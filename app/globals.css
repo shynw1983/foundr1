@@ -1971,7 +1971,69 @@ button {
   }
 
   .nav-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: none;
+  }
+
+  .mobile-nav-menu {
+    display: block;
+    position: relative;
+  }
+
+  .mobile-nav-menu summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #f7fafc;
+    font-weight: 800;
+    list-style: none;
+  }
+
+  .mobile-nav-menu summary::after {
+    content: "下へ";
+    color: #aab8c8;
+    font-size: 12px;
+  }
+
+  .mobile-nav-menu[open] summary::after {
+    content: "閉じる";
+  }
+
+  .mobile-nav-menu summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-nav-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: #202a36;
+    box-shadow: 0 16px 38px rgba(12, 18, 28, 0.3);
+  }
+
+  .mobile-nav-list a {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 8px;
+    color: #dce5ee;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
   }
 
   .metric-grid,

@@ -1,9 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "店舗仕入れ管理",
   description: "複数店舗・複数ブランド向け仕入れ管理システム"
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1
 };
 
 export default function RootLayout({
