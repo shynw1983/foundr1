@@ -713,7 +713,7 @@ function OrderFulfillmentPanel({
                     disabled={batch.status === "delivered"}
                     onClick={() => onMarkDelivered(batch.id)}
                   >
-                    {batch.status === "delivered" ? "完了" : "配達済み"}
+                    {batch.status === "delivered" ? "完了" : "配達完了にする"}
                   </button>
                 </div>
               ))}
