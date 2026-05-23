@@ -21,6 +21,29 @@ export async function getProcurementDashboardData() {
           category,
           unit,
           reference_price::float as "referencePrice",
+          coalesce(spec_note, '') as "specNote",
+          coalesce(storage_type, '') as "storageType",
+          '' as "photoUrl",
+          coalesce((
+            select suppliers.name
+            from product_supplier_options
+            join suppliers on suppliers.id = product_supplier_options.supplier_id
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = 'メイン'
+              and product_supplier_options.is_active = true
+            order by suppliers.name
+            limit 1
+          ), '') as "mainSupplier",
+          coalesce((
+            select suppliers.name
+            from product_supplier_options
+            join suppliers on suppliers.id = product_supplier_options.supplier_id
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = '予備'
+              and product_supplier_options.is_active = true
+            order by suppliers.name
+            limit 1
+          ), '') as "backupSupplier",
           case
             when exists (
               select 1 from product_brand_usages

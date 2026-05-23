@@ -210,7 +210,12 @@ export default function Home() {
         category: productCategories[0] ?? "食材",
         brand: brandsData[0]?.name ?? "共通",
         unit: "個",
-        referencePrice: 0
+        referencePrice: 0,
+        mainSupplier: suppliers[0]?.name ?? "",
+        backupSupplier: "",
+        specNote: "",
+        photoUrl: "",
+        storageType: "常温"
       }
     });
   }
@@ -534,6 +539,7 @@ export default function Home() {
                 <span>商品名</span>
                 <span>分類</span>
                 <span>単位</span>
+                <span>保管</span>
                 <span>参考価格</span>
                 <span>操作</span>
               </div>
@@ -545,6 +551,7 @@ export default function Home() {
                   </div>
                   <span>{product.category}</span>
                   <span>{product.unit}</span>
+                  <span>{product.storageType || "未設定"}</span>
                   <strong>¥{product.referencePrice}</strong>
                   <button
                     className="text-button"
@@ -552,6 +559,29 @@ export default function Home() {
                   >
                     編集
                   </button>
+                  <div className="product-master-detail">
+                    <div className="product-photo-thumb">
+                      {product.photoUrl ? (
+                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
+                      ) : (
+                        <span>写真</span>
+                      )}
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>主要仕入れ先</dt>
+                        <dd>{product.mainSupplier || "未設定"}</dd>
+                      </div>
+                      <div>
+                        <dt>予備仕入れ先</dt>
+                        <dd>{product.backupSupplier || "未設定"}</dd>
+                      </div>
+                      <div>
+                        <dt>規格</dt>
+                        <dd>{product.specNote || "未設定"}</dd>
+                      </div>
+                    </dl>
+                  </div>
                 </article>
               ))}
             </div>
@@ -878,13 +908,20 @@ function getFields(target: EditTarget): Array<{ key: string; label: string; type
     const categoryOptions = uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]);
     const brandOptions = uniqueOptions(["奈奈茶", "熱辣食堂", "奈奈茶 / 熱辣食堂", product.brand]);
     const unitOptions = uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]);
+    const supplierOptions = uniqueOptions(["", ...["城北食材卸", "東和包材", "南区調味料店", "近隣業務スーパー", "オンライン包材 A"], product.mainSupplier, product.backupSupplier]);
+    const storageOptions = uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]);
 
     return [
       { key: "name", label: "商品名" },
       { key: "category", label: "カテゴリ", options: categoryOptions },
       { key: "brand", label: "ブランド", options: brandOptions },
       { key: "unit", label: "単位", options: unitOptions },
-      { key: "referencePrice", label: "参考価格", type: "number" }
+      { key: "referencePrice", label: "参考価格", type: "number" },
+      { key: "mainSupplier", label: "主要仕入れ先", options: supplierOptions },
+      { key: "backupSupplier", label: "予備仕入れ先", options: supplierOptions },
+      { key: "storageType", label: "保管属性", options: storageOptions },
+      { key: "specNote", label: "規格メモ" },
+      { key: "photoUrl", label: "写真URL" }
     ];
   }
 

@@ -17,35 +17,60 @@ export const products = [
     category: "食材",
     brand: "奈奈茶",
     unit: "袋",
-    referencePrice: 128
+    referencePrice: 128,
+    mainSupplier: "南区調味料店",
+    backupSupplier: "城北食材卸",
+    specNote: "茶葉 500g、濃縮抽出向き",
+    photoUrl: "",
+    storageType: "常温"
   },
   {
     name: "700ml テイクアウトカップ",
     category: "包材",
     brand: "奈奈茶",
     unit: "箱",
-    referencePrice: 168
+    referencePrice: 168,
+    mainSupplier: "東和包材",
+    backupSupplier: "オンライン包材 A",
+    specNote: "95 口径、透明、1 箱 1,000 個",
+    photoUrl: "",
+    storageType: "常温"
   },
   {
     name: "牛脂マーラー鍋ベース",
     category: "食材",
     brand: "熱辣食堂",
     unit: "箱",
-    referencePrice: 285
+    referencePrice: 285,
+    mainSupplier: "南区調味料店",
+    backupSupplier: "城北食材卸",
+    specNote: "辛口ベース、1kg パック",
+    photoUrl: "",
+    storageType: "常温"
   },
   {
     name: "使い捨て食品手袋",
     category: "消耗品",
     brand: "奈奈茶 / 熱辣食堂",
     unit: "箱",
-    referencePrice: 29
+    referencePrice: 29,
+    mainSupplier: "城北食材卸",
+    backupSupplier: "近隣業務スーパー",
+    specNote: "食品対応、S/M/L を店舗別に管理",
+    photoUrl: "",
+    storageType: "常温"
   },
   {
     name: "生乳",
     category: "食材",
     brand: "奈奈茶 / 熱辣食堂",
     unit: "本",
-    referencePrice: 198
+    referencePrice: 198,
+    mainSupplier: "城北食材卸",
+    backupSupplier: "近隣業務スーパー",
+    specNote: "成分無調整 1L",
+    photoUrl: "",
+    storageType: "冷蔵"
   }
 ];
 
@@ -223,6 +248,27 @@ export const priceSignals = [
 
 export const productSupplierOptions = [
   {
+    product: "アッサム紅茶ベース",
+    options: [
+      {
+        supplier: "南区調味料店",
+        role: "メイン",
+        referencePrice: 128,
+        minOrder: "1 袋",
+        leadTime: "当日",
+        note: "茶葉の通常仕入れ先"
+      },
+      {
+        supplier: "城北食材卸",
+        role: "予備",
+        referencePrice: 136,
+        minOrder: "2 袋",
+        leadTime: "翌日",
+        note: "メイン欠品時に利用"
+      }
+    ]
+  },
+  {
     product: "700ml テイクアウトカップ",
     options: [
       {
@@ -290,6 +336,27 @@ export const productSupplierOptions = [
         minOrder: "1 箱",
         leadTime: "即日",
         note: "不足時の店頭購入"
+      }
+    ]
+  },
+  {
+    product: "生乳",
+    options: [
+      {
+        supplier: "城北食材卸",
+        role: "メイン",
+        referencePrice: 198,
+        minOrder: "12 本",
+        leadTime: "当日",
+        note: "冷蔵配送を優先"
+      },
+      {
+        supplier: "近隣業務スーパー",
+        role: "予備",
+        referencePrice: 218,
+        minOrder: "1 本",
+        leadTime: "即日",
+        note: "営業時間中の不足時に店頭購入"
       }
     ]
   }

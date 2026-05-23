@@ -50,12 +50,26 @@ for (const store of stores) {
 
 for (const product of products) {
   await sql`
-    insert into products (name, category, unit, reference_price, is_key_item, is_price_sensitive, updated_at)
+    insert into products (
+      name,
+      category,
+      unit,
+      reference_price,
+      spec_note,
+      photo_url,
+      storage_type,
+      is_key_item,
+      is_price_sensitive,
+      updated_at
+    )
     values (
       ${product.name},
       ${product.category},
       ${product.unit},
       ${product.referencePrice},
+      ${product.specNote},
+      ${product.photoUrl},
+      ${product.storageType},
       ${product.category === "食材"},
       ${product.category === "食材"},
       now()
@@ -65,6 +79,9 @@ for (const product of products) {
       category = excluded.category,
       unit = excluded.unit,
       reference_price = excluded.reference_price,
+      spec_note = excluded.spec_note,
+      photo_url = excluded.photo_url,
+      storage_type = excluded.storage_type,
       is_key_item = excluded.is_key_item,
       is_price_sensitive = excluded.is_price_sensitive,
       updated_at = now()
