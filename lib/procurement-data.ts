@@ -1,7 +1,7 @@
 import { sql } from "./db";
 
 export async function getProcurementDashboardData() {
-  const [stores, brands, products, suppliers, supplierLocations, productBrandUsages, productSupplierOptions] =
+  const [stores, brands, products, suppliers, supplierLocations, productBrandUsages, productSupplierOptions, orders] =
     await Promise.all([
       sql`
         select
@@ -96,6 +96,20 @@ export async function getProcurementDashboardData() {
         where product_supplier_options.is_active = true
         group by products.name
         order by products.name
+      `,
+      sql`
+        select
+          purchase_orders.order_no as id,
+          stores.name as store,
+          coalesce(brands.name, '共通') as brand,
+          coalesce(purchase_orders.deadline_label, '') as deadline,
+          purchase_orders.requested_item_count as items,
+          purchase_orders.priority,
+          purchase_orders.status
+        from purchase_orders
+        join stores on stores.id = purchase_orders.store_id
+        left join brands on brands.id = purchase_orders.brand_id
+        order by purchase_orders.created_at desc
       `
     ]);
 
@@ -106,6 +120,7 @@ export async function getProcurementDashboardData() {
     suppliers,
     supplierLocations,
     productBrandUsages,
-    productSupplierOptions
+    productSupplierOptions,
+    orders
   };
 }

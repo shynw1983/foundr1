@@ -38,12 +38,21 @@ type SupplierLocation = typeof initialSupplierLocations[number];
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type ProductSupplierOption = ProductSupplierGroup["options"][number];
 type ProductBrandUsage = typeof initialProductBrandUsages[number];
+type PurchaseOrder = typeof orders[number];
 type EditTarget =
   | { type: "product"; index: number; value: Product }
   | { type: "usage"; index: number; value: ProductBrandUsage }
   | { type: "supplier"; index: number; value: Supplier }
   | { type: "location"; index: number; value: SupplierLocation }
   | { type: "source"; groupIndex: number; optionIndex: number; value: ProductSupplierOption };
+type NewOrderDraft = {
+  store: string;
+  brand: string;
+  deadline: string;
+  priority: string;
+  items: number;
+  note: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -72,6 +81,8 @@ export default function Home() {
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
   const [storesData, setStoresData] = useState(stores);
   const [brandsData, setBrandsData] = useState(brands);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [newOrderDraft, setNewOrderDraft] = useState<NewOrderDraft | null>(null);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
@@ -110,8 +121,8 @@ export default function Home() {
     );
   }, [products, productBrandUsages, suppliers, supplierLocations, productSupplierOptions]);
 
-  const openOrders = orders.filter((order) => order.status !== "完了");
-  const urgentOrders = orders.filter((order) => order.priority === "高").length;
+  const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
+  const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
   const activeExceptions = exceptions.filter((item) => item.status !== "解決済み").length;
   const risingPrices = priceSignals.filter((item) => item.changeRate > 8).length;
   const keyProducts = products.filter((product) => product.category === "食材").length;
@@ -178,6 +189,21 @@ export default function Home() {
     setEditTarget(null);
   }
 
+  function saveNewOrder(draft: NewOrderDraft) {
+    const nextOrder: PurchaseOrder = {
+      id: `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${String(purchaseOrders.length + 1).padStart(3, "0")}`,
+      store: draft.store,
+      brand: draft.brand,
+      deadline: draft.deadline,
+      items: draft.items,
+      priority: draft.priority,
+      status: "仕入れ待ち"
+    };
+
+    setPurchaseOrders((items) => [nextOrder, ...items]);
+    setNewOrderDraft(null);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -210,10 +236,10 @@ export default function Home() {
               <Search size={17} />
               <input placeholder="商品・店舗・仕入れ先を検索" />
             </label>
-            <button className="primary-button">
+            <a className="primary-button" href="#create-order-panel">
               <Plus size={18} />
               仕入れ依頼を作成
-            </button>
+            </a>
           </div>
         </header>
 
@@ -224,11 +250,63 @@ export default function Home() {
           <MetricCard icon={<Boxes />} label="主要食材" value={keyProducts} note="価格確認の対象" />
         </section>
 
+        <section className="panel create-order-panel" id="create-order-panel">
+          <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度を指定して依頼を作成" />
+          <form
+            className="inline-create-form"
+            action="/api/orders"
+            method="post"
+          >
+            <label>
+              <span>送達店舗</span>
+              <select name="store" defaultValue={storesData[0]?.name}>
+                {storesData.map((store) => (
+                  <option value={store.name} key={store.name}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>対象ブランド</span>
+              <select name="brand" defaultValue={brandsData[0]?.name}>
+                {brandsData.map((brand) => (
+                  <option value={brand.name} key={brand.name}>{brand.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>締切</span>
+              <input name="deadline" defaultValue="本日 18:00" />
+            </label>
+            <label>
+              <span>商品件数</span>
+              <input name="items" type="number" min={1} defaultValue={1} />
+            </label>
+            <label>
+              <span>優先度</span>
+              <select name="priority" defaultValue="中">
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+              </select>
+            </label>
+            <label>
+              <span>メモ</span>
+              <textarea name="note" placeholder="欠品時の代替、配送希望など" />
+            </label>
+            <div className="inline-create-actions">
+              <button type="submit" className="primary-button">
+                <Plus size={18} />
+                依頼を追加
+              </button>
+            </div>
+          </form>
+        </section>
+
         <section className="workspace-grid">
           <section className="panel operation-panel" id="仕入れ依頼">
             <PanelTitle title="仕入れ依頼キュー" subtitle="今日処理すべき依頼を優先度順に確認" />
             <div className="order-list">
-              {orders.map((order) => (
+              {purchaseOrders.map((order) => (
                 <article className="order-row" key={order.id}>
                   <div>
                     <div className="row-heading">
@@ -518,6 +596,16 @@ export default function Home() {
           onSave={saveEdit}
         />
       ) : null}
+      {newOrderDraft ? (
+        <CreateOrderDialog
+          draft={newOrderDraft}
+          stores={storesData}
+          brands={brandsData}
+          onChange={setNewOrderDraft}
+          onClose={() => setNewOrderDraft(null)}
+          onSave={saveNewOrder}
+        />
+      ) : null}
     </main>
   );
 }
@@ -604,6 +692,111 @@ function EditDialog({
           </button>
           <button type="submit" className="primary-button">
             保存
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CreateOrderDialog({
+  draft,
+  stores,
+  brands,
+  onChange,
+  onClose,
+  onSave
+}: {
+  draft: NewOrderDraft;
+  stores: typeof import("../lib/mock-data").stores;
+  brands: typeof import("../lib/mock-data").brands;
+  onChange: (draft: NewOrderDraft) => void;
+  onClose: () => void;
+  onSave: (draft: NewOrderDraft) => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-order-title">
+      <form
+        className="edit-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(draft);
+        }}
+      >
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Purchase Request</p>
+            <h3 id="create-order-title">仕入れ依頼を作成</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
+            ×
+          </button>
+        </div>
+        <div className="edit-fields">
+          <label>
+            <span>送達店舗</span>
+            <select
+              value={draft.store}
+              onChange={(event) => onChange({ ...draft, store: event.target.value })}
+            >
+              {stores.map((store) => (
+                <option value={store.name} key={store.name}>{store.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>対象ブランド</span>
+            <select
+              value={draft.brand}
+              onChange={(event) => onChange({ ...draft, brand: event.target.value })}
+            >
+              {brands.map((brand) => (
+                <option value={brand.name} key={brand.name}>{brand.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>締切</span>
+            <input
+              value={draft.deadline}
+              onChange={(event) => onChange({ ...draft, deadline: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>商品件数</span>
+            <input
+              type="number"
+              min={1}
+              value={draft.items}
+              onChange={(event) => onChange({ ...draft, items: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            <span>優先度</span>
+            <select
+              value={draft.priority}
+              onChange={(event) => onChange({ ...draft, priority: event.target.value })}
+            >
+              <option value="高">高</option>
+              <option value="中">中</option>
+              <option value="低">低</option>
+            </select>
+          </label>
+          <label>
+            <span>メモ</span>
+            <textarea
+              value={draft.note}
+              onChange={(event) => onChange({ ...draft, note: event.target.value })}
+              placeholder="欠品時の代替、配送希望など"
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            キャンセル
+          </button>
+          <button type="submit" className="primary-button">
+            作成
           </button>
         </div>
       </form>

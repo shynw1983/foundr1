@@ -19,4 +19,7 @@ for (const statement of statements) {
   await sql.query(statement);
 }
 
+await sql.query("alter table purchase_orders add column if not exists deadline_label text");
+await sql.query("alter table purchase_orders add column if not exists requested_item_count integer not null default 0");
+
 console.log("Schema applied successfully.");

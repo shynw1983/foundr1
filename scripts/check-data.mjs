@@ -17,7 +17,8 @@ const rows = await sql`
     (select count(*) from suppliers) as suppliers,
     (select count(*) from supplier_locations) as supplier_locations,
     (select count(*) from product_brand_usages) as product_brand_usages,
-    (select count(*) from product_supplier_options) as product_supplier_options
+    (select count(*) from product_supplier_options) as product_supplier_options,
+    (select count(*) from purchase_orders) as purchase_orders
 `;
 
 console.log(JSON.stringify(rows[0], null, 2));

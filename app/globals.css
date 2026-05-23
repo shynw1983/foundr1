@@ -32,7 +32,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -185,6 +187,7 @@ button {
   color: white;
   background: var(--green);
   font-weight: 700;
+  text-decoration: none;
 }
 
 .icon-button {
@@ -405,6 +408,56 @@ button {
   display: grid;
   gap: 22px;
   margin-top: 18px;
+}
+
+.create-order-panel {
+  margin-bottom: 18px;
+  scroll-margin-top: 18px;
+}
+
+.create-order-panel:target {
+  border-color: rgba(33, 116, 91, 0.45);
+  box-shadow: 0 0 0 4px var(--green-soft), var(--shadow);
+}
+
+.inline-create-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inline-create-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.inline-create-form span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inline-create-form input,
+.inline-create-form select,
+.inline-create-form textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  outline: 0;
+}
+
+.inline-create-form textarea {
+  min-height: 84px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.inline-create-actions {
+  display: flex;
+  align-items: end;
 }
 
 .panel {
@@ -873,16 +926,27 @@ button {
   font-weight: 700;
 }
 
-.edit-fields input {
+.edit-fields input,
+.edit-fields select,
+.edit-fields textarea {
   min-height: 42px;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 12px;
   outline: 0;
+  background: white;
 }
 
-.edit-fields input:focus {
+.edit-fields textarea {
+  min-height: 86px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.edit-fields input:focus,
+.edit-fields select:focus,
+.edit-fields textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
@@ -988,6 +1052,7 @@ button {
   .management-grid,
   .admin-grid,
   .module-grid,
+  .inline-create-form,
   .store-grid,
   .location-grid,
   .usage-grid,

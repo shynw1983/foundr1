@@ -2,6 +2,7 @@ import { neon } from "@neondatabase/serverless";
 import { loadLocalEnv } from "./db-env.mjs";
 import {
   brands,
+  orders,
   productBrandUsages,
   products,
   productSupplierOptions,
@@ -177,6 +178,38 @@ for (const group of productSupplierOptions) {
   }
 }
 
+for (const order of orders) {
+  await sql`
+    insert into purchase_orders (
+      order_no,
+      store_id,
+      brand_id,
+      deadline_label,
+      requested_item_count,
+      priority,
+      status
+    )
+    select
+      ${order.id},
+      stores.id,
+      brands.id,
+      ${order.deadline},
+      ${order.items},
+      ${order.priority},
+      ${order.status}
+    from stores, brands
+    where stores.name = ${order.store}
+      and brands.name = ${order.brand.includes("/") ? order.brand.split(" / ")[0] : order.brand}
+    on conflict (order_no)
+    do update set
+      deadline_label = excluded.deadline_label,
+      requested_item_count = excluded.requested_item_count,
+      priority = excluded.priority,
+      status = excluded.status,
+      updated_at = now()
+  `;
+}
+
 const counts = await sql`
   select
     (select count(*) from stores) as stores,
@@ -185,7 +218,8 @@ const counts = await sql`
     (select count(*) from product_brand_usages) as product_brand_usages,
     (select count(*) from suppliers) as suppliers,
     (select count(*) from supplier_locations) as supplier_locations,
-    (select count(*) from product_supplier_options) as product_supplier_options
+    (select count(*) from product_supplier_options) as product_supplier_options,
+    (select count(*) from purchase_orders) as purchase_orders
 `;
 
 console.log(JSON.stringify(counts[0], null, 2));
