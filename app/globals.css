@@ -1989,4 +1989,16 @@ button {
   .row-actions {
     width: 100%;
   }
+
+  .management-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .management-row strong,
+  .management-row p,
+  .management-row small {
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+  }
 }
