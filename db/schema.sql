@@ -145,6 +145,10 @@ create table if not exists purchase_order_items (
   status text not null default 'requested'
 );
 
+alter table purchase_order_items add column if not exists actual_quantity numeric(12, 2);
+alter table purchase_order_items add column if not exists procurement_note text;
+alter table purchase_order_items add column if not exists price_exception_note text;
+
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
   purchase_order_item_id uuid not null references purchase_order_items(id) on delete cascade,
@@ -157,6 +161,23 @@ create table if not exists purchase_actuals (
   note text,
   recorded_by uuid references employees(id),
   recorded_at timestamptz not null default now()
+);
+
+create table if not exists delivery_batches (
+  id uuid primary key default gen_random_uuid(),
+  purchase_order_id uuid not null references purchase_orders(id) on delete cascade,
+  batch_no integer not null,
+  status text not null default 'in_delivery',
+  created_at timestamptz not null default now(),
+  delivered_at timestamptz,
+  unique (purchase_order_id, batch_no)
+);
+
+create table if not exists delivery_batch_items (
+  delivery_batch_id uuid not null references delivery_batches(id) on delete cascade,
+  purchase_order_item_id uuid not null references purchase_order_items(id) on delete cascade,
+  primary key (delivery_batch_id, purchase_order_item_id),
+  unique (purchase_order_item_id)
 );
 
 create table if not exists purchase_exceptions (
@@ -189,5 +210,6 @@ create table if not exists price_records (
 
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
+create index if not exists idx_delivery_batches_order_status on delivery_batches(purchase_order_id, status);
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);

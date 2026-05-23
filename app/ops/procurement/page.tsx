@@ -16,6 +16,7 @@ type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number];
 type DashboardOrderItem = {
+  id?: string;
   orderId: string;
   productName: string;
   requestedQuantity: number;
@@ -25,6 +26,8 @@ type DashboardOrderItem = {
   supplier?: string;
   note?: string;
   priceExceptionNote?: string;
+  deliveryStatus?: "pending" | "in_delivery" | "delivered";
+  deliveryBatchId?: string;
 };
 type ProcurementTaskItem = {
   id: string;
@@ -47,6 +50,7 @@ type DeliveryState = {
 type DeliveryBatch = {
   id: string;
   orderId: string;
+  batchNo?: number;
   itemIds: string[];
   status: "in_delivery" | "delivered";
   createdLabel: string;
@@ -86,7 +90,7 @@ function createProcurementTaskItems(
 
     if (orderItems.length > 0) {
       return orderItems.map((item, itemIndex) => ({
-        id: `${order.id}-${item.productName}-${itemIndex}`,
+        id: item.id ?? `${order.id}-${item.productName}-${itemIndex}`,
         orderId: order.id,
         productName: item.productName,
         requestedQuantity: item.requestedQuantity,
@@ -96,9 +100,12 @@ function createProcurementTaskItems(
         purchased: item.purchased ?? false,
         note: item.note ?? "",
         priceExceptionNote: item.priceExceptionNote ?? "",
-        deliveryStatus: "pending"
+        deliveryStatus: item.deliveryStatus ?? "pending",
+        deliveryBatchId: item.deliveryBatchId
       }));
     }
+
+    if (purchaseOrderItems.length > 0) return [];
 
     return Array.from({ length: Math.max(1, order.items) }, (_, itemIndex) => {
       const product = productList[(orderIndex + itemIndex) % productList.length];
@@ -115,7 +122,8 @@ function createProcurementTaskItems(
         purchased: false,
         note: "",
         priceExceptionNote: "",
-        deliveryStatus: "pending"
+        deliveryStatus: "pending",
+        deliveryBatchId: undefined
       };
     });
   });
@@ -214,6 +222,26 @@ function createDeliveryBatchId(orderId: string, batchCount: number) {
   return `${orderId}-DEL-${String(batchCount + 1).padStart(2, "0")}`;
 }
 
+function getDeliveryBatchLabel(batch: DeliveryBatch) {
+  if (batch.batchNo) return `${batch.orderId}-DEL-${String(batch.batchNo).padStart(2, "0")}`;
+
+  return batch.id;
+}
+
+async function saveProcurementTaskItem(item: ProcurementTaskItem) {
+  await fetch("/api/procurement/items", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      itemId: item.id,
+      purchased: item.purchased,
+      actualQuantity: item.actualQuantity,
+      note: item.note,
+      priceExceptionNote: item.priceExceptionNote
+    })
+  });
+}
+
 export default function ProcurementPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
@@ -241,13 +269,20 @@ export default function ProcurementPage() {
         suppliers?: Supplier[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: DashboardOrderItem[];
+        deliveryBatches?: DeliveryBatch[];
       };
 
       if (data.products) setProducts(data.products);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
       if (data.suppliers) setSuppliers(data.suppliers);
-      if (data.orders) setPurchaseOrders(data.orders);
+      if (data.orders && data.purchaseOrderItems) {
+        const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
+        setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
+      } else if (data.orders) {
+        setPurchaseOrders(data.orders);
+      }
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+      if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
       setDataSource("neon");
     }
 
@@ -277,7 +312,24 @@ export default function ProcurementPage() {
   }, [purchaseOrders]);
 
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
-    setProcurementTaskItems((items) => items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+    let updatedItem: ProcurementTaskItem | null = null;
+
+    setProcurementTaskItems((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item;
+
+        updatedItem = { ...item, ...next };
+        return updatedItem;
+      })
+    );
+
+    queueMicrotask(() => {
+      if (updatedItem) {
+        void saveProcurementTaskItem(updatedItem).catch(() => {
+          // The UI stays responsive; a later refresh will reveal if the save failed.
+        });
+      }
+    });
   }
 
   function updateDeliveryState(orderId: string, next: Partial<DeliveryState>) {
@@ -295,6 +347,7 @@ export default function ProcurementPage() {
     if (readyItems.length === 0) return;
 
     const batchId = createDeliveryBatchId(orderId, deliveryBatches.filter((batch) => batch.orderId === orderId).length);
+    const batchNo = deliveryBatches.filter((batch) => batch.orderId === orderId).length + 1;
     const createdLabel = new Intl.DateTimeFormat("ja-JP", {
       month: "2-digit",
       day: "2-digit",
@@ -307,6 +360,7 @@ export default function ProcurementPage() {
       {
         id: batchId,
         orderId,
+        batchNo,
         itemIds: readyItems.map((item) => item.id),
         status: "in_delivery",
         createdLabel
@@ -319,6 +373,38 @@ export default function ProcurementPage() {
           : item
       )
     );
+
+    void fetch("/api/procurement/delivery-batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        itemIds: readyItems.map((item) => item.id)
+      })
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((savedBatch: DeliveryBatch | null) => {
+        if (!savedBatch) return;
+
+        setDeliveryBatches((batches) =>
+          batches.map((batch) =>
+            batch.id === batchId
+              ? {
+                  ...savedBatch,
+                  itemIds: readyItems.map((item) => item.id)
+                }
+              : batch
+          )
+        );
+        setProcurementTaskItems((items) =>
+          items.map((item) =>
+            item.deliveryBatchId === batchId ? { ...item, deliveryBatchId: savedBatch.id } : item
+          )
+        );
+      })
+      .catch(() => {
+        // Keep the optimistic batch visible; the next refresh will restore the saved server state.
+      });
   }
 
   function markDeliveryBatchDelivered(batchId: string) {
@@ -328,6 +414,17 @@ export default function ProcurementPage() {
     setProcurementTaskItems((items) =>
       items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: "delivered" } : item))
     );
+
+    void fetch("/api/procurement/delivery-batches", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batchId,
+        status: "delivered"
+      })
+    }).catch(() => {
+      // Optimistic update: do not block the field workflow on the network round trip.
+    });
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
@@ -436,7 +533,11 @@ export default function ProcurementPage() {
                                       type="checkbox"
                                       checked={item.purchased}
                                       onChange={(event) =>
-                                        updateProcurementTaskItem(item.id, { purchased: event.target.checked })
+                                        updateProcurementTaskItem(item.id, {
+                                          purchased: event.target.checked,
+                                          deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
+                                          deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
+                                        })
                                       }
                                     />
                                     <span>{item.purchased ? "購入済み" : "未購入"}</span>
@@ -602,7 +703,7 @@ function OrderFulfillmentPanel({
               {batches.map((batch) => (
                 <div className="delivery-batch-row" key={batch.id}>
                   <div>
-                    <strong>{batch.id}</strong>
+                    <strong>{getDeliveryBatchLabel(batch)}</strong>
                     <span>{batch.createdLabel} · {batch.itemIds.length} 件 · {batch.status === "delivered" ? "配達済み" : "配送中"}</span>
                   </div>
                   <button

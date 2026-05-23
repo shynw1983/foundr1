@@ -10,7 +10,8 @@ export async function getProcurementDashboardData() {
     productBrandUsages,
     productSupplierOptions,
     orders,
-    purchaseOrderItems
+    purchaseOrderItems,
+    deliveryBatches
   ] =
     await Promise.all([
       sql`
@@ -146,23 +147,41 @@ export async function getProcurementDashboardData() {
       `,
       sql`
         select
+          purchase_order_items.id::text as id,
           purchase_orders.order_no as "orderId",
           products.name as "productName",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
           purchase_order_items.requested_unit as unit,
-          coalesce(purchase_actuals.actual_quantity::float, purchase_order_items.requested_quantity::float) as "actualQuantity",
-          (purchase_order_items.status = 'purchased' or purchase_actuals.id is not null) as purchased,
+          coalesce(
+            purchase_order_items.actual_quantity::float,
+            purchase_actuals.actual_quantity::float,
+            purchase_order_items.requested_quantity::float
+          ) as "actualQuantity",
+          (
+            purchase_order_items.status in ('purchased', 'in_delivery', 'delivered')
+            or purchase_actuals.id is not null
+          ) as purchased,
+          case
+            when purchase_order_items.status = 'in_delivery' then 'in_delivery'
+            when purchase_order_items.status = 'delivered' then 'delivered'
+            else 'pending'
+          end as "deliveryStatus",
+          delivery_batch_items.delivery_batch_id::text as "deliveryBatchId",
           case
             when purchase_order_items.note like 'supplier=%'
             then split_part(split_part(purchase_order_items.note, ';', 1), '=', 2)
             else ''
           end as supplier,
           case
+            when purchase_order_items.procurement_note is not null
+            then purchase_order_items.procurement_note
             when purchase_order_items.note like '%note=%'
             then split_part(purchase_order_items.note, 'note=', 2)
             else coalesce(purchase_actuals.note, '')
           end as note,
           case
+            when purchase_order_items.price_exception_note is not null
+            then purchase_order_items.price_exception_note
             when purchase_actuals.price_is_exception
             then coalesce(purchase_actuals.note, '')
             else ''
@@ -181,7 +200,22 @@ export async function getProcurementDashboardData() {
           order by purchase_actuals.recorded_at desc
           limit 1
         ) purchase_actuals on true
+        left join delivery_batch_items on delivery_batch_items.purchase_order_item_id = purchase_order_items.id
         order by purchase_orders.created_at desc, purchase_order_items.id
+      `,
+      sql`
+        select
+          delivery_batches.id::text as id,
+          purchase_orders.order_no as "orderId",
+          delivery_batches.batch_no as "batchNo",
+          delivery_batches.status,
+          to_char(delivery_batches.created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdLabel",
+          coalesce(array_agg(delivery_batch_items.purchase_order_item_id::text order by delivery_batch_items.purchase_order_item_id), '{}') as "itemIds"
+        from delivery_batches
+        join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id
+        left join delivery_batch_items on delivery_batch_items.delivery_batch_id = delivery_batches.id
+        group by delivery_batches.id, purchase_orders.order_no
+        order by delivery_batches.created_at desc
       `
     ]);
 
@@ -194,6 +228,7 @@ export async function getProcurementDashboardData() {
     productBrandUsages,
     productSupplierOptions,
     orders,
-    purchaseOrderItems
+    purchaseOrderItems,
+    deliveryBatches
   };
 }
