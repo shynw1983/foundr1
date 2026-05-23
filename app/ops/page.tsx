@@ -27,6 +27,17 @@ type Product = typeof initialProducts[number];
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type PurchaseOrder = typeof orders[number];
 
+const statusTone: Record<string, string> = {
+  仕入れ待ち: "tone-waiting",
+  仕入れ中: "tone-active",
+  一部完了: "tone-warning",
+  配送待ち: "tone-confirm",
+  配送中: "tone-route",
+  一部配達済み: "tone-warning",
+  確認待ち: "tone-confirm",
+  完了: "tone-done"
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
@@ -127,7 +138,7 @@ export default function OpsDashboard() {
                   <div>
                     <div className="row-heading">
                       <strong>{order.id}</strong>
-                      <span className="status-pill tone-active">{order.status}</span>
+                      <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
                     </div>
                     <p>{order.store} / {order.brand}</p>
                   </div>

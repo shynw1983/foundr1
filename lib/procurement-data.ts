@@ -139,10 +139,34 @@ export async function getProcurementDashboardData() {
           coalesce(purchase_orders.deadline_label, '') as deadline,
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
-          purchase_orders.status
+          case
+            when order_progress.total_count is null or order_progress.total_count = 0 then purchase_orders.status
+            when order_progress.delivered_count = order_progress.total_count then '完了'
+            when order_progress.in_delivery_count > 0 then '配送中'
+            when order_progress.delivered_count > 0 then '一部配達済み'
+            when order_progress.purchased_count = 0 then '仕入れ待ち'
+            when order_progress.purchased_count < order_progress.total_count then '一部完了'
+            else '配送待ち'
+          end as status
         from purchase_orders
         join stores on stores.id = purchase_orders.store_id
         left join brands on brands.id = purchase_orders.brand_id
+        left join lateral (
+          select
+            count(purchase_order_items.id)::int as total_count,
+            count(purchase_order_items.id) filter (
+              where purchase_order_items.status in ('purchased', 'in_delivery', 'delivered')
+                or exists (
+                  select 1
+                  from purchase_actuals
+                  where purchase_actuals.purchase_order_item_id = purchase_order_items.id
+                )
+            )::int as purchased_count,
+            count(purchase_order_items.id) filter (where purchase_order_items.status = 'in_delivery')::int as in_delivery_count,
+            count(purchase_order_items.id) filter (where purchase_order_items.status = 'delivered')::int as delivered_count
+          from purchase_order_items
+          where purchase_order_items.purchase_order_id = purchase_orders.id
+        ) order_progress on true
         order by purchase_orders.created_at desc
       `,
       sql`

@@ -25,7 +25,9 @@ const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
+  配送待ち: "tone-confirm",
   配送中: "tone-route",
+  一部配達済み: "tone-warning",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
