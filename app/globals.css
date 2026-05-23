@@ -362,7 +362,8 @@ button {
   font-weight: 800;
 }
 
-.management-form input {
+.management-form input,
+.management-form select {
   min-height: 42px;
   width: 100%;
   border: 1px solid var(--line);
@@ -373,9 +374,15 @@ button {
   font: inherit;
 }
 
-.management-form input:focus {
+.management-form input:focus,
+.management-form select:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.supplier-management-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.55fr) minmax(180px, 1fr) auto;
+  align-items: end;
 }
 
 .checkbox-group {
@@ -1532,6 +1539,18 @@ button {
   white-space: nowrap;
 }
 
+.supplier-admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.supplier-admin-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .price-block {
   display: grid;
   justify-items: end;
@@ -1983,6 +2002,7 @@ button {
   .workspace-grid,
   .dashboard-report-grid,
   .management-grid,
+  .supplier-management-form,
   .category-admin-grid,
   .admin-grid,
   .module-grid,

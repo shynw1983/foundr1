@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Store } from "lucide-react";
+import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Store, Truck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -15,6 +15,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
+  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes }
 ];
