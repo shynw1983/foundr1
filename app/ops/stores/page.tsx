@@ -23,6 +23,7 @@ export default function StoresPage() {
   const [storesData, setStoresData] = useState<StoreItem[]>(stores);
   const [brandsData, setBrandsData] = useState<BrandItem[]>(brands);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -128,6 +129,42 @@ export default function StoresPage() {
     });
   }
 
+  async function saveBrandEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingBrand) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const nextName = String(formData.get("name") ?? "").trim();
+    const type = String(formData.get("type") ?? "").trim() || "未設定";
+
+    if (!nextName) return;
+
+    formData.set("currentName", editingBrand.name);
+
+    const response = await fetch("/api/brands", {
+      method: "PUT",
+      body: formData
+    });
+
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "ブランドを更新できませんでした。");
+      return;
+    }
+
+    setBrandsData((items) =>
+      items.map((item) => item.name === editingBrand.name ? { name: nextName, type } : item)
+    );
+    setStoresData((items) =>
+      items.map((store) => ({
+        ...store,
+        brands: store.brands.map((brandName) => brandName === editingBrand.name ? nextName : brandName)
+      }))
+    );
+    setEditingBrand(null);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -216,15 +253,54 @@ export default function StoresPage() {
                     <strong>{brand.name}</strong>
                     <p>{brand.type}</p>
                   </div>
-                  <button className="text-button danger-button" type="button" onClick={() => deleteBrand(brand)}>
-                    削除
-                  </button>
+                  <div className="row-actions">
+                    <button className="text-button" type="button" onClick={() => setEditingBrand(brand)}>
+                      編集
+                    </button>
+                    <button className="text-button danger-button" type="button" onClick={() => deleteBrand(brand)}>
+                      削除
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
           </section>
         </section>
       </section>
+
+      {editingBrand ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="brand-edit-title">
+          <form className="edit-modal" onSubmit={saveBrandEdit}>
+            <div className="modal-heading">
+              <div>
+                <h3 id="brand-edit-title">ブランドを編集</h3>
+                <p>{editingBrand.name}</p>
+              </div>
+              <button type="button" className="text-button" onClick={() => setEditingBrand(null)}>
+                閉じる
+              </button>
+            </div>
+            <div className="edit-fields">
+              <label>
+                <span>ブランド名</span>
+                <input name="name" defaultValue={editingBrand.name} />
+              </label>
+              <label>
+                <span>種類</span>
+                <input name="type" defaultValue={editingBrand.type} />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="text-button" onClick={() => setEditingBrand(null)}>
+                キャンセル
+              </button>
+              <button type="submit" className="primary-button">
+                保存
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -21,6 +21,47 @@ export async function POST(request: Request) {
   return Response.json({ ok: true });
 }
 
+export async function PUT(request: Request) {
+  const formData = await request.formData();
+  const currentName = String(formData.get("currentName") ?? "").trim();
+  const nextName = String(formData.get("name") ?? "").trim();
+  const type = String(formData.get("type") ?? "").trim();
+
+  if (!currentName || !nextName) {
+    return Response.json({ error: "ブランド名を入力してください。" }, { status: 400 });
+  }
+
+  const duplicateRows = await sql`
+    select count(*)::int as count
+    from brands
+    where name = ${nextName}
+      and name <> ${currentName}
+  `;
+
+  if (Number(duplicateRows[0]?.count ?? 0) > 0) {
+    return Response.json(
+      { error: "同じ名前のブランドがすでにあります。" },
+      { status: 409 }
+    );
+  }
+
+  const updatedRows = await sql`
+    update brands
+    set
+      name = ${nextName},
+      brand_type = ${type || "未設定"},
+      updated_at = now()
+    where name = ${currentName}
+    returning id
+  `;
+
+  if (!updatedRows[0]?.id) {
+    return Response.json({ error: "ブランドが見つかりません。" }, { status: 404 });
+  }
+
+  return Response.json({ ok: true });
+}
+
 export async function DELETE(request: Request) {
   const body = await request.json() as { name?: string };
 

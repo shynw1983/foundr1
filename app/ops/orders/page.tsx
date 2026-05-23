@@ -73,11 +73,23 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
-const usageBrandOptions = [
+const defaultUsageBrandOptions = [
   { label: "共通", value: "共通" },
   { label: "nanacha", value: "奈奈茶" },
   { label: "まぁ麻", value: "熱辣食堂" }
 ];
+
+function createUsageBrandOptions(brandList: typeof brands) {
+  const aliases: Record<string, string> = {
+    共通: "共通",
+    奈奈茶: "nanacha",
+    熱辣食堂: "まぁ麻"
+  };
+
+  return brandList.length > 0
+    ? brandList.map((brand) => ({ label: aliases[brand.name] ?? brand.name, value: brand.name }))
+    : defaultUsageBrandOptions;
+}
 
 function getDefaultDeadlineValue() {
   const now = new Date();
@@ -183,7 +195,7 @@ export default function OrdersPage() {
       id: 1,
       category: initialProducts[0]?.category ?? "",
       productName: initialProducts[0]?.name ?? "",
-      brandName: usageBrandOptions[0].value,
+      brandName: defaultUsageBrandOptions[0].value,
       quantity: 1,
       unit: initialProducts[0]?.unit ?? "個"
     }
@@ -220,6 +232,7 @@ export default function OrdersPage() {
       ...store,
       label: store.name.replace("納品", "")
     }));
+  const usageBrandOptions = createUsageBrandOptions(brandsData);
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, exceptions);
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
     if (queueFilter === "未完了") return order.status !== "完了";
