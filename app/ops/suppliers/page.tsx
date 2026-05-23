@@ -101,7 +101,7 @@ export default function SuppliersPage() {
   }
 
   function deleteSupplier(supplier: Supplier) {
-    if (!window.confirm(`${supplier.name} を削除しますか？`)) return;
+    if (!window.confirm(`${supplier.name} を削除しますか？\n商品・仕入れ記録・価格記録との紐づけも解除されます。`)) return;
 
     setSuppliers((items) => items.filter((item) => item.name !== supplier.name));
     void fetch("/api/suppliers", {

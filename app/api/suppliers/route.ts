@@ -78,23 +78,61 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "仕入れ先名が必要です。" }, { status: 400 });
   }
 
-  const linkedRows = await sql`
-    select count(*)::int as count
-    from purchase_order_items
-    join suppliers on suppliers.id = purchase_order_items.supplier_id
-    where suppliers.name = ${name}
+  const rows = await sql`
+    select id
+    from suppliers
+    where name = ${name}
   `;
+  const supplierId = rows[0]?.id;
 
-  if (Number(linkedRows[0]?.count ?? 0) > 0) {
-    return Response.json(
-      { error: "この仕入れ先は仕入れ記録で使用されているため削除できません。" },
-      { status: 409 }
-    );
+  if (!supplierId) {
+    return Response.json({ error: "仕入れ先が見つかりません。" }, { status: 404 });
   }
 
   await sql`
+    update purchase_order_items
+    set supplier_location_id = null
+    where supplier_location_id in (
+      select id from supplier_locations where supplier_id = ${supplierId}
+    )
+  `;
+  await sql`
+    update purchase_order_items
+    set supplier_id = null
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
+    update purchase_actuals
+    set supplier_location_id = null
+    where supplier_location_id in (
+      select id from supplier_locations where supplier_id = ${supplierId}
+    )
+  `;
+  await sql`
+    update purchase_actuals
+    set supplier_id = null
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
+    update price_records
+    set supplier_location_id = null
+    where supplier_location_id in (
+      select id from supplier_locations where supplier_id = ${supplierId}
+    )
+  `;
+  await sql`
+    update price_records
+    set supplier_id = null
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
+    update employee_scopes
+    set supplier_id = null
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
     delete from suppliers
-    where name = ${name}
+    where id = ${supplierId}
   `;
 
   return Response.json({ ok: true });
