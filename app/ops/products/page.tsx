@@ -301,6 +301,14 @@ export default function ProductsPage() {
             <h1>仕入れ管理</h1>
           </div>
         </div>
+        <details className="mobile-nav-menu">
+          <summary>メニュー</summary>
+          <div className="mobile-nav-list">
+            {navItems.map(({ label, href }) => (
+              <a href={href} key={label}>{label}</a>
+            ))}
+          </div>
+        </details>
         <nav className="nav-list">
           {navItems.map(({ label, href, icon: Icon }) => (
             <a href={href} className="nav-item" key={label}>
