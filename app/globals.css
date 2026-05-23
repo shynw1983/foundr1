@@ -771,10 +771,11 @@ button {
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 96px minmax(150px, 1.2fr) 72px 86px minmax(140px, 1fr) minmax(140px, 1fr);
-  align-items: end;
-  gap: 10px;
-  padding: 10px;
+  grid-template-columns: 92px minmax(180px, 1.4fr) 72px 86px auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
@@ -787,7 +788,7 @@ button {
 
 .procurement-task label {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .procurement-task label > span,
@@ -799,7 +800,7 @@ button {
 
 .procurement-task input {
   width: 100%;
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 10px;
@@ -822,13 +823,14 @@ button {
 
 .task-product {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .quantity-diff {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
+  justify-content: center;
+  min-height: 34px;
   padding: 0 9px;
   border-radius: 8px;
   color: var(--green);
@@ -841,6 +843,54 @@ button {
 .quantity-diff.has-diff {
   color: var(--red);
   background: var(--red-soft);
+}
+
+.exception-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
+  background: white;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.exception-button.has-report {
+  border-color: transparent;
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.exception-modal {
+  width: min(640px, 100%);
+}
+
+.exception-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.exception-summary > span:not(.quantity-diff) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: white;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .row-heading {
@@ -1373,7 +1423,7 @@ button {
   }
 
   .procurement-task {
-    grid-template-columns: 96px minmax(150px, 1fr) 72px 86px;
+    grid-template-columns: 92px minmax(180px, 1fr) 72px 86px auto;
   }
 
   .panel.wide,
@@ -1429,10 +1479,34 @@ button {
   .compact-row,
   .module-card,
   .order-item-row,
-  .procurement-task,
   .product-master-head,
   .product-master-row {
     grid-template-columns: 1fr;
+  }
+
+  .procurement-task {
+    grid-template-columns: 64px minmax(0, 1fr) 54px 66px 70px;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .procurement-task .task-check {
+    gap: 5px;
+  }
+
+  .procurement-task .task-check span,
+  .procurement-task label > span,
+  .task-product small,
+  .quantity-diff,
+  .exception-button {
+    font-size: 11px;
+  }
+
+  .procurement-task input,
+  .quantity-diff,
+  .exception-button {
+    min-height: 32px;
+    padding: 0 7px;
   }
 
   .product-master-head {

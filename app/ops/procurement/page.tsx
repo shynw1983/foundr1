@@ -119,6 +119,7 @@ export default function ProcurementPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>(() =>
     createProcurementTaskItems(orders, initialProducts, [])
   );
@@ -158,6 +159,8 @@ export default function ProcurementPage() {
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
     setProcurementTaskItems((items) => items.map((item) => (item.id === id ? { ...item, ...next } : item)));
   }
+
+  const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
 
   return (
     <main className="shell">
@@ -261,24 +264,13 @@ export default function ProcurementPage() {
                                   <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
                                     {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
                                   </div>
-                                  <label>
-                                    <span>備考</span>
-                                    <input
-                                      value={item.note}
-                                      placeholder="代替品、欠品、配送メモ"
-                                      onChange={(event) => updateProcurementTaskItem(item.id, { note: event.target.value })}
-                                    />
-                                  </label>
-                                  <label>
-                                    <span>価格異常メモ</span>
-                                    <input
-                                      value={item.priceExceptionNote}
-                                      placeholder="通常より高い、特売終了など"
-                                      onChange={(event) =>
-                                        updateProcurementTaskItem(item.id, { priceExceptionNote: event.target.value })
-                                      }
-                                    />
-                                  </label>
+                                  <button
+                                    type="button"
+                                    className={item.note || item.priceExceptionNote ? "exception-button has-report" : "exception-button"}
+                                    onClick={() => setActiveExceptionItemId(item.id)}
+                                  >
+                                    異常報告
+                                  </button>
                                 </div>
                               );
                             })}
@@ -309,7 +301,82 @@ export default function ProcurementPage() {
           </div>
         </section>
       </section>
+      {activeExceptionItem ? (
+        <ExceptionReportDialog
+          item={activeExceptionItem}
+          onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
+          onClose={() => setActiveExceptionItemId(null)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function ExceptionReportDialog({
+  item,
+  onChange,
+  onClose
+}: {
+  item: ProcurementTaskItem;
+  onChange: (next: Partial<ProcurementTaskItem>) => void;
+  onClose: () => void;
+}) {
+  const quantityDiff = item.actualQuantity - item.requestedQuantity;
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="exception-report-title">
+      <form
+        className="edit-modal exception-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
+      >
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Exception Report</p>
+            <h3 id="exception-report-title">異常報告</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
+            ×
+          </button>
+        </div>
+        <div className="exception-summary">
+          <strong>{item.productName}</strong>
+          <span>依頼 {item.requestedQuantity} {item.unit}</span>
+          <span>実数 {item.actualQuantity} {item.unit}</span>
+          <span className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+            {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+          </span>
+        </div>
+        <div className="edit-fields">
+          <label>
+            <span>備考</span>
+            <textarea
+              value={item.note}
+              placeholder="代替品、欠品、配送メモなど"
+              onChange={(event) => onChange({ note: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>価格異常メモ</span>
+            <textarea
+              value={item.priceExceptionNote}
+              placeholder="通常より高い、特売終了、価格確認が必要など"
+              onChange={(event) => onChange({ priceExceptionNote: event.target.value })}
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            キャンセル
+          </button>
+          <button type="submit" className="primary-button">
+            保存
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
