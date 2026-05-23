@@ -45,16 +45,9 @@ type EditTarget =
   | { type: "supplier"; index: number; value: Supplier }
   | { type: "location"; index: number; value: SupplierLocation }
   | { type: "source"; groupIndex: number; optionIndex: number; value: ProductSupplierOption };
-type NewOrderDraft = {
-  store: string;
-  brand: string;
-  deadline: string;
-  priority: string;
-  items: number;
-  note: string;
-};
 type OrderItemDraft = {
   id: number;
+  category: string;
   productName: string;
   quantity: number;
   unit: string;
@@ -88,10 +81,10 @@ export default function Home() {
   const [storesData, setStoresData] = useState(stores);
   const [brandsData, setBrandsData] = useState(brands);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
-  const [newOrderDraft, setNewOrderDraft] = useState<NewOrderDraft | null>(null);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
+      category: initialProducts[0]?.category ?? "",
       productName: initialProducts[0]?.name ?? "",
       quantity: 1,
       unit: initialProducts[0]?.unit ?? "個"
@@ -140,6 +133,7 @@ export default function Home() {
   const activeExceptions = exceptions.filter((item) => item.status !== "解決済み").length;
   const risingPrices = priceSignals.filter((item) => item.changeRate > 8).length;
   const keyProducts = products.filter((product) => product.category === "食材").length;
+  const productCategories = Array.from(new Set(products.map((product) => product.category)));
 
   const masterModules = [
     {
@@ -203,29 +197,17 @@ export default function Home() {
     setEditTarget(null);
   }
 
-  function saveNewOrder(draft: NewOrderDraft) {
-    const nextOrder: PurchaseOrder = {
-      id: `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${String(purchaseOrders.length + 1).padStart(3, "0")}`,
-      store: draft.store,
-      brand: draft.brand,
-      deadline: draft.deadline,
-      items: draft.items,
-      priority: draft.priority,
-      status: "仕入れ待ち"
-    };
-
-    setPurchaseOrders((items) => [nextOrder, ...items]);
-    setNewOrderDraft(null);
-  }
-
   function addOrderItemDraft() {
+    const firstProduct = products[0];
+
     setOrderItemDrafts((items) => [
       ...items,
       {
         id: Date.now(),
-        productName: products[0]?.name ?? "",
+        category: firstProduct?.category ?? "",
+        productName: firstProduct?.name ?? "",
         quantity: 1,
-        unit: products[0]?.unit ?? "個"
+        unit: firstProduct?.unit ?? "個"
       }
     ]);
   }
@@ -235,14 +217,30 @@ export default function Home() {
       items.map((item) => {
         if (item.id !== id) return item;
 
-        const selectedProduct = next.productName
-          ? products.find((product) => product.name === next.productName)
-          : undefined;
+        if (next.category && next.category !== item.category) {
+          const firstProductInCategory = products.find((product) => product.category === next.category);
+
+          return {
+            ...item,
+            category: next.category,
+            productName: firstProductInCategory?.name ?? "",
+            unit: firstProductInCategory?.unit ?? "個"
+          };
+        }
+
+        if (next.productName && next.productName !== item.productName) {
+          const selectedProduct = products.find((product) => product.name === next.productName);
+
+          return {
+            ...item,
+            productName: next.productName,
+            unit: selectedProduct?.unit ?? item.unit
+          };
+        }
 
         return {
           ...item,
-          ...next,
-          unit: selectedProduct?.unit ?? next.unit ?? item.unit
+          ...next
         };
       })
     );
@@ -348,15 +346,28 @@ export default function Home() {
                 {orderItemDrafts.map((item, index) => (
                   <div className="order-item-row" key={item.id}>
                     <label>
-                      <span>商品 {index + 1}</span>
+                      <span>分類 {index + 1}</span>
+                      <select
+                        value={item.category}
+                        onChange={(event) => updateOrderItemDraft(item.id, { category: event.target.value })}
+                      >
+                        {productCategories.map((category) => (
+                          <option value={category} key={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>商品</span>
                       <select
                         name="productName"
                         value={item.productName}
                         onChange={(event) => updateOrderItemDraft(item.id, { productName: event.target.value })}
                       >
-                        {products.map((product) => (
+                        {products.filter((product) => product.category === item.category).map((product) => (
                           <option value={product.name} key={product.name}>
-                            {product.category} / {product.name}
+                            {product.name}
                           </option>
                         ))}
                       </select>
@@ -371,14 +382,11 @@ export default function Home() {
                         onChange={(event) => updateOrderItemDraft(item.id, { quantity: Number(event.target.value) })}
                       />
                     </label>
-                    <label>
+                    <div className="unit-display">
                       <span>単位</span>
-                      <input
-                        name="requestedUnit"
-                        value={item.unit}
-                        onChange={(event) => updateOrderItemDraft(item.id, { unit: event.target.value })}
-                      />
-                    </label>
+                      <strong>{item.unit}</strong>
+                      <input type="hidden" name="requestedUnit" value={item.unit} />
+                    </div>
                     <button
                       type="button"
                       className="text-button"
@@ -694,16 +702,6 @@ export default function Home() {
           onSave={saveEdit}
         />
       ) : null}
-      {newOrderDraft ? (
-        <CreateOrderDialog
-          draft={newOrderDraft}
-          stores={storesData}
-          brands={brandsData}
-          onChange={setNewOrderDraft}
-          onClose={() => setNewOrderDraft(null)}
-          onSave={saveNewOrder}
-        />
-      ) : null}
     </main>
   );
 }
@@ -790,111 +788,6 @@ function EditDialog({
           </button>
           <button type="submit" className="primary-button">
             保存
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function CreateOrderDialog({
-  draft,
-  stores,
-  brands,
-  onChange,
-  onClose,
-  onSave
-}: {
-  draft: NewOrderDraft;
-  stores: typeof import("../lib/mock-data").stores;
-  brands: typeof import("../lib/mock-data").brands;
-  onChange: (draft: NewOrderDraft) => void;
-  onClose: () => void;
-  onSave: (draft: NewOrderDraft) => void;
-}) {
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-order-title">
-      <form
-        className="edit-modal"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave(draft);
-        }}
-      >
-        <div className="modal-heading">
-          <div>
-            <p className="eyebrow">Purchase Request</p>
-            <h3 id="create-order-title">仕入れ依頼を作成</h3>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
-            ×
-          </button>
-        </div>
-        <div className="edit-fields">
-          <label>
-            <span>送達店舗</span>
-            <select
-              value={draft.store}
-              onChange={(event) => onChange({ ...draft, store: event.target.value })}
-            >
-              {stores.map((store) => (
-                <option value={store.name} key={store.name}>{store.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>対象ブランド</span>
-            <select
-              value={draft.brand}
-              onChange={(event) => onChange({ ...draft, brand: event.target.value })}
-            >
-              {brands.map((brand) => (
-                <option value={brand.name} key={brand.name}>{brand.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>締切</span>
-            <input
-              value={draft.deadline}
-              onChange={(event) => onChange({ ...draft, deadline: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>商品件数</span>
-            <input
-              type="number"
-              min={1}
-              value={draft.items}
-              onChange={(event) => onChange({ ...draft, items: Number(event.target.value) })}
-            />
-          </label>
-          <label>
-            <span>優先度</span>
-            <select
-              value={draft.priority}
-              onChange={(event) => onChange({ ...draft, priority: event.target.value })}
-            >
-              <option value="高">高</option>
-              <option value="中">中</option>
-              <option value="低">低</option>
-            </select>
-          </label>
-          <label>
-            <span>メモ</span>
-            <textarea
-              value={draft.note}
-              onChange={(event) => onChange({ ...draft, note: event.target.value })}
-              placeholder="欠品時の代替、配送希望など"
-            />
-          </label>
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            キャンセル
-          </button>
-          <button type="submit" className="primary-button">
-            作成
           </button>
         </div>
       </form>
