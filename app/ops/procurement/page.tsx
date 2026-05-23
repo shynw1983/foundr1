@@ -17,7 +17,12 @@ type DashboardOrderItem = {
   orderId: string;
   productName: string;
   requestedQuantity: number;
+  actualQuantity?: number;
   unit: string;
+  purchased?: boolean;
+  supplier?: string;
+  note?: string;
+  priceExceptionNote?: string;
 };
 type ProcurementTaskItem = {
   id: string;
@@ -26,6 +31,7 @@ type ProcurementTaskItem = {
   requestedQuantity: number;
   actualQuantity: number;
   unit: string;
+  supplier: string;
   purchased: boolean;
   note: string;
   priceExceptionNote: string;
@@ -55,11 +61,12 @@ function createProcurementTaskItems(
         orderId: order.id,
         productName: item.productName,
         requestedQuantity: item.requestedQuantity,
-        actualQuantity: item.requestedQuantity,
+        actualQuantity: item.actualQuantity ?? item.requestedQuantity,
         unit: item.unit,
-        purchased: false,
-        note: "",
-        priceExceptionNote: ""
+        supplier: item.supplier ?? "",
+        purchased: item.purchased ?? false,
+        note: item.note ?? "",
+        priceExceptionNote: item.priceExceptionNote ?? ""
       }));
     }
 
@@ -74,6 +81,7 @@ function createProcurementTaskItems(
         requestedQuantity: quantity,
         actualQuantity: quantity,
         unit: product.unit,
+        supplier: "",
         purchased: false,
         note: "",
         priceExceptionNote: ""
@@ -101,7 +109,7 @@ function groupTasksBySupplier(
   supplierOptions: ProductSupplierGroup[]
 ) {
   return items.reduce<Array<{ supplier: string; items: ProcurementTaskItem[] }>>((groups, item) => {
-    const supplier = getProcurementSupplier(item.productName, productList, supplierOptions);
+    const supplier = item.supplier || getProcurementSupplier(item.productName, productList, supplierOptions);
     const existingGroup = groups.find((group) => group.supplier === supplier);
 
     if (existingGroup) {

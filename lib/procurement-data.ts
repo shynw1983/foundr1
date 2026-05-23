@@ -149,10 +149,38 @@ export async function getProcurementDashboardData() {
           purchase_orders.order_no as "orderId",
           products.name as "productName",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
-          purchase_order_items.requested_unit as unit
+          purchase_order_items.requested_unit as unit,
+          coalesce(purchase_actuals.actual_quantity::float, purchase_order_items.requested_quantity::float) as "actualQuantity",
+          (purchase_order_items.status = 'purchased' or purchase_actuals.id is not null) as purchased,
+          case
+            when purchase_order_items.note like 'supplier=%'
+            then split_part(split_part(purchase_order_items.note, ';', 1), '=', 2)
+            else ''
+          end as supplier,
+          case
+            when purchase_order_items.note like '%note=%'
+            then split_part(purchase_order_items.note, 'note=', 2)
+            else coalesce(purchase_actuals.note, '')
+          end as note,
+          case
+            when purchase_actuals.price_is_exception
+            then coalesce(purchase_actuals.note, '')
+            else ''
+          end as "priceExceptionNote"
         from purchase_order_items
         join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
         join products on products.id = purchase_order_items.product_id
+        left join lateral (
+          select
+            purchase_actuals.id,
+            purchase_actuals.actual_quantity,
+            purchase_actuals.note,
+            purchase_actuals.price_is_exception
+          from purchase_actuals
+          where purchase_actuals.purchase_order_item_id = purchase_order_items.id
+          order by purchase_actuals.recorded_at desc
+          limit 1
+        ) purchase_actuals on true
         order by purchase_orders.created_at desc, purchase_order_items.id
       `
     ]);
