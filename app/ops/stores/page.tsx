@@ -24,6 +24,7 @@ export default function StoresPage() {
   const [brandsData, setBrandsData] = useState<BrandItem[]>(brands);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
+  const [selectedStoreBrands, setSelectedStoreBrands] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -67,6 +68,7 @@ export default function StoresPage() {
       ...items.filter((item) => item.name !== name),
       { name, owner, brands: selectedBrands }
     ]);
+    setSelectedStoreBrands([]);
     form.reset();
   }
 
@@ -165,6 +167,38 @@ export default function StoresPage() {
     setEditingBrand(null);
   }
 
+  function toggleStoreBrand(brandName: string, checked: boolean) {
+    const allBrandNames = brandsData.map((brand) => brand.name);
+    const concreteBrandNames = allBrandNames.filter((name) => name !== "共通");
+
+    if (brandName === "共通") {
+      setSelectedStoreBrands(checked ? allBrandNames : []);
+      return;
+    }
+
+    setSelectedStoreBrands((current) => {
+      const nextConcrete = checked
+        ? Array.from(new Set([...current.filter((name) => name !== "共通"), brandName]))
+        : current.filter((name) => name !== "共通" && name !== brandName);
+      const hasAllConcreteBrands = concreteBrandNames.every((name) => nextConcrete.includes(name));
+
+      return hasAllConcreteBrands && concreteBrandNames.length > 0
+        ? ["共通", ...nextConcrete]
+        : nextConcrete;
+    });
+  }
+
+  function formatStoreBrands(brandNames: string[]) {
+    const concreteBrandNames = brandsData.map((brand) => brand.name).filter((name) => name !== "共通");
+    const hasAllConcreteBrands = concreteBrandNames.length > 0 && concreteBrandNames.every((name) => brandNames.includes(name));
+
+    if (brandNames.includes("共通") || hasAllConcreteBrands) {
+      return "共通（全ブランド）";
+    }
+
+    return brandNames.length > 0 ? brandNames.join(" / ") : "ブランド未設定";
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -210,8 +244,14 @@ export default function StoresPage() {
                 <span>取り扱いブランド</span>
                 {brandsData.map((brand) => (
                   <label key={brand.name}>
-                    <input type="checkbox" name="brand" value={brand.name} />
-                    {brand.name}
+                    <input
+                      type="checkbox"
+                      name="brand"
+                      value={brand.name}
+                      checked={selectedStoreBrands.includes(brand.name)}
+                      onChange={(event) => toggleStoreBrand(brand.name, event.target.checked)}
+                    />
+                    {brand.name === "共通" ? "共通（全ブランド）" : brand.name}
                   </label>
                 ))}
               </div>
@@ -223,7 +263,7 @@ export default function StoresPage() {
                   <div>
                     <strong>{store.name}</strong>
                     <p>{store.owner || "担当者未設定"}</p>
-                    <small>{store.brands.length > 0 ? store.brands.join(" / ") : "ブランド未設定"}</small>
+                    <small>{formatStoreBrands(store.brands)}</small>
                   </div>
                   <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
                     削除
