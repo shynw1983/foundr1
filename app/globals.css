@@ -339,6 +339,99 @@ button {
   padding-right: 4px;
 }
 
+.management-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.management-form label,
+.checkbox-group {
+  display: grid;
+  gap: 7px;
+}
+
+.management-form span,
+.checkbox-group > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.management-form input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  outline: 0;
+  background: white;
+  font: inherit;
+}
+
+.management-form input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.checkbox-group {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.checkbox-group input {
+  min-height: auto;
+  width: 18px;
+  height: 18px;
+}
+
+.management-list {
+  display: grid;
+  gap: 10px;
+}
+
+.management-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.management-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.management-row strong {
+  font-size: 17px;
+}
+
+.management-row p,
+.management-row small {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .queue-filter-bar {
   display: flex;
   flex-wrap: wrap;

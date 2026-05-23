@@ -1,0 +1,66 @@
+import { sql } from "../../../lib/db";
+
+export async function POST(request: Request) {
+  const formData = await request.formData();
+  const name = String(formData.get("name") ?? "").trim();
+  const owner = String(formData.get("owner") ?? "").trim();
+  const brandNames = formData.getAll("brand").map((value) => String(value));
+
+  if (!name) {
+    return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
+  }
+
+  const rows = await sql`
+    insert into stores (name, owner_name, updated_at)
+    values (${name}, ${owner}, now())
+    on conflict (name)
+    do update set
+      owner_name = excluded.owner_name,
+      updated_at = now()
+    returning id
+  `;
+  const storeId = rows[0]?.id;
+
+  await sql`delete from store_brands where store_id = ${storeId}`;
+
+  for (const brandName of brandNames) {
+    await sql`
+      insert into store_brands (store_id, brand_id)
+      select ${storeId}, brands.id
+      from brands
+      where brands.name = ${brandName}
+      on conflict do nothing
+    `;
+  }
+
+  return Response.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const body = await request.json() as { name?: string };
+
+  if (!body.name) {
+    return Response.json({ error: "店舗名が必要です。" }, { status: 400 });
+  }
+
+  const linkedOrders = await sql`
+    select count(*)::int as count
+    from purchase_orders
+    join stores on stores.id = purchase_orders.store_id
+    where stores.name = ${body.name}
+  `;
+
+  if (Number(linkedOrders[0]?.count ?? 0) > 0) {
+    return Response.json(
+      { error: "この店舗は仕入れ依頼で使用されているため削除できません。" },
+      { status: 409 }
+    );
+  }
+
+  await sql`
+    delete from stores
+    where name = ${body.name}
+  `;
+
+  return Response.json({ ok: true });
+}
