@@ -292,6 +292,7 @@ button {
 }
 
 .workspace-grid,
+.dashboard-report-grid,
 .management-grid,
 .admin-grid {
   display: grid;
@@ -299,7 +300,8 @@ button {
   margin-bottom: 18px;
 }
 
-.workspace-grid {
+.workspace-grid,
+.dashboard-report-grid {
   grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.75fr);
   align-items: start;
 }
@@ -1360,6 +1362,7 @@ button {
   .metric-grid,
   .content-grid,
   .workspace-grid,
+  .dashboard-report-grid,
   .management-grid,
   .admin-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1398,6 +1401,7 @@ button {
   .metric-grid,
   .content-grid,
   .workspace-grid,
+  .dashboard-report-grid,
   .management-grid,
   .admin-grid,
   .module-grid,

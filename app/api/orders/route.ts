@@ -67,5 +67,5 @@ export async function POST(request: Request) {
     }
   }
 
-  redirect("/ops");
+  redirect("/ops/orders");
 }
