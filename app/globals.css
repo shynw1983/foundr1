@@ -2027,8 +2027,39 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .procurement-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .procurement-panel > .panel-title {
+    margin-bottom: 12px;
+    padding: 0 2px;
+  }
+
+  .procurement-order-list {
+    gap: 14px;
+  }
+
+  .procurement-order-card {
+    gap: 12px;
+    padding: 12px;
+    background: white;
+  }
+
+  .procurement-supplier-list,
+  .procurement-task-list {
+    gap: 8px;
+  }
+
   .fulfillment-panel {
     grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
   .fulfillment-actions {
@@ -2047,6 +2078,22 @@ button {
 
   .delivery-batch-row {
     grid-template-columns: 1fr;
+    padding: 8px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .procurement-supplier-group {
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .supplier-group-heading {
+    padding-bottom: 6px;
   }
 
   .compact-row,
