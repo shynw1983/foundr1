@@ -356,9 +356,6 @@ export default function Home() {
             <div className="order-items-builder">
               <div className="builder-heading">
                 <strong>采购商品清单</strong>
-                <button type="button" className="text-button" onClick={addOrderItemDraft}>
-                  商品を追加
-                </button>
               </div>
               <div className="order-item-list">
                 {orderItemDrafts.map((item, index) => (
@@ -415,6 +412,11 @@ export default function Home() {
                     </button>
                   </div>
                 ))}
+              </div>
+              <div className="builder-actions">
+                <button type="button" className="text-button" onClick={addOrderItemDraft}>
+                  商品を追加
+                </button>
               </div>
             </div>
             <div className="inline-create-actions">

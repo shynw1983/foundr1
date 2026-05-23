@@ -540,6 +540,11 @@ button {
   gap: 12px;
 }
 
+.builder-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .order-item-list {
   display: grid;
   gap: 10px;
