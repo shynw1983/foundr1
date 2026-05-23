@@ -14,6 +14,8 @@ type ProductWithCategory = Product & {
   subcategory?: string;
   originCountries?: string[];
   packageSpec?: string;
+  productBrandName?: string;
+  manufacturer?: string;
 };
 type Supplier = typeof initialSuppliers[number];
 type ProductEditTarget = { type: "product"; index: number; value: ProductWithCategory; originalName?: string };
@@ -83,6 +85,8 @@ export default function ProductsPage() {
   const filteredProducts = products.filter((product) => {
     const targetText = [
       product.name,
+      product.productBrandName,
+      product.manufacturer,
       product.category,
       product.subcategory,
       product.brand,
@@ -130,6 +134,8 @@ export default function ProductsPage() {
       index: products.length,
       value: {
         name: "",
+        productBrandName: "",
+        manufacturer: "",
         category: productCategories[0] ?? "食材",
         subcategory: "未分類",
         brand: brandsData[0]?.name ?? "共通",
@@ -463,7 +469,7 @@ export default function ProductsPage() {
                 <article className="product-master-row" key={`${product.name}-${productIndex}`}>
                   <div>
                     <strong>{product.name || "未設定の商品"}</strong>
-                    <p>{product.brand}</p>
+                    <p>{product.productBrandName || "商品ブランド未設定"}</p>
                   </div>
                   <span>{product.category}</span>
                   <span>{product.subcategory || "未分類"}</span>
@@ -490,6 +496,14 @@ export default function ProductsPage() {
                       )}
                     </div>
                     <dl>
+                      <div>
+                        <dt>用途ブランド</dt>
+                        <dd>{product.brand || "共通"}</dd>
+                      </div>
+                      <div>
+                        <dt>メーカー</dt>
+                        <dd>{product.manufacturer || "未設定"}</dd>
+                      </div>
                       <div>
                         <dt>主要仕入れ先</dt>
                         <dd>{product.mainSupplier || "未設定"}</dd>
@@ -818,6 +832,8 @@ function getProductFields(
 
   return [
     { key: "name", label: "商品名" },
+    { key: "productBrandName", label: "商品ブランド" },
+    { key: "manufacturer", label: "メーカー" },
     { key: "category", label: "大分類", options: uniqueOptions([...categoryOptions, product.category]) },
     {
       key: "subcategory",

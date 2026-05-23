@@ -31,6 +31,8 @@ export async function getProcurementDashboardData() {
       sql`
         select
           name,
+          coalesce(product_brand_name, '') as "productBrandName",
+          coalesce(manufacturer, '') as manufacturer,
           category,
           coalesce(subcategory, '未分類') as subcategory,
           unit,

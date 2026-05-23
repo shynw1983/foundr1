@@ -3,6 +3,8 @@ import { sql } from "../../../lib/db";
 type ProductPayload = {
   currentName?: string;
   name?: string;
+  productBrandName?: string;
+  manufacturer?: string;
   category?: string;
   subcategory?: string;
   unit?: string;
@@ -21,6 +23,8 @@ export async function PUT(request: Request) {
   const body = await request.json() as ProductPayload;
   const currentName = String(body.currentName ?? "").trim();
   const name = String(body.name ?? "").trim();
+  const productBrandName = String(body.productBrandName ?? "").trim();
+  const manufacturer = String(body.manufacturer ?? "").trim();
   const category = String(body.category ?? "").trim() || "未分類";
   const subcategory = String(body.subcategory ?? "").trim() || "未分類";
   const unit = String(body.unit ?? "").trim() || "個";
@@ -56,6 +60,8 @@ export async function PUT(request: Request) {
         update products
         set
           name = ${name},
+          product_brand_name = ${productBrandName},
+          manufacturer = ${manufacturer},
           category = ${category},
           subcategory = ${subcategory},
           unit = ${unit},
@@ -72,6 +78,8 @@ export async function PUT(request: Request) {
     : await sql`
         insert into products (
           name,
+          product_brand_name,
+          manufacturer,
           category,
           subcategory,
           unit,
@@ -85,6 +93,8 @@ export async function PUT(request: Request) {
         )
         values (
           ${name},
+          ${productBrandName},
+          ${manufacturer},
           ${category},
           ${subcategory},
           ${unit},
