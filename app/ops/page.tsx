@@ -122,6 +122,37 @@ function createProcurementTaskItems(
   });
 }
 
+function getProcurementSupplier(
+  productName: string,
+  productList: Product[],
+  supplierOptions: ProductSupplierGroup[]
+) {
+  const product = productList.find((item) => item.name === productName);
+  const mainOption = supplierOptions
+    .find((group) => group.product === productName)
+    ?.options.find((option) => option.role === "メイン");
+
+  return product?.mainSupplier || mainOption?.supplier || "未設定";
+}
+
+function groupTasksBySupplier(
+  items: ProcurementTaskItem[],
+  productList: Product[],
+  supplierOptions: ProductSupplierGroup[]
+) {
+  return items.reduce<Array<{ supplier: string; items: ProcurementTaskItem[] }>>((groups, item) => {
+    const supplier = getProcurementSupplier(item.productName, productList, supplierOptions);
+    const existingGroup = groups.find((group) => group.supplier === supplier);
+
+    if (existingGroup) {
+      existingGroup.items.push(item);
+      return groups;
+    }
+
+    return [...groups, { supplier, items: [item] }];
+  }, []);
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [productBrandUsages, setProductBrandUsages] = useState<ProductBrandUsage[]>(initialProductBrandUsages);
@@ -522,6 +553,7 @@ export default function Home() {
               <div className="procurement-order-list">
                 {purchaseOrders.map((order) => {
                   const items = procurementTaskItems.filter((item) => item.orderId === order.id);
+                  const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
                   const completedCount = items.filter((item) => item.purchased).length;
 
                   return (
@@ -533,57 +565,76 @@ export default function Home() {
                         </div>
                         <span>{completedCount} / {items.length} 完了</span>
                       </div>
-                      <div className="procurement-task-list">
-                        {items.map((item) => {
-                          const quantityDiff = item.actualQuantity - item.requestedQuantity;
+                      <div className="procurement-supplier-list">
+                        {supplierGroups.map((group) => {
+                          const supplierCompletedCount = group.items.filter((item) => item.purchased).length;
 
                           return (
-                            <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
-                              <label className="task-check">
-                                <input
-                                  type="checkbox"
-                                  checked={item.purchased}
-                                  onChange={(event) => updateProcurementTaskItem(item.id, { purchased: event.target.checked })}
-                                />
-                                <span>{item.purchased ? "購入済み" : "未購入"}</span>
-                              </label>
-                              <div className="task-product">
-                                <strong>{item.productName}</strong>
-                                <small>依頼 {item.requestedQuantity} {item.unit}</small>
+                            <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
+                              <div className="supplier-group-heading">
+                                <div>
+                                  <span>仕入れ先</span>
+                                  <strong>{group.supplier}</strong>
+                                </div>
+                                <small>{supplierCompletedCount} / {group.items.length} 完了</small>
                               </div>
-                              <label>
-                                <span>実数</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={item.actualQuantity}
-                                  onChange={(event) =>
-                                    updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
-                                  }
-                                />
-                              </label>
-                              <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
-                                {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+                              <div className="procurement-task-list">
+                                {group.items.map((item) => {
+                                  const quantityDiff = item.actualQuantity - item.requestedQuantity;
+
+                                  return (
+                                    <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
+                                      <label className="task-check">
+                                        <input
+                                          type="checkbox"
+                                          checked={item.purchased}
+                                          onChange={(event) =>
+                                            updateProcurementTaskItem(item.id, { purchased: event.target.checked })
+                                          }
+                                        />
+                                        <span>{item.purchased ? "購入済み" : "未購入"}</span>
+                                      </label>
+                                      <div className="task-product">
+                                        <strong>{item.productName}</strong>
+                                        <small>依頼 {item.requestedQuantity} {item.unit}</small>
+                                      </div>
+                                      <label>
+                                        <span>実数</span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={item.actualQuantity}
+                                          onChange={(event) =>
+                                            updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
+                                          }
+                                        />
+                                      </label>
+                                      <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+                                        {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+                                      </div>
+                                      <label>
+                                        <span>備考</span>
+                                        <input
+                                          value={item.note}
+                                          placeholder="代替品、欠品、配送メモ"
+                                          onChange={(event) => updateProcurementTaskItem(item.id, { note: event.target.value })}
+                                        />
+                                      </label>
+                                      <label>
+                                        <span>価格異常メモ</span>
+                                        <input
+                                          value={item.priceExceptionNote}
+                                          placeholder="通常より高い、特売終了など"
+                                          onChange={(event) =>
+                                            updateProcurementTaskItem(item.id, { priceExceptionNote: event.target.value })
+                                          }
+                                        />
+                                      </label>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              <label>
-                                <span>備考</span>
-                                <input
-                                  value={item.note}
-                                  placeholder="代替品、欠品、配送メモ"
-                                  onChange={(event) => updateProcurementTaskItem(item.id, { note: event.target.value })}
-                                />
-                              </label>
-                              <label>
-                                <span>価格異常メモ</span>
-                                <input
-                                  value={item.priceExceptionNote}
-                                  placeholder="通常より高い、特売終了など"
-                                  onChange={(event) =>
-                                    updateProcurementTaskItem(item.id, { priceExceptionNote: event.target.value })
-                                  }
-                                />
-                              </label>
-                            </div>
+                            </section>
                           );
                         })}
                       </div>
