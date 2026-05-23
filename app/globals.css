@@ -2027,6 +2027,51 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .operation-panel,
+  .history-panel,
+  .product-master-page-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .operation-panel > .panel-title,
+  .history-panel > .panel-title,
+  .product-master-page-panel > .panel-title {
+    margin-bottom: 12px;
+    padding: 0 2px;
+  }
+
+  .create-order-panel .order-items-builder,
+  .management-grid .management-form,
+  .product-category-admin-panel .management-form {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .management-grid .checkbox-group {
+    padding: 8px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .operation-panel .order-list {
+    max-height: none;
+    padding-right: 0;
+  }
+
+  .order-row,
+  .history-row,
+  .product-master-row,
+  .management-row,
+  .supplier-admin-row {
+    background: white;
+  }
+
   .procurement-panel {
     padding: 0;
     border: 0;
