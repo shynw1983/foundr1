@@ -20,6 +20,7 @@ type OrderItemDraft = {
   quantity: number;
   unit: string;
 };
+type QueueFilter = "未完了" | "今日対応" | "配送待ち" | "完了" | "すべて";
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -40,12 +41,19 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "商品マスタ", href: "/ops/products", icon: Boxes }
 ];
 
+const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
+
+function isTodayOrder(order: PurchaseOrder) {
+  return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
+}
+
 export default function OrdersPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [storesData, setStoresData] = useState(stores);
   const [brandsData, setBrandsData] = useState(brands);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
@@ -79,6 +87,25 @@ export default function OrdersPage() {
   }, []);
 
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const filteredPurchaseOrders = purchaseOrders.filter((order) => {
+    if (queueFilter === "未完了") return order.status !== "完了";
+    if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
+    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部配達済み"].includes(order.status);
+    if (queueFilter === "完了") return order.status === "完了";
+
+    return true;
+  });
+
+  function getQueueFilterCount(filter: QueueFilter) {
+    if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
+    if (filter === "今日対応") return purchaseOrders.filter((order) => order.status !== "完了" && isTodayOrder(order)).length;
+    if (filter === "配送待ち") {
+      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部配達済み"].includes(order.status)).length;
+    }
+    if (filter === "完了") return purchaseOrders.filter((order) => order.status === "完了").length;
+
+    return purchaseOrders.length;
+  }
 
   function addOrderItemDraft() {
     const firstProduct = products[0];
@@ -280,9 +307,22 @@ export default function OrdersPage() {
 
         <section className="workspace-grid">
           <section className="panel operation-panel" id="仕入れ依頼">
-            <PanelTitle title="仕入れ依頼キュー" subtitle="今日処理すべき依頼を優先度順に確認" />
+            <PanelTitle title="仕入れ依頼キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
+            <div className="queue-filter-bar" aria-label="仕入れ依頼フィルター">
+              {queueFilters.map((filter) => (
+                <button
+                  type="button"
+                  className={queueFilter === filter ? "queue-filter is-active" : "queue-filter"}
+                  onClick={() => setQueueFilter(filter)}
+                  key={filter}
+                >
+                  <span>{filter}</span>
+                  <strong>{getQueueFilterCount(filter)}</strong>
+                </button>
+              ))}
+            </div>
             <div className="order-list">
-              {purchaseOrders.map((order) => (
+              {filteredPurchaseOrders.map((order) => (
                 <article className="order-row" key={order.id}>
                   <div>
                     <div className="row-heading">
@@ -308,6 +348,9 @@ export default function OrdersPage() {
                   </a>
                 </article>
               ))}
+              {filteredPurchaseOrders.length === 0 ? (
+                <div className="empty-state">該当する依頼はありません</div>
+              ) : null}
             </div>
           </section>
 

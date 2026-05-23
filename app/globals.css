@@ -327,6 +327,60 @@ button {
   padding-right: 4px;
 }
 
+.queue-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 14px;
+}
+
+.queue-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: white;
+  font-weight: 800;
+}
+
+.queue-filter strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 12px;
+}
+
+.queue-filter.is-active {
+  border-color: transparent;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.queue-filter.is-active strong {
+  color: white;
+  background: var(--green);
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .module-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
