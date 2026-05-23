@@ -139,6 +139,7 @@ export async function getProcurementDashboardData() {
           coalesce(purchase_orders.deadline_label, '') as deadline,
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
+          coalesce(purchase_orders.note, '') as note,
           case
             when order_progress.total_count is null or order_progress.total_count = 0 then purchase_orders.status
             when order_progress.delivered_count = order_progress.total_count then '完了'

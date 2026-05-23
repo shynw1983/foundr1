@@ -12,7 +12,7 @@ import {
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
-type PurchaseOrder = typeof orders[number];
+type PurchaseOrder = typeof orders[number] & { note?: string };
 type OrderItemDraft = {
   id: number;
   category: string;
@@ -26,6 +26,7 @@ type PurchaseOrderItem = {
   id?: string;
   orderId: string;
   productName: string;
+  brandName?: string;
   requestedQuantity: number;
   actualQuantity?: number;
   unit: string;
@@ -39,6 +40,14 @@ type StoreFeedback = {
   message: string;
   store: string;
   status: string;
+};
+type EditingOrder = {
+  order: PurchaseOrder;
+  store: string;
+  deadline: string;
+  priority: string;
+  note: string;
+  items: OrderItemDraft[];
 };
 
 const statusTone: Record<string, string> = {
@@ -77,6 +86,30 @@ function getDefaultDeadlineValue() {
   const day = String(now.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}T18:00`;
+}
+
+function labelToDeadlineValue(label: string) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const tomorrowMonth = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const tomorrowDay = String(tomorrow.getDate()).padStart(2, "0");
+  const timeMatch = label.match(/(\d{1,2}):(\d{2})/);
+  const hour = timeMatch?.[1]?.padStart(2, "0") ?? "18";
+  const minute = timeMatch?.[2] ?? "00";
+
+  if (label.includes("本日")) return `${year}-${month}-${day}T${hour}:${minute}`;
+  if (label.includes("明日")) return `${tomorrow.getFullYear()}-${tomorrowMonth}-${tomorrowDay}T${hour}:${minute}`;
+
+  const dateMatch = label.match(/(\d{1,2})\/(\d{1,2})/);
+  if (dateMatch) {
+    return `${year}-${dateMatch[1].padStart(2, "0")}-${dateMatch[2].padStart(2, "0")}T${hour}:${minute}`;
+  }
+
+  return getDefaultDeadlineValue();
 }
 
 function isTodayOrder(order: PurchaseOrder) {
@@ -144,6 +177,7 @@ export default function OrdersPage() {
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
+  const [editingOrder, setEditingOrder] = useState<EditingOrder | null>(null);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
@@ -261,19 +295,136 @@ export default function OrdersPage() {
     setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
   }
 
-  function deletePurchaseOrder(orderId: string) {
-    if (!window.confirm(`${orderId} を削除しますか？`)) return;
+  function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
+    const product = products.find((candidate) => candidate.name === item.productName);
 
-    setPurchaseOrders((items) => items.filter((item) => item.id !== orderId));
-    setPurchaseOrderItems((items) => items.filter((item) => item.orderId !== orderId));
+    return {
+      id: Date.now() + index,
+      category: product?.category ?? productCategories[0] ?? "",
+      productName: item.productName,
+      brandName: item.brandName ?? usageBrandOptions[0].value,
+      quantity: item.requestedQuantity,
+      unit: item.unit
+    };
+  }
 
-    void fetch("/api/orders", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderId })
-    }).catch(() => {
-      // Keep the UI responsive; a refresh will restore server state if deletion failed.
+  function startEditingOrder(order: PurchaseOrder) {
+    const items = purchaseOrderItems
+      .filter((item) => item.orderId === order.id)
+      .map((item, index) => createDraftFromOrderItem(item, index));
+
+    setEditingOrder({
+      order,
+      store: order.store,
+      deadline: labelToDeadlineValue(order.deadline),
+      priority: order.priority,
+      note: order.note ?? "",
+      items: items.length > 0 ? items : [
+        {
+          id: Date.now(),
+          category: products[0]?.category ?? "",
+          productName: products[0]?.name ?? "",
+          brandName: usageBrandOptions[0].value,
+          quantity: 1,
+          unit: products[0]?.unit ?? "個"
+        }
+      ]
     });
+  }
+
+  function updateEditingOrderItem(id: number, next: Partial<OrderItemDraft>) {
+    setEditingOrder((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        items: current.items.map((item) => {
+          if (item.id !== id) return item;
+
+          if (next.category && next.category !== item.category) {
+            const firstProductInCategory = products.find((product) => product.category === next.category);
+
+            return {
+              ...item,
+              category: next.category,
+              productName: firstProductInCategory?.name ?? "",
+              unit: firstProductInCategory?.unit ?? "個"
+            };
+          }
+
+          if (next.productName && next.productName !== item.productName) {
+            const selectedProduct = products.find((product) => product.name === next.productName);
+
+            return {
+              ...item,
+              productName: next.productName,
+              unit: selectedProduct?.unit ?? item.unit
+            };
+          }
+
+          return {
+            ...item,
+            ...next
+          };
+        })
+      };
+    });
+  }
+
+  function addEditingOrderItem() {
+    const firstProduct = products[0];
+
+    setEditingOrder((current) => current ? {
+      ...current,
+      items: [
+        ...current.items,
+        {
+          id: Date.now(),
+          category: firstProduct?.category ?? "",
+          productName: firstProduct?.name ?? "",
+          brandName: usageBrandOptions[0].value,
+          quantity: 1,
+          unit: firstProduct?.unit ?? "個"
+        }
+      ]
+    } : current);
+  }
+
+  function removeEditingOrderItem(id: number) {
+    setEditingOrder((current) => current ? {
+      ...current,
+      items: current.items.filter((item) => item.id !== id)
+    } : current);
+  }
+
+  async function saveEditingOrder() {
+    if (!editingOrder) return;
+
+    const formData = new FormData();
+    formData.set("orderId", editingOrder.order.id);
+    formData.set("store", editingOrder.store);
+    formData.set("deadline", editingOrder.deadline);
+    formData.set("priority", editingOrder.priority);
+    formData.set("note", editingOrder.note);
+    editingOrder.items.forEach((item) => {
+      formData.append("productName", item.productName);
+      formData.append("itemBrand", item.brandName);
+      formData.append("requestedQuantity", String(item.quantity));
+      formData.append("requestedUnit", item.unit);
+    });
+
+    const response = await fetch("/api/orders", {
+      method: "PUT",
+      body: formData
+    });
+
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "仕入れ依頼を保存できませんでした。");
+      return;
+    }
+
+    window.location.reload();
   }
 
   return (
@@ -467,8 +618,8 @@ export default function OrdersPage() {
                     <a className="icon-button" href="/ops/procurement" aria-label={`${order.id} の仕入れ処理`}>
                       <PackageCheck size={18} />
                     </a>
-                    <button type="button" className="text-button danger-button" onClick={() => deletePurchaseOrder(order.id)}>
-                      削除
+                    <button type="button" className="text-button" onClick={() => startEditingOrder(order)}>
+                      編集
                     </button>
                   </div>
                 </article>
@@ -498,6 +649,145 @@ export default function OrdersPage() {
           </aside>
         </section>
       </section>
+
+      {editingOrder ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="order-edit-title">
+          <section className="edit-modal order-edit-modal">
+            <div className="modal-heading">
+              <div>
+                <h3 id="order-edit-title">仕入れ依頼を編集</h3>
+                <p>{editingOrder.order.id}</p>
+              </div>
+              <button type="button" className="text-button" onClick={() => setEditingOrder(null)}>
+                閉じる
+              </button>
+            </div>
+
+            <div className="edit-fields">
+              <label>
+                <span>配達先店舗</span>
+                <select
+                  value={editingOrder.store}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, store: event.target.value } : current)}
+                >
+                  {orderableStores.map((store) => (
+                    <option value={store.name} key={store.name}>{store.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>締切</span>
+                <input
+                  type="datetime-local"
+                  value={editingOrder.deadline}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, deadline: event.target.value } : current)}
+                />
+              </label>
+              <label>
+                <span>優先度</span>
+                <select
+                  value={editingOrder.priority}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, priority: event.target.value } : current)}
+                >
+                  <option value="高">高</option>
+                  <option value="中">中</option>
+                  <option value="低">低</option>
+                </select>
+              </label>
+              <label>
+                <span>メモ</span>
+                <textarea
+                  value={editingOrder.note}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, note: event.target.value } : current)}
+                  placeholder="欠品時の代替、配送希望など"
+                />
+              </label>
+            </div>
+
+            <div className="order-items-builder">
+              <div className="builder-heading">
+                <strong>仕入れ商品リスト</strong>
+              </div>
+              <div className="order-item-list">
+                {editingOrder.items.map((item) => (
+                  <div className="order-item-row" key={item.id}>
+                    <label>
+                      <span>分類</span>
+                      <select
+                        value={item.category}
+                        onChange={(event) => updateEditingOrderItem(item.id, { category: event.target.value })}
+                      >
+                        {productCategories.map((category) => (
+                          <option value={category} key={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>商品</span>
+                      <select
+                        value={item.productName}
+                        onChange={(event) => updateEditingOrderItem(item.id, { productName: event.target.value })}
+                      >
+                        {products
+                          .filter((product) => product.category === item.category)
+                          .map((product) => (
+                            <option value={product.name} key={product.name}>{product.name}</option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>用途ブランド</span>
+                      <select
+                        value={item.brandName}
+                        onChange={(event) => updateEditingOrderItem(item.id, { brandName: event.target.value })}
+                      >
+                        {usageBrandOptions.map((brand) => (
+                          <option value={brand.value} key={brand.value}>{brand.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>数量</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(event) => updateEditingOrderItem(item.id, { quantity: Number(event.target.value) })}
+                      />
+                    </label>
+                    <div className="unit-display">
+                      <span>単位</span>
+                      <strong>{item.unit}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => removeEditingOrderItem(item.id)}
+                      disabled={editingOrder.items.length === 1}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="builder-actions">
+                <button type="button" className="text-button" onClick={addEditingOrderItem}>
+                  商品を追加
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="text-button" onClick={() => setEditingOrder(null)}>
+                キャンセル
+              </button>
+              <button type="button" className="primary-button" onClick={saveEditingOrder}>
+                保存
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
