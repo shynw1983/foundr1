@@ -33,6 +33,8 @@ export async function getProcurementDashboardData() {
           coalesce(subcategory, '未分類') as subcategory,
           unit,
           reference_price::float as "referencePrice",
+          coalesce(origin_countries, '{}') as "originCountries",
+          coalesce(package_spec, '') as "packageSpec",
           coalesce(spec_note, '') as "specNote",
           coalesce(storage_type, '') as "storageType",
           coalesce(photo_url, '') as "photoUrl",

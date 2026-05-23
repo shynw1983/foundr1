@@ -7,6 +7,8 @@ type ProductPayload = {
   subcategory?: string;
   unit?: string;
   referencePrice?: number;
+  originCountries?: string[];
+  packageSpec?: string;
   brand?: string;
   mainSupplier?: string;
   backupSupplier?: string;
@@ -23,6 +25,10 @@ export async function PUT(request: Request) {
   const subcategory = String(body.subcategory ?? "").trim() || "未分類";
   const unit = String(body.unit ?? "").trim() || "個";
   const referencePrice = Number(body.referencePrice ?? 0);
+  const originCountries = Array.isArray(body.originCountries)
+    ? body.originCountries.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+  const packageSpec = String(body.packageSpec ?? "");
   const specNote = String(body.specNote ?? "");
   const photoUrl = String(body.photoUrl ?? "");
   const storageType = String(body.storageType ?? "");
@@ -54,6 +60,8 @@ export async function PUT(request: Request) {
           subcategory = ${subcategory},
           unit = ${unit},
           reference_price = ${Number.isFinite(referencePrice) ? referencePrice : 0},
+          origin_countries = ${originCountries},
+          package_spec = ${packageSpec},
           spec_note = ${specNote},
           photo_url = ${photoUrl},
           storage_type = ${storageType},
@@ -68,6 +76,8 @@ export async function PUT(request: Request) {
           subcategory,
           unit,
           reference_price,
+          origin_countries,
+          package_spec,
           spec_note,
           photo_url,
           storage_type,
@@ -79,6 +89,8 @@ export async function PUT(request: Request) {
           ${subcategory},
           ${unit},
           ${Number.isFinite(referencePrice) ? referencePrice : 0},
+          ${originCountries},
+          ${packageSpec},
           ${specNote},
           ${photoUrl},
           ${storageType},

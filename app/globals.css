@@ -1775,6 +1775,17 @@ button {
   resize: vertical;
 }
 
+.product-spec-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(160px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.product-spec-grid select[multiple] {
+  min-height: 112px;
+  padding: 8px 12px;
+}
+
 .edit-fields input:focus,
 .edit-fields select:focus,
 .edit-fields textarea:focus {
@@ -1986,6 +1997,10 @@ button {
   .product-photo-preview {
     width: 100%;
     max-width: 180px;
+  }
+
+  .product-spec-grid {
+    grid-template-columns: 1fr;
   }
 
   .location-details {

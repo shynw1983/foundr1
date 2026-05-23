@@ -10,7 +10,11 @@ import {
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
-type ProductWithCategory = Product & { subcategory?: string };
+type ProductWithCategory = Product & {
+  subcategory?: string;
+  originCountries?: string[];
+  packageSpec?: string;
+};
 type Supplier = typeof initialSuppliers[number];
 type ProductEditTarget = { type: "product"; index: number; value: ProductWithCategory; originalName?: string };
 
@@ -115,6 +119,8 @@ export default function ProductsPage() {
         brand: brandsData[0]?.name ?? "共通",
         unit: "個",
         referencePrice: 0,
+        originCountries: [],
+        packageSpec: "",
         mainSupplier: suppliers[0]?.name ?? "",
         backupSupplier: "",
         specNote: "",
@@ -284,7 +290,15 @@ export default function ProductsPage() {
                         <dd>{product.backupSupplier || "未設定"}</dd>
                       </div>
                       <div>
+                        <dt>原産地</dt>
+                        <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
+                      </div>
+                      <div>
                         <dt>規格</dt>
+                        <dd>{product.packageSpec || "未設定"}</dd>
+                      </div>
+                      <div>
+                        <dt>メモ</dt>
                         <dd>{product.specNote || "未設定"}</dd>
                       </div>
                     </dl>
@@ -331,6 +345,7 @@ function ProductEditDialog({
   const fields = getProductFields(target.value, suppliers, brands);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState("");
+  const originOptions = getOriginCountryOptions(target.value.originCountries ?? []);
 
   async function uploadPhoto(file: File) {
     if (!target.value.name) {
@@ -433,7 +448,7 @@ function ProductEditDialog({
               <span>{field.label}</span>
               {field.options ? (
                 <select
-                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
                   onChange={(event) =>
                     onChange({
                       ...target,
@@ -450,7 +465,7 @@ function ProductEditDialog({
                 </select>
               ) : (
                 <input
-                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
                   type={field.type ?? "text"}
                   onChange={(event) => {
                     const nextValue = field.type === "number" ? Number(event.target.value) : event.target.value;
@@ -466,6 +481,61 @@ function ProductEditDialog({
               )}
             </label>
           ))}
+          <div className="product-spec-grid">
+            <label>
+              <span>原産地</span>
+              <select
+                multiple
+                value={target.value.originCountries ?? []}
+                onChange={(event) => {
+                  const nextCountries = Array.from(event.target.selectedOptions).map((option) => option.value);
+                  onChange({
+                    ...target,
+                    value: {
+                      ...target.value,
+                      originCountries: nextCountries
+                    }
+                  });
+                }}
+              >
+                {originOptions.map((option) => (
+                  <option value={option} key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>規格</span>
+              <input
+                value={target.value.packageSpec ?? ""}
+                placeholder="例: 1kg入、500g×20袋"
+                onChange={(event) =>
+                  onChange({
+                    ...target,
+                    value: {
+                      ...target.value,
+                      packageSpec: event.target.value
+                    }
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span>メモ</span>
+              <textarea
+                value={target.value.specNote ?? ""}
+                placeholder="例: 冷凍庫の位置、代替条件など"
+                onChange={(event) =>
+                  onChange({
+                    ...target,
+                    value: {
+                      ...target.value,
+                      specNote: event.target.value
+                    }
+                  })
+                }
+              />
+            </label>
+          </div>
         </div>
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>
@@ -514,9 +584,32 @@ function getProductFields(
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },
     { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]) },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
-    { key: "specNote", label: "規格メモ" },
     { key: "photoUrl", label: "写真URL" }
   ];
+}
+
+function getOriginCountryOptions(selectedCountries: string[]) {
+  return uniqueOptions([
+    "日本",
+    "中国",
+    "韓国",
+    "台湾",
+    "ベトナム",
+    "タイ",
+    "インドネシア",
+    "マレーシア",
+    "フィリピン",
+    "アメリカ",
+    "カナダ",
+    "オーストラリア",
+    "ニュージーランド",
+    "ブラジル",
+    "チリ",
+    "スペイン",
+    "イタリア",
+    "フランス",
+    ...selectedCountries
+  ]);
 }
 
 function uniqueOptions(options: string[]) {

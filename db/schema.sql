@@ -52,6 +52,8 @@ create table if not exists products (
   subcategory text,
   unit text not null,
   reference_price numeric(12, 2),
+  origin_countries text[] not null default '{}',
+  package_spec text,
   spec_note text,
   photo_url text,
   is_key_item boolean not null default false,
@@ -65,6 +67,8 @@ alter table products add column if not exists spec_note text;
 alter table products add column if not exists photo_url text;
 alter table products add column if not exists storage_type text;
 alter table products add column if not exists subcategory text;
+alter table products add column if not exists origin_countries text[] not null default '{}';
+alter table products add column if not exists package_spec text;
 
 create table if not exists product_brand_usages (
   id uuid primary key default gen_random_uuid(),
