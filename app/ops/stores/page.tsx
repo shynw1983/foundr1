@@ -258,14 +258,15 @@ export default function StoresPage() {
             <h1>仕入れ管理</h1>
           </div>
         </div>
-        <details className="mobile-nav-menu">
-          <summary>メニュー</summary>
-          <div className="mobile-nav-list">
+        <label className="mobile-nav-menu">
+          <span>メニュー</span>
+          <select defaultValue="" onChange={(event) => { if (event.target.value) window.location.href = event.target.value; }}>
+            <option value="" disabled>移動先を選択</option>
             {navItems.map(({ label, href }) => (
-              <a href={href} key={label}>{label}</a>
+              <option value={href} key={label}>{label}</option>
             ))}
-          </div>
-        </details>
+          </select>
+        </label>
         <nav className="nav-list">
           {navItems.map(({ label, href, icon: Icon }) => (
             <a href={href} className="nav-item" key={label}>
