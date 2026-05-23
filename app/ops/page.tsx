@@ -45,6 +45,23 @@ type OrderItemDraft = {
   quantity: number;
   unit: string;
 };
+type ProcurementTaskItem = {
+  id: string;
+  orderId: string;
+  productName: string;
+  requestedQuantity: number;
+  actualQuantity: number;
+  unit: string;
+  purchased: boolean;
+  note: string;
+  priceExceptionNote: string;
+};
+type DashboardOrderItem = {
+  orderId: string;
+  productName: string;
+  requestedQuantity: number;
+  unit: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -58,8 +75,52 @@ const statusTone: Record<string, string> = {
 const navItems: Array<[string, LucideIcon]> = [
   ["ダッシュボード", ClipboardList],
   ["仕入れ依頼", PackageCheck],
+  ["仕入れ処理", ClipboardList],
   ["連絡・報告", MessageSquareWarning]
 ];
+
+function createProcurementTaskItems(
+  purchaseOrders: PurchaseOrder[],
+  productList: Product[],
+  purchaseOrderItems: DashboardOrderItem[]
+) {
+  if (productList.length === 0) return [];
+
+  return purchaseOrders.flatMap((order, orderIndex) => {
+    const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+
+    if (orderItems.length > 0) {
+      return orderItems.map((item, itemIndex) => ({
+        id: `${order.id}-${item.productName}-${itemIndex}`,
+        orderId: order.id,
+        productName: item.productName,
+        requestedQuantity: item.requestedQuantity,
+        actualQuantity: item.requestedQuantity,
+        unit: item.unit,
+        purchased: false,
+        note: "",
+        priceExceptionNote: ""
+      }));
+    }
+
+    return Array.from({ length: Math.max(1, order.items) }, (_, itemIndex) => {
+      const product = productList[(orderIndex + itemIndex) % productList.length];
+      const quantity = itemIndex + 1;
+
+      return {
+        id: `${order.id}-${itemIndex}`,
+        orderId: order.id,
+        productName: product.name,
+        requestedQuantity: quantity,
+        actualQuantity: quantity,
+        unit: product.unit,
+        purchased: false,
+        note: "",
+        priceExceptionNote: ""
+      };
+    });
+  });
+}
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -70,6 +131,10 @@ export default function Home() {
   const [storesData, setStoresData] = useState(stores);
   const [brandsData, setBrandsData] = useState(brands);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
+  const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>(() =>
+    createProcurementTaskItems(orders, initialProducts, [])
+  );
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
@@ -95,6 +160,7 @@ export default function Home() {
         suppliers?: Supplier[];
         supplierLocations?: SupplierLocation[];
         productSupplierOptions?: ProductSupplierGroup[];
+        purchaseOrderItems?: DashboardOrderItem[];
       };
 
       if (data.stores) setStoresData(data.stores);
@@ -104,6 +170,7 @@ export default function Home() {
       if (data.suppliers) setSuppliers(data.suppliers);
       if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
       setDataSource("neon");
     }
 
@@ -116,6 +183,16 @@ export default function Home() {
       JSON.stringify({ products, productBrandUsages, suppliers, supplierLocations, productSupplierOptions })
     );
   }, [products, productBrandUsages, suppliers, supplierLocations, productSupplierOptions]);
+
+  useEffect(() => {
+    setProcurementTaskItems((items) => {
+      const existingItems = new Map(items.map((item) => [item.id, item]));
+
+      return createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
+        (item) => existingItems.get(item.id) ?? item
+      );
+    });
+  }, [purchaseOrders, products, purchaseOrderItems]);
 
   const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
@@ -231,6 +308,19 @@ export default function Home() {
 
   function removeOrderItemDraft(id: number) {
     setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
+  }
+
+  function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
+    setProcurementTaskItems((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item;
+
+        return {
+          ...item,
+          ...next
+        };
+      })
+    );
   }
 
   return (
@@ -394,37 +484,115 @@ export default function Home() {
         </section>
 
         <section className="workspace-grid">
-          <section className="panel operation-panel" id="仕入れ依頼">
-            <PanelTitle title="仕入れ依頼キュー" subtitle="今日処理すべき依頼を優先度順に確認" />
-            <div className="order-list">
-              {purchaseOrders.map((order) => (
-                <article className="order-row" key={order.id}>
-                  <div>
-                    <div className="row-heading">
-                      <strong>{order.id}</strong>
-                      <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
+          <div className="ops-main-stack">
+            <section className="panel operation-panel" id="仕入れ依頼">
+              <PanelTitle title="仕入れ依頼キュー" subtitle="今日処理すべき依頼を優先度順に確認" />
+              <div className="order-list">
+                {purchaseOrders.map((order) => (
+                  <article className="order-row" key={order.id}>
+                    <div>
+                      <div className="row-heading">
+                        <strong>{order.id}</strong>
+                        <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
+                      </div>
+                      <p>{order.store} / {order.brand}</p>
                     </div>
-                    <p>{order.store} / {order.brand}</p>
-                  </div>
-                  <div>
-                    <span className="muted-label">締切</span>
-                    <strong>{order.deadline}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-label">商品</span>
-                    <strong>{order.items} 件</strong>
-                  </div>
-                  <div>
-                    <span className="muted-label">優先度</span>
-                    <strong>{order.priority}</strong>
-                  </div>
-                  <button className="icon-button" aria-label={`${order.id} の詳細`}>
-                    <ArrowUpRight size={18} />
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
+                    <div>
+                      <span className="muted-label">締切</span>
+                      <strong>{order.deadline}</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">商品</span>
+                      <strong>{order.items} 件</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">優先度</span>
+                      <strong>{order.priority}</strong>
+                    </div>
+                    <button className="icon-button" aria-label={`${order.id} の詳細`}>
+                      <ArrowUpRight size={18} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel procurement-panel" id="仕入れ処理">
+              <PanelTitle title="仕入れ処理" subtitle="購入済み、数量差異、備考、価格異常を現場で記録" />
+              <div className="procurement-order-list">
+                {purchaseOrders.map((order) => {
+                  const items = procurementTaskItems.filter((item) => item.orderId === order.id);
+                  const completedCount = items.filter((item) => item.purchased).length;
+
+                  return (
+                    <article className="procurement-order-card" key={order.id}>
+                      <div className="procurement-order-heading">
+                        <div>
+                          <strong>{order.id}</strong>
+                          <p>{order.store} / {order.brand}</p>
+                        </div>
+                        <span>{completedCount} / {items.length} 完了</span>
+                      </div>
+                      <div className="procurement-task-list">
+                        {items.map((item) => {
+                          const quantityDiff = item.actualQuantity - item.requestedQuantity;
+
+                          return (
+                            <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
+                              <label className="task-check">
+                                <input
+                                  type="checkbox"
+                                  checked={item.purchased}
+                                  onChange={(event) => updateProcurementTaskItem(item.id, { purchased: event.target.checked })}
+                                />
+                                <span>{item.purchased ? "購入済み" : "未購入"}</span>
+                              </label>
+                              <div className="task-product">
+                                <strong>{item.productName}</strong>
+                                <small>依頼 {item.requestedQuantity} {item.unit}</small>
+                              </div>
+                              <label>
+                                <span>実数</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={item.actualQuantity}
+                                  onChange={(event) =>
+                                    updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
+                                  }
+                                />
+                              </label>
+                              <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+                                {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+                              </div>
+                              <label>
+                                <span>備考</span>
+                                <input
+                                  value={item.note}
+                                  placeholder="代替品、欠品、配送メモ"
+                                  onChange={(event) => updateProcurementTaskItem(item.id, { note: event.target.value })}
+                                />
+                              </label>
+                              <label>
+                                <span>価格異常メモ</span>
+                                <input
+                                  value={item.priceExceptionNote}
+                                  placeholder="通常より高い、特売終了など"
+                                  onChange={(event) =>
+                                    updateProcurementTaskItem(item.id, { priceExceptionNote: event.target.value })
+                                  }
+                                />
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
 
           <aside className="side-stack">
             <section className="panel" id="連絡・報告">

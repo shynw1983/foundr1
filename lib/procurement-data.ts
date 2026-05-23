@@ -1,7 +1,17 @@
 import { sql } from "./db";
 
 export async function getProcurementDashboardData() {
-  const [stores, brands, products, suppliers, supplierLocations, productBrandUsages, productSupplierOptions, orders] =
+  const [
+    stores,
+    brands,
+    products,
+    suppliers,
+    supplierLocations,
+    productBrandUsages,
+    productSupplierOptions,
+    orders,
+    purchaseOrderItems
+  ] =
     await Promise.all([
       sql`
         select
@@ -133,6 +143,17 @@ export async function getProcurementDashboardData() {
         join stores on stores.id = purchase_orders.store_id
         left join brands on brands.id = purchase_orders.brand_id
         order by purchase_orders.created_at desc
+      `,
+      sql`
+        select
+          purchase_orders.order_no as "orderId",
+          products.name as "productName",
+          purchase_order_items.requested_quantity::float as "requestedQuantity",
+          purchase_order_items.requested_unit as unit
+        from purchase_order_items
+        join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+        join products on products.id = purchase_order_items.product_id
+        order by purchase_orders.created_at desc, purchase_order_items.id
       `
     ]);
 
@@ -144,6 +165,7 @@ export async function getProcurementDashboardData() {
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,
-    orders
+    orders,
+    purchaseOrderItems
   };
 }
