@@ -4,11 +4,11 @@ import { sql } from "../../../lib/db";
 export async function POST(request: Request) {
   const formData = await request.formData();
   const storeName = String(formData.get("store") ?? "");
-  const brandName = String(formData.get("brand") ?? "");
   const deadline = String(formData.get("deadline") ?? "");
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
+  const brandNames = formData.getAll("itemBrand").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
@@ -18,7 +18,6 @@ export async function POST(request: Request) {
     insert into purchase_orders (
       order_no,
       store_id,
-      brand_id,
       deadline_label,
       requested_item_count,
       priority,
@@ -28,15 +27,13 @@ export async function POST(request: Request) {
     select
       ${orderNo},
       stores.id,
-      brands.id,
       ${deadline},
       ${itemCount},
       ${priority},
       ${"仕入れ待ち"},
       ${note}
-    from stores, brands
+    from stores
     where stores.name = ${storeName}
-      and brands.name = ${brandName}
     returning id
   `;
 
@@ -46,11 +43,13 @@ export async function POST(request: Request) {
     for (const [index, productName] of productNames.entries()) {
       const quantity = Number.isFinite(quantities[index]) && quantities[index] > 0 ? quantities[index] : 1;
       const unit = units[index] || "個";
+      const brandName = brandNames[index] || "共通";
 
       await sql`
         insert into purchase_order_items (
           purchase_order_id,
           product_id,
+          brand_id,
           requested_quantity,
           requested_unit,
           status
@@ -58,11 +57,13 @@ export async function POST(request: Request) {
         select
           ${purchaseOrderId},
           products.id,
+          brands.id,
           ${quantity},
           ${unit},
           ${"requested"}
-        from products
+        from products, brands
         where products.name = ${productName}
+          and brands.name = ${brandName}
       `;
     }
   }

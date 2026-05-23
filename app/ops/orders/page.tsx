@@ -17,6 +17,7 @@ type OrderItemDraft = {
   id: number;
   category: string;
   productName: string;
+  brandName: string;
   quantity: number;
   unit: string;
 };
@@ -60,6 +61,7 @@ export default function OrdersPage() {
       id: 1,
       category: initialProducts[0]?.category ?? "",
       productName: initialProducts[0]?.name ?? "",
+      brandName: brands[0]?.name ?? "共通",
       quantity: 1,
       unit: initialProducts[0]?.unit ?? "個"
     }
@@ -117,6 +119,7 @@ export default function OrdersPage() {
         id: Date.now(),
         category: firstProduct?.category ?? "",
         productName: firstProduct?.name ?? "",
+        brandName: brandsData[0]?.name ?? "共通",
         quantity: 1,
         unit: firstProduct?.unit ?? "個"
       }
@@ -201,21 +204,13 @@ export default function OrdersPage() {
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗を中心に、商品用途ブランドと仕入れ商品リストを指定" />
+          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗を中心に、商品ごとの用途ブランドと仕入れ商品リストを指定" />
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
               <select name="store" defaultValue={storesData[0]?.name}>
                 {storesData.map((store) => (
                   <option value={store.name} key={store.name}>{store.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>用途ブランド</span>
-              <select name="brand" defaultValue={brandsData[0]?.name}>
-                {brandsData.map((brand) => (
-                  <option value={brand.name} key={brand.name}>{brand.name}</option>
                 ))}
               </select>
             </label>
@@ -262,6 +257,18 @@ export default function OrdersPage() {
                       >
                         {products.filter((product) => product.category === item.category).map((product) => (
                           <option value={product.name} key={product.name}>{product.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>用途ブランド</span>
+                      <select
+                        name="itemBrand"
+                        value={item.brandName}
+                        onChange={(event) => updateOrderItemDraft(item.id, { brandName: event.target.value })}
+                      >
+                        {brandsData.map((brand) => (
+                          <option value={brand.name} key={brand.name}>{brand.name}</option>
                         ))}
                       </select>
                     </label>

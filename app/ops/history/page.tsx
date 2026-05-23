@@ -11,6 +11,7 @@ type PurchaseOrderItem = {
   id?: string;
   orderId: string;
   productName: string;
+  brandName?: string;
   requestedQuantity: number;
   actualQuantity?: number;
   unit: string;
@@ -79,7 +80,7 @@ function createHistoryRows(
       brand: order?.brand ?? "共通",
       deadline: order?.deadline ?? "",
       productName: item.productName,
-      productBrand: product?.brand ?? order?.brand ?? "共通",
+      productBrand: item.brandName ?? product?.brand ?? order?.brand ?? "共通",
       supplier: item.supplier || product?.mainSupplier || "未設定",
       requestedQuantity: item.requestedQuantity,
       actualQuantity: item.actualQuantity ?? item.requestedQuantity,

@@ -135,7 +135,7 @@ export async function getProcurementDashboardData() {
         select
           purchase_orders.order_no as id,
           stores.name as store,
-          coalesce(brands.name, '共通') as brand,
+          coalesce(order_brands.brand_names, brands.name, '共通') as brand,
           coalesce(purchase_orders.deadline_label, '') as deadline,
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
@@ -151,6 +151,12 @@ export async function getProcurementDashboardData() {
         from purchase_orders
         join stores on stores.id = purchase_orders.store_id
         left join brands on brands.id = purchase_orders.brand_id
+        left join lateral (
+          select string_agg(distinct brands.name, ' / ' order by brands.name) as brand_names
+          from purchase_order_items
+          join brands on brands.id = purchase_order_items.brand_id
+          where purchase_order_items.purchase_order_id = purchase_orders.id
+        ) order_brands on true
         left join lateral (
           select
             count(purchase_order_items.id)::int as total_count,
@@ -174,6 +180,7 @@ export async function getProcurementDashboardData() {
           purchase_order_items.id::text as id,
           purchase_orders.order_no as "orderId",
           products.name as "productName",
+          coalesce(item_brands.name, order_brands.name, '共通') as "brandName",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
           purchase_order_items.requested_unit as unit,
           coalesce(
@@ -213,6 +220,8 @@ export async function getProcurementDashboardData() {
         from purchase_order_items
         join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
         join products on products.id = purchase_order_items.product_id
+        left join brands item_brands on item_brands.id = purchase_order_items.brand_id
+        left join brands order_brands on order_brands.id = purchase_orders.brand_id
         left join lateral (
           select
             purchase_actuals.id,

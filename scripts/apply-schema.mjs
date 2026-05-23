@@ -31,7 +31,7 @@ const columns = await sql`
   from information_schema.columns
   where table_schema = 'public'
     and table_name = 'purchase_order_items'
-    and column_name in ('actual_quantity', 'procurement_note', 'price_exception_note')
+    and column_name in ('actual_quantity', 'brand_id', 'procurement_note', 'price_exception_note')
   order by column_name
 `;
 
