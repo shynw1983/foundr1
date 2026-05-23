@@ -90,18 +90,6 @@ export async function DELETE(request: Request) {
   }
 
   await sql`
-    update purchase_order_items
-    set supplier_location_id = null
-    where supplier_location_id in (
-      select id from supplier_locations where supplier_id = ${supplierId}
-    )
-  `;
-  await sql`
-    update purchase_order_items
-    set supplier_id = null
-    where supplier_id = ${supplierId}
-  `;
-  await sql`
     update purchase_actuals
     set supplier_location_id = null
     where supplier_location_id in (
