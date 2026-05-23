@@ -63,6 +63,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
+const usageBrandOptions = [
+  { label: "共通", value: "共通" },
+  { label: "nanacha", value: "奈奈茶" },
+  { label: "まぁ麻", value: "熱辣食堂" }
+];
 
 function isTodayOrder(order: PurchaseOrder) {
   return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
@@ -134,7 +139,7 @@ export default function OrdersPage() {
       id: 1,
       category: initialProducts[0]?.category ?? "",
       productName: initialProducts[0]?.name ?? "",
-      brandName: brands[0]?.name ?? "共通",
+      brandName: usageBrandOptions[0].value,
       quantity: 1,
       unit: initialProducts[0]?.unit ?? "個"
     }
@@ -201,7 +206,7 @@ export default function OrdersPage() {
         id: Date.now(),
         category: firstProduct?.category ?? "",
         productName: firstProduct?.name ?? "",
-        brandName: brandsData[0]?.name ?? "共通",
+        brandName: usageBrandOptions[0].value,
         quantity: 1,
         unit: firstProduct?.unit ?? "個"
       }
@@ -364,8 +369,8 @@ export default function OrdersPage() {
                         value={item.brandName}
                         onChange={(event) => updateOrderItemDraft(item.id, { brandName: event.target.value })}
                       >
-                        {brandsData.map((brand) => (
-                          <option value={brand.name} key={brand.name}>{brand.name}</option>
+                        {usageBrandOptions.map((brand) => (
+                          <option value={brand.value} key={brand.value}>{brand.label}</option>
                         ))}
                       </select>
                     </label>
