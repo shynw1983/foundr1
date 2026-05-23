@@ -460,6 +460,40 @@ button {
   align-items: end;
 }
 
+.order-items-builder {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.builder-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-item-list {
+  display: grid;
+  gap: 10px;
+}
+
+.order-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(92px, 0.22fr) minmax(92px, 0.22fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .panel {
   min-width: 0;
   padding: 18px;
@@ -1074,7 +1108,8 @@ button {
   }
 
   .compact-row,
-  .module-card {
+  .module-card,
+  .order-item-row {
     grid-template-columns: 1fr;
   }
 

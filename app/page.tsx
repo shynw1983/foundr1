@@ -53,6 +53,12 @@ type NewOrderDraft = {
   items: number;
   note: string;
 };
+type OrderItemDraft = {
+  id: number;
+  productName: string;
+  quantity: number;
+  unit: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -83,6 +89,14 @@ export default function Home() {
   const [brandsData, setBrandsData] = useState(brands);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
   const [newOrderDraft, setNewOrderDraft] = useState<NewOrderDraft | null>(null);
+  const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
+    {
+      id: 1,
+      productName: initialProducts[0]?.name ?? "",
+      quantity: 1,
+      unit: initialProducts[0]?.unit ?? "個"
+    }
+  ]);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
@@ -204,6 +218,40 @@ export default function Home() {
     setNewOrderDraft(null);
   }
 
+  function addOrderItemDraft() {
+    setOrderItemDrafts((items) => [
+      ...items,
+      {
+        id: Date.now(),
+        productName: products[0]?.name ?? "",
+        quantity: 1,
+        unit: products[0]?.unit ?? "個"
+      }
+    ]);
+  }
+
+  function updateOrderItemDraft(id: number, next: Partial<OrderItemDraft>) {
+    setOrderItemDrafts((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item;
+
+        const selectedProduct = next.productName
+          ? products.find((product) => product.name === next.productName)
+          : undefined;
+
+        return {
+          ...item,
+          ...next,
+          unit: selectedProduct?.unit ?? next.unit ?? item.unit
+        };
+      })
+    );
+  }
+
+  function removeOrderItemDraft(id: number) {
+    setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -278,10 +326,6 @@ export default function Home() {
               <input name="deadline" defaultValue="本日 18:00" />
             </label>
             <label>
-              <span>商品件数</span>
-              <input name="items" type="number" min={1} defaultValue={1} />
-            </label>
-            <label>
               <span>優先度</span>
               <select name="priority" defaultValue="中">
                 <option value="高">高</option>
@@ -293,6 +337,60 @@ export default function Home() {
               <span>メモ</span>
               <textarea name="note" placeholder="欠品時の代替、配送希望など" />
             </label>
+            <div className="order-items-builder">
+              <div className="builder-heading">
+                <strong>采购商品清单</strong>
+                <button type="button" className="text-button" onClick={addOrderItemDraft}>
+                  商品を追加
+                </button>
+              </div>
+              <div className="order-item-list">
+                {orderItemDrafts.map((item, index) => (
+                  <div className="order-item-row" key={item.id}>
+                    <label>
+                      <span>商品 {index + 1}</span>
+                      <select
+                        name="productName"
+                        value={item.productName}
+                        onChange={(event) => updateOrderItemDraft(item.id, { productName: event.target.value })}
+                      >
+                        {products.map((product) => (
+                          <option value={product.name} key={product.name}>
+                            {product.category} / {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>数量</span>
+                      <input
+                        name="requestedQuantity"
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(event) => updateOrderItemDraft(item.id, { quantity: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      <span>単位</span>
+                      <input
+                        name="requestedUnit"
+                        value={item.unit}
+                        onChange={(event) => updateOrderItemDraft(item.id, { unit: event.target.value })}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => removeOrderItemDraft(item.id)}
+                      disabled={orderItemDrafts.length === 1}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="inline-create-actions">
               <button type="submit" className="primary-button">
                 <Plus size={18} />
