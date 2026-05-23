@@ -471,11 +471,11 @@ export default function ProductsPage() {
                     <strong>{product.name || "未設定の商品"}</strong>
                     <p>{product.productBrandName || "商品ブランド未設定"}</p>
                   </div>
-                  <span>{product.category}</span>
-                  <span>{product.subcategory || "未分類"}</span>
-                  <span>{product.unit}</span>
-                  <span>{product.storageType || "未設定"}</span>
-                  <strong>¥{product.referencePrice}</strong>
+                  <span className="product-master-cell" data-label="大分類">{product.category}</span>
+                  <span className="product-master-cell" data-label="小分類">{product.subcategory || "未分類"}</span>
+                  <span className="product-master-cell" data-label="単位">{product.unit}</span>
+                  <span className="product-master-cell" data-label="保管">{product.storageType || "未設定"}</span>
+                  <strong className="product-master-cell" data-label="参考価格">¥{product.referencePrice}</strong>
                   <div className="row-actions">
                     <button
                       className="text-button"

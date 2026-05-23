@@ -760,6 +760,10 @@ button {
   font-weight: 800;
 }
 
+.product-master-cell::before {
+  display: none;
+}
+
 .product-master-detail {
   grid-column: 1 / -1;
   display: grid;
@@ -2048,6 +2052,21 @@ button {
 
   .product-master-head {
     display: none;
+  }
+
+  .product-master-cell {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.38fr) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .product-master-cell::before {
+    content: attr(data-label);
+    display: inline;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
   }
 
   .product-master-detail,
