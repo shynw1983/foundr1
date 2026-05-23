@@ -154,6 +154,37 @@ button {
   gap: 10px;
 }
 
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.user-badge-name,
+.user-badge-role {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-badge-role {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.user-badge-muted {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .search-box {
   display: flex;
   align-items: center;
@@ -454,6 +485,23 @@ button {
   margin: 0;
   color: var(--muted);
   font-weight: 700;
+}
+
+.staff-management-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.7fr);
+}
+
+.staff-row .row-actions {
+  flex: 0 0 auto;
+}
+
+.staff-form {
+  margin-bottom: 0;
+}
+
+.staff-store-scope {
+  display: grid;
+  gap: 9px;
 }
 
 .queue-filter-bar {
@@ -2208,6 +2256,11 @@ button {
   .topbar-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .user-badge {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .search-box {

@@ -1,6 +1,7 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut } from "lucide-react";
+import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { UserBadge } from "../components/UserBadge";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -68,6 +69,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
+  { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
@@ -524,6 +526,7 @@ export default function OrdersPage() {
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
+            <UserBadge />
             <label className="search-box">
               <Search size={17} />
               <input placeholder="商品・店舗・依頼番号を検索" />
