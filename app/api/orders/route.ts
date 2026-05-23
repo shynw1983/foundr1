@@ -1,10 +1,38 @@
 import { redirect } from "next/navigation";
 import { sql } from "../../../lib/db";
 
+function formatDeadlineLabel(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+
+  if (!match) {
+    return value;
+  }
+
+  const [, year, month, day, hour, minute] = match;
+  const deadlineDate = new Date(Number(year), Number(month) - 1, Number(day));
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+  const sameDate = (target: Date) =>
+    target.getFullYear() === deadlineDate.getFullYear() &&
+    target.getMonth() === deadlineDate.getMonth() &&
+    target.getDate() === deadlineDate.getDate();
+
+  if (sameDate(today)) {
+    return `本日 ${hour}:${minute}`;
+  }
+
+  if (sameDate(tomorrow)) {
+    return `明日 ${hour}:${minute}`;
+  }
+
+  return `${month}/${day} ${hour}:${minute}`;
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const storeName = String(formData.get("store") ?? "");
-  const deadline = String(formData.get("deadline") ?? "");
+  const deadline = formatDeadlineLabel(String(formData.get("deadline") ?? ""));
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);

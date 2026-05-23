@@ -70,6 +70,15 @@ const usageBrandOptions = [
   { label: "まぁ麻", value: "熱辣食堂" }
 ];
 
+function getDefaultDeadlineValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T18:00`;
+}
+
 function isTodayOrder(order: PurchaseOrder) {
   return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
 }
@@ -319,7 +328,7 @@ export default function OrdersPage() {
             </label>
             <label>
               <span>締切</span>
-              <input name="deadline" defaultValue="本日 18:00" />
+              <input name="deadline" type="datetime-local" defaultValue={getDefaultDeadlineValue()} />
             </label>
             <label>
               <span>優先度</span>
