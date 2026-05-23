@@ -768,6 +768,14 @@ button {
   display: none;
 }
 
+.mobile-product-head {
+  display: none;
+}
+
+.mobile-product-photo {
+  display: none;
+}
+
 .product-master-detail {
   grid-column: 1 / -1;
   display: grid;
@@ -2062,26 +2070,81 @@ button {
     display: none;
   }
 
+  .product-title-block {
+    display: none;
+  }
+
+  .mobile-product-head {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mobile-product-photo {
+    display: grid;
+    width: 76px;
+    aspect-ratio: 1;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: white;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .mobile-product-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mobile-product-head small {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
   .product-master-cell {
     display: none;
   }
 
   .mobile-product-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .mobile-product-summary span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 26px;
-    padding: 0 8px;
+    display: grid;
+    gap: 2px;
+    min-height: 48px;
+    padding: 7px 9px;
     border-radius: 8px;
     color: var(--text);
     background: white;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
+  }
+
+  .mobile-product-summary span:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-product-summary small {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .mobile-product-summary strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .product-master-detail {
@@ -2128,6 +2191,10 @@ button {
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
+  }
+
+  .product-master-detail > .product-photo-thumb {
+    display: none;
   }
 
   .product-master-detail,

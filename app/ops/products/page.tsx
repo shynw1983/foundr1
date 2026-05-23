@@ -467,9 +467,23 @@ export default function ProductsPage() {
 
               return (
                 <article className="product-master-row" key={`${product.name}-${productIndex}`}>
-                  <div>
+                  <div className="product-title-block">
                     <strong>{product.name || "未設定の商品"}</strong>
                     <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                  </div>
+                  <div className="mobile-product-head">
+                    <div className="mobile-product-photo">
+                      {product.photoUrl ? (
+                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
+                      ) : (
+                        <span>写真</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{product.name || "未設定の商品"}</strong>
+                      <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                      <small>写真・基本情報</small>
+                    </div>
                   </div>
                   <span className="product-master-cell" data-label="大分類">{product.category}</span>
                   <span className="product-master-cell" data-label="小分類">{product.subcategory || "未分類"}</span>
@@ -477,11 +491,11 @@ export default function ProductsPage() {
                   <span className="product-master-cell" data-label="保管">{product.storageType || "未設定"}</span>
                   <strong className="product-master-cell" data-label="参考価格">¥{product.referencePrice}</strong>
                   <div className="mobile-product-summary" aria-label="商品概要">
-                    <span>{product.category}</span>
-                    <span>{product.subcategory || "未分類"}</span>
-                    <span>{product.unit}</span>
-                    <span>{product.storageType || "未設定"}</span>
-                    <span>¥{product.referencePrice}</span>
+                    <span><small>大分類</small><strong>{product.category}</strong></span>
+                    <span><small>小分類</small><strong>{product.subcategory || "未分類"}</strong></span>
+                    <span><small>単位</small><strong>{product.unit}</strong></span>
+                    <span><small>保管</small><strong>{product.storageType || "未設定"}</strong></span>
+                    <span><small>参考価格</small><strong>¥{product.referencePrice}</strong></span>
                   </div>
                   <div className="row-actions">
                     <button
