@@ -20,9 +20,9 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function StoresPage() {
-  const [storesData, setStoresData] = useState<StoreItem[]>(stores);
-  const [brandsData, setBrandsData] = useState<BrandItem[]>(brands);
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [storesData, setStoresData] = useState<StoreItem[]>([]);
+  const [brandsData, setBrandsData] = useState<BrandItem[]>([]);
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
   const [selectedStoreBrands, setSelectedStoreBrands] = useState<string[]>([]);
 
@@ -224,7 +224,7 @@ export default function StoresPage() {
           <div>
             <p className="eyebrow">店舗とブランドの基本情報</p>
             <h2>店舗・ブランド</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
         </header>
 
@@ -270,6 +270,9 @@ export default function StoresPage() {
                   </button>
                 </article>
               ))}
+              {storesData.length === 0 ? (
+                <div className="empty-state">登録済みの店舗はありません</div>
+              ) : null}
             </div>
           </section>
 
@@ -303,6 +306,9 @@ export default function StoresPage() {
                   </div>
                 </article>
               ))}
+              {brandsData.length === 0 ? (
+                <div className="empty-state">ブランドを読み込み中です</div>
+              ) : null}
             </div>
           </section>
         </section>
