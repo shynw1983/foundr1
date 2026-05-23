@@ -22,6 +22,24 @@ type OrderItemDraft = {
   unit: string;
 };
 type QueueFilter = "未完了" | "今日対応" | "配送待ち" | "完了" | "すべて";
+type PurchaseOrderItem = {
+  id?: string;
+  orderId: string;
+  productName: string;
+  requestedQuantity: number;
+  actualQuantity?: number;
+  unit: string;
+  note?: string;
+  priceExceptionNote?: string;
+};
+type StoreFeedback = {
+  id: string;
+  product: string;
+  type: string;
+  message: string;
+  store: string;
+  status: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -49,11 +67,65 @@ function isTodayOrder(order: PurchaseOrder) {
   return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
 }
 
+function createStoreFeedbackItems(
+  purchaseOrders: PurchaseOrder[],
+  purchaseOrderItems: PurchaseOrderItem[],
+  fallbackItems: StoreFeedback[]
+) {
+  const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
+  const feedbackItems = purchaseOrderItems.flatMap<StoreFeedback>((item) => {
+    const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
+    const quantityDiff = actualQuantity - item.requestedQuantity;
+    const order = orderMap.get(item.orderId);
+    const store = order?.store ?? "店舗未設定";
+    const baseId = item.id ?? `${item.orderId}-${item.productName}`;
+    const items: StoreFeedback[] = [];
+
+    if (item.priceExceptionNote) {
+      items.push({
+        id: `${baseId}-price`,
+        product: item.productName,
+        type: "価格異常",
+        message: item.priceExceptionNote,
+        store,
+        status: "店舗確認待ち"
+      });
+    }
+
+    if (quantityDiff !== 0) {
+      items.push({
+        id: `${baseId}-quantity`,
+        product: item.productName,
+        type: "数量差異",
+        message: `依頼 ${item.requestedQuantity} ${item.unit} / 実数 ${actualQuantity} ${item.unit}`,
+        store,
+        status: "店舗確認待ち"
+      });
+    }
+
+    if (item.note) {
+      items.push({
+        id: `${baseId}-note`,
+        product: item.productName,
+        type: "備考",
+        message: item.note,
+        store,
+        status: "共有済み"
+      });
+    }
+
+    return items;
+  });
+
+  return feedbackItems.length > 0 ? feedbackItems : fallbackItems;
+}
+
 export default function OrdersPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [storesData, setStoresData] = useState(stores);
   const [brandsData, setBrandsData] = useState(brands);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
@@ -77,12 +149,14 @@ export default function OrdersPage() {
         brands?: typeof brands;
         products?: Product[];
         orders?: PurchaseOrder[];
+        purchaseOrderItems?: PurchaseOrderItem[];
       };
 
       if (data.stores) setStoresData(data.stores);
       if (data.brands) setBrandsData(data.brands);
       if (data.products) setProducts(data.products);
       if (data.orders) setPurchaseOrders(data.orders);
+      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
       setDataSource("neon");
     }
 
@@ -90,6 +164,7 @@ export default function OrdersPage() {
   }, []);
 
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, exceptions);
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
     if (queueFilter === "未完了") return order.status !== "完了";
     if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
@@ -366,7 +441,7 @@ export default function OrdersPage() {
             <section className="panel" id="連絡・報告">
               <PanelTitle title="要確認" subtitle="依頼前後の店舗連絡" />
               <div className="stack">
-                {exceptions.map((item) => (
+                {storeFeedbackItems.map((item) => (
                   <article className="feedback-item" key={item.id}>
                     <div className="feedback-topline">
                       <strong>{item.product}</strong>
