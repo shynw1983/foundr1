@@ -196,15 +196,15 @@ export default function StoresPage() {
 
         <section className="management-grid">
           <section className="panel">
-            <PanelTitle title="店舗管理" subtitle="配達先店舗と取り扱いブランドを管理" />
+            <PanelTitle title="店舗管理" subtitle="配達先店舗と取り扱いブランドを管理。担当者は現在メモ扱いで、社員アカウント連携は次の権限設計で対応" />
             <form className="management-form" onSubmit={createStore}>
               <label>
                 <span>店舗名</span>
-                <input name="name" placeholder="例: 第三家店" />
+                <input name="name" placeholder="例: 天神店" />
               </label>
               <label>
-                <span>担当者</span>
-                <input name="owner" placeholder="例: 店長名" />
+                <span>担当者メモ</span>
+                <input name="owner" placeholder="例: 店長名・担当者名" />
               </label>
               <div className="checkbox-group">
                 <span>取り扱いブランド</span>
