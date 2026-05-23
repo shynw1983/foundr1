@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowUpRight,
+  Boxes,
   Clock3,
   ClipboardList,
   MessageSquareWarning,
@@ -72,11 +73,12 @@ const statusTone: Record<string, string> = {
   完了: "tone-done"
 };
 
-const navItems: Array<[string, LucideIcon]> = [
-  ["ダッシュボード", ClipboardList],
-  ["仕入れ依頼", PackageCheck],
-  ["仕入れ処理", ClipboardList],
-  ["連絡・報告", MessageSquareWarning]
+const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
+  { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
+  { label: "仕入れ依頼", href: "/ops#仕入れ依頼", icon: PackageCheck },
+  { label: "仕入れ処理", href: "/ops#仕入れ処理", icon: ClipboardList },
+  { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes }
 ];
 
 function createProcurementTaskItems(
@@ -365,8 +367,8 @@ export default function Home() {
           </div>
         </div>
         <nav className="nav-list">
-          {navItems.map(([label, Icon]) => (
-            <a href={`#${label}`} className="nav-item" key={label}>
+          {navItems.map(({ label, href, icon: Icon }) => (
+            <a href={href} className="nav-item" key={label}>
               <Icon size={18} />
               <span>{label}</span>
             </a>
