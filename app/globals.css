@@ -1319,6 +1319,24 @@ button {
   padding-inline: 12px;
 }
 
+.delivery-complete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: white;
+  background: #17202b;
+  font-weight: 800;
+}
+
+.delivery-complete-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .procurement-supplier-group {
   display: grid;
   gap: 10px;

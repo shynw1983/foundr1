@@ -706,7 +706,7 @@ function OrderFulfillmentPanel({
                   </div>
                   <button
                     type="button"
-                    className="primary-button"
+                    className="delivery-complete-button"
                     disabled={batch.status === "delivered"}
                     onClick={() => onMarkDelivered(batch.id)}
                   >
