@@ -1982,6 +1982,18 @@ button {
 }
 
 @media (max-width: 760px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: auto;
+    padding: 7px 8px;
+  }
+
+  .brand-block {
+    display: none;
+  }
+
   .workspace {
     padding: 18px;
   }
@@ -1996,7 +2008,6 @@ button {
     width: 100%;
   }
 
-  .nav-list,
   .metric-grid,
   .content-grid,
   .workspace-grid,
@@ -2013,6 +2024,35 @@ button {
   .access-grid,
   .workflow-band {
     grid-template-columns: 1fr;
+  }
+
+  .nav-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .nav-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 0 9px;
+    gap: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .nav-item svg {
+    width: 15px;
+    height: 15px;
   }
 
   .order-row {
