@@ -2061,14 +2061,43 @@ button {
   }
 
   .procurement-task {
-    grid-template-columns: 64px minmax(0, 1fr) 54px 66px 70px;
-    align-items: start;
-    gap: 6px;
-    padding: 6px;
+    grid-template-columns: minmax(76px, auto) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "check product product"
+      "actual diff exception";
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
   }
 
   .procurement-task .task-check {
+    grid-area: check;
+    align-self: start;
     gap: 5px;
+  }
+
+  .procurement-task .task-product {
+    grid-area: product;
+    min-width: 0;
+  }
+
+  .procurement-task > label:not(.task-check) {
+    grid-area: actual;
+    width: 78px;
+  }
+
+  .procurement-task > .quantity-diff {
+    grid-area: diff;
+  }
+
+  .procurement-task > .exception-button {
+    grid-area: exception;
+  }
+
+  .task-product-line strong {
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   .procurement-task .task-check span,
