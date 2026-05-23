@@ -93,13 +93,13 @@ function createHistoryRows(
 }
 
 export default function ProcurementHistoryPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
   const [storeFilter, setStoreFilter] = useState("すべて");
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
   useEffect(() => {
     async function loadHistoryData() {
@@ -170,7 +170,7 @@ export default function ProcurementHistoryPage() {
           <div>
             <p className="eyebrow">店舗単位の仕入れ明細</p>
             <h2>仕入れ一覧</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

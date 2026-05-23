@@ -5,7 +5,6 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   brands,
-  exceptions,
   orders,
   products as initialProducts,
   stores
@@ -74,16 +73,12 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
 const defaultUsageBrandOptions = [
-  { label: "共通", value: "共通" },
-  { label: "nanacha", value: "奈奈茶" },
-  { label: "まぁ麻", value: "熱辣食堂" }
+  { label: "共通", value: "共通" }
 ];
 
 function createUsageBrandOptions(brandList: typeof brands) {
   const aliases: Record<string, string> = {
-    共通: "共通",
-    奈奈茶: "nanacha",
-    熱辣食堂: "まぁ麻"
+    共通: "共通"
   };
 
   return brandList.length > 0
@@ -182,22 +177,22 @@ function createStoreFeedbackItems(
 }
 
 export default function OrdersPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [storesData, setStoresData] = useState(stores);
-  const [brandsData, setBrandsData] = useState(brands);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [storesData, setStoresData] = useState<typeof stores>([]);
+  const [brandsData, setBrandsData] = useState<typeof brands>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [editingOrder, setEditingOrder] = useState<EditingOrder | null>(null);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
-      category: initialProducts[0]?.category ?? "",
-      productName: initialProducts[0]?.name ?? "",
+      category: "",
+      productName: "",
       brandName: defaultUsageBrandOptions[0].value,
       quantity: 1,
-      unit: initialProducts[0]?.unit ?? "個"
+      unit: "個"
     }
   ]);
 
@@ -216,7 +211,20 @@ export default function OrdersPage() {
 
       if (data.stores) setStoresData(data.stores);
       if (data.brands) setBrandsData(data.brands);
-      if (data.products) setProducts(data.products);
+      if (data.products) {
+        setProducts(data.products);
+        setOrderItemDrafts((items) => {
+          const firstProduct = data.products?.[0];
+          if (!firstProduct || items.some((item) => item.productName)) return items;
+
+          return items.map((item) => ({
+            ...item,
+            category: firstProduct.category,
+            productName: firstProduct.name,
+            unit: firstProduct.unit
+          }));
+        });
+      }
       if (data.orders) setPurchaseOrders(data.orders);
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
       setDataSource("neon");
@@ -233,7 +241,7 @@ export default function OrdersPage() {
       label: store.name.replace("納品", "")
     }));
   const usageBrandOptions = createUsageBrandOptions(brandsData);
-  const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, exceptions);
+  const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, []);
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
     if (queueFilter === "未完了") return order.status !== "完了";
     if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
@@ -465,7 +473,7 @@ export default function OrdersPage() {
           <div>
             <p className="eyebrow">店舗からの仕入れ依頼</p>
             <h2>仕入れ依頼</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

@@ -16,7 +16,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  exceptions,
   orders,
   priceSignals,
   productSupplierOptions as initialProductSupplierOptions,
@@ -50,11 +49,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function OpsDashboard() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
-  const [storesData, setStoresData] = useState(stores);
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [storesData, setStoresData] = useState<typeof stores>([]);
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -80,7 +79,7 @@ export default function OpsDashboard() {
 
   const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
-  const activeExceptions = exceptions.filter((item) => item.status !== "解決済み").length;
+  const activeExceptions = 0;
   const risingPrices = priceSignals.filter((item) => item.changeRate > 0);
   const supplierRouteCount = new Set(
     productSupplierOptions.flatMap((group) => group.options.filter((option) => option.role === "メイン").map((option) => option.supplier))
@@ -111,7 +110,7 @@ export default function OpsDashboard() {
           <div>
             <p className="eyebrow">複数店舗の日常仕入れオペレーション</p>
             <h2>仕入れダッシュボード</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -169,16 +168,7 @@ export default function OpsDashboard() {
             <section className="panel" id="連絡・報告">
               <PanelTitle title="要確認" subtitle="店舗へ返答が必要な連絡" />
               <div className="stack">
-                {exceptions.map((item) => (
-                  <article className="feedback-item" key={item.id}>
-                    <div className="feedback-topline">
-                      <strong>{item.product}</strong>
-                      <span>{item.type}</span>
-                    </div>
-                    <p>{item.message}</p>
-                    <small>{item.store} · {item.status}</small>
-                  </article>
-                ))}
+                <div className="empty-state">要確認の連絡はありません</div>
               </div>
             </section>
 

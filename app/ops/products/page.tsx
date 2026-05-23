@@ -24,11 +24,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
-  const [brandsData, setBrandsData] = useState(brands);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [brandsData, setBrandsData] = useState<typeof brands>([]);
   const [query, setQuery] = useState("");
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function ProductsPage() {
           <div>
             <p className="eyebrow">商品データベース</p>
             <h2>商品マスタ</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -237,6 +237,9 @@ export default function ProductsPage() {
                 </article>
               );
             })}
+            {filteredProducts.length === 0 ? (
+              <div className="empty-state">登録済みの商品はありません</div>
+            ) : null}
           </div>
         </section>
       </section>
@@ -433,7 +436,7 @@ function getProductFields(
   return [
     { key: "name", label: "商品名" },
     { key: "category", label: "カテゴリ", options: uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]) },
-    { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, "奈奈茶 / 熱辣食堂", product.brand]) },
+    { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "number" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },

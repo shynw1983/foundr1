@@ -4,7 +4,6 @@ import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Sea
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  exceptions,
   orders,
   productSupplierOptions as initialProductSupplierOptions,
   products as initialProducts,
@@ -245,19 +244,15 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
 }
 
 export default function ProcurementPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
-  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
-  const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>(() =>
-    createProcurementTaskItems(orders, initialProducts, [])
-  );
-  const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>(() =>
-    createInitialDeliveryStates(orders)
-  );
+  const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
+  const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
 
   useEffect(() => {
@@ -456,7 +451,7 @@ export default function ProcurementPage() {
           <div>
             <p className="eyebrow">現場の仕入れ実行</p>
             <h2>仕入れ処理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -590,16 +585,7 @@ export default function ProcurementPage() {
         <section className="panel" id="連絡・報告">
           <PanelTitle title="現場連絡" subtitle="欠品や代替品の連絡を確認" />
           <div className="stack">
-            {exceptions.map((item) => (
-              <article className="feedback-item" key={item.id}>
-                <div className="feedback-topline">
-                  <strong>{item.product}</strong>
-                  <span>{item.type}</span>
-                </div>
-                <p>{item.message}</p>
-                <small>{item.store} · {item.status}</small>
-              </article>
-            ))}
+            <div className="empty-state">現場連絡はありません</div>
           </div>
         </section>
       </section>
