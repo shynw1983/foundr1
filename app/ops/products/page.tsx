@@ -22,6 +22,7 @@ type ProductEditTarget = { type: "product"; index: number; value: ProductWithCat
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
+const productPageSizeOptions = [20, 50, 100];
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
@@ -43,6 +44,8 @@ export default function ProductsPage() {
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
   const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(20);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -104,6 +107,16 @@ export default function ProductsPage() {
       (subcategoryFilter === "すべて" || (product.subcategory ?? "未分類") === subcategoryFilter)
     );
   });
+  const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / productPageSize));
+  const currentProductPage = Math.min(productPage, productPageCount);
+  const pagedProducts = filteredProducts.slice(
+    (currentProductPage - 1) * productPageSize,
+    currentProductPage * productPageSize
+  );
+
+  useEffect(() => {
+    setProductPage(1);
+  }, [query, categoryFilter, subcategoryFilter, productPageSize]);
 
   async function saveProduct(target: ProductEditTarget) {
     const response = await fetch("/api/products", {
@@ -343,95 +356,23 @@ export default function ProductsPage() {
           </div>
         </header>
 
-        <section className="panel product-category-admin-panel">
-          <div className="panel-title">
-            <div>
-              <h3>分類管理</h3>
-              <p>商品マスタで使う大分類と小分類を管理</p>
-            </div>
-          </div>
-          <div className="category-admin-grid">
-            <form
-              className="management-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                void createCategory(new FormData(form)).then(() => form.reset());
-              }}
-            >
-              <label>
-                <span>大分類を追加</span>
-                <input name="name" placeholder="例: 食材" />
-              </label>
-              <button className="primary-button" type="submit">追加</button>
-            </form>
-            <form
-              className="management-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                void createSubcategory(new FormData(form)).then(() => form.reset());
-              }}
-            >
-              <label>
-                <span>大分類</span>
-                <select name="category" defaultValue={productCategories[0] ?? ""}>
-                  {productCategories.map((category) => (
-                    <option value={category} key={category}>{category}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>小分類を追加</span>
-                <input name="name" placeholder="例: 新鮮野菜" />
-              </label>
-              <button className="primary-button" type="submit">追加</button>
-            </form>
-          </div>
-          <div className="category-master-list">
-            {productCategories.map((category) => {
-              const subcategories = subcategoryMaster.filter((subcategory) => subcategory.category === category);
-
-              return (
-                <article className="category-master-row" key={category}>
-                  <div className="category-master-heading">
-                    <strong>{category}</strong>
-                    <div className="row-actions">
-                      <button className="text-button" type="button" onClick={() => setEditingCategory({ type: "category", currentName: category, name: category })}>
-                        編集
-                      </button>
-                      <button className="text-button danger-button" type="button" onClick={() => void deleteCategory(category)}>
-                        削除
-                      </button>
-                    </div>
-                  </div>
-                  <div className="category-chip-list">
-                    {subcategories.map((subcategory) => (
-                      <span key={`${category}-${subcategory.name}`}>
-                        {subcategory.name}
-                        <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
-                          編集
-                        </button>
-                        <button type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
-                          削除
-                        </button>
-                      </span>
-                    ))}
-                    {subcategories.length === 0 ? <small>小分類未設定</small> : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
         <section className="panel product-master-page-panel">
           <div className="panel-title product-master-title">
             <div>
               <h3>商品マスタ</h3>
               <p>大分類、小分類、商品名、単位、仕入れ先、規格、写真、保管属性を管理</p>
             </div>
-            <span className="source-indicator">{filteredProducts.length} 件</span>
+            <div className="product-list-controls">
+              <label>
+                <span>表示件数</span>
+                <select value={productPageSize} onChange={(event) => setProductPageSize(Number(event.target.value))}>
+                  {productPageSizeOptions.map((size) => (
+                    <option value={size} key={size}>{size} 件</option>
+                  ))}
+                </select>
+              </label>
+              <span className="source-indicator">{filteredProducts.length} 件</span>
+            </div>
           </div>
           <div className="product-filter-stack">
             <div className="product-category-strip" aria-label="大分類">
@@ -472,7 +413,7 @@ export default function ProductsPage() {
               <span>参考価格</span>
               <span>操作</span>
             </div>
-            {filteredProducts.map((product) => {
+            {pagedProducts.map((product) => {
               const productIndex = products.findIndex((item) => item.name === product.name);
 
               return (
@@ -565,6 +506,111 @@ export default function ProductsPage() {
               <div className="empty-state">登録済みの商品はありません</div>
             ) : null}
           </div>
+          {filteredProducts.length > productPageSize ? (
+            <div className="pagination-bar">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setProductPage((page) => Math.max(1, page - 1))}
+                disabled={currentProductPage === 1}
+              >
+                前へ
+              </button>
+              <span>{currentProductPage} / {productPageCount}</span>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setProductPage((page) => Math.min(productPageCount, page + 1))}
+                disabled={currentProductPage === productPageCount}
+              >
+                次へ
+              </button>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel product-category-admin-panel">
+          <details className="category-maintenance">
+            <summary>
+              <span>分類管理</span>
+              <small>大分類・小分類の追加、編集、削除</small>
+            </summary>
+            <div className="category-maintenance-body">
+              <div className="category-admin-grid">
+                <form
+                  className="management-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    void createCategory(new FormData(form)).then(() => form.reset());
+                  }}
+                >
+                  <label>
+                    <span>大分類を追加</span>
+                    <input name="name" placeholder="例: 食材" />
+                  </label>
+                  <button className="primary-button" type="submit">追加</button>
+                </form>
+                <form
+                  className="management-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    void createSubcategory(new FormData(form)).then(() => form.reset());
+                  }}
+                >
+                  <label>
+                    <span>大分類</span>
+                    <select name="category" defaultValue={productCategories[0] ?? ""}>
+                      {productCategories.map((category) => (
+                        <option value={category} key={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>小分類を追加</span>
+                    <input name="name" placeholder="例: 新鮮野菜" />
+                  </label>
+                  <button className="primary-button" type="submit">追加</button>
+                </form>
+              </div>
+              <div className="category-master-list">
+                {productCategories.map((category) => {
+                  const subcategories = subcategoryMaster.filter((subcategory) => subcategory.category === category);
+
+                  return (
+                    <article className="category-master-row" key={category}>
+                      <div className="category-master-heading">
+                        <strong>{category}</strong>
+                        <div className="row-actions">
+                          <button className="text-button" type="button" onClick={() => setEditingCategory({ type: "category", currentName: category, name: category })}>
+                            編集
+                          </button>
+                          <button className="text-button danger-button" type="button" onClick={() => void deleteCategory(category)}>
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                      <div className="category-chip-list">
+                        {subcategories.map((subcategory) => (
+                          <span key={`${category}-${subcategory.name}`}>
+                            {subcategory.name}
+                            <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
+                              編集
+                            </button>
+                            <button type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
+                              削除
+                            </button>
+                          </span>
+                        ))}
+                        {subcategories.length === 0 ? <small>小分類未設定</small> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </details>
         </section>
       </section>
 
