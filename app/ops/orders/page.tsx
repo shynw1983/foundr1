@@ -347,10 +347,10 @@ export default function OrdersPage() {
                 <strong>仕入れ商品リスト</strong>
               </div>
               <div className="order-item-list">
-                {orderItemDrafts.map((item, index) => (
+                {orderItemDrafts.map((item) => (
                   <div className="order-item-row" key={item.id}>
                     <label>
-                      <span>分類 {index + 1}</span>
+                      <span>分類</span>
                       <select
                         value={item.category}
                         onChange={(event) => updateOrderItemDraft(item.id, { category: event.target.value })}
