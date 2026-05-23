@@ -70,3 +70,18 @@ export async function POST(request: Request) {
 
   redirect("/ops/orders");
 }
+
+export async function DELETE(request: Request) {
+  const body = await request.json() as { orderId?: string };
+
+  if (!body.orderId) {
+    return Response.json({ error: "orderId is required" }, { status: 400 });
+  }
+
+  await sql`
+    delete from purchase_orders
+    where order_no = ${body.orderId}
+  `;
+
+  return Response.json({ ok: true });
+}

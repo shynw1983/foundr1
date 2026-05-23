@@ -239,6 +239,21 @@ export default function OrdersPage() {
     setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
   }
 
+  function deletePurchaseOrder(orderId: string) {
+    if (!window.confirm(`${orderId} を削除しますか？`)) return;
+
+    setPurchaseOrders((items) => items.filter((item) => item.id !== orderId));
+    setPurchaseOrderItems((items) => items.filter((item) => item.orderId !== orderId));
+
+    void fetch("/api/orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId })
+    }).catch(() => {
+      // Keep the UI responsive; a refresh will restore server state if deletion failed.
+    });
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -426,9 +441,14 @@ export default function OrdersPage() {
                     <span className="muted-label">優先度</span>
                     <strong>{order.priority}</strong>
                   </div>
-                  <a className="icon-button" href="/ops/procurement" aria-label={`${order.id} の仕入れ処理`}>
-                    <PackageCheck size={18} />
-                  </a>
+                  <div className="row-actions">
+                    <a className="icon-button" href="/ops/procurement" aria-label={`${order.id} の仕入れ処理`}>
+                      <PackageCheck size={18} />
+                    </a>
+                    <button type="button" className="text-button danger-button" onClick={() => deletePurchaseOrder(order.id)}>
+                      削除
+                    </button>
+                  </div>
                 </article>
               ))}
               {filteredPurchaseOrders.length === 0 ? (

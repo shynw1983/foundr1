@@ -94,6 +94,33 @@ export default function ProductsPage() {
     });
   }
 
+  function deleteProduct(product: Product) {
+    if (!window.confirm(`${product.name} を削除しますか？`)) return;
+
+    setProducts((items) => items.filter((item) => item.name !== product.name));
+
+    void fetch("/api/products", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productName: product.name })
+    })
+      .then((response) => {
+        if (!response.ok) {
+          setProducts((items) => (items.some((item) => item.name === product.name) ? items : [...items, product]));
+          return response.json().then((body) => {
+            window.alert(body.error ?? "商品を削除できませんでした。");
+          });
+        }
+
+        return null;
+      })
+      .catch(() => {
+        setProducts((items) => (items.some((item) => item.name === product.name) ? items : [...items, product]));
+        window.alert("商品を削除できませんでした。");
+      });
+  }
+
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -172,12 +199,17 @@ export default function ProductsPage() {
                   <span>{product.unit}</span>
                   <span>{product.storageType || "未設定"}</span>
                   <strong>¥{product.referencePrice}</strong>
-                  <button
-                    className="text-button"
-                    onClick={() => setEditTarget({ type: "product", index: productIndex, value: product })}
-                  >
-                    編集
-                  </button>
+                  <div className="row-actions">
+                    <button
+                      className="text-button"
+                      onClick={() => setEditTarget({ type: "product", index: productIndex, value: product })}
+                    >
+                      編集
+                    </button>
+                    <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                      削除
+                    </button>
+                  </div>
                   <div className="product-master-detail">
                     <div className="product-photo-thumb">
                       {product.photoUrl ? (

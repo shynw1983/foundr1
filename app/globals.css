@@ -218,6 +218,18 @@ button {
   white-space: nowrap;
 }
 
+.danger-button {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -550,7 +562,7 @@ button {
 .product-master-head,
 .product-master-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(76px, 0.42fr) 58px 64px 88px auto;
+  grid-template-columns: minmax(0, 1.35fr) minmax(76px, 0.42fr) 58px 64px 88px minmax(104px, auto);
   align-items: center;
   gap: 10px;
 }
@@ -799,7 +811,7 @@ button {
 
 .order-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.7fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) 44px;
+  grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.7fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(92px, auto);
   align-items: center;
   gap: 12px;
   padding: 13px;
@@ -1815,7 +1827,9 @@ button {
     justify-items: start;
   }
 
-  .order-row .icon-button {
+  .order-row .icon-button,
+  .order-row .text-button,
+  .row-actions {
     width: 100%;
   }
 }
