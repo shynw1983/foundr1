@@ -2043,36 +2043,16 @@ button {
   }
 
   .nav-list {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 5px;
+    display: none;
   }
 
   .mobile-nav-menu {
-    display: none;
-  }
-
-  .nav-item {
-    justify-content: center;
-    min-height: 30px;
-    padding: 0 5px;
-    gap: 0;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #dce5ee;
-    font-size: 11px;
-    font-weight: 800;
-    line-height: 1.1;
-    text-align: center;
-    white-space: normal;
-  }
-
-  .nav-item svg {
-    display: none;
+    display: block;
+    position: relative;
   }
 
   .mobile-nav-menu summary {
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: space-between;
     min-height: 38px;
