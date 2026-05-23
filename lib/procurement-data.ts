@@ -34,7 +34,7 @@ export async function getProcurementDashboardData() {
           reference_price::float as "referencePrice",
           coalesce(spec_note, '') as "specNote",
           coalesce(storage_type, '') as "storageType",
-          '' as "photoUrl",
+          coalesce(photo_url, '') as "photoUrl",
           coalesce((
             select suppliers.name
             from product_supplier_options

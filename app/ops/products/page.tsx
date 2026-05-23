@@ -2,7 +2,7 @@
 
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   brands,
   products as initialProducts,
@@ -270,6 +270,40 @@ function ProductEditDialog({
   onSave: (target: ProductEditTarget) => void;
 }) {
   const fields = getProductFields(target.value, suppliers, brands);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadStatus, setUploadStatus] = useState("");
+
+  async function uploadPhoto(file: File) {
+    if (!target.value.name) {
+      setUploadStatus("先に商品名を入力してください。");
+      return;
+    }
+
+    setUploadStatus("アップロード中...");
+    const formData = new FormData();
+    formData.set("productName", target.value.name);
+    formData.set("file", file);
+
+    const response = await fetch("/api/products/photo", {
+      method: "POST",
+      body: formData
+    });
+    const body = await response.json();
+
+    if (!response.ok) {
+      setUploadStatus(body.error ?? "アップロードできませんでした。");
+      return;
+    }
+
+    onChange({
+      ...target,
+      value: {
+        ...target.value,
+        photoUrl: body.url
+      }
+    });
+    setUploadStatus("アップロード済み");
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="product-edit-title">
@@ -288,6 +322,51 @@ function ProductEditDialog({
           <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
             ×
           </button>
+        </div>
+        <div className="photo-upload-box">
+          <div className="product-photo-preview">
+            {target.value.photoUrl ? (
+              <img src={target.value.photoUrl} alt={`${target.value.name || "商品"} の写真`} />
+            ) : (
+              <span>写真</span>
+            )}
+          </div>
+          <div>
+            <strong>商品写真</strong>
+            <p>写真は Vercel Blob に保存され、商品マスタに URL が記録されます。</p>
+            <div className="photo-upload-actions">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadPhoto(file);
+                }}
+              />
+              <button type="button" className="secondary-button" onClick={() => fileInputRef.current?.click()}>
+                写真をアップロード
+              </button>
+              {target.value.photoUrl ? (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        photoUrl: ""
+                      }
+                    })
+                  }
+                >
+                  写真URLをクリア
+                </button>
+              ) : null}
+            </div>
+            {uploadStatus ? <small>{uploadStatus}</small> : null}
+          </div>
         </div>
         <div className="edit-fields">
           {fields.map((field) => (
