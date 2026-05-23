@@ -164,7 +164,11 @@ export default function Home() {
 
   function saveEdit(target: EditTarget) {
     if (target.type === "product") {
-      setProducts((items) => items.map((item, index) => (index === target.index ? target.value : item)));
+      setProducts((items) =>
+        target.index >= items.length
+          ? [...items, target.value]
+          : items.map((item, index) => (index === target.index ? target.value : item))
+      );
     }
 
     if (target.type === "supplier") {
@@ -195,6 +199,20 @@ export default function Home() {
     }
 
     setEditTarget(null);
+  }
+
+  function openNewProductEditor() {
+    setEditTarget({
+      type: "product",
+      index: products.length,
+      value: {
+        name: "",
+        category: productCategories[0] ?? "食材",
+        brand: brandsData[0]?.name ?? "共通",
+        unit: "個",
+        referencePrice: 0
+      }
+    });
   }
 
   function addOrderItemDraft() {
@@ -494,16 +512,38 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="panel compact-editor" id="商品マスタ">
-            <PanelTitle title="最近の編集" subtitle="代表データだけをホームに表示" />
-            <div className="compact-list">
-              {products.slice(0, 5).map((product, index) => (
-                <article className="compact-row" key={product.name}>
+          <section className="panel product-master-panel" id="商品マスタ">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>商品マスタ</h3>
+                <p>カテゴリ、商品名、ブランド、単位、参考価格</p>
+              </div>
+              <button type="button" className="text-button" onClick={openNewProductEditor}>
+                商品を追加
+              </button>
+            </div>
+            <div className="product-category-strip" aria-label="商品カテゴリ">
+              {productCategories.map((category) => (
+                <span key={category}>{category}</span>
+              ))}
+            </div>
+            <div className="product-master-table">
+              <div className="product-master-head">
+                <span>商品名</span>
+                <span>分類</span>
+                <span>単位</span>
+                <span>参考価格</span>
+                <span>操作</span>
+              </div>
+              {products.map((product, index) => (
+                <article className="product-master-row" key={`${product.name}-${index}`}>
                   <div>
-                    <strong>{product.name}</strong>
-                    <p>{product.category} · {product.brand}</p>
+                    <strong>{product.name || "未設定の商品"}</strong>
+                    <p>{product.brand}</p>
                   </div>
-                  <span>¥{product.referencePrice}</span>
+                  <span>{product.category}</span>
+                  <span>{product.unit}</span>
+                  <strong>¥{product.referencePrice}</strong>
                   <button
                     className="text-button"
                     onClick={() => setEditTarget({ type: "product", index, value: product })}
@@ -754,7 +794,7 @@ function EditDialog({
         <div className="modal-heading">
           <div>
             <p className="eyebrow">Data Edit</p>
-            <h3 id="edit-title">{getEditTitle(target.type)}</h3>
+            <h3 id="edit-title">{getEditTitle(target)}</h3>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
             ×
@@ -764,21 +804,40 @@ function EditDialog({
           {fields.map((field) => (
             <label key={field.key}>
               <span>{field.label}</span>
-              <input
-                value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
-                type={field.type ?? "text"}
-                onChange={(event) => {
-                  const nextValue =
-                    field.type === "number" ? Number(event.target.value) : event.target.value;
-                  onChange({
-                    ...target,
-                    value: {
-                      ...target.value,
-                      [field.key]: nextValue
-                    }
-                  } as EditTarget);
-                }}
-              />
+              {field.options ? (
+                <select
+                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  onChange={(event) => {
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        [field.key]: event.target.value
+                      }
+                    } as EditTarget);
+                  }}
+                >
+                  {field.options.map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  type={field.type ?? "text"}
+                  onChange={(event) => {
+                    const nextValue =
+                      field.type === "number" ? Number(event.target.value) : event.target.value;
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        [field.key]: nextValue
+                      }
+                    } as EditTarget);
+                  }}
+                />
+              )}
             </label>
           ))}
         </div>
@@ -795,7 +854,7 @@ function EditDialog({
   );
 }
 
-function getEditTitle(type: EditTarget["type"]) {
+function getEditTitle(target: EditTarget) {
   const titles = {
     product: "商品マスタを編集",
     usage: "ブランド別利用を編集",
@@ -804,16 +863,25 @@ function getEditTitle(type: EditTarget["type"]) {
     source: "商品別仕入れ先を編集"
   };
 
-  return titles[type];
+  if (target.type === "product" && !target.value.name) {
+    return "商品マスタを追加";
+  }
+
+  return titles[target.type];
 }
 
-function getFields(target: EditTarget): Array<{ key: string; label: string; type?: "number" }> {
+function getFields(target: EditTarget): Array<{ key: string; label: string; type?: "number"; options?: string[] }> {
   if (target.type === "product") {
+    const product = target.value;
+    const categoryOptions = uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]);
+    const brandOptions = uniqueOptions(["奈奈茶", "熱辣食堂", "奈奈茶 / 熱辣食堂", product.brand]);
+    const unitOptions = uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]);
+
     return [
       { key: "name", label: "商品名" },
-      { key: "category", label: "カテゴリ" },
-      { key: "brand", label: "ブランド" },
-      { key: "unit", label: "単位" },
+      { key: "category", label: "カテゴリ", options: categoryOptions },
+      { key: "brand", label: "ブランド", options: brandOptions },
+      { key: "unit", label: "単位", options: unitOptions },
       { key: "referencePrice", label: "参考価格", type: "number" }
     ];
   }
@@ -858,6 +926,10 @@ function getFields(target: EditTarget): Array<{ key: string; label: string; type
     { key: "leadTime", label: "リードタイム" },
     { key: "note", label: "備考" }
   ];
+}
+
+function uniqueOptions(options: string[]) {
+  return Array.from(new Set(options.filter(Boolean)));
 }
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
