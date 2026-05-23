@@ -3,27 +3,20 @@
 import {
   AlertTriangle,
   ArrowUpRight,
-  Boxes,
-  CheckCircle2,
   Clock3,
   ClipboardList,
   MessageSquareWarning,
   PackageCheck,
   Plus,
   Search,
-  Store,
-  Truck,
-  UsersRound,
-  WalletCards
+  Store
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  accessProfiles,
   brands,
   exceptions,
   orders,
-  priceSignals,
   productBrandUsages as initialProductBrandUsages,
   productSupplierOptions as initialProductSupplierOptions,
   products as initialProducts,
@@ -65,11 +58,7 @@ const statusTone: Record<string, string> = {
 const navItems: Array<[string, LucideIcon]> = [
   ["ダッシュボード", ClipboardList],
   ["仕入れ依頼", PackageCheck],
-  ["連絡・報告", MessageSquareWarning],
-  ["価格推移", WalletCards],
-  ["マスタ管理", Boxes],
-  ["店舗・権限", Store],
-  ["権限", UsersRound]
+  ["連絡・報告", MessageSquareWarning]
 ];
 
 export default function Home() {
@@ -131,36 +120,7 @@ export default function Home() {
   const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
   const activeExceptions = exceptions.filter((item) => item.status !== "解決済み").length;
-  const risingPrices = priceSignals.filter((item) => item.changeRate > 8).length;
-  const keyProducts = products.filter((product) => product.category === "食材").length;
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
-
-  const masterModules = [
-    {
-      title: "商品マスタ",
-      count: products.length,
-      detail: "商品本体、カテゴリ、単位、参考価格",
-      sample: products.slice(0, 3).map((product) => product.name).join(" / ")
-    },
-    {
-      title: "ブランド別利用",
-      count: productBrandUsages.length,
-      detail: "共用品のブランド別用途と標準数量",
-      sample: productBrandUsages.slice(0, 3).map((usage) => `${usage.product}:${usage.brand}`).join(" / ")
-    },
-    {
-      title: "商品別仕入れ先",
-      count: productSupplierOptions.length,
-      detail: "メイン、予備、緊急チャネル",
-      sample: productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")
-    },
-    {
-      title: "仕入れ先・拠点",
-      count: suppliers.length + supplierLocations.length,
-      detail: "ネットショップ、実店舗、チェーン分店",
-      sample: suppliers.slice(0, 3).map((supplier) => supplier.name).join(" / ")
-    }
-  ];
 
   function saveEdit(target: EditTarget) {
     if (target.type === "product") {
@@ -316,7 +276,7 @@ export default function Home() {
           <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="3 店舗をカバー" />
           <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" />
           <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" />
-          <MetricCard icon={<Boxes />} label="主要食材" value={keyProducts} note="価格確認の対象" />
+          <MetricCard icon={<Store />} label="対象店舗" value={storesData.length} note="依頼を送れる店舗" />
         </section>
 
         <section className="panel create-order-panel" id="create-order-panel">
@@ -483,286 +443,7 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="panel" id="価格推移">
-              <PanelTitle title="価格アラート" subtitle={`${risingPrices} 件の値上がり注意`} />
-              <div className="trend-list">
-                {priceSignals.map((signal) => (
-                  <article className="trend-row" key={signal.product}>
-                    <div>
-                      <strong>{signal.product}</strong>
-                      <p>{signal.supplier}</p>
-                    </div>
-                    <div className={signal.changeRate > 0 ? "rate-up" : "rate-down"}>
-                      {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
           </aside>
-        </section>
-
-        <section className="management-grid" id="マスタ管理">
-          <section className="panel management-panel">
-            <PanelTitle title="マスタ管理" subtitle="件数が増えるデータは一覧画面で検索・編集する前提" />
-            <div className="module-grid">
-              {masterModules.map((module) => (
-                <article className="module-card" key={module.title}>
-                  <div>
-                    <strong>{module.title}</strong>
-                    <p>{module.detail}</p>
-                  </div>
-                  <span>{module.count} 件</span>
-                  <small>{module.sample}</small>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel product-master-panel" id="商品マスタ">
-            <div className="panel-title product-master-title">
-              <div>
-                <h3>商品マスタ</h3>
-                <p>カテゴリ、商品名、ブランド、単位、参考価格</p>
-              </div>
-              <button type="button" className="text-button" onClick={openNewProductEditor}>
-                商品を追加
-              </button>
-            </div>
-            <div className="product-category-strip" aria-label="商品カテゴリ">
-              {productCategories.map((category) => (
-                <span key={category}>{category}</span>
-              ))}
-            </div>
-            <div className="product-master-table">
-              <div className="product-master-head">
-                <span>商品名</span>
-                <span>分類</span>
-                <span>単位</span>
-                <span>保管</span>
-                <span>参考価格</span>
-                <span>操作</span>
-              </div>
-              {products.map((product, index) => (
-                <article className="product-master-row" key={`${product.name}-${index}`}>
-                  <div>
-                    <strong>{product.name || "未設定の商品"}</strong>
-                    <p>{product.brand}</p>
-                  </div>
-                  <span>{product.category}</span>
-                  <span>{product.unit}</span>
-                  <span>{product.storageType || "未設定"}</span>
-                  <strong>¥{product.referencePrice}</strong>
-                  <button
-                    className="text-button"
-                    onClick={() => setEditTarget({ type: "product", index, value: product })}
-                  >
-                    編集
-                  </button>
-                  <div className="product-master-detail">
-                    <div className="product-photo-thumb">
-                      {product.photoUrl ? (
-                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
-                      ) : (
-                        <span>写真</span>
-                      )}
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>主要仕入れ先</dt>
-                        <dd>{product.mainSupplier || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>予備仕入れ先</dt>
-                        <dd>{product.backupSupplier || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>規格</dt>
-                        <dd>{product.specNote || "未設定"}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <section className="admin-grid" id="店舗・権限">
-          <section className="panel">
-            <PanelTitle title="店舗・ブランド" subtitle="3-5 店舗規模の担当範囲を確認" />
-            <div className="store-grid">
-              {storesData.map((store) => (
-                <article className="store-card" key={store.name}>
-                  <Store size={18} />
-                  <strong>{store.name}</strong>
-                  <p>{store.brands.join(" / ")}</p>
-                  <small>{store.owner}</small>
-                </article>
-              ))}
-            </div>
-            <div className="brand-strip">
-              {brandsData.map((brand) => (
-                <span key={brand.name}>{brand.name} · {brand.type}</span>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel" id="権限">
-            <PanelTitle title="権限スコープ" subtitle="本部、店舗、ブランド別に表示範囲を分離" />
-            <div className="access-grid compact-access-grid">
-              {accessProfiles.map((profile) => (
-                <article className="access-card" key={profile.name}>
-                  <div className="access-heading">
-                    <div>
-                      <strong>{profile.name}</strong>
-                      <p>{profile.person}</p>
-                    </div>
-                    <span>{profile.visibleOrderIds.length} 件</span>
-                  </div>
-                  <div className="access-scope">{profile.scope}</div>
-                  <p>{profile.note}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <details className="panel data-lab">
-          <summary>詳細マスタ編集を開く</summary>
-          <div className="data-lab-grid">
-            <section id="ブランド別利用">
-              <PanelTitle title="ブランド別利用設定" subtitle="同じ食材・備品をブランド別の用途と数量で管理" />
-              <div className="usage-grid">
-                {productBrandUsages.map((usage, index) => (
-                  <article className="usage-card" key={`${usage.product}-${usage.brand}`}>
-                    <div className="usage-heading">
-                      <div>
-                        <strong>{usage.product}</strong>
-                        <p>{usage.usage}</p>
-                      </div>
-                      <span>{usage.brand}</span>
-                    </div>
-                    <div className="usage-meta">
-                      <span>標準 {usage.defaultOrderQuantity}</span>
-                      <span>優先度 {usage.priority}</span>
-                    </div>
-                    <p>{usage.specNote}</p>
-                    <button
-                      className="text-button"
-                      onClick={() => setEditTarget({ type: "usage", index, value: usage })}
-                    >
-                      編集
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section id="商品別仕入れ先">
-              <PanelTitle title="商品別仕入れ先" subtitle="メイン・予備・緊急チャネル" />
-              <div className="sourcing-list">
-                {productSupplierOptions.map((group, groupIndex) => (
-                  <article className="sourcing-card" key={group.product}>
-                    <div className="sourcing-title">
-                      <strong>{group.product}</strong>
-                      <span>{group.options.length} チャネル</span>
-                    </div>
-                    <div className="supplier-option-list">
-                      {group.options.map((option, optionIndex) => (
-                        <div className="supplier-option" key={`${group.product}-${option.supplier}`}>
-                          <span className={`source-role source-role-${option.role}`}>{option.role}</span>
-                          <div>
-                            <strong>{option.supplier}</strong>
-                            <p>{option.note}</p>
-                          </div>
-                          <div className="option-meta">
-                            <span>¥{option.referencePrice}</span>
-                            <small>{option.minOrder} · {option.leadTime}</small>
-                          </div>
-                          <button
-                            className="text-button"
-                            onClick={() => setEditTarget({ type: "source", groupIndex, optionIndex, value: option })}
-                          >
-                            編集
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section id="仕入れ先">
-              <PanelTitle title="仕入れ先" subtitle="仕入れ先本体" />
-              <div className="supplier-list">
-                {suppliers.map((supplier, index) => (
-                  <article className="supplier-row" key={supplier.name}>
-                    <Truck size={18} />
-                    <div>
-                      <strong>{supplier.name}</strong>
-                      <p>{supplier.category} · {supplier.reliability}</p>
-                    </div>
-                    <span className="supplier-type">{supplier.channelType}</span>
-                    <button
-                      className="text-button"
-                      onClick={() => setEditTarget({ type: "supplier", index, value: supplier })}
-                    >
-                      編集
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section id="仕入れ先拠点">
-              <PanelTitle title="仕入れ先拠点" subtitle="ネットショップ、実店舗、チェーン分店" />
-              <div className="location-grid">
-                {supplierLocations.map((location, index) => (
-                  <article className="location-card" key={`${location.supplier}-${location.locationName}`}>
-                    <div className="location-heading">
-                      <div>
-                        <strong>{location.locationName}</strong>
-                        <p>{location.supplier}</p>
-                      </div>
-                      <span>{location.type}</span>
-                    </div>
-                    <dl className="location-details">
-                      <div>
-                        <dt>エリア</dt>
-                        <dd>{location.area}</dd>
-                      </div>
-                      <div>
-                        <dt>営業時間</dt>
-                        <dd>{location.hours}</dd>
-                      </div>
-                      <div>
-                        <dt>購入方法</dt>
-                        <dd>{location.purchaseMethod}</dd>
-                      </div>
-                    </dl>
-                    <p>{location.note}</p>
-                    <button
-                      className="text-button"
-                      onClick={() => setEditTarget({ type: "location", index, value: location })}
-                    >
-                      編集
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </div>
-        </details>
-
-        <section className="workflow-band">
-          {["店舗申請", "仕入れ処理", "異常報告", "配送完了", "店舗確認"].map((step, index) => (
-            <div className="workflow-step" key={step}>
-              <CheckCircle2 size={18} />
-              <span>{index + 1}. {step}</span>
-            </div>
-          ))}
         </section>
       </section>
 
