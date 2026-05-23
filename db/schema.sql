@@ -28,7 +28,9 @@ create table if not exists store_brands (
 create table if not exists employees (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  login_id text unique,
   email text unique,
+  password_hash text,
   role text not null,
   status text not null default 'active',
   created_at timestamptz not null default now(),

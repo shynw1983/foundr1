@@ -2057,6 +2057,76 @@ button {
   font-size: 12px;
 }
 
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 22px;
+  background: #f4f7fb;
+}
+
+.login-card {
+  display: grid;
+  gap: 18px;
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.login-card .brand-mark {
+  color: white;
+}
+
+.login-card h1,
+.login-card p {
+  margin: 0;
+}
+
+.login-card p:not(.eyebrow) {
+  color: var(--muted);
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.login-form span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-form input {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  font: inherit;
+  outline: 0;
+}
+
+.login-form input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.login-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--red);
+  background: var(--red-soft);
+  font-weight: 800;
+}
+
 @media (max-width: 1120px) {
   .shell {
     grid-template-columns: 1fr;

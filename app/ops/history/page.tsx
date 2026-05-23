@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Search, Store, Truck } from "lucide-react";
+import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Search, Store, Truck, LogOut } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { orders, products as initialProducts } from "../../../lib/mock-data";
@@ -52,7 +52,8 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes }
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
+  { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
 function getItemStatus(item: PurchaseOrderItem) {
