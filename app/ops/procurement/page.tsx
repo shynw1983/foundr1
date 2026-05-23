@@ -59,7 +59,7 @@ const statusTone: Record<string, string> = {
   仕入れ完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部送達: "tone-warning",
+  一部配達済み: "tone-warning",
   到着日入力待ち: "tone-warning",
   到着待ち: "tone-route",
   確認待ち: "tone-confirm",
@@ -182,7 +182,7 @@ function getOrderStatus(
 
   if (deliveredCount === items.length) return "完了";
   if (deliveryCount > 0) return "配送中";
-  if (deliveredCount > 0) return "一部送達";
+  if (deliveredCount > 0) return "一部配達済み";
   if (purchasedCount === 0) return "仕入れ待ち";
   if (purchasedCount < items.length) return "一部完了";
   if (hasOnlineSupplier(items, supplierList)) {
@@ -445,7 +445,7 @@ export default function ProcurementPage() {
                                     <div className="task-product-line">
                                       <strong>{item.productName}</strong>
                                       {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
-                                      {item.deliveryStatus === "delivered" ? <span>送達済み</span> : null}
+                                      {item.deliveryStatus === "delivered" ? <span>配達済み</span> : null}
                                     </div>
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
                                   </div>
@@ -550,7 +550,7 @@ function OrderFulfillmentPanel({
               ? `到着予定 ${expectedArrivalLabel}`
               : "発注後に到着予定日を入力"
             : deliveredCount === totalCount
-              ? "送達済み"
+              ? "配達済み"
               : inDeliveryCount > 0
                 ? "配送中"
                 : readyToDeliverCount > 0
@@ -560,7 +560,7 @@ function OrderFulfillmentPanel({
         <div className="fulfillment-metrics">
           <span>購入 {purchasedCount} / {totalCount}</span>
           <span>配送中 {inDeliveryCount}</span>
-          <span>送達 {deliveredCount}</span>
+          <span>配達済み {deliveredCount}</span>
         </div>
       </div>
       {isOnlineOrder ? (
@@ -603,7 +603,7 @@ function OrderFulfillmentPanel({
                 <div className="delivery-batch-row" key={batch.id}>
                   <div>
                     <strong>{batch.id}</strong>
-                    <span>{batch.createdLabel} · {batch.itemIds.length} 件 · {batch.status === "delivered" ? "送達済み" : "配送中"}</span>
+                    <span>{batch.createdLabel} · {batch.itemIds.length} 件 · {batch.status === "delivered" ? "配達済み" : "配送中"}</span>
                   </div>
                   <button
                     type="button"
@@ -611,7 +611,7 @@ function OrderFulfillmentPanel({
                     disabled={batch.status === "delivered"}
                     onClick={() => onMarkDelivered(batch.id)}
                   >
-                    送達
+                    配達済み
                   </button>
                 </div>
               ))}

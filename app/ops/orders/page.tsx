@@ -174,7 +174,7 @@ export default function OrdersPage() {
           <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度、商品清单を指定して依頼を作成" />
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
-              <span>送達店舗</span>
+              <span>配達先店舗</span>
               <select name="store" defaultValue={storesData[0]?.name}>
                 {storesData.map((store) => (
                   <option value={store.name} key={store.name}>{store.name}</option>
