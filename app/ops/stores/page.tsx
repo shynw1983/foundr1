@@ -23,8 +23,10 @@ export default function StoresPage() {
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [brandsData, setBrandsData] = useState<BrandItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
+  const [editingStore, setEditingStore] = useState<StoreItem | null>(null);
   const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
   const [selectedStoreBrands, setSelectedStoreBrands] = useState<string[]>([]);
+  const [editingStoreBrands, setEditingStoreBrands] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -167,25 +169,71 @@ export default function StoresPage() {
     setEditingBrand(null);
   }
 
-  function toggleStoreBrand(brandName: string, checked: boolean) {
+  async function saveStoreEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingStore) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const nextName = String(formData.get("name") ?? "").trim();
+    const owner = String(formData.get("owner") ?? "").trim();
+
+    if (!nextName) return;
+
+    formData.set("currentName", editingStore.name);
+    editingStoreBrands.forEach((brandName) => formData.append("brand", brandName));
+
+    const response = await fetch("/api/stores", {
+      method: "PUT",
+      body: formData
+    });
+
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "店舗を更新できませんでした。");
+      return;
+    }
+
+    setStoresData((items) =>
+      items.map((item) => item.name === editingStore.name ? { name: nextName, owner, brands: editingStoreBrands } : item)
+    );
+    setEditingStore(null);
+    setEditingStoreBrands([]);
+  }
+
+  function startEditingStore(store: StoreItem) {
+    setEditingStore(store);
+    setEditingStoreBrands(store.brands);
+  }
+
+  function toggleBrandSelection(
+    current: string[],
+    brandName: string,
+    checked: boolean
+  ) {
     const allBrandNames = brandsData.map((brand) => brand.name);
     const concreteBrandNames = allBrandNames.filter((name) => name !== "共通");
 
     if (brandName === "共通") {
-      setSelectedStoreBrands(checked ? allBrandNames : []);
-      return;
+      return checked ? allBrandNames : [];
     }
 
-    setSelectedStoreBrands((current) => {
-      const nextConcrete = checked
-        ? Array.from(new Set([...current.filter((name) => name !== "共通"), brandName]))
-        : current.filter((name) => name !== "共通" && name !== brandName);
-      const hasAllConcreteBrands = concreteBrandNames.every((name) => nextConcrete.includes(name));
+    const nextConcrete = checked
+      ? Array.from(new Set([...current.filter((name) => name !== "共通"), brandName]))
+      : current.filter((name) => name !== "共通" && name !== brandName);
+    const hasAllConcreteBrands = concreteBrandNames.every((name) => nextConcrete.includes(name));
 
-      return hasAllConcreteBrands && concreteBrandNames.length > 0
-        ? ["共通", ...nextConcrete]
-        : nextConcrete;
-    });
+    return hasAllConcreteBrands && concreteBrandNames.length > 0
+      ? ["共通", ...nextConcrete]
+      : nextConcrete;
+  }
+
+  function toggleStoreBrand(brandName: string, checked: boolean) {
+    setSelectedStoreBrands((current) => toggleBrandSelection(current, brandName, checked));
+  }
+
+  function toggleEditingStoreBrand(brandName: string, checked: boolean) {
+    setEditingStoreBrands((current) => toggleBrandSelection(current, brandName, checked));
   }
 
   function formatStoreBrands(brandNames: string[]) {
@@ -265,9 +313,14 @@ export default function StoresPage() {
                     <p>{store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
                   </div>
-                  <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
-                    削除
-                  </button>
+                  <div className="row-actions">
+                    <button className="text-button" type="button" onClick={() => startEditingStore(store)}>
+                      編集
+                    </button>
+                    <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
+                      削除
+                    </button>
+                  </div>
                 </article>
               ))}
               {storesData.length === 0 ? (
@@ -313,6 +366,54 @@ export default function StoresPage() {
           </section>
         </section>
       </section>
+
+      {editingStore ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="store-edit-title">
+          <form className="edit-modal" onSubmit={saveStoreEdit}>
+            <div className="modal-heading">
+              <div>
+                <h3 id="store-edit-title">店舗を編集</h3>
+                <p>{editingStore.name}</p>
+              </div>
+              <button type="button" className="text-button" onClick={() => setEditingStore(null)}>
+                閉じる
+              </button>
+            </div>
+            <div className="edit-fields">
+              <label>
+                <span>店舗名</span>
+                <input name="name" defaultValue={editingStore.name} />
+              </label>
+              <label>
+                <span>担当者メモ</span>
+                <input name="owner" defaultValue={editingStore.owner} placeholder="例: 店長名・担当者名" />
+              </label>
+              <div className="checkbox-group">
+                <span>取り扱いブランド</span>
+                {brandsData.map((brand) => (
+                  <label key={brand.name}>
+                    <input
+                      type="checkbox"
+                      value={brand.name}
+                      checked={editingStoreBrands.includes(brand.name)}
+                      onChange={(event) => toggleEditingStoreBrand(brand.name, event.target.checked)}
+                    />
+                    {brand.name === "共通" ? "共通（全ブランド）" : brand.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="text-button" onClick={() => setEditingStore(null)}>
+                キャンセル
+              </button>
+              <button type="submit" className="primary-button">
+                保存
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {editingBrand ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="brand-edit-title">
