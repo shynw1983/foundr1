@@ -893,7 +893,7 @@ button {
 .procurement-task {
   display: grid;
   grid-template-columns: 92px minmax(180px, 1.4fr) 72px 86px auto;
-  align-items: center;
+  align-items: start;
   gap: 8px;
   min-height: 52px;
   padding: 7px 9px;
@@ -910,6 +910,7 @@ button {
 .procurement-task label {
   display: grid;
   gap: 4px;
+  align-self: start;
 }
 
 .procurement-task label > span,
@@ -1649,6 +1650,7 @@ button {
 
   .procurement-task {
     grid-template-columns: 64px minmax(0, 1fr) 54px 66px 70px;
+    align-items: start;
     gap: 6px;
     padding: 6px;
   }
