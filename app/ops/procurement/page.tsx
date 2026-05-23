@@ -37,10 +37,19 @@ type ProcurementTaskItem = {
   purchased: boolean;
   note: string;
   priceExceptionNote: string;
+  deliveryStatus: "pending" | "in_delivery" | "delivered";
+  deliveryBatchId?: string;
 };
 type DeliveryState = {
-  status: "not_started" | "delivery" | "delivered" | "online_ordered";
+  status: "not_started" | "online_ordered";
   expectedArrivalDate: string;
+};
+type DeliveryBatch = {
+  id: string;
+  orderId: string;
+  itemIds: string[];
+  status: "in_delivery" | "delivered";
+  createdLabel: string;
 };
 
 const statusTone: Record<string, string> = {
@@ -48,7 +57,9 @@ const statusTone: Record<string, string> = {
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
   仕入れ完了: "tone-done",
+  配送待ち: "tone-confirm",
   配送中: "tone-route",
+  一部送達: "tone-warning",
   到着日入力待ち: "tone-warning",
   到着待ち: "tone-route",
   確認待ち: "tone-confirm",
@@ -67,7 +78,7 @@ function createProcurementTaskItems(
   purchaseOrders: PurchaseOrder[],
   productList: Product[],
   purchaseOrderItems: DashboardOrderItem[]
-) {
+): ProcurementTaskItem[] {
   if (productList.length === 0) return [];
 
   return purchaseOrders.flatMap((order, orderIndex) => {
@@ -84,7 +95,8 @@ function createProcurementTaskItems(
         supplier: item.supplier ?? "",
         purchased: item.purchased ?? false,
         note: item.note ?? "",
-        priceExceptionNote: item.priceExceptionNote ?? ""
+        priceExceptionNote: item.priceExceptionNote ?? "",
+        deliveryStatus: "pending"
       }));
     }
 
@@ -102,7 +114,8 @@ function createProcurementTaskItems(
         supplier: "",
         purchased: false,
         note: "",
-        priceExceptionNote: ""
+        priceExceptionNote: "",
+        deliveryStatus: "pending"
       };
     });
   });
@@ -163,19 +176,22 @@ function getOrderStatus(
 ) {
   if (items.length === 0) return order.status;
 
-  const completedCount = items.filter((item) => item.purchased).length;
+  const purchasedCount = items.filter((item) => item.purchased).length;
+  const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
+  const deliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
 
-  if (completedCount === 0) return "仕入れ待ち";
-  if (completedCount < items.length) return "一部完了";
-  if (deliveryState.status === "delivered") return "完了";
-  if (deliveryState.status === "delivery") return "配送中";
+  if (deliveredCount === items.length) return "完了";
+  if (deliveryCount > 0) return "配送中";
+  if (deliveredCount > 0) return "一部送達";
+  if (purchasedCount === 0) return "仕入れ待ち";
+  if (purchasedCount < items.length) return "一部完了";
   if (hasOnlineSupplier(items, supplierList)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
     return "到着日入力待ち";
   }
   if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
 
-  return "仕入れ完了";
+  return "配送待ち";
 }
 
 function getDeliveryStateForOrder(deliveryStates: Record<string, DeliveryState>, orderId: string) {
@@ -194,6 +210,10 @@ function formatExpectedArrivalDate(date: string) {
   return date ? date.replaceAll("-", "/") : "";
 }
 
+function createDeliveryBatchId(orderId: string, batchCount: number) {
+  return `${orderId}-DEL-${String(batchCount + 1).padStart(2, "0")}`;
+}
+
 export default function ProcurementPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
@@ -208,6 +228,7 @@ export default function ProcurementPage() {
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>(() =>
     createInitialDeliveryStates(orders)
   );
+  const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -266,6 +287,49 @@ export default function ProcurementPage() {
     }));
   }
 
+  function createDeliveryBatch(orderId: string) {
+    const readyItems = procurementTaskItems.filter(
+      (item) => item.orderId === orderId && item.purchased && item.deliveryStatus === "pending"
+    );
+
+    if (readyItems.length === 0) return;
+
+    const batchId = createDeliveryBatchId(orderId, deliveryBatches.filter((batch) => batch.orderId === orderId).length);
+    const createdLabel = new Intl.DateTimeFormat("ja-JP", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date());
+
+    setDeliveryBatches((batches) => [
+      ...batches,
+      {
+        id: batchId,
+        orderId,
+        itemIds: readyItems.map((item) => item.id),
+        status: "in_delivery",
+        createdLabel
+      }
+    ]);
+    setProcurementTaskItems((items) =>
+      items.map((item) =>
+        readyItems.some((readyItem) => readyItem.id === item.id)
+          ? { ...item, deliveryStatus: "in_delivery", deliveryBatchId: batchId }
+          : item
+      )
+    );
+  }
+
+  function markDeliveryBatchDelivered(batchId: string) {
+    setDeliveryBatches((batches) =>
+      batches.map((batch) => (batch.id === batchId ? { ...batch, status: "delivered" } : batch))
+    );
+    setProcurementTaskItems((items) =>
+      items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: "delivered" } : item))
+    );
+  }
+
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
 
   return (
@@ -313,9 +377,13 @@ export default function ProcurementPage() {
               const items = procurementTaskItems.filter((item) => item.orderId === order.id);
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
               const completedCount = items.filter((item) => item.purchased).length;
+              const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
+              const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
+              const readyToDeliverCount = items.filter((item) => item.purchased && item.deliveryStatus === "pending").length;
               const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
+              const orderDeliveryBatches = deliveryBatches.filter((batch) => batch.orderId === order.id);
               const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
-              const isPurchased = items.length > 0 && completedCount === items.length;
+              const hasPurchasedItems = completedCount > 0;
               const isOnlineOrder = hasOnlineSupplier(items, suppliers);
 
               return (
@@ -332,9 +400,17 @@ export default function ProcurementPage() {
                   </div>
                   <OrderFulfillmentPanel
                     isOnlineOrder={isOnlineOrder}
-                    isPurchased={isPurchased}
+                    hasPurchasedItems={hasPurchasedItems}
+                    purchasedCount={completedCount}
+                    deliveredCount={deliveredCount}
+                    inDeliveryCount={inDeliveryCount}
+                    readyToDeliverCount={readyToDeliverCount}
+                    totalCount={items.length}
                     state={deliveryState}
                     onChange={(next) => updateDeliveryState(order.id, next)}
+                    batches={orderDeliveryBatches}
+                    onCreateBatch={() => createDeliveryBatch(order.id)}
+                    onMarkDelivered={markDeliveryBatchDelivered}
                   />
                   <div className="procurement-supplier-list">
                     {supplierGroups.map((group) => {
@@ -366,7 +442,11 @@ export default function ProcurementPage() {
                                     <span>{item.purchased ? "購入済み" : "未購入"}</span>
                                   </label>
                                   <div className="task-product">
-                                    <strong>{item.productName}</strong>
+                                    <div className="task-product-line">
+                                      <strong>{item.productName}</strong>
+                                      {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
+                                      {item.deliveryStatus === "delivered" ? <span>送達済み</span> : null}
+                                    </div>
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
                                   </div>
                                   <label>
@@ -433,19 +513,35 @@ export default function ProcurementPage() {
 
 function OrderFulfillmentPanel({
   isOnlineOrder,
-  isPurchased,
+  hasPurchasedItems,
+  purchasedCount,
+  deliveredCount,
+  inDeliveryCount,
+  readyToDeliverCount,
+  totalCount,
   state,
-  onChange
+  onChange,
+  batches,
+  onCreateBatch,
+  onMarkDelivered
 }: {
   isOnlineOrder: boolean;
-  isPurchased: boolean;
+  hasPurchasedItems: boolean;
+  purchasedCount: number;
+  deliveredCount: number;
+  inDeliveryCount: number;
+  readyToDeliverCount: number;
+  totalCount: number;
   state: DeliveryState;
   onChange: (next: Partial<DeliveryState>) => void;
+  batches: DeliveryBatch[];
+  onCreateBatch: () => void;
+  onMarkDelivered: (batchId: string) => void;
 }) {
   const expectedArrivalLabel = formatExpectedArrivalDate(state.expectedArrivalDate);
 
   return (
-    <div className={isPurchased ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
+    <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
       <div>
         <span>{isOnlineOrder ? "ネット注文" : "納品フロー"}</span>
         <strong>
@@ -453,14 +549,19 @@ function OrderFulfillmentPanel({
             ? expectedArrivalLabel
               ? `到着予定 ${expectedArrivalLabel}`
               : "発注後に到着予定日を入力"
-            : state.status === "delivered"
+            : deliveredCount === totalCount
               ? "送達済み"
-              : state.status === "delivery"
+              : inDeliveryCount > 0
                 ? "配送中"
-                : isPurchased
+                : readyToDeliverCount > 0
                   ? "配送待ち"
                   : "仕入れ完了後に配送へ"}
         </strong>
+        <div className="fulfillment-metrics">
+          <span>購入 {purchasedCount} / {totalCount}</span>
+          <span>配送中 {inDeliveryCount}</span>
+          <span>送達 {deliveredCount}</span>
+        </div>
       </div>
       {isOnlineOrder ? (
         <div className="fulfillment-actions">
@@ -469,7 +570,7 @@ function OrderFulfillmentPanel({
             <input
               type="date"
               value={state.expectedArrivalDate}
-              disabled={!isPurchased}
+              disabled={!hasPurchasedItems}
               onChange={(event) =>
                 onChange({ expectedArrivalDate: event.target.value, status: event.target.value ? "online_ordered" : "not_started" })
               }
@@ -478,30 +579,44 @@ function OrderFulfillmentPanel({
           <button
             type="button"
             className="secondary-button"
-            disabled={!isPurchased || !state.expectedArrivalDate}
+            disabled={!hasPurchasedItems || !state.expectedArrivalDate}
             onClick={() => onChange({ status: "online_ordered" })}
           >
             発注済み
           </button>
         </div>
       ) : (
-        <div className="fulfillment-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={!isPurchased}
-            onClick={() => onChange({ status: "delivery" })}
-          >
-            配送
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!isPurchased}
-            onClick={() => onChange({ status: "delivered" })}
-          >
-            送達
-          </button>
+        <div className="fulfillment-delivery-area">
+          <div className="fulfillment-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={readyToDeliverCount === 0}
+              onClick={onCreateBatch}
+            >
+              購入済み分を配送
+            </button>
+          </div>
+          {batches.length > 0 ? (
+            <div className="delivery-batch-list">
+              {batches.map((batch) => (
+                <div className="delivery-batch-row" key={batch.id}>
+                  <div>
+                    <strong>{batch.id}</strong>
+                    <span>{batch.createdLabel} · {batch.itemIds.length} 件 · {batch.status === "delivered" ? "送達済み" : "配送中"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={batch.status === "delivered"}
+                    onClick={() => onMarkDelivered(batch.id)}
+                  >
+                    送達
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

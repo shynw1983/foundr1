@@ -730,7 +730,7 @@ button {
 .fulfillment-panel {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 12px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -757,6 +757,24 @@ button {
 
 .fulfillment-panel strong {
   font-size: 14px;
+}
+
+.fulfillment-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.fulfillment-metrics span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 11px;
 }
 
 .fulfillment-actions {
@@ -786,6 +804,48 @@ button {
 .fulfillment-actions input:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.fulfillment-delivery-area {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  min-width: min(360px, 100%);
+}
+
+.delivery-batch-list {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.delivery-batch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.delivery-batch-row div {
+  display: grid;
+  gap: 2px;
+}
+
+.delivery-batch-row strong {
+  font-size: 12px;
+}
+
+.delivery-batch-row span {
+  font-size: 11px;
+}
+
+.delivery-batch-row button {
+  min-height: 32px;
+  padding-inline: 12px;
 }
 
 .procurement-supplier-group {
@@ -885,6 +945,26 @@ button {
 .task-product {
   display: grid;
   gap: 2px;
+}
+
+.task-product-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-product-line span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .quantity-diff {
@@ -1545,9 +1625,18 @@ button {
     justify-content: stretch;
   }
 
+  .fulfillment-delivery-area {
+    justify-items: stretch;
+    min-width: 0;
+  }
+
   .fulfillment-actions label,
   .fulfillment-actions button {
     flex: 1 1 120px;
+  }
+
+  .delivery-batch-row {
+    grid-template-columns: 1fr;
   }
 
   .compact-row,
