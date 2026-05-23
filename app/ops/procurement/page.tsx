@@ -37,6 +37,15 @@ type ProcurementTaskItem = {
   priceExceptionNote: string;
 };
 
+const statusTone: Record<string, string> = {
+  仕入れ待ち: "tone-waiting",
+  仕入れ中: "tone-active",
+  一部完了: "tone-warning",
+  配送中: "tone-route",
+  確認待ち: "tone-confirm",
+  完了: "tone-done"
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
@@ -119,6 +128,16 @@ function groupTasksBySupplier(
 
     return [...groups, { supplier, items: [item] }];
   }, []);
+}
+
+function getLiveOrderStatus(order: PurchaseOrder, items: ProcurementTaskItem[]) {
+  if (items.length === 0) return order.status;
+
+  const completedCount = items.filter((item) => item.purchased).length;
+
+  if (completedCount === 0) return "仕入れ待ち";
+  if (completedCount === items.length) return "完了";
+  return "一部完了";
 }
 
 export default function ProcurementPage() {
@@ -215,12 +234,16 @@ export default function ProcurementPage() {
               const items = procurementTaskItems.filter((item) => item.orderId === order.id);
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
               const completedCount = items.filter((item) => item.purchased).length;
+              const liveStatus = getLiveOrderStatus(order, items);
 
               return (
                 <article className="procurement-order-card" key={order.id}>
                   <div className="procurement-order-heading">
                     <div>
-                      <strong>{order.id}</strong>
+                      <div className="row-heading">
+                        <strong>{order.id}</strong>
+                        <span className={`status-pill ${statusTone[liveStatus]}`}>{liveStatus}</span>
+                      </div>
                       <p>{order.store} / {order.brand}</p>
                     </div>
                     <span>{completedCount} / {items.length} 完了</span>
