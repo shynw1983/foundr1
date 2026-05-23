@@ -396,8 +396,12 @@ button {
 
 .checkbox-group input {
   min-height: auto;
+  flex: 0 0 18px;
   width: 18px;
   height: 18px;
+  padding: 0;
+  transform: none;
+  accent-color: var(--blue);
 }
 
 .management-list {
