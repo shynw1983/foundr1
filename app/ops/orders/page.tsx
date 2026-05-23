@@ -173,7 +173,7 @@ export default function OrdersPage() {
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度、商品清单を指定して依頼を作成" />
+          <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度、仕入れ商品リストを指定して依頼を作成" />
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
@@ -209,7 +209,7 @@ export default function OrdersPage() {
             </label>
             <div className="order-items-builder">
               <div className="builder-heading">
-                <strong>采购商品清单</strong>
+                <strong>仕入れ商品リスト</strong>
               </div>
               <div className="order-item-list">
                 {orderItemDrafts.map((item, index) => (
