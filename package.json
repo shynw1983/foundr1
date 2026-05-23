@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:push": "node scripts/apply-schema.mjs",
+    "db:check": "node scripts/check-db.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "lucide-react": "0.511.0",
     "next": "^16.2.6",
     "react": "19.0.0",
