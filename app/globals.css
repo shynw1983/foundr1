@@ -1319,6 +1319,8 @@ button {
   padding-inline: 12px;
 }
 
+.delivery-batch-row .primary-button,
+.delivery-batch-row .delivery-complete-button,
 .delivery-complete-button {
   display: inline-flex;
   align-items: center;
@@ -1328,10 +1330,12 @@ button {
   border-radius: 8px;
   padding: 0 12px;
   color: white;
-  background: #17202b;
+  background: #17202b !important;
   font-weight: 800;
 }
 
+.delivery-batch-row .primary-button:disabled,
+.delivery-batch-row .delivery-complete-button:disabled,
 .delivery-complete-button:disabled {
   cursor: default;
   opacity: 1;
