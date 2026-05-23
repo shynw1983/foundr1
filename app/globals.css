@@ -92,6 +92,19 @@ button {
   text-transform: uppercase;
 }
 
+.source-indicator {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  margin-top: 8px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .nav-list {
   display: grid;
   gap: 5px;

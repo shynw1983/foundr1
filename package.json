@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "node scripts/apply-schema.mjs",
-    "db:check": "node scripts/check-db.mjs"
+    "db:check": "node scripts/check-db.mjs",
+    "db:seed": "node --experimental-strip-types scripts/seed-db.mjs",
+    "db:data": "node --experimental-strip-types scripts/check-data.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -70,25 +70,37 @@ export default function Home() {
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [supplierLocations, setSupplierLocations] = useState<SupplierLocation[]>(initialSupplierLocations);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
+  const [storesData, setStoresData] = useState(stores);
+  const [brandsData, setBrandsData] = useState(brands);
+  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("foundr1-procurement-data");
-    if (!saved) return;
+    async function loadDashboardData() {
+      const response = await fetch("/api/dashboard");
+      if (!response.ok) return;
 
-    const data = JSON.parse(saved) as {
-      products?: Product[];
-      productBrandUsages?: ProductBrandUsage[];
-      suppliers?: Supplier[];
-      supplierLocations?: SupplierLocation[];
-      productSupplierOptions?: ProductSupplierGroup[];
-    };
+      const data = await response.json() as {
+        stores?: typeof stores;
+        brands?: typeof brands;
+        products?: Product[];
+        productBrandUsages?: ProductBrandUsage[];
+        suppliers?: Supplier[];
+        supplierLocations?: SupplierLocation[];
+        productSupplierOptions?: ProductSupplierGroup[];
+      };
 
-    if (data.products) setProducts(data.products);
-    if (data.productBrandUsages) setProductBrandUsages(data.productBrandUsages);
-    if (data.suppliers) setSuppliers(data.suppliers);
-    if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
-    if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      if (data.stores) setStoresData(data.stores);
+      if (data.brands) setBrandsData(data.brands);
+      if (data.products) setProducts(data.products);
+      if (data.productBrandUsages) setProductBrandUsages(data.productBrandUsages);
+      if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
+      if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      setDataSource("neon");
+    }
+
+    void loadDashboardData();
   }, []);
 
   useEffect(() => {
@@ -191,6 +203,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">複数店舗の日常仕入れオペレーション</p>
             <h2>仕入れワークスペース</h2>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -323,7 +336,7 @@ export default function Home() {
           <section className="panel">
             <PanelTitle title="店舗・ブランド" subtitle="3-5 店舗規模の担当範囲を確認" />
             <div className="store-grid">
-              {stores.map((store) => (
+              {storesData.map((store) => (
                 <article className="store-card" key={store.name}>
                   <Store size={18} />
                   <strong>{store.name}</strong>
@@ -333,7 +346,7 @@ export default function Home() {
               ))}
             </div>
             <div className="brand-strip">
-              {brands.map((brand) => (
+              {brandsData.map((brand) => (
                 <span key={brand.name}>{brand.name} · {brand.type}</span>
               ))}
             </div>
