@@ -480,6 +480,73 @@ button {
   gap: 8px;
 }
 
+.history-filter-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 240px));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.history-filter-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.history-filter-row span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.history-filter-row select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+}
+
+.history-table {
+  display: grid;
+  gap: 8px;
+}
+
+.history-table-head,
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(220px, 1.4fr) minmax(130px, 0.8fr) minmax(95px, 0.55fr) minmax(92px, 0.55fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.history-table-head {
+  padding: 0 12px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.history-row {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.history-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-row small {
+  display: block;
+  margin-top: 6px;
+  color: var(--amber);
+  font-weight: 800;
+}
+
 .product-master-head,
 .product-master-row {
   display: grid;
@@ -1695,6 +1762,9 @@ button {
   }
 
   .compact-row,
+  .history-filter-row,
+  .history-table-head,
+  .history-row,
   .module-card,
   .order-item-row,
   .product-master-head,

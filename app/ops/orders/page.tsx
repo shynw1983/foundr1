@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, MessageSquareWarning, PackageCheck, Plus, Search } from "lucide-react";
+import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -37,6 +37,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes }
 ];
@@ -200,7 +201,7 @@ export default function OrdersPage() {
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度、仕入れ商品リストを指定して依頼を作成" />
+          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗を中心に、商品用途ブランドと仕入れ商品リストを指定" />
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
@@ -211,7 +212,7 @@ export default function OrdersPage() {
               </select>
             </label>
             <label>
-              <span>対象ブランド</span>
+              <span>用途ブランド</span>
               <select name="brand" defaultValue={brandsData[0]?.name}>
                 {brandsData.map((brand) => (
                   <option value={brand.name} key={brand.name}>{brand.name}</option>
