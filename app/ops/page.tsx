@@ -1,0 +1,983 @@
+"use client";
+
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Boxes,
+  CheckCircle2,
+  Clock3,
+  ClipboardList,
+  MessageSquareWarning,
+  PackageCheck,
+  Plus,
+  Search,
+  Store,
+  Truck,
+  UsersRound,
+  WalletCards
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  accessProfiles,
+  brands,
+  exceptions,
+  orders,
+  priceSignals,
+  productBrandUsages as initialProductBrandUsages,
+  productSupplierOptions as initialProductSupplierOptions,
+  products as initialProducts,
+  stores,
+  supplierLocations as initialSupplierLocations,
+  suppliers as initialSuppliers
+} from "../../lib/mock-data";
+
+type Product = typeof initialProducts[number];
+type Supplier = typeof initialSuppliers[number];
+type SupplierLocation = typeof initialSupplierLocations[number];
+type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
+type ProductSupplierOption = ProductSupplierGroup["options"][number];
+type ProductBrandUsage = typeof initialProductBrandUsages[number];
+type PurchaseOrder = typeof orders[number];
+type EditTarget =
+  | { type: "product"; index: number; value: Product }
+  | { type: "usage"; index: number; value: ProductBrandUsage }
+  | { type: "supplier"; index: number; value: Supplier }
+  | { type: "location"; index: number; value: SupplierLocation }
+  | { type: "source"; groupIndex: number; optionIndex: number; value: ProductSupplierOption };
+type OrderItemDraft = {
+  id: number;
+  category: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+};
+
+const statusTone: Record<string, string> = {
+  仕入れ待ち: "tone-waiting",
+  仕入れ中: "tone-active",
+  一部完了: "tone-warning",
+  配送中: "tone-route",
+  確認待ち: "tone-confirm",
+  完了: "tone-done"
+};
+
+const navItems: Array<[string, LucideIcon]> = [
+  ["ダッシュボード", ClipboardList],
+  ["仕入れ依頼", PackageCheck],
+  ["連絡・報告", MessageSquareWarning],
+  ["価格推移", WalletCards],
+  ["マスタ管理", Boxes],
+  ["店舗・権限", Store],
+  ["権限", UsersRound]
+];
+
+export default function Home() {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [productBrandUsages, setProductBrandUsages] = useState<ProductBrandUsage[]>(initialProductBrandUsages);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
+  const [supplierLocations, setSupplierLocations] = useState<SupplierLocation[]>(initialSupplierLocations);
+  const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
+  const [storesData, setStoresData] = useState(stores);
+  const [brandsData, setBrandsData] = useState(brands);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
+  const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
+    {
+      id: 1,
+      category: initialProducts[0]?.category ?? "",
+      productName: initialProducts[0]?.name ?? "",
+      quantity: 1,
+      unit: initialProducts[0]?.unit ?? "個"
+    }
+  ]);
+  const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+
+  useEffect(() => {
+    async function loadDashboardData() {
+      const response = await fetch("/api/dashboard");
+      if (!response.ok) return;
+
+      const data = await response.json() as {
+        stores?: typeof stores;
+        brands?: typeof brands;
+        products?: Product[];
+        productBrandUsages?: ProductBrandUsage[];
+        suppliers?: Supplier[];
+        supplierLocations?: SupplierLocation[];
+        productSupplierOptions?: ProductSupplierGroup[];
+      };
+
+      if (data.stores) setStoresData(data.stores);
+      if (data.brands) setBrandsData(data.brands);
+      if (data.products) setProducts(data.products);
+      if (data.productBrandUsages) setProductBrandUsages(data.productBrandUsages);
+      if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
+      if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      setDataSource("neon");
+    }
+
+    void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "foundr1-procurement-data",
+      JSON.stringify({ products, productBrandUsages, suppliers, supplierLocations, productSupplierOptions })
+    );
+  }, [products, productBrandUsages, suppliers, supplierLocations, productSupplierOptions]);
+
+  const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
+  const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
+  const activeExceptions = exceptions.filter((item) => item.status !== "解決済み").length;
+  const risingPrices = priceSignals.filter((item) => item.changeRate > 8).length;
+  const keyProducts = products.filter((product) => product.category === "食材").length;
+  const productCategories = Array.from(new Set(products.map((product) => product.category)));
+
+  const masterModules = [
+    {
+      title: "商品マスタ",
+      count: products.length,
+      detail: "商品本体、カテゴリ、単位、参考価格",
+      sample: products.slice(0, 3).map((product) => product.name).join(" / ")
+    },
+    {
+      title: "ブランド別利用",
+      count: productBrandUsages.length,
+      detail: "共用品のブランド別用途と標準数量",
+      sample: productBrandUsages.slice(0, 3).map((usage) => `${usage.product}:${usage.brand}`).join(" / ")
+    },
+    {
+      title: "商品別仕入れ先",
+      count: productSupplierOptions.length,
+      detail: "メイン、予備、緊急チャネル",
+      sample: productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")
+    },
+    {
+      title: "仕入れ先・拠点",
+      count: suppliers.length + supplierLocations.length,
+      detail: "ネットショップ、実店舗、チェーン分店",
+      sample: suppliers.slice(0, 3).map((supplier) => supplier.name).join(" / ")
+    }
+  ];
+
+  function saveEdit(target: EditTarget) {
+    if (target.type === "product") {
+      setProducts((items) =>
+        target.index >= items.length
+          ? [...items, target.value]
+          : items.map((item, index) => (index === target.index ? target.value : item))
+      );
+    }
+
+    if (target.type === "supplier") {
+      setSuppliers((items) => items.map((item, index) => (index === target.index ? target.value : item)));
+    }
+
+    if (target.type === "usage") {
+      setProductBrandUsages((items) => items.map((item, index) => (index === target.index ? target.value : item)));
+    }
+
+    if (target.type === "location") {
+      setSupplierLocations((items) => items.map((item, index) => (index === target.index ? target.value : item)));
+    }
+
+    if (target.type === "source") {
+      setProductSupplierOptions((groups) =>
+        groups.map((group, groupIndex) =>
+          groupIndex === target.groupIndex
+            ? {
+                ...group,
+                options: group.options.map((option, optionIndex) =>
+                  optionIndex === target.optionIndex ? target.value : option
+                )
+              }
+            : group
+        )
+      );
+    }
+
+    setEditTarget(null);
+  }
+
+  function openNewProductEditor() {
+    setEditTarget({
+      type: "product",
+      index: products.length,
+      value: {
+        name: "",
+        category: productCategories[0] ?? "食材",
+        brand: brandsData[0]?.name ?? "共通",
+        unit: "個",
+        referencePrice: 0,
+        mainSupplier: suppliers[0]?.name ?? "",
+        backupSupplier: "",
+        specNote: "",
+        photoUrl: "",
+        storageType: "常温"
+      }
+    });
+  }
+
+  function addOrderItemDraft() {
+    const firstProduct = products[0];
+
+    setOrderItemDrafts((items) => [
+      ...items,
+      {
+        id: Date.now(),
+        category: firstProduct?.category ?? "",
+        productName: firstProduct?.name ?? "",
+        quantity: 1,
+        unit: firstProduct?.unit ?? "個"
+      }
+    ]);
+  }
+
+  function updateOrderItemDraft(id: number, next: Partial<OrderItemDraft>) {
+    setOrderItemDrafts((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item;
+
+        if (next.category && next.category !== item.category) {
+          const firstProductInCategory = products.find((product) => product.category === next.category);
+
+          return {
+            ...item,
+            category: next.category,
+            productName: firstProductInCategory?.name ?? "",
+            unit: firstProductInCategory?.unit ?? "個"
+          };
+        }
+
+        if (next.productName && next.productName !== item.productName) {
+          const selectedProduct = products.find((product) => product.name === next.productName);
+
+          return {
+            ...item,
+            productName: next.productName,
+            unit: selectedProduct?.unit ?? item.unit
+          };
+        }
+
+        return {
+          ...item,
+          ...next
+        };
+      })
+    );
+  }
+
+  function removeOrderItemDraft(id: number) {
+    setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
+  }
+
+  return (
+    <main className="shell">
+      <aside className="sidebar" aria-label="管理画面ナビゲーション">
+        <div className="brand-block">
+          <div className="brand-mark">F1</div>
+          <div>
+            <p className="eyebrow">Foundr1 Ops</p>
+            <h1>仕入れ管理</h1>
+          </div>
+        </div>
+        <nav className="nav-list">
+          {navItems.map(([label, Icon]) => (
+            <a href={`#${label}`} className="nav-item" key={label}>
+              <Icon size={18} />
+              <span>{label}</span>
+            </a>
+          ))}
+        </nav>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">複数店舗の日常仕入れオペレーション</p>
+            <h2>仕入れワークスペース</h2>
+            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "ローカル表示"}</span>
+          </div>
+          <div className="topbar-actions">
+            <label className="search-box">
+              <Search size={17} />
+              <input placeholder="商品・店舗・仕入れ先を検索" />
+            </label>
+            <a className="primary-button" href="#create-order-panel">
+              <Plus size={18} />
+              仕入れ依頼を作成
+            </a>
+          </div>
+        </header>
+
+        <section className="metric-grid" id="ダッシュボード">
+          <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="3 店舗をカバー" />
+          <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" />
+          <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" />
+          <MetricCard icon={<Boxes />} label="主要食材" value={keyProducts} note="価格確認の対象" />
+        </section>
+
+        <section className="panel create-order-panel" id="create-order-panel">
+          <PanelTitle title="新規仕入れ依頼" subtitle="店舗、ブランド、締切、優先度を指定して依頼を作成" />
+          <form
+            className="inline-create-form"
+            action="/api/orders"
+            method="post"
+          >
+            <label>
+              <span>送達店舗</span>
+              <select name="store" defaultValue={storesData[0]?.name}>
+                {storesData.map((store) => (
+                  <option value={store.name} key={store.name}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>対象ブランド</span>
+              <select name="brand" defaultValue={brandsData[0]?.name}>
+                {brandsData.map((brand) => (
+                  <option value={brand.name} key={brand.name}>{brand.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>締切</span>
+              <input name="deadline" defaultValue="本日 18:00" />
+            </label>
+            <label>
+              <span>優先度</span>
+              <select name="priority" defaultValue="中">
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+              </select>
+            </label>
+            <label>
+              <span>メモ</span>
+              <textarea name="note" placeholder="欠品時の代替、配送希望など" />
+            </label>
+            <div className="order-items-builder">
+              <div className="builder-heading">
+                <strong>采购商品清单</strong>
+              </div>
+              <div className="order-item-list">
+                {orderItemDrafts.map((item, index) => (
+                  <div className="order-item-row" key={item.id}>
+                    <label>
+                      <span>分類 {index + 1}</span>
+                      <select
+                        value={item.category}
+                        onChange={(event) => updateOrderItemDraft(item.id, { category: event.target.value })}
+                      >
+                        {productCategories.map((category) => (
+                          <option value={category} key={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>商品</span>
+                      <select
+                        name="productName"
+                        value={item.productName}
+                        onChange={(event) => updateOrderItemDraft(item.id, { productName: event.target.value })}
+                      >
+                        {products.filter((product) => product.category === item.category).map((product) => (
+                          <option value={product.name} key={product.name}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>数量</span>
+                      <input
+                        name="requestedQuantity"
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(event) => updateOrderItemDraft(item.id, { quantity: Number(event.target.value) })}
+                      />
+                    </label>
+                    <div className="unit-display">
+                      <span>単位</span>
+                      <strong>{item.unit}</strong>
+                      <input type="hidden" name="requestedUnit" value={item.unit} />
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => removeOrderItemDraft(item.id)}
+                      disabled={orderItemDrafts.length === 1}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="builder-actions">
+                <button type="button" className="text-button" onClick={addOrderItemDraft}>
+                  商品を追加
+                </button>
+              </div>
+            </div>
+            <div className="inline-create-actions">
+              <button type="submit" className="primary-button">
+                <Plus size={18} />
+                依頼を追加
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className="workspace-grid">
+          <section className="panel operation-panel" id="仕入れ依頼">
+            <PanelTitle title="仕入れ依頼キュー" subtitle="今日処理すべき依頼を優先度順に確認" />
+            <div className="order-list">
+              {purchaseOrders.map((order) => (
+                <article className="order-row" key={order.id}>
+                  <div>
+                    <div className="row-heading">
+                      <strong>{order.id}</strong>
+                      <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
+                    </div>
+                    <p>{order.store} / {order.brand}</p>
+                  </div>
+                  <div>
+                    <span className="muted-label">締切</span>
+                    <strong>{order.deadline}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-label">商品</span>
+                    <strong>{order.items} 件</strong>
+                  </div>
+                  <div>
+                    <span className="muted-label">優先度</span>
+                    <strong>{order.priority}</strong>
+                  </div>
+                  <button className="icon-button" aria-label={`${order.id} の詳細`}>
+                    <ArrowUpRight size={18} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <aside className="side-stack">
+            <section className="panel" id="連絡・報告">
+              <PanelTitle title="要確認" subtitle="店舗へ返答が必要な連絡" />
+              <div className="stack">
+                {exceptions.map((item) => (
+                  <article className="feedback-item" key={item.id}>
+                    <div className="feedback-topline">
+                      <strong>{item.product}</strong>
+                      <span>{item.type}</span>
+                    </div>
+                    <p>{item.message}</p>
+                    <small>{item.store} · {item.status}</small>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel" id="価格推移">
+              <PanelTitle title="価格アラート" subtitle={`${risingPrices} 件の値上がり注意`} />
+              <div className="trend-list">
+                {priceSignals.map((signal) => (
+                  <article className="trend-row" key={signal.product}>
+                    <div>
+                      <strong>{signal.product}</strong>
+                      <p>{signal.supplier}</p>
+                    </div>
+                    <div className={signal.changeRate > 0 ? "rate-up" : "rate-down"}>
+                      {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </section>
+
+        <section className="management-grid" id="マスタ管理">
+          <section className="panel management-panel">
+            <PanelTitle title="マスタ管理" subtitle="件数が増えるデータは一覧画面で検索・編集する前提" />
+            <div className="module-grid">
+              {masterModules.map((module) => (
+                <article className="module-card" key={module.title}>
+                  <div>
+                    <strong>{module.title}</strong>
+                    <p>{module.detail}</p>
+                  </div>
+                  <span>{module.count} 件</span>
+                  <small>{module.sample}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel product-master-panel" id="商品マスタ">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>商品マスタ</h3>
+                <p>カテゴリ、商品名、ブランド、単位、参考価格</p>
+              </div>
+              <button type="button" className="text-button" onClick={openNewProductEditor}>
+                商品を追加
+              </button>
+            </div>
+            <div className="product-category-strip" aria-label="商品カテゴリ">
+              {productCategories.map((category) => (
+                <span key={category}>{category}</span>
+              ))}
+            </div>
+            <div className="product-master-table">
+              <div className="product-master-head">
+                <span>商品名</span>
+                <span>分類</span>
+                <span>単位</span>
+                <span>保管</span>
+                <span>参考価格</span>
+                <span>操作</span>
+              </div>
+              {products.map((product, index) => (
+                <article className="product-master-row" key={`${product.name}-${index}`}>
+                  <div>
+                    <strong>{product.name || "未設定の商品"}</strong>
+                    <p>{product.brand}</p>
+                  </div>
+                  <span>{product.category}</span>
+                  <span>{product.unit}</span>
+                  <span>{product.storageType || "未設定"}</span>
+                  <strong>¥{product.referencePrice}</strong>
+                  <button
+                    className="text-button"
+                    onClick={() => setEditTarget({ type: "product", index, value: product })}
+                  >
+                    編集
+                  </button>
+                  <div className="product-master-detail">
+                    <div className="product-photo-thumb">
+                      {product.photoUrl ? (
+                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
+                      ) : (
+                        <span>写真</span>
+                      )}
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>主要仕入れ先</dt>
+                        <dd>{product.mainSupplier || "未設定"}</dd>
+                      </div>
+                      <div>
+                        <dt>予備仕入れ先</dt>
+                        <dd>{product.backupSupplier || "未設定"}</dd>
+                      </div>
+                      <div>
+                        <dt>規格</dt>
+                        <dd>{product.specNote || "未設定"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </section>
+
+        <section className="admin-grid" id="店舗・権限">
+          <section className="panel">
+            <PanelTitle title="店舗・ブランド" subtitle="3-5 店舗規模の担当範囲を確認" />
+            <div className="store-grid">
+              {storesData.map((store) => (
+                <article className="store-card" key={store.name}>
+                  <Store size={18} />
+                  <strong>{store.name}</strong>
+                  <p>{store.brands.join(" / ")}</p>
+                  <small>{store.owner}</small>
+                </article>
+              ))}
+            </div>
+            <div className="brand-strip">
+              {brandsData.map((brand) => (
+                <span key={brand.name}>{brand.name} · {brand.type}</span>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel" id="権限">
+            <PanelTitle title="権限スコープ" subtitle="本部、店舗、ブランド別に表示範囲を分離" />
+            <div className="access-grid compact-access-grid">
+              {accessProfiles.map((profile) => (
+                <article className="access-card" key={profile.name}>
+                  <div className="access-heading">
+                    <div>
+                      <strong>{profile.name}</strong>
+                      <p>{profile.person}</p>
+                    </div>
+                    <span>{profile.visibleOrderIds.length} 件</span>
+                  </div>
+                  <div className="access-scope">{profile.scope}</div>
+                  <p>{profile.note}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </section>
+
+        <details className="panel data-lab">
+          <summary>詳細マスタ編集を開く</summary>
+          <div className="data-lab-grid">
+            <section id="ブランド別利用">
+              <PanelTitle title="ブランド別利用設定" subtitle="同じ食材・備品をブランド別の用途と数量で管理" />
+              <div className="usage-grid">
+                {productBrandUsages.map((usage, index) => (
+                  <article className="usage-card" key={`${usage.product}-${usage.brand}`}>
+                    <div className="usage-heading">
+                      <div>
+                        <strong>{usage.product}</strong>
+                        <p>{usage.usage}</p>
+                      </div>
+                      <span>{usage.brand}</span>
+                    </div>
+                    <div className="usage-meta">
+                      <span>標準 {usage.defaultOrderQuantity}</span>
+                      <span>優先度 {usage.priority}</span>
+                    </div>
+                    <p>{usage.specNote}</p>
+                    <button
+                      className="text-button"
+                      onClick={() => setEditTarget({ type: "usage", index, value: usage })}
+                    >
+                      編集
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section id="商品別仕入れ先">
+              <PanelTitle title="商品別仕入れ先" subtitle="メイン・予備・緊急チャネル" />
+              <div className="sourcing-list">
+                {productSupplierOptions.map((group, groupIndex) => (
+                  <article className="sourcing-card" key={group.product}>
+                    <div className="sourcing-title">
+                      <strong>{group.product}</strong>
+                      <span>{group.options.length} チャネル</span>
+                    </div>
+                    <div className="supplier-option-list">
+                      {group.options.map((option, optionIndex) => (
+                        <div className="supplier-option" key={`${group.product}-${option.supplier}`}>
+                          <span className={`source-role source-role-${option.role}`}>{option.role}</span>
+                          <div>
+                            <strong>{option.supplier}</strong>
+                            <p>{option.note}</p>
+                          </div>
+                          <div className="option-meta">
+                            <span>¥{option.referencePrice}</span>
+                            <small>{option.minOrder} · {option.leadTime}</small>
+                          </div>
+                          <button
+                            className="text-button"
+                            onClick={() => setEditTarget({ type: "source", groupIndex, optionIndex, value: option })}
+                          >
+                            編集
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section id="仕入れ先">
+              <PanelTitle title="仕入れ先" subtitle="仕入れ先本体" />
+              <div className="supplier-list">
+                {suppliers.map((supplier, index) => (
+                  <article className="supplier-row" key={supplier.name}>
+                    <Truck size={18} />
+                    <div>
+                      <strong>{supplier.name}</strong>
+                      <p>{supplier.category} · {supplier.reliability}</p>
+                    </div>
+                    <span className="supplier-type">{supplier.channelType}</span>
+                    <button
+                      className="text-button"
+                      onClick={() => setEditTarget({ type: "supplier", index, value: supplier })}
+                    >
+                      編集
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section id="仕入れ先拠点">
+              <PanelTitle title="仕入れ先拠点" subtitle="ネットショップ、実店舗、チェーン分店" />
+              <div className="location-grid">
+                {supplierLocations.map((location, index) => (
+                  <article className="location-card" key={`${location.supplier}-${location.locationName}`}>
+                    <div className="location-heading">
+                      <div>
+                        <strong>{location.locationName}</strong>
+                        <p>{location.supplier}</p>
+                      </div>
+                      <span>{location.type}</span>
+                    </div>
+                    <dl className="location-details">
+                      <div>
+                        <dt>エリア</dt>
+                        <dd>{location.area}</dd>
+                      </div>
+                      <div>
+                        <dt>営業時間</dt>
+                        <dd>{location.hours}</dd>
+                      </div>
+                      <div>
+                        <dt>購入方法</dt>
+                        <dd>{location.purchaseMethod}</dd>
+                      </div>
+                    </dl>
+                    <p>{location.note}</p>
+                    <button
+                      className="text-button"
+                      onClick={() => setEditTarget({ type: "location", index, value: location })}
+                    >
+                      編集
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        </details>
+
+        <section className="workflow-band">
+          {["店舗申請", "仕入れ処理", "異常報告", "配送完了", "店舗確認"].map((step, index) => (
+            <div className="workflow-step" key={step}>
+              <CheckCircle2 size={18} />
+              <span>{index + 1}. {step}</span>
+            </div>
+          ))}
+        </section>
+      </section>
+
+      {editTarget ? (
+        <EditDialog
+          target={editTarget}
+          onChange={setEditTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={saveEdit}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+function MetricCard({
+  icon,
+  label,
+  value,
+  note
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  note: string;
+}) {
+  return (
+    <article className="metric-card">
+      <div className="metric-icon">{icon}</div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{note}</p>
+      </div>
+    </article>
+  );
+}
+
+function EditDialog({
+  target,
+  onChange,
+  onClose,
+  onSave
+}: {
+  target: EditTarget;
+  onChange: (target: EditTarget) => void;
+  onClose: () => void;
+  onSave: (target: EditTarget) => void;
+}) {
+  const fields = getFields(target);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <form
+        className="edit-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(target);
+        }}
+      >
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Data Edit</p>
+            <h3 id="edit-title">{getEditTitle(target)}</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
+            ×
+          </button>
+        </div>
+        <div className="edit-fields">
+          {fields.map((field) => (
+            <label key={field.key}>
+              <span>{field.label}</span>
+              {field.options ? (
+                <select
+                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  onChange={(event) => {
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        [field.key]: event.target.value
+                      }
+                    } as EditTarget);
+                  }}
+                >
+                  {field.options.map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={String((target.value as Record<string, string | number>)[field.key] ?? "")}
+                  type={field.type ?? "text"}
+                  onChange={(event) => {
+                    const nextValue =
+                      field.type === "number" ? Number(event.target.value) : event.target.value;
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        [field.key]: nextValue
+                      }
+                    } as EditTarget);
+                  }}
+                />
+              )}
+            </label>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            キャンセル
+          </button>
+          <button type="submit" className="primary-button">
+            保存
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function getEditTitle(target: EditTarget) {
+  const titles = {
+    product: "商品マスタを編集",
+    usage: "ブランド別利用を編集",
+    supplier: "仕入れ先を編集",
+    location: "仕入れ先拠点を編集",
+    source: "商品別仕入れ先を編集"
+  };
+
+  if (target.type === "product" && !target.value.name) {
+    return "商品マスタを追加";
+  }
+
+  return titles[target.type];
+}
+
+function getFields(target: EditTarget): Array<{ key: string; label: string; type?: "number"; options?: string[] }> {
+  if (target.type === "product") {
+    const product = target.value;
+    const categoryOptions = uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]);
+    const brandOptions = uniqueOptions(["奈奈茶", "熱辣食堂", "奈奈茶 / 熱辣食堂", product.brand]);
+    const unitOptions = uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]);
+    const supplierOptions = uniqueOptions(["", ...["城北食材卸", "東和包材", "南区調味料店", "近隣業務スーパー", "オンライン包材 A"], product.mainSupplier, product.backupSupplier]);
+    const storageOptions = uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]);
+
+    return [
+      { key: "name", label: "商品名" },
+      { key: "category", label: "カテゴリ", options: categoryOptions },
+      { key: "brand", label: "ブランド", options: brandOptions },
+      { key: "unit", label: "単位", options: unitOptions },
+      { key: "referencePrice", label: "参考価格", type: "number" },
+      { key: "mainSupplier", label: "主要仕入れ先", options: supplierOptions },
+      { key: "backupSupplier", label: "予備仕入れ先", options: supplierOptions },
+      { key: "storageType", label: "保管属性", options: storageOptions },
+      { key: "specNote", label: "規格メモ" },
+      { key: "photoUrl", label: "写真URL" }
+    ];
+  }
+
+  if (target.type === "supplier") {
+    return [
+      { key: "name", label: "仕入れ先名" },
+      { key: "category", label: "カテゴリ" },
+      { key: "reliability", label: "安定性" },
+      { key: "channelType", label: "種別" }
+    ];
+  }
+
+  if (target.type === "usage") {
+    return [
+      { key: "product", label: "商品名" },
+      { key: "brand", label: "ブランド" },
+      { key: "usage", label: "用途" },
+      { key: "defaultOrderQuantity", label: "標準数量" },
+      { key: "specNote", label: "規格メモ" },
+      { key: "priority", label: "優先度" }
+    ];
+  }
+
+  if (target.type === "location") {
+    return [
+      { key: "supplier", label: "仕入れ先" },
+      { key: "locationName", label: "拠点名" },
+      { key: "type", label: "種別" },
+      { key: "area", label: "エリア" },
+      { key: "hours", label: "営業時間" },
+      { key: "purchaseMethod", label: "購入方法" },
+      { key: "note", label: "備考" }
+    ];
+  }
+
+  return [
+    { key: "supplier", label: "仕入れ先" },
+    { key: "role", label: "役割" },
+    { key: "referencePrice", label: "参考価格", type: "number" },
+    { key: "minOrder", label: "最小発注" },
+    { key: "leadTime", label: "リードタイム" },
+    { key: "note", label: "備考" }
+  ];
+}
+
+function uniqueOptions(options: string[]) {
+  return Array.from(new Set(options.filter(Boolean)));
+}
+
+function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="panel-title">
+      <div>
+        <h3>{title}</h3>
+        <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
