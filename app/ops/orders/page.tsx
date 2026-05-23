@@ -62,6 +62,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
+const orderableStoreNames = ["清川店", "清水店"];
 
 function isTodayOrder(order: PurchaseOrder) {
   return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
@@ -164,6 +165,12 @@ export default function OrdersPage() {
   }, []);
 
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const orderableStores = storesData
+    .filter((store) => orderableStoreNames.includes(store.name.replace("納品", "")))
+    .map((store) => ({
+      ...store,
+      label: store.name.replace("納品", "")
+    }));
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, exceptions);
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
     if (queueFilter === "未完了") return order.status !== "完了";
@@ -298,9 +305,9 @@ export default function OrdersPage() {
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
-              <select name="store" defaultValue={storesData[0]?.name}>
-                {storesData.map((store) => (
-                  <option value={store.name} key={store.name}>{store.name}</option>
+              <select name="store" defaultValue={orderableStores[0]?.name}>
+                {orderableStores.map((store) => (
+                  <option value={store.name} key={store.name}>{store.label}</option>
                 ))}
               </select>
             </label>
