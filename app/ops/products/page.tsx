@@ -476,6 +476,13 @@ export default function ProductsPage() {
                   <span className="product-master-cell" data-label="単位">{product.unit}</span>
                   <span className="product-master-cell" data-label="保管">{product.storageType || "未設定"}</span>
                   <strong className="product-master-cell" data-label="参考価格">¥{product.referencePrice}</strong>
+                  <div className="mobile-product-summary" aria-label="商品概要">
+                    <span>{product.category}</span>
+                    <span>{product.subcategory || "未分類"}</span>
+                    <span>{product.unit}</span>
+                    <span>{product.storageType || "未設定"}</span>
+                    <span>¥{product.referencePrice}</span>
+                  </div>
                   <div className="row-actions">
                     <button
                       className="text-button"
@@ -487,7 +494,8 @@ export default function ProductsPage() {
                       削除
                     </button>
                   </div>
-                  <div className="product-master-detail">
+                  <details className="product-master-detail">
+                    <summary>詳細</summary>
                     <div className="product-photo-thumb">
                       {product.photoUrl ? (
                         <img src={product.photoUrl} alt={`${product.name} の写真`} />
@@ -525,7 +533,7 @@ export default function ProductsPage() {
                         <dd>{product.specNote || "未設定"}</dd>
                       </div>
                     </dl>
-                  </div>
+                  </details>
                 </article>
               );
             })}

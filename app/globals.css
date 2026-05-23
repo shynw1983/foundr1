@@ -764,6 +764,10 @@ button {
   display: none;
 }
 
+.mobile-product-summary {
+  display: none;
+}
+
 .product-master-detail {
   grid-column: 1 / -1;
   display: grid;
@@ -771,6 +775,10 @@ button {
   gap: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--line);
+}
+
+.product-master-detail summary {
+  display: none;
 }
 
 .product-photo-thumb {
@@ -2055,15 +2063,68 @@ button {
   }
 
   .product-master-cell {
-    display: grid;
-    grid-template-columns: minmax(88px, 0.38fr) minmax(0, 1fr);
-    align-items: baseline;
-    gap: 12px;
+    display: none;
   }
 
-  .product-master-cell::before {
-    content: attr(data-label);
-    display: inline;
+  .mobile-product-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .mobile-product-summary span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 8px;
+    border-radius: 8px;
+    color: var(--text);
+    background: white;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .product-master-detail {
+    display: block;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .product-master-detail summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--blue);
+    background: white;
+    font-size: 13px;
+    font-weight: 800;
+    list-style: none;
+  }
+
+  .product-master-detail summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .product-master-detail[open] summary {
+    margin-bottom: 10px;
+  }
+
+  .product-master-detail[open] summary::after {
+    content: "を閉じる";
+  }
+
+  .product-master-detail:not([open]) summary::after {
+    content: "を見る";
+  }
+
+  .product-master-detail dl {
+    margin-top: 10px;
+  }
+
+  .product-master-detail dt {
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
