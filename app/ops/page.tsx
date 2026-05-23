@@ -135,10 +135,10 @@ export default function OpsDashboard() {
         </header>
 
         <section className="metric-grid" id="ダッシュボード">
-          <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="今日見るべき依頼" />
-          <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" />
-          <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" />
-          <MetricCard icon={<Store />} label="巡回仕入れ先" value={supplierRouteCount || storesData.length} note="主要購入ルート" />
+          <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="今日見るべき依頼" href="/ops/orders" />
+          <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" href="/ops/orders" />
+          <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" href="/ops/procurement#連絡・報告" />
+          <MetricCard icon={<Store />} label="巡回仕入れ先" value={supplierRouteCount || storesData.length} note="主要購入ルート" href="/ops/suppliers" />
         </section>
 
         <section className="dashboard-report-grid">
@@ -204,22 +204,22 @@ export default function OpsDashboard() {
         <section className="panel">
           <PanelTitle title="商品・仕入れ先の概況" subtitle="マスタは専用ページで管理" />
           <div className="module-grid">
-            <article className="module-card">
+            <a className="module-card" href="/ops/products">
               <div>
                 <strong>商品マスタ</strong>
                 <p>商品、単位、保管属性、主要仕入れ先</p>
               </div>
               <span>{products.length} 件</span>
               <small>{products.slice(0, 3).map((product) => product.name).join(" / ")}</small>
-            </article>
-            <article className="module-card">
+            </a>
+            <a className="module-card" href="/ops/suppliers">
               <div>
                 <strong>商品別仕入れ先</strong>
                 <p>メイン、予備、緊急チャネル</p>
               </div>
               <span>{productSupplierOptions.length} 件</span>
               <small>{productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")}</small>
-            </article>
+            </a>
           </div>
         </section>
       </section>
@@ -231,22 +231,24 @@ function MetricCard({
   icon,
   label,
   value,
-  note
+  note,
+  href
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   note: string;
+  href: string;
 }) {
   return (
-    <article className="metric-card">
+    <a className="metric-card" href={href}>
       <div className="metric-icon">{icon}</div>
       <div>
         <span>{label}</span>
         <strong>{value}</strong>
         <p>{note}</p>
       </div>
-    </article>
+    </a>
   );
 }
 
