@@ -30,6 +30,7 @@ export async function getProcurementDashboardData() {
         select
           name,
           category,
+          coalesce(subcategory, '未分類') as subcategory,
           unit,
           reference_price::float as "referencePrice",
           coalesce(spec_note, '') as "specNote",

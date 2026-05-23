@@ -49,6 +49,7 @@ create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   category text not null,
+  subcategory text,
   unit text not null,
   reference_price numeric(12, 2),
   spec_note text,
@@ -63,6 +64,7 @@ create table if not exists products (
 alter table products add column if not exists spec_note text;
 alter table products add column if not exists photo_url text;
 alter table products add column if not exists storage_type text;
+alter table products add column if not exists subcategory text;
 
 create table if not exists product_brand_usages (
   id uuid primary key default gen_random_uuid(),

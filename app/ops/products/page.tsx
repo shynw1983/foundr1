@@ -10,8 +10,9 @@ import {
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
+type ProductWithCategory = Product & { subcategory?: string };
 type Supplier = typeof initialSuppliers[number];
-type ProductEditTarget = { type: "product"; index: number; value: Product };
+type ProductEditTarget = { type: "product"; index: number; value: ProductWithCategory; originalName?: string };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
@@ -24,10 +25,12 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [brandsData, setBrandsData] = useState<typeof brands>([]);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("すべて");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
 
@@ -38,7 +41,7 @@ export default function ProductsPage() {
 
       const data = await response.json() as {
         brands?: typeof brands;
-        products?: Product[];
+        products?: ProductWithCategory[];
         suppliers?: Supplier[];
       };
 
@@ -52,10 +55,16 @@ export default function ProductsPage() {
   }, []);
 
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const visibleSubcategories = Array.from(new Set(
+    products
+      .filter((product) => categoryFilter === "すべて" || product.category === categoryFilter)
+      .map((product) => product.subcategory ?? "未分類")
+  ));
   const filteredProducts = products.filter((product) => {
     const targetText = [
       product.name,
       product.category,
+      product.subcategory,
       product.brand,
       product.unit,
       product.mainSupplier,
@@ -64,10 +73,29 @@ export default function ProductsPage() {
       product.specNote
     ].join(" ");
 
-    return targetText.toLowerCase().includes(query.toLowerCase());
+    return (
+      targetText.toLowerCase().includes(query.toLowerCase()) &&
+      (categoryFilter === "すべて" || product.category === categoryFilter) &&
+      (subcategoryFilter === "すべて" || (product.subcategory ?? "未分類") === subcategoryFilter)
+    );
   });
 
-  function saveProduct(target: ProductEditTarget) {
+  async function saveProduct(target: ProductEditTarget) {
+    const response = await fetch("/api/products", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        currentName: target.originalName ?? "",
+        ...target.value
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "商品を保存できませんでした。");
+      return;
+    }
+
     setProducts((items) =>
       target.index >= items.length
         ? [...items, target.value]
@@ -83,6 +111,7 @@ export default function ProductsPage() {
       value: {
         name: "",
         category: productCategories[0] ?? "食材",
+        subcategory: "未分類",
         brand: brandsData[0]?.name ?? "共通",
         unit: "個",
         referencePrice: 0,
@@ -169,19 +198,44 @@ export default function ProductsPage() {
           <div className="panel-title product-master-title">
             <div>
               <h3>商品マスタ</h3>
-              <p>カテゴリ、商品名、単位、仕入れ先、規格、写真、保管属性を管理</p>
+              <p>大分類、小分類、商品名、単位、仕入れ先、規格、写真、保管属性を管理</p>
             </div>
             <span className="source-indicator">{filteredProducts.length} 件</span>
           </div>
-          <div className="product-category-strip" aria-label="商品カテゴリ">
-            {productCategories.map((category) => (
-              <span key={category}>{category}</span>
-            ))}
+          <div className="product-filter-stack">
+            <div className="product-category-strip" aria-label="大分類">
+              {["すべて", ...productCategories].map((category) => (
+                <button
+                  type="button"
+                  className={categoryFilter === category ? "filter-chip is-active" : "filter-chip"}
+                  onClick={() => {
+                    setCategoryFilter(category);
+                    setSubcategoryFilter("すべて");
+                  }}
+                  key={category}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+            <div className="product-category-strip" aria-label="小分類">
+              {["すべて", ...visibleSubcategories].map((subcategory) => (
+                <button
+                  type="button"
+                  className={subcategoryFilter === subcategory ? "filter-chip is-active" : "filter-chip"}
+                  onClick={() => setSubcategoryFilter(subcategory)}
+                  key={subcategory}
+                >
+                  {subcategory}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="product-master-table">
             <div className="product-master-head">
               <span>商品名</span>
               <span>分類</span>
+              <span>小分類</span>
               <span>単位</span>
               <span>保管</span>
               <span>参考価格</span>
@@ -197,13 +251,14 @@ export default function ProductsPage() {
                     <p>{product.brand}</p>
                   </div>
                   <span>{product.category}</span>
+                  <span>{product.subcategory || "未分類"}</span>
                   <span>{product.unit}</span>
                   <span>{product.storageType || "未設定"}</span>
                   <strong>¥{product.referencePrice}</strong>
                   <div className="row-actions">
                     <button
                       className="text-button"
-                      onClick={() => setEditTarget({ type: "product", index: productIndex, value: product })}
+                      onClick={() => setEditTarget({ type: "product", index: productIndex, value: product, originalName: product.name })}
                     >
                       編集
                     </button>
@@ -251,7 +306,7 @@ export default function ProductsPage() {
           brands={brandsData}
           onChange={setEditTarget}
           onClose={() => setEditTarget(null)}
-          onSave={saveProduct}
+          onSave={(target) => void saveProduct(target)}
         />
       ) : null}
     </main>
@@ -426,7 +481,7 @@ function ProductEditDialog({
 }
 
 function getProductFields(
-  product: Product,
+  product: ProductWithCategory,
   suppliers: Supplier[],
   brandsData: typeof brands
 ): Array<{ key: string; label: string; type?: "number"; options?: string[] }> {
@@ -435,7 +490,24 @@ function getProductFields(
 
   return [
     { key: "name", label: "商品名" },
-    { key: "category", label: "カテゴリ", options: uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]) },
+    { key: "category", label: "大分類", options: uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]) },
+    {
+      key: "subcategory",
+      label: "小分類",
+      options: uniqueOptions([
+        "未分類",
+        "新鮮野菜",
+        "冷凍野菜",
+        "新鮮肉類",
+        "冷凍肉類",
+        "乾物・調味料",
+        "乳製品",
+        "冷凍海鮮",
+        "カップ・容器",
+        "箸・スプーン",
+        product.subcategory ?? ""
+      ])
+    },
     { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "number" },

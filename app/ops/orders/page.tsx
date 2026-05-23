@@ -11,10 +11,12 @@ import {
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
+type ProductWithCategory = Product & { subcategory?: string };
 type PurchaseOrder = typeof orders[number] & { note?: string };
 type OrderItemDraft = {
   id: number;
   category: string;
+  subcategory: string;
   productName: string;
   brandName: string;
   quantity: number;
@@ -177,7 +179,7 @@ function createStoreFeedbackItems(
 }
 
 export default function OrdersPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [brandsData, setBrandsData] = useState<typeof brands>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -189,6 +191,7 @@ export default function OrdersPage() {
     {
       id: 1,
       category: "",
+      subcategory: "",
       productName: "",
       brandName: defaultUsageBrandOptions[0].value,
       quantity: 1,
@@ -204,7 +207,7 @@ export default function OrdersPage() {
       const data = await response.json() as {
         stores?: typeof stores;
         brands?: typeof brands;
-        products?: Product[];
+        products?: ProductWithCategory[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: PurchaseOrderItem[];
       };
@@ -220,6 +223,7 @@ export default function OrdersPage() {
           return items.map((item) => ({
             ...item,
             category: firstProduct.category,
+            subcategory: firstProduct.subcategory ?? "未分類",
             productName: firstProduct.name,
             unit: firstProduct.unit
           }));
@@ -234,6 +238,7 @@ export default function OrdersPage() {
   }, []);
 
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const productSubcategories = Array.from(new Set(products.map((product) => product.subcategory ?? "未分類")));
   const orderableStores = storesData
     .filter((store) => orderableStoreNames.includes(store.name.replace("納品", "")))
     .map((store) => ({
@@ -270,6 +275,7 @@ export default function OrdersPage() {
       {
         id: Date.now(),
         category: firstProduct?.category ?? "",
+        subcategory: firstProduct?.subcategory ?? "未分類",
         productName: firstProduct?.name ?? "",
         brandName: usageBrandOptions[0].value,
         quantity: 1,
@@ -289,8 +295,22 @@ export default function OrdersPage() {
           return {
             ...item,
             category: next.category,
+            subcategory: firstProductInCategory?.subcategory ?? "未分類",
             productName: firstProductInCategory?.name ?? "",
             unit: firstProductInCategory?.unit ?? "個"
+          };
+        }
+
+        if (next.subcategory && next.subcategory !== item.subcategory) {
+          const firstProductInSubcategory = products.find(
+            (product) => product.category === item.category && (product.subcategory ?? "未分類") === next.subcategory
+          );
+
+          return {
+            ...item,
+            subcategory: next.subcategory,
+            productName: firstProductInSubcategory?.name ?? "",
+            unit: firstProductInSubcategory?.unit ?? "個"
           };
         }
 
@@ -322,6 +342,7 @@ export default function OrdersPage() {
     return {
       id: Date.now() + index,
       category: product?.category ?? productCategories[0] ?? "",
+      subcategory: product?.subcategory ?? "未分類",
       productName: item.productName,
       brandName: item.brandName ?? usageBrandOptions[0].value,
       quantity: item.requestedQuantity,
@@ -344,6 +365,7 @@ export default function OrdersPage() {
         {
           id: Date.now(),
           category: products[0]?.category ?? "",
+          subcategory: products[0]?.subcategory ?? "未分類",
           productName: products[0]?.name ?? "",
           brandName: usageBrandOptions[0].value,
           quantity: 1,
@@ -368,8 +390,22 @@ export default function OrdersPage() {
             return {
               ...item,
               category: next.category,
+              subcategory: firstProductInCategory?.subcategory ?? "未分類",
               productName: firstProductInCategory?.name ?? "",
               unit: firstProductInCategory?.unit ?? "個"
+            };
+          }
+
+          if (next.subcategory && next.subcategory !== item.subcategory) {
+            const firstProductInSubcategory = products.find(
+              (product) => product.category === item.category && (product.subcategory ?? "未分類") === next.subcategory
+            );
+
+            return {
+              ...item,
+              subcategory: next.subcategory,
+              productName: firstProductInSubcategory?.name ?? "",
+              unit: firstProductInSubcategory?.unit ?? "個"
             };
           }
 
@@ -402,6 +438,7 @@ export default function OrdersPage() {
         {
           id: Date.now(),
           category: firstProduct?.category ?? "",
+          subcategory: firstProduct?.subcategory ?? "未分類",
           productName: firstProduct?.name ?? "",
           brandName: usageBrandOptions[0].value,
           quantity: 1,
@@ -522,7 +559,7 @@ export default function OrdersPage() {
                 {orderItemDrafts.map((item) => (
                   <div className="order-item-row" key={item.id}>
                     <label>
-                      <span>分類</span>
+                      <span>大分類</span>
                       <select
                         value={item.category}
                         onChange={(event) => updateOrderItemDraft(item.id, { category: event.target.value })}
@@ -533,15 +570,32 @@ export default function OrdersPage() {
                       </select>
                     </label>
                     <label>
+                      <span>小分類</span>
+                      <select
+                        value={item.subcategory}
+                        onChange={(event) => updateOrderItemDraft(item.id, { subcategory: event.target.value })}
+                      >
+                        {productSubcategories
+                          .filter((subcategory) =>
+                            products.some((product) => product.category === item.category && (product.subcategory ?? "未分類") === subcategory)
+                          )
+                          .map((subcategory) => (
+                            <option value={subcategory} key={subcategory}>{subcategory}</option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
                       <span>商品</span>
                       <select
                         name="productName"
                         value={item.productName}
                         onChange={(event) => updateOrderItemDraft(item.id, { productName: event.target.value })}
                       >
-                        {products.filter((product) => product.category === item.category).map((product) => (
-                          <option value={product.name} key={product.name}>{product.name}</option>
-                        ))}
+                        {products
+                          .filter((product) => product.category === item.category && (product.subcategory ?? "未分類") === item.subcategory)
+                          .map((product) => (
+                            <option value={product.name} key={product.name}>{product.name}</option>
+                          ))}
                       </select>
                     </label>
                     <label>
@@ -733,7 +787,7 @@ export default function OrdersPage() {
                 {editingOrder.items.map((item) => (
                   <div className="order-item-row" key={item.id}>
                     <label>
-                      <span>分類</span>
+                      <span>大分類</span>
                       <select
                         value={item.category}
                         onChange={(event) => updateEditingOrderItem(item.id, { category: event.target.value })}
@@ -744,13 +798,28 @@ export default function OrdersPage() {
                       </select>
                     </label>
                     <label>
+                      <span>小分類</span>
+                      <select
+                        value={item.subcategory}
+                        onChange={(event) => updateEditingOrderItem(item.id, { subcategory: event.target.value })}
+                      >
+                        {productSubcategories
+                          .filter((subcategory) =>
+                            products.some((product) => product.category === item.category && (product.subcategory ?? "未分類") === subcategory)
+                          )
+                          .map((subcategory) => (
+                            <option value={subcategory} key={subcategory}>{subcategory}</option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
                       <span>商品</span>
                       <select
                         value={item.productName}
                         onChange={(event) => updateEditingOrderItem(item.id, { productName: event.target.value })}
                       >
                         {products
-                          .filter((product) => product.category === item.category)
+                          .filter((product) => product.category === item.category && (product.subcategory ?? "未分類") === item.subcategory)
                           .map((product) => (
                             <option value={product.name} key={product.name}>{product.name}</option>
                           ))}
