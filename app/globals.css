@@ -571,6 +571,63 @@ button {
   margin-bottom: 12px;
 }
 
+.category-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+
+.category-master-list {
+  display: grid;
+  gap: 10px;
+}
+
+.category-master-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.category-master-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.category-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-chip-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.category-chip-list button {
+  min-height: 22px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 6px;
+  background: white;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .product-category-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1906,6 +1963,7 @@ button {
   .workspace-grid,
   .dashboard-report-grid,
   .management-grid,
+  .category-admin-grid,
   .admin-grid,
   .module-grid,
   .inline-create-form,

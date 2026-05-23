@@ -17,6 +17,9 @@ type ProductWithCategory = Product & {
 };
 type Supplier = typeof initialSuppliers[number];
 type ProductEditTarget = { type: "product"; index: number; value: ProductWithCategory; originalName?: string };
+type CategoryItem = { name: string; sortOrder?: number };
+type SubcategoryItem = { category: string; name: string; sortOrder?: number };
+type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
@@ -32,11 +35,14 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [brandsData, setBrandsData] = useState<typeof brands>([]);
+  const [categoryMaster, setCategoryMaster] = useState<CategoryItem[]>([]);
+  const [subcategoryMaster, setSubcategoryMaster] = useState<SubcategoryItem[]>([]);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
   const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
+  const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
 
   useEffect(() => {
     async function loadProductData() {
@@ -47,22 +53,32 @@ export default function ProductsPage() {
         brands?: typeof brands;
         products?: ProductWithCategory[];
         suppliers?: Supplier[];
+        productCategories?: CategoryItem[];
+        productSubcategories?: SubcategoryItem[];
       };
 
       if (data.brands) setBrandsData(data.brands);
       if (data.products) setProducts(data.products);
       if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.productCategories) setCategoryMaster(data.productCategories);
+      if (data.productSubcategories) setSubcategoryMaster(data.productSubcategories);
       setDataSource("neon");
     }
 
     void loadProductData();
   }, []);
 
-  const productCategories = Array.from(new Set(products.map((product) => product.category)));
+  const productCategories = categoryMaster.length > 0
+    ? categoryMaster.map((category) => category.name)
+    : Array.from(new Set(products.map((product) => product.category)));
   const visibleSubcategories = Array.from(new Set(
-    products
-      .filter((product) => categoryFilter === "すべて" || product.category === categoryFilter)
-      .map((product) => product.subcategory ?? "未分類")
+    subcategoryMaster.length > 0
+      ? subcategoryMaster
+          .filter((subcategory) => categoryFilter === "すべて" || subcategory.category === categoryFilter)
+          .map((subcategory) => subcategory.name)
+      : products
+          .filter((product) => categoryFilter === "すべて" || product.category === categoryFilter)
+          .map((product) => product.subcategory ?? "未分類")
   ));
   const filteredProducts = products.filter((product) => {
     const targetText = [
@@ -156,6 +172,117 @@ export default function ProductsPage() {
       });
   }
 
+  async function createCategory(formData: FormData) {
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name) return;
+
+    const response = await fetch("/api/product-categories", {
+      method: "POST",
+      body: formData
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "大分類を保存できませんでした。");
+      return;
+    }
+
+    setCategoryMaster((items) => items.some((item) => item.name === name) ? items : [...items, { name }]);
+  }
+
+  async function createSubcategory(formData: FormData) {
+    const category = String(formData.get("category") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+    if (!category || !name) return;
+
+    const response = await fetch("/api/product-subcategories", {
+      method: "POST",
+      body: formData
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "小分類を保存できませんでした。");
+      return;
+    }
+
+    setSubcategoryMaster((items) => items.some((item) => item.category === category && item.name === name) ? items : [...items, { category, name }]);
+  }
+
+  async function saveCategoryEdit() {
+    if (!editingCategory) return;
+
+    const formData = new FormData();
+    if (editingCategory.type === "category") {
+      formData.set("currentName", editingCategory.currentName);
+      formData.set("name", editingCategory.name);
+      const response = await fetch("/api/product-categories", { method: "PUT", body: formData });
+      if (!response.ok) {
+        const body = await response.json();
+        window.alert(body.error ?? "大分類を更新できませんでした。");
+        return;
+      }
+      setCategoryMaster((items) => items.map((item) => item.name === editingCategory.currentName ? { ...item, name: editingCategory.name } : item));
+      setSubcategoryMaster((items) => items.map((item) => item.category === editingCategory.currentName ? { ...item, category: editingCategory.name } : item));
+      setProducts((items) => items.map((item) => item.category === editingCategory.currentName ? { ...item, category: editingCategory.name } : item));
+    } else {
+      formData.set("currentCategory", editingCategory.currentCategory);
+      formData.set("currentName", editingCategory.currentName);
+      formData.set("category", editingCategory.category);
+      formData.set("name", editingCategory.name);
+      const response = await fetch("/api/product-subcategories", { method: "PUT", body: formData });
+      if (!response.ok) {
+        const body = await response.json();
+        window.alert(body.error ?? "小分類を更新できませんでした。");
+        return;
+      }
+      setSubcategoryMaster((items) =>
+        items.map((item) =>
+          item.category === editingCategory.currentCategory && item.name === editingCategory.currentName
+            ? { ...item, category: editingCategory.category, name: editingCategory.name }
+            : item
+        )
+      );
+      setProducts((items) =>
+        items.map((item) =>
+          item.category === editingCategory.currentCategory && (item.subcategory ?? "未分類") === editingCategory.currentName
+            ? { ...item, category: editingCategory.category, subcategory: editingCategory.name }
+            : item
+        )
+      );
+    }
+
+    setEditingCategory(null);
+  }
+
+  async function deleteCategory(name: string) {
+    if (!window.confirm(`${name} を削除しますか？`)) return;
+    const response = await fetch("/api/product-categories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "大分類を削除できませんでした。");
+      return;
+    }
+    setCategoryMaster((items) => items.filter((item) => item.name !== name));
+  }
+
+  async function deleteSubcategory(category: string, name: string) {
+    if (!window.confirm(`${category} / ${name} を削除しますか？`)) return;
+    const response = await fetch("/api/product-subcategories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, name })
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "小分類を削除できませんでした。");
+      return;
+    }
+    setSubcategoryMaster((items) => items.filter((item) => !(item.category === category && item.name === name)));
+  }
+
 
   return (
     <main className="shell">
@@ -199,6 +326,88 @@ export default function ProductsPage() {
             </button>
           </div>
         </header>
+
+        <section className="panel product-category-admin-panel">
+          <div className="panel-title">
+            <div>
+              <h3>分類管理</h3>
+              <p>商品マスタで使う大分類と小分類を管理</p>
+            </div>
+          </div>
+          <div className="category-admin-grid">
+            <form
+              className="management-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                void createCategory(new FormData(form)).then(() => form.reset());
+              }}
+            >
+              <label>
+                <span>大分類を追加</span>
+                <input name="name" placeholder="例: 食材" />
+              </label>
+              <button className="primary-button" type="submit">追加</button>
+            </form>
+            <form
+              className="management-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                void createSubcategory(new FormData(form)).then(() => form.reset());
+              }}
+            >
+              <label>
+                <span>大分類</span>
+                <select name="category" defaultValue={productCategories[0] ?? ""}>
+                  {productCategories.map((category) => (
+                    <option value={category} key={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>小分類を追加</span>
+                <input name="name" placeholder="例: 新鮮野菜" />
+              </label>
+              <button className="primary-button" type="submit">追加</button>
+            </form>
+          </div>
+          <div className="category-master-list">
+            {productCategories.map((category) => {
+              const subcategories = subcategoryMaster.filter((subcategory) => subcategory.category === category);
+
+              return (
+                <article className="category-master-row" key={category}>
+                  <div className="category-master-heading">
+                    <strong>{category}</strong>
+                    <div className="row-actions">
+                      <button className="text-button" type="button" onClick={() => setEditingCategory({ type: "category", currentName: category, name: category })}>
+                        編集
+                      </button>
+                      <button className="text-button danger-button" type="button" onClick={() => void deleteCategory(category)}>
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                  <div className="category-chip-list">
+                    {subcategories.map((subcategory) => (
+                      <span key={`${category}-${subcategory.name}`}>
+                        {subcategory.name}
+                        <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
+                          編集
+                        </button>
+                        <button type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
+                          削除
+                        </button>
+                      </span>
+                    ))}
+                    {subcategories.length === 0 ? <small>小分類未設定</small> : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="panel product-master-page-panel">
           <div className="panel-title product-master-title">
@@ -318,10 +527,53 @@ export default function ProductsPage() {
           target={editTarget}
           suppliers={suppliers}
           brands={brandsData}
+          categoryOptions={productCategories}
+          subcategoryOptions={subcategoryMaster
+            .filter((subcategory) => subcategory.category === editTarget.value.category)
+            .map((subcategory) => subcategory.name)}
           onChange={setEditTarget}
           onClose={() => setEditTarget(null)}
           onSave={(target) => void saveProduct(target)}
         />
+      ) : null}
+      {editingCategory ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-edit-title">
+          <section className="edit-modal">
+            <div className="modal-heading">
+              <div>
+                <h3 id="category-edit-title">{editingCategory.type === "category" ? "大分類を編集" : "小分類を編集"}</h3>
+                <p>{editingCategory.type === "category" ? editingCategory.currentName : `${editingCategory.currentCategory} / ${editingCategory.currentName}`}</p>
+              </div>
+              <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>閉じる</button>
+            </div>
+            <div className="edit-fields">
+              {editingCategory.type === "subcategory" ? (
+                <label>
+                  <span>大分類</span>
+                  <select
+                    value={editingCategory.category}
+                    onChange={(event) => setEditingCategory({ ...editingCategory, category: event.target.value })}
+                  >
+                    {productCategories.map((category) => (
+                      <option value={category} key={category}>{category}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label>
+                <span>{editingCategory.type === "category" ? "大分類名" : "小分類名"}</span>
+                <input
+                  value={editingCategory.name}
+                  onChange={(event) => setEditingCategory({ ...editingCategory, name: event.target.value })}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>キャンセル</button>
+              <button type="button" className="primary-button" onClick={() => void saveCategoryEdit()}>保存</button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </main>
   );
@@ -331,6 +583,8 @@ function ProductEditDialog({
   target,
   suppliers,
   brands,
+  categoryOptions,
+  subcategoryOptions,
   onChange,
   onClose,
   onSave
@@ -338,11 +592,13 @@ function ProductEditDialog({
   target: ProductEditTarget;
   suppliers: Supplier[];
   brands: typeof import("../../../lib/mock-data").brands;
+  categoryOptions: string[];
+  subcategoryOptions: string[];
   onChange: (target: ProductEditTarget) => void;
   onClose: () => void;
   onSave: (target: ProductEditTarget) => void;
 }) {
-  const fields = getProductFields(target.value, suppliers, brands);
+  const fields = getProductFields(target.value, suppliers, brands, categoryOptions, subcategoryOptions);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState("");
   const originOptions = getOriginCountryOptions(target.value.originCountries ?? []);
@@ -553,30 +809,20 @@ function ProductEditDialog({
 function getProductFields(
   product: ProductWithCategory,
   suppliers: Supplier[],
-  brandsData: typeof brands
+  brandsData: typeof brands,
+  categoryOptions: string[],
+  subcategoryOptions: string[]
 ): Array<{ key: string; label: string; type?: "number"; options?: string[] }> {
   const supplierNames = suppliers.map((supplier) => supplier.name);
   const brandNames = brandsData.map((brand) => brand.name);
 
   return [
     { key: "name", label: "商品名" },
-    { key: "category", label: "大分類", options: uniqueOptions(["食材", "包材", "消耗品", "清掃備品", "設備消耗品", product.category]) },
+    { key: "category", label: "大分類", options: uniqueOptions([...categoryOptions, product.category]) },
     {
       key: "subcategory",
       label: "小分類",
-      options: uniqueOptions([
-        "未分類",
-        "新鮮野菜",
-        "冷凍野菜",
-        "新鮮肉類",
-        "冷凍肉類",
-        "乾物・調味料",
-        "乳製品",
-        "冷凍海鮮",
-        "カップ・容器",
-        "箸・スプーン",
-        product.subcategory ?? ""
-      ])
+      options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
     { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },

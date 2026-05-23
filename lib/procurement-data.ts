@@ -6,6 +6,8 @@ export async function getProcurementDashboardData() {
     brands,
     products,
     suppliers,
+    productCategories,
+    productSubcategories,
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,
@@ -79,6 +81,20 @@ export async function getProcurementDashboardData() {
         select name, category, reliability, channel_type as "channelType"
         from suppliers
         order by name
+      `,
+      sql`
+        select name, sort_order as "sortOrder"
+        from product_categories
+        order by sort_order, name
+      `,
+      sql`
+        select
+          product_categories.name as category,
+          product_subcategories.name,
+          product_subcategories.sort_order as "sortOrder"
+        from product_subcategories
+        join product_categories on product_categories.id = product_subcategories.category_id
+        order by product_categories.sort_order, product_categories.name, product_subcategories.sort_order, product_subcategories.name
       `,
       sql`
         select
@@ -261,6 +277,8 @@ export async function getProcurementDashboardData() {
     brands,
     products,
     suppliers,
+    productCategories,
+    productSubcategories,
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,

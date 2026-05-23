@@ -45,6 +45,24 @@ create table if not exists employee_scopes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists product_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists product_subcategories (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid not null references product_categories(id) on delete cascade,
+  name text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (category_id, name)
+);
+
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
