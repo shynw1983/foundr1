@@ -7,11 +7,13 @@ import {
   exceptions,
   orders,
   productSupplierOptions as initialProductSupplierOptions,
-  products as initialProducts
+  products as initialProducts,
+  suppliers as initialSuppliers
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
+type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number];
 type DashboardOrderItem = {
   orderId: string;
@@ -36,12 +38,19 @@ type ProcurementTaskItem = {
   note: string;
   priceExceptionNote: string;
 };
+type DeliveryState = {
+  status: "not_started" | "delivery" | "delivered" | "online_ordered";
+  expectedArrivalDate: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
+  仕入れ完了: "tone-done",
   配送中: "tone-route",
+  到着日入力待ち: "tone-warning",
+  到着待ち: "tone-route",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
@@ -130,25 +139,74 @@ function groupTasksBySupplier(
   }, []);
 }
 
-function getLiveOrderStatus(order: PurchaseOrder, items: ProcurementTaskItem[]) {
+function hasOnlineSupplier(items: ProcurementTaskItem[], supplierList: Supplier[]) {
+  return items.some((item) => {
+    const supplier = supplierList.find((supplierItem) => supplierItem.name === item.supplier);
+    const supplierName = item.supplier.toLowerCase();
+
+    return (
+      supplier?.channelType === "ネットショップ" ||
+      supplierName.includes("online") ||
+      supplierName.includes("ネット") ||
+      supplierName.includes("オンライン") ||
+      supplierName.includes("amazon") ||
+      supplierName.includes("楽天")
+    );
+  });
+}
+
+function getOrderStatus(
+  order: PurchaseOrder,
+  items: ProcurementTaskItem[],
+  deliveryState: DeliveryState,
+  supplierList: Supplier[]
+) {
   if (items.length === 0) return order.status;
 
   const completedCount = items.filter((item) => item.purchased).length;
 
   if (completedCount === 0) return "仕入れ待ち";
-  if (completedCount === items.length) return "完了";
-  return "一部完了";
+  if (completedCount < items.length) return "一部完了";
+  if (deliveryState.status === "delivered") return "完了";
+  if (deliveryState.status === "delivery") return "配送中";
+  if (hasOnlineSupplier(items, supplierList)) {
+    if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
+    return "到着日入力待ち";
+  }
+  if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
+
+  return "仕入れ完了";
+}
+
+function getDeliveryStateForOrder(deliveryStates: Record<string, DeliveryState>, orderId: string) {
+  return deliveryStates[orderId] ?? { status: "not_started", expectedArrivalDate: "" };
+}
+
+function createInitialDeliveryStates(purchaseOrders: PurchaseOrder[]) {
+  return purchaseOrders.reduce<Record<string, DeliveryState>>((states, order) => {
+    states[order.id] = { status: "not_started", expectedArrivalDate: "" };
+
+    return states;
+  }, {});
+}
+
+function formatExpectedArrivalDate(date: string) {
+  return date ? date.replaceAll("-", "/") : "";
 }
 
 export default function ProcurementPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>(initialProductSupplierOptions);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(orders);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"mock" | "neon">("mock");
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>(() =>
     createProcurementTaskItems(orders, initialProducts, [])
+  );
+  const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>(() =>
+    createInitialDeliveryStates(orders)
   );
 
   useEffect(() => {
@@ -159,12 +217,14 @@ export default function ProcurementPage() {
       const data = await response.json() as {
         products?: Product[];
         productSupplierOptions?: ProductSupplierGroup[];
+        suppliers?: Supplier[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: DashboardOrderItem[];
       };
 
       if (data.products) setProducts(data.products);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      if (data.suppliers) setSuppliers(data.suppliers);
       if (data.orders) setPurchaseOrders(data.orders);
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
       setDataSource("neon");
@@ -183,8 +243,27 @@ export default function ProcurementPage() {
     });
   }, [purchaseOrders, products, purchaseOrderItems]);
 
+  useEffect(() => {
+    setDeliveryStates((states) => {
+      const nextStates = { ...states };
+
+      purchaseOrders.forEach((order) => {
+        nextStates[order.id] = getDeliveryStateForOrder(nextStates, order.id);
+      });
+
+      return nextStates;
+    });
+  }, [purchaseOrders]);
+
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
     setProcurementTaskItems((items) => items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+  }
+
+  function updateDeliveryState(orderId: string, next: Partial<DeliveryState>) {
+    setDeliveryStates((states) => ({
+      ...states,
+      [orderId]: { ...getDeliveryStateForOrder(states, orderId), ...next }
+    }));
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
@@ -234,7 +313,10 @@ export default function ProcurementPage() {
               const items = procurementTaskItems.filter((item) => item.orderId === order.id);
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
               const completedCount = items.filter((item) => item.purchased).length;
-              const liveStatus = getLiveOrderStatus(order, items);
+              const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
+              const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
+              const isPurchased = items.length > 0 && completedCount === items.length;
+              const isOnlineOrder = hasOnlineSupplier(items, suppliers);
 
               return (
                 <article className="procurement-order-card" key={order.id}>
@@ -248,6 +330,12 @@ export default function ProcurementPage() {
                     </div>
                     <span>{completedCount} / {items.length} 完了</span>
                   </div>
+                  <OrderFulfillmentPanel
+                    isOnlineOrder={isOnlineOrder}
+                    isPurchased={isPurchased}
+                    state={deliveryState}
+                    onChange={(next) => updateDeliveryState(order.id, next)}
+                  />
                   <div className="procurement-supplier-list">
                     {supplierGroups.map((group) => {
                       const supplierCompletedCount = group.items.filter((item) => item.purchased).length;
@@ -340,6 +428,83 @@ export default function ProcurementPage() {
         />
       ) : null}
     </main>
+  );
+}
+
+function OrderFulfillmentPanel({
+  isOnlineOrder,
+  isPurchased,
+  state,
+  onChange
+}: {
+  isOnlineOrder: boolean;
+  isPurchased: boolean;
+  state: DeliveryState;
+  onChange: (next: Partial<DeliveryState>) => void;
+}) {
+  const expectedArrivalLabel = formatExpectedArrivalDate(state.expectedArrivalDate);
+
+  return (
+    <div className={isPurchased ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
+      <div>
+        <span>{isOnlineOrder ? "ネット注文" : "納品フロー"}</span>
+        <strong>
+          {isOnlineOrder
+            ? expectedArrivalLabel
+              ? `到着予定 ${expectedArrivalLabel}`
+              : "発注後に到着予定日を入力"
+            : state.status === "delivered"
+              ? "送達済み"
+              : state.status === "delivery"
+                ? "配送中"
+                : isPurchased
+                  ? "配送待ち"
+                  : "仕入れ完了後に配送へ"}
+        </strong>
+      </div>
+      {isOnlineOrder ? (
+        <div className="fulfillment-actions">
+          <label>
+            <span>到着予定日</span>
+            <input
+              type="date"
+              value={state.expectedArrivalDate}
+              disabled={!isPurchased}
+              onChange={(event) =>
+                onChange({ expectedArrivalDate: event.target.value, status: event.target.value ? "online_ordered" : "not_started" })
+              }
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!isPurchased || !state.expectedArrivalDate}
+            onClick={() => onChange({ status: "online_ordered" })}
+          >
+            発注済み
+          </button>
+        </div>
+      ) : (
+        <div className="fulfillment-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!isPurchased}
+            onClick={() => onChange({ status: "delivery" })}
+          >
+            配送
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!isPurchased}
+            onClick={() => onChange({ status: "delivered" })}
+          >
+            送達
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

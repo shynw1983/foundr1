@@ -714,7 +714,7 @@ button {
   color: var(--muted);
 }
 
-.procurement-order-heading span {
+.procurement-order-heading > span {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -725,6 +725,67 @@ button {
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.fulfillment-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.fulfillment-panel.is-ready {
+  border-color: rgba(47, 136, 119, 0.26);
+  background: #f7fcfa;
+}
+
+.fulfillment-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.fulfillment-panel span,
+.fulfillment-actions label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fulfillment-panel strong {
+  font-size: 14px;
+}
+
+.fulfillment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fulfillment-actions label {
+  display: grid;
+  gap: 4px;
+}
+
+.fulfillment-actions input {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  outline: 0;
+}
+
+.fulfillment-actions button:disabled,
+.fulfillment-actions input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .procurement-supplier-group {
@@ -1474,6 +1535,19 @@ button {
 
   .product-row {
     grid-template-columns: 1fr;
+  }
+
+  .fulfillment-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .fulfillment-actions {
+    justify-content: stretch;
+  }
+
+  .fulfillment-actions label,
+  .fulfillment-actions button {
+    flex: 1 1 120px;
   }
 
   .compact-row,
