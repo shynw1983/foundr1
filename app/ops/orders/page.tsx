@@ -1253,8 +1253,11 @@ function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOptio
     return currentUserInStore?.id ?? storeStaff[0].id;
   }
 
-  if (staffOptions.some((staff) => staff.id === currentId)) return currentId;
-  if (staffOptions.some((staff) => staff.id === currentUserId)) return currentUserId;
+  const currentFallback = staffOptions.find((staff) => staff.id === currentId && staff.role !== "owner");
+  if (currentFallback) return currentFallback.id;
+
+  const currentUserFallback = staffOptions.find((staff) => staff.id === currentUserId && staff.role !== "owner");
+  if (currentUserFallback) return currentUserFallback.id;
 
   return staffOptions[0]?.id ?? "";
 }
