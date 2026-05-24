@@ -232,7 +232,7 @@ export default function StoresPage() {
     const concreteBrandNames = allBrandNames.filter((name) => name !== "共通");
 
     if (brandName === "共通") {
-      return checked ? allBrandNames : [];
+      return checked ? concreteBrandNames : [];
     }
 
     const nextConcrete = checked
@@ -240,9 +240,7 @@ export default function StoresPage() {
       : current.filter((name) => name !== "共通" && name !== brandName);
     const hasAllConcreteBrands = concreteBrandNames.every((name) => nextConcrete.includes(name));
 
-    return hasAllConcreteBrands && concreteBrandNames.length > 0
-      ? ["共通", ...nextConcrete]
-      : nextConcrete;
+    return nextConcrete;
   }
 
   function toggleStoreBrand(brandName: string, checked: boolean) {
@@ -257,7 +255,7 @@ export default function StoresPage() {
     const concreteBrandNames = brandsData.map((brand) => brand.name).filter((name) => name !== "共通");
     const hasAllConcreteBrands = concreteBrandNames.length > 0 && concreteBrandNames.every((name) => brandNames.includes(name));
 
-    if (brandNames.includes("共通") || hasAllConcreteBrands) {
+    if (hasAllConcreteBrands) {
       return "共通（全ブランド）";
     }
 

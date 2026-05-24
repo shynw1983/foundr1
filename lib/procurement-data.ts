@@ -107,7 +107,7 @@ export async function getProcurementDashboardData() {
         select
           stores.name,
           stores.owner_name as owner,
-          coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null), '{}') as brands
+          coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null and brands.name <> '共通'), '{}') as brands
         from stores
         left join store_brands on store_brands.store_id = stores.id
         left join brands on brands.id = store_brands.brand_id

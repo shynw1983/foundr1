@@ -1,10 +1,24 @@
 import { sql } from "../../../lib/db";
 
+async function normalizeStoreBrands(brandNames: string[]) {
+  const concreteBrands = await sql`
+    select name
+    from brands
+    where name <> '共通'
+    order by name
+  `;
+  const concreteBrandNames = concreteBrands.map((brand) => String(brand.name));
+
+  if (brandNames.includes("共通")) return concreteBrandNames;
+
+  return Array.from(new Set(brandNames.filter((brandName) => brandName && brandName !== "共通")));
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
-  const brandNames = formData.getAll("brand").map((value) => String(value));
+  const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
 
   if (!name) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
@@ -41,7 +55,7 @@ export async function PUT(request: Request) {
   const currentName = String(formData.get("currentName") ?? "").trim();
   const nextName = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
-  const brandNames = formData.getAll("brand").map((value) => String(value));
+  const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
 
   if (!currentName || !nextName) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
