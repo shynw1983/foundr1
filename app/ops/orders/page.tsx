@@ -1245,9 +1245,9 @@ function isStaffAssignedToStore(staff: StaffOption, storeName: string) {
 
 function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOption[], storeName: string, currentUserId: string) {
   const currentStaff = staffOptions.find((staff) => staff.id === currentId);
-  if (currentStaff && isStaffAssignedToStore(currentStaff, storeName)) return currentStaff.id;
+  if (currentStaff && currentStaff.role !== "owner" && isStaffAssignedToStore(currentStaff, storeName)) return currentStaff.id;
 
-  const storeStaff = staffOptions.filter((staff) => isStaffAssignedToStore(staff, storeName));
+  const storeStaff = staffOptions.filter((staff) => staff.role !== "owner" && isStaffAssignedToStore(staff, storeName));
   if (storeStaff.length > 0) {
     const currentUserInStore = storeStaff.find((staff) => staff.id === currentUserId);
     return currentUserInStore?.id ?? storeStaff[0].id;
@@ -1259,7 +1259,7 @@ function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOptio
   const currentUserFallback = staffOptions.find((staff) => staff.id === currentUserId && staff.role !== "owner");
   if (currentUserFallback) return currentUserFallback.id;
 
-  return staffOptions[0]?.id ?? "";
+  return staffOptions.find((staff) => staff.role !== "owner")?.id ?? staffOptions[0]?.id ?? "";
 }
 
 function getSelectedBuyerStaffId(currentId: string, staffOptions: StaffOption[], storeName: string) {
