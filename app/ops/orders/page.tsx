@@ -548,6 +548,9 @@ export default function OrdersPage() {
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
+          <UserBadge />
+        </div>
         <nav className="nav-list">
           {navItems.map(({ label, href, icon: Icon }) => (
             <a href={href} className="nav-item" key={label}>
@@ -566,7 +569,6 @@ export default function OrdersPage() {
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
-            <UserBadge />
             <label className="search-box">
               <Search size={17} />
               <input

@@ -275,6 +275,9 @@ export default function StoresPage() {
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
+          <UserBadge />
+        </div>
         <nav className="nav-list">
           {navItems.map(({ label, href, icon: Icon }) => (
             <a href={href} className="nav-item" key={label}>
@@ -291,9 +294,6 @@ export default function StoresPage() {
             <p className="eyebrow">店舗とブランドの基本情報</p>
             <h2>店舗・ブランド</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
-          </div>
-          <div className="topbar-actions">
-            <UserBadge />
           </div>
         </header>
 

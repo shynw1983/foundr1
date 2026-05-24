@@ -276,6 +276,37 @@ button {
   gap: 5px;
 }
 
+.sidebar-user {
+  margin: 0 0 14px;
+  padding: 0 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-user .user-badge,
+.mobile-nav-user .user-badge {
+  justify-content: space-between;
+  width: 100%;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f7fafc;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-user .user-badge-role,
+.mobile-nav-user .user-badge-role {
+  color: #d8eaff;
+  background: rgba(40, 105, 168, 0.38);
+}
+
+.sidebar-user .user-badge-muted,
+.mobile-nav-user .user-badge-muted {
+  color: #dce5ee;
+}
+
+.mobile-nav-user {
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -1105,6 +1136,9 @@ button {
 
 .product-title-block strong,
 .product-title-block p {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2509,6 +2543,10 @@ button {
     display: none;
   }
 
+  .sidebar-user {
+    display: none;
+  }
+
   .mobile-nav-menu {
     position: relative;
     display: block;
@@ -2610,6 +2648,10 @@ button {
 
   .workspace {
     padding: 18px;
+  }
+
+  .sidebar-user {
+    display: none;
   }
 
   .topbar,
