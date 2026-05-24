@@ -2,6 +2,13 @@
 
 import { FormEvent, useState } from "react";
 
+function getDefaultPathForRole(role?: string) {
+  if (role === "buyer") return "/ops/procurement";
+  if (role === "staff") return "/ops/orders";
+
+  return "/ops";
+}
+
 export default function OpsLoginPage() {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -26,8 +33,9 @@ export default function OpsLoginPage() {
       return;
     }
 
+    const body = await response.json().catch(() => ({})) as { employee?: { role?: string } };
     const params = new URLSearchParams(window.location.search);
-    window.location.href = params.get("next") || "/ops";
+    window.location.href = params.get("next") || getDefaultPathForRole(body.employee?.role);
   }
 
   return (

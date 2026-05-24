@@ -66,9 +66,9 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
+  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
@@ -544,8 +544,8 @@ export default function OrdersPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">店舗からの仕入れ依頼</p>
-            <h2>仕入れ依頼</h2>
+            <p className="eyebrow">店舗からの発注</p>
+            <h2>発注管理</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -556,13 +556,13 @@ export default function OrdersPage() {
             </label>
             <a className="primary-button" href="#create-order-panel">
               <Plus size={18} />
-              仕入れ依頼を作成
+              発注を作成
             </a>
           </div>
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗と仕入れ商品リストを指定" />
+          <PanelTitle title="新規発注" subtitle="配達先店舗と仕入れ商品リストを指定" />
           <form className="inline-create-form" onSubmit={submitNewOrder}>
             <label>
               <span>配達先店舗</span>
@@ -680,7 +680,7 @@ export default function OrdersPage() {
 
         <section className="workspace-grid">
           <section className="panel operation-panel" id="仕入れ依頼">
-            <PanelTitle title="仕入れ依頼キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
+            <PanelTitle title="発注キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
             <div className="queue-filter-bar" aria-label="仕入れ依頼フィルター">
               {queueFilters.map((filter) => (
                 <button
@@ -720,7 +720,7 @@ export default function OrdersPage() {
                     <a
                       className="icon-button"
                       href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
-                      aria-label={`${order.id} の仕入れ処理`}
+                      aria-label={`${order.id} の仕入れ管理`}
                     >
                       <PackageCheck size={18} />
                     </a>

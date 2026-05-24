@@ -74,9 +74,9 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
+  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
@@ -469,7 +469,7 @@ export default function ProcurementPage() {
         <header className="topbar">
           <div>
             <p className="eyebrow">現場の仕入れ実行</p>
-            <h2>仕入れ処理</h2>
+            <h2>仕入れ管理</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -479,14 +479,14 @@ export default function ProcurementPage() {
               <input placeholder="注文番号・商品・仕入れ先を検索" />
             </label>
             <a className="primary-button" href="/ops/orders">
-              仕入れ依頼を見る
+              発注管理を見る
             </a>
           </div>
         </header>
 
         <section className="panel procurement-panel">
           <PanelTitle
-            title={focusedOrderId ? `${focusedOrderId} の仕入れ処理` : "仕入れ処理"}
+            title={focusedOrderId ? `${focusedOrderId} の仕入れ管理` : "仕入れ管理"}
             subtitle={focusedOrderId ? "選択した依頼だけを表示" : "仕入れ先ごとに購入済み、数量差異、備考、価格異常を記録"}
           />
           {focusedOrderId ? (

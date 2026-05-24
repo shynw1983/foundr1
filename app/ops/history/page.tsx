@@ -48,9 +48,9 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
+  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
@@ -175,7 +175,7 @@ export default function ProcurementHistoryPage() {
         <header className="topbar">
           <div>
             <p className="eyebrow">店舗単位の仕入れ明細</p>
-            <h2>仕入れ一覧</h2>
+            <h2>仕入れ履歴</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">

@@ -66,9 +66,9 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ処理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ一覧", href: "/ops/history", icon: FileText },
+  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
@@ -157,7 +157,7 @@ export default function OpsDashboard() {
             </label>
             <a className="primary-button" href="/ops/orders">
               <Plus size={18} />
-              仕入れ依頼を作成
+              発注を作成
             </a>
           </div>
         </header>
@@ -171,7 +171,7 @@ export default function OpsDashboard() {
 
         <section className="dashboard-report-grid">
           <section className="panel">
-            <PanelTitle title="最近の仕入れ依頼" subtitle="直近の依頼状況を確認" />
+            <PanelTitle title="最近の発注" subtitle="直近の依頼状況を確認" />
             <div className="order-list">
               {purchaseOrders.slice(0, 6).map((order) => (
                 <article className="order-row" key={order.id}>
@@ -194,7 +194,11 @@ export default function OpsDashboard() {
                     <span className="muted-label">優先度</span>
                     <strong>{order.priority}</strong>
                   </div>
-                  <a className="icon-button" href="/ops/procurement" aria-label={`${order.id} の仕入れ処理`}>
+                  <a
+                    className="icon-button"
+                    href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
+                    aria-label={`${order.id} の仕入れ管理`}
+                  >
                     <TrendingUp size={18} />
                   </a>
                 </article>
