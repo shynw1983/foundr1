@@ -699,8 +699,8 @@ function ProductEditDialog({
       return;
     }
 
-    if (file.size > 6 * 1024 * 1024) {
-      setUploadStatus("写真は6MB以下にしてください。");
+    if (file.size > 4 * 1024 * 1024) {
+      setUploadStatus("写真は4MB以下にしてください。");
       return;
     }
 

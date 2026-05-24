@@ -1,7 +1,7 @@
 import { put } from "@vercel/blob";
 import { sql } from "../../../../lib/db";
 
-const maxPhotoSizeBytes = 6 * 1024 * 1024;
+const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     if (file.size > maxPhotoSizeBytes) {
-      return Response.json({ error: "写真は6MB以下にしてください。" }, { status: 413 });
+      return Response.json({ error: "写真は4MB以下にしてください。" }, { status: 413 });
     }
 
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -47,6 +47,21 @@ export async function POST(request: Request) {
     return Response.json({ url: blob.url });
   } catch (error) {
     console.error(error);
+    const message = error instanceof Error ? error.message : "";
+
+    if (message.toLowerCase().includes("body") || message.toLowerCase().includes("size")) {
+      return Response.json(
+        { error: "写真ファイルが大きすぎます。4MB以下に圧縮してからアップロードしてください。" },
+        { status: 413 }
+      );
+    }
+
+    if (message.toLowerCase().includes("blob") || message.toLowerCase().includes("token")) {
+      return Response.json(
+        { error: "Vercel Blob の保存に失敗しました。Blob の接続設定を確認してください。" },
+        { status: 502 }
+      );
+    }
 
     return Response.json(
       { error: "写真をアップロードできませんでした。時間をおいて再試行してください。" },
