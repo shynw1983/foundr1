@@ -2367,12 +2367,61 @@ button {
     gap: 5px;
   }
 
+  .source-indicator,
+  .status-pill,
+  .supplier-type,
+  .source-role,
+  .category-chip,
+  .brand-strip span,
+  .procurement-order-heading > span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .panel-title {
+    gap: 10px;
+  }
+
+  .panel-title > div,
+  .row-heading,
+  .management-row > div:first-child,
+  .compact-row > div:first-child,
+  .order-row > div:first-child,
+  .history-row > div,
+  .procurement-order-heading > div,
+  .category-master-heading > div,
+  .supplier-option > div {
+    min-width: 0;
+  }
+
   .order-row {
     grid-template-columns: 1fr 1fr;
   }
 
+  .order-row > div:first-child,
+  .order-row .row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .order-row .row-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 7px;
+  }
+
+  .order-row .row-actions .icon-button,
+  .order-row .row-actions .text-button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .supplier-option {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .supplier-option .source-role {
+    justify-self: start;
   }
 
   .product-row {
@@ -2456,6 +2505,20 @@ button {
     min-height: 40px;
   }
 
+  .management-row .row-actions,
+  .category-master-heading .row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .management-row .row-actions button,
+  .category-master-heading .row-actions button {
+    justify-content: center;
+    width: 100%;
+    min-height: 40px;
+  }
+
   .procurement-panel {
     padding: 0;
     border: 0;
@@ -2523,6 +2586,12 @@ button {
 
   .supplier-group-heading {
     padding-bottom: 6px;
+  }
+
+  .procurement-order-heading,
+  .category-master-heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .compact-row,
