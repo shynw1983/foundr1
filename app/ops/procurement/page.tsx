@@ -377,7 +377,6 @@ export default function ProcurementPage() {
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
-  const [activeSupplierItemId, setActiveSupplierItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
@@ -574,7 +573,6 @@ export default function ProcurementPage() {
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
-  const activeSupplierItem = procurementTaskItems.find((item) => item.id === activeSupplierItemId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const displayedPurchaseOrders = (focusedOrderId
     ? purchaseOrders.filter((order) => order.id === focusedOrderId)
@@ -766,13 +764,6 @@ export default function ProcurementPage() {
                                   >
                                     異常報告
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="source-change-button"
-                                    onClick={() => setActiveSupplierItemId(item.id)}
-                                  >
-                                    購入先変更
-                                  </button>
                                 </div>
                               );
                             })}
@@ -800,19 +791,11 @@ export default function ProcurementPage() {
       {activeExceptionItem ? (
         <ExceptionReportDialog
           item={activeExceptionItem}
+          choices={getSupplierChoicesForItem(activeExceptionItem, findProcurementProduct(activeExceptionItem, products), productSupplierOptions)}
+          plannedSupplier={getProcurementSupplier(activeExceptionItem.productName, products, productSupplierOptions)}
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
           onClose={() => setActiveExceptionItemId(null)}
           onSaved={() => showNotice("異常報告を保存しました。")}
-        />
-      ) : null}
-      {activeSupplierItem ? (
-        <SupplierChangeDialog
-          item={activeSupplierItem}
-          choices={getSupplierChoicesForItem(activeSupplierItem, findProcurementProduct(activeSupplierItem, products), productSupplierOptions)}
-          plannedSupplier={getProcurementSupplier(activeSupplierItem.productName, products, productSupplierOptions)}
-          onChange={(next) => updateProcurementTaskItem(activeSupplierItem.id, next)}
-          onClose={() => setActiveSupplierItemId(null)}
-          onSaved={() => showNotice("購入先を記録しました。")}
         />
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
@@ -955,16 +938,22 @@ function OrderFulfillmentPanel({
 
 function ExceptionReportDialog({
   item,
+  choices,
+  plannedSupplier,
   onChange,
   onClose,
   onSaved
 }: {
   item: ProcurementTaskItem;
+  choices: SupplierChoice[];
+  plannedSupplier: string;
   onChange: (next: Partial<ProcurementTaskItem>) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const quantityDiff = item.actualQuantity - item.requestedQuantity;
+  const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
+  const currentSupplier = item.supplier || plannedSupplier;
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="exception-report-title">
@@ -972,6 +961,7 @@ function ExceptionReportDialog({
         className="edit-modal exception-modal"
         onSubmit={(event) => {
           event.preventDefault();
+          onChange({ note: setTemporarySupplierNote(item.note, temporarySupplier) });
           onSaved();
           onClose();
         }}
@@ -989,11 +979,44 @@ function ExceptionReportDialog({
           <strong>{item.productName}</strong>
           <span>依頼 {item.requestedQuantity} {item.unit}</span>
           <span>実数 {item.actualQuantity} {item.unit}</span>
+          <span>購入先 {currentSupplier}</span>
           <span className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
             {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
           </span>
         </div>
         <div className="edit-fields">
+          <label>
+            <span>購入先変更</span>
+            <div className="supplier-choice-list">
+              {choices.map((choice) => (
+                <button
+                  type="button"
+                  className={choice.supplier === currentSupplier ? "supplier-choice is-selected" : "supplier-choice"}
+                  onClick={() => {
+                    onChange({
+                      supplier: choice.supplier,
+                      note: setTemporarySupplierNote(item.note, "")
+                    });
+                    setTemporarySupplier("");
+                  }}
+                  key={`${choice.role}-${choice.supplier}`}
+                >
+                  <span>{choice.role}</span>
+                  <strong>{choice.supplier}</strong>
+                </button>
+              ))}
+              {choices.length === 0 ? <div className="empty-state">選択できる仕入れ先がありません</div> : null}
+            </div>
+          </label>
+          <label>
+            <span>臨時購入先</span>
+            <input
+              type="text"
+              value={temporarySupplier}
+              placeholder="例: 近隣スーパー、商店街の青果店"
+              onChange={(event) => setTemporarySupplier(event.target.value)}
+            />
+          </label>
           <label>
             <span>備考</span>
             <textarea
@@ -1027,100 +1050,6 @@ function ExceptionReportDialog({
           </button>
           <button type="submit" className="primary-button">
             保存
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function SupplierChangeDialog({
-  item,
-  choices,
-  plannedSupplier,
-  onChange,
-  onClose,
-  onSaved
-}: {
-  item: ProcurementTaskItem;
-  choices: SupplierChoice[];
-  plannedSupplier: string;
-  onChange: (next: Partial<ProcurementTaskItem>) => void;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
-  const currentSupplier = item.supplier || plannedSupplier;
-
-  function saveTemporarySupplier() {
-    onChange({
-      note: setTemporarySupplierNote(item.note, temporarySupplier)
-    });
-    onSaved();
-    onClose();
-  }
-
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="supplier-change-title">
-      <form
-        className="edit-modal exception-modal"
-        onSubmit={(event) => {
-          event.preventDefault();
-          saveTemporarySupplier();
-        }}
-      >
-        <div className="modal-heading">
-          <div>
-            <p className="eyebrow">Purchase Source</p>
-            <h3 id="supplier-change-title">購入先変更</h3>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
-            ×
-          </button>
-        </div>
-        <div className="exception-summary">
-          <strong>{item.productName}</strong>
-          <span>予定 {plannedSupplier}</span>
-          <span>現在 {currentSupplier}</span>
-        </div>
-        <div className="supplier-choice-list">
-          {choices.map((choice) => (
-            <button
-              type="button"
-              className={choice.supplier === currentSupplier ? "supplier-choice is-selected" : "supplier-choice"}
-              onClick={() => {
-                onChange({
-                  supplier: choice.supplier,
-                  note: setTemporarySupplierNote(item.note, "")
-                });
-                onSaved();
-                onClose();
-              }}
-              key={`${choice.role}-${choice.supplier}`}
-            >
-              <span>{choice.role}</span>
-              <strong>{choice.supplier}</strong>
-            </button>
-          ))}
-          {choices.length === 0 ? <div className="empty-state">選択できる仕入れ先がありません</div> : null}
-        </div>
-        <div className="edit-fields">
-          <label>
-            <span>臨時購入先</span>
-            <input
-              type="text"
-              value={temporarySupplier}
-              placeholder="例: 近隣スーパー、商店街の青果店"
-              onChange={(event) => setTemporarySupplier(event.target.value)}
-            />
-          </label>
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            キャンセル
-          </button>
-          <button type="submit" className="primary-button">
-            臨時購入を記録
           </button>
         </div>
       </form>

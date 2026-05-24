@@ -1978,7 +1978,7 @@ button {
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto auto;
+  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto;
   align-items: start;
   gap: 8px;
   min-height: 52px;
@@ -2114,21 +2114,6 @@ button {
   border-color: transparent;
   color: var(--red);
   background: var(--red-soft);
-}
-
-.source-change-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--blue);
-  background: var(--blue-soft);
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
 }
 
 .exception-modal {
@@ -3275,6 +3260,50 @@ button {
     padding: 0 2px;
   }
 
+  .product-master-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-master-title h3 {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .product-master-title p {
+    max-width: 17em;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .product-list-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .product-list-controls label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .product-list-controls select {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 9px;
+    font-size: 14px;
+  }
+
+  .product-list-controls .source-indicator {
+    grid-column: 1 / -1;
+    justify-self: start;
+    min-height: 30px;
+    font-size: 14px;
+  }
+
   .create-order-panel .order-items-builder,
   .management-grid .management-form,
   .product-category-admin-panel .management-form {
@@ -3530,8 +3559,7 @@ button {
     grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
       "check photo product product"
-      "actual actual diff exception"
-      "source source source source";
+      "actual actual diff exception";
     align-items: end;
     gap: 8px;
     padding: 8px;
@@ -3577,11 +3605,6 @@ button {
     align-self: end;
   }
 
-  .procurement-task > .source-change-button {
-    grid-area: source;
-    width: 100%;
-  }
-
   .task-product-line strong {
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -3592,8 +3615,7 @@ button {
   .procurement-task label > span,
   .task-product small,
   .quantity-diff,
-  .exception-button,
-  .source-change-button {
+  .exception-button {
     font-size: 11px;
   }
 
