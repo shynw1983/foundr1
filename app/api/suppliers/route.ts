@@ -119,6 +119,14 @@ export async function DELETE(request: Request) {
     where supplier_id = ${supplierId}
   `;
   await sql`
+    delete from product_supplier_options
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
+    delete from supplier_locations
+    where supplier_id = ${supplierId}
+  `;
+  await sql`
     delete from suppliers
     where id = ${supplierId}
   `;

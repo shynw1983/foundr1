@@ -127,7 +127,7 @@ function labelToDeadlineValue(label: string) {
 }
 
 function isTodayOrder(order: PurchaseOrder) {
-  return order.deadline.includes("本日") || order.deadline.includes("2026-05-23") || order.deadline.includes("05/23");
+  return order.deadline.includes("本日");
 }
 
 function createStoreFeedbackItems(

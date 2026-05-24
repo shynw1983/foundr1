@@ -99,7 +99,8 @@ export async function getProcurementDashboardData() {
     productSupplierOptions,
     orders,
     purchaseOrderItems,
-    deliveryBatches
+    deliveryBatches,
+    priceSignals
   ] =
     await Promise.all([
       sql`
@@ -359,6 +360,41 @@ export async function getProcurementDashboardData() {
         left join delivery_batch_items on delivery_batch_items.delivery_batch_id = delivery_batches.id
         group by delivery_batches.id, purchase_orders.order_no
         order by delivery_batches.created_at desc
+      `,
+      sql`
+        with ranked_prices as (
+          select
+            products.name as product,
+            coalesce(suppliers.name, '未設定') as supplier,
+            price_records.price::float as price,
+            row_number() over (
+              partition by price_records.product_id, price_records.supplier_id
+              order by price_records.recorded_at desc
+            ) as row_no
+          from price_records
+          join products on products.id = price_records.product_id
+          left join suppliers on suppliers.id = price_records.supplier_id
+        ),
+        latest_prices as (
+          select * from ranked_prices where row_no = 1
+        ),
+        previous_prices as (
+          select * from ranked_prices where row_no = 2
+        )
+        select
+          latest_prices.product,
+          latest_prices.supplier,
+          round(
+            ((latest_prices.price - previous_prices.price) / nullif(previous_prices.price, 0) * 100)::numeric,
+            1
+          )::float as "changeRate"
+        from latest_prices
+        join previous_prices
+          on previous_prices.product = latest_prices.product
+          and previous_prices.supplier = latest_prices.supplier
+        where previous_prices.price <> 0
+        order by abs((latest_prices.price - previous_prices.price) / previous_prices.price) desc
+        limit 8
       `
     ]);
 
@@ -379,6 +415,7 @@ export async function getProcurementDashboardData() {
     productSupplierOptions,
     orders: displayOrders,
     purchaseOrderItems,
-    deliveryBatches
+    deliveryBatches,
+    priceSignals
   };
 }

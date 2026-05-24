@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { priceSignals } from "../../../lib/mock-data";
 import { getProcurementDashboardData } from "../../../lib/procurement-data";
 
 export async function GET() {
@@ -7,7 +6,6 @@ export async function GET() {
 
   return NextResponse.json({
     ...data,
-    exceptions: [],
-    priceSignals
+    exceptions: []
   });
 }

@@ -21,7 +21,6 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   orders,
-  priceSignals,
   productSupplierOptions as initialProductSupplierOptions,
   products as initialProducts,
   stores
@@ -30,6 +29,29 @@ import {
 type Product = typeof initialProducts[number];
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type PurchaseOrder = typeof orders[number];
+type PurchaseOrderItem = {
+  id?: string;
+  orderId: string;
+  productName: string;
+  requestedQuantity: number;
+  actualQuantity?: number;
+  unit: string;
+  note?: string;
+  priceExceptionNote?: string;
+};
+type PriceSignal = {
+  product: string;
+  supplier: string;
+  changeRate: number;
+};
+type StoreFeedback = {
+  id: string;
+  product: string;
+  type: string;
+  message: string;
+  store: string;
+  status: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -59,6 +81,8 @@ export default function OpsDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
+  const [priceSignals, setPriceSignals] = useState<PriceSignal[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
@@ -72,12 +96,16 @@ export default function OpsDashboard() {
         products?: Product[];
         productSupplierOptions?: ProductSupplierGroup[];
         orders?: PurchaseOrder[];
+        purchaseOrderItems?: PurchaseOrderItem[];
+        priceSignals?: PriceSignal[];
       };
 
       if (data.stores) setStoresData(data.stores);
       if (data.products) setProducts(data.products);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
       if (data.orders) setPurchaseOrders(data.orders);
+      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+      if (data.priceSignals) setPriceSignals(data.priceSignals);
       setDataSource("neon");
     }
 
@@ -86,7 +114,8 @@ export default function OpsDashboard() {
 
   const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
-  const activeExceptions = 0;
+  const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems);
+  const activeExceptions = storeFeedbackItems.length;
   const risingPrices = priceSignals.filter((item) => item.changeRate > 0);
   const supplierRouteCount = new Set(
     productSupplierOptions.flatMap((group) => group.options.filter((option) => option.role === "メイン").map((option) => option.supplier))
@@ -177,7 +206,19 @@ export default function OpsDashboard() {
             <section className="panel" id="連絡・報告">
               <PanelTitle title="要確認" subtitle="店舗へ返答が必要な連絡" />
               <div className="stack">
-                <div className="empty-state">要確認の連絡はありません</div>
+                {storeFeedbackItems.slice(0, 4).map((item) => (
+                  <article className="feedback-item" key={item.id}>
+                    <div className="feedback-topline">
+                      <strong>{item.product}</strong>
+                      <span>{item.type}</span>
+                    </div>
+                    <p>{item.message}</p>
+                    <small>{item.store} · {item.status}</small>
+                  </article>
+                ))}
+                {storeFeedbackItems.length === 0 ? (
+                  <div className="empty-state">要確認の連絡はありません</div>
+                ) : null}
               </div>
             </section>
 
@@ -195,6 +236,9 @@ export default function OpsDashboard() {
                     </div>
                   </article>
                 ))}
+                {priceSignals.length === 0 ? (
+                  <div className="empty-state">価格記録が2件以上ある商品はまだありません</div>
+                ) : null}
               </div>
             </section>
           </aside>
@@ -224,6 +268,57 @@ export default function OpsDashboard() {
       </section>
     </main>
   );
+}
+
+function createStoreFeedbackItems(
+  purchaseOrders: PurchaseOrder[],
+  purchaseOrderItems: PurchaseOrderItem[]
+) {
+  const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
+
+  return purchaseOrderItems.flatMap<StoreFeedback>((item) => {
+    const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
+    const quantityDiff = actualQuantity - item.requestedQuantity;
+    const order = orderMap.get(item.orderId);
+    const store = order?.store ?? "店舗未設定";
+    const baseId = item.id ?? `${item.orderId}-${item.productName}`;
+    const items: StoreFeedback[] = [];
+
+    if (item.priceExceptionNote) {
+      items.push({
+        id: `${baseId}-price`,
+        product: item.productName,
+        type: "価格異常",
+        message: item.priceExceptionNote,
+        store,
+        status: "店舗確認待ち"
+      });
+    }
+
+    if (quantityDiff !== 0) {
+      items.push({
+        id: `${baseId}-quantity`,
+        product: item.productName,
+        type: "数量差異",
+        message: `依頼 ${item.requestedQuantity} ${item.unit} / 実数 ${actualQuantity} ${item.unit}`,
+        store,
+        status: "店舗確認待ち"
+      });
+    }
+
+    if (item.note) {
+      items.push({
+        id: `${baseId}-note`,
+        product: item.productName,
+        type: "備考",
+        message: item.note,
+        store,
+        status: "共有済み"
+      });
+    }
+
+    return items;
+  });
 }
 
 function MetricCard({
