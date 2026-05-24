@@ -1026,6 +1026,9 @@ button {
 .product-master-table {
   display: grid;
   gap: 8px;
+  --product-master-columns: minmax(260px, 1.35fr) minmax(92px, 0.42fr) minmax(124px, 0.52fr) minmax(58px, 0.22fr) minmax(70px, 0.28fr) minmax(96px, 0.38fr) minmax(258px, auto);
+  --product-master-gap: 12px;
+  --product-master-x: 20px;
 }
 
 .history-filter-row {
@@ -1098,14 +1101,14 @@ button {
 .product-master-head,
 .product-master-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(76px, 0.42fr) minmax(86px, 0.52fr) 58px 64px 88px minmax(104px, auto);
+  grid-template-columns: var(--product-master-columns);
   align-items: center;
-  gap: 10px;
+  column-gap: var(--product-master-gap);
 }
 
 .product-master-head {
   min-height: 32px;
-  padding: 0 10px;
+  padding: 0 var(--product-master-x);
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
@@ -1113,7 +1116,7 @@ button {
 
 .product-master-row {
   min-height: 62px;
-  padding: 10px;
+  padding: 10px var(--product-master-x);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
@@ -1181,6 +1184,11 @@ button {
 
 .product-master-row .row-actions .text-button {
   font-weight: 600;
+}
+
+.product-master-head span:last-child,
+.product-master-row > .row-actions {
+  justify-self: end;
 }
 
 .product-master-cell::before {
