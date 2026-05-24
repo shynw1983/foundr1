@@ -1273,7 +1273,7 @@ button {
 .product-title-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .product-master-row > span,
@@ -1378,7 +1378,7 @@ button {
 .product-photo-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .photo-upload-box {
@@ -1409,7 +1409,7 @@ button {
 .product-photo-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .photo-upload-box p {
@@ -3031,7 +3031,7 @@ button {
   .mobile-product-photo img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
   }
 
   .mobile-product-head small {
@@ -3749,7 +3749,7 @@ button {
   .mobile-product-photo img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
   }
 
   .mobile-product-head small {
