@@ -934,6 +934,34 @@ button {
   margin-bottom: 12px;
 }
 
+.product-structured-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.product-structured-filters label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.product-structured-filters span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.product-structured-filters select {
+  min-height: 36px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: white;
+  font: inherit;
+}
+
 .pagination-bar {
   display: flex;
   align-items: center;
@@ -3041,6 +3069,7 @@ button {
   .management-grid,
   .supplier-management-form,
   .category-admin-grid,
+  .product-structured-filters,
   .admin-grid,
   .module-grid,
   .inline-create-form,

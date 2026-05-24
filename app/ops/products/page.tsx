@@ -9,7 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   brands,
   products as initialProducts,
-  suppliers as initialSuppliers
+  suppliers as initialSuppliers,
+  stores as initialStores
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
@@ -23,6 +24,7 @@ type ProductWithCategory = Product & {
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
+type StoreItem = typeof initialStores[number];
 type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: string };
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
@@ -107,6 +109,29 @@ function getProductIdentity(product: { id?: string; name: string }) {
   return product.id ?? product.name;
 }
 
+function getProductBrands(product: ProductWithCategory) {
+  return String(product.brand ?? "未設定")
+    .split("/")
+    .map((brand) => brand.trim())
+    .filter(Boolean);
+}
+
+function productMatchesBrand(product: ProductWithCategory, brandName: string) {
+  if (brandName === "すべて") return true;
+  return getProductBrands(product).includes(brandName);
+}
+
+function productMatchesStore(product: ProductWithCategory, store: StoreItem | undefined) {
+  if (!store) return true;
+
+  const storeBrands = store.brands ?? [];
+  if (storeBrands.length === 0) return true;
+
+  const productBrands = getProductBrands(product);
+
+  return productBrands.includes("共通") || storeBrands.some((brandName) => productBrands.includes(brandName));
+}
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
@@ -123,11 +148,15 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 export default function ProductsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
+  const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [brandsData, setBrandsData] = useState<typeof brands>([]);
   const [categoryMaster, setCategoryMaster] = useState<CategoryItem[]>([]);
   const [subcategoryMaster, setSubcategoryMaster] = useState<SubcategoryItem[]>([]);
   const [query, setQuery] = useState("");
+  const [storeFilter, setStoreFilter] = useState("すべて");
+  const [brandFilter, setBrandFilter] = useState("すべて");
+  const [supplierFilter, setSupplierFilter] = useState("すべて");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
   const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
   const [productPage, setProductPage] = useState(1);
@@ -144,6 +173,7 @@ export default function ProductsPage() {
 
     const data = await response.json() as {
       brands?: typeof brands;
+      stores?: StoreItem[];
       products?: ProductWithCategory[];
       suppliers?: Supplier[];
       productCategories?: CategoryItem[];
@@ -151,6 +181,7 @@ export default function ProductsPage() {
     };
 
     if (data.brands) setBrandsData(data.brands);
+    if (data.stores) setStoresData(data.stores);
     if (data.products) setProducts(data.products);
     if (data.suppliers) setSuppliers(data.suppliers);
     if (data.productCategories) setCategoryMaster(data.productCategories);
@@ -165,6 +196,18 @@ export default function ProductsPage() {
   const productCategories = categoryMaster.length > 0
     ? categoryMaster.map((category) => category.name)
     : Array.from(new Set(products.map((product) => product.category)));
+  const storeOptions = storesData.map((store) => store.name);
+  const brandOptions = uniqueOptions([
+    "未設定",
+    "共通",
+    ...brandsData.map((brand) => brand.name),
+    ...products.flatMap((product) => getProductBrands(product))
+  ]);
+  const supplierOptions = uniqueOptions([
+    ...suppliers.map((supplier) => supplier.name),
+    ...products.flatMap((product) => [product.mainSupplier, product.backupSupplier])
+  ]);
+  const selectedStore = storesData.find((store) => store.name === storeFilter);
   const visibleSubcategories = Array.from(new Set(
     subcategoryMaster.length > 0
       ? subcategoryMaster
@@ -191,6 +234,9 @@ export default function ProductsPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
+      productMatchesStore(product, selectedStore) &&
+      productMatchesBrand(product, brandFilter) &&
+      (supplierFilter === "すべて" || product.mainSupplier === supplierFilter || product.backupSupplier === supplierFilter) &&
       (categoryFilter === "すべて" || product.category === categoryFilter) &&
       (subcategoryFilter === "すべて" || (product.subcategory ?? "未分類") === subcategoryFilter)
     );
@@ -213,7 +259,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setProductPage(1);
-  }, [query, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
+  }, [query, storeFilter, brandFilter, supplierFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
     const matchingProducts = products.filter((product) =>
@@ -521,6 +567,35 @@ export default function ProductsPage() {
             </div>
           </div>
           <div className="product-filter-stack">
+            <div className="product-structured-filters" aria-label="商品マスタ詳細フィルター">
+              <label>
+                <span>店舗</span>
+                <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+                  <option value="すべて">すべて</option>
+                  {storeOptions.map((storeName) => (
+                    <option value={storeName} key={storeName}>{storeName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>店舗ブランド</span>
+                <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
+                  <option value="すべて">すべて</option>
+                  {brandOptions.map((brandName) => (
+                    <option value={brandName} key={brandName}>{brandName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>仕入れ先</span>
+                <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+                  <option value="すべて">すべて</option>
+                  {supplierOptions.map((supplierName) => (
+                    <option value={supplierName} key={supplierName}>{supplierName}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className="product-category-strip" aria-label="大分類">
               {["すべて", ...productCategories].map((category) => (
                 <button
