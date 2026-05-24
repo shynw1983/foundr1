@@ -1459,6 +1459,106 @@ button {
   gap: 12px;
 }
 
+.builder-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-product-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.order-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.order-product-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 74px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
+  color: inherit;
+  text-align: left;
+}
+
+.order-product-card.is-selected {
+  border-color: rgba(37, 125, 97, 0.42);
+  background: var(--green-soft);
+}
+
+.order-product-card em {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 999px;
+  color: white;
+  background: var(--green);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.order-product-photo {
+  display: grid;
+  width: 52px;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.order-product-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.order-product-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-right: 20px;
+}
+
+.order-product-info strong,
+.selected-order-product strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.order-product-info small,
+.order-product-info span,
+.selected-order-product small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .builder-actions {
   display: flex;
   justify-content: flex-end;
@@ -1479,6 +1579,14 @@ button {
   border-radius: 8px;
   background: white;
   box-shadow: 0 8px 20px rgba(34, 45, 62, 0.04);
+}
+
+.create-order-panel .order-item-row {
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 140px) minmax(84px, 0.22fr) auto;
+}
+
+.selected-order-product {
+  min-width: 0;
 }
 
 .unit-display {

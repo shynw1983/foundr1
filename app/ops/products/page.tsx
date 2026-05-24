@@ -14,6 +14,7 @@ import {
 
 type Product = typeof initialProducts[number];
 type ProductWithCategory = Product & {
+  id?: string;
   subcategory?: string;
   originCountries?: string[];
   packageSpec?: string;
@@ -22,7 +23,7 @@ type ProductWithCategory = Product & {
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
-type ProductEditTarget = { type: "product"; index: number; value: ProductDraft; originalName?: string };
+type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: string };
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
@@ -100,6 +101,10 @@ function compareProducts(a: ProductWithCategory, b: ProductWithCategory, key: Pr
     compareText(a.subcategory ?? "未分類", b.subcategory ?? "未分類") ||
     compareText(a.name, b.name)
   );
+}
+
+function getProductIdentity(product: { id?: string; name: string }) {
+  return product.id ?? product.name;
 }
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -211,10 +216,28 @@ export default function ProductsPage() {
   }, [query, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
+    const matchingProducts = products.filter((product) =>
+      getProductIdentity(product) !== getProductIdentity(target.value) &&
+      product.name.trim() === String(target.value.name ?? "").trim()
+    );
+    const sameCategoryMatches = matchingProducts.filter((product) =>
+      product.category === target.value.category &&
+      (product.subcategory ?? "未分類") === (target.value.subcategory ?? "未分類")
+    );
+
+    if (sameCategoryMatches.length > 0 || matchingProducts.length > 0) {
+      const message = sameCategoryMatches.length > 0
+        ? "同じ大分類・小分類に同名の商品があります。規格・仕入れ先が違う場合はそのまま保存できます。保存しますか？"
+        : "同じ商品名が別分類にあります。分類が正しいか確認してください。保存しますか？";
+
+      if (!window.confirm(message)) return;
+    }
+
     const response = await fetch("/api/products", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: target.value.id ?? "",
         currentName: target.originalName ?? "",
         ...target.value,
         referencePrice: parseReferencePrice(target.value.referencePrice)
@@ -235,7 +258,6 @@ export default function ProductsPage() {
   function openNewProductEditor() {
     setEditTarget({
       type: "product",
-      index: products.length,
       value: {
         name: "",
         productBrandName: "",
@@ -259,9 +281,9 @@ export default function ProductsPage() {
   function copyProductToNewDraft(product: ProductWithCategory) {
     setEditTarget({
       type: "product",
-      index: products.length,
       value: {
         ...product,
+        id: undefined,
         name: "",
         photoUrl: ""
       }
@@ -270,19 +292,20 @@ export default function ProductsPage() {
     showNotice("商品情報をコピーしました。商品名を入力して保存してください。", "info");
   }
 
-  function deleteProduct(product: Product) {
+  function deleteProduct(product: ProductWithCategory) {
     if (!window.confirm(`${product.name} を削除しますか？`)) return;
+    const productIdentity = getProductIdentity(product);
 
-    setProducts((items) => items.filter((item) => item.name !== product.name));
+    setProducts((items) => items.filter((item) => getProductIdentity(item) !== productIdentity));
 
     void fetch("/api/products", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productName: product.name })
+      body: JSON.stringify({ id: product.id, productName: product.name })
     })
       .then((response) => {
         if (!response.ok) {
-          setProducts((items) => (items.some((item) => item.name === product.name) ? items : [...items, product]));
+          setProducts((items) => (items.some((item) => getProductIdentity(item) === productIdentity) ? items : [...items, product]));
           return response.json().then((body) => {
             window.alert(body.error ?? "商品を削除できませんでした。");
           });
@@ -292,7 +315,7 @@ export default function ProductsPage() {
         return null;
       })
       .catch(() => {
-        setProducts((items) => (items.some((item) => item.name === product.name) ? items : [...items, product]));
+        setProducts((items) => (items.some((item) => getProductIdentity(item) === productIdentity) ? items : [...items, product]));
         window.alert("商品を削除できませんでした。");
       });
   }
@@ -541,11 +564,8 @@ export default function ProductsPage() {
               ))}
               <span>操作</span>
             </div>
-            {pagedProducts.map((product) => {
-              const productIndex = products.findIndex((item) => item.name === product.name);
-
-              return (
-                <article className="product-master-row" key={`${product.name}-${productIndex}`}>
+            {pagedProducts.map((product) => (
+                <article className="product-master-row" key={getProductIdentity(product)}>
                   <div className="product-title-block">
                     <div className="product-title-photo">
                       {product.photoUrl ? (
@@ -589,7 +609,7 @@ export default function ProductsPage() {
                     <div className="mobile-product-actions">
                       <button
                         className="text-button"
-                        onClick={() => setEditTarget({ type: "product", index: productIndex, value: product, originalName: product.name })}
+                        onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
                       >
                         編集
                       </button>
@@ -604,7 +624,7 @@ export default function ProductsPage() {
                   <div className="row-actions">
                     <button
                       className="text-button"
-                      onClick={() => setEditTarget({ type: "product", index: productIndex, value: product, originalName: product.name })}
+                      onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
                     >
                       編集
                     </button>
@@ -658,8 +678,7 @@ export default function ProductsPage() {
                     </div>
                   </details>
                 </article>
-              );
-            })}
+              ))}
             {filteredProducts.length === 0 ? (
               <div className="empty-state">登録済みの商品はありません</div>
             ) : null}

@@ -67,7 +67,7 @@ create table if not exists product_subcategories (
 
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
+  name text not null,
   product_brand_name text,
   manufacturer text,
   category text not null,
@@ -95,6 +95,7 @@ alter table products add column if not exists package_spec text;
 alter table products add column if not exists product_brand_name text;
 alter table products add column if not exists manufacturer text;
 alter table products add column if not exists brand_scope text not null default 'unset';
+alter table products drop constraint if exists products_name_key;
 
 create table if not exists product_brand_usages (
   id uuid primary key default gen_random_uuid(),

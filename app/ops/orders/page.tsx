@@ -14,11 +14,17 @@ import {
 } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
-type ProductWithCategory = Product & { subcategory?: string };
+type ProductWithCategory = Product & {
+  id?: string;
+  subcategory?: string;
+  productBrandName?: string;
+  manufacturer?: string;
+};
 type StoreItem = typeof stores[number];
 type PurchaseOrder = typeof orders[number] & { note?: string };
 type OrderItemDraft = {
   id: number;
+  productId: string;
   category: string;
   subcategory: string;
   productName: string;
@@ -29,6 +35,7 @@ type QueueFilter = "未完了" | "今日対応" | "配送待ち" | "完了" | "�
 type PurchaseOrderItem = {
   id?: string;
   orderId: string;
+  productId?: string;
   productName: string;
   brandName?: string;
   requestedQuantity: number;
@@ -81,6 +88,22 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
 const quantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
+
+function getProductPhotoSrc(photoUrl?: string) {
+  if (!photoUrl) return "";
+  if (photoUrl.startsWith("/api/products/photo/view")) return photoUrl;
+
+  try {
+    const url = new URL(photoUrl);
+    if (url.hostname.endsWith(".private.blob.vercel-storage.com")) {
+      return `/api/products/photo/view?pathname=${encodeURIComponent(url.pathname.slice(1))}`;
+    }
+  } catch {
+    return photoUrl;
+  }
+
+  return photoUrl;
+}
 
 function getDefaultDeadlineValue() {
   const now = new Date();
@@ -143,6 +166,7 @@ function getProductsForStore(products: ProductWithCategory[], storeList: StoreIt
 function createOrderItemDraftFromProduct(product: ProductWithCategory | undefined, id = Date.now()): OrderItemDraft {
   return {
     id,
+    productId: product?.id ?? "",
     category: product?.category ?? "",
     subcategory: product?.subcategory ?? "未分類",
     productName: product?.name ?? "",
@@ -162,13 +186,14 @@ function getFirstProductInSubcategory(products: ProductWithCategory[], category:
 }
 
 function syncOrderItemWithProducts(item: OrderItemDraft, availableProducts: ProductWithCategory[]) {
-  if (availableProducts.some((product) => product.name === item.productName)) return item;
+  if (availableProducts.some((product) => product.id === item.productId || (!item.productId && product.name === item.productName))) return item;
 
   const firstSameCategory = getFirstProductInCategory(availableProducts, item.category);
   const nextProduct = firstSameCategory ?? availableProducts[0];
 
   return {
     ...item,
+    productId: nextProduct?.id ?? "",
     category: nextProduct?.category ?? "",
     subcategory: nextProduct?.subcategory ?? "未分類",
     productName: nextProduct?.name ?? "",
@@ -243,16 +268,9 @@ export default function OrdersPage() {
   const [draftDeadline, setDraftDeadline] = useState(getDefaultDeadlineValue());
   const [draftPriority, setDraftPriority] = useState("中");
   const [draftNote, setDraftNote] = useState("");
-  const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
-    {
-      id: 1,
-      category: "",
-      subcategory: "",
-      productName: "",
-      quantity: 1,
-      unit: "個"
-    }
-  ]);
+  const [draftCategoryFilter, setDraftCategoryFilter] = useState("");
+  const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
+  const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
 
   async function loadDashboardData() {
     const response = await fetch("/api/dashboard");
@@ -268,18 +286,6 @@ export default function OrdersPage() {
     if (data.stores) setStoresData(data.stores);
     if (data.products) {
       setProducts(data.products);
-      setOrderItemDrafts((items) => {
-        const firstProduct = data.products?.[0];
-        if (!firstProduct || items.some((item) => item.productName)) return items;
-
-        return items.map((item) => ({
-          ...item,
-          category: firstProduct.category,
-          subcategory: firstProduct.subcategory ?? "未分類",
-          productName: firstProduct.name,
-          unit: firstProduct.unit
-        }));
-      });
     }
     if (data.orders) setPurchaseOrders(data.orders);
     if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
@@ -324,7 +330,21 @@ export default function OrdersPage() {
   const selectedDraftStore = draftStore || orderableStores[0]?.name || "";
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
-  const draftProductSubcategories = Array.from(new Set(draftProducts.map((product) => product.subcategory ?? "未分類")));
+  const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
+    ? draftCategoryFilter
+    : draftProductCategories[0] ?? "";
+  const draftProductSubcategories = Array.from(new Set(
+    draftProducts
+      .filter((product) => !selectedDraftCategory || product.category === selectedDraftCategory)
+      .map((product) => product.subcategory ?? "未分類")
+  ));
+  const selectedDraftSubcategory = draftProductSubcategories.includes(draftSubcategoryFilter)
+    ? draftSubcategoryFilter
+    : draftProductSubcategories[0] ?? "";
+  const visibleDraftProducts = draftProducts.filter((product) =>
+    (!selectedDraftCategory || product.category === selectedDraftCategory) &&
+    (!selectedDraftSubcategory || (product.subcategory ?? "未分類") === selectedDraftSubcategory)
+  );
   const editingProducts = editingOrder
     ? getProductsForStore(products, orderableStores, editingOrder.store)
     : products;
@@ -334,6 +354,14 @@ export default function OrdersPage() {
   useEffect(() => {
     setOrderItemDrafts((items) => items.map((item) => syncOrderItemWithProducts(item, draftProducts)));
   }, [selectedDraftStore, products]);
+
+  useEffect(() => {
+    setDraftCategoryFilter((current) => draftProductCategories.includes(current) ? current : draftProductCategories[0] ?? "");
+  }, [selectedDraftStore, products]);
+
+  useEffect(() => {
+    setDraftSubcategoryFilter((current) => draftProductSubcategories.includes(current) ? current : draftProductSubcategories[0] ?? "");
+  }, [selectedDraftCategory, selectedDraftStore, products]);
 
   function getQueueFilterCount(filter: QueueFilter) {
     if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
@@ -353,6 +381,25 @@ export default function OrdersPage() {
     ]);
   }
 
+  function addProductToDraft(product: ProductWithCategory) {
+    setOrderItemDrafts((items) => {
+      const existingItem = items.find((item) => item.productId === product.id);
+
+      if (existingItem) {
+        return items.map((item) =>
+          item.id === existingItem.id
+            ? { ...item, quantity: Math.min(999, item.quantity + 1) }
+            : item
+        );
+      }
+
+      return [
+        ...items.filter((item) => item.productId || item.productName),
+        createOrderItemDraftFromProduct(product)
+      ];
+    });
+  }
+
   function updateOrderItemDraft(id: number, next: Partial<OrderItemDraft>) {
     setOrderItemDrafts((items) =>
       items.map((item) => {
@@ -363,6 +410,7 @@ export default function OrdersPage() {
 
           return {
             ...item,
+            productId: firstProductInCategory?.id ?? "",
             category: next.category,
             subcategory: firstProductInCategory?.subcategory ?? "未分類",
             productName: firstProductInCategory?.name ?? "",
@@ -375,18 +423,20 @@ export default function OrdersPage() {
 
           return {
             ...item,
+            productId: firstProductInSubcategory?.id ?? "",
             subcategory: next.subcategory,
             productName: firstProductInSubcategory?.name ?? "",
             unit: firstProductInSubcategory?.unit ?? "個"
           };
         }
 
-        if (next.productName && next.productName !== item.productName) {
-          const selectedProduct = draftProducts.find((product) => product.name === next.productName);
+        if (next.productId && next.productId !== item.productId) {
+          const selectedProduct = draftProducts.find((product) => product.id === next.productId);
 
           return {
             ...item,
-            productName: next.productName,
+            productId: next.productId,
+            productName: selectedProduct?.name ?? "",
             unit: selectedProduct?.unit ?? item.unit
           };
         }
@@ -442,10 +492,12 @@ export default function OrdersPage() {
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
-    const product = products.find((candidate) => candidate.name === item.productName);
+    const product = products.find((candidate) => candidate.id === item.productId) ??
+      products.find((candidate) => candidate.name === item.productName);
 
     return {
       id: Date.now() + index,
+      productId: product?.id ?? item.productId ?? "",
       category: product?.category ?? "",
       subcategory: product?.subcategory ?? "未分類",
       productName: item.productName,
@@ -485,6 +537,7 @@ export default function OrdersPage() {
 
             return {
               ...item,
+              productId: firstProductInCategory?.id ?? "",
               category: next.category,
               subcategory: firstProductInCategory?.subcategory ?? "未分類",
               productName: firstProductInCategory?.name ?? "",
@@ -497,18 +550,20 @@ export default function OrdersPage() {
 
             return {
               ...item,
+              productId: firstProductInSubcategory?.id ?? "",
               subcategory: next.subcategory,
               productName: firstProductInSubcategory?.name ?? "",
               unit: firstProductInSubcategory?.unit ?? "個"
             };
           }
 
-          if (next.productName && next.productName !== item.productName) {
-            const selectedProduct = editingProducts.find((product) => product.name === next.productName);
+          if (next.productId && next.productId !== item.productId) {
+            const selectedProduct = editingProducts.find((product) => product.id === next.productId);
 
             return {
               ...item,
-              productName: next.productName,
+              productId: next.productId,
+              productName: selectedProduct?.name ?? "",
               unit: selectedProduct?.unit ?? item.unit
             };
           }
@@ -549,6 +604,7 @@ export default function OrdersPage() {
     formData.set("priority", editingOrder.priority);
     formData.set("note", editingOrder.note);
     editingOrder.items.forEach((item) => {
+      formData.append("productId", item.productId);
       formData.append("productName", item.productName);
       formData.append("requestedQuantity", String(item.quantity));
       formData.append("requestedUnit", item.unit);
@@ -647,49 +703,74 @@ export default function OrdersPage() {
             <div className="order-items-builder">
               <div className="builder-heading">
                 <strong>仕入れ商品リスト</strong>
+                <span>{orderItemDrafts.filter((item) => item.productId || item.productName).length} 件</span>
+              </div>
+              <div className="order-product-picker">
+                <div className="product-category-strip" aria-label="発注大分類">
+                  {draftProductCategories.map((category) => (
+                    <button
+                      type="button"
+                      className={selectedDraftCategory === category ? "filter-chip is-active" : "filter-chip"}
+                      onClick={() => setDraftCategoryFilter(category)}
+                      key={category}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+                <div className="product-category-strip" aria-label="発注小分類">
+                  {draftProductSubcategories.map((subcategory) => (
+                    <button
+                      type="button"
+                      className={selectedDraftSubcategory === subcategory ? "filter-chip is-active" : "filter-chip"}
+                      onClick={() => setDraftSubcategoryFilter(subcategory)}
+                      key={subcategory}
+                    >
+                      {subcategory}
+                    </button>
+                  ))}
+                </div>
+                <div className="order-product-grid">
+                  {visibleDraftProducts.map((product) => {
+                    const selectedItem = orderItemDrafts.find((item) => item.productId === product.id);
+
+                    return (
+                      <button
+                        type="button"
+                        className={selectedItem ? "order-product-card is-selected" : "order-product-card"}
+                        onClick={() => addProductToDraft(product)}
+                        key={product.id ?? product.name}
+                      >
+                        <span className="order-product-photo">
+                          {product.photoUrl ? (
+                            <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                          ) : (
+                            <span>写真</span>
+                          )}
+                        </span>
+                        <span className="order-product-info">
+                          <strong>{product.name}</strong>
+                          <small>{product.productBrandName || product.mainSupplier || "詳細未設定"}</small>
+                          <span>{product.unit} · {product.storageType || "保管未設定"} · ¥{product.referencePrice}</span>
+                        </span>
+                        {selectedItem ? <em>{selectedItem.quantity}</em> : null}
+                      </button>
+                    );
+                  })}
+                  {visibleDraftProducts.length === 0 ? (
+                    <div className="empty-state">選択できる商品がありません</div>
+                  ) : null}
+                </div>
               </div>
               <div className="order-item-list">
                 {orderItemDrafts.map((item) => (
                   <div className="order-item-row" key={item.id}>
-                    <label>
-                      <span>大分類</span>
-                      <select
-                        value={item.category}
-                        onChange={(event) => updateOrderItemDraft(item.id, { category: event.target.value })}
-                      >
-                        {draftProductCategories.map((category) => (
-                          <option value={category} key={category}>{category}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>小分類</span>
-                      <select
-                        value={item.subcategory}
-                        onChange={(event) => updateOrderItemDraft(item.id, { subcategory: event.target.value })}
-                      >
-                        {draftProductSubcategories
-                          .filter((subcategory) =>
-                            draftProducts.some((product) => product.category === item.category && (product.subcategory ?? "未分類") === subcategory)
-                          )
-                          .map((subcategory) => (
-                            <option value={subcategory} key={subcategory}>{subcategory}</option>
-                          ))}
-                      </select>
-                    </label>
-                    <label>
+                    <label className="selected-order-product">
                       <span>商品</span>
-                      <select
-                        name="productName"
-                        value={item.productName}
-                        onChange={(event) => updateOrderItemDraft(item.id, { productName: event.target.value })}
-                      >
-                        {draftProducts
-                          .filter((product) => product.category === item.category && (product.subcategory ?? "未分類") === item.subcategory)
-                          .map((product) => (
-                            <option value={product.name} key={product.name}>{product.name}</option>
-                          ))}
-                      </select>
+                      <strong>{item.productName || "商品未選択"}</strong>
+                      <small>{item.category} / {item.subcategory}</small>
+                      <input type="hidden" name="productId" value={item.productId} />
+                      <input type="hidden" name="productName" value={item.productName} />
                     </label>
                     <label>
                       <span>数量</span>
@@ -712,17 +793,14 @@ export default function OrdersPage() {
                       type="button"
                       className="text-button"
                       onClick={() => removeOrderItemDraft(item.id)}
-                      disabled={orderItemDrafts.length === 1}
                     >
                       削除
                     </button>
                   </div>
                 ))}
-              </div>
-              <div className="builder-actions">
-                <button type="button" className="text-button" onClick={addOrderItemDraft}>
-                  商品を追加
-                </button>
+                {orderItemDrafts.length === 0 ? (
+                  <div className="empty-state">商品カードをクリックして追加してください</div>
+                ) : null}
               </div>
             </div>
             <div className="inline-create-actions">
@@ -913,13 +991,13 @@ export default function OrdersPage() {
                     <label>
                       <span>商品</span>
                       <select
-                        value={item.productName}
-                        onChange={(event) => updateEditingOrderItem(item.id, { productName: event.target.value })}
+                        value={item.productId}
+                        onChange={(event) => updateEditingOrderItem(item.id, { productId: event.target.value })}
                       >
                         {editingProducts
                           .filter((product) => product.category === item.category && (product.subcategory ?? "未分類") === item.subcategory)
                           .map((product) => (
-                            <option value={product.name} key={product.name}>{product.name}</option>
+                            <option value={product.id ?? product.name} key={product.id ?? product.name}>{product.name}</option>
                           ))}
                       </select>
                     </label>

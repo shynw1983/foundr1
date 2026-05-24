@@ -53,7 +53,7 @@ function normalizeRequestedQuantity(value: number) {
   return Math.min(999, Math.max(1, Math.round(value)));
 }
 
-async function validateOrderInput(storeName: string, productNames: string[]) {
+async function validateOrderInput(storeName: string, productNames: string[], productIds: string[]) {
   if (!storeName) {
     return { error: Response.json({ error: "配達先店舗を選択してください。" }, { status: 400 }) };
   }
@@ -74,13 +74,23 @@ async function validateOrderInput(storeName: string, productNames: string[]) {
     return { error: Response.json({ error: "配達先店舗が見つかりません。" }, { status: 400 }) };
   }
 
-  const productRows = await sql`
+  const uniqueProductIds = Array.from(new Set(productIds.filter(Boolean)));
+  const productRows = uniqueProductIds.length > 0
+    ? await sql`
+    select id, name
+    from products
+    where id::text = any(${uniqueProductIds})
+  `
+    : await sql`
     select id, name
     from products
     where name = any(${Array.from(new Set(productNames))})
   `;
   const productIdsByName = new Map(productRows.map((row) => [String(row.name), String(row.id)]));
-  const missingProducts = productNames.filter((name) => !productIdsByName.has(name));
+  const validProductIds = new Set(productRows.map((row) => String(row.id)));
+  const missingProducts = uniqueProductIds.length > 0
+    ? productIds.filter((id) => id && !validProductIds.has(id))
+    : productNames.filter((name) => !productIdsByName.has(name));
 
   if (missingProducts.length > 0) {
     return {
@@ -91,7 +101,7 @@ async function validateOrderInput(storeName: string, productNames: string[]) {
     };
   }
 
-  return { storeId, productIdsByName };
+  return { storeId, productIdsByName, validProductIds };
 }
 
 export async function POST(request: Request) {
@@ -106,11 +116,12 @@ export async function POST(request: Request) {
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
+  const productIds = formData.getAll("productId").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
   const orderNo = `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${Date.now().toString().slice(-3)}`;
-  const validation = await validateOrderInput(storeName, productNames);
+  const validation = await validateOrderInput(storeName, productNames, productIds);
   if (validation.error) return validation.error;
 
   const insertedOrders = await sql`
@@ -143,7 +154,7 @@ export async function POST(request: Request) {
     for (const [index, productName] of productNames.entries()) {
       const quantity = normalizeRequestedQuantity(quantities[index]);
       const unit = units[index] || "個";
-      const productId = validation.productIdsByName?.get(productName);
+      const productId = productIds[index] || validation.productIdsByName?.get(productName);
 
       await sql`
         insert into purchase_order_items (
@@ -180,6 +191,7 @@ export async function PUT(request: Request) {
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
+  const productIds = formData.getAll("productId").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
 
@@ -191,7 +203,7 @@ export async function PUT(request: Request) {
     return Response.json({ error: "商品を1件以上選択してください。" }, { status: 400 });
   }
 
-  const validation = await validateOrderInput(storeName, productNames);
+  const validation = await validateOrderInput(storeName, productNames, productIds);
   if (validation.error) return validation.error;
 
   const existingOrder = await sql`
@@ -253,7 +265,7 @@ export async function PUT(request: Request) {
   for (const [index, productName] of productNames.entries()) {
     const quantity = normalizeRequestedQuantity(quantities[index]);
     const unit = units[index] || "個";
-    const productId = validation.productIdsByName?.get(productName);
+    const productId = productIds[index] || validation.productIdsByName?.get(productName);
 
     await sql`
       insert into purchase_order_items (

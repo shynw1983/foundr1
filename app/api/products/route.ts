@@ -1,6 +1,7 @@
 import { sql } from "../../../lib/db";
 
 type ProductPayload = {
+  id?: string;
   currentName?: string;
   name?: string;
   productBrandName?: string;
@@ -21,6 +22,7 @@ type ProductPayload = {
 
 export async function PUT(request: Request) {
   const body = await request.json() as ProductPayload;
+  const id = String(body.id ?? "").trim();
   const currentName = String(body.currentName ?? "").trim();
   const name = String(body.name ?? "").trim();
   const productBrandName = String(body.productBrandName ?? "").trim();
@@ -50,22 +52,29 @@ export async function PUT(request: Request) {
     return Response.json({ error: "商品名を入力してください。" }, { status: 400 });
   }
 
-  const duplicateRows = await sql`
-    select count(*)::int as count
-    from products
-    where name = ${name}
-      and (${currentName || null}::text is null or name <> ${currentName})
-  `;
-
-  if (Number(duplicateRows[0]?.count ?? 0) > 0) {
-    return Response.json(
-      { error: "同じ名前の商品がすでにあります。" },
-      { status: 409 }
-    );
-  }
-
-  const rows = currentName
+  const rows = id
     ? await sql`
+        update products
+        set
+          name = ${name},
+          product_brand_name = ${productBrandName},
+          manufacturer = ${manufacturer},
+          category = ${category},
+          subcategory = ${subcategory},
+          unit = ${unit},
+          reference_price = ${Number.isFinite(referencePrice) ? referencePrice : 0},
+          origin_countries = ${originCountries},
+          package_spec = ${packageSpec},
+          spec_note = ${specNote},
+          photo_url = ${photoUrl},
+          brand_scope = ${brandScope},
+          storage_type = ${storageType},
+          updated_at = now()
+        where id = ${id}
+        returning id
+      `
+    : currentName
+      ? await sql`
         update products
         set
           name = ${name},
@@ -85,7 +94,7 @@ export async function PUT(request: Request) {
         where name = ${currentName}
         returning id
       `
-    : await sql`
+      : await sql`
         insert into products (
           name,
           product_brand_name,
@@ -169,17 +178,19 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const body = await request.json() as { productName?: string };
+  const body = await request.json() as { id?: string; productName?: string };
+  const id = String(body.id ?? "").trim();
 
-  if (!body.productName) {
-    return Response.json({ error: "productName is required" }, { status: 400 });
+  if (!id && !body.productName) {
+    return Response.json({ error: "product id is required" }, { status: 400 });
   }
 
   const linkedItems = await sql`
     select count(*)::int as count
     from purchase_order_items
     join products on products.id = purchase_order_items.product_id
-    where products.name = ${body.productName}
+    where (${id || null}::uuid is not null and products.id = ${id || null})
+       or (${id || null}::uuid is null and products.name = ${body.productName ?? ""})
   `;
 
   if (Number(linkedItems[0]?.count ?? 0) > 0) {
@@ -191,7 +202,8 @@ export async function DELETE(request: Request) {
 
   await sql`
     delete from products
-    where name = ${body.productName}
+    where (${id || null}::uuid is not null and id = ${id || null})
+       or (${id || null}::uuid is null and name = ${body.productName ?? ""})
   `;
 
   return Response.json({ ok: true });

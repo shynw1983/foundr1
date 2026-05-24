@@ -117,6 +117,7 @@ export async function getProcurementDashboardData() {
       sql`select name, brand_type as type from brands order by name`,
       sql`
         select
+          id::text,
           name,
           coalesce(product_brand_name, '') as "productBrandName",
           coalesce(manufacturer, '') as manufacturer,
@@ -296,6 +297,7 @@ export async function getProcurementDashboardData() {
         select
           purchase_order_items.id::text as id,
           purchase_orders.order_no as "orderId",
+          products.id::text as "productId",
           products.name as "productName",
           coalesce(item_brands.name, order_brands.name, '共通') as "brandName",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
