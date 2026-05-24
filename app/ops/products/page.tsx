@@ -20,8 +20,9 @@ type ProductWithCategory = Product & {
   productBrandName?: string;
   manufacturer?: string;
 };
+type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
-type ProductEditTarget = { type: "product"; index: number; value: ProductWithCategory; originalName?: string };
+type ProductEditTarget = { type: "product"; index: number; value: ProductDraft; originalName?: string };
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
@@ -41,6 +42,15 @@ function getProductPhotoSrc(photoUrl?: string) {
   }
 
   return photoUrl;
+}
+
+function parseReferencePrice(value: number | string) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const normalizedValue = value.replace(/[^\d.-]/g, "");
+  const price = Number(normalizedValue);
+
+  return Number.isFinite(price) ? price : 0;
 }
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -146,7 +156,8 @@ export default function ProductsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         currentName: target.originalName ?? "",
-        ...target.value
+        ...target.value,
+        referencePrice: parseReferencePrice(target.value.referencePrice)
       })
     });
 
@@ -885,13 +896,13 @@ function ProductEditDialog({
                 <input
                   value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
                   type={field.type ?? "text"}
+                  inputMode={field.inputMode}
                   onChange={(event) => {
-                    const nextValue = field.key === "referencePrice" ? Number(event.target.value) : event.target.value;
                     onChange({
                       ...target,
                       value: {
                         ...target.value,
-                        [field.key]: nextValue
+                        [field.key]: event.target.value
                       }
                     });
                   }}
@@ -969,12 +980,12 @@ function ProductEditDialog({
 }
 
 function getProductFields(
-  product: ProductWithCategory,
+  product: ProductDraft,
   suppliers: Supplier[],
   brandsData: typeof brands,
   categoryOptions: string[],
   subcategoryOptions: string[]
-): Array<{ key: string; label: string; type?: "text"; options?: string[] }> {
+): Array<{ key: string; label: string; type?: "text"; inputMode?: "decimal"; options?: string[] }> {
   const supplierNames = suppliers.map((supplier) => supplier.name);
   const brandNames = brandsData.map((brand) => brand.name);
 
@@ -990,7 +1001,7 @@ function getProductFields(
     },
     { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
-    { key: "referencePrice", label: "参考価格", type: "text" },
+    { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },
     { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]) },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
