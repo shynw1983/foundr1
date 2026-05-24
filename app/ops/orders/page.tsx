@@ -717,7 +717,11 @@ export default function OrdersPage() {
                     <strong>{order.priority}</strong>
                   </div>
                   <div className="row-actions">
-                    <a className="icon-button" href="/ops/procurement" aria-label={`${order.id} の仕入れ処理`}>
+                    <a
+                      className="icon-button"
+                      href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
+                      aria-label={`${order.id} の仕入れ処理`}
+                    >
                       <PackageCheck size={18} />
                     </a>
                     <button type="button" className="text-button" onClick={() => startEditingOrder(order)}>

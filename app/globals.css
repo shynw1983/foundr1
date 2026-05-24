@@ -1316,6 +1316,21 @@ button {
   gap: 12px;
 }
 
+.focused-order-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid rgba(33, 104, 176, 0.16);
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .procurement-order-card {
   display: grid;
   gap: 12px;
@@ -2611,6 +2626,16 @@ button {
 
   .procurement-order-list {
     gap: 14px;
+  }
+
+  .focused-order-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .focused-order-bar .text-button {
+    justify-content: center;
+    width: 100%;
   }
 
   .procurement-order-card {

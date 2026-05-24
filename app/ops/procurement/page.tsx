@@ -261,6 +261,7 @@ export default function ProcurementPage() {
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
+  const [focusedOrderId, setFocusedOrderId] = useState("");
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -291,6 +292,11 @@ export default function ProcurementPage() {
     }
 
     void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFocusedOrderId(params.get("order") ?? "");
   }, []);
 
   useEffect(() => {
@@ -434,6 +440,9 @@ export default function ProcurementPage() {
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
+  const displayedPurchaseOrders = focusedOrderId
+    ? purchaseOrders.filter((order) => order.id === focusedOrderId)
+    : purchaseOrders;
 
   return (
     <main className="shell">
@@ -476,9 +485,18 @@ export default function ProcurementPage() {
         </header>
 
         <section className="panel procurement-panel">
-          <PanelTitle title="仕入れ処理" subtitle="仕入れ先ごとに購入済み、数量差異、備考、価格異常を記録" />
+          <PanelTitle
+            title={focusedOrderId ? `${focusedOrderId} の仕入れ処理` : "仕入れ処理"}
+            subtitle={focusedOrderId ? "選択した依頼だけを表示" : "仕入れ先ごとに購入済み、数量差異、備考、価格異常を記録"}
+          />
+          {focusedOrderId ? (
+            <div className="focused-order-bar">
+              <span>注文番号 {focusedOrderId}</span>
+              <a className="text-button" href="/ops/procurement">全体を見る</a>
+            </div>
+          ) : null}
           <div className="procurement-order-list">
-            {purchaseOrders.map((order) => {
+            {displayedPurchaseOrders.map((order) => {
               const items = procurementTaskItems.filter((item) => item.orderId === order.id);
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
               const completedCount = items.filter((item) => item.purchased).length;
@@ -590,6 +608,9 @@ export default function ProcurementPage() {
                 </article>
               );
             })}
+            {focusedOrderId && displayedPurchaseOrders.length === 0 ? (
+              <div className="empty-state">対象の仕入れ依頼が見つかりません</div>
+            ) : null}
           </div>
         </section>
 
