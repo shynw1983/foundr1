@@ -48,10 +48,13 @@ function translateTextNode(node: Text, dictionary: OpsDictionary, language: OpsL
   const leadingWhitespace = source.match(/^\s*/)?.[0] ?? "";
   const trailingWhitespace = source.match(/\s*$/)?.[0] ?? "";
   const text = source.trim();
-
-  node.textContent = language === "ja"
+  const nextText = language === "ja"
     ? source
     : `${leadingWhitespace}${translateText(text, dictionary)}${trailingWhitespace}`;
+
+  if (node.textContent !== nextText) {
+    node.textContent = nextText;
+  }
 }
 
 function translateElementAttributes(element: Element, dictionary: OpsDictionary, language: OpsLanguage) {
@@ -67,7 +70,10 @@ function translateElementAttributes(element: Element, dictionary: OpsDictionary,
       originalAttributes.set(element, stored);
     }
 
-    element.setAttribute(attr, language === "ja" ? stored[attr] : translateText(stored[attr], dictionary));
+    const nextValue = language === "ja" ? stored[attr] : translateText(stored[attr], dictionary);
+    if (value !== nextValue) {
+      element.setAttribute(attr, nextValue);
+    }
   }
 }
 
@@ -182,7 +188,6 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => translateNode(node, dictionary, language));
-        if (mutation.type === "characterData") translateNode(mutation.target, dictionary, language);
         if (mutation.type === "attributes") translateNode(mutation.target, dictionary, language);
       }
     });
@@ -191,7 +196,6 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
       attributes: true,
       attributeFilter: translatableAttributes,
       childList: true,
-      characterData: true,
       subtree: true
     });
 
