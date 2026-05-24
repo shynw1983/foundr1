@@ -3477,6 +3477,7 @@ button {
     grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
       "check photo product product"
+      "supplier supplier supplier supplier"
       "actual actual diff exception";
     align-items: end;
     gap: 8px;
@@ -3508,7 +3509,12 @@ button {
     min-width: 0;
   }
 
-  .procurement-task > label:not(.task-check) {
+  .procurement-task .task-supplier {
+    grid-area: supplier;
+    width: 100%;
+  }
+
+  .procurement-task .task-actual {
     grid-area: actual;
     width: 100%;
   }

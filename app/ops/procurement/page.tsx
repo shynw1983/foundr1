@@ -685,7 +685,7 @@ export default function ProcurementPage() {
                                     {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
                                   </div>
-                                  <label>
+                                  <label className="task-supplier">
                                     <span>仕入れ先</span>
                                     <select
                                       value={item.supplier || getProcurementSupplier(item.productName, products, productSupplierOptions)}
@@ -696,7 +696,7 @@ export default function ProcurementPage() {
                                       ))}
                                     </select>
                                   </label>
-                                  <label>
+                                  <label className="task-actual">
                                     <span>実数</span>
                                     <input
                                       type="number"
