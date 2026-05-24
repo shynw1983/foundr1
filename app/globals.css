@@ -1114,6 +1114,31 @@ button {
   font-weight: 500;
 }
 
+.sortable-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.sortable-heading:hover,
+.sortable-heading.is-active {
+  color: var(--blue);
+}
+
+.sortable-heading span {
+  font-size: 11px;
+  line-height: 1;
+}
+
 .product-master-row {
   min-height: 62px;
   padding: 10px var(--product-master-x);

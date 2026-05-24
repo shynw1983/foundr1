@@ -26,7 +26,31 @@ type ProductEditTarget = { type: "product"; index: number; value: ProductDraft; 
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
+type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice";
+type SortDirection = "asc" | "desc";
 const productPageSizeOptions = [20, 50, 100];
+const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection; label: string }> = [
+  { key: "category", direction: "asc", label: "分類順" },
+  { key: "name", direction: "asc", label: "商品名 昇順" },
+  { key: "name", direction: "desc", label: "商品名 降順" },
+  { key: "category", direction: "desc", label: "分類 降順" },
+  { key: "subcategory", direction: "asc", label: "小分類 昇順" },
+  { key: "subcategory", direction: "desc", label: "小分類 降順" },
+  { key: "unit", direction: "asc", label: "単位 昇順" },
+  { key: "unit", direction: "desc", label: "単位 降順" },
+  { key: "storageType", direction: "asc", label: "保管 昇順" },
+  { key: "storageType", direction: "desc", label: "保管 降順" },
+  { key: "referencePrice", direction: "asc", label: "参考価格 安い順" },
+  { key: "referencePrice", direction: "desc", label: "参考価格 高い順" }
+];
+const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
+  { key: "name", label: "商品名" },
+  { key: "category", label: "分類" },
+  { key: "subcategory", label: "小分類" },
+  { key: "unit", label: "単位" },
+  { key: "storageType", label: "保管" },
+  { key: "referencePrice", label: "参考価格" }
+];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -51,6 +75,31 @@ function parseReferencePrice(value: number | string) {
   const price = Number(normalizedValue);
 
   return Number.isFinite(price) ? price : 0;
+}
+
+function compareText(a: string | undefined, b: string | undefined) {
+  return String(a ?? "").localeCompare(String(b ?? ""), "ja", { numeric: true, sensitivity: "base" });
+}
+
+function compareProducts(a: ProductWithCategory, b: ProductWithCategory, key: ProductSortKey, direction: SortDirection) {
+  const directionMultiplier = direction === "asc" ? 1 : -1;
+  let result = 0;
+
+  if (key === "referencePrice") {
+    result = Number(a.referencePrice ?? 0) - Number(b.referencePrice ?? 0);
+  } else if (key === "subcategory") {
+    result = compareText(a.subcategory ?? "未分類", b.subcategory ?? "未分類");
+  } else {
+    result = compareText(String(a[key] ?? ""), String(b[key] ?? ""));
+  }
+
+  if (result !== 0) return result * directionMultiplier;
+
+  return (
+    compareText(a.category, b.category) ||
+    compareText(a.subcategory ?? "未分類", b.subcategory ?? "未分類") ||
+    compareText(a.name, b.name)
+  );
 }
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -78,6 +127,8 @@ export default function ProductsPage() {
   const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
   const [productPage, setProductPage] = useState(1);
   const [productPageSize, setProductPageSize] = useState(20);
+  const [productSortKey, setProductSortKey] = useState<ProductSortKey>("category");
+  const [productSortDirection, setProductSortDirection] = useState<SortDirection>("asc");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -139,16 +190,25 @@ export default function ProductsPage() {
       (subcategoryFilter === "すべて" || (product.subcategory ?? "未分類") === subcategoryFilter)
     );
   });
-  const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / productPageSize));
+  const sortedProducts = [...filteredProducts].sort((a, b) => compareProducts(a, b, productSortKey, productSortDirection));
+  const productPageCount = Math.max(1, Math.ceil(sortedProducts.length / productPageSize));
   const currentProductPage = Math.min(productPage, productPageCount);
-  const pagedProducts = filteredProducts.slice(
+  const pagedProducts = sortedProducts.slice(
     (currentProductPage - 1) * productPageSize,
     currentProductPage * productPageSize
   );
+  const productSortValue = `${productSortKey}:${productSortDirection}`;
+
+  function updateProductSort(key: ProductSortKey, direction?: SortDirection) {
+    setProductSortKey(key);
+    setProductSortDirection((currentDirection) =>
+      direction ?? (productSortKey === key && currentDirection === "asc" ? "desc" : "asc")
+    );
+  }
 
   useEffect(() => {
     setProductPage(1);
-  }, [query, categoryFilter, subcategoryFilter, productPageSize]);
+  }, [query, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
     const response = await fetch("/api/products", {
@@ -409,6 +469,22 @@ export default function ProductsPage() {
             </div>
             <div className="product-list-controls">
               <label>
+                <span>並び順</span>
+                <select
+                  value={productSortValue}
+                  onChange={(event) => {
+                    const [nextKey, nextDirection] = event.target.value.split(":") as [ProductSortKey, SortDirection];
+                    updateProductSort(nextKey, nextDirection);
+                  }}
+                >
+                  {productSortOptions.map((option) => (
+                    <option value={`${option.key}:${option.direction}`} key={`${option.key}-${option.direction}`}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span>表示件数</span>
                 <select value={productPageSize} onChange={(event) => setProductPageSize(Number(event.target.value))}>
                   {productPageSizeOptions.map((size) => (
@@ -450,12 +526,19 @@ export default function ProductsPage() {
           </div>
           <div className="product-master-table">
             <div className="product-master-head">
-              <span>商品名</span>
-              <span>分類</span>
-              <span>小分類</span>
-              <span>単位</span>
-              <span>保管</span>
-              <span>参考価格</span>
+              {sortableProductColumns.map((column) => (
+                <button
+                  type="button"
+                  className={productSortKey === column.key ? "sortable-heading is-active" : "sortable-heading"}
+                  onClick={() => updateProductSort(column.key)}
+                  key={column.key}
+                >
+                  {column.label}
+                  {productSortKey === column.key ? (
+                    <span>{productSortDirection === "asc" ? "↑" : "↓"}</span>
+                  ) : null}
+                </button>
+              ))}
               <span>操作</span>
             </div>
             {pagedProducts.map((product) => {
