@@ -31,6 +31,7 @@ type DashboardOrderItem = {
   productName: string;
   requestedQuantity: number;
   actualQuantity?: number;
+  actualPrice?: string;
   unit: string;
   purchased?: boolean;
   supplier?: string;
@@ -46,6 +47,7 @@ type ProcurementTaskItem = {
   productName: string;
   requestedQuantity: number;
   actualQuantity: number;
+  actualPrice: string;
   unit: string;
   supplier: string;
   purchased: boolean;
@@ -132,6 +134,7 @@ function createProcurementTaskItems(
           productName: item.productName,
           requestedQuantity: item.requestedQuantity,
           actualQuantity: item.actualQuantity ?? item.requestedQuantity,
+          actualPrice: item.actualPrice ?? "",
           unit: item.unit,
           supplier: item.supplier || product?.mainSupplier || "",
           purchased: item.purchased ?? false,
@@ -156,6 +159,7 @@ function createProcurementTaskItems(
         productName: product.name,
         requestedQuantity: quantity,
         actualQuantity: quantity,
+        actualPrice: "",
         unit: product.unit,
         supplier: "",
         purchased: false,
@@ -283,6 +287,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       itemId: item.id,
       purchased: item.purchased,
       actualQuantity: item.actualQuantity,
+      actualPrice: item.actualPrice,
       note: item.note,
       priceExceptionNote: item.priceExceptionNote,
       supplier: item.supplier
@@ -529,7 +534,7 @@ export default function ProcurementPage() {
         order.store,
         order.brand,
         order.priority,
-        ...orderItems.flatMap((item) => [item.productName, item.supplier, item.note, item.priceExceptionNote])
+        ...orderItems.flatMap((item) => [item.productName, item.supplier, item.note, item.priceExceptionNote, item.actualPrice])
       ].join(" ").toLowerCase().includes(normalizedQuery);
     });
 
@@ -934,6 +939,16 @@ function ExceptionReportDialog({
               value={item.note}
               placeholder="代替品、欠品、配送メモなど"
               onChange={(event) => onChange({ note: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>実際購入価格</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={item.actualPrice}
+              placeholder="例: 271 / ¥271"
+              onChange={(event) => onChange({ actualPrice: event.target.value })}
             />
           </label>
           <label>

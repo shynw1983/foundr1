@@ -9,6 +9,7 @@ export async function PATCH(request: Request) {
     itemId?: string;
     purchased?: boolean;
     actualQuantity?: number;
+    actualPrice?: string;
     note?: string;
     priceExceptionNote?: string;
     supplier?: string;
@@ -19,6 +20,9 @@ export async function PATCH(request: Request) {
   }
 
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
+  const actualPriceText = String(body.actualPrice ?? "").trim();
+  const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
+  const actualPrice = normalizedActualPrice ? Number(normalizedActualPrice) : null;
   const note = body.note ?? "";
   const priceExceptionNote = body.priceExceptionNote ?? "";
   const supplierName = String(body.supplier ?? "").trim();
@@ -53,6 +57,7 @@ export async function PATCH(request: Request) {
         else status
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
+      actual_price = ${Number.isFinite(actualPrice) ? actualPrice : null},
       procurement_note = ${note},
       price_exception_note = ${priceExceptionNote},
       selected_supplier_id = coalesce(${supplierId}, selected_supplier_id)
@@ -71,6 +76,7 @@ export async function PATCH(request: Request) {
         supplier_id,
         actual_quantity,
         actual_unit,
+        actual_price,
         price_is_exception,
         note
       )
@@ -79,6 +85,7 @@ export async function PATCH(request: Request) {
         coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
         coalesce(${actualQuantity}, purchase_order_items.requested_quantity),
         purchase_order_items.requested_unit,
+        ${Number.isFinite(actualPrice) ? actualPrice : null},
         ${priceExceptionNote.length > 0},
         ${priceExceptionNote || note}
       from purchase_order_items

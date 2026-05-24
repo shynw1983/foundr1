@@ -307,6 +307,11 @@ export async function getProcurementDashboardData() {
             purchase_actuals.actual_quantity::float,
             purchase_order_items.requested_quantity::float
           ) as "actualQuantity",
+          coalesce(
+            purchase_order_items.actual_price::text,
+            purchase_actuals.actual_price::text,
+            ''
+          ) as "actualPrice",
           (
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null

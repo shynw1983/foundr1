@@ -183,6 +183,7 @@ create table if not exists purchase_order_items (
 
 alter table purchase_order_items add column if not exists brand_id uuid references brands(id);
 alter table purchase_order_items add column if not exists actual_quantity numeric(12, 2);
+alter table purchase_order_items add column if not exists actual_price numeric(12, 2);
 alter table purchase_order_items add column if not exists procurement_note text;
 alter table purchase_order_items add column if not exists price_exception_note text;
 alter table purchase_order_items add column if not exists selected_supplier_id uuid references suppliers(id);
