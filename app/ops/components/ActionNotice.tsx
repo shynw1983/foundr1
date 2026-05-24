@@ -43,6 +43,9 @@ export function ActionNotice({
 
   return (
     <div className={`action-notice ${notice.tone === "info" ? "is-info" : ""}`} role="status" aria-live="polite">
+      <span className="action-notice-icon" aria-hidden="true">
+        {notice.tone === "info" ? "i" : "✓"}
+      </span>
       <span>{notice.message}</span>
       <button type="button" onClick={onClose} aria-label="通知を閉じる">
         ×
