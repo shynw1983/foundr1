@@ -6,7 +6,6 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  brands,
   orders,
   products as initialProducts,
   stores
@@ -20,7 +19,6 @@ type OrderItemDraft = {
   category: string;
   subcategory: string;
   productName: string;
-  brandName: string;
   quantity: number;
   unit: string;
 };
@@ -79,19 +77,6 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
-const defaultUsageBrandOptions = [
-  { label: "共通", value: "共通" }
-];
-
-function createUsageBrandOptions(brandList: typeof brands) {
-  const aliases: Record<string, string> = {
-    共通: "共通"
-  };
-
-  return brandList.length > 0
-    ? brandList.map((brand) => ({ label: aliases[brand.name] ?? brand.name, value: brand.name }))
-    : defaultUsageBrandOptions;
-}
 
 function getDefaultDeadlineValue() {
   const now = new Date();
@@ -186,7 +171,6 @@ function createStoreFeedbackItems(
 export default function OrdersPage() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
-  const [brandsData, setBrandsData] = useState<typeof brands>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
@@ -198,7 +182,6 @@ export default function OrdersPage() {
       category: "",
       subcategory: "",
       productName: "",
-      brandName: defaultUsageBrandOptions[0].value,
       quantity: 1,
       unit: "個"
     }
@@ -211,14 +194,12 @@ export default function OrdersPage() {
 
       const data = await response.json() as {
         stores?: typeof stores;
-        brands?: typeof brands;
         products?: ProductWithCategory[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: PurchaseOrderItem[];
       };
 
       if (data.stores) setStoresData(data.stores);
-      if (data.brands) setBrandsData(data.brands);
       if (data.products) {
         setProducts(data.products);
         setOrderItemDrafts((items) => {
@@ -250,7 +231,6 @@ export default function OrdersPage() {
       ...store,
       label: store.name.replace("納品", "")
     }));
-  const usageBrandOptions = createUsageBrandOptions(brandsData);
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, []);
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
     if (queueFilter === "未完了") return order.status !== "完了";
@@ -282,7 +262,6 @@ export default function OrdersPage() {
         category: firstProduct?.category ?? "",
         subcategory: firstProduct?.subcategory ?? "未分類",
         productName: firstProduct?.name ?? "",
-        brandName: usageBrandOptions[0].value,
         quantity: 1,
         unit: firstProduct?.unit ?? "個"
       }
@@ -349,7 +328,6 @@ export default function OrdersPage() {
       category: product?.category ?? productCategories[0] ?? "",
       subcategory: product?.subcategory ?? "未分類",
       productName: item.productName,
-      brandName: item.brandName ?? usageBrandOptions[0].value,
       quantity: item.requestedQuantity,
       unit: item.unit
     };
@@ -372,7 +350,6 @@ export default function OrdersPage() {
           category: products[0]?.category ?? "",
           subcategory: products[0]?.subcategory ?? "未分類",
           productName: products[0]?.name ?? "",
-          brandName: usageBrandOptions[0].value,
           quantity: 1,
           unit: products[0]?.unit ?? "個"
         }
@@ -445,7 +422,6 @@ export default function OrdersPage() {
           category: firstProduct?.category ?? "",
           subcategory: firstProduct?.subcategory ?? "未分類",
           productName: firstProduct?.name ?? "",
-          brandName: usageBrandOptions[0].value,
           quantity: 1,
           unit: firstProduct?.unit ?? "個"
         }
@@ -471,7 +447,6 @@ export default function OrdersPage() {
     formData.set("note", editingOrder.note);
     editingOrder.items.forEach((item) => {
       formData.append("productName", item.productName);
-      formData.append("itemBrand", item.brandName);
       formData.append("requestedQuantity", String(item.quantity));
       formData.append("requestedUnit", item.unit);
     });
@@ -532,7 +507,7 @@ export default function OrdersPage() {
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗を中心に、商品ごとの用途ブランドと仕入れ商品リストを指定" />
+          <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗と仕入れ商品リストを指定" />
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
@@ -603,18 +578,6 @@ export default function OrdersPage() {
                           .map((product) => (
                             <option value={product.name} key={product.name}>{product.name}</option>
                           ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>用途ブランド</span>
-                      <select
-                        name="itemBrand"
-                        value={item.brandName}
-                        onChange={(event) => updateOrderItemDraft(item.id, { brandName: event.target.value })}
-                      >
-                        {usageBrandOptions.map((brand) => (
-                          <option value={brand.value} key={brand.value}>{brand.label}</option>
-                        ))}
                       </select>
                     </label>
                     <label>
@@ -830,17 +793,6 @@ export default function OrdersPage() {
                           .map((product) => (
                             <option value={product.name} key={product.name}>{product.name}</option>
                           ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>用途ブランド</span>
-                      <select
-                        value={item.brandName}
-                        onChange={(event) => updateEditingOrderItem(item.id, { brandName: event.target.value })}
-                      >
-                        {usageBrandOptions.map((brand) => (
-                          <option value={brand.value} key={brand.value}>{brand.label}</option>
-                        ))}
                       </select>
                     </label>
                     <label>
