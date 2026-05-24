@@ -2730,29 +2730,32 @@ button {
 
   .sidebar-user {
     order: 2;
-    flex: 0 0 auto;
+    flex: 0 1 176px;
     margin: 0;
     padding: 0;
     border-bottom: 0;
   }
 
   .sidebar-user .user-badge {
-    width: auto;
-    min-width: 178px;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
   }
 
   .mobile-nav-menu {
     order: 3;
     position: relative;
-    flex: 0 0 auto;
+    flex: 0 0 132px;
     display: block;
   }
 
   .mobile-nav-menu summary {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     min-height: 42px;
+    width: 100%;
     padding: 0 12px;
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 8px;
@@ -2974,13 +2977,14 @@ button {
   }
 
   .sidebar-user .user-badge {
-    min-width: 132px;
+    width: 100%;
+    min-width: 0;
     min-height: 42px;
     padding: 0 10px;
   }
 
   .sidebar-user .user-badge-name {
-    max-width: 58px;
+    max-width: 46px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3002,15 +3006,15 @@ button {
 
   .sidebar-user {
     order: 2;
-    flex: 0 0 auto;
+    flex: 0 1 132px;
     margin: 0;
     padding: 0;
     border-bottom: 0;
   }
 
   .sidebar-user .user-badge {
-    width: auto;
-    min-width: 178px;
+    width: 100%;
+    min-width: 0;
   }
 
   .topbar,
@@ -3059,8 +3063,15 @@ button {
 
   .mobile-nav-menu {
     order: 3;
+    flex: 0 0 132px;
     display: grid;
     gap: 5px;
+  }
+
+  .mobile-nav-menu summary {
+    justify-content: center;
+    width: 100%;
+    min-height: 42px;
   }
 
   .mobile-nav-list {
