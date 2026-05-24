@@ -2424,6 +2424,38 @@ button {
     background: white;
   }
 
+  .supplier-admin-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .supplier-admin-row > div:first-child {
+    min-width: 0;
+  }
+
+  .supplier-admin-row strong,
+  .supplier-admin-row p,
+  .supplier-admin-row small {
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+  }
+
+  .supplier-admin-row .supplier-type {
+    justify-self: start;
+  }
+
+  .supplier-admin-row .row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .supplier-admin-row .row-actions .text-button {
+    justify-content: center;
+    min-height: 40px;
+  }
+
   .procurement-panel {
     padding: 0;
     border: 0;
