@@ -70,27 +70,27 @@ export default function ProductsPage() {
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
 
+  async function loadProductData() {
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!response.ok) return;
+
+    const data = await response.json() as {
+      brands?: typeof brands;
+      products?: ProductWithCategory[];
+      suppliers?: Supplier[];
+      productCategories?: CategoryItem[];
+      productSubcategories?: SubcategoryItem[];
+    };
+
+    if (data.brands) setBrandsData(data.brands);
+    if (data.products) setProducts(data.products);
+    if (data.suppliers) setSuppliers(data.suppliers);
+    if (data.productCategories) setCategoryMaster(data.productCategories);
+    if (data.productSubcategories) setSubcategoryMaster(data.productSubcategories);
+    setDataSource("neon");
+  }
+
   useEffect(() => {
-    async function loadProductData() {
-      const response = await fetch("/api/dashboard");
-      if (!response.ok) return;
-
-      const data = await response.json() as {
-        brands?: typeof brands;
-        products?: ProductWithCategory[];
-        suppliers?: Supplier[];
-        productCategories?: CategoryItem[];
-        productSubcategories?: SubcategoryItem[];
-      };
-
-      if (data.brands) setBrandsData(data.brands);
-      if (data.products) setProducts(data.products);
-      if (data.suppliers) setSuppliers(data.suppliers);
-      if (data.productCategories) setCategoryMaster(data.productCategories);
-      if (data.productSubcategories) setSubcategoryMaster(data.productSubcategories);
-      setDataSource("neon");
-    }
-
     void loadProductData();
   }, []);
 
@@ -154,11 +154,7 @@ export default function ProductsPage() {
       return;
     }
 
-    setProducts((items) =>
-      target.index >= items.length
-        ? [...items, target.value]
-        : items.map((item, index) => (index === target.index ? target.value : item))
-    );
+    await loadProductData();
     setEditTarget(null);
   }
 

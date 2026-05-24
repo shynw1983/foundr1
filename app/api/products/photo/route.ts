@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
       access: "private"
     });
-    const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}`;
+    const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 
     if (productName && productName !== "new-product") {
       await sql`
