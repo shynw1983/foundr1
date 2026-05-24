@@ -485,9 +485,9 @@ export default function ProductsPage() {
                       )}
                     </div>
                     <div>
+                      <small>基本情報</small>
                       <strong>{product.name || "未設定の商品"}</strong>
                       <p>{product.productBrandName || "商品ブランド未設定"}</p>
-                      <small>写真・基本情報</small>
                     </div>
                   </div>
                   <span className="product-master-cell" data-label="大分類">{product.category}</span>
@@ -500,7 +500,23 @@ export default function ProductsPage() {
                     <span><small>小分類</small><strong>{product.subcategory || "未分類"}</strong></span>
                     <span><small>単位</small><strong>{product.unit}</strong></span>
                     <span><small>保管</small><strong>{product.storageType || "未設定"}</strong></span>
-                    <span><small>参考価格</small><strong>¥{product.referencePrice}</strong></span>
+                  </div>
+                  <div className="mobile-product-price-row">
+                    <span className="mobile-product-price"><small>参考価格</small><strong>¥{product.referencePrice}</strong></span>
+                    <div className="mobile-product-actions">
+                      <button
+                        className="text-button"
+                        onClick={() => setEditTarget({ type: "product", index: productIndex, value: product, originalName: product.name })}
+                      >
+                        編集
+                      </button>
+                      <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                        複製
+                      </button>
+                      <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                        削除
+                      </button>
+                    </div>
                   </div>
                   <div className="row-actions">
                     <button
@@ -889,7 +905,7 @@ function ProductEditDialog({
                   }
                 >
                   {field.options.map((option) => (
-                    <option value={option} key={option}>{option}</option>
+                    <option value={option} key={option}>{option || field.emptyLabel || ""}</option>
                   ))}
                 </select>
               ) : (
@@ -985,7 +1001,7 @@ function getProductFields(
   brandsData: typeof brands,
   categoryOptions: string[],
   subcategoryOptions: string[]
-): Array<{ key: string; label: string; type?: "text"; inputMode?: "decimal"; options?: string[] }> {
+): Array<{ key: string; label: string; type?: "text"; inputMode?: "decimal"; options?: string[]; emptyLabel?: string }> {
   const supplierNames = suppliers.map((supplier) => supplier.name);
   const brandNames = brandsData.map((brand) => brand.name);
 
@@ -1003,7 +1019,7 @@ function getProductFields(
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },
-    { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]) },
+    { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
   ];
