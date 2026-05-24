@@ -1,6 +1,21 @@
 import { redirect } from "next/navigation";
 import { sql } from "../../../lib/db";
 
+function toTokyoDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+
+  return {
+    year: parts.find((part) => part.type === "year")?.value ?? "",
+    month: parts.find((part) => part.type === "month")?.value ?? "",
+    day: parts.find((part) => part.type === "day")?.value ?? ""
+  };
+}
+
 function formatDeadlineLabel(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
 
@@ -9,30 +24,36 @@ function formatDeadlineLabel(value: string) {
   }
 
   const [, year, month, day, hour, minute] = match;
-  const deadlineDate = new Date(Number(year), Number(month) - 1, Number(day));
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  const sameDate = (target: Date) =>
-    target.getFullYear() === deadlineDate.getFullYear() &&
-    target.getMonth() === deadlineDate.getMonth() &&
-    target.getDate() === deadlineDate.getDate();
+  const today = toTokyoDateParts(new Date());
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = toTokyoDateParts(tomorrowDate);
 
-  if (sameDate(today)) {
+  if (today.year === year && today.month === month && today.day === day) {
     return `本日 ${hour}:${minute}`;
   }
 
-  if (sameDate(tomorrow)) {
+  if (tomorrow.year === year && tomorrow.month === month && tomorrow.day === day) {
     return `明日 ${hour}:${minute}`;
   }
 
   return `${month}/${day} ${hour}:${minute}`;
 }
 
+function deadlineAtFromInput(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute] = match;
+  return `${year}-${month}-${day} ${hour}:${minute}:00+09:00`;
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const storeName = String(formData.get("store") ?? "");
-  const deadline = formatDeadlineLabel(String(formData.get("deadline") ?? ""));
+  const deadlineInput = String(formData.get("deadline") ?? "");
+  const deadline = formatDeadlineLabel(deadlineInput);
+  const deadlineAt = deadlineAtFromInput(deadlineInput);
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
@@ -47,6 +68,7 @@ export async function POST(request: Request) {
       order_no,
       store_id,
       deadline_label,
+      deadline_at,
       requested_item_count,
       priority,
       status,
@@ -56,6 +78,7 @@ export async function POST(request: Request) {
       ${orderNo},
       stores.id,
       ${deadline},
+      ${deadlineAt},
       ${itemCount},
       ${priority},
       ${"仕入れ待ち"},
@@ -103,7 +126,9 @@ export async function PUT(request: Request) {
   const formData = await request.formData();
   const orderId = String(formData.get("orderId") ?? "");
   const storeName = String(formData.get("store") ?? "");
-  const deadline = formatDeadlineLabel(String(formData.get("deadline") ?? ""));
+  const deadlineInput = String(formData.get("deadline") ?? "");
+  const deadline = formatDeadlineLabel(deadlineInput);
+  const deadlineAt = deadlineAtFromInput(deadlineInput);
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
@@ -157,6 +182,7 @@ export async function PUT(request: Request) {
     set
       store_id = stores.id,
       deadline_label = ${deadline},
+      deadline_at = ${deadlineAt},
       requested_item_count = ${productNames.length},
       priority = ${priority},
       note = ${note},

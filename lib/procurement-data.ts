@@ -1,5 +1,91 @@
 import { sql } from "./db";
 
+type DateParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+
+function toTokyoDateParts(value: Date): DateParts {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(value);
+
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value ?? 0),
+    month: Number(parts.find((part) => part.type === "month")?.value ?? 0),
+    day: Number(parts.find((part) => part.type === "day")?.value ?? 0),
+    hour: Number(parts.find((part) => part.type === "hour")?.value ?? 0),
+    minute: Number(parts.find((part) => part.type === "minute")?.value ?? 0)
+  };
+}
+
+function addDays(parts: DateParts, days: number) {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return {
+    ...parts,
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate()
+  };
+}
+
+function dateKey(parts: Pick<DateParts, "year" | "month" | "day">) {
+  return Date.UTC(parts.year, parts.month - 1, parts.day);
+}
+
+function parseLegacyDeadline(label: string, createdAt: string | Date): DateParts | null {
+  const timeMatch = label.match(/(\d{1,2}):(\d{2})/);
+  if (!timeMatch) return null;
+
+  const base = toTokyoDateParts(new Date(createdAt));
+  let dateParts = base;
+
+  if (label.includes("明日")) {
+    dateParts = addDays(base, 1);
+  } else if (label.includes("昨日")) {
+    dateParts = addDays(base, -1);
+  } else {
+    const dateMatch = label.match(/(\d{1,2})\/(\d{1,2})/);
+    if (dateMatch) {
+      dateParts = {
+        ...base,
+        month: Number(dateMatch[1]),
+        day: Number(dateMatch[2])
+      };
+    }
+  }
+
+  return {
+    ...dateParts,
+    hour: Number(timeMatch[1]),
+    minute: Number(timeMatch[2])
+  };
+}
+
+function formatDeadlineForToday(deadlineAt: string | Date | null, deadlineLabel: string, createdAt: string | Date) {
+  const deadlineParts = deadlineAt ? toTokyoDateParts(new Date(deadlineAt)) : parseLegacyDeadline(deadlineLabel, createdAt);
+  if (!deadlineParts) return deadlineLabel;
+
+  const today = toTokyoDateParts(new Date());
+  const diffDays = Math.round((dateKey(deadlineParts) - dateKey(today)) / 86_400_000);
+  const time = `${String(deadlineParts.hour).padStart(2, "0")}:${String(deadlineParts.minute).padStart(2, "0")}`;
+
+  if (diffDays === 0) return `本日 ${time}`;
+  if (diffDays === 1) return `明日 ${time}`;
+  if (diffDays === -1) return `昨日 ${time}`;
+
+  return `${String(deadlineParts.month).padStart(2, "0")}/${String(deadlineParts.day).padStart(2, "0")} ${time}`;
+}
+
 export async function getProcurementDashboardData() {
   const [
     stores,
@@ -157,7 +243,9 @@ export async function getProcurementDashboardData() {
           purchase_orders.order_no as id,
           stores.name as store,
           coalesce(order_brands.brand_names, brands.name, '共通') as brand,
-          coalesce(purchase_orders.deadline_label, '') as deadline,
+          coalesce(purchase_orders.deadline_label, '') as "deadlineLabel",
+          purchase_orders.deadline_at as "deadlineAt",
+          purchase_orders.created_at as "createdAt",
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
           coalesce(purchase_orders.note, '') as note,
@@ -274,6 +362,11 @@ export async function getProcurementDashboardData() {
       `
     ]);
 
+  const displayOrders = orders.map((order) => ({
+    ...order,
+    deadline: formatDeadlineForToday(order.deadlineAt, order.deadlineLabel, order.createdAt)
+  }));
+
   return {
     stores,
     brands,
@@ -284,7 +377,7 @@ export async function getProcurementDashboardData() {
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,
-    orders,
+    orders: displayOrders,
     purchaseOrderItems,
     deliveryBatches
   };
