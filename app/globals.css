@@ -1978,7 +1978,7 @@ button {
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto;
+  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto auto;
   align-items: start;
   gap: 8px;
   min-height: 52px;
@@ -2116,6 +2116,21 @@ button {
   background: var(--red-soft);
 }
 
+.source-change-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .exception-modal {
   width: min(640px, 100%);
 }
@@ -2141,6 +2156,44 @@ button {
   background: white;
   font-size: 12px;
   font-weight: 800;
+}
+
+.supplier-choice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.supplier-choice {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+
+.supplier-choice span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.supplier-choice strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.supplier-choice.is-selected {
+  border-color: rgba(40, 105, 168, 0.45);
+  background: var(--blue-soft);
 }
 
 .row-heading {
@@ -3477,8 +3530,8 @@ button {
     grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
       "check photo product product"
-      "supplier supplier supplier supplier"
-      "actual actual diff exception";
+      "actual actual diff exception"
+      "source source source source";
     align-items: end;
     gap: 8px;
     padding: 8px;
@@ -3509,11 +3562,6 @@ button {
     min-width: 0;
   }
 
-  .procurement-task .task-supplier {
-    grid-area: supplier;
-    width: 100%;
-  }
-
   .procurement-task .task-actual {
     grid-area: actual;
     width: 100%;
@@ -3529,6 +3577,11 @@ button {
     align-self: end;
   }
 
+  .procurement-task > .source-change-button {
+    grid-area: source;
+    width: 100%;
+  }
+
   .task-product-line strong {
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -3539,7 +3592,8 @@ button {
   .procurement-task label > span,
   .task-product small,
   .quantity-diff,
-  .exception-button {
+  .exception-button,
+  .source-change-button {
     font-size: 11px;
   }
 

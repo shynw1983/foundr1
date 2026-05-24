@@ -69,6 +69,10 @@ type DeliveryBatch = {
   createdLabel: string;
   storeConfirmedLabel?: string;
 };
+type SupplierChoice = {
+  supplier: string;
+  role: string;
+};
 
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
@@ -188,6 +192,53 @@ function getProcurementSupplier(
 function findProcurementProduct(item: ProcurementTaskItem, productList: Product[]) {
   return productList.find((product) => product.id === item.productId)
     ?? productList.find((product) => product.name === item.productName);
+}
+
+function normalizeSupplierName(value?: string) {
+  const supplier = String(value ?? "").trim();
+  if (!supplier || supplier === "無" || supplier === "未設定") return "";
+
+  return supplier;
+}
+
+function getSupplierChoicesForItem(
+  item: ProcurementTaskItem,
+  product: Product | undefined,
+  supplierOptions: ProductSupplierGroup[]
+): SupplierChoice[] {
+  const choices = new Map<string, SupplierChoice>();
+  const addChoice = (supplier: string | undefined, role: string) => {
+    const normalizedSupplier = normalizeSupplierName(supplier);
+    if (!normalizedSupplier || choices.has(normalizedSupplier)) return;
+    choices.set(normalizedSupplier, { supplier: normalizedSupplier, role });
+  };
+
+  addChoice(product?.mainSupplier, "主");
+  addChoice(product?.backupSupplier, "予備");
+  supplierOptions
+    .find((group) => group.product === item.productName)
+    ?.options.forEach((option) => addChoice(option.supplier, option.role));
+  addChoice(item.supplier, "現在");
+
+  return Array.from(choices.values());
+}
+
+function getTemporarySupplierNote(note: string) {
+  return note.split(/\r?\n/)
+    .find((line) => line.startsWith("臨時購入先:"))
+    ?.replace("臨時購入先:", "")
+    .trim() ?? "";
+}
+
+function setTemporarySupplierNote(note: string, temporarySupplier: string) {
+  const nextNote = note
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("臨時購入先:"))
+    .join("\n")
+    .trim();
+  const normalizedSupplier = temporarySupplier.trim();
+
+  return [nextNote, normalizedSupplier ? `臨時購入先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
 }
 
 function groupTasksBySupplier(
@@ -326,6 +377,7 @@ export default function ProcurementPage() {
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
+  const [activeSupplierItemId, setActiveSupplierItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
@@ -522,6 +574,7 @@ export default function ProcurementPage() {
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
+  const activeSupplierItem = procurementTaskItems.find((item) => item.id === activeSupplierItemId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const displayedPurchaseOrders = (focusedOrderId
     ? purchaseOrders.filter((order) => order.id === focusedOrderId)
@@ -656,6 +709,7 @@ export default function ProcurementPage() {
                               const product = findProcurementProduct(item, products);
                               const photoSrc = getProductPhotoSrc(product?.photoUrl);
                               const productSpec = product?.packageSpec || product?.specNote;
+                              const temporarySupplierNote = getTemporarySupplierNote(item.note);
 
                               return (
                                 <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -686,21 +740,11 @@ export default function ProcurementPage() {
                                       {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
                                       {item.deliveryStatus === "delivered" ? <span>配達済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
+                                      {temporarySupplierNote ? <span>臨時 {temporarySupplierNote}</span> : null}
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
                                   </div>
-                                  <label className="task-supplier">
-                                    <span>仕入れ先</span>
-                                    <select
-                                      value={item.supplier || getProcurementSupplier(item.productName, products, productSupplierOptions)}
-                                      onChange={(event) => updateProcurementTaskItem(item.id, { supplier: event.target.value })}
-                                    >
-                                      {suppliers.map((supplier) => (
-                                        <option value={supplier.name} key={supplier.name}>{supplier.name}</option>
-                                      ))}
-                                    </select>
-                                  </label>
                                   <label className="task-actual">
                                     <span>実数</span>
                                     <input
@@ -721,6 +765,13 @@ export default function ProcurementPage() {
                                     onClick={() => setActiveExceptionItemId(item.id)}
                                   >
                                     異常報告
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="source-change-button"
+                                    onClick={() => setActiveSupplierItemId(item.id)}
+                                  >
+                                    購入先変更
                                   </button>
                                 </div>
                               );
@@ -752,6 +803,16 @@ export default function ProcurementPage() {
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
           onClose={() => setActiveExceptionItemId(null)}
           onSaved={() => showNotice("異常報告を保存しました。")}
+        />
+      ) : null}
+      {activeSupplierItem ? (
+        <SupplierChangeDialog
+          item={activeSupplierItem}
+          choices={getSupplierChoicesForItem(activeSupplierItem, findProcurementProduct(activeSupplierItem, products), productSupplierOptions)}
+          plannedSupplier={getProcurementSupplier(activeSupplierItem.productName, products, productSupplierOptions)}
+          onChange={(next) => updateProcurementTaskItem(activeSupplierItem.id, next)}
+          onClose={() => setActiveSupplierItemId(null)}
+          onSaved={() => showNotice("購入先を記録しました。")}
         />
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
@@ -966,6 +1027,100 @@ function ExceptionReportDialog({
           </button>
           <button type="submit" className="primary-button">
             保存
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function SupplierChangeDialog({
+  item,
+  choices,
+  plannedSupplier,
+  onChange,
+  onClose,
+  onSaved
+}: {
+  item: ProcurementTaskItem;
+  choices: SupplierChoice[];
+  plannedSupplier: string;
+  onChange: (next: Partial<ProcurementTaskItem>) => void;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
+  const currentSupplier = item.supplier || plannedSupplier;
+
+  function saveTemporarySupplier() {
+    onChange({
+      note: setTemporarySupplierNote(item.note, temporarySupplier)
+    });
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="supplier-change-title">
+      <form
+        className="edit-modal exception-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveTemporarySupplier();
+        }}
+      >
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Purchase Source</p>
+            <h3 id="supplier-change-title">購入先変更</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
+            ×
+          </button>
+        </div>
+        <div className="exception-summary">
+          <strong>{item.productName}</strong>
+          <span>予定 {plannedSupplier}</span>
+          <span>現在 {currentSupplier}</span>
+        </div>
+        <div className="supplier-choice-list">
+          {choices.map((choice) => (
+            <button
+              type="button"
+              className={choice.supplier === currentSupplier ? "supplier-choice is-selected" : "supplier-choice"}
+              onClick={() => {
+                onChange({
+                  supplier: choice.supplier,
+                  note: setTemporarySupplierNote(item.note, "")
+                });
+                onSaved();
+                onClose();
+              }}
+              key={`${choice.role}-${choice.supplier}`}
+            >
+              <span>{choice.role}</span>
+              <strong>{choice.supplier}</strong>
+            </button>
+          ))}
+          {choices.length === 0 ? <div className="empty-state">選択できる仕入れ先がありません</div> : null}
+        </div>
+        <div className="edit-fields">
+          <label>
+            <span>臨時購入先</span>
+            <input
+              type="text"
+              value={temporarySupplier}
+              placeholder="例: 近隣スーパー、商店街の青果店"
+              onChange={(event) => setTemporarySupplier(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            キャンセル
+          </button>
+          <button type="submit" className="primary-button">
+            臨時購入を記録
           </button>
         </div>
       </form>
