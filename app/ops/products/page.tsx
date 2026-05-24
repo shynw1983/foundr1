@@ -185,6 +185,20 @@ export default function ProductsPage() {
     });
   }
 
+  function copyProductToNewDraft(product: ProductWithCategory) {
+    setEditTarget({
+      type: "product",
+      index: products.length,
+      value: {
+        ...product,
+        name: "",
+        photoUrl: ""
+      }
+    });
+
+    showNotice("商品情報をコピーしました。商品名を入力して保存してください。", "info");
+  }
+
   function deleteProduct(product: Product) {
     if (!window.confirm(`${product.name} を削除しますか？`)) return;
 
@@ -483,6 +497,9 @@ export default function ProductsPage() {
                       onClick={() => setEditTarget({ type: "product", index: productIndex, value: product, originalName: product.name })}
                     >
                       編集
+                    </button>
+                    <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                      複製
                     </button>
                     <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
                       削除
