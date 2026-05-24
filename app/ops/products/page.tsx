@@ -56,6 +56,8 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "storageType", label: "保管" },
   { key: "referencePrice", label: "参考価格" }
 ];
+const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
+const customUnitOption = "__custom_unit__";
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -948,6 +950,26 @@ function ProductEditDialog({
   const [originSearch, setOriginSearch] = useState("");
   const selectedOriginCountries = target.value.originCountries ?? [];
   const filteredOriginOptions = originOptions.filter((option) => option.includes(originSearch.trim()));
+  const currentUnit = String(target.value.unit ?? "");
+  const [isCustomUnitMode, setIsCustomUnitMode] = useState(() =>
+    Boolean(currentUnit && !commonUnitOptions.includes(currentUnit))
+  );
+
+  useEffect(() => {
+    if (currentUnit && !commonUnitOptions.includes(currentUnit)) {
+      setIsCustomUnitMode(true);
+    }
+  }, [currentUnit]);
+
+  function setProductValue(key: string, value: string) {
+    onChange({
+      ...target,
+      value: {
+        ...target.value,
+        [key]: value
+      }
+    });
+  }
 
   function setOriginCountry(country: string, checked: boolean) {
     const nextCountries = checked
@@ -1081,18 +1103,39 @@ function ProductEditDialog({
           {fields.map((field) => (
             <label key={field.key}>
               <span>{field.label}</span>
-              {field.options ? (
+              {field.key === "unit" ? (
+                <div className="unit-picker">
+                  <select
+                    value={isCustomUnitMode ? customUnitOption : currentUnit}
+                    onChange={(event) => {
+                      if (event.target.value === customUnitOption) {
+                        setIsCustomUnitMode(true);
+                        if (commonUnitOptions.includes(currentUnit)) setProductValue("unit", "");
+                        return;
+                      }
+
+                      setIsCustomUnitMode(false);
+                      setProductValue("unit", event.target.value);
+                    }}
+                  >
+                    <option value="">選択してください</option>
+                    {commonUnitOptions.map((option) => (
+                      <option value={option} key={option}>{option}</option>
+                    ))}
+                    <option value={customUnitOption}>その他（自由入力）</option>
+                  </select>
+                  {isCustomUnitMode ? (
+                    <input
+                      value={currentUnit}
+                      placeholder="例：ケース、パック、束"
+                      onChange={(event) => setProductValue("unit", event.target.value)}
+                    />
+                  ) : null}
+                </div>
+              ) : field.options ? (
                 <select
                   value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
-                  onChange={(event) =>
-                    onChange({
-                      ...target,
-                      value: {
-                        ...target.value,
-                        [field.key]: event.target.value
-                      }
-                    })
-                  }
+                  onChange={(event) => setProductValue(field.key, event.target.value)}
                 >
                   {field.options.map((option) => (
                     <option value={option} key={option}>{option || field.emptyLabel || ""}</option>
@@ -1104,13 +1147,7 @@ function ProductEditDialog({
                   type={field.type ?? "text"}
                   inputMode={field.inputMode}
                   onChange={(event) => {
-                    onChange({
-                      ...target,
-                      value: {
-                        ...target.value,
-                        [field.key]: event.target.value
-                      }
-                    });
+                    setProductValue(field.key, event.target.value);
                   }}
                 />
               )}
@@ -1215,7 +1252,7 @@ function getProductFields(
       options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
     { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
-    { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
+    { key: "unit", label: "単位" },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
     { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
