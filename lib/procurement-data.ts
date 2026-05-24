@@ -348,6 +348,7 @@ export async function getProcurementDashboardData() {
           select
             purchase_actuals.id,
             purchase_actuals.actual_quantity,
+            purchase_actuals.actual_price,
             purchase_actuals.note,
             purchase_actuals.price_is_exception
           from purchase_actuals

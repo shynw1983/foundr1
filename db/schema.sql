@@ -205,6 +205,8 @@ create table if not exists purchase_actuals (
   recorded_at timestamptz not null default now()
 );
 
+alter table purchase_actuals add column if not exists actual_price numeric(12, 2);
+
 create table if not exists delivery_batches (
   id uuid primary key default gen_random_uuid(),
   purchase_order_id uuid not null references purchase_orders(id) on delete cascade,

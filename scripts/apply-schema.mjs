@@ -28,7 +28,7 @@ const tables = await sql`
     and table_name in ('delivery_batches', 'delivery_batch_items')
   order by table_name
 `;
-const columns = await sql`
+const orderItemColumns = await sql`
   select column_name
   from information_schema.columns
   where table_schema = 'public'
@@ -36,5 +36,13 @@ const columns = await sql`
     and column_name in ('actual_quantity', 'actual_price', 'brand_id', 'procurement_note', 'price_exception_note')
   order by column_name
 `;
+const actualColumns = await sql`
+  select column_name
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'purchase_actuals'
+    and column_name in ('actual_price')
+  order by column_name
+`;
 
-console.log(JSON.stringify({ tables, columns }, null, 2));
+console.log(JSON.stringify({ tables, orderItemColumns, actualColumns }, null, 2));
