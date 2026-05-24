@@ -754,7 +754,15 @@ export default function OrdersPage() {
           <form className="inline-create-form" onSubmit={submitNewOrder}>
             <label>
               <span>納品先店舗</span>
-              <select name="store" value={selectedDraftStore} onChange={(event) => setDraftStore(event.target.value)}>
+              <select
+                name="store"
+                value={selectedDraftStore}
+                onChange={(event) => {
+                  setDraftStore(event.target.value);
+                  setDraftRequesterStaffId("");
+                  setDraftBuyerStaffId("");
+                }}
+              >
                 {orderableStores.map((store) => (
                   <option value={store.name} key={store.name}>{store.label}</option>
                 ))}
