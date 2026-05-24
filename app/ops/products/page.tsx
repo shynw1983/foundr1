@@ -849,7 +849,7 @@ export default function ProductsPage() {
                             <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
                               編集
                             </button>
-                            <button type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
+                            <button className="danger-button" type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
                               削除
                             </button>
                           </span>

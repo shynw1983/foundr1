@@ -867,7 +867,7 @@ export default function OrdersPage() {
                     </div>
                     <button
                       type="button"
-                      className="text-button"
+                      className="text-button danger-button"
                       onClick={() => removeOrderItemDraft(item.id)}
                     >
                       削除
@@ -1129,7 +1129,7 @@ export default function OrdersPage() {
                     </div>
                     <button
                       type="button"
-                      className="text-button"
+                      className="text-button danger-button"
                       onClick={() => removeEditingOrderItem(item.id)}
                       disabled={editingOrder.items.length === 1}
                     >
