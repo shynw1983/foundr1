@@ -1,9 +1,6 @@
 import { put } from "@vercel/blob";
 import { requireMasterOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { normalizeProductPhoto } from "../../../../lib/product-photo";
-
-export const runtime = "nodejs";
 
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
@@ -35,9 +32,9 @@ export async function POST(request: Request) {
       );
     }
 
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase() || "product";
-    const normalizedPhoto = await normalizeProductPhoto(Buffer.from(await file.arrayBuffer()));
-    const blob = await put(`products/${safeName}-${Date.now()}.jpg`, new Blob([normalizedPhoto], { type: "image/jpeg" }), {
+    const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
       access: "private"
     });
     const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;

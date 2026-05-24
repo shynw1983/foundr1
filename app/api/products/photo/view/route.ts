@@ -2,9 +2,6 @@ import { get } from "@vercel/blob";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { authCookieName, readSessionToken } from "../../../../../lib/auth";
-import { normalizeProductPhoto } from "../../../../../lib/product-photo";
-
-export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
@@ -37,26 +34,12 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const sourceBytes = Buffer.from(await new Response(result.stream).arrayBuffer());
-
-  try {
-    const normalizedPhoto = await normalizeProductPhoto(sourceBytes);
-    return new NextResponse(normalizedPhoto, {
-      headers: {
-        "Content-Type": "image/jpeg",
-        "X-Content-Type-Options": "nosniff",
-        ETag: `${result.blob.etag}-normalized`,
-        "Cache-Control": "private, no-cache"
-      }
-    });
-  } catch {
-    return new NextResponse(sourceBytes, {
-      headers: {
-        "Content-Type": result.blob.contentType,
-        "X-Content-Type-Options": "nosniff",
-        ETag: result.blob.etag,
-        "Cache-Control": "private, no-cache"
-      }
-    });
-  }
+  return new NextResponse(result.stream, {
+    headers: {
+      "Content-Type": result.blob.contentType,
+      "X-Content-Type-Options": "nosniff",
+      ETag: result.blob.etag,
+      "Cache-Control": "private, no-cache"
+    }
+  });
 }
