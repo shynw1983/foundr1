@@ -2301,7 +2301,32 @@ button {
 
   .sidebar {
     position: static;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     height: auto;
+    padding: 10px 14px;
+  }
+
+  .brand-block {
+    min-width: 0;
+    padding: 0;
+  }
+
+  .brand-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .brand-block h1 {
+    font-size: 19px;
+    line-height: 1.1;
+  }
+
+  .brand-block .eyebrow {
+    margin-bottom: 2px;
+    font-size: 10px;
   }
 
   .nav-list {
