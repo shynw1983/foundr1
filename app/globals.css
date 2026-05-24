@@ -1077,7 +1077,7 @@ button {
   padding: 0 10px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .product-master-row {
@@ -1091,7 +1091,8 @@ button {
 .product-master-row p {
   margin: 3px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .product-title-block {
@@ -1109,6 +1110,11 @@ button {
   white-space: nowrap;
 }
 
+.product-title-block strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .product-title-photo {
   display: grid;
   width: 46px;
@@ -1120,7 +1126,7 @@ button {
   background: white;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .product-title-photo img {
@@ -1131,7 +1137,16 @@ button {
 
 .product-master-row > span,
 .product-master-row > strong {
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.product-master-row > strong {
+  font-weight: 500;
+}
+
+.product-master-row .row-actions .text-button {
+  font-weight: 600;
 }
 
 .product-master-cell::before {
@@ -1167,7 +1182,7 @@ button {
   color: var(--blue);
   background: white;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
   list-style: none;
 }
