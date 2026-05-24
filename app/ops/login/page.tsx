@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 function getDefaultPathForRole(role?: string) {
   if (role === "buyer") return "/ops/procurement";
   if (role === "staff") return "/ops/orders";
+  if (role === "store_owner") return "/ops";
 
   return "/ops";
 }
@@ -45,7 +46,7 @@ export default function OpsLoginPage() {
         <div>
           <p className="eyebrow">Foundr1 Ops</p>
           <h1>スタッフログイン</h1>
-          <p>仕入れ管理システムにログイン</p>
+          <p>発注管理システムにログイン</p>
         </div>
         <form className="login-form" onSubmit={submitLogin}>
           <label>

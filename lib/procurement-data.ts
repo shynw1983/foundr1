@@ -1,3 +1,5 @@
+import { getSessionStoreScope } from "./api-auth";
+import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
 
 type DateParts = {
@@ -86,7 +88,8 @@ function formatDeadlineForToday(deadlineAt: string | Date | null, deadlineLabel:
   return `${String(deadlineParts.month).padStart(2, "0")}/${String(deadlineParts.day).padStart(2, "0")} ${time}`;
 }
 
-export async function getProcurementDashboardData() {
+export async function getProcurementDashboardData(session?: EmployeeSession) {
+  const scope = session ? await getSessionStoreScope(session) : { allStores: true, storeIds: [] };
   const [
     stores,
     brands,
@@ -111,6 +114,7 @@ export async function getProcurementDashboardData() {
         from stores
         left join store_brands on store_brands.store_id = stores.id
         left join brands on brands.id = store_brands.brand_id
+        where (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
         group by stores.id
         order by stores.name
       `,
@@ -167,6 +171,18 @@ export async function getProcurementDashboardData() {
             else '未設定'
           end as brand
         from products
+        where (
+          ${scope.allStores}
+          or coalesce(products.brand_scope, 'unset') = 'common'
+          or exists (
+            select 1
+            from product_brand_usages scoped_product_brands
+            join store_brands scoped_store_brands
+              on scoped_store_brands.brand_id = scoped_product_brands.brand_id
+            where scoped_product_brands.product_id = products.id
+              and scoped_store_brands.store_id::text = any(${scope.storeIds})
+          )
+        )
         order by name
       `,
       sql`
@@ -212,6 +228,15 @@ export async function getProcurementDashboardData() {
         from product_brand_usages
         join products on products.id = product_brand_usages.product_id
         join brands on brands.id = product_brand_usages.brand_id
+        where (
+          ${scope.allStores}
+          or exists (
+            select 1
+            from store_brands scoped_store_brands
+            where scoped_store_brands.brand_id = product_brand_usages.brand_id
+              and scoped_store_brands.store_id::text = any(${scope.storeIds})
+          )
+        )
         order by products.name, brands.name
       `,
       sql`
@@ -239,6 +264,18 @@ export async function getProcurementDashboardData() {
         join products on products.id = product_supplier_options.product_id
         join suppliers on suppliers.id = product_supplier_options.supplier_id
         where product_supplier_options.is_active = true
+          and (
+            ${scope.allStores}
+            or coalesce(products.brand_scope, 'unset') = 'common'
+            or exists (
+              select 1
+              from product_brand_usages scoped_product_brands
+              join store_brands scoped_store_brands
+                on scoped_store_brands.brand_id = scoped_product_brands.brand_id
+              where scoped_product_brands.product_id = products.id
+                and scoped_store_brands.store_id::text = any(${scope.storeIds})
+            )
+          )
         group by products.name
         order by products.name
       `,
@@ -261,7 +298,7 @@ export async function getProcurementDashboardData() {
             when order_progress.delivered_count = order_progress.total_count then '確認待ち'
             when order_progress.in_delivery_count > 0 then '配送中'
             when order_progress.delivered_count > 0 then '一部納品済み'
-            when order_progress.purchased_count = 0 then '仕入れ待ち'
+            when order_progress.purchased_count = 0 then '発注待ち'
             when order_progress.purchased_count < order_progress.total_count then '一部購入済み'
             else '配送待ち'
           end as status
@@ -291,6 +328,7 @@ export async function getProcurementDashboardData() {
           from purchase_order_items
           where purchase_order_items.purchase_order_id = purchase_orders.id
         ) order_progress on true
+        where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         order by purchase_orders.created_at desc
       `,
       sql`
@@ -357,6 +395,7 @@ export async function getProcurementDashboardData() {
           limit 1
         ) purchase_actuals on true
         left join delivery_batch_items on delivery_batch_items.purchase_order_item_id = purchase_order_items.id
+        where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         order by purchase_orders.created_at desc, purchase_order_items.id
       `,
       sql`
@@ -371,6 +410,7 @@ export async function getProcurementDashboardData() {
         from delivery_batches
         join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id
         left join delivery_batch_items on delivery_batch_items.delivery_batch_id = delivery_batches.id
+        where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         group by delivery_batches.id, purchase_orders.order_no
         order by delivery_batches.created_at desc
       `,
@@ -379,6 +419,8 @@ export async function getProcurementDashboardData() {
           select
             price_records.product_id,
             price_records.supplier_id,
+            price_records.product_id::text as "productId",
+            price_records.supplier_id::text as "supplierId",
             products.name as product,
             coalesce(suppliers.name, '未設定') as supplier,
             price_records.price::float as price,
@@ -406,6 +448,8 @@ export async function getProcurementDashboardData() {
             and product_supplier_options.reference_price > 0
         )
         select
+          latest_prices."productId",
+          latest_prices."supplierId",
           latest_prices.product,
           latest_prices.supplier,
           latest_prices.price as "latestPrice",

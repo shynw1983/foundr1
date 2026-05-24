@@ -1,4 +1,4 @@
-import { requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
@@ -22,6 +22,21 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "到着予定日の形式が不正です。" }, { status: 400 });
   }
 
+  const existingOrder = await sql`
+    select store_id::text as "storeId"
+    from purchase_orders
+    where order_no = ${orderId}
+    limit 1
+  `;
+
+  if (!existingOrder[0]) {
+    return Response.json({ error: "発注依頼が見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, existingOrder[0].storeId)) {
+    return Response.json({ error: "この依頼を操作する権限がありません。" }, { status: 403 });
+  }
+
   const rows = await sql`
     update purchase_orders
     set
@@ -33,7 +48,7 @@ export async function PATCH(request: Request) {
   `;
 
   if (!rows[0]?.id) {
-    return Response.json({ error: "仕入れ依頼が見つかりません。" }, { status: 404 });
+    return Response.json({ error: "発注依頼が見つかりません。" }, { status: 404 });
   }
 
   return Response.json({ ok: true });

@@ -1,3 +1,4 @@
+import { requireMasterOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 async function normalizeStoreBrands(brandNames: string[]) {
@@ -15,6 +16,9 @@ async function normalizeStoreBrands(brandNames: string[]) {
 }
 
 export async function POST(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
@@ -51,6 +55,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const currentName = String(formData.get("currentName") ?? "").trim();
   const nextName = String(formData.get("name") ?? "").trim();
@@ -106,6 +113,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as { name?: string };
 
   if (!body.name) {
@@ -121,7 +131,7 @@ export async function DELETE(request: Request) {
 
   if (Number(linkedOrders[0]?.count ?? 0) > 0) {
     return Response.json(
-      { error: "この店舗は仕入れ依頼で使用されているため削除できません。" },
+      { error: "この店舗は発注依頼で使用されているため削除できません。" },
       { status: 409 }
     );
   }

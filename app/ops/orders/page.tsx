@@ -65,6 +65,9 @@ type EditingOrder = {
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
+  仕入れ完了: "tone-done",
+  発注待ち: "tone-waiting",
+  発注中: "tone-active",
   一部完了: "tone-warning",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
@@ -77,8 +80,11 @@ const statusTone: Record<string, string> = {
 };
 
 function formatPurchaseOrderStatus(status: string) {
-  if (status === "一部完了") return "一部購入済み";
+  if (status === "仕入れ待ち") return "発注待ち";
+  if (status === "仕入れ中") return "発注中";
   if (status === "仕入れ完了") return "購入完了";
+  if (status === "一部完了") return "一部購入済み";
+  if (status === "発注完了") return "購入完了";
   if (status === "一部配達済み") return "一部納品済み";
   if (status === "確認待ち") return "店舗確認待ち";
 
@@ -87,12 +93,12 @@ function formatPurchaseOrderStatus(status: string) {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -493,11 +499,11 @@ export default function OrdersPage() {
     });
 
     if (!response.ok) {
-      window.alert("仕入れ依頼を送信できませんでした。");
+      window.alert("発注依頼を送信できませんでした。");
       return;
     }
 
-    showNotice("仕入れ依頼を送信しました。");
+    showNotice("発注依頼を送信しました。");
     setDraftDeadline(getDefaultDeadlineValue());
     setDraftPriority("中");
     setDraftNote("");
@@ -630,13 +636,13 @@ export default function OrdersPage() {
 
     if (!response.ok) {
       const body = await response.json();
-      window.alert(body.error ?? "仕入れ依頼を保存できませんでした。");
+      window.alert(body.error ?? "発注依頼を保存できませんでした。");
       return;
     }
 
     await loadDashboardData();
     setEditingOrder(null);
-    showNotice("仕入れ依頼を更新しました。");
+    showNotice("発注依頼を更新しました。");
   }
 
   return (
@@ -646,7 +652,7 @@ export default function OrdersPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -666,8 +672,8 @@ export default function OrdersPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">店舗からの仕入れ依頼</p>
-            <h2>仕入れ依頼</h2>
+            <p className="eyebrow">店舗からの発注依頼</p>
+            <h2>発注依頼</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -687,7 +693,7 @@ export default function OrdersPage() {
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規仕入れ依頼" subtitle="納品先店舗と依頼商品リストを指定" />
+          <PanelTitle title="新規発注依頼" subtitle="納品先店舗と依頼商品リストを指定" />
           <form className="inline-create-form" onSubmit={submitNewOrder}>
             <label>
               <span>納品先店舗</span>
@@ -826,9 +832,9 @@ export default function OrdersPage() {
         </section>
 
         <section className="workspace-grid">
-          <section className="panel operation-panel" id="仕入れ依頼">
+          <section className="panel operation-panel" id="発注依頼">
             <PanelTitle title="依頼キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
-            <div className="queue-filter-bar" aria-label="仕入れ依頼フィルター">
+            <div className="queue-filter-bar" aria-label="発注依頼フィルター">
               {queueFilters.map((filter) => (
                 <button
                   type="button"
@@ -867,7 +873,7 @@ export default function OrdersPage() {
                     <a
                       className="icon-button"
                       href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
-                      aria-label={`${order.id} の仕入れ管理`}
+                      aria-label={`${order.id} の発注管理`}
                     >
                       <PackageCheck size={18} />
                     </a>
@@ -911,7 +917,7 @@ export default function OrdersPage() {
           <section className="edit-modal order-edit-modal">
             <div className="modal-heading">
               <div>
-                <h3 id="order-edit-title">仕入れ依頼を編集</h3>
+                <h3 id="order-edit-title">発注依頼を編集</h3>
                 <p>{editingOrder.order.id}</p>
               </div>
               <button type="button" className="text-button" onClick={() => setEditingOrder(null)}>

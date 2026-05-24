@@ -1,4 +1,5 @@
-import { requireWritableOpsSession } from "../../../lib/api-auth";
+import { canAccessStore, requireWritableOpsSession } from "../../../lib/api-auth";
+import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
 function toTokyoDateParts(date: Date) {
@@ -53,7 +54,7 @@ function normalizeRequestedQuantity(value: number) {
   return Math.min(999, Math.max(1, Math.round(value)));
 }
 
-async function validateOrderInput(storeName: string, productNames: string[], productIds: string[]) {
+async function validateOrderInput(session: EmployeeSession, storeName: string, productNames: string[], productIds: string[]) {
   if (!storeName) {
     return { error: Response.json({ error: "納品先店舗を選択してください。" }, { status: 400 }) };
   }
@@ -72,6 +73,10 @@ async function validateOrderInput(storeName: string, productNames: string[], pro
 
   if (!storeId) {
     return { error: Response.json({ error: "納品先店舗が見つかりません。" }, { status: 400 }) };
+  }
+
+  if (!await canAccessStore(session, storeId)) {
+    return { error: Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 }) };
   }
 
   const uniqueProductIds = Array.from(new Set(productIds.filter(Boolean)));
@@ -121,7 +126,7 @@ export async function POST(request: Request) {
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
   const orderNo = `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${Date.now().toString().slice(-3)}`;
-  const validation = await validateOrderInput(storeName, productNames, productIds);
+  const validation = await validateOrderInput(session, storeName, productNames, productIds);
   if (validation.error) return validation.error;
 
   const insertedOrders = await sql`
@@ -133,7 +138,8 @@ export async function POST(request: Request) {
       requested_item_count,
       priority,
       status,
-      note
+      note,
+      requested_by
     )
     values (
       ${orderNo},
@@ -142,8 +148,9 @@ export async function POST(request: Request) {
       ${deadlineAt},
       ${itemCount},
       ${priority},
-      ${"仕入れ待ち"},
-      ${note}
+      ${"発注待ち"},
+      ${note},
+      ${session.id}
     )
     returning id
   `;
@@ -203,11 +210,11 @@ export async function PUT(request: Request) {
     return Response.json({ error: "商品を1件以上選択してください。" }, { status: 400 });
   }
 
-  const validation = await validateOrderInput(storeName, productNames, productIds);
+  const validation = await validateOrderInput(session, storeName, productNames, productIds);
   if (validation.error) return validation.error;
 
   const existingOrder = await sql`
-    select id
+    select id, store_id::text as "storeId"
     from purchase_orders
     where order_no = ${orderId}
     limit 1
@@ -215,7 +222,11 @@ export async function PUT(request: Request) {
   const purchaseOrderId = existingOrder[0]?.id;
 
   if (!purchaseOrderId) {
-    return Response.json({ error: "仕入れ依頼が見つかりません。" }, { status: 404 });
+    return Response.json({ error: "発注依頼が見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, existingOrder[0]?.storeId)) {
+    return Response.json({ error: "この依頼を操作する権限がありません。" }, { status: 403 });
   }
 
   const lockedItems = await sql`
@@ -234,7 +245,7 @@ export async function PUT(request: Request) {
 
   if (Number(lockedItems[0]?.count ?? 0) > 0) {
     return Response.json(
-      { error: "仕入れ処理が始まっている依頼は編集できません。必要な変更は備考または追加依頼で対応してください。" },
+      { error: "発注処理が始まっている依頼は編集できません。必要な変更は備考または追加依頼で対応してください。" },
       { status: 409 }
     );
   }
@@ -296,6 +307,21 @@ export async function DELETE(request: Request) {
 
   if (!body.orderId) {
     return Response.json({ error: "orderId is required" }, { status: 400 });
+  }
+
+  const existingOrder = await sql`
+    select store_id::text as "storeId"
+    from purchase_orders
+    where order_no = ${body.orderId}
+    limit 1
+  `;
+
+  if (!existingOrder[0]) {
+    return Response.json({ error: "発注依頼が見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, existingOrder[0]?.storeId)) {
+    return Response.json({ error: "この依頼を操作する権限がありません。" }, { status: 403 });
   }
 
   await sql`

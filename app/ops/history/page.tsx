@@ -49,12 +49,12 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -159,7 +159,7 @@ export default function ProcurementHistoryPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -179,8 +179,8 @@ export default function ProcurementHistoryPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">店舗単位の仕入れ明細</p>
-            <h2>仕入れ履歴</h2>
+            <p className="eyebrow">店舗単位の発注明細</p>
+            <h2>発注履歴</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -188,7 +188,7 @@ export default function ProcurementHistoryPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="店舗・商品・仕入れ先を検索"
+                placeholder="店舗・商品・発注先を検索"
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
@@ -198,7 +198,7 @@ export default function ProcurementHistoryPage() {
         <section className="panel history-panel">
           <div className="panel-title product-master-title">
             <div>
-              <h3>全仕入れ明細</h3>
+              <h3>全発注明細</h3>
               <p>配送は店舗単位、ブランドは商品の用途として確認</p>
             </div>
             <span className="source-indicator">{filteredRows.length} 件</span>
@@ -229,7 +229,7 @@ export default function ProcurementHistoryPage() {
             <div className="history-table-head">
               <span>店舗 / 依頼番号</span>
               <span>商品</span>
-              <span>仕入れ先</span>
+              <span>発注先</span>
               <span>数量</span>
               <span>状態</span>
             </div>
@@ -250,7 +250,7 @@ export default function ProcurementHistoryPage() {
               </article>
             ))}
             {filteredRows.length === 0 ? (
-              <div className="empty-state">該当する仕入れ明細はありません</div>
+              <div className="empty-state">該当する発注明細はありません</div>
             ) : null}
           </div>
         </section>

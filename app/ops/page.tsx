@@ -40,6 +40,8 @@ type PurchaseOrderItem = {
   priceExceptionNote?: string;
 };
 type PriceSignal = {
+  productId: string;
+  supplierId: string | null;
   product: string;
   supplier: string;
   latestPrice: number;
@@ -58,6 +60,9 @@ type StoreFeedback = {
 const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
+  仕入れ完了: "tone-done",
+  発注待ち: "tone-waiting",
+  発注中: "tone-active",
   一部完了: "tone-warning",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
@@ -72,8 +77,11 @@ const statusTone: Record<string, string> = {
 function formatPurchaseOrderStatus(status: string) {
   if (status === "仕入れ待ち") return "発注待ち";
   if (status === "仕入れ中") return "発注中";
-  if (status === "一部完了") return "一部購入済み";
   if (status === "仕入れ完了") return "発注完了";
+  if (status === "発注待ち") return "発注待ち";
+  if (status === "発注中") return "発注中";
+  if (status === "一部完了") return "一部購入済み";
+  if (status === "発注完了") return "発注完了";
   if (status === "一部配達済み") return "一部納品済み";
   if (status === "確認待ち") return "店舗確認待ち";
 
@@ -101,10 +109,16 @@ export default function OpsDashboard() {
   const [priceSignals, setPriceSignals] = useState<PriceSignal[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
+  const [currentRole, setCurrentRole] = useState("");
+  const [updatingBaseline, setUpdatingBaseline] = useState("");
+  const [priceMessage, setPriceMessage] = useState("");
 
   useEffect(() => {
     async function loadDashboardData() {
-      const response = await fetch("/api/dashboard");
+      const [response, meResponse] = await Promise.all([
+        fetch("/api/dashboard"),
+        fetch("/api/auth/me")
+      ]);
       if (!response.ok) return;
 
       const data = await response.json() as {
@@ -122,6 +136,10 @@ export default function OpsDashboard() {
       if (data.orders) setPurchaseOrders(data.orders);
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
       if (data.priceSignals) setPriceSignals(data.priceSignals);
+      if (meResponse.ok) {
+        const me = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+        setCurrentRole(me.employee?.role ?? "");
+      }
       setDataSource("neon");
     }
 
@@ -133,6 +151,7 @@ export default function OpsDashboard() {
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems);
   const activeExceptions = storeFeedbackItems.length;
   const risingPrices = priceSignals.filter((item) => item.changeRate > 0);
+  const canUpdateBaseline = ["owner", "manager", "buyer"].includes(currentRole);
   const supplierRouteCount = new Set(
     productSupplierOptions.flatMap((group) => group.options.filter((option) => option.role === "メイン").map((option) => option.supplier))
   ).size;
@@ -248,7 +267,7 @@ export default function OpsDashboard() {
               <PanelTitle title="価格トレンド" subtitle="主要食材と包材の変動" />
               <div className="trend-list">
                 {priceSignals.map((signal) => (
-                  <article className="trend-row" key={signal.product}>
+                  <article className="trend-row" key={`${signal.productId}-${signal.supplierId ?? "none"}`}>
                     <div>
                       <strong>{signal.product}</strong>
                       <p>{signal.supplier}</p>
@@ -260,12 +279,23 @@ export default function OpsDashboard() {
                           {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
                         </em>
                       </span>
+                      {canUpdateBaseline ? (
+                        <button
+                          className="trend-baseline-button"
+                          type="button"
+                          disabled={updatingBaseline === `${signal.productId}-${signal.supplierId ?? "none"}`}
+                          onClick={() => updateBaselinePrice(signal)}
+                        >
+                          基準価格を更新
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
                 {priceSignals.length === 0 ? (
                   <div className="empty-state">比較できる価格記録はまだありません</div>
                 ) : null}
+                {priceMessage ? <div className="trend-message">{priceMessage}</div> : null}
               </div>
             </section>
           </aside>
@@ -295,6 +325,33 @@ export default function OpsDashboard() {
       </section>
     </main>
   );
+
+  async function updateBaselinePrice(signal: PriceSignal) {
+    const updateKey = `${signal.productId}-${signal.supplierId ?? "none"}`;
+    setUpdatingBaseline(updateKey);
+    setPriceMessage("");
+
+    const response = await fetch("/api/price-records/baseline", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productId: signal.productId,
+        supplierId: signal.supplierId,
+        price: signal.latestPrice
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setPriceMessage(body.error ?? "基準価格を更新できませんでした。");
+      setUpdatingBaseline("");
+      return;
+    }
+
+    setPriceSignals((current) => current.filter((item) => item !== signal));
+    setPriceMessage(`${signal.product} の基準価格を ¥${formatPrice(signal.latestPrice)} に更新しました。`);
+    setUpdatingBaseline("");
+  }
 }
 
 function createStoreFeedbackItems(

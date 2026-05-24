@@ -13,12 +13,12 @@ type Supplier = typeof initialSuppliers[number];
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -68,7 +68,7 @@ export default function SuppliersPage() {
 
     if (!response.ok) {
       const body = await response.json();
-      window.alert(body.error ?? "仕入れ先を保存できませんでした。");
+      window.alert(body.error ?? "発注先を保存できませんでした。");
       return;
     }
 
@@ -77,7 +77,7 @@ export default function SuppliersPage() {
       supplier
     ].sort((a, b) => a.name.localeCompare(b.name, "ja")));
     form.reset();
-    showNotice("仕入れ先を追加しました。");
+    showNotice("発注先を追加しました。");
   }
 
   async function saveSupplierEdit(event: FormEvent<HTMLFormElement>) {
@@ -95,7 +95,7 @@ export default function SuppliersPage() {
 
     if (!response.ok) {
       const body = await response.json();
-      window.alert(body.error ?? "仕入れ先を更新できませんでした。");
+      window.alert(body.error ?? "発注先を更新できませんでした。");
       return;
     }
 
@@ -105,11 +105,11 @@ export default function SuppliersPage() {
         .sort((a, b) => a.name.localeCompare(b.name, "ja"))
     );
     setEditingSupplier(null);
-    showNotice("仕入れ先を更新しました。");
+    showNotice("発注先を更新しました。");
   }
 
   function deleteSupplier(supplier: Supplier) {
-    if (!window.confirm(`${supplier.name} を削除しますか？\n商品・仕入れ記録・価格記録との紐づけも解除されます。`)) return;
+    if (!window.confirm(`${supplier.name} を削除しますか？\n商品・発注記録・価格記録との紐づけも解除されます。`)) return;
 
     setSuppliers((items) => items.filter((item) => item.name !== supplier.name));
     void fetch("/api/suppliers", {
@@ -119,18 +119,18 @@ export default function SuppliersPage() {
     })
       .then((response) => {
         if (response.ok) {
-          showNotice("仕入れ先を削除しました。");
+          showNotice("発注先を削除しました。");
           return null;
         }
 
         setSuppliers((items) => (items.some((item) => item.name === supplier.name) ? items : [...items, supplier]));
         return response.json().then((body) => {
-          window.alert(body.error ?? "仕入れ先を削除できませんでした。");
+          window.alert(body.error ?? "発注先を削除できませんでした。");
         });
       })
       .catch(() => {
         setSuppliers((items) => (items.some((item) => item.name === supplier.name) ? items : [...items, supplier]));
-        window.alert("仕入れ先を削除できませんでした。");
+        window.alert("発注先を削除できませんでした。");
       });
   }
 
@@ -141,7 +141,7 @@ export default function SuppliersPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -161,8 +161,8 @@ export default function SuppliersPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">仕入れ先データベース</p>
-            <h2>仕入れ先管理</h2>
+            <p className="eyebrow">発注先データベース</p>
+            <h2>発注先管理</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -170,7 +170,7 @@ export default function SuppliersPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="仕入れ先・分類・区分を検索"
+                placeholder="発注先・分類・区分を検索"
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
@@ -180,13 +180,13 @@ export default function SuppliersPage() {
         <section className="panel">
           <div className="panel-title">
             <div>
-              <h3>仕入れ先を追加</h3>
+              <h3>発注先を追加</h3>
               <p>実店舗、チェーン店、ネットショップを同じマスタで管理</p>
             </div>
           </div>
           <form className="management-form supplier-management-form" onSubmit={createSupplier}>
             <label>
-              <span>仕入れ先名</span>
+              <span>発注先名</span>
               <input name="name" placeholder="例: 業務スーパー" />
             </label>
             <label>
@@ -215,8 +215,8 @@ export default function SuppliersPage() {
         <section className="panel">
           <div className="panel-title product-master-title">
             <div>
-              <h3>仕入れ先リスト</h3>
-              <p>商品マスタのメイン仕入れ先・予備仕入れ先で選択される候補</p>
+              <h3>発注先リスト</h3>
+              <p>商品マスタのメイン発注先・予備発注先で選択される候補</p>
             </div>
             <span className="source-indicator">{filteredSuppliers.length} 件</span>
           </div>
@@ -248,7 +248,7 @@ export default function SuppliersPage() {
           <form className="edit-modal" onSubmit={saveSupplierEdit}>
             <div className="modal-heading">
               <div>
-                <h3>仕入れ先を編集</h3>
+                <h3>発注先を編集</h3>
                 <p>{editingSupplier.name}</p>
               </div>
               <button className="text-button" type="button" onClick={() => setEditingSupplier(null)}>
@@ -257,7 +257,7 @@ export default function SuppliersPage() {
             </div>
             <div className="edit-fields">
               <label>
-                <span>仕入れ先名</span>
+                <span>発注先名</span>
                 <input name="name" defaultValue={editingSupplier.name} />
               </label>
               <label>

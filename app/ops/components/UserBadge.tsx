@@ -11,6 +11,7 @@ type CurrentEmployee = {
 const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
+  store_owner: "加盟店オーナー",
   staff: "Staff",
   buyer: "Buyer"
 };

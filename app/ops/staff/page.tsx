@@ -25,12 +25,12 @@ type StaffMember = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -39,7 +39,8 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
-  buyer: "仕入れ担当",
+  store_owner: "加盟店オーナー",
+  buyer: "発注担当",
   staff: "店舗スタッフ"
 };
 
@@ -164,7 +165,7 @@ export default function StaffPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -280,7 +281,8 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         <span>権限</span>
         <select name="role" defaultValue={member?.role ?? "staff"}>
           <option value="staff">店舗スタッフ</option>
-          <option value="buyer">仕入れ担当</option>
+          <option value="store_owner">加盟店オーナー</option>
+          <option value="buyer">発注担当</option>
           <option value="manager">Manager</option>
           <option value="owner">Owner</option>
         </select>

@@ -19,7 +19,7 @@ async function requireOwner() {
 }
 
 function normalizeRole(role?: string) {
-  return ["owner", "manager", "buyer", "staff"].includes(role ?? "") ? role as string : "staff";
+  return ["owner", "manager", "buyer", "store_owner", "staff"].includes(role ?? "") ? role as string : "staff";
 }
 
 function normalizeStatus(status?: string) {

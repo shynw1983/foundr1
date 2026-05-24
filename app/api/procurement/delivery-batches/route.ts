@@ -1,4 +1,4 @@
-import { requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function POST(request: Request) {
@@ -10,12 +10,12 @@ export async function POST(request: Request) {
     itemIds?: string[];
   };
 
-  if (!body.orderId || !body.itemIds || body.itemIds.length === 0) {
+  if (!body.orderId || !Array.isArray(body.itemIds) || body.itemIds.length === 0) {
     return Response.json({ error: "orderId and itemIds are required" }, { status: 400 });
   }
 
   const orders = await sql`
-    select id
+    select id, store_id::text as "storeId"
     from purchase_orders
     where order_no = ${body.orderId}
     limit 1
@@ -24,6 +24,22 @@ export async function POST(request: Request) {
 
   if (!purchaseOrderId) {
     return Response.json({ error: "purchase order was not found" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, orders[0]?.storeId)) {
+    return Response.json({ error: "この依頼を操作する権限がありません。" }, { status: 403 });
+  }
+
+  const uniqueItemIds = Array.from(new Set(body.itemIds.map(String)));
+  const itemCountRows = await sql`
+    select count(*)::int as count
+    from purchase_order_items
+    where purchase_order_id = ${purchaseOrderId}
+      and id::text = any(${uniqueItemIds})
+  `;
+
+  if (Number(itemCountRows[0]?.count ?? 0) !== uniqueItemIds.length) {
+    return Response.json({ error: "この依頼に含まれない項目があります。" }, { status: 400 });
   }
 
   const batchRows = await sql`
@@ -49,7 +65,7 @@ export async function POST(request: Request) {
   `;
   const batch = batchRows[0];
 
-  for (const itemId of body.itemIds) {
+  for (const itemId of uniqueItemIds) {
     await sql`
       insert into delivery_batch_items (
         delivery_batch_id,
@@ -61,7 +77,7 @@ export async function POST(request: Request) {
     `;
   }
 
-  for (const itemId of body.itemIds) {
+  for (const itemId of uniqueItemIds) {
     await sql`
       update purchase_order_items
       set status = 'in_delivery'
@@ -72,7 +88,7 @@ export async function POST(request: Request) {
   return Response.json({
     id: batch.id,
     orderId: body.orderId,
-    itemIds: body.itemIds,
+    itemIds: uniqueItemIds,
     batchNo: batch.batchNo,
     status: batch.status,
     createdLabel: batch.createdLabel
@@ -90,6 +106,22 @@ export async function PATCH(request: Request) {
 
   if (!body.batchId || !["delivered", "received"].includes(body.status ?? "")) {
     return Response.json({ error: "batchId and valid status are required" }, { status: 400 });
+  }
+
+  const batchRows = await sql`
+    select purchase_orders.store_id::text as "storeId"
+    from delivery_batches
+    join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id
+    where delivery_batches.id = ${body.batchId}
+    limit 1
+  `;
+
+  if (!batchRows[0]) {
+    return Response.json({ error: "配送バッチが見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, batchRows[0].storeId)) {
+    return Response.json({ error: "この配送バッチを操作する権限がありません。" }, { status: 403 });
   }
 
   if (body.status === "received") {

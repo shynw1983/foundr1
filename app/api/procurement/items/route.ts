@@ -1,4 +1,4 @@
-import { requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
@@ -19,6 +19,22 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "itemId is required" }, { status: 400 });
   }
 
+  const itemRows = await sql`
+    select purchase_orders.store_id::text as "storeId"
+    from purchase_order_items
+    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+    where purchase_order_items.id = ${body.itemId}
+    limit 1
+  `;
+
+  if (!itemRows[0]) {
+    return Response.json({ error: "発注項目が見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, itemRows[0].storeId)) {
+    return Response.json({ error: "この発注項目を操作する権限がありません。" }, { status: 403 });
+  }
+
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const actualPriceText = String(body.actualPrice ?? "").trim();
   const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
@@ -37,7 +53,7 @@ export async function PATCH(request: Request) {
   const supplierId = supplierRows[0]?.id ?? null;
 
   if (supplierName && !supplierId) {
-    return Response.json({ error: "仕入れ先が見つかりません。" }, { status: 400 });
+    return Response.json({ error: "発注先が見つかりません。" }, { status: 400 });
   }
 
   if (body.purchased === false) {

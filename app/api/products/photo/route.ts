@@ -1,9 +1,13 @@
 import { put } from "@vercel/blob";
+import { requireMasterOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   try {
     const formData = await request.formData();
     const productName = String(formData.get("productName") ?? "new-product").trim();

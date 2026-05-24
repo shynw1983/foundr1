@@ -134,12 +134,12 @@ function productMatchesStore(product: ProductWithCategory, store: StoreItem | un
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -273,7 +273,7 @@ export default function ProductsPage() {
 
     if (sameCategoryMatches.length > 0 || matchingProducts.length > 0) {
       const message = sameCategoryMatches.length > 0
-        ? "同じ大分類・小分類に同名の商品があります。規格・仕入れ先が違う場合はそのまま保存できます。保存しますか？"
+        ? "同じ大分類・小分類に同名の商品があります。規格・発注先が違う場合はそのまま保存できます。保存しますか？"
         : "同じ商品名が別分類にあります。分類が正しいか確認してください。保存しますか？";
 
       if (!window.confirm(message)) return;
@@ -492,7 +492,7 @@ export default function ProductsPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -521,7 +521,7 @@ export default function ProductsPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="商品・分類・仕入れ先を検索"
+                placeholder="商品・分類・発注先を検索"
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
@@ -536,7 +536,7 @@ export default function ProductsPage() {
           <div className="panel-title product-master-title">
             <div>
               <h3>商品マスタ</h3>
-              <p>大分類、小分類、商品名、単位、仕入れ先、規格、写真、保管属性を管理</p>
+              <p>大分類、小分類、商品名、単位、発注先、規格、写真、保管属性を管理</p>
             </div>
             <div className="product-list-controls">
               <label>
@@ -587,7 +587,7 @@ export default function ProductsPage() {
                 </select>
               </label>
               <label>
-                <span>仕入れ先</span>
+                <span>発注先</span>
                 <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
                   {supplierOptions.map((supplierName) => (
@@ -732,11 +732,11 @@ export default function ProductsPage() {
                           <dd>{product.manufacturer || "未設定"}</dd>
                         </div>
                         <div>
-                          <dt>メイン仕入れ先</dt>
+                          <dt>メイン発注先</dt>
                           <dd>{product.mainSupplier || "未設定"}</dd>
                         </div>
                         <div>
-                          <dt>予備仕入れ先</dt>
+                          <dt>予備発注先</dt>
                           <dd>{product.backupSupplier || "未設定"}</dd>
                         </div>
                         <div>
@@ -1197,8 +1197,8 @@ function getProductFields(
     { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
-    { key: "mainSupplier", label: "メイン仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
-    { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
+    { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
+    { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
   ];

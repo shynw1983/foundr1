@@ -1,6 +1,10 @@
+import { requireMasterOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 export async function POST(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim();
@@ -8,7 +12,7 @@ export async function POST(request: Request) {
   const reliability = String(formData.get("reliability") ?? "").trim();
 
   if (!name) {
-    return Response.json({ error: "仕入れ先名を入力してください。" }, { status: 400 });
+    return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
   }
 
   await sql`
@@ -26,6 +30,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const currentName = String(formData.get("currentName") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -34,7 +41,7 @@ export async function PUT(request: Request) {
   const reliability = String(formData.get("reliability") ?? "").trim();
 
   if (!currentName || !name) {
-    return Response.json({ error: "仕入れ先名を入力してください。" }, { status: 400 });
+    return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
   }
 
   const duplicateRows = await sql`
@@ -46,7 +53,7 @@ export async function PUT(request: Request) {
 
   if (Number(duplicateRows[0]?.count ?? 0) > 0) {
     return Response.json(
-      { error: "同じ名前の仕入れ先がすでにあります。" },
+      { error: "同じ名前の発注先がすでにあります。" },
       { status: 409 }
     );
   }
@@ -64,18 +71,21 @@ export async function PUT(request: Request) {
   `;
 
   if (!rows[0]?.id) {
-    return Response.json({ error: "仕入れ先が見つかりません。" }, { status: 404 });
+    return Response.json({ error: "発注先が見つかりません。" }, { status: 404 });
   }
 
   return Response.json({ ok: true });
 }
 
 export async function DELETE(request: Request) {
+  const session = await requireMasterOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as { name?: string };
   const name = String(body.name ?? "").trim();
 
   if (!name) {
-    return Response.json({ error: "仕入れ先名が必要です。" }, { status: 400 });
+    return Response.json({ error: "発注先名が必要です。" }, { status: 400 });
   }
 
   const rows = await sql`
@@ -86,7 +96,7 @@ export async function DELETE(request: Request) {
   const supplierId = rows[0]?.id;
 
   if (!supplierId) {
-    return Response.json({ error: "仕入れ先が見つかりません。" }, { status: 404 });
+    return Response.json({ error: "発注先が見つかりません。" }, { status: 404 });
   }
 
   await sql`
