@@ -3,6 +3,7 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { OpsNavList } from "../components/OpsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
@@ -276,14 +277,7 @@ export default function StoresPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <nav className="nav-list">
-          {navItems.map(({ label, href, icon: Icon }) => (
-            <a href={href} className="nav-item" key={label}>
-              <Icon size={18} />
-              <span>{label}</span>
-            </a>
-          ))}
-        </nav>
+        <OpsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">

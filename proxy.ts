@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const authCookieName = "foundr1_ops_session";
 const masterPageRoles = new Set(["owner", "manager", "buyer"]);
-const masterPagePaths = ["/ops/staff", "/ops/stores", "/ops/suppliers", "/ops/products"];
+const masterPagePaths = ["/ops/stores", "/ops/suppliers", "/ops/products"];
 
 type ProxySession = {
   role?: string;
@@ -58,6 +58,14 @@ export async function proxy(request: NextRequest) {
 
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
+    const isStaffPage = pathname === "/ops/staff" || pathname.startsWith("/ops/staff/");
+    if (isStaffPage && session.role !== "owner") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/ops";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
     const isMasterPage = masterPagePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
     if (isMasterPage && !masterPageRoles.has(session.role ?? "")) {
       const url = request.nextUrl.clone();

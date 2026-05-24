@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { UserBadge } from "./components/UserBadge";
 import { MobileNavMenu } from "./components/MobileNavMenu";
+import { OpsNavList } from "./components/OpsNavList";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -170,14 +171,7 @@ export default function OpsDashboard() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <nav className="nav-list">
-          {navItems.map(({ label, href, icon: Icon }) => (
-            <a href={href} className="nav-item" key={label}>
-              <Icon size={18} />
-              <span>{label}</span>
-            </a>
-          ))}
-        </nav>
+        <OpsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">
