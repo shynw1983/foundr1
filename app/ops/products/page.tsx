@@ -488,43 +488,45 @@ export default function ProductsPage() {
                   </div>
                   <details className="product-master-detail">
                     <summary>詳細</summary>
-                    <div className="product-photo-thumb">
-                      {product.photoUrl ? (
-                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
-                      ) : (
-                        <span>写真</span>
-                      )}
+                    <div className="product-master-detail-body">
+                      <div className="product-photo-thumb">
+                        {product.photoUrl ? (
+                          <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                        ) : (
+                          <span>写真</span>
+                        )}
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>用途ブランド</dt>
+                          <dd>{product.brand || "共通"}</dd>
+                        </div>
+                        <div>
+                          <dt>メーカー</dt>
+                          <dd>{product.manufacturer || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>主要仕入れ先</dt>
+                          <dd>{product.mainSupplier || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>予備仕入れ先</dt>
+                          <dd>{product.backupSupplier || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>原産地</dt>
+                          <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>規格</dt>
+                          <dd>{product.packageSpec || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>メモ</dt>
+                          <dd>{product.specNote || "未設定"}</dd>
+                        </div>
+                      </dl>
                     </div>
-                    <dl>
-                      <div>
-                        <dt>用途ブランド</dt>
-                        <dd>{product.brand || "共通"}</dd>
-                      </div>
-                      <div>
-                        <dt>メーカー</dt>
-                        <dd>{product.manufacturer || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>主要仕入れ先</dt>
-                        <dd>{product.mainSupplier || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>予備仕入れ先</dt>
-                        <dd>{product.backupSupplier || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>原産地</dt>
-                        <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>規格</dt>
-                        <dd>{product.packageSpec || "未設定"}</dd>
-                      </div>
-                      <div>
-                        <dt>メモ</dt>
-                        <dd>{product.specNote || "未設定"}</dd>
-                      </div>
-                    </dl>
                   </details>
                 </article>
               );
