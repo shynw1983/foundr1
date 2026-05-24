@@ -59,8 +59,7 @@ type StoreFeedback = {
 };
 
 const statusTone: Record<string, string> = {
-  発注待ち: "tone-waiting",
-  発注中: "tone-active",
+  購入待ち: "tone-waiting",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",

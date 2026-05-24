@@ -181,7 +181,7 @@ export const orders = [
     deadline: "本日 16:00",
     items: 8,
     priority: "高",
-    status: "発注待ち"
+    status: "購入待ち"
   },
   {
     id: "PO-0523-002",
@@ -190,7 +190,7 @@ export const orders = [
     deadline: "本日 18:30",
     items: 12,
     priority: "中",
-    status: "発注中"
+    status: "一部購入済み"
   },
   {
     id: "PO-0523-003",

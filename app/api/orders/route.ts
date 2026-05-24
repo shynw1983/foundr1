@@ -175,7 +175,7 @@ export async function POST(request: Request) {
       ${deadlineAt},
       ${itemCount},
       ${priority},
-      ${"発注待ち"},
+      ${"購入待ち"},
       ${note},
       ${requesterStaffId},
       ${buyerStaffId}

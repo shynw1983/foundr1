@@ -78,8 +78,7 @@ type SupplierChoice = {
 };
 
 const statusTone: Record<string, string> = {
-  発注待ち: "tone-waiting",
-  発注中: "tone-active",
+  購入待ち: "tone-waiting",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
@@ -303,7 +302,7 @@ function getOrderStatus(
   if (deliveredCount === items.length) return "確認待ち";
   if (deliveryCount > 0) return "配送中";
   if (deliveredCount > 0) return "一部納品済み";
-  if (purchasedCount === 0) return "発注待ち";
+  if (purchasedCount === 0) return "購入待ち";
   if (purchasedCount < items.length) return "一部購入済み";
   if (hasOnlineSupplier(items, supplierList)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
