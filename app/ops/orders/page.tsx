@@ -179,6 +179,7 @@ export default function OrdersPage() {
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
+  const [query, setQuery] = useState("");
   const [editingOrder, setEditingOrder] = useState<EditingOrder | null>(null);
   const [draftStore, setDraftStore] = useState("");
   const [draftDeadline, setDraftDeadline] = useState(getDefaultDeadlineValue());
@@ -240,7 +241,23 @@ export default function OrdersPage() {
       label: store.name.replace("納品", "")
     }));
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, []);
+  const normalizedQuery = query.trim().toLowerCase();
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
+    if (normalizedQuery) {
+      const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+      const targetText = [
+        order.id,
+        order.store,
+        order.brand,
+        order.deadline,
+        order.priority,
+        order.note ?? "",
+        ...orderItems.flatMap((item) => [item.productName, item.brandName ?? "", item.note ?? "", item.priceExceptionNote ?? ""])
+      ].join(" ").toLowerCase();
+
+      if (!targetText.includes(normalizedQuery)) return false;
+    }
+
     if (queueFilter === "未完了") return order.status !== "完了";
     if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
     if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部配達済み"].includes(order.status);
@@ -552,7 +569,11 @@ export default function OrdersPage() {
             <UserBadge />
             <label className="search-box">
               <Search size={17} />
-              <input placeholder="商品・店舗・依頼番号を検索" />
+              <input
+                value={query}
+                placeholder="商品・店舗・依頼番号を検索"
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </label>
             <a className="primary-button" href="#create-order-panel">
               <Plus size={18} />

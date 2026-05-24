@@ -437,8 +437,17 @@ export default function ProductsPage() {
               return (
                 <article className="product-master-row" key={`${product.name}-${productIndex}`}>
                   <div className="product-title-block">
-                    <strong>{product.name || "未設定の商品"}</strong>
-                    <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                    <div className="product-title-photo">
+                      {product.photoUrl ? (
+                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                      ) : (
+                        <span>写真</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{product.name || "未設定の商品"}</strong>
+                      <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                    </div>
                   </div>
                   <div className="mobile-product-head">
                     <div className="mobile-product-photo">

@@ -157,6 +157,8 @@ create table if not exists purchase_orders (
   assigned_to uuid references employees(id),
   deadline_label text,
   deadline_at timestamptz,
+  expected_arrival_date date,
+  online_order_status text not null default 'not_started',
   requested_item_count integer not null default 0,
   priority text not null default 'medium',
   status text not null default 'submitted',
@@ -180,6 +182,10 @@ alter table purchase_order_items add column if not exists brand_id uuid referenc
 alter table purchase_order_items add column if not exists actual_quantity numeric(12, 2);
 alter table purchase_order_items add column if not exists procurement_note text;
 alter table purchase_order_items add column if not exists price_exception_note text;
+alter table purchase_order_items add column if not exists selected_supplier_id uuid references suppliers(id);
+
+alter table purchase_orders add column if not exists expected_arrival_date date;
+alter table purchase_orders add column if not exists online_order_status text not null default 'not_started';
 
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
@@ -202,8 +208,13 @@ create table if not exists delivery_batches (
   status text not null default 'in_delivery',
   created_at timestamptz not null default now(),
   delivered_at timestamptz,
+  store_confirmed_at timestamptz,
+  store_confirmed_by uuid references employees(id),
   unique (purchase_order_id, batch_no)
 );
+
+alter table delivery_batches add column if not exists store_confirmed_at timestamptz;
+alter table delivery_batches add column if not exists store_confirmed_by uuid references employees(id);
 
 create table if not exists delivery_batch_items (
   delivery_batch_id uuid not null references delivery_batches(id) on delete cascade,

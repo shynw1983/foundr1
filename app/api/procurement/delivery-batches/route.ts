@@ -1,6 +1,10 @@
+import { requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function POST(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as {
     orderId?: string;
     itemIds?: string[];
@@ -76,13 +80,40 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as {
     batchId?: string;
-    status?: "delivered";
+    status?: "delivered" | "received";
   };
 
-  if (!body.batchId || body.status !== "delivered") {
-    return Response.json({ error: "batchId and delivered status are required" }, { status: 400 });
+  if (!body.batchId || !["delivered", "received"].includes(body.status ?? "")) {
+    return Response.json({ error: "batchId and valid status are required" }, { status: 400 });
+  }
+
+  if (body.status === "received") {
+    await sql`
+      update delivery_batches
+      set
+        status = 'received',
+        store_confirmed_at = now(),
+        store_confirmed_by = ${session.id}
+      where id = ${body.batchId}
+        and status = 'delivered'
+    `;
+
+    await sql`
+      update purchase_order_items
+      set status = 'received'
+      where id in (
+        select purchase_order_item_id
+        from delivery_batch_items
+        where delivery_batch_id = ${body.batchId}
+      )
+    `;
+
+    return Response.json({ ok: true });
   }
 
   await sql`

@@ -21,7 +21,7 @@ type PurchaseOrderItem = {
   supplier?: string;
   note?: string;
   priceExceptionNote?: string;
-  deliveryStatus?: "pending" | "in_delivery" | "delivered";
+  deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
 };
 type HistoryRow = {
   id: string;
@@ -43,7 +43,8 @@ const statusTone: Record<string, string> = {
   未購入: "tone-waiting",
   購入済み: "tone-confirm",
   配送中: "tone-route",
-  配達済み: "tone-done"
+  配達済み: "tone-confirm",
+  店舗確認済み: "tone-done"
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -61,6 +62,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 function getItemStatus(item: PurchaseOrderItem) {
   if (item.deliveryStatus === "delivered") return "配達済み";
+  if (item.deliveryStatus === "received") return "店舗確認済み";
   if (item.deliveryStatus === "in_delivery") return "配送中";
   if (item.purchased) return "購入済み";
 
@@ -217,6 +219,7 @@ export default function ProcurementHistoryPage() {
                 <option value="購入済み">購入済み</option>
                 <option value="配送中">配送中</option>
                 <option value="配達済み">配達済み</option>
+                <option value="店舗確認済み">店舗確認済み</option>
               </select>
             </label>
           </div>

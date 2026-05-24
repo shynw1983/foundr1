@@ -1000,6 +1000,41 @@ button {
   font-size: 13px;
 }
 
+.product-title-block {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.product-title-block strong,
+.product-title-block p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-title-photo {
+  display: grid;
+  width: 46px;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.product-title-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .product-master-row > span,
 .product-master-row > strong {
   font-weight: 800;
@@ -1031,7 +1066,35 @@ button {
 }
 
 .product-master-detail summary {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
+  background: white;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.product-master-detail summary::-webkit-details-marker {
   display: none;
+}
+
+.product-master-detail[open] summary {
+  margin-bottom: 8px;
+}
+
+.product-master-detail[open] summary::after {
+  content: "を閉じる";
+}
+
+.product-master-detail:not([open]) summary::after {
+  content: "を見る";
 }
 
 .product-photo-thumb {

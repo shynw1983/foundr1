@@ -1,12 +1,17 @@
+import { requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as {
     itemId?: string;
     purchased?: boolean;
     actualQuantity?: number;
     note?: string;
     priceExceptionNote?: string;
+    supplier?: string;
   };
 
   if (!body.itemId) {
@@ -16,6 +21,20 @@ export async function PATCH(request: Request) {
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const note = body.note ?? "";
   const priceExceptionNote = body.priceExceptionNote ?? "";
+  const supplierName = String(body.supplier ?? "").trim();
+  const supplierRows = supplierName
+    ? await sql`
+        select id
+        from suppliers
+        where name = ${supplierName}
+        limit 1
+      `
+    : [];
+  const supplierId = supplierRows[0]?.id ?? null;
+
+  if (supplierName && !supplierId) {
+    return Response.json({ error: "仕入れ先が見つかりません。" }, { status: 400 });
+  }
 
   if (body.purchased === false) {
     await sql`
@@ -35,14 +54,21 @@ export async function PATCH(request: Request) {
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
       procurement_note = ${note},
-      price_exception_note = ${priceExceptionNote}
+      price_exception_note = ${priceExceptionNote},
+      selected_supplier_id = coalesce(${supplierId}, selected_supplier_id)
     where id = ${body.itemId}
   `;
 
   if (body.purchased) {
     await sql`
+      delete from purchase_actuals
+      where purchase_order_item_id = ${body.itemId}
+    `;
+
+    await sql`
       insert into purchase_actuals (
         purchase_order_item_id,
+        supplier_id,
         actual_quantity,
         actual_unit,
         price_is_exception,
@@ -50,6 +76,7 @@ export async function PATCH(request: Request) {
       )
       select
         purchase_order_items.id,
+        coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
         coalesce(${actualQuantity}, purchase_order_items.requested_quantity),
         purchase_order_items.requested_unit,
         ${priceExceptionNote.length > 0},

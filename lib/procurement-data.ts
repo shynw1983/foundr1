@@ -247,12 +247,15 @@ export async function getProcurementDashboardData() {
           coalesce(purchase_orders.deadline_label, '') as "deadlineLabel",
           purchase_orders.deadline_at as "deadlineAt",
           purchase_orders.created_at as "createdAt",
+          coalesce(purchase_orders.online_order_status, 'not_started') as "onlineOrderStatus",
+          coalesce(to_char(purchase_orders.expected_arrival_date, 'YYYY-MM-DD'), '') as "expectedArrivalDate",
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
           coalesce(purchase_orders.note, '') as note,
           case
             when order_progress.total_count is null or order_progress.total_count = 0 then purchase_orders.status
-            when order_progress.delivered_count = order_progress.total_count then '完了'
+            when order_progress.received_count = order_progress.total_count then '完了'
+            when order_progress.delivered_count = order_progress.total_count then '確認待ち'
             when order_progress.in_delivery_count > 0 then '配送中'
             when order_progress.delivered_count > 0 then '一部配達済み'
             when order_progress.purchased_count = 0 then '仕入れ待ち'
@@ -272,7 +275,7 @@ export async function getProcurementDashboardData() {
           select
             count(purchase_order_items.id)::int as total_count,
             count(purchase_order_items.id) filter (
-              where purchase_order_items.status in ('purchased', 'in_delivery', 'delivered')
+              where purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
                 or exists (
                   select 1
                   from purchase_actuals
@@ -280,7 +283,8 @@ export async function getProcurementDashboardData() {
                 )
             )::int as purchased_count,
             count(purchase_order_items.id) filter (where purchase_order_items.status = 'in_delivery')::int as in_delivery_count,
-            count(purchase_order_items.id) filter (where purchase_order_items.status = 'delivered')::int as delivered_count
+            count(purchase_order_items.id) filter (where purchase_order_items.status in ('delivered', 'received'))::int as delivered_count,
+            count(purchase_order_items.id) filter (where purchase_order_items.status = 'received')::int as received_count
           from purchase_order_items
           where purchase_order_items.purchase_order_id = purchase_orders.id
         ) order_progress on true
@@ -300,20 +304,17 @@ export async function getProcurementDashboardData() {
             purchase_order_items.requested_quantity::float
           ) as "actualQuantity",
           (
-            purchase_order_items.status in ('purchased', 'in_delivery', 'delivered')
+            purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null
           ) as purchased,
           case
             when purchase_order_items.status = 'in_delivery' then 'in_delivery'
+            when purchase_order_items.status = 'received' then 'received'
             when purchase_order_items.status = 'delivered' then 'delivered'
             else 'pending'
           end as "deliveryStatus",
           delivery_batch_items.delivery_batch_id::text as "deliveryBatchId",
-          case
-            when purchase_order_items.note like 'supplier=%'
-            then split_part(split_part(purchase_order_items.note, ';', 1), '=', 2)
-            else ''
-          end as supplier,
+          coalesce(selected_suppliers.name, '') as supplier,
           case
             when purchase_order_items.procurement_note is not null
             then purchase_order_items.procurement_note
@@ -333,6 +334,7 @@ export async function getProcurementDashboardData() {
         join products on products.id = purchase_order_items.product_id
         left join brands item_brands on item_brands.id = purchase_order_items.brand_id
         left join brands order_brands on order_brands.id = purchase_orders.brand_id
+        left join suppliers selected_suppliers on selected_suppliers.id = purchase_order_items.selected_supplier_id
         left join lateral (
           select
             purchase_actuals.id,
@@ -354,6 +356,7 @@ export async function getProcurementDashboardData() {
           delivery_batches.batch_no as "batchNo",
           delivery_batches.status,
           to_char(delivery_batches.created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdLabel",
+          to_char(delivery_batches.store_confirmed_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "storeConfirmedLabel",
           coalesce(array_agg(delivery_batch_items.purchase_order_item_id::text order by delivery_batch_items.purchase_order_item_id), '{}') as "itemIds"
         from delivery_batches
         join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id

@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { requireWritableOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 function toTokyoDateParts(date: Date) {
@@ -53,7 +53,51 @@ function normalizeRequestedQuantity(value: number) {
   return Math.min(999, Math.max(1, Math.round(value)));
 }
 
+async function validateOrderInput(storeName: string, productNames: string[]) {
+  if (!storeName) {
+    return { error: Response.json({ error: "配達先店舗を選択してください。" }, { status: 400 }) };
+  }
+
+  if (productNames.length === 0) {
+    return { error: Response.json({ error: "商品を1件以上選択してください。" }, { status: 400 }) };
+  }
+
+  const stores = await sql`
+    select id
+    from stores
+    where name = ${storeName}
+    limit 1
+  `;
+  const storeId = stores[0]?.id as string | undefined;
+
+  if (!storeId) {
+    return { error: Response.json({ error: "配達先店舗が見つかりません。" }, { status: 400 }) };
+  }
+
+  const productRows = await sql`
+    select id, name
+    from products
+    where name = any(${Array.from(new Set(productNames))})
+  `;
+  const productIdsByName = new Map(productRows.map((row) => [String(row.name), String(row.id)]));
+  const missingProducts = productNames.filter((name) => !productIdsByName.has(name));
+
+  if (missingProducts.length > 0) {
+    return {
+      error: Response.json(
+        { error: `商品マスタに存在しない商品があります: ${Array.from(new Set(missingProducts)).join("、")}` },
+        { status: 400 }
+      )
+    };
+  }
+
+  return { storeId, productIdsByName };
+}
+
 export async function POST(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const storeName = String(formData.get("store") ?? "");
   const deadlineInput = String(formData.get("deadline") ?? "");
@@ -62,11 +106,12 @@ export async function POST(request: Request) {
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
-  const brandNames = formData.getAll("itemBrand").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
   const orderNo = `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${Date.now().toString().slice(-3)}`;
+  const validation = await validateOrderInput(storeName, productNames);
+  if (validation.error) return validation.error;
 
   const insertedOrders = await sql`
     insert into purchase_orders (
@@ -79,17 +124,16 @@ export async function POST(request: Request) {
       status,
       note
     )
-    select
+    values (
       ${orderNo},
-      stores.id,
+      ${validation.storeId},
       ${deadline},
       ${deadlineAt},
       ${itemCount},
       ${priority},
       ${"仕入れ待ち"},
       ${note}
-    from stores
-    where stores.name = ${storeName}
+    )
     returning id
   `;
 
@@ -99,35 +143,34 @@ export async function POST(request: Request) {
     for (const [index, productName] of productNames.entries()) {
       const quantity = normalizeRequestedQuantity(quantities[index]);
       const unit = units[index] || "個";
-      const brandName = brandNames[index] || "共通";
+      const productId = validation.productIdsByName?.get(productName);
 
       await sql`
         insert into purchase_order_items (
           purchase_order_id,
           product_id,
-          brand_id,
           requested_quantity,
           requested_unit,
           status
         )
-        select
+        values (
           ${purchaseOrderId},
-          products.id,
-          brands.id,
+          ${productId},
           ${quantity},
           ${unit},
           ${"requested"}
-        from products, brands
-        where products.name = ${productName}
-          and brands.name = ${brandName}
+        )
       `;
     }
   }
 
-  redirect("/ops/orders");
+  return Response.json({ ok: true, orderId: orderNo });
 }
 
 export async function PUT(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const formData = await request.formData();
   const orderId = String(formData.get("orderId") ?? "");
   const storeName = String(formData.get("store") ?? "");
@@ -137,7 +180,6 @@ export async function PUT(request: Request) {
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
-  const brandNames = formData.getAll("itemBrand").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
 
@@ -148,6 +190,9 @@ export async function PUT(request: Request) {
   if (productNames.length === 0) {
     return Response.json({ error: "商品を1件以上選択してください。" }, { status: 400 });
   }
+
+  const validation = await validateOrderInput(storeName, productNames);
+  if (validation.error) return validation.error;
 
   const existingOrder = await sql`
     select id
@@ -185,16 +230,14 @@ export async function PUT(request: Request) {
   const updatedOrders = await sql`
     update purchase_orders
     set
-      store_id = stores.id,
+      store_id = ${validation.storeId},
       deadline_label = ${deadline},
       deadline_at = ${deadlineAt},
       requested_item_count = ${productNames.length},
       priority = ${priority},
       note = ${note},
       updated_at = now()
-    from stores
     where purchase_orders.id = ${purchaseOrderId}
-      and stores.name = ${storeName}
     returning purchase_orders.id
   `;
 
@@ -210,27 +253,23 @@ export async function PUT(request: Request) {
   for (const [index, productName] of productNames.entries()) {
     const quantity = normalizeRequestedQuantity(quantities[index]);
     const unit = units[index] || "個";
-    const brandName = brandNames[index] || "共通";
+    const productId = validation.productIdsByName?.get(productName);
 
     await sql`
       insert into purchase_order_items (
         purchase_order_id,
         product_id,
-        brand_id,
         requested_quantity,
         requested_unit,
         status
       )
-      select
+      values (
         ${purchaseOrderId},
-        products.id,
-        brands.id,
+        ${productId},
         ${quantity},
         ${unit},
         ${"requested"}
-      from products, brands
-      where products.name = ${productName}
-        and brands.name = ${brandName}
+      )
     `;
   }
 
@@ -238,6 +277,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const body = await request.json() as { orderId?: string };
 
   if (!body.orderId) {
