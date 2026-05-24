@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { OpsTranslationProvider } from "./ops/components/OpsTranslationProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,7 +19,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <OpsTranslationProvider>{children}</OpsTranslationProvider>
+      </body>
     </html>
   );
 }

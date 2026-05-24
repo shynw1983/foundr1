@@ -110,7 +110,6 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
-const orderableStoreNames = ["清川店", "清水店"];
 const quantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 
 function getProductPhotoSrc(photoUrl?: string) {
@@ -345,7 +344,6 @@ export default function OrdersPage() {
   }, []);
 
   const orderableStores = storesData
-    .filter((store) => orderableStoreNames.includes(store.name.replace("納品", "")))
     .map((store) => ({
       ...store,
       label: store.name.replace("納品", "")

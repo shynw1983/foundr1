@@ -1,0 +1,231 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+
+type OpsLanguage = "ja" | "zh";
+type OpsDictionary = Record<string, string>;
+type OpsTranslationContextValue = {
+  language: OpsLanguage;
+  setLanguage: (language: OpsLanguage) => void;
+  t: (value: string) => string;
+};
+
+const languageStorageKey = "foundr1-ops-language";
+const localeCacheVersion = "20260525-ops-i18n";
+const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
+  ja: { htmlLang: "ja" },
+  zh: { htmlLang: "zh-Hans" }
+};
+const originalText = new WeakMap<Text, string>();
+const originalAttributes = new WeakMap<Element, Record<string, string>>();
+const translatableAttributes = ["aria-label", "placeholder", "title"];
+const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION"]);
+
+const OpsTranslationContext = createContext<OpsTranslationContextValue>({
+  language: "ja",
+  setLanguage: () => {},
+  t: (value) => value
+});
+
+function translateText(value: string, dictionary: OpsDictionary) {
+  if (!value || Object.keys(dictionary).length === 0) return value;
+
+  const exact = dictionary[value];
+  if (exact) return exact;
+
+  return Object.entries(dictionary)
+    .filter(([source, target]) => source.length > 1 && target && value.includes(source))
+    .sort((a, b) => b[0].length - a[0].length)
+    .reduce((translated, [source, target]) => translated.split(source).join(target), value);
+}
+
+function translateTextNode(node: Text, dictionary: OpsDictionary, language: OpsLanguage) {
+  if (!node.textContent || !node.textContent.trim()) return;
+  if (node.parentElement?.closest("[data-i18n-ignore]")) return;
+
+  const source = originalText.get(node) ?? node.textContent;
+  if (!originalText.has(node)) originalText.set(node, source);
+  const leadingWhitespace = source.match(/^\s*/)?.[0] ?? "";
+  const trailingWhitespace = source.match(/\s*$/)?.[0] ?? "";
+  const text = source.trim();
+
+  node.textContent = language === "ja"
+    ? source
+    : `${leadingWhitespace}${translateText(text, dictionary)}${trailingWhitespace}`;
+}
+
+function translateElementAttributes(element: Element, dictionary: OpsDictionary, language: OpsLanguage) {
+  if (element.closest("[data-i18n-ignore]")) return;
+
+  for (const attr of translatableAttributes) {
+    const value = element.getAttribute(attr);
+    if (!value) continue;
+
+    const stored = originalAttributes.get(element) ?? {};
+    if (!stored[attr]) {
+      stored[attr] = value;
+      originalAttributes.set(element, stored);
+    }
+
+    element.setAttribute(attr, language === "ja" ? stored[attr] : translateText(stored[attr], dictionary));
+  }
+}
+
+function translateNode(root: Node, dictionary: OpsDictionary, language: OpsLanguage) {
+  if (root.nodeType === Node.TEXT_NODE) {
+    translateTextNode(root as Text, dictionary, language);
+    return;
+  }
+
+  if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) return;
+
+  const element = root as Element;
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    if (ignoredTags.has(element.tagName) || element.closest("[data-i18n-ignore]")) return;
+    translateElementAttributes(element, dictionary, language);
+  }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.parentElement?.closest("[data-i18n-ignore]") || ignoredTags.has(node.parentElement?.tagName ?? "")
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT;
+      }
+
+      const nextElement = node as Element;
+      return ignoredTags.has(nextElement.tagName) || nextElement.closest("[data-i18n-ignore]")
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  let current = walker.nextNode();
+  while (current) {
+    if (current.nodeType === Node.TEXT_NODE) {
+      translateTextNode(current as Text, dictionary, language);
+    } else if (current.nodeType === Node.ELEMENT_NODE) {
+      translateElementAttributes(current as Element, dictionary, language);
+    }
+    current = walker.nextNode();
+  }
+}
+
+export function OpsTranslationProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<OpsLanguage>("ja");
+  const [dictionary, setDictionary] = useState<OpsDictionary>({});
+
+  useEffect(() => {
+    try {
+      const storedLanguage = localStorage.getItem(languageStorageKey);
+      if (storedLanguage === "zh") setLanguageState(storedLanguage);
+    } catch {
+      // Continue without persistence.
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = languageMeta[language].htmlLang;
+
+    try {
+      localStorage.setItem(languageStorageKey, language);
+    } catch {
+      // Continue without persistence.
+    }
+
+    if (language === "ja") {
+      setDictionary({});
+      return;
+    }
+
+    let active = true;
+    const storageKey = `foundr1-ops-dictionary-${localeCacheVersion}-${language}`;
+
+    async function loadDictionary() {
+      try {
+        const cached = localStorage.getItem(storageKey);
+        if (cached && active) setDictionary(JSON.parse(cached) as OpsDictionary);
+      } catch {
+        // Fetch a fresh copy below.
+      }
+
+      try {
+        const response = await fetch(`/locales/ops/${language}.json`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) return;
+
+        const nextDictionary = await response.json() as OpsDictionary;
+        if (active) setDictionary(nextDictionary);
+
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(nextDictionary));
+        } catch {
+          // Ignore cache failures.
+        }
+      } catch {
+        // Keep the cached dictionary if available.
+      }
+    }
+
+    void loadDictionary();
+
+    return () => {
+      active = false;
+    };
+  }, [language]);
+
+  useEffect(() => {
+    translateNode(document.body, dictionary, language);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach((node) => translateNode(node, dictionary, language));
+        if (mutation.type === "characterData") translateNode(mutation.target, dictionary, language);
+        if (mutation.type === "attributes") translateNode(mutation.target, dictionary, language);
+      }
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: translatableAttributes,
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+
+    return () => observer.disconnect();
+  }, [dictionary, language]);
+
+  const setLanguage = useCallback((nextLanguage: OpsLanguage) => setLanguageState(nextLanguage), []);
+  const value = useMemo(() => ({
+    language,
+    setLanguage,
+    t: (text: string) => language === "ja" ? text : translateText(text, dictionary)
+  }), [dictionary, language, setLanguage]);
+
+  return <OpsTranslationContext.Provider value={value}>{children}</OpsTranslationContext.Provider>;
+}
+
+export function useOpsTranslation() {
+  return useContext(OpsTranslationContext);
+}
+
+export function OpsLanguagePicker() {
+  const { language, setLanguage, t } = useOpsTranslation();
+
+  return (
+    <label className="ops-language-picker" data-i18n-ignore>
+      <span>{t("Language")}</span>
+      <select
+        value={language}
+        onChange={(event) => setLanguage(event.target.value as OpsLanguage)}
+        aria-label="Language"
+      >
+        <option value="ja">日本語</option>
+        <option value="zh">中文</option>
+      </select>
+    </label>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { OpsLanguagePicker } from "../components/OpsTranslationProvider";
 
 function getDefaultPathForRole(role?: string) {
   if (role === "buyer") return "/ops/procurement";
@@ -42,6 +43,7 @@ export default function OpsLoginPage() {
   return (
     <main className="login-shell">
       <section className="login-card">
+        <OpsLanguagePicker />
         <div className="brand-mark">F1</div>
         <div>
           <p className="eyebrow">Foundr1 Ops</p>

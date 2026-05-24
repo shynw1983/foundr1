@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { OpsLanguagePicker } from "./OpsTranslationProvider";
 
 type CurrentEmployee = {
   name: string;
@@ -31,13 +32,21 @@ export function UserBadge() {
   }, []);
 
   if (!employee) {
-    return <span className="user-badge user-badge-muted">ログイン確認中</span>;
+    return (
+      <div className="user-panel">
+        <span className="user-badge user-badge-muted">ログイン確認中</span>
+        <OpsLanguagePicker />
+      </div>
+    );
   }
 
   return (
-    <span className="user-badge" title={`ログインID: ${employee.loginId}`}>
-      <span className="user-badge-name">{employee.name}</span>
-      <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
-    </span>
+    <div className="user-panel">
+      <span className="user-badge" title={`ログインID: ${employee.loginId}`}>
+        <span className="user-badge-name">{employee.name}</span>
+        <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
+      </span>
+      <OpsLanguagePicker />
+    </div>
   );
 }
