@@ -165,6 +165,100 @@ button {
   line-height: 1;
 }
 
+/* Typography tuning: keep headings clear, let operational data breathe. */
+.topbar h2 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.panel-title h3 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.brand-mark,
+.source-indicator,
+.user-badge-name,
+.user-badge-role,
+.user-badge-muted,
+.mobile-nav-list a,
+.text-button,
+.secondary-button,
+.queue-filter,
+.filter-chip,
+.status-pill,
+.muted-label,
+.focused-order-bar,
+.procurement-order-heading > span,
+.fulfillment-panel span,
+.fulfillment-actions label span,
+.supplier-group-heading span,
+.procurement-task label > span,
+.procurement-task .task-check span,
+.quantity-diff,
+.exception-button,
+.product-master-head,
+.history-table-head,
+.product-master-detail summary,
+.product-master-detail-body dt,
+.category-maintenance summary,
+.category-chip-list span,
+.source-role,
+.location-details dt,
+.access-scope,
+.inline-create-form span,
+.unit-display span {
+  font-weight: 600;
+}
+
+.primary-button {
+  font-weight: 600;
+}
+
+.metric-card strong {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.product-title-block strong,
+.row-heading strong,
+.management-row strong,
+.module-card strong,
+.supplier-admin-row strong,
+.feedback-topline strong,
+.trend-row strong,
+.procurement-order-heading strong,
+.task-product strong,
+.delivery-batch-row strong {
+  font-weight: 700;
+}
+
+.product-master-row > span,
+.product-master-row > strong,
+.mobile-product-summary span,
+.unit-display strong,
+.fulfillment-panel strong,
+.supplier-group-heading strong,
+.product-master-detail-body dd {
+  font-weight: 500;
+}
+
+.product-master-cell,
+.history-row,
+.order-row,
+.procurement-task,
+.procurement-order-card {
+  font-size: 14px;
+}
+
+.product-master-row p,
+.order-row p,
+.history-row p,
+.procurement-order-heading p,
+.photo-upload-box p {
+  font-size: 12px;
+}
+
 @keyframes action-notice-pop {
   from {
     opacity: 0;
