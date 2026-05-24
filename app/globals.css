@@ -692,6 +692,31 @@ button {
   box-shadow: inset 0 0 0 3px white;
 }
 
+.edit-fields .checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-fields .checkbox-group > span {
+  flex: 0 0 100%;
+}
+
+.edit-fields .checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 34px;
+}
+
+.edit-fields .checkbox-group input {
+  min-height: auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+}
+
 .management-list {
   display: grid;
   gap: 10px;
@@ -2932,9 +2957,33 @@ button {
     padding: 0;
   }
 
+  .brand-block > div:last-child {
+    min-width: 0;
+  }
+
   .brand-mark {
     width: 40px;
     height: 40px;
+  }
+
+  .brand-block h1,
+  .brand-block .eyebrow {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-user .user-badge {
+    min-width: 132px;
+    min-height: 42px;
+    padding: 0 10px;
+  }
+
+  .sidebar-user .user-badge-name {
+    max-width: 58px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .brand-block h1 {

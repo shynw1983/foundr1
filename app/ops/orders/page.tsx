@@ -19,6 +19,7 @@ type ProductWithCategory = Product & {
   subcategory?: string;
   productBrandName?: string;
   manufacturer?: string;
+  packageSpec?: string;
 };
 type StoreItem = typeof stores[number];
 type PurchaseOrder = typeof orders[number] & { note?: string };
@@ -750,7 +751,7 @@ export default function OrdersPage() {
                         </span>
                         <span className="order-product-info">
                           <strong>{product.name}</strong>
-                          <small>{product.productBrandName || product.mainSupplier || "詳細未設定"}</small>
+                          <small>{product.packageSpec || product.productBrandName || product.mainSupplier || "詳細未設定"}</small>
                           <span>{product.unit} · {product.storageType || "保管未設定"} · ¥{product.referencePrice}</span>
                         </span>
                         {selectedItem ? <em>{selectedItem.quantity}</em> : null}
