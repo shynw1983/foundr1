@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-type OpsLanguage = "ja" | "zh";
+type OpsLanguage = "ja" | "zh-Hans" | "zh-Hant";
 type OpsDictionary = Record<string, string>;
 type OpsTranslationContextValue = {
   language: OpsLanguage;
@@ -11,14 +11,16 @@ type OpsTranslationContextValue = {
 };
 
 const languageStorageKey = "foundr1-ops-language";
-const localeCacheVersion = "20260525-ops-i18n";
+const languagePreferenceStorageKey = "foundr1-ops-language-preference";
+const localeCacheVersion = "20260525-ops-i18n-v2";
 const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
-  zh: { htmlLang: "zh-Hans" }
+  "zh-Hans": { htmlLang: "zh-Hans" },
+  "zh-Hant": { htmlLang: "zh-Hant" }
 };
 const originalText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Record<string, string>>();
-const translatableAttributes = ["aria-label", "placeholder", "title"];
+const translatableAttributes = ["aria-label", "data-label", "placeholder", "title"];
 const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION"]);
 
 const OpsTranslationContext = createContext<OpsTranslationContextValue>({
@@ -26,6 +28,25 @@ const OpsTranslationContext = createContext<OpsTranslationContextValue>({
   setLanguage: () => {},
   t: (value) => value
 });
+
+function getBrowserDefaultLanguage(): OpsLanguage {
+  if (typeof navigator === "undefined") return "ja";
+
+  const browserLanguages = [navigator.language, ...(navigator.languages ?? [])];
+  const normalizedLanguages = browserLanguages.map((value) => value.toLowerCase());
+  if (normalizedLanguages.some((value) => value.startsWith("zh-tw") || value.startsWith("zh-hk") || value.startsWith("zh-mo") || value.includes("hant"))) {
+    return "zh-Hant";
+  }
+
+  return normalizedLanguages.some((value) => value.startsWith("zh")) ? "zh-Hans" : "ja";
+}
+
+function normalizeStoredLanguage(value: string | null): OpsLanguage | null {
+  if (value === "ja" || value === "zh-Hans" || value === "zh-Hant") return value;
+  if (value === "zh") return "zh-Hans";
+
+  return null;
+}
 
 function translateText(value: string, dictionary: OpsDictionary) {
   if (!value || Object.keys(dictionary).length === 0) return value;
@@ -123,21 +144,21 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     try {
-      const storedLanguage = localStorage.getItem(languageStorageKey);
-      if (storedLanguage === "zh") setLanguageState(storedLanguage);
+      const hasManualPreference = localStorage.getItem(languagePreferenceStorageKey) === "manual";
+      const storedLanguage = normalizeStoredLanguage(localStorage.getItem(languageStorageKey));
+      if (hasManualPreference && storedLanguage) {
+        setLanguageState(storedLanguage);
+        return;
+      }
+
+      setLanguageState(getBrowserDefaultLanguage());
     } catch {
-      // Continue without persistence.
+      setLanguageState(getBrowserDefaultLanguage());
     }
   }, []);
 
   useEffect(() => {
     document.documentElement.lang = languageMeta[language].htmlLang;
-
-    try {
-      localStorage.setItem(languageStorageKey, language);
-    } catch {
-      // Continue without persistence.
-    }
 
     if (language === "ja") {
       setDictionary({});
@@ -202,7 +223,16 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
     return () => observer.disconnect();
   }, [dictionary, language]);
 
-  const setLanguage = useCallback((nextLanguage: OpsLanguage) => setLanguageState(nextLanguage), []);
+  const setLanguage = useCallback((nextLanguage: OpsLanguage) => {
+    setLanguageState(nextLanguage);
+
+    try {
+      localStorage.setItem(languageStorageKey, nextLanguage);
+      localStorage.setItem(languagePreferenceStorageKey, "manual");
+    } catch {
+      // Continue without persistence.
+    }
+  }, []);
   const value = useMemo(() => ({
     language,
     setLanguage,
@@ -228,7 +258,8 @@ export function OpsLanguagePicker() {
         aria-label="Language"
       >
         <option value="ja">日本語</option>
-        <option value="zh">中文</option>
+        <option value="zh-Hans">简体中文</option>
+        <option value="zh-Hant">繁體中文</option>
       </select>
     </label>
   );

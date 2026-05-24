@@ -393,8 +393,8 @@ export default function OrdersPage() {
   });
   const selectedDraftStore = draftStore || orderableStores[0]?.name || "";
   const draftAssignableStaff = getAssignableStaffOptions(staffOptions, selectedDraftStore);
-  const selectedDraftRequesterStaffId = getSelectedStaffId(draftRequesterStaffId || currentUserId, draftAssignableStaff);
-  const selectedDraftBuyerStaffId = getSelectedStaffId(draftBuyerStaffId || selectedDraftRequesterStaffId, draftAssignableStaff);
+  const selectedDraftRequesterStaffId = getSelectedRequesterStaffId(draftRequesterStaffId, draftAssignableStaff, selectedDraftStore, currentUserId);
+  const selectedDraftBuyerStaffId = getSelectedBuyerStaffId(draftBuyerStaffId, draftAssignableStaff, selectedDraftStore);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
   const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
@@ -436,8 +436,8 @@ export default function OrdersPage() {
   }, [selectedDraftCategory, selectedDraftStore, products]);
 
   useEffect(() => {
-    setDraftRequesterStaffId((current) => getSelectedStaffId(current || currentUserId, draftAssignableStaff));
-    setDraftBuyerStaffId((current) => getSelectedStaffId(current || currentUserId, draftAssignableStaff));
+    setDraftRequesterStaffId((current) => getSelectedRequesterStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
+    setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore));
   }, [selectedDraftStore, currentUserId, staffOptions]);
 
   function getQueueFilterCount(filter: QueueFilter) {
@@ -1216,11 +1216,57 @@ function calculateOrderEstimatedAmount(orderId: string, orderItems: PurchaseOrde
 
 function getAssignableStaffOptions(staffOptions: StaffOption[], storeName: string) {
   const storeLabel = storeName.replace("納品", "");
-  return staffOptions.filter((staff) =>
-    staff.storeNames.length === 0 ||
-    staff.storeNames.includes(storeName) ||
-    staff.storeNames.includes(storeLabel)
-  );
+  return staffOptions
+    .filter((staff) =>
+      staff.storeNames.length === 0 ||
+      staff.storeNames.includes(storeName) ||
+      staff.storeNames.includes(storeLabel)
+    )
+    .sort((a, b) => getStaffStoreRelevance(a, storeName) - getStaffStoreRelevance(b, storeName));
+}
+
+function getStaffStoreRelevance(staff: StaffOption, storeName: string) {
+  const rolePriority: Record<string, number> = {
+    store_owner: 0,
+    staff: 1,
+    manager: 2,
+    buyer: 3,
+    owner: 4
+  };
+  const storeMatchPriority = isStaffAssignedToStore(staff, storeName) ? 0 : 10;
+
+  return storeMatchPriority + (rolePriority[staff.role] ?? 5);
+}
+
+function isStaffAssignedToStore(staff: StaffOption, storeName: string) {
+  const storeLabel = storeName.replace("納品", "");
+  return staff.storeNames.includes(storeName) || staff.storeNames.includes(storeLabel);
+}
+
+function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOption[], storeName: string, currentUserId: string) {
+  const currentStaff = staffOptions.find((staff) => staff.id === currentId);
+  if (currentStaff && isStaffAssignedToStore(currentStaff, storeName)) return currentStaff.id;
+
+  const storeStaff = staffOptions.filter((staff) => isStaffAssignedToStore(staff, storeName));
+  if (storeStaff.length > 0) {
+    const currentUserInStore = storeStaff.find((staff) => staff.id === currentUserId);
+    return currentUserInStore?.id ?? storeStaff[0].id;
+  }
+
+  if (staffOptions.some((staff) => staff.id === currentId)) return currentId;
+  if (staffOptions.some((staff) => staff.id === currentUserId)) return currentUserId;
+
+  return staffOptions[0]?.id ?? "";
+}
+
+function getSelectedBuyerStaffId(currentId: string, staffOptions: StaffOption[], storeName: string) {
+  const currentStaff = staffOptions.find((staff) => staff.id === currentId);
+  if (currentStaff && (isStaffAssignedToStore(currentStaff, storeName) || currentStaff.role === "owner")) return currentStaff.id;
+
+  return staffOptions.find((staff) => staff.role === "store_owner" && isStaffAssignedToStore(staff, storeName))?.id ??
+    staffOptions.find((staff) => staff.role === "owner")?.id ??
+    staffOptions[0]?.id ??
+    "";
 }
 
 function getSelectedStaffId(currentId: string, staffOptions: StaffOption[]) {
