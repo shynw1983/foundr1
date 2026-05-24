@@ -3375,6 +3375,38 @@ button {
     justify-content: stretch;
   }
 
+  .create-order-panel .order-items-builder {
+    min-width: 0;
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .order-product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-product-card {
+    min-width: 0;
+  }
+
+  .create-order-panel .order-item-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .create-order-panel .order-item-row > label,
+  .create-order-panel .unit-display,
+  .create-order-panel .order-item-row > button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .create-order-panel .order-item-row > button {
+    justify-content: center;
+    min-height: 38px;
+  }
+
   .builder-actions .text-button,
   .inline-create-actions .primary-button {
     width: 100%;

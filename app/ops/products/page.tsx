@@ -1194,7 +1194,7 @@ function getProductFields(
       label: "小分類",
       options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
-    { key: "brand", label: "ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
+    { key: "brand", label: "店舗ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
