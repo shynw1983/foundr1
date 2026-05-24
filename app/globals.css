@@ -2339,6 +2339,29 @@ button {
   font-size: 12px;
 }
 
+.trend-price-block {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.trend-price-block strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.trend-price-block span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.trend-price-block em {
+  font-style: normal;
+}
+
 .store-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -408,6 +408,8 @@ export async function getProcurementDashboardData() {
         select
           latest_prices.product,
           latest_prices.supplier,
+          latest_prices.price as "latestPrice",
+          coalesce(previous_prices.price, fallback_prices.price) as "baselinePrice",
           round(
             (
               (latest_prices.price - coalesce(previous_prices.price, fallback_prices.price))

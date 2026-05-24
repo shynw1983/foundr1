@@ -42,6 +42,8 @@ type PurchaseOrderItem = {
 type PriceSignal = {
   product: string;
   supplier: string;
+  latestPrice: number;
+  baselinePrice: number;
   changeRate: number;
 };
 type StoreFeedback = {
@@ -68,8 +70,10 @@ const statusTone: Record<string, string> = {
 };
 
 function formatPurchaseOrderStatus(status: string) {
+  if (status === "仕入れ待ち") return "発注待ち";
+  if (status === "仕入れ中") return "発注中";
   if (status === "一部完了") return "一部購入済み";
-  if (status === "仕入れ完了") return "購入完了";
+  if (status === "仕入れ完了") return "発注完了";
   if (status === "一部配達済み") return "一部納品済み";
   if (status === "確認待ち") return "店舗確認待ち";
 
@@ -78,12 +82,12 @@ function formatPurchaseOrderStatus(status: string) {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
-  { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
-  { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
+  { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
-  { label: "仕入れ先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
@@ -140,7 +144,7 @@ export default function OpsDashboard() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
-            <h1>仕入れ管理</h1>
+            <h1>発注管理</h1>
           </div>
         </div>
         <MobileNavMenu navItems={navItems} />
@@ -160,14 +164,14 @@ export default function OpsDashboard() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">複数店舗の日常仕入れオペレーション</p>
-            <h2>仕入れダッシュボード</h2>
+            <p className="eyebrow">複数店舗の日常発注オペレーション</p>
+            <h2>発注ダッシュボード</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
               <Search size={17} />
-              <input placeholder="商品・店舗・仕入れ先を検索" />
+              <input placeholder="商品・店舗・発注先を検索" />
             </label>
             <a className="primary-button" href="/ops/orders">
               <Plus size={18} />
@@ -180,12 +184,12 @@ export default function OpsDashboard() {
           <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="今日見るべき依頼" href="/ops/orders" />
           <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" href="/ops/orders" />
           <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" href="/ops/procurement#連絡・報告" />
-          <MetricCard icon={<Store />} label="巡回仕入れ先" value={supplierRouteCount || storesData.length} note="主要仕入れルート" href="/ops/suppliers" />
+          <MetricCard icon={<Store />} label="巡回発注先" value={supplierRouteCount || storesData.length} note="主要発注ルート" href="/ops/suppliers" />
         </section>
 
         <section className="dashboard-report-grid">
           <section className="panel">
-            <PanelTitle title="最近の仕入れ依頼" subtitle="直近の依頼状況を確認" />
+            <PanelTitle title="最近の発注依頼" subtitle="直近の依頼状況を確認" />
             <div className="order-list">
               {purchaseOrders.slice(0, 6).map((order) => (
                 <article className="order-row" key={order.id}>
@@ -211,7 +215,7 @@ export default function OpsDashboard() {
                   <a
                     className="icon-button"
                     href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
-                    aria-label={`${order.id} の仕入れ管理`}
+                    aria-label={`${order.id} の発注管理`}
                   >
                     <TrendingUp size={18} />
                   </a>
@@ -249,8 +253,13 @@ export default function OpsDashboard() {
                       <strong>{signal.product}</strong>
                       <p>{signal.supplier}</p>
                     </div>
-                    <div className={signal.changeRate > 0 ? "rate-up" : "rate-down"}>
-                      {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
+                    <div className="trend-price-block">
+                      <strong>¥{formatPrice(signal.latestPrice)}</strong>
+                      <span>
+                        基準 ¥{formatPrice(signal.baselinePrice)} · <em className={signal.changeRate > 0 ? "rate-up" : "rate-down"}>
+                          {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
+                        </em>
+                      </span>
                     </div>
                   </article>
                 ))}
@@ -263,20 +272,20 @@ export default function OpsDashboard() {
         </section>
 
         <section className="panel">
-          <PanelTitle title="商品・仕入れ先の概況" subtitle="マスタは専用ページで管理" />
+          <PanelTitle title="商品・発注先の概況" subtitle="マスタは専用ページで管理" />
           <div className="module-grid">
             <a className="module-card" href="/ops/products">
               <div>
                 <strong>商品マスタ</strong>
-                <p>商品、単位、保管属性、メイン仕入れ先</p>
+                <p>商品、単位、保管属性、メイン発注先</p>
               </div>
               <span>{products.length} 件</span>
               <small>{products.slice(0, 3).map((product) => product.name).join(" / ")}</small>
             </a>
             <a className="module-card" href="/ops/suppliers">
               <div>
-                <strong>商品別仕入れ先</strong>
-                <p>メイン仕入れ先、予備仕入れ先、臨時仕入れ先</p>
+                <strong>商品別発注先</strong>
+                <p>メイン発注先、予備発注先、臨時発注先</p>
               </div>
               <span>{productSupplierOptions.length} 件</span>
               <small>{productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")}</small>
@@ -337,6 +346,12 @@ function createStoreFeedbackItems(
 
     return items;
   });
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2
+  }).format(value);
 }
 
 function MetricCard({
