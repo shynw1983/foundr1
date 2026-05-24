@@ -945,6 +945,22 @@ function ProductEditDialog({
   const [uploadStatus, setUploadStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const originOptions = getOriginCountryOptions(target.value.originCountries ?? []);
+  const [originSearch, setOriginSearch] = useState("");
+  const selectedOriginCountries = target.value.originCountries ?? [];
+  const filteredOriginOptions = originOptions.filter((option) => option.includes(originSearch.trim()));
+
+  function setOriginCountry(country: string, checked: boolean) {
+    const nextCountries = checked
+      ? uniqueOptions([...selectedOriginCountries, country])
+      : selectedOriginCountries.filter((item) => item !== country);
+    onChange({
+      ...target,
+      value: {
+        ...target.value,
+        originCountries: nextCountries
+      }
+    });
+  }
 
   async function uploadPhoto(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -1101,27 +1117,36 @@ function ProductEditDialog({
             </label>
           ))}
           <div className="product-spec-grid">
-            <label>
+            <fieldset className="origin-country-picker">
               <span>原産地</span>
-              <select
-                multiple
-                value={target.value.originCountries ?? []}
-                onChange={(event) => {
-                  const nextCountries = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  onChange({
-                    ...target,
-                    value: {
-                      ...target.value,
-                      originCountries: nextCountries
-                    }
-                  });
-                }}
-              >
-                {originOptions.map((option) => (
-                  <option value={option} key={option}>{option}</option>
+              <input
+                value={originSearch}
+                placeholder="国名で検索"
+                onChange={(event) => setOriginSearch(event.target.value)}
+              />
+              {selectedOriginCountries.length ? (
+                <div className="selected-origin-list">
+                  {selectedOriginCountries.map((country) => (
+                    <button type="button" key={country} onClick={() => setOriginCountry(country, false)}>
+                      {country} ×
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="origin-country-list">
+                {filteredOriginOptions.map((option) => (
+                  <label key={option}>
+                    <input
+                      type="checkbox"
+                      checked={selectedOriginCountries.includes(option)}
+                      onChange={(event) => setOriginCountry(option, event.target.checked)}
+                    />
+                    <span>{option}</span>
+                  </label>
                 ))}
-              </select>
-            </label>
+                {filteredOriginOptions.length === 0 ? <small>該当する国・地域はありません。</small> : null}
+              </div>
+            </fieldset>
             <label>
               <span>規格</span>
               <input

@@ -935,6 +935,7 @@ button {
   padding: 0 8px;
   background: white;
   font: inherit;
+  font-weight: 500;
 }
 
 .product-filter-stack {
@@ -2726,14 +2727,88 @@ button {
   gap: 12px;
 }
 
-.product-spec-grid select[multiple] {
-  min-height: 112px;
+.origin-country-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.origin-country-picker > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.origin-country-picker > input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  outline: 0;
+}
+
+.selected-origin-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.selected-origin-list button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.origin-country-list {
+  display: grid;
+  gap: 6px;
+  max-height: 184px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 8px 12px;
+  background: white;
+}
+
+.origin-country-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.origin-country-list input {
+  min-height: auto;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+}
+
+.origin-country-list span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.origin-country-list small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .edit-fields input:focus,
 .edit-fields select:focus,
-.edit-fields textarea:focus {
+.edit-fields textarea:focus,
+.origin-country-picker > input:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
