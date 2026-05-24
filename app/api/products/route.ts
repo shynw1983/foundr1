@@ -36,6 +36,15 @@ export async function PUT(request: Request) {
   const specNote = String(body.specNote ?? "");
   const photoUrl = String(body.photoUrl ?? "");
   const storageType = String(body.storageType ?? "");
+  const selectedBrands = String(body.brand ?? "")
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const brandScope = selectedBrands.includes("共通")
+    ? "common"
+    : selectedBrands.filter((brandName) => brandName !== "未設定").length > 0
+      ? "specific"
+      : "unset";
 
   if (!name) {
     return Response.json({ error: "商品名を入力してください。" }, { status: 400 });
@@ -70,6 +79,7 @@ export async function PUT(request: Request) {
           package_spec = ${packageSpec},
           spec_note = ${specNote},
           photo_url = ${photoUrl},
+          brand_scope = ${brandScope},
           storage_type = ${storageType},
           updated_at = now()
         where name = ${currentName}
@@ -88,6 +98,7 @@ export async function PUT(request: Request) {
           package_spec,
           spec_note,
           photo_url,
+          brand_scope,
           storage_type,
           updated_at
         )
@@ -103,6 +114,7 @@ export async function PUT(request: Request) {
           ${packageSpec},
           ${specNote},
           ${photoUrl},
+          ${brandScope},
           ${storageType},
           now()
         )
@@ -116,8 +128,8 @@ export async function PUT(request: Request) {
   }
 
   await sql`delete from product_brand_usages where product_id = ${productId}`;
-  if (body.brand && body.brand !== "共通") {
-    for (const brandName of String(body.brand).split("/").map((item) => item.trim()).filter(Boolean)) {
+  if (brandScope === "specific") {
+    for (const brandName of selectedBrands.filter((item) => item !== "未設定" && item !== "共通")) {
       await sql`
         insert into product_brand_usages (product_id, brand_id)
         select ${productId}, brands.id

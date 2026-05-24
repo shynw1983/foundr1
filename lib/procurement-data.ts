@@ -129,6 +129,7 @@ export async function getProcurementDashboardData() {
           coalesce(spec_note, '') as "specNote",
           coalesce(storage_type, '') as "storageType",
           coalesce(photo_url, '') as "photoUrl",
+          coalesce(brand_scope, 'unset') as "brandScope",
           coalesce((
             select suppliers.name
             from product_supplier_options
@@ -150,6 +151,7 @@ export async function getProcurementDashboardData() {
             limit 1
           ), '') as "backupSupplier",
           case
+            when coalesce(products.brand_scope, 'unset') = 'common' then '共通'
             when exists (
               select 1 from product_brand_usages
               join brands on brands.id = product_brand_usages.brand_id
@@ -161,7 +163,7 @@ export async function getProcurementDashboardData() {
               join brands on brands.id = product_brand_usages.brand_id
               where product_brand_usages.product_id = products.id
             )
-            else '共通'
+            else '未設定'
           end as brand
         from products
         order by name

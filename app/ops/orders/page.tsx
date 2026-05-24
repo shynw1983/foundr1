@@ -120,7 +120,7 @@ function isTodayOrder(order: PurchaseOrder) {
 }
 
 function getProductBrands(product: ProductWithCategory) {
-  return String(product.brand ?? "共通")
+  return String(product.brand ?? "未設定")
     .split("/")
     .map((brand) => brand.trim())
     .filter(Boolean);

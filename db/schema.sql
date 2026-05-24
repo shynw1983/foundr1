@@ -78,6 +78,7 @@ create table if not exists products (
   package_spec text,
   spec_note text,
   photo_url text,
+  brand_scope text not null default 'unset',
   is_key_item boolean not null default false,
   is_price_sensitive boolean not null default false,
   storage_type text,
@@ -93,6 +94,7 @@ alter table products add column if not exists origin_countries text[] not null d
 alter table products add column if not exists package_spec text;
 alter table products add column if not exists product_brand_name text;
 alter table products add column if not exists manufacturer text;
+alter table products add column if not exists brand_scope text not null default 'unset';
 
 create table if not exists product_brand_usages (
   id uuid primary key default gen_random_uuid(),

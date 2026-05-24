@@ -282,8 +282,7 @@ button {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.sidebar-user .user-badge,
-.mobile-nav-user .user-badge {
+.sidebar-user .user-badge {
   justify-content: space-between;
   width: 100%;
   border-color: rgba(255, 255, 255, 0.12);
@@ -291,20 +290,13 @@ button {
   background: rgba(255, 255, 255, 0.07);
 }
 
-.sidebar-user .user-badge-role,
-.mobile-nav-user .user-badge-role {
+.sidebar-user .user-badge-role {
   color: #d8eaff;
   background: rgba(40, 105, 168, 0.38);
 }
 
-.sidebar-user .user-badge-muted,
-.mobile-nav-user .user-badge-muted {
+.sidebar-user .user-badge-muted {
   color: #dce5ee;
-}
-
-.mobile-nav-user {
-  padding: 4px 4px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .nav-item {
@@ -2582,11 +2574,15 @@ button {
   }
 
   .sidebar-user {
-    display: none;
+    flex: 0 1 220px;
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
   }
 
   .mobile-nav-menu {
     position: relative;
+    flex: 0 0 auto;
     display: block;
   }
 
@@ -2818,7 +2814,10 @@ button {
   }
 
   .sidebar-user {
-    display: none;
+    flex: 0 1 220px;
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
   }
 
   .topbar,

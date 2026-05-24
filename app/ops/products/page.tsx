@@ -242,7 +242,7 @@ export default function ProductsPage() {
         manufacturer: "",
         category: productCategories[0] ?? "食材",
         subcategory: "未分類",
-        brand: brandsData[0]?.name ?? "共通",
+        brand: "未設定",
         unit: "個",
         referencePrice: 0,
         originCountries: [],
@@ -1098,7 +1098,7 @@ function getProductFields(
       label: "小分類",
       options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
-    { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
+    { key: "brand", label: "ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },
