@@ -13,7 +13,11 @@ import {
   suppliers as initialSuppliers
 } from "../../../lib/mock-data";
 
-type Product = typeof initialProducts[number];
+type Product = typeof initialProducts[number] & {
+  id?: string;
+  packageSpec?: string;
+  productBrandName?: string;
+};
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number] & {
@@ -23,6 +27,7 @@ type PurchaseOrder = typeof orders[number] & {
 type DashboardOrderItem = {
   id?: string;
   orderId: string;
+  productId?: string;
   productName: string;
   requestedQuantity: number;
   actualQuantity?: number;
@@ -37,6 +42,7 @@ type DashboardOrderItem = {
 type ProcurementTaskItem = {
   id: string;
   orderId: string;
+  productId?: string;
   productName: string;
   requestedQuantity: number;
   actualQuantity: number;
@@ -89,6 +95,22 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
+function getProductPhotoSrc(photoUrl?: string) {
+  if (!photoUrl) return "";
+  if (photoUrl.startsWith("/api/products/photo/view")) return photoUrl;
+
+  try {
+    const url = new URL(photoUrl);
+    if (url.pathname.includes("/products/")) {
+      return `/api/products/photo/view?pathname=${encodeURIComponent(url.pathname.slice(1))}`;
+    }
+  } catch {
+    return photoUrl;
+  }
+
+  return photoUrl;
+}
+
 function createProcurementTaskItems(
   purchaseOrders: PurchaseOrder[],
   productList: Product[],
@@ -106,6 +128,7 @@ function createProcurementTaskItems(
         return {
           id: item.id ?? `${order.id}-${item.productName}-${itemIndex}`,
           orderId: order.id,
+          productId: item.productId,
           productName: item.productName,
           requestedQuantity: item.requestedQuantity,
           actualQuantity: item.actualQuantity ?? item.requestedQuantity,
@@ -129,6 +152,7 @@ function createProcurementTaskItems(
       return {
         id: `${order.id}-${itemIndex}`,
         orderId: order.id,
+        productId: undefined,
         productName: product.name,
         requestedQuantity: quantity,
         actualQuantity: quantity,
@@ -155,6 +179,11 @@ function getProcurementSupplier(
     ?.options.find((option) => option.role === "メイン");
 
   return product?.mainSupplier || mainOption?.supplier || "未設定";
+}
+
+function findProcurementProduct(item: ProcurementTaskItem, productList: Product[]) {
+  return productList.find((product) => product.id === item.productId)
+    ?? productList.find((product) => product.name === item.productName);
 }
 
 function groupTasksBySupplier(
@@ -619,6 +648,9 @@ export default function ProcurementPage() {
                           <div className="procurement-task-list">
                             {group.items.map((item) => {
                               const quantityDiff = item.actualQuantity - item.requestedQuantity;
+                              const product = findProcurementProduct(item, products);
+                              const photoSrc = getProductPhotoSrc(product?.photoUrl);
+                              const productSpec = product?.packageSpec || product?.specNote;
 
                               return (
                                 <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -636,6 +668,13 @@ export default function ProcurementPage() {
                                     />
                                     <span>{item.purchased ? "購入済み" : "未購入"}</span>
                                   </label>
+                                  <span className="task-product-photo">
+                                    {photoSrc ? (
+                                      <img src={photoSrc} alt={`${item.productName} の写真`} />
+                                    ) : (
+                                      <span>写真</span>
+                                    )}
+                                  </span>
                                   <div className="task-product">
                                     <div className="task-product-line">
                                       <strong>{item.productName}</strong>
@@ -643,6 +682,7 @@ export default function ProcurementPage() {
                                       {item.deliveryStatus === "delivered" ? <span>配達済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
                                     </div>
+                                    {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
                                   </div>
                                   <label>

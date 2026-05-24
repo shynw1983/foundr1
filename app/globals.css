@@ -1978,7 +1978,7 @@ button {
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 92px minmax(180px, 1.4fr) 72px 86px auto;
+  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto;
   align-items: start;
   gap: 8px;
   min-height: 52px;
@@ -2029,9 +2029,31 @@ button {
   padding: 0;
 }
 
+.task-product-photo {
+  display: grid;
+  width: 42px;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.task-product-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .task-product {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .task-product-line {
@@ -3390,9 +3412,15 @@ button {
   }
 
   .create-order-panel .order-item-row {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 92px) 72px;
+    align-items: end;
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .create-order-panel .selected-order-product {
+    grid-column: 1 / -1;
+    gap: 4px;
   }
 
   .create-order-panel .order-item-row > label,
@@ -3402,9 +3430,41 @@ button {
     width: 100%;
   }
 
+  .create-order-panel .order-item-row > label,
+  .create-order-panel .unit-display {
+    gap: 4px;
+  }
+
+  .create-order-panel .order-item-row > label > span,
+  .create-order-panel .unit-display span {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .create-order-panel .selected-order-product strong {
+    font-size: 17px;
+    line-height: 1.25;
+  }
+
+  .create-order-panel .selected-order-product small {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .create-order-panel .order-item-row select,
+  .create-order-panel .unit-display strong {
+    min-height: 34px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
   .create-order-panel .order-item-row > button {
     justify-content: center;
-    min-height: 38px;
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 14px;
   }
 
   .builder-actions .text-button,
@@ -3414,10 +3474,10 @@ button {
   }
 
   .procurement-task {
-    grid-template-columns: minmax(78px, 0.9fr) minmax(76px, 1fr) minmax(86px, 1.1fr);
+    grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
-      "check product product"
-      "actual diff exception";
+      "check photo product product"
+      "actual actual diff exception";
     align-items: end;
     gap: 8px;
     padding: 8px;
@@ -3427,6 +3487,20 @@ button {
     grid-area: check;
     align-self: start;
     gap: 5px;
+  }
+
+  .procurement-task .task-check span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .task-product-photo {
+    grid-area: photo;
+    width: 52px;
   }
 
   .procurement-task .task-product {
