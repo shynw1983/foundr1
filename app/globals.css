@@ -1725,6 +1725,7 @@ button {
   gap: 10px;
 }
 
+.side-stack .stack .empty-state,
 .trend-list .empty-state {
   min-height: 72px;
   padding: 14px 16px;
