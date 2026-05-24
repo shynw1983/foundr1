@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 
 type StoreOption = {
   id: string;
@@ -54,6 +55,7 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 export default function StaffPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -117,6 +119,7 @@ export default function StaffPage() {
 
     form.reset();
     await loadStaff();
+    showNotice("スタッフを追加しました。");
   }
 
   async function updateStaff(event: FormEvent<HTMLFormElement>) {
@@ -137,6 +140,7 @@ export default function StaffPage() {
 
     setEditingStaff(null);
     await loadStaff();
+    showNotice("スタッフを更新しました。");
   }
 
   async function deleteStaff(member: StaffMember) {
@@ -150,6 +154,7 @@ export default function StaffPage() {
     }
 
     await loadStaff();
+    showNotice("スタッフを削除しました。");
   }
 
   return (
@@ -244,6 +249,7 @@ export default function StaffPage() {
           </section>
         </div>
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }

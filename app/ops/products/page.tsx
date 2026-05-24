@@ -3,6 +3,7 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -56,6 +57,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function ProductsPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [brandsData, setBrandsData] = useState<typeof brands>([]);
@@ -156,6 +158,7 @@ export default function ProductsPage() {
 
     await loadProductData();
     setEditTarget(null);
+    showNotice("商品を保存しました。");
   }
 
   function openNewProductEditor() {
@@ -200,6 +203,7 @@ export default function ProductsPage() {
           });
         }
 
+        showNotice("商品を削除しました。");
         return null;
       })
       .catch(() => {
@@ -223,6 +227,7 @@ export default function ProductsPage() {
     }
 
     setCategoryMaster((items) => items.some((item) => item.name === name) ? items : [...items, { name }]);
+    showNotice("大分類を追加しました。");
   }
 
   async function createSubcategory(formData: FormData) {
@@ -241,6 +246,7 @@ export default function ProductsPage() {
     }
 
     setSubcategoryMaster((items) => items.some((item) => item.category === category && item.name === name) ? items : [...items, { category, name }]);
+    showNotice("小分類を追加しました。");
   }
 
   async function saveCategoryEdit() {
@@ -287,6 +293,7 @@ export default function ProductsPage() {
     }
 
     setEditingCategory(null);
+    showNotice("分類を更新しました。");
   }
 
   async function deleteCategory(name: string) {
@@ -302,6 +309,7 @@ export default function ProductsPage() {
       return;
     }
     setCategoryMaster((items) => items.filter((item) => item.name !== name));
+    showNotice("大分類を削除しました。");
   }
 
   async function deleteSubcategory(category: string, name: string) {
@@ -317,6 +325,7 @@ export default function ProductsPage() {
       return;
     }
     setSubcategoryMaster((items) => items.filter((item) => !(item.category === category && item.name === name)));
+    showNotice("小分類を削除しました。");
   }
 
 
@@ -676,6 +685,7 @@ export default function ProductsPage() {
           </section>
         </div>
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }

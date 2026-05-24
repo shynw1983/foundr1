@@ -3,6 +3,7 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 const channelTypes = ["実店舗", "チェーン店", "ネットショップ", "卸売", "その他"];
 
 export default function SuppliersPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
@@ -75,6 +77,7 @@ export default function SuppliersPage() {
       supplier
     ].sort((a, b) => a.name.localeCompare(b.name, "ja")));
     form.reset();
+    showNotice("仕入れ先を追加しました。");
   }
 
   async function saveSupplierEdit(event: FormEvent<HTMLFormElement>) {
@@ -102,6 +105,7 @@ export default function SuppliersPage() {
         .sort((a, b) => a.name.localeCompare(b.name, "ja"))
     );
     setEditingSupplier(null);
+    showNotice("仕入れ先を更新しました。");
   }
 
   function deleteSupplier(supplier: Supplier) {
@@ -114,7 +118,10 @@ export default function SuppliersPage() {
       body: JSON.stringify({ name: supplier.name })
     })
       .then((response) => {
-        if (response.ok) return null;
+        if (response.ok) {
+          showNotice("仕入れ先を削除しました。");
+          return null;
+        }
 
         setSuppliers((items) => (items.some((item) => item.name === supplier.name) ? items : [...items, supplier]));
         return response.json().then((body) => {
@@ -277,6 +284,7 @@ export default function SuppliersPage() {
           </form>
         </div>
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }

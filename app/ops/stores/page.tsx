@@ -3,6 +3,7 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -25,6 +26,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 export default function StoresPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [brandsData, setBrandsData] = useState<BrandItem[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
@@ -77,6 +79,7 @@ export default function StoresPage() {
     ]);
     setSelectedStoreBrands([]);
     form.reset();
+    showNotice("店舗を追加しました。");
   }
 
   async function createBrand(event: FormEvent<HTMLFormElement>) {
@@ -104,6 +107,7 @@ export default function StoresPage() {
       { name, type: type || "未設定" }
     ]);
     form.reset();
+    showNotice("ブランドを追加しました。");
   }
 
   function deleteStore(store: StoreItem) {
@@ -115,7 +119,10 @@ export default function StoresPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: store.name })
     }).then(async (response) => {
-      if (response.ok) return;
+      if (response.ok) {
+        showNotice("店舗を削除しました。");
+        return;
+      }
       const body = await response.json();
       setStoresData((items) => (items.some((item) => item.name === store.name) ? items : [...items, store]));
       window.alert(body.error ?? "店舗を削除できませんでした。");
@@ -131,7 +138,10 @@ export default function StoresPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: brand.name })
     }).then(async (response) => {
-      if (response.ok) return;
+      if (response.ok) {
+        showNotice("ブランドを削除しました。");
+        return;
+      }
       const body = await response.json();
       setBrandsData((items) => (items.some((item) => item.name === brand.name) ? items : [...items, brand]));
       window.alert(body.error ?? "ブランドを削除できませんでした。");
@@ -172,6 +182,7 @@ export default function StoresPage() {
       }))
     );
     setEditingBrand(null);
+    showNotice("ブランドを更新しました。");
   }
 
   async function saveStoreEdit(event: FormEvent<HTMLFormElement>) {
@@ -204,6 +215,7 @@ export default function StoresPage() {
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
+    showNotice("店舗を更新しました。");
   }
 
   function startEditingStore(store: StoreItem) {
@@ -457,6 +469,7 @@ export default function StoresPage() {
           </form>
         </div>
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }

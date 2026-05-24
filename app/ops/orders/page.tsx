@@ -3,7 +3,9 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import {
   orders,
@@ -170,6 +172,7 @@ function createStoreFeedbackItems(
 }
 
 export default function OrdersPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -192,39 +195,39 @@ export default function OrdersPage() {
     }
   ]);
 
-  useEffect(() => {
-    async function loadDashboardData() {
-      const response = await fetch("/api/dashboard");
-      if (!response.ok) return;
+  async function loadDashboardData() {
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) return;
 
-      const data = await response.json() as {
-        stores?: typeof stores;
-        products?: ProductWithCategory[];
-        orders?: PurchaseOrder[];
-        purchaseOrderItems?: PurchaseOrderItem[];
-      };
+    const data = await response.json() as {
+      stores?: typeof stores;
+      products?: ProductWithCategory[];
+      orders?: PurchaseOrder[];
+      purchaseOrderItems?: PurchaseOrderItem[];
+    };
 
-      if (data.stores) setStoresData(data.stores);
-      if (data.products) {
-        setProducts(data.products);
-        setOrderItemDrafts((items) => {
-          const firstProduct = data.products?.[0];
-          if (!firstProduct || items.some((item) => item.productName)) return items;
+    if (data.stores) setStoresData(data.stores);
+    if (data.products) {
+      setProducts(data.products);
+      setOrderItemDrafts((items) => {
+        const firstProduct = data.products?.[0];
+        if (!firstProduct || items.some((item) => item.productName)) return items;
 
-          return items.map((item) => ({
-            ...item,
-            category: firstProduct.category,
-            subcategory: firstProduct.subcategory ?? "未分類",
-            productName: firstProduct.name,
-            unit: firstProduct.unit
-          }));
-        });
-      }
-      if (data.orders) setPurchaseOrders(data.orders);
-      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
-      setDataSource("neon");
+        return items.map((item) => ({
+          ...item,
+          category: firstProduct.category,
+          subcategory: firstProduct.subcategory ?? "未分類",
+          productName: firstProduct.name,
+          unit: firstProduct.unit
+        }));
+      });
     }
+    if (data.orders) setPurchaseOrders(data.orders);
+    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    setDataSource("neon");
+  }
 
+  useEffect(() => {
     void loadDashboardData();
   }, []);
 
@@ -346,7 +349,28 @@ export default function OrdersPage() {
       }
     ]);
 
+    showNotice("過去の依頼を新規依頼にコピーしました。", "info");
     document.getElementById("create-order-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function submitNewOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      body: new FormData(form)
+    });
+
+    if (!response.ok) {
+      window.alert("仕入れ依頼を発送できませんでした。");
+      return;
+    }
+
+    showNotice("仕入れ依頼を発送しました。");
+    setDraftDeadline(getDefaultDeadlineValue());
+    setDraftPriority("中");
+    setDraftNote("");
+    await loadDashboardData();
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
@@ -491,7 +515,9 @@ export default function OrdersPage() {
       return;
     }
 
-    window.location.reload();
+    await loadDashboardData();
+    setEditingOrder(null);
+    showNotice("仕入れ依頼を更新しました。");
   }
 
   return (
@@ -537,7 +563,7 @@ export default function OrdersPage() {
 
         <section className="panel create-order-panel" id="create-order-panel">
           <PanelTitle title="新規仕入れ依頼" subtitle="配達先店舗と仕入れ商品リストを指定" />
-          <form className="inline-create-form" action="/api/orders" method="post">
+          <form className="inline-create-form" onSubmit={submitNewOrder}>
             <label>
               <span>配達先店舗</span>
               <select name="store" value={selectedDraftStore} onChange={(event) => setDraftStore(event.target.value)}>
@@ -873,6 +899,7 @@ export default function OrdersPage() {
           </section>
         </div>
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }

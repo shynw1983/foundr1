@@ -3,6 +3,7 @@
 import { Boxes, ClipboardList, FileText, MessageSquareWarning, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -249,6 +250,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
 }
 
 export default function ProcurementPage() {
+  const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -407,6 +409,7 @@ export default function ProcurementPage() {
       .catch(() => {
         // Keep the optimistic batch visible; the next refresh will restore the saved server state.
       });
+    showNotice("購入済み分を配送中にしました。");
   }
 
   function markDeliveryBatchDelivered(batchId: string) {
@@ -427,6 +430,7 @@ export default function ProcurementPage() {
     }).catch(() => {
       // Optimistic update: do not block the field workflow on the network round trip.
     });
+    showNotice("配送を完了にしました。");
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
@@ -601,8 +605,10 @@ export default function ProcurementPage() {
           item={activeExceptionItem}
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
           onClose={() => setActiveExceptionItemId(null)}
+          onSaved={() => showNotice("異常報告を保存しました。")}
         />
       ) : null}
+      <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
 }
@@ -722,11 +728,13 @@ function OrderFulfillmentPanel({
 function ExceptionReportDialog({
   item,
   onChange,
-  onClose
+  onClose,
+  onSaved
 }: {
   item: ProcurementTaskItem;
   onChange: (next: Partial<ProcurementTaskItem>) => void;
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const quantityDiff = item.actualQuantity - item.requestedQuantity;
 
@@ -736,6 +744,7 @@ function ExceptionReportDialog({
         className="edit-modal exception-modal"
         onSubmit={(event) => {
           event.preventDefault();
+          onSaved();
           onClose();
         }}
       >
