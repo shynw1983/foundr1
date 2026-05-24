@@ -130,11 +130,29 @@ function getProductPhotoSrc(photoUrl?: string) {
 
 function getDefaultDeadlineValue() {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+  const deadline = new Date(now);
+  deadline.setHours(now.getHours() + 2);
 
-  return `${year}-${month}-${day}T18:00`;
+  if (deadline.getMinutes() > 0 || deadline.getSeconds() > 0 || deadline.getMilliseconds() > 0) {
+    deadline.setHours(deadline.getHours() + 1);
+  }
+
+  deadline.setMinutes(0, 0, 0);
+
+  if (deadline.getHours() < 12) {
+    deadline.setHours(12, 0, 0, 0);
+  }
+
+  if (deadline.getDate() !== now.getDate()) {
+    deadline.setHours(12, 0, 0, 0);
+  }
+
+  const year = deadline.getFullYear();
+  const month = String(deadline.getMonth() + 1).padStart(2, "0");
+  const day = String(deadline.getDate()).padStart(2, "0");
+  const hour = String(deadline.getHours()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hour}:00`;
 }
 
 function labelToDeadlineValue(label: string) {
