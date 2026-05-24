@@ -131,6 +131,35 @@ button {
   display: none;
 }
 
+.mobile-nav-menu summary {
+  list-style: none;
+}
+
+.mobile-nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-nav-list {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-nav-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #e8eef6;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.mobile-nav-list a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .workspace {
   min-width: 0;
   padding: 28px;
@@ -2190,26 +2219,44 @@ button {
   }
 
   .mobile-nav-menu {
-    display: grid;
-    gap: 5px;
+    position: relative;
+    display: block;
   }
 
-  .mobile-nav-menu span {
-    color: #aab8c8;
-    font-size: 11px;
-    font-weight: 800;
-  }
-
-  .mobile-nav-menu select {
-    width: 100%;
-    min-height: 40px;
+  .mobile-nav-menu summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
     padding: 0 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.07);
     color: #f7fafc;
     font-weight: 800;
-    outline: 0;
+    cursor: pointer;
+  }
+
+  .hamburger-button {
+    display: inline-grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.09);
+  }
+
+  .mobile-nav-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 40;
+    width: min(320px, calc(100vw - 24px));
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #202a36;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
   }
 
   .metric-grid,
@@ -2241,11 +2288,32 @@ button {
     top: 0;
     z-index: 30;
     height: auto;
-    padding: 7px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
   }
 
   .brand-block {
-    display: none;
+    display: flex;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .brand-block h1 {
+    font-size: 18px;
+    line-height: 1.1;
+  }
+
+  .brand-block .eyebrow {
+    margin-bottom: 2px;
+    font-size: 10px;
   }
 
   .workspace {

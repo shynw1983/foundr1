@@ -16,6 +16,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { UserBadge } from "./components/UserBadge";
+import { MobileNavMenu } from "./components/MobileNavMenu";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -101,15 +102,7 @@ export default function OpsDashboard() {
             <h1>仕入れ管理</h1>
           </div>
         </div>
-        <label className="mobile-nav-menu">
-          <span>メニュー</span>
-          <select defaultValue="" onChange={(event) => { if (event.target.value) window.location.href = event.target.value; }}>
-            <option value="" disabled>移動先を選択</option>
-            {navItems.map(({ label, href }) => (
-              <option value={href} key={label}>{label}</option>
-            ))}
-          </select>
-        </label>
+        <MobileNavMenu navItems={navItems} />
         <nav className="nav-list">
           {navItems.map(({ label, href, icon: Icon }) => (
             <a href={href} className="nav-item" key={label}>
