@@ -1725,6 +1725,15 @@ button {
   gap: 10px;
 }
 
+.trend-list .empty-state {
+  min-height: 72px;
+  padding: 14px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .order-row {
   display: grid;
   grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.7fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(92px, auto);
@@ -1923,7 +1932,7 @@ button {
   border-radius: 8px;
   padding: 0 12px;
   color: white;
-  background: #17202b !important;
+  background: var(--green);
   font-weight: 800;
 }
 
@@ -1932,6 +1941,7 @@ button {
 .delivery-complete-button:disabled {
   cursor: default;
   opacity: 1;
+  background: #17202b;
 }
 
 .procurement-supplier-group {

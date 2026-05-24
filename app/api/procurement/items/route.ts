@@ -91,6 +91,36 @@ export async function PATCH(request: Request) {
       from purchase_order_items
       where purchase_order_items.id = ${body.itemId}
     `;
+
+    if (Number.isFinite(actualPrice)) {
+      await sql`
+        delete from price_records
+        where source = 'purchase_actual'
+          and receipt_note = ${body.itemId}
+      `;
+
+      await sql`
+        insert into price_records (
+          product_id,
+          supplier_id,
+          price,
+          unit,
+          source,
+          receipt_note,
+          recorded_by
+        )
+        select
+          purchase_order_items.product_id,
+          coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
+          ${actualPrice},
+          purchase_order_items.requested_unit,
+          'purchase_actual',
+          ${body.itemId},
+          ${session.id}
+        from purchase_order_items
+        where purchase_order_items.id = ${body.itemId}
+      `;
+    }
   }
 
   return Response.json({ ok: true });

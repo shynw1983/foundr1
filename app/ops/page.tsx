@@ -255,7 +255,7 @@ export default function OpsDashboard() {
                   </article>
                 ))}
                 {priceSignals.length === 0 ? (
-                  <div className="empty-state">価格記録が2件以上ある商品はまだありません</div>
+                  <div className="empty-state">比較できる価格記録はまだありません</div>
                 ) : null}
               </div>
             </section>

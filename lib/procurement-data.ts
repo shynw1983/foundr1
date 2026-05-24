@@ -377,6 +377,8 @@ export async function getProcurementDashboardData() {
       sql`
         with ranked_prices as (
           select
+            price_records.product_id,
+            price_records.supplier_id,
             products.name as product,
             coalesce(suppliers.name, '未設定') as supplier,
             price_records.price::float as price,
@@ -393,20 +395,42 @@ export async function getProcurementDashboardData() {
         ),
         previous_prices as (
           select * from ranked_prices where row_no = 2
+        ),
+        fallback_prices as (
+          select
+            product_supplier_options.product_id,
+            product_supplier_options.supplier_id,
+            product_supplier_options.reference_price::float as price
+          from product_supplier_options
+          where product_supplier_options.reference_price is not null
+            and product_supplier_options.reference_price > 0
         )
         select
           latest_prices.product,
           latest_prices.supplier,
           round(
-            ((latest_prices.price - previous_prices.price) / nullif(previous_prices.price, 0) * 100)::numeric,
+            (
+              (latest_prices.price - coalesce(previous_prices.price, fallback_prices.price))
+              / nullif(coalesce(previous_prices.price, fallback_prices.price), 0)
+              * 100
+            )::numeric,
             1
           )::float as "changeRate"
         from latest_prices
-        join previous_prices
-          on previous_prices.product = latest_prices.product
-          and previous_prices.supplier = latest_prices.supplier
-        where previous_prices.price <> 0
-        order by abs((latest_prices.price - previous_prices.price) / previous_prices.price) desc
+        left join previous_prices
+          on previous_prices.product_id = latest_prices.product_id
+          and (
+            previous_prices.supplier_id = latest_prices.supplier_id
+            or (previous_prices.supplier_id is null and latest_prices.supplier_id is null)
+          )
+        left join fallback_prices
+          on fallback_prices.product_id = latest_prices.product_id
+          and (
+            fallback_prices.supplier_id = latest_prices.supplier_id
+            or (fallback_prices.supplier_id is null and latest_prices.supplier_id is null)
+          )
+        where coalesce(previous_prices.price, fallback_prices.price) <> 0
+        order by abs((latest_prices.price - coalesce(previous_prices.price, fallback_prices.price)) / coalesce(previous_prices.price, fallback_prices.price)) desc
         limit 8
       `
     ]);
