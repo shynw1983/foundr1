@@ -3119,16 +3119,38 @@ button {
 
   .sidebar-user {
     order: 2;
-    flex: 0 1 176px;
+    flex: 0 1 336px;
     margin: 0;
     padding: 0;
     border-bottom: 0;
   }
 
+  .sidebar-user .user-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .sidebar-user .user-badge {
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
     min-width: 0;
     min-height: 42px;
+  }
+
+  .sidebar-user .ops-language-picker {
+    flex: 0 0 104px;
+    width: 104px;
+  }
+
+  .sidebar-user .ops-language-picker span {
+    display: none;
+  }
+
+  .sidebar-user .ops-language-picker select {
+    min-height: 42px;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .mobile-nav-menu {
