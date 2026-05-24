@@ -77,6 +77,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const orderableStoreNames = ["清川店", "清水店"];
+const quantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 
 function getDefaultDeadlineValue() {
   const now = new Date();
@@ -610,13 +611,15 @@ export default function OrdersPage() {
                     </label>
                     <label>
                       <span>数量</span>
-                      <input
+                      <select
                         name="requestedQuantity"
-                        type="number"
-                        min={1}
                         value={item.quantity}
                         onChange={(event) => updateOrderItemDraft(item.id, { quantity: Number(event.target.value) })}
-                      />
+                      >
+                        {quantityOptions.map((quantity) => (
+                          <option value={quantity} key={quantity}>{quantity}</option>
+                        ))}
+                      </select>
                     </label>
                     <div className="unit-display">
                       <span>単位</span>
@@ -828,12 +831,14 @@ export default function OrdersPage() {
                     </label>
                     <label>
                       <span>数量</span>
-                      <input
-                        type="number"
-                        min="1"
+                      <select
                         value={item.quantity}
                         onChange={(event) => updateEditingOrderItem(item.id, { quantity: Number(event.target.value) })}
-                      />
+                      >
+                        {quantityOptions.map((quantity) => (
+                          <option value={quantity} key={quantity}>{quantity}</option>
+                        ))}
+                      </select>
                     </label>
                     <div className="unit-display">
                       <span>単位</span>

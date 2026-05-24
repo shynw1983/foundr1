@@ -48,6 +48,11 @@ function deadlineAtFromInput(value: string) {
   return `${year}-${month}-${day} ${hour}:${minute}:00+09:00`;
 }
 
+function normalizeRequestedQuantity(value: number) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(999, Math.max(1, Math.round(value)));
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const storeName = String(formData.get("store") ?? "");
@@ -92,7 +97,7 @@ export async function POST(request: Request) {
 
   if (purchaseOrderId) {
     for (const [index, productName] of productNames.entries()) {
-      const quantity = Number.isFinite(quantities[index]) && quantities[index] > 0 ? quantities[index] : 1;
+      const quantity = normalizeRequestedQuantity(quantities[index]);
       const unit = units[index] || "個";
       const brandName = brandNames[index] || "共通";
 
@@ -203,7 +208,7 @@ export async function PUT(request: Request) {
   `;
 
   for (const [index, productName] of productNames.entries()) {
-    const quantity = Number.isFinite(quantities[index]) && quantities[index] > 0 ? quantities[index] : 1;
+    const quantity = normalizeRequestedQuantity(quantities[index]);
     const unit = units[index] || "個";
     const brandName = brandNames[index] || "共通";
 
