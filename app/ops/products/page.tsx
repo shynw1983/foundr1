@@ -13,6 +13,7 @@ import {
   suppliers as initialSuppliers,
   stores as initialStores
 } from "../../../lib/mock-data";
+import { originCountryOptions } from "../../../lib/origin-countries";
 
 type Product = typeof initialProducts[number];
 type ProductWithCategory = Product & {
@@ -1199,27 +1200,7 @@ function getProductFields(
 }
 
 function getOriginCountryOptions(selectedCountries: string[]) {
-  return uniqueOptions([
-    "日本",
-    "中国",
-    "韓国",
-    "台湾",
-    "ベトナム",
-    "タイ",
-    "インドネシア",
-    "マレーシア",
-    "フィリピン",
-    "アメリカ",
-    "カナダ",
-    "オーストラリア",
-    "ニュージーランド",
-    "ブラジル",
-    "チリ",
-    "スペイン",
-    "イタリア",
-    "フランス",
-    ...selectedCountries
-  ]);
+  return uniqueOptions([...originCountryOptions, ...selectedCountries]);
 }
 
 function uniqueOptions(options: string[]) {
