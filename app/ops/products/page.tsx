@@ -26,6 +26,22 @@ type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
 const productPageSizeOptions = [20, 50, 100];
 
+function getProductPhotoSrc(photoUrl?: string) {
+  if (!photoUrl) return "";
+  if (photoUrl.startsWith("/api/products/photo/view")) return photoUrl;
+
+  try {
+    const url = new URL(photoUrl);
+    if (url.hostname.endsWith(".private.blob.vercel-storage.com")) {
+      return `/api/products/photo/view?pathname=${encodeURIComponent(url.pathname.slice(1))}`;
+    }
+  } catch {
+    return photoUrl;
+  }
+
+  return photoUrl;
+}
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
@@ -422,7 +438,7 @@ export default function ProductsPage() {
                   <div className="mobile-product-head">
                     <div className="mobile-product-photo">
                       {product.photoUrl ? (
-                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
+                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
                       ) : (
                         <span>写真</span>
                       )}
@@ -460,7 +476,7 @@ export default function ProductsPage() {
                     <summary>詳細</summary>
                     <div className="product-photo-thumb">
                       {product.photoUrl ? (
-                        <img src={product.photoUrl} alt={`${product.name} の写真`} />
+                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
                       ) : (
                         <span>写真</span>
                       )}
@@ -766,7 +782,7 @@ function ProductEditDialog({
         <div className="photo-upload-box">
           <div className="product-photo-preview">
             {target.value.photoUrl ? (
-              <img src={target.value.photoUrl} alt={`${target.value.name || "商品"} の写真`} />
+              <img src={getProductPhotoSrc(target.value.photoUrl)} alt={`${target.value.name || "商品"} の写真`} />
             ) : (
               <span>写真</span>
             )}

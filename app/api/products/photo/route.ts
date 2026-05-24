@@ -31,20 +31,21 @@ export async function POST(request: Request) {
     const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase() || "product";
     const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
-      access: "public"
+      access: "private"
     });
+    const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}`;
 
     if (productName && productName !== "new-product") {
       await sql`
         update products
         set
-          photo_url = ${blob.url},
+          photo_url = ${photoUrl},
           updated_at = now()
         where name = ${productName}
       `;
     }
 
-    return Response.json({ url: blob.url });
+    return Response.json({ url: photoUrl, pathname: blob.pathname });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "";
