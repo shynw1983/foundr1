@@ -43,13 +43,13 @@ const statusTone: Record<string, string> = {
   未購入: "tone-waiting",
   購入済み: "tone-confirm",
   配送中: "tone-route",
-  配達済み: "tone-confirm",
+  納品済み: "tone-confirm",
   店舗確認済み: "tone-done"
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -61,7 +61,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 function getItemStatus(item: PurchaseOrderItem) {
-  if (item.deliveryStatus === "delivered") return "配達済み";
+  if (item.deliveryStatus === "delivered") return "納品済み";
   if (item.deliveryStatus === "received") return "店舗確認済み";
   if (item.deliveryStatus === "in_delivery") return "配送中";
   if (item.purchased) return "購入済み";
@@ -220,14 +220,14 @@ export default function ProcurementHistoryPage() {
                 <option value="未購入">未購入</option>
                 <option value="購入済み">購入済み</option>
                 <option value="配送中">配送中</option>
-                <option value="配達済み">配達済み</option>
+                <option value="納品済み">納品済み</option>
                 <option value="店舗確認済み">店舗確認済み</option>
               </select>
             </label>
           </div>
           <div className="history-table">
             <div className="history-table-head">
-              <span>店舗 / 注文</span>
+              <span>店舗 / 依頼番号</span>
               <span>商品</span>
               <span>仕入れ先</span>
               <span>数量</span>
@@ -241,7 +241,7 @@ export default function ProcurementHistoryPage() {
                 </div>
                 <div>
                   <strong>{row.productName}</strong>
-                  <p>用途ブランド: {row.productBrand}</p>
+                  <p>適用ブランド: {row.productBrand}</p>
                   {row.note ? <small>{row.note}</small> : null}
                 </div>
                 <span>{row.supplier}</span>

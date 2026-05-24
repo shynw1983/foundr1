@@ -25,7 +25,7 @@ type StaffMember = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },

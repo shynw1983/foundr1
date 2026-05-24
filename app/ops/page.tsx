@@ -57,16 +57,28 @@ const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
+  一部購入済み: "tone-warning",
+  購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
   一部配達済み: "tone-warning",
+  一部納品済み: "tone-warning",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
 
+function formatPurchaseOrderStatus(status: string) {
+  if (status === "一部完了") return "一部購入済み";
+  if (status === "仕入れ完了") return "購入完了";
+  if (status === "一部配達済み") return "一部納品済み";
+  if (status === "確認待ち") return "店舗確認待ち";
+
+  return status;
+}
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -159,7 +171,7 @@ export default function OpsDashboard() {
             </label>
             <a className="primary-button" href="/ops/orders">
               <Plus size={18} />
-              発注を作成
+              依頼を作成
             </a>
           </div>
         </header>
@@ -168,19 +180,19 @@ export default function OpsDashboard() {
           <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="今日見るべき依頼" href="/ops/orders" />
           <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" href="/ops/orders" />
           <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" href="/ops/procurement#連絡・報告" />
-          <MetricCard icon={<Store />} label="巡回仕入れ先" value={supplierRouteCount || storesData.length} note="主要購入ルート" href="/ops/suppliers" />
+          <MetricCard icon={<Store />} label="巡回仕入れ先" value={supplierRouteCount || storesData.length} note="主要仕入れルート" href="/ops/suppliers" />
         </section>
 
         <section className="dashboard-report-grid">
           <section className="panel">
-            <PanelTitle title="最近の発注" subtitle="直近の依頼状況を確認" />
+            <PanelTitle title="最近の仕入れ依頼" subtitle="直近の依頼状況を確認" />
             <div className="order-list">
               {purchaseOrders.slice(0, 6).map((order) => (
                 <article className="order-row" key={order.id}>
                   <div>
                     <div className="row-heading">
                       <strong>{order.id}</strong>
-                      <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
+                      <span className={`status-pill ${statusTone[order.status]}`}>{formatPurchaseOrderStatus(order.status)}</span>
                     </div>
                     <p>{order.store} / {order.brand}</p>
                   </div>
@@ -256,7 +268,7 @@ export default function OpsDashboard() {
             <a className="module-card" href="/ops/products">
               <div>
                 <strong>商品マスタ</strong>
-                <p>商品、単位、保管属性、主要仕入れ先</p>
+                <p>商品、単位、保管属性、メイン仕入れ先</p>
               </div>
               <span>{products.length} 件</span>
               <small>{products.slice(0, 3).map((product) => product.name).join(" / ")}</small>
@@ -264,7 +276,7 @@ export default function OpsDashboard() {
             <a className="module-card" href="/ops/suppliers">
               <div>
                 <strong>商品別仕入れ先</strong>
-                <p>メイン、予備、緊急チャネル</p>
+                <p>メイン仕入れ先、予備仕入れ先、臨時仕入れ先</p>
               </div>
               <span>{productSupplierOptions.length} 件</span>
               <small>{productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")}</small>

@@ -66,16 +66,28 @@ const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
+  一部購入済み: "tone-warning",
+  購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
   一部配達済み: "tone-warning",
+  一部納品済み: "tone-warning",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
 
+function formatPurchaseOrderStatus(status: string) {
+  if (status === "一部完了") return "一部購入済み";
+  if (status === "仕入れ完了") return "購入完了";
+  if (status === "一部配達済み") return "一部納品済み";
+  if (status === "確認待ち") return "店舗確認待ち";
+
+  return status;
+}
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -323,7 +335,7 @@ export default function OrdersPage() {
 
     if (queueFilter === "未完了") return order.status !== "完了";
     if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
-    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部配達済み"].includes(order.status);
+    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部配達済み", "一部納品済み"].includes(order.status);
     if (queueFilter === "完了") return order.status === "完了";
 
     return true;
@@ -368,7 +380,7 @@ export default function OrdersPage() {
     if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
     if (filter === "今日対応") return purchaseOrders.filter((order) => order.status !== "完了" && isTodayOrder(order)).length;
     if (filter === "配送待ち") {
-      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部配達済み"].includes(order.status)).length;
+      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部配達済み", "一部納品済み"].includes(order.status)).length;
     }
     if (filter === "完了") return purchaseOrders.filter((order) => order.status === "完了").length;
 
@@ -481,11 +493,11 @@ export default function OrdersPage() {
     });
 
     if (!response.ok) {
-      window.alert("仕入れ依頼を発送できませんでした。");
+      window.alert("仕入れ依頼を送信できませんでした。");
       return;
     }
 
-    showNotice("仕入れ依頼を発送しました。");
+    showNotice("仕入れ依頼を送信しました。");
     setDraftDeadline(getDefaultDeadlineValue());
     setDraftPriority("中");
     setDraftNote("");
@@ -654,8 +666,8 @@ export default function OrdersPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">店舗からの発注</p>
-            <h2>発注管理</h2>
+            <p className="eyebrow">店舗からの仕入れ依頼</p>
+            <h2>仕入れ依頼</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -669,16 +681,16 @@ export default function OrdersPage() {
             </label>
             <a className="primary-button" href="#create-order-panel">
               <Plus size={18} />
-              発注を作成
+              依頼を作成
             </a>
           </div>
         </header>
 
         <section className="panel create-order-panel" id="create-order-panel">
-          <PanelTitle title="新規発注" subtitle="配達先店舗と仕入れ商品リストを指定" />
+          <PanelTitle title="新規仕入れ依頼" subtitle="納品先店舗と依頼商品リストを指定" />
           <form className="inline-create-form" onSubmit={submitNewOrder}>
             <label>
-              <span>配達先店舗</span>
+              <span>納品先店舗</span>
               <select name="store" value={selectedDraftStore} onChange={(event) => setDraftStore(event.target.value)}>
                 {orderableStores.map((store) => (
                   <option value={store.name} key={store.name}>{store.label}</option>
@@ -703,11 +715,11 @@ export default function OrdersPage() {
             </label>
             <div className="order-items-builder">
               <div className="builder-heading">
-                <strong>仕入れ商品リスト</strong>
+                <strong>依頼商品リスト</strong>
                 <span>{orderItemDrafts.filter((item) => item.productId || item.productName).length} 件</span>
               </div>
               <div className="order-product-picker">
-                <div className="product-category-strip" aria-label="発注大分類">
+                <div className="product-category-strip" aria-label="依頼商品大分類">
                   {draftProductCategories.map((category) => (
                     <button
                       type="button"
@@ -719,7 +731,7 @@ export default function OrdersPage() {
                     </button>
                   ))}
                 </div>
-                <div className="product-category-strip" aria-label="発注小分類">
+                <div className="product-category-strip" aria-label="依頼商品小分類">
                   {draftProductSubcategories.map((subcategory) => (
                     <button
                       type="button"
@@ -807,7 +819,7 @@ export default function OrdersPage() {
             <div className="inline-create-actions">
               <button type="submit" className="primary-button">
                 <Plus size={18} />
-                依頼を発送
+                依頼を送信
               </button>
             </div>
           </form>
@@ -815,7 +827,7 @@ export default function OrdersPage() {
 
         <section className="workspace-grid">
           <section className="panel operation-panel" id="仕入れ依頼">
-            <PanelTitle title="発注キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
+            <PanelTitle title="依頼キュー" subtitle="未完了の依頼を中心に、状態別に確認" />
             <div className="queue-filter-bar" aria-label="仕入れ依頼フィルター">
               {queueFilters.map((filter) => (
                 <button
@@ -835,7 +847,7 @@ export default function OrdersPage() {
                   <div>
                     <div className="row-heading">
                       <strong>{order.id}</strong>
-                      <span className={`status-pill ${statusTone[order.status]}`}>{order.status}</span>
+                      <span className={`status-pill ${statusTone[order.status]}`}>{formatPurchaseOrderStatus(order.status)}</span>
                     </div>
                     <p>{order.store} / {order.brand}</p>
                   </div>
@@ -909,7 +921,7 @@ export default function OrdersPage() {
 
             <div className="edit-fields">
               <label>
-                <span>配達先店舗</span>
+                <span>納品先店舗</span>
                 <select
                   value={editingOrder.store}
                   onChange={(event) => {
@@ -958,7 +970,7 @@ export default function OrdersPage() {
 
             <div className="order-items-builder">
               <div className="builder-heading">
-                <strong>仕入れ商品リスト</strong>
+                <strong>依頼商品リスト</strong>
               </div>
               <div className="order-item-list">
                 {editingOrder.items.map((item) => (

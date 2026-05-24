@@ -55,7 +55,7 @@ function normalizeRequestedQuantity(value: number) {
 
 async function validateOrderInput(storeName: string, productNames: string[], productIds: string[]) {
   if (!storeName) {
-    return { error: Response.json({ error: "配達先店舗を選択してください。" }, { status: 400 }) };
+    return { error: Response.json({ error: "納品先店舗を選択してください。" }, { status: 400 }) };
   }
 
   if (productNames.length === 0) {
@@ -71,7 +71,7 @@ async function validateOrderInput(storeName: string, productNames: string[], pro
   const storeId = stores[0]?.id as string | undefined;
 
   if (!storeId) {
-    return { error: Response.json({ error: "配達先店舗が見つかりません。" }, { status: 400 }) };
+    return { error: Response.json({ error: "納品先店舗が見つかりません。" }, { status: 400 }) };
   }
 
   const uniqueProductIds = Array.from(new Set(productIds.filter(Boolean)));
@@ -254,7 +254,7 @@ export async function PUT(request: Request) {
   `;
 
   if (!updatedOrders[0]?.id) {
-    return Response.json({ error: "配達先店舗が見つかりません。" }, { status: 400 });
+    return Response.json({ error: "納品先店舗が見つかりません。" }, { status: 400 });
   }
 
   await sql`

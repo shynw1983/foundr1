@@ -260,9 +260,9 @@ export async function getProcurementDashboardData() {
             when order_progress.received_count = order_progress.total_count then '完了'
             when order_progress.delivered_count = order_progress.total_count then '確認待ち'
             when order_progress.in_delivery_count > 0 then '配送中'
-            when order_progress.delivered_count > 0 then '一部配達済み'
+            when order_progress.delivered_count > 0 then '一部納品済み'
             when order_progress.purchased_count = 0 then '仕入れ待ち'
-            when order_progress.purchased_count < order_progress.total_count then '一部完了'
+            when order_progress.purchased_count < order_progress.total_count then '一部購入済み'
             else '配送待ち'
           end as status
         from purchase_orders

@@ -13,7 +13,7 @@ type Supplier = typeof initialSuppliers[number];
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -216,7 +216,7 @@ export default function SuppliersPage() {
           <div className="panel-title product-master-title">
             <div>
               <h3>仕入れ先リスト</h3>
-              <p>商品マスタの主要仕入れ先・予備仕入れ先で選択される候補</p>
+              <p>商品マスタのメイン仕入れ先・予備仕入れ先で選択される候補</p>
             </div>
             <span className="source-indicator">{filteredSuppliers.length} 件</span>
           </div>

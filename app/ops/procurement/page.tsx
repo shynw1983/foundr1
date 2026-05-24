@@ -78,10 +78,13 @@ const statusTone: Record<string, string> = {
   仕入れ待ち: "tone-waiting",
   仕入れ中: "tone-active",
   一部完了: "tone-warning",
+  一部購入済み: "tone-warning",
   仕入れ完了: "tone-done",
+  購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
   一部配達済み: "tone-warning",
+  一部納品済み: "tone-warning",
   到着日入力待ち: "tone-warning",
   到着待ち: "tone-route",
   確認待ち: "tone-confirm",
@@ -90,7 +93,7 @@ const statusTone: Record<string, string> = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -213,8 +216,8 @@ function getSupplierChoicesForItem(
     choices.set(normalizedSupplier, { supplier: normalizedSupplier, role });
   };
 
-  addChoice(product?.mainSupplier, "主");
-  addChoice(product?.backupSupplier, "予備");
+  addChoice(product?.mainSupplier, "メイン仕入れ先");
+  addChoice(product?.backupSupplier, "予備仕入れ先");
   supplierOptions
     .find((group) => group.product === item.productName)
     ?.options.forEach((option) => addChoice(option.supplier, option.role));
@@ -225,20 +228,27 @@ function getSupplierChoicesForItem(
 
 function getTemporarySupplierNote(note: string) {
   return note.split(/\r?\n/)
-    .find((line) => line.startsWith("臨時購入先:"))
-    ?.replace("臨時購入先:", "")
+    .find((line) => line.startsWith("臨時仕入れ先:") || line.startsWith("臨時購入先:"))
+    ?.replace(/^臨時(?:仕入れ|購入)先:/, "")
     .trim() ?? "";
 }
 
 function setTemporarySupplierNote(note: string, temporarySupplier: string) {
   const nextNote = note
     .split(/\r?\n/)
-    .filter((line) => !line.startsWith("臨時購入先:"))
+    .filter((line) => !line.startsWith("臨時仕入れ先:") && !line.startsWith("臨時購入先:"))
     .join("\n")
     .trim();
   const normalizedSupplier = temporarySupplier.trim();
 
-  return [nextNote, normalizedSupplier ? `臨時購入先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
+  return [nextNote, normalizedSupplier ? `臨時仕入れ先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
+}
+
+function formatSupplierRole(role: string) {
+  if (role === "メイン") return "メイン仕入れ先";
+  if (role === "予備") return "予備仕入れ先";
+
+  return role;
 }
 
 function groupTasksBySupplier(
@@ -292,9 +302,9 @@ function getOrderStatus(
   if (receivedCount === items.length) return "完了";
   if (deliveredCount === items.length) return "確認待ち";
   if (deliveryCount > 0) return "配送中";
-  if (deliveredCount > 0) return "一部配達済み";
+  if (deliveredCount > 0) return "一部納品済み";
   if (purchasedCount === 0) return "仕入れ待ち";
-  if (purchasedCount < items.length) return "一部完了";
+  if (purchasedCount < items.length) return "一部購入済み";
   if (hasOnlineSupplier(items, supplierList)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
     return "到着日入力待ち";
@@ -569,7 +579,7 @@ export default function ProcurementPage() {
     }).catch(() => {
       window.alert("配送状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
     });
-    showNotice(status === "received" ? "店舗確認済みにしました。" : "配送を完了にしました。");
+    showNotice(status === "received" ? "店舗確認済みにしました。" : "納品済みにしました。");
   }
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
@@ -625,12 +635,12 @@ export default function ProcurementPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="注文番号・商品・仕入れ先を検索"
+                placeholder="依頼番号・商品・仕入れ先を検索"
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
             <a className="primary-button" href="/ops/orders">
-              発注管理を見る
+              仕入れ依頼を見る
             </a>
           </div>
         </header>
@@ -642,7 +652,7 @@ export default function ProcurementPage() {
           />
           {focusedOrderId ? (
             <div className="focused-order-bar">
-              <span>注文番号 {focusedOrderId}</span>
+              <span>依頼番号 {focusedOrderId}</span>
               <a className="text-button" href="/ops/procurement">全体を見る</a>
             </div>
           ) : null}
@@ -667,11 +677,11 @@ export default function ProcurementPage() {
                     <div>
                       <div className="row-heading">
                         <strong>{order.id}</strong>
-                        <span className={`status-pill ${statusTone[liveStatus]}`}>{liveStatus}</span>
+                      <span className={`status-pill ${statusTone[liveStatus]}`}>{liveStatus === "確認待ち" ? "店舗確認待ち" : liveStatus}</span>
                       </div>
                       <p>{order.store} / {order.brand}</p>
                     </div>
-                    <span>{completedCount} / {items.length} 完了</span>
+                    <span>{completedCount} / {items.length} 購入済み</span>
                   </div>
                   <OrderFulfillmentPanel
                     isOnlineOrder={isOnlineOrder}
@@ -699,7 +709,7 @@ export default function ProcurementPage() {
                               <span>仕入れ先</span>
                               <strong>{group.supplier}</strong>
                             </div>
-                            <small>{supplierCompletedCount} / {group.items.length} 完了</small>
+                            <small>{supplierCompletedCount} / {group.items.length} 購入済み</small>
                           </div>
                           <div className="procurement-task-list">
                             {group.items.map((item) => {
@@ -736,9 +746,9 @@ export default function ProcurementPage() {
                                     <div className="task-product-line">
                                       <strong>{item.productName}</strong>
                                       {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
-                                      {item.deliveryStatus === "delivered" ? <span>配達済み</span> : null}
+                                      {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
-                                      {temporarySupplierNote ? <span>臨時 {temporarySupplierNote}</span> : null}
+                                      {temporarySupplierNote ? <span>臨時仕入れ先 {temporarySupplierNote}</span> : null}
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
@@ -837,12 +847,12 @@ function OrderFulfillmentPanel({
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
       <div>
-        <span>{isOnlineOrder ? "ネット注文" : "納品フロー"}</span>
+        <span>{isOnlineOrder ? "ネット注文" : "配送フロー"}</span>
         <strong>
           {isOnlineOrder
             ? expectedArrivalLabel
               ? `到着予定 ${expectedArrivalLabel}`
-              : "発注後に到着予定日を入力"
+              : "仕入れ先へ発注後に到着予定日を入力"
             : receivedCount === totalCount
               ? "店舗確認済み"
               : deliveredCount === totalCount
@@ -851,12 +861,12 @@ function OrderFulfillmentPanel({
                 ? "配送中"
                 : readyToDeliverCount > 0
                   ? "配送待ち"
-                  : "仕入れ完了後に配送へ"}
+                  : "購入完了後に配送へ"}
         </strong>
         <div className="fulfillment-metrics">
           <span>購入 {purchasedCount} / {totalCount}</span>
           <span>配送中 {inDeliveryCount}</span>
-          <span>配達済み {deliveredCount}</span>
+          <span>納品済み {deliveredCount}</span>
           <span>店舗確認 {receivedCount}</span>
         </div>
       </div>
@@ -905,7 +915,7 @@ function OrderFulfillmentPanel({
                         batch.status === "received"
                           ? `店舗確認済み${batch.storeConfirmedLabel ? ` ${batch.storeConfirmedLabel}` : ""}`
                           : batch.status === "delivered"
-                            ? "配達済み"
+                            ? "納品済み"
                             : "配送中"
                       }
                     </span>
@@ -916,7 +926,7 @@ function OrderFulfillmentPanel({
                     disabled={batch.status !== "in_delivery"}
                     onClick={() => onMarkStatus(batch.id, "delivered")}
                   >
-                    {batch.status === "in_delivery" ? "配達完了にする" : "配達済み"}
+                    {batch.status === "in_delivery" ? "納品済みにする" : "納品済み"}
                   </button>
                   <button
                     type="button"
@@ -979,14 +989,14 @@ function ExceptionReportDialog({
           <strong>{item.productName}</strong>
           <span>依頼 {item.requestedQuantity} {item.unit}</span>
           <span>実数 {item.actualQuantity} {item.unit}</span>
-          <span>購入先 {currentSupplier}</span>
+          <span>実際の仕入れ先 {currentSupplier}</span>
           <span className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
             {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
           </span>
         </div>
         <div className="edit-fields">
           <label>
-            <span>購入先変更</span>
+            <span>仕入れ先変更</span>
             <div className="supplier-choice-list">
               {choices.map((choice) => (
                 <button
@@ -1001,7 +1011,7 @@ function ExceptionReportDialog({
                   }}
                   key={`${choice.role}-${choice.supplier}`}
                 >
-                  <span>{choice.role}</span>
+                  <span>{formatSupplierRole(choice.role)}</span>
                   <strong>{choice.supplier}</strong>
                 </button>
               ))}
@@ -1009,7 +1019,7 @@ function ExceptionReportDialog({
             </div>
           </label>
           <label>
-            <span>臨時購入先</span>
+            <span>臨時仕入れ先</span>
             <input
               type="text"
               value={temporarySupplier}

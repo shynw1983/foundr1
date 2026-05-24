@@ -134,7 +134,7 @@ function productMatchesStore(product: ProductWithCategory, store: StoreItem | un
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
-  { label: "発注管理", href: "/ops/orders", icon: PackageCheck },
+  { label: "仕入れ依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "仕入れ管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "仕入れ履歴", href: "/ops/history", icon: FileText },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
@@ -578,7 +578,7 @@ export default function ProductsPage() {
                 </select>
               </label>
               <label>
-                <span>店舗ブランド</span>
+                <span>適用ブランド</span>
                 <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
                   {brandOptions.map((brandName) => (
@@ -724,7 +724,7 @@ export default function ProductsPage() {
                       </div>
                       <dl>
                         <div>
-                          <dt>用途ブランド</dt>
+                          <dt>適用ブランド</dt>
                           <dd>{product.brand || "共通"}</dd>
                         </div>
                         <div>
@@ -732,7 +732,7 @@ export default function ProductsPage() {
                           <dd>{product.manufacturer || "未設定"}</dd>
                         </div>
                         <div>
-                          <dt>主要仕入れ先</dt>
+                          <dt>メイン仕入れ先</dt>
                           <dd>{product.mainSupplier || "未設定"}</dd>
                         </div>
                         <div>
@@ -1194,10 +1194,10 @@ function getProductFields(
       label: "小分類",
       options: uniqueOptions([...subcategoryOptions, product.subcategory ?? ""])
     },
-    { key: "brand", label: "店舗ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
+    { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
-    { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
+    { key: "mainSupplier", label: "メイン仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
     { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
