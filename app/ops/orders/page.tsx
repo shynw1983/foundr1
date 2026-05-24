@@ -176,6 +176,10 @@ export default function OrdersPage() {
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [editingOrder, setEditingOrder] = useState<EditingOrder | null>(null);
+  const [draftStore, setDraftStore] = useState("");
+  const [draftDeadline, setDraftDeadline] = useState(getDefaultDeadlineValue());
+  const [draftPriority, setDraftPriority] = useState("中");
+  const [draftNote, setDraftNote] = useState("");
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([
     {
       id: 1,
@@ -240,6 +244,7 @@ export default function OrdersPage() {
 
     return true;
   });
+  const selectedDraftStore = draftStore || orderableStores[0]?.name || "";
 
   function getQueueFilterCount(filter: QueueFilter) {
     if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
@@ -318,6 +323,29 @@ export default function OrdersPage() {
 
   function removeOrderItemDraft(id: number) {
     setOrderItemDrafts((items) => items.filter((item) => item.id !== id));
+  }
+
+  function copyOrderToDraft(order: PurchaseOrder) {
+    const items = purchaseOrderItems
+      .filter((item) => item.orderId === order.id)
+      .map((item, index) => createDraftFromOrderItem(item, index));
+
+    setDraftStore(order.store);
+    setDraftDeadline(getDefaultDeadlineValue());
+    setDraftPriority(order.priority || "中");
+    setDraftNote(order.note ?? "");
+    setOrderItemDrafts(items.length > 0 ? items : [
+      {
+        id: Date.now(),
+        category: products[0]?.category ?? "",
+        subcategory: products[0]?.subcategory ?? "未分類",
+        productName: products[0]?.name ?? "",
+        quantity: 1,
+        unit: products[0]?.unit ?? "個"
+      }
+    ]);
+
+    document.getElementById("create-order-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
@@ -511,7 +539,7 @@ export default function OrdersPage() {
           <form className="inline-create-form" action="/api/orders" method="post">
             <label>
               <span>配達先店舗</span>
-              <select name="store" defaultValue={orderableStores[0]?.name}>
+              <select name="store" value={selectedDraftStore} onChange={(event) => setDraftStore(event.target.value)}>
                 {orderableStores.map((store) => (
                   <option value={store.name} key={store.name}>{store.label}</option>
                 ))}
@@ -519,11 +547,11 @@ export default function OrdersPage() {
             </label>
             <label>
               <span>締切</span>
-              <input name="deadline" type="datetime-local" defaultValue={getDefaultDeadlineValue()} />
+              <input name="deadline" type="datetime-local" value={draftDeadline} onChange={(event) => setDraftDeadline(event.target.value)} />
             </label>
             <label>
               <span>優先度</span>
-              <select name="priority" defaultValue="中">
+              <select name="priority" value={draftPriority} onChange={(event) => setDraftPriority(event.target.value)}>
                 <option value="高">高</option>
                 <option value="中">中</option>
                 <option value="低">低</option>
@@ -531,7 +559,7 @@ export default function OrdersPage() {
             </label>
             <label>
               <span>メモ</span>
-              <textarea name="note" placeholder="欠品時の代替、配送希望など" />
+              <textarea name="note" value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="欠品時の代替、配送希望など" />
             </label>
             <div className="order-items-builder">
               <div className="builder-heading">
@@ -665,6 +693,9 @@ export default function OrdersPage() {
                     </a>
                     <button type="button" className="text-button" onClick={() => startEditingOrder(order)}>
                       編集
+                    </button>
+                    <button type="button" className="text-button" onClick={() => copyOrderToDraft(order)}>
+                      複製
                     </button>
                   </div>
                 </article>
