@@ -1122,8 +1122,8 @@ function getProductFields(
     { key: "brand", label: "ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
-    { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
-    { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
+    { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
+    { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
   ];
@@ -1155,4 +1155,8 @@ function getOriginCountryOptions(selectedCountries: string[]) {
 
 function uniqueOptions(options: string[]) {
   return Array.from(new Set(options.filter(Boolean)));
+}
+
+function uniqueOptionsWithEmpty(options: string[]) {
+  return Array.from(new Set(options.filter((option) => option === "" || Boolean(option))));
 }

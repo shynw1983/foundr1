@@ -2,6 +2,7 @@
 
 import { Menu } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { UserBadge } from "./UserBadge";
 
 type NavItem = {
   label: string;
@@ -19,6 +20,9 @@ export function MobileNavMenu({ navItems }: { navItems: NavItem[] }) {
         <span>メニュー</span>
       </summary>
       <nav className="mobile-nav-list" aria-label="モバイルナビゲーション">
+        <div className="mobile-nav-user">
+          <UserBadge />
+        </div>
         {navItems.map(({ label, href, icon: Icon }) => (
           <a href={href} key={label}>
             <Icon size={17} />

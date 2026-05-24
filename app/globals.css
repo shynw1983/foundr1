@@ -299,6 +299,10 @@ button {
   color: #dce5ee;
 }
 
+.mobile-nav-user {
+  display: none;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -3005,16 +3009,7 @@ button {
   }
 
   .sidebar-user {
-    order: 2;
-    flex: 0 1 132px;
-    margin: 0;
-    padding: 0;
-    border-bottom: 0;
-  }
-
-  .sidebar-user .user-badge {
-    width: 100%;
-    min-width: 0;
+    display: none;
   }
 
   .topbar,
@@ -3063,15 +3058,35 @@ button {
 
   .mobile-nav-menu {
     order: 3;
-    flex: 0 0 132px;
-    display: grid;
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: block;
     gap: 5px;
   }
 
   .mobile-nav-menu summary {
     justify-content: center;
-    width: 100%;
+    width: auto;
     min-height: 42px;
+  }
+
+  .mobile-nav-user {
+    display: block;
+    padding: 4px 4px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .mobile-nav-user .user-badge {
+    justify-content: space-between;
+    width: 100%;
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f7fafc;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .mobile-nav-user .user-badge-role {
+    color: #d8eaff;
+    background: rgba(40, 105, 168, 0.38);
   }
 
   .mobile-nav-list {
