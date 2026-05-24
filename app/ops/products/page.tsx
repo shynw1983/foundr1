@@ -886,7 +886,7 @@ function ProductEditDialog({
                   value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
                   type={field.type ?? "text"}
                   onChange={(event) => {
-                    const nextValue = field.type === "number" ? Number(event.target.value) : event.target.value;
+                    const nextValue = field.key === "referencePrice" ? Number(event.target.value) : event.target.value;
                     onChange({
                       ...target,
                       value: {
@@ -974,7 +974,7 @@ function getProductFields(
   brandsData: typeof brands,
   categoryOptions: string[],
   subcategoryOptions: string[]
-): Array<{ key: string; label: string; type?: "number"; options?: string[] }> {
+): Array<{ key: string; label: string; type?: "text"; options?: string[] }> {
   const supplierNames = suppliers.map((supplier) => supplier.name);
   const brandNames = brandsData.map((brand) => brand.name);
 
@@ -990,7 +990,7 @@ function getProductFields(
     },
     { key: "brand", label: "ブランド", options: uniqueOptions([...brandNames, product.brand]) },
     { key: "unit", label: "単位", options: uniqueOptions(["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", product.unit]) },
-    { key: "referencePrice", label: "参考価格", type: "number" },
+    { key: "referencePrice", label: "参考価格", type: "text" },
     { key: "mainSupplier", label: "主要仕入れ先", options: uniqueOptions(["", ...supplierNames, product.mainSupplier]) },
     { key: "backupSupplier", label: "予備仕入れ先", options: uniqueOptions(["", ...supplierNames, product.backupSupplier]) },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
