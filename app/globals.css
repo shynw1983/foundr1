@@ -124,8 +124,8 @@ button {
   color: #f8fffc;
   background: #176d57;
   box-shadow: 0 22px 55px rgba(15, 23, 42, 0.34);
-  font-size: 16px;
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 500;
   animation: action-notice-pop 0.18s ease-out;
 }
 
@@ -143,8 +143,8 @@ button {
   border-radius: 999px;
   color: #176d57;
   background: white;
-  font-size: 20px;
-  font-weight: 900;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .action-notice.is-info .action-notice-icon {
@@ -627,7 +627,7 @@ button {
 .checkbox-group > span {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .management-form input,
@@ -925,14 +925,14 @@ button {
 
 .category-maintenance summary span {
   color: var(--ink);
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .category-maintenance summary small {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .category-maintenance-body {
@@ -984,7 +984,7 @@ button {
   color: var(--blue);
   background: var(--blue-soft);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .category-chip-list button {
@@ -995,7 +995,7 @@ button {
   background: white;
   color: var(--blue);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .product-category-strip {
@@ -2586,8 +2586,8 @@ button {
   .mobile-nav-list {
     position: absolute;
     top: calc(100% + 8px);
-    right: auto;
-    left: 0;
+    right: 0;
+    left: auto;
     z-index: 40;
     width: min(320px, calc(100vw - 24px));
     padding: 8px;
