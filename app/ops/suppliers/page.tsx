@@ -137,13 +137,13 @@ export default function SuppliersPage() {
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
-        <div className="brand-block">
+        <a className="brand-block" href="/ops" aria-label="ダッシュボードへ戻る">
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 Ops</p>
             <h1>発注管理</h1>
           </div>
-        </div>
+        </a>
         <MobileNavMenu navItems={navItems} />
         <div className="sidebar-user">
           <UserBadge />

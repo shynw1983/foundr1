@@ -62,6 +62,15 @@ button {
   gap: 12px;
   align-items: center;
   padding: 8px 6px 24px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+  outline: none;
+}
+
+.brand-block:hover,
+.brand-block:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .brand-mark {
@@ -2953,14 +2962,21 @@ button {
   .metric-grid,
   .content-grid,
   .workspace-grid,
-  .dashboard-report-grid,
   .management-grid,
   .admin-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-report-grid {
+    grid-template-columns: 1fr;
+  }
+
   .ops-main-stack {
     grid-column: 1 / -1;
+  }
+
+  .order-row {
+    grid-template-columns: minmax(0, 1.35fr) minmax(96px, 0.65fr) minmax(84px, 0.5fr) minmax(84px, 0.5fr) auto;
   }
 
   .procurement-task {
@@ -3898,6 +3914,24 @@ button {
 }
 
 @media (min-width: 640px) and (max-width: 900px) {
+  .history-table-head {
+    display: none;
+  }
+
+  .history-row {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-management-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .supplier-management-form .primary-button {
+    grid-column: 1 / -1;
+    justify-self: end;
+    min-width: 120px;
+  }
+
   .category-master-heading {
     align-items: center;
     flex-direction: row;
