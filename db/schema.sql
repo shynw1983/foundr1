@@ -190,6 +190,8 @@ alter table purchase_order_items add column if not exists selected_supplier_id u
 
 alter table purchase_orders add column if not exists expected_arrival_date date;
 alter table purchase_orders add column if not exists online_order_status text not null default 'not_started';
+alter table purchase_orders add column if not exists requested_by uuid references employees(id);
+alter table purchase_orders add column if not exists assigned_to uuid references employees(id);
 
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),

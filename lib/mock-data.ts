@@ -160,7 +160,7 @@ export const supplierLocations = [
     area: "セントラル受取拠点近く",
     hours: "6:00-15:00",
     purchaseMethod: "店頭 / 配送",
-    note: "朝のまとめ仕入れに利用"
+    note: "朝のまとめ購入に利用"
   },
   {
     supplier: "東和包材",
@@ -181,7 +181,7 @@ export const orders = [
     deadline: "本日 16:00",
     items: 8,
     priority: "高",
-    status: "仕入れ待ち"
+    status: "発注待ち"
   },
   {
     id: "PO-0523-002",
@@ -190,7 +190,7 @@ export const orders = [
     deadline: "本日 18:30",
     items: 12,
     priority: "中",
-    status: "仕入れ中"
+    status: "発注中"
   },
   {
     id: "PO-0523-003",
@@ -199,7 +199,7 @@ export const orders = [
     deadline: "明日 10:00",
     items: 15,
     priority: "高",
-    status: "一部完了"
+    status: "一部購入済み"
   },
   {
     id: "PO-0522-006",
@@ -227,13 +227,13 @@ export const exceptions = [
     type: "価格異常",
     message: "現地価格が参考価格より 12% 上昇。異常価格として記録済み。",
     store: "南町クラウド店",
-    status: "仕入れ担当が対応中"
+    status: "購入担当が対応中"
   },
   {
     id: "EX-003",
     product: "使い捨て食品手袋",
     type: "数量不足",
-    message: "6 箱のみ購入。残り 4 箱は明日追加仕入れ予定。",
+    message: "6 箱のみ購入。残り 4 箱は明日追加購入予定。",
     store: "セントラル受取拠点",
     status: "一部解決"
   }
@@ -256,7 +256,7 @@ export const productSupplierOptions = [
         referencePrice: 128,
         minOrder: "1 袋",
         leadTime: "当日",
-        note: "茶葉の通常仕入れ先"
+        note: "茶葉の通常購入先"
       },
       {
         supplier: "城北食材卸",
@@ -364,15 +364,15 @@ export const productSupplierOptions = [
 
 export const accessProfiles = [
   {
-    name: "本部仕入れ担当",
+    name: "本部購入担当",
     person: "李 本部",
     scope: "全店舗・全ブランド",
     stores: ["セントラル受取拠点", "東口テイクアウト店", "南町クラウド店"],
     visibleOrderIds: ["PO-0523-001", "PO-0523-002", "PO-0523-003", "PO-0522-006"],
-    note: "横断仕入れ、価格管理、仕入れ先管理を担当"
+    note: "横断購入、価格管理、購入先管理を担当"
   },
   {
-    name: "店舗仕入れ担当",
+    name: "店舗購入担当",
     person: "林 店舗",
     scope: "東口テイクアウト店のみ",
     stores: ["東口テイクアウト店"],
@@ -380,7 +380,7 @@ export const accessProfiles = [
     note: "自店舗の依頼、欠品報告、受け取り確認のみ操作"
   },
   {
-    name: "ブランド別仕入れ担当",
+    name: "ブランド別購入担当",
     person: "陳 ブランド",
     scope: "熱辣食堂ブランド",
     stores: ["セントラル受取拠点", "南町クラウド店"],

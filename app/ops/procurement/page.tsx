@@ -24,6 +24,8 @@ type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number] & {
   expectedArrivalDate?: string;
   onlineOrderStatus?: "not_started" | "online_ordered";
+  requesterName?: string;
+  buyerName?: string;
 };
 type DashboardOrderItem = {
   id?: string;
@@ -76,18 +78,12 @@ type SupplierChoice = {
 };
 
 const statusTone: Record<string, string> = {
-  仕入れ待ち: "tone-waiting",
-  仕入れ中: "tone-active",
-  仕入れ完了: "tone-done",
   発注待ち: "tone-waiting",
   発注中: "tone-active",
-  一部完了: "tone-warning",
   一部購入済み: "tone-warning",
-  発注完了: "tone-done",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部配達済み: "tone-warning",
   一部納品済み: "tone-warning",
   到着日入力待ち: "tone-warning",
   到着待ち: "tone-route",
@@ -100,11 +96,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/ops/history", icon: FileText },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
@@ -232,20 +228,20 @@ function getSupplierChoicesForItem(
 
 function getTemporarySupplierNote(note: string) {
   return note.split(/\r?\n/)
-    .find((line) => line.startsWith("臨時発注先:") || line.startsWith("臨時仕入れ先:") || line.startsWith("臨時購入先:"))
-    ?.replace(/^臨時(?:発注|仕入れ|購入)先:/, "")
+    .find((line) => line.startsWith("臨時購入先:"))
+    ?.replace(/^臨時購入先:/, "")
     .trim() ?? "";
 }
 
 function setTemporarySupplierNote(note: string, temporarySupplier: string) {
   const nextNote = note
     .split(/\r?\n/)
-    .filter((line) => !line.startsWith("臨時発注先:") && !line.startsWith("臨時仕入れ先:") && !line.startsWith("臨時購入先:"))
+    .filter((line) => !line.startsWith("臨時購入先:"))
     .join("\n")
     .trim();
   const normalizedSupplier = temporarySupplier.trim();
 
-  return [nextNote, normalizedSupplier ? `臨時発注先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
+  return [nextNote, normalizedSupplier ? `臨時購入先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
 }
 
 function formatSupplierRole(role: string) {
@@ -667,6 +663,7 @@ export default function ProcurementPage() {
               const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
               const hasPurchasedItems = completedCount > 0;
               const isOnlineOrder = hasOnlineSupplier(items, suppliers);
+              const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, products);
 
               return (
                 <article className="procurement-order-card" key={order.id}>
@@ -676,9 +673,12 @@ export default function ProcurementPage() {
                         <strong>{order.id}</strong>
                       <span className={`status-pill ${statusTone[liveStatus]}`}>{liveStatus === "確認待ち" ? "店舗確認待ち" : liveStatus}</span>
                       </div>
-                      <p>{order.store} / {order.brand}</p>
+                      <p>{order.store} / {order.brand}{order.buyerName ? ` · 購入担当 ${order.buyerName}` : ""}</p>
                     </div>
-                    <span>{completedCount} / {items.length} 購入済み</span>
+                    <div className="procurement-order-summary">
+                      <span>概算 {formatEstimatedAmount(estimatedAmount)}</span>
+                      <span>{completedCount} / {items.length} 購入済み</span>
+                    </div>
                   </div>
                   <OrderFulfillmentPanel
                     isOnlineOrder={isOnlineOrder}
@@ -745,7 +745,7 @@ export default function ProcurementPage() {
                                       {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
                                       {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
-                                      {temporarySupplierNote ? <span>臨時発注先 {temporarySupplierNote}</span> : null}
+                                      {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
@@ -988,14 +988,14 @@ function ExceptionReportDialog({
           <strong>{item.productName}</strong>
           <span>依頼 {item.requestedQuantity} {item.unit}</span>
           <span>実数 {item.actualQuantity} {item.unit}</span>
-          <span>実際の発注先 {currentSupplier}</span>
+          <span>実際の購入先 {currentSupplier}</span>
           <span className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
             {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
           </span>
         </div>
         <div className="edit-fields">
           <label>
-            <span>発注先変更</span>
+            <span>購入先変更</span>
             <div className="supplier-choice-list">
               {choices.map((choice) => (
                 <button
@@ -1018,7 +1018,7 @@ function ExceptionReportDialog({
             </div>
           </label>
           <label>
-            <span>臨時発注先</span>
+            <span>臨時購入先</span>
             <input
               type="text"
               value={temporarySupplier}
@@ -1075,4 +1075,20 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
       </div>
     </div>
   );
+}
+
+function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productList: Product[]) {
+  return items.reduce((total, item) => {
+    const product = findProcurementProduct(item, productList);
+    const price = Number(product?.referencePrice ?? 0);
+    return total + item.requestedQuantity * (Number.isFinite(price) ? price : 0);
+  }, 0);
+}
+
+function formatEstimatedAmount(amount: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    maximumFractionDigits: 0
+  }).format(Math.round(amount));
 }

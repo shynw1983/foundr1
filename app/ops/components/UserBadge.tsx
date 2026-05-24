@@ -13,7 +13,7 @@ const roleLabels: Record<string, string> = {
   manager: "Manager",
   store_owner: "加盟店オーナー",
   staff: "Staff",
-  buyer: "Buyer"
+  buyer: "購入担当"
 };
 
 export function UserBadge() {

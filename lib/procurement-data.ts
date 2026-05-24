@@ -100,6 +100,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,
+    staffOptions,
     orders,
     purchaseOrderItems,
     deliveryBatches,
@@ -281,9 +282,33 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
       `,
       sql`
         select
+          employees.id::text as id,
+          employees.name,
+          employees.role,
+          coalesce(array_agg(stores.name order by stores.name) filter (where stores.name is not null), '{}') as "storeNames"
+        from employees
+        left join employee_scopes
+          on employee_scopes.employee_id = employees.id
+          and employee_scopes.scope_type = 'store'
+        left join stores on stores.id = employee_scopes.store_id
+        where employees.status = 'active'
+          and (
+            ${scope.allStores}
+            or employees.id::text = ${session?.id ?? ""}
+            or employee_scopes.store_id::text = any(${scope.storeIds})
+          )
+        group by employees.id
+        order by employees.name
+      `,
+      sql`
+        select
           purchase_orders.order_no as id,
           stores.name as store,
           coalesce(order_brands.brand_names, brands.name, '共通') as brand,
+          requested_employees.id::text as "requesterStaffId",
+          coalesce(requested_employees.name, '') as "requesterName",
+          assigned_employees.id::text as "buyerStaffId",
+          coalesce(assigned_employees.name, '') as "buyerName",
           coalesce(purchase_orders.deadline_label, '') as "deadlineLabel",
           purchase_orders.deadline_at as "deadlineAt",
           purchase_orders.created_at as "createdAt",
@@ -305,6 +330,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         from purchase_orders
         join stores on stores.id = purchase_orders.store_id
         left join brands on brands.id = purchase_orders.brand_id
+        left join employees requested_employees on requested_employees.id = purchase_orders.requested_by
+        left join employees assigned_employees on assigned_employees.id = purchase_orders.assigned_to
         left join lateral (
           select string_agg(distinct brands.name, ' / ' order by brands.name) as brand_names
           from purchase_order_items
@@ -476,6 +503,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             or (fallback_prices.supplier_id is null and latest_prices.supplier_id is null)
           )
         where coalesce(previous_prices.price, fallback_prices.price) <> 0
+          and latest_prices.price <> coalesce(previous_prices.price, fallback_prices.price)
         order by abs((latest_prices.price - coalesce(previous_prices.price, fallback_prices.price)) / coalesce(previous_prices.price, fallback_prices.price)) desc
         limit 8
       `
@@ -496,9 +524,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     supplierLocations,
     productBrandUsages,
     productSupplierOptions,
+    staffOptions,
     orders: displayOrders,
     purchaseOrderItems,
     deliveryBatches,
-    priceSignals
+    priceSignals,
+    currentUserId: session?.id ?? ""
   };
 }

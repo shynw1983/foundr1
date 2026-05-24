@@ -1,4 +1,4 @@
-import { canAccessStore, requireWritableOpsSession } from "../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireWritableOpsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
@@ -109,6 +109,28 @@ async function validateOrderInput(session: EmployeeSession, storeName: string, p
   return { storeId, productIdsByName, validProductIds };
 }
 
+async function validateStaffAssignee(session: EmployeeSession, staffId: string, storeId: string, fallbackId: string) {
+  const targetStaffId = staffId || fallbackId;
+  const scope = await getSessionStoreScope(session);
+  const rows = await sql`
+    select employees.id::text as id
+    from employees
+    left join employee_scopes
+      on employee_scopes.employee_id = employees.id
+      and employee_scopes.scope_type = 'store'
+    where employees.id = ${targetStaffId}
+      and employees.status = 'active'
+      and (
+        ${scope.allStores}
+        or employees.id = ${session.id}
+        or employee_scopes.store_id = ${storeId}
+      )
+    limit 1
+  `;
+
+  return rows[0]?.id ? targetStaffId : fallbackId;
+}
+
 export async function POST(request: Request) {
   const session = await requireWritableOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -120,6 +142,8 @@ export async function POST(request: Request) {
   const deadlineAt = deadlineAtFromInput(deadlineInput);
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
+  const requesterStaffIdInput = String(formData.get("requesterStaffId") ?? "");
+  const buyerStaffIdInput = String(formData.get("buyerStaffId") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
   const productIds = formData.getAll("productId").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
@@ -128,6 +152,8 @@ export async function POST(request: Request) {
   const orderNo = `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${Date.now().toString().slice(-3)}`;
   const validation = await validateOrderInput(session, storeName, productNames, productIds);
   if (validation.error) return validation.error;
+  const requesterStaffId = await validateStaffAssignee(session, requesterStaffIdInput, validation.storeId, session.id);
+  const buyerStaffId = await validateStaffAssignee(session, buyerStaffIdInput, validation.storeId, requesterStaffId);
 
   const insertedOrders = await sql`
     insert into purchase_orders (
@@ -139,7 +165,8 @@ export async function POST(request: Request) {
       priority,
       status,
       note,
-      requested_by
+      requested_by,
+      assigned_to
     )
     values (
       ${orderNo},
@@ -150,7 +177,8 @@ export async function POST(request: Request) {
       ${priority},
       ${"発注待ち"},
       ${note},
-      ${session.id}
+      ${requesterStaffId},
+      ${buyerStaffId}
     )
     returning id
   `;
@@ -197,6 +225,8 @@ export async function PUT(request: Request) {
   const deadlineAt = deadlineAtFromInput(deadlineInput);
   const priority = String(formData.get("priority") ?? "中");
   const note = String(formData.get("note") ?? "");
+  const requesterStaffIdInput = String(formData.get("requesterStaffId") ?? "");
+  const buyerStaffIdInput = String(formData.get("buyerStaffId") ?? "");
   const productNames = formData.getAll("productName").map((value) => String(value)).filter(Boolean);
   const productIds = formData.getAll("productId").map((value) => String(value));
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
@@ -212,6 +242,8 @@ export async function PUT(request: Request) {
 
   const validation = await validateOrderInput(session, storeName, productNames, productIds);
   if (validation.error) return validation.error;
+  const requesterStaffId = await validateStaffAssignee(session, requesterStaffIdInput, validation.storeId, session.id);
+  const buyerStaffId = await validateStaffAssignee(session, buyerStaffIdInput, validation.storeId, requesterStaffId);
 
   const existingOrder = await sql`
     select id, store_id::text as "storeId"
@@ -259,6 +291,8 @@ export async function PUT(request: Request) {
       requested_item_count = ${productNames.length},
       priority = ${priority},
       note = ${note},
+      requested_by = ${requesterStaffId},
+      assigned_to = ${buyerStaffId},
       updated_at = now()
     where purchase_orders.id = ${purchaseOrderId}
     returning purchase_orders.id

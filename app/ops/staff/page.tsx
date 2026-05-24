@@ -29,11 +29,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/ops/history", icon: FileText },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
@@ -41,7 +41,7 @@ const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   store_owner: "加盟店オーナー",
-  buyer: "発注担当",
+  buyer: "購入担当",
   staff: "店舗スタッフ"
 };
 
@@ -276,7 +276,7 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         <select name="role" defaultValue={member?.role ?? "staff"}>
           <option value="staff">店舗スタッフ</option>
           <option value="store_owner">加盟店オーナー</option>
-          <option value="buyer">発注担当</option>
+          <option value="buyer">購入担当</option>
           <option value="manager">Manager</option>
           <option value="owner">Owner</option>
         </select>

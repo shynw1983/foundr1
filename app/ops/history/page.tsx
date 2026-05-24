@@ -53,11 +53,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/ops/history", icon: FileText },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 

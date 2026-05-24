@@ -1747,7 +1747,7 @@ button {
 
 .order-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.7fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(92px, auto);
+  grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.65fr) minmax(64px, 0.45fr) minmax(92px, 0.75fr) minmax(92px, 0.7fr) minmax(64px, 0.45fr) minmax(92px, auto);
   align-items: center;
   gap: 12px;
   padding: 13px;
@@ -1809,6 +1809,45 @@ button {
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.procurement-order-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.procurement-order-summary span,
+.estimated-amount-box {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.procurement-order-summary span {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.estimated-amount-box {
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  background: rgba(33, 104, 176, 0.08);
+}
+
+.estimated-amount-box span {
+  color: var(--muted);
+}
+
+.estimated-amount-box strong {
+  color: var(--blue);
 }
 
 .fulfillment-panel {

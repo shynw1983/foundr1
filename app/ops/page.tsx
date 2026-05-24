@@ -59,31 +59,18 @@ type StoreFeedback = {
 };
 
 const statusTone: Record<string, string> = {
-  仕入れ待ち: "tone-waiting",
-  仕入れ中: "tone-active",
-  仕入れ完了: "tone-done",
   発注待ち: "tone-waiting",
   発注中: "tone-active",
-  一部完了: "tone-warning",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部配達済み: "tone-warning",
   一部納品済み: "tone-warning",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
 
 function formatPurchaseOrderStatus(status: string) {
-  if (status === "仕入れ待ち") return "発注待ち";
-  if (status === "仕入れ中") return "発注中";
-  if (status === "仕入れ完了") return "発注完了";
-  if (status === "発注待ち") return "発注待ち";
-  if (status === "発注中") return "発注中";
-  if (status === "一部完了") return "一部購入済み";
-  if (status === "発注完了") return "発注完了";
-  if (status === "一部配達済み") return "一部納品済み";
   if (status === "確認待ち") return "店舗確認待ち";
 
   return status;
@@ -94,11 +81,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/ops/history", icon: FileText },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
@@ -151,7 +138,8 @@ export default function OpsDashboard() {
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems);
   const activeExceptions = storeFeedbackItems.length;
-  const risingPrices = priceSignals.filter((item) => item.changeRate > 0);
+  const visiblePriceSignals = priceSignals.filter((item) => item.changeRate !== 0);
+  const risingPrices = visiblePriceSignals.filter((item) => item.changeRate > 0);
   const canUpdateBaseline = ["owner", "manager", "buyer"].includes(currentRole);
   const supplierRouteCount = new Set(
     productSupplierOptions.flatMap((group) => group.options.filter((option) => option.role === "メイン").map((option) => option.supplier))
@@ -260,7 +248,7 @@ export default function OpsDashboard() {
             <section className="panel">
               <PanelTitle title="価格トレンド" subtitle="主要食材と包材の変動" />
               <div className="trend-list">
-                {priceSignals.map((signal) => (
+                {visiblePriceSignals.map((signal) => (
                   <article className="trend-row" key={`${signal.productId}-${signal.supplierId ?? "none"}`}>
                     <div>
                       <strong>{signal.product}</strong>
@@ -273,7 +261,7 @@ export default function OpsDashboard() {
                           {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
                         </em>
                       </span>
-                      {canUpdateBaseline ? (
+                      {canUpdateBaseline && signal.changeRate !== 0 ? (
                         <button
                           className="trend-baseline-button"
                           type="button"
@@ -286,7 +274,7 @@ export default function OpsDashboard() {
                     </div>
                   </article>
                 ))}
-                {priceSignals.length === 0 ? (
+                {visiblePriceSignals.length === 0 ? (
                   <div className="empty-state">比較できる価格記録はまだありません</div>
                 ) : null}
                 {priceMessage ? <div className="trend-message">{priceMessage}</div> : null}
@@ -309,7 +297,7 @@ export default function OpsDashboard() {
             <a className="module-card" href="/ops/suppliers">
               <div>
                 <strong>商品別発注先</strong>
-                <p>メイン発注先、予備発注先、臨時発注先</p>
+                <p>メイン発注先、予備発注先、臨時購入先</p>
               </div>
               <span>{productSupplierOptions.length} 件</span>
               <small>{productSupplierOptions.slice(0, 3).map((group) => group.product).join(" / ")}</small>

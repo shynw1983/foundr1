@@ -23,7 +23,19 @@ type ProductWithCategory = Product & {
   packageSpec?: string;
 };
 type StoreItem = typeof stores[number];
-type PurchaseOrder = typeof orders[number] & { note?: string };
+type PurchaseOrder = typeof orders[number] & {
+  note?: string;
+  requesterStaffId?: string;
+  requesterName?: string;
+  buyerStaffId?: string;
+  buyerName?: string;
+};
+type StaffOption = {
+  id: string;
+  name: string;
+  role: string;
+  storeNames: string[];
+};
 type OrderItemDraft = {
   id: number;
   productId: string;
@@ -60,33 +72,24 @@ type EditingOrder = {
   deadline: string;
   priority: string;
   note: string;
+  requesterStaffId: string;
+  buyerStaffId: string;
   items: OrderItemDraft[];
 };
 
 const statusTone: Record<string, string> = {
-  仕入れ待ち: "tone-waiting",
-  仕入れ中: "tone-active",
-  仕入れ完了: "tone-done",
   発注待ち: "tone-waiting",
   発注中: "tone-active",
-  一部完了: "tone-warning",
   一部購入済み: "tone-warning",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部配達済み: "tone-warning",
   一部納品済み: "tone-warning",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };
 
 function formatPurchaseOrderStatus(status: string) {
-  if (status === "仕入れ待ち") return "発注待ち";
-  if (status === "仕入れ中") return "発注中";
-  if (status === "仕入れ完了") return "購入完了";
-  if (status === "一部完了") return "一部購入済み";
-  if (status === "発注完了") return "購入完了";
-  if (status === "一部配達済み") return "一部納品済み";
   if (status === "確認待ち") return "店舗確認待ち";
 
   return status;
@@ -97,11 +100,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
   { label: "発注管理", href: "/ops/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/ops/history", icon: FileText },
+  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
-  { label: "商品マスタ", href: "/ops/products", icon: Boxes },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
@@ -280,6 +283,8 @@ export default function OrdersPage() {
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
   const [query, setQuery] = useState("");
@@ -288,6 +293,8 @@ export default function OrdersPage() {
   const [draftDeadline, setDraftDeadline] = useState(getDefaultDeadlineValue());
   const [draftPriority, setDraftPriority] = useState("中");
   const [draftNote, setDraftNote] = useState("");
+  const [draftRequesterStaffId, setDraftRequesterStaffId] = useState("");
+  const [draftBuyerStaffId, setDraftBuyerStaffId] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState("");
   const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
@@ -301,6 +308,8 @@ export default function OrdersPage() {
       products?: ProductWithCategory[];
       orders?: PurchaseOrder[];
       purchaseOrderItems?: PurchaseOrderItem[];
+      staffOptions?: StaffOption[];
+      currentUserId?: string;
     };
 
     if (data.stores) setStoresData(data.stores);
@@ -309,6 +318,10 @@ export default function OrdersPage() {
     }
     if (data.orders) setPurchaseOrders(data.orders);
     if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.staffOptions) {
+      setStaffOptions(data.staffOptions);
+    }
+    if (data.currentUserId) setCurrentUserId(data.currentUserId);
     setDataSource("neon");
   }
 
@@ -342,12 +355,15 @@ export default function OrdersPage() {
 
     if (queueFilter === "未完了") return order.status !== "完了";
     if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
-    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部配達済み", "一部納品済み"].includes(order.status);
+    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部納品済み"].includes(order.status);
     if (queueFilter === "完了") return order.status === "完了";
 
     return true;
   });
   const selectedDraftStore = draftStore || orderableStores[0]?.name || "";
+  const draftAssignableStaff = getAssignableStaffOptions(staffOptions, selectedDraftStore);
+  const selectedDraftRequesterStaffId = getSelectedStaffId(draftRequesterStaffId || currentUserId, draftAssignableStaff);
+  const selectedDraftBuyerStaffId = getSelectedStaffId(draftBuyerStaffId || selectedDraftRequesterStaffId, draftAssignableStaff);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
   const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
@@ -370,6 +386,11 @@ export default function OrdersPage() {
     : products;
   const editingProductCategories = Array.from(new Set(editingProducts.map((product) => product.category)));
   const editingProductSubcategories = Array.from(new Set(editingProducts.map((product) => product.subcategory ?? "未分類")));
+  const editingAssignableStaff = editingOrder ? getAssignableStaffOptions(staffOptions, editingOrder.store) : [];
+  const draftEstimatedAmount = calculateDraftEstimatedAmount(orderItemDrafts, products);
+  const editingEstimatedAmount = editingOrder
+    ? calculateDraftEstimatedAmount(editingOrder.items, products)
+    : 0;
 
   useEffect(() => {
     setOrderItemDrafts((items) => items.map((item) => syncOrderItemWithProducts(item, draftProducts)));
@@ -383,11 +404,16 @@ export default function OrdersPage() {
     setDraftSubcategoryFilter((current) => draftProductSubcategories.includes(current) ? current : draftProductSubcategories[0] ?? "");
   }, [selectedDraftCategory, selectedDraftStore, products]);
 
+  useEffect(() => {
+    setDraftRequesterStaffId((current) => getSelectedStaffId(current || currentUserId, draftAssignableStaff));
+    setDraftBuyerStaffId((current) => getSelectedStaffId(current || currentUserId, draftAssignableStaff));
+  }, [selectedDraftStore, currentUserId, staffOptions]);
+
   function getQueueFilterCount(filter: QueueFilter) {
     if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
     if (filter === "今日対応") return purchaseOrders.filter((order) => order.status !== "完了" && isTodayOrder(order)).length;
     if (filter === "配送待ち") {
-      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部配達済み", "一部納品済み"].includes(order.status)).length;
+      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部納品済み"].includes(order.status)).length;
     }
     if (filter === "完了") return purchaseOrders.filter((order) => order.status === "完了").length;
 
@@ -483,6 +509,8 @@ export default function OrdersPage() {
     setDraftDeadline(getDefaultDeadlineValue());
     setDraftPriority(order.priority || "中");
     setDraftNote(order.note ?? "");
+    setDraftRequesterStaffId(order.requesterStaffId || currentUserId);
+    setDraftBuyerStaffId(order.buyerStaffId || order.requesterStaffId || currentUserId);
     setOrderItemDrafts(items.length > 0 ? items : [
       createOrderItemDraftFromProduct(availableProducts[0])
     ]);
@@ -537,6 +565,8 @@ export default function OrdersPage() {
       deadline: labelToDeadlineValue(order.deadline),
       priority: order.priority,
       note: order.note ?? "",
+      requesterStaffId: order.requesterStaffId || currentUserId,
+      buyerStaffId: order.buyerStaffId || order.requesterStaffId || currentUserId,
       items: items.length > 0 ? items : [
         createOrderItemDraftFromProduct(getProductsForStore(products, orderableStores, order.store)[0])
       ]
@@ -623,6 +653,8 @@ export default function OrdersPage() {
     formData.set("deadline", editingOrder.deadline);
     formData.set("priority", editingOrder.priority);
     formData.set("note", editingOrder.note);
+    formData.set("requesterStaffId", editingOrder.requesterStaffId);
+    formData.set("buyerStaffId", editingOrder.buyerStaffId);
     editingOrder.items.forEach((item) => {
       formData.append("productId", item.productId);
       formData.append("productName", item.productName);
@@ -707,6 +739,22 @@ export default function OrdersPage() {
                 <option value="高">高</option>
                 <option value="中">中</option>
                 <option value="低">低</option>
+              </select>
+            </label>
+            <label>
+              <span>依頼担当</span>
+              <select name="requesterStaffId" value={selectedDraftRequesterStaffId} onChange={(event) => setDraftRequesterStaffId(event.target.value)}>
+                {draftAssignableStaff.map((staff) => (
+                  <option value={staff.id} key={staff.id}>{staff.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>購入担当</span>
+              <select name="buyerStaffId" value={selectedDraftBuyerStaffId} onChange={(event) => setDraftBuyerStaffId(event.target.value)}>
+                {draftAssignableStaff.map((staff) => (
+                  <option value={staff.id} key={staff.id}>{staff.name}</option>
+                ))}
               </select>
             </label>
             <label>
@@ -815,6 +863,7 @@ export default function OrdersPage() {
                   <div className="empty-state">商品カードをクリックして追加してください</div>
                 ) : null}
               </div>
+              <EstimatedAmountBox amount={draftEstimatedAmount} />
             </div>
             <div className="inline-create-actions">
               <button type="submit" className="primary-button">
@@ -842,44 +891,56 @@ export default function OrdersPage() {
               ))}
             </div>
             <div className="order-list">
-              {filteredPurchaseOrders.map((order) => (
-                <article className="order-row" key={order.id}>
-                  <div>
-                    <div className="row-heading">
-                      <strong>{order.id}</strong>
-                      <span className={`status-pill ${statusTone[order.status]}`}>{formatPurchaseOrderStatus(order.status)}</span>
+              {filteredPurchaseOrders.map((order) => {
+                const estimatedAmount = calculateOrderEstimatedAmount(order.id, purchaseOrderItems, products);
+
+                return (
+                  <article className="order-row" key={order.id}>
+                    <div>
+                      <div className="row-heading">
+                        <strong>{order.id}</strong>
+                        <span className={`status-pill ${statusTone[order.status]}`}>{formatPurchaseOrderStatus(order.status)}</span>
+                      </div>
+                      <p>{order.store} / {order.brand}</p>
                     </div>
-                    <p>{order.store} / {order.brand}</p>
-                  </div>
-                  <div>
-                    <span className="muted-label">締切</span>
-                    <strong>{order.deadline}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-label">商品</span>
-                    <strong>{order.items} 件</strong>
-                  </div>
-                  <div>
-                    <span className="muted-label">優先度</span>
-                    <strong>{order.priority}</strong>
-                  </div>
-                  <div className="row-actions">
-                    <a
-                      className="icon-button"
-                      href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
-                      aria-label={`${order.id} の発注管理`}
-                    >
-                      <PackageCheck size={18} />
-                    </a>
-                    <button type="button" className="text-button" onClick={() => startEditingOrder(order)}>
-                      編集
-                    </button>
-                    <button type="button" className="text-button" onClick={() => copyOrderToDraft(order)}>
-                      複製
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div>
+                      <span className="muted-label">締切</span>
+                      <strong>{order.deadline}</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">商品</span>
+                      <strong>{order.items} 件</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">担当</span>
+                      <strong>{formatOrderAssignees(order)}</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">概算金額</span>
+                      <strong>{formatEstimatedAmount(estimatedAmount)}</strong>
+                    </div>
+                    <div>
+                      <span className="muted-label">優先度</span>
+                      <strong>{order.priority}</strong>
+                    </div>
+                    <div className="row-actions">
+                      <a
+                        className="icon-button"
+                        href={`/ops/procurement?order=${encodeURIComponent(order.id)}`}
+                        aria-label={`${order.id} の発注管理`}
+                      >
+                        <PackageCheck size={18} />
+                      </a>
+                      <button type="button" className="text-button" onClick={() => startEditingOrder(order)}>
+                        編集
+                      </button>
+                      <button type="button" className="text-button" onClick={() => copyOrderToDraft(order)}>
+                        複製
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
               {filteredPurchaseOrders.length === 0 ? (
                 <div className="empty-state">該当する依頼はありません</div>
               ) : null}
@@ -956,6 +1017,28 @@ export default function OrdersPage() {
                   <option value="高">高</option>
                   <option value="中">中</option>
                   <option value="低">低</option>
+                </select>
+              </label>
+              <label>
+                <span>依頼担当</span>
+                <select
+                  value={getSelectedStaffId(editingOrder.requesterStaffId, editingAssignableStaff)}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, requesterStaffId: event.target.value } : current)}
+                >
+                  {editingAssignableStaff.map((staff) => (
+                    <option value={staff.id} key={staff.id}>{staff.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>購入担当</span>
+                <select
+                  value={getSelectedStaffId(editingOrder.buyerStaffId, editingAssignableStaff)}
+                  onChange={(event) => setEditingOrder((current) => current ? { ...current, buyerStaffId: event.target.value } : current)}
+                >
+                  {editingAssignableStaff.map((staff) => (
+                    <option value={staff.id} key={staff.id}>{staff.name}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -1045,6 +1128,7 @@ export default function OrdersPage() {
                   商品を追加
                 </button>
               </div>
+              <EstimatedAmountBox amount={editingEstimatedAmount} />
             </div>
 
             <div className="modal-actions">
@@ -1072,4 +1156,68 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
       </div>
     </div>
   );
+}
+
+function EstimatedAmountBox({ amount }: { amount: number }) {
+  return (
+    <div className="estimated-amount-box">
+      <span>概算金額</span>
+      <strong>{formatEstimatedAmount(amount)}</strong>
+    </div>
+  );
+}
+
+function calculateDraftEstimatedAmount(items: OrderItemDraft[], productList: ProductWithCategory[]) {
+  return items.reduce((total, item) => {
+    const product = findProductForEstimate(item.productId, item.productName, productList);
+    return total + item.quantity * getReferencePrice(product);
+  }, 0);
+}
+
+function calculateOrderEstimatedAmount(orderId: string, orderItems: PurchaseOrderItem[], productList: ProductWithCategory[]) {
+  return orderItems
+    .filter((item) => item.orderId === orderId)
+    .reduce((total, item) => {
+      const product = findProductForEstimate(item.productId, item.productName, productList);
+      return total + item.requestedQuantity * getReferencePrice(product);
+    }, 0);
+}
+
+function getAssignableStaffOptions(staffOptions: StaffOption[], storeName: string) {
+  const storeLabel = storeName.replace("納品", "");
+  return staffOptions.filter((staff) =>
+    staff.storeNames.length === 0 ||
+    staff.storeNames.includes(storeName) ||
+    staff.storeNames.includes(storeLabel)
+  );
+}
+
+function getSelectedStaffId(currentId: string, staffOptions: StaffOption[]) {
+  if (staffOptions.some((staff) => staff.id === currentId)) return currentId;
+  return staffOptions[0]?.id ?? "";
+}
+
+function formatOrderAssignees(order: PurchaseOrder) {
+  const requester = order.requesterName || "未設定";
+  const buyer = order.buyerName || requester;
+  if (requester === buyer) return requester;
+  return `${requester} / ${buyer}`;
+}
+
+function findProductForEstimate(productId: string | undefined, productName: string, productList: ProductWithCategory[]) {
+  return productList.find((product) => product.id === productId)
+    ?? productList.find((product) => product.name === productName);
+}
+
+function getReferencePrice(product: ProductWithCategory | undefined) {
+  const price = Number(product?.referencePrice ?? 0);
+  return Number.isFinite(price) ? price : 0;
+}
+
+function formatEstimatedAmount(amount: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    maximumFractionDigits: 0
+  }).format(Math.round(amount));
 }
