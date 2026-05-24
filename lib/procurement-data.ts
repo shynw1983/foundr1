@@ -365,6 +365,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           products.id::text as "productId",
           products.name as "productName",
           coalesce(item_brands.name, order_brands.name, '共通') as "brandName",
+          products.reference_price::float as "referencePrice",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
           purchase_order_items.requested_unit as unit,
           coalesce(

@@ -349,7 +349,6 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       actualQuantity: item.actualQuantity,
       actualPrice: item.actualPrice,
       note: item.note,
-      priceExceptionNote: item.priceExceptionNote,
       supplier: item.supplier
     })
   });
@@ -765,7 +764,7 @@ export default function ProcurementPage() {
                                   </div>
                                   <button
                                     type="button"
-                                    className={item.note || item.priceExceptionNote ? "exception-button has-report" : "exception-button"}
+                                    className={item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
                                     onClick={() => setActiveExceptionItemId(item.id)}
                                   >
                                     異常報告
@@ -1041,14 +1040,6 @@ function ExceptionReportDialog({
               value={item.actualPrice}
               placeholder="例: 271 / ¥271"
               onChange={(event) => onChange({ actualPrice: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>価格異常メモ</span>
-            <textarea
-              value={item.priceExceptionNote}
-              placeholder="通常より高い、特売終了、価格確認が必要など"
-              onChange={(event) => onChange({ priceExceptionNote: event.target.value })}
             />
           </label>
         </div>

@@ -1,4 +1,5 @@
 import { authCookieName, createSessionToken, sessionCookieMaxAge, verifyPassword } from "../../../../lib/auth";
+import { touchEmployeeLastSeen } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 type EmployeeRow = {
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     loginId: employee.login_id || employee.email || loginId,
     role: employee.role
   });
+  await touchEmployeeLastSeen(employee.id);
 
   const response = Response.json({
     ok: true,

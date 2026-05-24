@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { touchEmployeeLastSeen } from "../../../lib/api-auth";
 import { authCookieName, hashPassword, readSessionToken } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
@@ -15,6 +16,7 @@ type StaffPayload = {
 async function requireOwner() {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(authCookieName)?.value);
+  if (session) await touchEmployeeLastSeen(session.id);
   return session?.role === "owner" ? session : null;
 }
 
@@ -38,6 +40,7 @@ export async function GET() {
       employees.email,
       employees.role,
       employees.status,
+      employees.last_seen_at as "lastSeenAt",
       coalesce(
         json_agg(
           json_build_object('id', stores.id, 'name', stores.name)

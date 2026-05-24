@@ -12,7 +12,21 @@ export type StoreScope = {
 
 export async function requireOpsSession(): Promise<EmployeeSession | null> {
   const cookieStore = await cookies();
-  return readSessionToken(cookieStore.get(authCookieName)?.value);
+  const session = readSessionToken(cookieStore.get(authCookieName)?.value);
+  if (session) await touchEmployeeLastSeen(session.id);
+  return session;
+}
+
+export async function touchEmployeeLastSeen(employeeId: string) {
+  await sql`
+    update employees
+    set last_seen_at = now()
+    where id = ${employeeId}
+      and (
+        last_seen_at is null
+        or last_seen_at < now() - interval '1 minute'
+      )
+  `;
 }
 
 export async function requireWritableOpsSession() {

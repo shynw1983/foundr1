@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { touchEmployeeLastSeen } from "../../../../lib/api-auth";
 import { authCookieName, readSessionToken } from "../../../../lib/auth";
 
 export async function GET() {
@@ -8,6 +9,7 @@ export async function GET() {
   if (!session) {
     return Response.json({ employee: null }, { status: 401 });
   }
+  await touchEmployeeLastSeen(session.id);
 
   return Response.json({
     employee: {

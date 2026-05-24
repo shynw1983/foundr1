@@ -755,6 +755,39 @@ button {
   font-size: 17px;
 }
 
+.staff-row-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.presence-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.presence-pill.is-online {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.presence-pill.is-away {
+  color: #9a6a12;
+  background: #fff4d7;
+}
+
+.presence-pill.is-offline {
+  color: var(--muted);
+  background: #eef2f6;
+}
+
 .management-row p,
 .management-row small {
   margin: 0;

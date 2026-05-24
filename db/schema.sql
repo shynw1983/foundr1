@@ -33,9 +33,12 @@ create table if not exists employees (
   password_hash text,
   role text not null,
   status text not null default 'active',
+  last_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table employees add column if not exists last_seen_at timestamptz;
 
 create table if not exists employee_scopes (
   id uuid primary key default gen_random_uuid(),

@@ -21,6 +21,7 @@ type StaffMember = {
   email: string | null;
   role: string;
   status: string;
+  lastSeenAt?: string | null;
   stores: StoreOption[];
 };
 
@@ -56,6 +57,28 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
+function getPresenceState(lastSeenAt?: string | null) {
+  if (!lastSeenAt) return { label: "オフライン", tone: "is-offline" };
+
+  const elapsedMinutes = (Date.now() - new Date(lastSeenAt).getTime()) / 60_000;
+  if (!Number.isFinite(elapsedMinutes)) return { label: "オフライン", tone: "is-offline" };
+  if (elapsedMinutes <= 5) return { label: "オンライン", tone: "is-online" };
+  if (elapsedMinutes <= 30) return { label: "離席中", tone: "is-away" };
+
+  return { label: "オフライン", tone: "is-offline" };
+}
+
+function formatLastSeen(lastSeenAt?: string | null) {
+  if (!lastSeenAt) return "最終アクセス 未記録";
+
+  return `最終アクセス ${new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(lastSeenAt))}`;
+}
+
 export default function StaffPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -66,6 +89,7 @@ export default function StaffPage() {
   const [error, setError] = useState("");
 
   const activeCount = useMemo(() => staff.filter((member) => member.status === "active").length, [staff]);
+  const onlineCount = useMemo(() => staff.filter((member) => getPresenceState(member.lastSeenAt).label === "オンライン").length, [staff]);
 
   async function loadStaff() {
     const response = await fetch("/api/staff");
@@ -192,14 +216,19 @@ export default function StaffPage() {
         ) : (
           <section className="management-grid staff-management-grid">
             <section className="panel">
-              <PanelTitle title="スタッフ一覧" subtitle={`登録 ${staff.length} 名・有効 ${activeCount} 名`} />
+              <PanelTitle title="スタッフ一覧" subtitle={`登録 ${staff.length} 名・有効 ${activeCount} 名・オンライン ${onlineCount} 名`} />
               <div className="management-list">
                 {staff.map((member) => (
                   <article className="management-row staff-row" key={member.id}>
                     <div>
-                      <strong>{member.name}</strong>
+                      <div className="staff-row-heading">
+                        <strong>{member.name}</strong>
+                        <span className={`presence-pill ${getPresenceState(member.lastSeenAt).tone}`}>
+                          {getPresenceState(member.lastSeenAt).label}
+                        </span>
+                      </div>
                       <p>{member.loginId} / {roleLabels[member.role] ?? member.role}</p>
-                      <small>{member.status === "active" ? "有効" : "停止中"} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"}</small>
+                      <small>{member.status === "active" ? "有効" : "停止中"} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}</small>
                     </div>
                     <div className="row-actions">
                       <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>

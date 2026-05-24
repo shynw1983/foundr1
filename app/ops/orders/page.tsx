@@ -52,8 +52,10 @@ type PurchaseOrderItem = {
   productId?: string;
   productName: string;
   brandName?: string;
+  referencePrice?: number;
   requestedQuantity: number;
   actualQuantity?: number;
+  actualPrice?: string;
   unit: string;
   note?: string;
   priceExceptionNote?: string;
@@ -236,13 +238,16 @@ function createStoreFeedbackItems(
     const store = order?.store ?? "店舗未設定";
     const baseId = item.id ?? `${item.orderId}-${item.productName}`;
     const items: StoreFeedback[] = [];
+    const actualPrice = parsePriceValue(item.actualPrice);
+    const referencePrice = Number(item.referencePrice ?? 0);
 
-    if (item.priceExceptionNote) {
+    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice) {
+      const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
       items.push({
         id: `${baseId}-price`,
         product: item.productName,
         type: "価格異常",
-        message: item.priceExceptionNote,
+        message: `実際 ¥${formatPrice(actualPrice)} / 基準 ¥${formatPrice(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`,
         store,
         status: "店舗確認待ち"
       });
@@ -274,6 +279,17 @@ function createStoreFeedbackItems(
   });
 
   return feedbackItems.length > 0 ? feedbackItems : fallbackItems;
+}
+
+function parsePriceValue(value?: string) {
+  const price = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(price) ? price : 0;
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2
+  }).format(value);
 }
 
 export default function OrdersPage() {
