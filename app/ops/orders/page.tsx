@@ -615,7 +615,7 @@ export default function OrdersPage() {
             <div className="inline-create-actions">
               <button type="submit" className="primary-button">
                 <Plus size={18} />
-                依頼を追加
+                依頼を発送
               </button>
             </div>
           </form>

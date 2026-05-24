@@ -2499,6 +2499,16 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .builder-actions {
+    justify-content: stretch;
+  }
+
+  .builder-actions .text-button,
+  .inline-create-actions .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .procurement-task {
     grid-template-columns: minmax(78px, 0.9fr) minmax(76px, 1fr) minmax(86px, 1.1fr);
     grid-template-areas:
