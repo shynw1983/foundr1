@@ -1,39 +1,56 @@
 import { put } from "@vercel/blob";
 import { sql } from "../../../../lib/db";
 
+const maxPhotoSizeBytes = 6 * 1024 * 1024;
+
 export async function POST(request: Request) {
-  const formData = await request.formData();
-  const productName = String(formData.get("productName") ?? "");
-  const file = formData.get("file");
+  try {
+    const formData = await request.formData();
+    const productName = String(formData.get("productName") ?? "new-product").trim();
+    const file = formData.get("file");
 
-  if (!productName) {
-    return Response.json({ error: "productName is required" }, { status: 400 });
-  }
+    if (!(file instanceof File)) {
+      return Response.json({ error: "file is required" }, { status: 400 });
+    }
 
-  if (!(file instanceof File)) {
-    return Response.json({ error: "file is required" }, { status: 400 });
-  }
+    if (!file.type.startsWith("image/")) {
+      return Response.json({ error: "画像ファイルを選択してください。" }, { status: 400 });
+    }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    if (file.size > maxPhotoSizeBytes) {
+      return Response.json({ error: "写真は6MB以下にしてください。" }, { status: 413 });
+    }
+
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return Response.json(
+        { error: "Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。" },
+        { status: 503 }
+      );
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase() || "product";
+    const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
+      access: "public"
+    });
+
+    if (productName && productName !== "new-product") {
+      await sql`
+        update products
+        set
+          photo_url = ${blob.url},
+          updated_at = now()
+        where name = ${productName}
+      `;
+    }
+
+    return Response.json({ url: blob.url });
+  } catch (error) {
+    console.error(error);
+
     return Response.json(
-      { error: "Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。" },
-      { status: 503 }
+      { error: "写真をアップロードできませんでした。時間をおいて再試行してください。" },
+      { status: 500 }
     );
   }
-
-  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase();
-  const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
-    access: "public"
-  });
-
-  await sql`
-    update products
-    set
-      photo_url = ${blob.url},
-      updated_at = now()
-    where name = ${productName}
-  `;
-
-  return Response.json({ url: blob.url });
 }

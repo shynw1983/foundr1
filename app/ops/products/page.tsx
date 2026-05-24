@@ -690,38 +690,59 @@ function ProductEditDialog({
   const fields = getProductFields(target.value, suppliers, brands, categoryOptions, subcategoryOptions);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const originOptions = getOriginCountryOptions(target.value.originCountries ?? []);
 
   async function uploadPhoto(file: File) {
-    if (!target.value.name) {
-      setUploadStatus("先に商品名を入力してください。");
+    if (!file.type.startsWith("image/")) {
+      setUploadStatus("画像ファイルを選択してください。");
+      return;
+    }
+
+    if (file.size > 6 * 1024 * 1024) {
+      setUploadStatus("写真は6MB以下にしてください。");
       return;
     }
 
     setUploadStatus("アップロード中...");
-    const formData = new FormData();
-    formData.set("productName", target.value.name);
-    formData.set("file", file);
+    setIsUploading(true);
 
-    const response = await fetch("/api/products/photo", {
-      method: "POST",
-      body: formData
-    });
-    const body = await response.json();
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 30_000);
+      const formData = new FormData();
+      formData.set("productName", target.value.name || "new-product");
+      formData.set("file", file);
 
-    if (!response.ok) {
-      setUploadStatus(body.error ?? "アップロードできませんでした。");
-      return;
-    }
+      const response = await fetch("/api/products/photo", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal
+      });
+      window.clearTimeout(timeoutId);
+      const body = await response.json().catch(() => ({}));
 
-    onChange({
-      ...target,
-      value: {
-        ...target.value,
-        photoUrl: body.url
+      if (!response.ok) {
+        setUploadStatus(body.error ?? "アップロードできませんでした。");
+        return;
       }
-    });
-    setUploadStatus("アップロード済み");
+
+      onChange({
+        ...target,
+        value: {
+          ...target.value,
+          photoUrl: body.url
+        }
+      });
+      setUploadStatus("アップロード済み。最後に保存してください。");
+    } catch (error) {
+      setUploadStatus(error instanceof DOMException && error.name === "AbortError"
+        ? "アップロードがタイムアウトしました。通信環境を確認してください。"
+        : "アップロードできませんでした。");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   return (
@@ -764,7 +785,7 @@ function ProductEditDialog({
                 }}
               />
               <button type="button" className="secondary-button" onClick={() => fileInputRef.current?.click()}>
-                写真をアップロード
+                {isUploading ? "アップロード中..." : "写真をアップロード"}
               </button>
               {target.value.photoUrl ? (
                 <button
