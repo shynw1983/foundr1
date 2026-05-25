@@ -2614,6 +2614,16 @@ button {
   margin-top: 0;
 }
 
+.feedback-order-link {
+  color: var(--blue);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.feedback-order-link:hover {
+  text-decoration: underline;
+}
+
 .feedback-actions .text-button {
   flex: 0 0 auto;
 }

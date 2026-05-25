@@ -75,6 +75,7 @@ type StoreFeedback = {
   id: string;
   itemId?: string;
   kind?: "price" | "quantity" | "note";
+  orderId: string;
   product: string;
   type: string;
   message: string;
@@ -292,6 +293,7 @@ function createStoreFeedbackItems(
         id: `${baseId}-price`,
         itemId: item.id,
         kind: "price",
+        orderId: item.orderId,
         product: item.productName,
         type: "価格異常",
         message: `実際 ¥${formatPrice(actualPrice)} / 基準 ¥${formatPrice(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`,
@@ -305,6 +307,7 @@ function createStoreFeedbackItems(
         id: `${baseId}-quantity`,
         itemId: item.id,
         kind: "quantity",
+        orderId: item.orderId,
         product: item.productName,
         type: "数量差異",
         message: `依頼 ${item.requestedQuantity} ${item.unit} / 実数 ${actualQuantity} ${item.unit}`,
@@ -318,6 +321,7 @@ function createStoreFeedbackItems(
         id: `${baseId}-note`,
         itemId: item.id,
         kind: "note",
+        orderId: item.orderId,
         product: item.productName,
         type: "備考",
         message: item.note,
@@ -1106,7 +1110,7 @@ export default function OrdersPage() {
                   directStoreConfirmationItems.every((item) => item.deliveryStatus === "received");
 
                 return (
-                  <article className="order-row" key={order.id}>
+                  <article className="order-row" id={`order-${order.id}`} key={order.id}>
                     <div>
                       <div className="row-heading">
                         <strong>{order.id}</strong>
@@ -1230,7 +1234,12 @@ export default function OrdersPage() {
                     </div>
                     <p>{item.message}</p>
                     <div className="feedback-actions">
-                      <small>{item.store} · {item.status}</small>
+                      <small>
+                        <a className="feedback-order-link" href={`#order-${item.orderId}`}>
+                          依頼番号 {item.orderId}
+                        </a>
+                        <span> · {item.store} · {item.status}</span>
+                      </small>
                       {item.status === "店舗確認待ち" ? (
                         <button
                           type="button"
