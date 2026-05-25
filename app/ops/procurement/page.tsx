@@ -105,6 +105,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 const procurementStatusFilters: ProcurementStatusFilter[] = ["未完了", "購入待ち", "一部購入済み", "到着日入力待ち", "到着待ち", "配送待ち", "配送中", "一部納品済み", "確認待ち", "完了", "すべて"];
+const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -856,14 +857,16 @@ export default function ProcurementPage() {
                                   </div>
                                   <label className="task-actual">
                                     <span>実数</span>
-                                    <input
-                                      type="number"
-                                      min={0}
+                                    <select
                                       value={item.actualQuantity}
                                       onChange={(event) =>
                                         updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
                                       }
-                                    />
+                                    >
+                                      {actualQuantityOptions.map((quantity) => (
+                                        <option value={quantity} key={quantity}>{quantity}</option>
+                                      ))}
+                                    </select>
                                   </label>
                                   <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
                                     {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}

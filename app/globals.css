@@ -2339,7 +2339,8 @@ button {
   font-weight: 800;
 }
 
-.procurement-task input {
+.procurement-task input,
+.procurement-task select {
   width: 100%;
   min-height: 34px;
   border: 1px solid var(--line);
@@ -3722,6 +3723,17 @@ button {
     display: none;
   }
 
+  .mobile-visible-notification .notification-panel {
+    position: fixed;
+    top: 58px;
+    right: 10px;
+    left: 10px;
+    z-index: 80;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 76px);
+  }
+
   .mobile-nav-list {
     right: 0;
     left: auto;
@@ -4169,6 +4181,7 @@ button {
   }
 
   .procurement-task input,
+  .procurement-task select,
   .quantity-diff,
   .exception-button {
     min-height: 36px;
