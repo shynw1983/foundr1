@@ -20,11 +20,15 @@ type ProductComparison = {
   candidateSupplierName: string;
   candidateOrigin: string;
   candidatePrice: number;
+  candidateOriginalPrice: number;
+  candidateCurrency: string;
+  exchangeRate: number;
   candidateQuantity: number;
   candidateUnit: string;
   candidateWeightKg: number;
   importQuantity: number;
   freightRatePerKg: number;
+  freightRateOriginalPerKg: number;
   basePrice: number;
   baseQuantity: number;
   baseUnit: string;
@@ -53,6 +57,8 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
+const comparisonUnits = ["g", "kg", "ml", "L", "個", "袋", "箱"];
+
 export default function ProductComparisonsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<Product[]>([]);
@@ -64,6 +70,10 @@ export default function ProductComparisonsPage() {
   const [basePrice, setBasePrice] = useState("");
   const [baseQuantity, setBaseQuantity] = useState("1");
   const [baseUnit, setBaseUnit] = useState("g");
+  const [isImported, setIsImported] = useState(false);
+  const [candidateCurrency, setCandidateCurrency] = useState("JPY");
+  const [exchangeRate, setExchangeRate] = useState("1");
+  const [exchangeRateLabel, setExchangeRateLabel] = useState("");
   const [candidatePrice, setCandidatePrice] = useState("");
   const [candidateQuantity, setCandidateQuantity] = useState("1");
   const [candidateUnit, setCandidateUnit] = useState("g");
@@ -78,6 +88,18 @@ export default function ProductComparisonsPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (!isImported) {
+      setCandidateCurrency("JPY");
+      setExchangeRate("1");
+      setExchangeRateLabel("");
+      return;
+    }
+
+    setCandidateCurrency("CNY");
+    void loadExchangeRate("CNY");
+  }, [isImported]);
 
   const selectedProduct = products.find((product) => product.id === selectedProductId);
   const baseCategories = useMemo(
@@ -96,8 +118,12 @@ export default function ProductComparisonsPage() {
     [baseCategory, baseSubcategory, products]
   );
   const importCount = Math.max(1, normalizeNumber(importQuantity));
-  const candidateFreight = normalizeNumber(freightRatePerKg) * normalizeNumber(candidateWeightKg) * importCount;
-  const candidateTotal = (normalizeNumber(candidatePrice) * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
+  const activeExchangeRate = candidateCurrency === "JPY" ? 1 : Math.max(0, normalizeNumber(exchangeRate));
+  const candidatePriceJpy = normalizeNumber(candidatePrice) * activeExchangeRate;
+  const freightRatePerKgJpy = normalizeNumber(freightRatePerKg) * activeExchangeRate;
+  const requiresCandidateWeight = isImported && candidateUnit === "箱";
+  const candidateFreight = freightRatePerKgJpy * normalizeNumber(candidateWeightKg) * importCount;
+  const candidateTotal = (candidatePriceJpy * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
   const candidateUnitCost = candidateTotal / Math.max(1, normalizeNumber(candidateQuantity) * importCount);
   const baseUnitCost = normalizeNumber(basePrice) / Math.max(1, normalizeNumber(baseQuantity));
   const savingRate = baseUnitCost > 0 ? ((candidateUnitCost - baseUnitCost) / baseUnitCost) * 100 : 0;
@@ -119,6 +145,25 @@ export default function ProductComparisonsPage() {
     }
 
     setDataSource("neon");
+  }
+
+  async function loadExchangeRate(currency: string) {
+    if (currency === "JPY") {
+      setExchangeRate("1");
+      setExchangeRateLabel("");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/exchange-rates?base=${currency}&target=JPY`);
+      if (!response.ok) throw new Error("rate fetch failed");
+      const data = await response.json() as { rate?: number; date?: string };
+      if (!Number.isFinite(data.rate) || !data.rate) throw new Error("invalid rate");
+      setExchangeRate(String(data.rate));
+      setExchangeRateLabel(data.date ? `取得日 ${data.date}` : "最新レート");
+    } catch {
+      setExchangeRateLabel("為替レートを取得できませんでした。手入力してください。");
+    }
   }
 
   const filteredComparisons = useMemo(() => {
@@ -173,6 +218,9 @@ export default function ProductComparisonsPage() {
     formData.set("basePrice", basePrice);
     formData.set("baseQuantity", baseQuantity);
     formData.set("baseUnit", baseUnit);
+    formData.set("isImported", String(isImported));
+    formData.set("candidateCurrency", candidateCurrency);
+    formData.set("exchangeRate", exchangeRate);
     formData.set("candidatePrice", candidatePrice);
     formData.set("candidateQuantity", candidateQuantity);
     formData.set("candidateUnit", candidateUnit);
@@ -200,6 +248,10 @@ export default function ProductComparisonsPage() {
     setBasePrice("");
     setBaseQuantity("1");
     setBaseUnit("g");
+    setIsImported(false);
+    setCandidateCurrency("JPY");
+    setExchangeRate("1");
+    setExchangeRateLabel("");
     setCandidatePrice("");
     setCandidateQuantity("1");
     setCandidateUnit("g");
@@ -300,12 +352,7 @@ export default function ProductComparisonsPage() {
                 <label>
                   <span>単位</span>
                   <select value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)}>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="ml">ml</option>
-                    <option value="L">L</option>
-                    <option value="個">個</option>
-                    <option value="袋">袋</option>
+                    {comparisonUnits.map((unit) => <option value={unit} key={unit}>{unit}</option>)}
                   </select>
                 </label>
               </div>
@@ -319,9 +366,26 @@ export default function ProductComparisonsPage() {
               </label>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>候補価格</span>
+                  <span>{isImported ? "候補金額" : "候補価格"}</span>
                   <input value={candidatePrice} inputMode="decimal" onChange={(event) => setCandidatePrice(event.target.value)} placeholder="例: 298" />
                 </label>
+                {isImported ? (
+                  <label>
+                    <span>通貨</span>
+                    <select value={candidateCurrency} onChange={(event) => {
+                      setCandidateCurrency(event.target.value);
+                      void loadExchangeRate(event.target.value);
+                    }}>
+                      <option value="CNY">人民元</option>
+                    </select>
+                  </label>
+                ) : null}
+                {isImported ? (
+                  <label>
+                    <span>為替レート</span>
+                    <input value={exchangeRate} inputMode="decimal" onChange={(event) => setExchangeRate(event.target.value)} placeholder="例: 21.5" />
+                  </label>
+                ) : null}
                 <label>
                   <span>候補規格数量</span>
                   <input value={candidateQuantity} inputMode="decimal" onChange={(event) => setCandidateQuantity(event.target.value)} placeholder="例: 500" />
@@ -329,17 +393,13 @@ export default function ProductComparisonsPage() {
                 <label>
                   <span>単位</span>
                   <select value={candidateUnit} onChange={(event) => setCandidateUnit(event.target.value)}>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="ml">ml</option>
-                    <option value="L">L</option>
-                    <option value="個">個</option>
-                    <option value="袋">袋</option>
+                    {comparisonUnits.map((unit) => <option value={unit} key={unit}>{unit}</option>)}
                   </select>
                 </label>
               </div>
+              {isImported ? <small className="form-hint">{exchangeRateLabel || `1 ${candidateCurrency} = ${formatCurrency(activeExchangeRate)}`}</small> : null}
               <label className="exception-toggle">
-                <input type="checkbox" name="isImported" />
+                <input type="checkbox" name="isImported" checked={isImported} onChange={(event) => setIsImported(event.target.checked)} />
                 <span>海外輸入品として計算</span>
               </label>
               <label>
@@ -348,8 +408,14 @@ export default function ProductComparisonsPage() {
               </label>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>候補規格重量 kg</span>
-                  <input value={candidateWeightKg} inputMode="decimal" onChange={(event) => setCandidateWeightKg(event.target.value)} placeholder="例: 0.5" />
+                  <span>{requiresCandidateWeight ? "候補1箱重量 kg" : "候補規格重量 kg"}</span>
+                  <input
+                    value={candidateWeightKg}
+                    inputMode="decimal"
+                    onChange={(event) => setCandidateWeightKg(event.target.value)}
+                    placeholder={requiresCandidateWeight ? "例: 8" : "任意"}
+                    required={requiresCandidateWeight}
+                  />
                 </label>
                 <label>
                   <span>輸入数量</span>
@@ -369,6 +435,12 @@ export default function ProductComparisonsPage() {
                   <span>運賃合計</span>
                   <input value={formatCurrency(candidateFreight)} readOnly />
                 </label>
+                {isImported ? (
+                  <label>
+                    <span>候補価格 円換算</span>
+                    <input value={formatCurrency(candidatePriceJpy)} readOnly />
+                  </label>
+                ) : null}
                 <label>
                   <span>税費</span>
                   <input value={taxCost} inputMode="decimal" onChange={(event) => setTaxCost(event.target.value)} placeholder="0" />
@@ -452,8 +524,13 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
           <span>候補 {formatCurrency(candidateUnitCost)} / {comparison.candidateUnit}</span>
           <span>候補総額 {formatCurrency(candidateTotal)}</span>
         </div>
+        {comparison.isImported && comparison.candidateCurrency !== "JPY" ? (
+          <small>
+            入力額 {formatForeignCurrency(comparison.candidateOriginalPrice, comparison.candidateCurrency)} / 為替 1 {comparison.candidateCurrency} = {formatCurrency(comparison.exchangeRate)}
+          </small>
+        ) : null}
         {comparison.isImported ? <small>輸入費用: 運賃 {formatCurrency(comparison.freightCost)} / 税費 {formatCurrency(comparison.taxCost)} / その他 {formatCurrency(comparison.otherCost)}</small> : null}
-        {comparison.isImported ? <small>輸入重量 {formatNumber(comparison.candidateWeightKg * importCount)} kg / 運賃単価 {formatCurrency(comparison.freightRatePerKg)} / kg</small> : null}
+        {comparison.isImported ? <small>輸入重量 {formatNumber(comparison.candidateWeightKg * importCount)} kg / 運賃単価 {formatCurrency(comparison.freightRatePerKg)} / kg{comparison.candidateCurrency !== "JPY" ? ` (${formatForeignCurrency(comparison.freightRateOriginalPerKg, comparison.candidateCurrency)} / kg)` : ""}</small> : null}
         {comparison.note ? <small>{comparison.note}</small> : null}
         <em>{comparison.createdLabel}{comparison.createdBy ? ` · ${comparison.createdBy}` : ""}</em>
       </div>
@@ -490,6 +567,14 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
+    maximumFractionDigits: 2
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatForeignCurrency(value: number, currency: string) {
+  return new Intl.NumberFormat(currency === "CNY" ? "zh-CN" : "ja-JP", {
+    style: "currency",
+    currency,
     maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
 }
