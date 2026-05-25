@@ -3973,11 +3973,17 @@ button {
     left: auto;
     z-index: 40;
     width: min(320px, calc(100vw - 24px));
+    max-height: calc(100vh - 108px);
+    max-height: calc(100dvh - 108px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
     background: #202a36;
     box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
   }
 
   .metric-grid,
@@ -4376,6 +4382,8 @@ button {
   .mobile-nav-list {
     right: 0;
     left: auto;
+    max-height: calc(100vh - 84px);
+    max-height: calc(100dvh - 84px);
   }
 
   .source-indicator,
