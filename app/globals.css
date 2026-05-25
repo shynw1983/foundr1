@@ -2913,6 +2913,39 @@ button {
   overflow-wrap: anywhere;
 }
 
+.comparison-card {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.comparison-card:has(.recommendation-photo) {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.comparison-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 1fr);
+  gap: 10px 14px;
+  align-items: start;
+}
+
+.comparison-card-body .recommendation-title,
+.comparison-card-body > p,
+.comparison-card-body > em,
+.comparison-card-body > small {
+  grid-column: 1;
+}
+
+.comparison-card-body .comparison-result-grid,
+.comparison-card-body .comparison-import-details {
+  grid-column: 2;
+}
+
+.comparison-import-details {
+  display: grid;
+  gap: 4px;
+}
+
 .form-hint {
   color: var(--muted);
   font-size: 12px;
@@ -4134,11 +4167,20 @@ button {
 
   .recommendations-grid,
   .recommendation-card,
+  .comparison-card:has(.recommendation-photo),
+  .comparison-card-body,
+  .comparison-card-body .recommendation-title,
+  .comparison-card-body > p,
+  .comparison-card-body > em,
+  .comparison-card-body > small,
+  .comparison-card-body .comparison-result-grid,
+  .comparison-card-body .comparison-import-details,
   .comparison-category-picker,
   .comparison-inline-fields,
   .comparison-preview,
   .comparison-result-grid {
     grid-template-columns: 1fr;
+    grid-column: auto;
   }
 
   .recommendation-form {

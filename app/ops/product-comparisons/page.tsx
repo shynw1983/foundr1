@@ -520,7 +520,7 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
       {comparison.photoUrl ? (
         <span className="recommendation-photo"><img src={comparison.photoUrl} alt={`${comparison.candidateProductName} の写真`} /></span>
       ) : null}
-      <div>
+      <div className="comparison-card-body">
         <div className="recommendation-title">
           <strong>{comparison.baseProductName} ⇔ {comparison.candidateProductName}</strong>
           <span className={rate <= 0 ? "rate-down" : "rate-up"}>{rate > 0 ? "+" : ""}{rate.toFixed(1)}%</span>
@@ -531,13 +531,17 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
           <span>候補 {formatCurrency(candidateUnitCost)} / {comparison.candidateUnit}</span>
           <span>候補総額 {formatCurrency(candidateTotal)}</span>
         </div>
-        {comparison.isImported && comparison.candidateCurrency !== "JPY" ? (
-          <small>
-            入力額 {formatForeignCurrency(comparison.candidateOriginalPrice, comparison.candidateCurrency)} / 為替 1 {comparison.candidateCurrency} = {formatCurrency(comparison.exchangeRate)}
-          </small>
+        {comparison.isImported ? (
+          <div className="comparison-import-details">
+            {comparison.candidateCurrency !== "JPY" ? (
+              <small>
+                入力額 {formatForeignCurrency(comparison.candidateOriginalPrice, comparison.candidateCurrency)} / 為替 1 {comparison.candidateCurrency} = {formatCurrency(comparison.exchangeRate)}
+              </small>
+            ) : null}
+            <small>輸入費用: 運賃 {formatCurrency(comparison.freightCost)} / 税費 {formatCurrency(comparison.taxCost)} / その他 {formatCurrency(comparison.otherCost)}</small>
+            <small>輸入重量 {formatNumber(comparison.candidateWeightKg * importCount)} kg / 運賃単価 {formatCurrency(comparison.freightRatePerKg)} / kg{comparison.candidateCurrency !== "JPY" ? ` (${formatForeignCurrency(comparison.freightRateOriginalPerKg, comparison.candidateCurrency)} / kg)` : ""}</small>
+          </div>
         ) : null}
-        {comparison.isImported ? <small>輸入費用: 運賃 {formatCurrency(comparison.freightCost)} / 税費 {formatCurrency(comparison.taxCost)} / その他 {formatCurrency(comparison.otherCost)}</small> : null}
-        {comparison.isImported ? <small>輸入重量 {formatNumber(comparison.candidateWeightKg * importCount)} kg / 運賃単価 {formatCurrency(comparison.freightRatePerKg)} / kg{comparison.candidateCurrency !== "JPY" ? ` (${formatForeignCurrency(comparison.freightRateOriginalPerKg, comparison.candidateCurrency)} / kg)` : ""}</small> : null}
         {comparison.note ? <small>{comparison.note}</small> : null}
         <em>{comparison.createdLabel}{comparison.createdBy ? ` · ${comparison.createdBy}` : ""}</em>
       </div>
