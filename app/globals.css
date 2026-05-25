@@ -3656,6 +3656,10 @@ button {
     background: rgba(40, 105, 168, 0.38);
   }
 
+  .mobile-nav-user .notification-menu {
+    display: none;
+  }
+
   .mobile-nav-list {
     right: 0;
     left: auto;

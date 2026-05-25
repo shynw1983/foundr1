@@ -329,6 +329,7 @@ export default function OrdersPage() {
   const [draftBuyerStaffId, setDraftBuyerStaffId] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState("");
   const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
 
   async function loadDashboardData() {
@@ -552,22 +553,30 @@ export default function OrdersPage() {
 
   async function submitNewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingOrder) return;
+
+    setIsSubmittingOrder(true);
     const form = event.currentTarget;
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      body: new FormData(form)
-    });
 
-    if (!response.ok) {
-      window.alert("発注依頼を送信できませんでした。");
-      return;
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        body: new FormData(form)
+      });
+
+      if (!response.ok) {
+        window.alert("発注依頼を送信できませんでした。");
+        return;
+      }
+
+      showNotice("発注依頼を送信しました。");
+      setDraftDeadline(getDefaultDeadlineValue());
+      setDraftPriority("中");
+      setDraftNote("");
+      await loadDashboardData();
+    } finally {
+      setIsSubmittingOrder(false);
     }
-
-    showNotice("発注依頼を送信しました。");
-    setDraftDeadline(getDefaultDeadlineValue());
-    setDraftPriority("中");
-    setDraftNote("");
-    await loadDashboardData();
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
@@ -905,9 +914,9 @@ export default function OrdersPage() {
               <EstimatedAmountBox amount={draftEstimatedAmount} />
             </div>
             <div className="inline-create-actions">
-              <button type="submit" className="primary-button">
+              <button type="submit" className="primary-button" disabled={isSubmittingOrder}>
                 <Plus size={18} />
-                依頼を送信
+                {isSubmittingOrder ? "送信中..." : "依頼を送信"}
               </button>
             </div>
           </form>
