@@ -48,8 +48,11 @@ type ProductComparison = {
   createdBy: string;
   createdById: string;
   createdLabel: string;
+  archivedLabel: string;
+  isArchived: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canArchive: boolean;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -90,12 +93,13 @@ export default function ProductComparisonsPage() {
   const [candidateUnit, setCandidateUnit] = useState("g");
   const [candidateWeightKg, setCandidateWeightKg] = useState("");
   const [importQuantity, setImportQuantity] = useState("1");
-  const [freightRatePerKg, setFreightRatePerKg] = useState("");
+  const [freightRatePerKg, setFreightRatePerKg] = useState("20");
   const [taxCost, setTaxCost] = useState("");
   const [otherCost, setOtherCost] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [photoFileName, setPhotoFileName] = useState("");
   const [editingComparisonId, setEditingComparisonId] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -193,9 +197,10 @@ export default function ProductComparisonsPage() {
 
   const filteredComparisons = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return comparisons;
+    const scopedComparisons = comparisons.filter((comparison) => comparison.isArchived === showArchived);
+    if (!keyword) return scopedComparisons;
 
-    return comparisons.filter((comparison) =>
+    return scopedComparisons.filter((comparison) =>
       [
         comparison.baseProductName,
         comparison.candidateProductName,
@@ -205,7 +210,9 @@ export default function ProductComparisonsPage() {
         comparison.createdBy
       ].join(" ").toLowerCase().includes(keyword)
     );
-  }, [comparisons, query]);
+  }, [comparisons, query, showArchived]);
+  const activeComparisonCount = comparisons.filter((comparison) => !comparison.isArchived).length;
+  const archivedComparisonCount = comparisons.filter((comparison) => comparison.isArchived).length;
 
   function selectBaseCategory(category: string) {
     setBaseCategory(category);
@@ -291,7 +298,7 @@ export default function ProductComparisonsPage() {
     setCandidateUnit("g");
     setCandidateWeightKg("");
     setImportQuantity("1");
-    setFreightRatePerKg("");
+    setFreightRatePerKg("20");
     setTaxCost("");
     setOtherCost("");
     setPhotoFileName("");
@@ -353,6 +360,24 @@ export default function ProductComparisonsPage() {
     }
 
     showNotice("商品比較を削除しました。");
+    await loadData();
+  }
+
+  async function archiveComparison(comparison: ProductComparison) {
+    const action = comparison.isArchived ? "restore" : "archive";
+    const response = await fetch("/api/product-comparisons", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: comparison.id, action })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "商品比較を更新できませんでした。");
+      return;
+    }
+
+    showNotice(comparison.isArchived ? "商品比較を履歴に戻しました。" : "商品比較をアーカイブしました。");
     await loadData();
   }
 
@@ -576,16 +601,20 @@ export default function ProductComparisonsPage() {
           <section className="panel">
             <div className="panel-title">
               <div>
-                <h3>比較履歴</h3>
-                <p>現行品と候補品の単位コスト差を確認</p>
+                <h3>{showArchived ? "アーカイブ済み比較" : "比較履歴"}</h3>
+                <p>{showArchived ? "保管した比較を確認、必要に応じて履歴へ戻す" : "現行品と候補品の単位コスト差を確認"}</p>
               </div>
+              <button type="button" className="secondary-button" onClick={() => setShowArchived((current) => !current)}>
+                {showArchived ? `比較履歴へ戻る（${activeComparisonCount}）` : `アーカイブを表示（${archivedComparisonCount}）`}
+              </button>
             </div>
             <div className="recommendation-list">
-              {filteredComparisons.length === 0 ? <div className="empty-state">商品比較はありません</div> : null}
+              {filteredComparisons.length === 0 ? <div className="empty-state">{showArchived ? "アーカイブ済みの商品比較はありません" : "商品比較はありません"}</div> : null}
               {filteredComparisons.map((comparison) => (
                 <ComparisonCard
                   comparison={comparison}
                   key={comparison.id}
+                  onArchive={() => archiveComparison(comparison)}
                   onCopy={() => populateComparisonForm(comparison, "copy")}
                   onDelete={() => deleteComparison(comparison)}
                   onEdit={() => populateComparisonForm(comparison, "edit")}
@@ -602,11 +631,13 @@ export default function ProductComparisonsPage() {
 
 function ComparisonCard({
   comparison,
+  onArchive,
   onCopy,
   onDelete,
   onEdit
 }: {
   comparison: ProductComparison;
+  onArchive: () => void;
   onCopy: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -615,6 +646,12 @@ function ComparisonCard({
   const candidateTotal = (comparison.candidatePrice * importCount) + comparison.freightCost + comparison.taxCost + comparison.otherCost;
   const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
   const baseUnitCost = comparison.basePrice / Math.max(1, comparison.baseQuantity);
+  const importWeightKg = inferCandidateTotalWeightKg(
+    comparison.candidateUnit,
+    comparison.candidateQuantity,
+    comparison.candidateWeightKg,
+    importCount
+  );
   const candidateComparableUnitCost = getComparableUnitCost(
     candidateTotal,
     comparison.candidateQuantity * importCount,
@@ -638,8 +675,9 @@ function ComparisonCard({
           <span className={rate <= 0 ? "rate-down" : "rate-up"}>{candidateComparableUnitCost === null ? "単位確認" : `${rate > 0 ? "+" : ""}${rate.toFixed(1)}%`}</span>
         </div>
         <div className="comparison-card-actions">
-          {comparison.canEdit ? <button type="button" className="secondary-button" onClick={onEdit}>編集</button> : null}
-          <button type="button" className="secondary-button" onClick={onCopy}>コピーして再比較</button>
+          {comparison.canEdit && !comparison.isArchived ? <button type="button" className="secondary-button" onClick={onEdit}>編集</button> : null}
+          {!comparison.isArchived ? <button type="button" className="secondary-button" onClick={onCopy}>コピーして再比較</button> : null}
+          {comparison.canArchive ? <button type="button" className="secondary-button" onClick={onArchive}>{comparison.isArchived ? "履歴へ戻す" : "アーカイブ"}</button> : null}
           {comparison.canDelete ? <button type="button" className="danger-button" onClick={onDelete}>削除</button> : null}
         </div>
         <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
@@ -667,15 +705,19 @@ function ComparisonCard({
               <dd>{formatCurrency(comparison.otherCost)}</dd>
             </dl>
             <dl>
+              <dt>候補規格</dt>
+              <dd>{formatNumber(comparison.candidateQuantity)} {comparison.candidateUnit}</dd>
+              <dt>輸入単位数</dt>
+              <dd>{formatNumber(importCount)}</dd>
               <dt>輸入重量</dt>
-              <dd>{formatNumber(comparison.candidateWeightKg * importCount)} kg</dd>
+              <dd>{formatNumber(importWeightKg)} kg</dd>
               <dt>運賃単価</dt>
               <dd>{formatCurrency(comparison.freightRatePerKg)} / kg{comparison.candidateCurrency !== "JPY" ? ` (${formatForeignCurrency(comparison.freightRateOriginalPerKg, comparison.candidateCurrency)} / kg)` : ""}</dd>
             </dl>
           </div>
         ) : null}
         {comparison.note ? <small>{comparison.note}</small> : null}
-        <em>{comparison.createdLabel}{comparison.createdBy ? ` · ${comparison.createdBy}` : ""}</em>
+        <em>{comparison.createdLabel}{comparison.createdBy ? ` · ${comparison.createdBy}` : ""}{comparison.archivedLabel ? ` · アーカイブ ${comparison.archivedLabel}` : ""}</em>
       </div>
     </article>
   );

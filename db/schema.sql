@@ -229,6 +229,7 @@ create table if not exists product_comparisons (
   photo_url text,
   note text,
   created_by uuid references employees(id),
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -258,6 +259,7 @@ alter table product_comparisons add column if not exists other_cost numeric(12, 
 alter table product_comparisons add column if not exists photo_url text;
 alter table product_comparisons add column if not exists note text;
 alter table product_comparisons add column if not exists created_by uuid references employees(id);
+alter table product_comparisons add column if not exists archived_at timestamptz;
 
 create table if not exists purchase_orders (
   id uuid primary key default gen_random_uuid(),

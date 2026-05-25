@@ -43,6 +43,8 @@ export async function GET() {
       coalesce(product_comparisons.note, '') as note,
       product_comparisons.created_by::text as "createdById",
       coalesce(employees.name, '') as "createdBy",
+      product_comparisons.archived_at is not null as "isArchived",
+      to_char(product_comparisons.archived_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "archivedLabel",
       to_char(product_comparisons.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "createdLabel"
     from product_comparisons
     left join products on products.id = product_comparisons.base_product_id
@@ -55,7 +57,8 @@ export async function GET() {
     comparisons: rows.map((row) => ({
       ...row,
       canEdit: canModifyComparison(session.role, session.id, row.createdById),
-      canDelete: canModifyComparison(session.role, session.id, row.createdById)
+      canDelete: canModifyComparison(session.role, session.id, row.createdById),
+      canArchive: canModifyComparison(session.role, session.id, row.createdById)
     }))
   });
 }
@@ -91,6 +94,7 @@ export async function POST(request: Request) {
   const otherCost = normalizeNumber(formData.get("otherCost"));
   const note = String(formData.get("note") ?? "").trim();
   const file = formData.get("photo");
+  const totalWeightKg = inferCandidateTotalWeightKg(candidateUnit, candidateQuantity, candidateWeightKg, importQuantity);
 
   if (!baseProductId) {
     return Response.json({ error: "比較対象の商品を選択してください。" }, { status: 400 });
@@ -113,7 +117,9 @@ export async function POST(request: Request) {
   }
 
   const photoUrl = await uploadPhotoIfNeeded(file, candidateProductName, "product-comparisons");
-  const freightCost = isImported ? freightRatePerKg * candidateWeightKg * importQuantity : freightCostInput;
+  const freightCost = isImported && totalWeightKg > 0 && freightRatePerKg > 0
+    ? freightRatePerKg * totalWeightKg
+    : freightCostInput;
 
   await sql`
     insert into product_comparisons (
@@ -182,6 +188,11 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    const body = await request.json().catch(() => ({})) as { id?: string; action?: string };
+    return updateComparisonArchive(session, String(body.id ?? "").trim(), String(body.action ?? ""));
+  }
+
   const formData = await request.formData();
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
@@ -228,6 +239,36 @@ export async function PATCH(request: Request) {
       tax_cost = ${parsed.taxCost},
       other_cost = ${parsed.otherCost},
       note = ${parsed.note},
+      updated_at = now()
+    where id = ${id}
+  `;
+
+  return Response.json({ ok: true });
+}
+
+async function updateComparisonArchive(session: Awaited<ReturnType<typeof requireOpsSession>>, id: string, action: string) {
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!id) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+  if (!["archive", "restore"].includes(action)) {
+    return Response.json({ error: "操作を確認してください。" }, { status: 400 });
+  }
+
+  const rows = await sql`
+    select id, created_by::text as "createdById"
+    from product_comparisons
+    where id = ${id}
+    limit 1
+  `;
+  const target = rows[0];
+  if (!target) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+  if (!canModifyComparison(session.role, session.id, target.createdById)) {
+    return Response.json({ error: "この商品比較を更新する権限がありません。" }, { status: 403 });
+  }
+
+  await sql`
+    update product_comparisons
+    set
+      archived_at = ${action === "archive" ? new Date().toISOString() : null},
       updated_at = now()
     where id = ${id}
   `;
