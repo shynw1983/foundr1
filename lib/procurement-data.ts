@@ -131,6 +131,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           unit,
           reference_price::float as "referencePrice",
           coalesce(origin_countries, '{}') as "originCountries",
+          package_quantity::float as "packageQuantity",
+          coalesce(package_quantity_unit, '') as "packageQuantityUnit",
           coalesce(package_spec, '') as "packageSpec",
           coalesce(spec_note, '') as "specNote",
           coalesce(storage_type, '') as "storageType",

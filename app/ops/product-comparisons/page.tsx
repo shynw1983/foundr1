@@ -10,7 +10,14 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OpsNavList } from "../components/OpsNavList";
 import { UserBadge } from "../components/UserBadge";
 
-type Product = typeof initialProducts[number] & { id?: string; packageSpec?: string; referencePrice?: number; subcategory?: string };
+type Product = typeof initialProducts[number] & {
+  id?: string;
+  packageQuantity?: number | string;
+  packageQuantityUnit?: string;
+  packageSpec?: string;
+  referencePrice?: number;
+  subcategory?: string;
+};
 type ProductComparison = {
   id: string;
   baseProductId: string;
@@ -205,7 +212,7 @@ export default function ProductComparisonsPage() {
     }
 
     setBasePrice(String(product.referencePrice ?? 0));
-    const inferred = inferSpecQuantity([product.packageSpec, product.specNote].filter(Boolean).join(" "));
+    const inferred = getProductSpecQuantity(product);
     setBaseQuantity(String(inferred.quantity));
     setBaseUnit(inferred.unit);
     setCandidateUnit(inferred.unit);
@@ -339,7 +346,7 @@ export default function ProductComparisonsPage() {
                   </select>
                 </label>
               </div>
-              {selectedProduct ? <small className="form-hint">規格: {selectedProduct.packageSpec || selectedProduct.specNote || "未設定"}</small> : null}
+              {selectedProduct ? <small className="form-hint">規格: {formatProductSpecSummary(selectedProduct)}</small> : null}
               <div className="comparison-inline-fields">
                 <label>
                   <span>現行価格</span>
@@ -553,14 +560,37 @@ function formatNumber(value: number) {
 
 function inferSpecQuantity(value: string) {
   const normalized = value.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
-  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|L|個|袋|本|枚)/i);
-  if (!match) return { quantity: 1, unit: "g" };
+  const matches = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g|ml|L|個|袋|本|枚|箱)/gi)]
+    .map((match) => ({ quantity: Number(match[1]), unit: match[2] }))
+    .filter((match) => Number.isFinite(match.quantity) && match.quantity > 0);
+  const countMatch = matches.find((match) => ["個", "本", "枚", "袋"].includes(match.unit));
+  const metricMatch = matches.find((match) => ["kg", "g", "ml", "L"].includes(match.unit));
+  const boxMatch = matches.find((match) => match.unit === "箱");
+  const selected = countMatch ?? metricMatch ?? boxMatch;
+  if (!selected) return { quantity: 1, unit: "g" };
 
-  const rawQuantity = Number(match[1]);
-  const unit = match[2];
+  const rawQuantity = selected.quantity;
+  const unit = selected.unit;
   if (unit.toLowerCase() === "kg") return { quantity: rawQuantity * 1000, unit: "g" };
   if (unit === "L") return { quantity: rawQuantity * 1000, unit: "ml" };
   return { quantity: rawQuantity, unit };
+}
+
+function getProductSpecQuantity(product: Product) {
+  const packageQuantity = Number(product.packageQuantity ?? 0);
+  if (Number.isFinite(packageQuantity) && packageQuantity > 0) {
+    return { quantity: packageQuantity, unit: product.packageQuantityUnit || product.unit || "個" };
+  }
+
+  return inferSpecQuantity([product.packageSpec, product.specNote].filter(Boolean).join(" "));
+}
+
+function formatProductSpecSummary(product: Product) {
+  const packageQuantity = Number(product.packageQuantity ?? 0);
+  const quantityLabel = Number.isFinite(packageQuantity) && packageQuantity > 0
+    ? `${packageQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${product.packageQuantityUnit || product.unit || "個"}`
+    : "";
+  return [quantityLabel, product.packageSpec || "", product.specNote || ""].filter(Boolean).join(" / ") || "未設定";
 }
 
 function formatCurrency(value: number) {

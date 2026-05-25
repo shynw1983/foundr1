@@ -20,6 +20,8 @@ type ProductWithCategory = Product & {
   id?: string;
   subcategory?: string;
   originCountries?: string[];
+  packageQuantity?: number | string;
+  packageQuantityUnit?: string;
   packageSpec?: string;
   productBrandName?: string;
   manufacturer?: string;
@@ -82,6 +84,12 @@ function parseReferencePrice(value: number | string) {
   const price = Number(normalizedValue);
 
   return Number.isFinite(price) ? price : 0;
+}
+
+function formatPackageQuantity(product: ProductWithCategory) {
+  const quantity = Number(product.packageQuantity ?? 0);
+  if (!Number.isFinite(quantity) || quantity <= 0) return "未設定";
+  return `${quantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })} ${product.packageQuantityUnit || product.unit || "個"}`;
 }
 
 function compareText(a: string | undefined, b: string | undefined) {
@@ -322,6 +330,8 @@ export default function ProductsPage() {
         unit: "個",
         referencePrice: 0,
         originCountries: [],
+        packageQuantity: "",
+        packageQuantityUnit: "個",
         packageSpec: "",
         mainSupplier: suppliers[0]?.name ?? "",
         backupSupplier: "",
@@ -741,6 +751,10 @@ export default function ProductsPage() {
                         <div>
                           <dt>原産地</dt>
                           <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>数量</dt>
+                          <dd>{formatPackageQuantity(product)}</dd>
                         </div>
                         <div>
                           <dt>規格</dt>
@@ -1186,11 +1200,49 @@ function ProductEditDialog({
                 {filteredOriginOptions.length === 0 ? <small>該当する国・地域はありません。</small> : null}
               </div>
             </fieldset>
+            <div className="product-quantity-fields">
+              <label>
+                <span>数量</span>
+                <input
+                  value={target.value.packageQuantity ?? ""}
+                  inputMode="decimal"
+                  placeholder="例: 200"
+                  onChange={(event) =>
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        packageQuantity: event.target.value
+                      }
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <span>数量単位</span>
+                <select
+                  value={target.value.packageQuantityUnit || target.value.unit || "個"}
+                  onChange={(event) =>
+                    onChange({
+                      ...target,
+                      value: {
+                        ...target.value,
+                        packageQuantityUnit: event.target.value
+                      }
+                    })
+                  }
+                >
+                  {commonUnitOptions.map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label>
               <span>規格</span>
               <input
                 value={target.value.packageSpec ?? ""}
-                placeholder="例: 1kg入、500g×20袋"
+                placeholder="例: 1500ml、500g、1L"
                 onChange={(event) =>
                   onChange({
                     ...target,

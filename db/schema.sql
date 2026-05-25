@@ -78,6 +78,8 @@ create table if not exists products (
   unit text not null,
   reference_price numeric(12, 2),
   origin_countries text[] not null default '{}',
+  package_quantity numeric(12, 3),
+  package_quantity_unit text,
   package_spec text,
   spec_note text,
   photo_url text,
@@ -94,6 +96,8 @@ alter table products add column if not exists photo_url text;
 alter table products add column if not exists storage_type text;
 alter table products add column if not exists subcategory text;
 alter table products add column if not exists origin_countries text[] not null default '{}';
+alter table products add column if not exists package_quantity numeric(12, 3);
+alter table products add column if not exists package_quantity_unit text;
 alter table products add column if not exists package_spec text;
 alter table products add column if not exists product_brand_name text;
 alter table products add column if not exists manufacturer text;

@@ -12,6 +12,8 @@ type ProductPayload = {
   unit?: string;
   referencePrice?: number;
   originCountries?: string[];
+  packageQuantity?: number | string;
+  packageQuantityUnit?: string;
   packageSpec?: string;
   brand?: string;
   mainSupplier?: string;
@@ -35,6 +37,8 @@ export async function PUT(request: Request) {
   const subcategory = String(body.subcategory ?? "").trim() || "未分類";
   const unit = String(body.unit ?? "").trim() || "個";
   const referencePrice = Number(body.referencePrice ?? 0);
+  const packageQuantity = parseOptionalNumber(body.packageQuantity);
+  const packageQuantityUnit = String(body.packageQuantityUnit ?? "").trim();
   const originCountries = Array.isArray(body.originCountries)
     ? body.originCountries.map((item) => String(item).trim()).filter(Boolean)
     : [];
@@ -68,6 +72,8 @@ export async function PUT(request: Request) {
           unit = ${unit},
           reference_price = ${Number.isFinite(referencePrice) ? referencePrice : 0},
           origin_countries = ${originCountries},
+          package_quantity = ${packageQuantity},
+          package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
           spec_note = ${specNote},
           photo_url = ${photoUrl},
@@ -89,6 +95,8 @@ export async function PUT(request: Request) {
           unit = ${unit},
           reference_price = ${Number.isFinite(referencePrice) ? referencePrice : 0},
           origin_countries = ${originCountries},
+          package_quantity = ${packageQuantity},
+          package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
           spec_note = ${specNote},
           photo_url = ${photoUrl},
@@ -108,6 +116,8 @@ export async function PUT(request: Request) {
           unit,
           reference_price,
           origin_countries,
+          package_quantity,
+          package_quantity_unit,
           package_spec,
           spec_note,
           photo_url,
@@ -124,6 +134,8 @@ export async function PUT(request: Request) {
           ${unit},
           ${Number.isFinite(referencePrice) ? referencePrice : 0},
           ${originCountries},
+          ${packageQuantity},
+          ${packageQuantity ? packageQuantityUnit || unit : ""},
           ${packageSpec},
           ${specNote},
           ${photoUrl},
@@ -179,6 +191,13 @@ export async function PUT(request: Request) {
   }
 
   return Response.json({ ok: true });
+}
+
+function parseOptionalNumber(value: unknown) {
+  const normalized = String(value ?? "").replace(/[¥￥,\s]/g, "");
+  if (!normalized) return null;
+  const numberValue = Number(normalized);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
 export async function DELETE(request: Request) {
