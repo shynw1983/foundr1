@@ -135,6 +135,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(package_quantity_unit, '') as "packageQuantityUnit",
           coalesce(package_spec, '') as "packageSpec",
           coalesce(spec_note, '') as "specNote",
+          coalesce(japanese_note, '') as "japaneseNote",
           coalesce(storage_type, '') as "storageType",
           coalesce(photo_url, '') as "photoUrl",
           coalesce(brand_scope, 'unset') as "brandScope",

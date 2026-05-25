@@ -25,6 +25,7 @@ type ProductWithCategory = Product & {
   packageSpec?: string;
   productBrandName?: string;
   manufacturer?: string;
+  japaneseNote?: string;
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
@@ -243,6 +244,7 @@ export default function ProductsPage() {
       product.mainSupplier,
       product.backupSupplier,
       product.storageType,
+      product.japaneseNote,
       product.specNote
     ].join(" ");
 
@@ -336,6 +338,7 @@ export default function ProductsPage() {
         mainSupplier: suppliers[0]?.name ?? "",
         backupSupplier: "",
         specNote: "",
+        japaneseNote: "",
         photoUrl: "",
         storageType: "常温"
       }
@@ -662,7 +665,7 @@ export default function ProductsPage() {
                     </div>
                     <div>
                       <strong>{product.name || "未設定の商品"}</strong>
-                      <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
                   <div className="mobile-product-head">
@@ -676,7 +679,7 @@ export default function ProductsPage() {
                     <div>
                       <small>基本情報</small>
                       <strong>{product.name || "未設定の商品"}</strong>
-                      <p>{product.productBrandName || "商品ブランド未設定"}</p>
+                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
                   <span className="product-master-cell" data-label="大分類">{product.category}</span>
@@ -739,6 +742,10 @@ export default function ProductsPage() {
                         <div>
                           <dt>メーカー</dt>
                           <dd>{product.manufacturer || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>日本語メモ</dt>
+                          <dd>{product.japaneseNote || "未設定"}</dd>
                         </div>
                         <div>
                           <dt>メイン発注先</dt>
@@ -1249,6 +1256,22 @@ function ProductEditDialog({
                     value: {
                       ...target.value,
                       packageSpec: event.target.value
+                    }
+                  })
+                }
+              />
+            </label>
+            <label className="product-spec-note">
+              <span>日本語メモ</span>
+              <textarea
+                value={target.value.japaneseNote ?? ""}
+                placeholder="例: 日本スタッフ向けの商品説明、読み方、用途"
+                onChange={(event) =>
+                  onChange({
+                    ...target,
+                    value: {
+                      ...target.value,
+                      japaneseNote: event.target.value
                     }
                   })
                 }

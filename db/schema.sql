@@ -82,6 +82,7 @@ create table if not exists products (
   package_quantity_unit text,
   package_spec text,
   spec_note text,
+  japanese_note text,
   photo_url text,
   brand_scope text not null default 'unset',
   is_key_item boolean not null default false,
@@ -101,6 +102,7 @@ alter table products add column if not exists package_quantity_unit text;
 alter table products add column if not exists package_spec text;
 alter table products add column if not exists product_brand_name text;
 alter table products add column if not exists manufacturer text;
+alter table products add column if not exists japanese_note text;
 alter table products add column if not exists brand_scope text not null default 'unset';
 alter table products drop constraint if exists products_name_key;
 

@@ -19,6 +19,7 @@ type ProductPayload = {
   mainSupplier?: string;
   backupSupplier?: string;
   specNote?: string;
+  japaneseNote?: string;
   photoUrl?: string;
   storageType?: string;
 };
@@ -44,6 +45,7 @@ export async function PUT(request: Request) {
     : [];
   const packageSpec = String(body.packageSpec ?? "");
   const specNote = String(body.specNote ?? "");
+  const japaneseNote = String(body.japaneseNote ?? "");
   const photoUrl = String(body.photoUrl ?? "");
   const storageType = String(body.storageType ?? "");
   const selectedBrands = String(body.brand ?? "")
@@ -76,6 +78,7 @@ export async function PUT(request: Request) {
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
           spec_note = ${specNote},
+          japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
           storage_type = ${storageType},
@@ -99,6 +102,7 @@ export async function PUT(request: Request) {
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
           spec_note = ${specNote},
+          japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
           storage_type = ${storageType},
@@ -120,6 +124,7 @@ export async function PUT(request: Request) {
           package_quantity_unit,
           package_spec,
           spec_note,
+          japanese_note,
           photo_url,
           brand_scope,
           storage_type,
@@ -138,6 +143,7 @@ export async function PUT(request: Request) {
           ${packageQuantity ? packageQuantityUnit || unit : ""},
           ${packageSpec},
           ${specNote},
+          ${japaneseNote},
           ${photoUrl},
           ${brandScope},
           ${storageType},
