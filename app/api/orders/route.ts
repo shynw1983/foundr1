@@ -186,6 +186,23 @@ export async function POST(request: Request) {
   const purchaseOrderId = insertedOrders[0]?.id;
 
   if (purchaseOrderId) {
+    await sql`
+      insert into ops_notifications (
+        recipient_employee_id,
+        notification_type,
+        title,
+        message,
+        href
+      )
+      values (
+        ${buyerStaffId},
+        ${"new_order"},
+        ${"新しい発注依頼"},
+        ${`${storeName} から ${itemCount} 件の発注依頼が届きました。`},
+        ${`/ops/procurement?order=${encodeURIComponent(orderNo)}`}
+      )
+    `;
+
     for (const [index, productName] of productNames.entries()) {
       const quantity = normalizeRequestedQuantity(quantities[index]);
       const unit = units[index] || "個";

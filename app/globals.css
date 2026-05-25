@@ -318,6 +318,93 @@ button {
   width: 100%;
 }
 
+.notification-menu {
+  position: relative;
+}
+
+.notification-menu summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.notification-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.notification-menu summary span {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(320px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+}
+
+.notification-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 4px 8px;
+}
+
+.notification-heading button {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.notification-item,
+.notification-empty {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.notification-item span,
+.notification-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notification-item.is-unread {
+  background: var(--green-soft);
+}
+
 .ops-language-picker {
   display: grid;
   gap: 5px;
@@ -350,6 +437,13 @@ button {
 
 .sidebar-user .ops-language-picker select,
 .mobile-nav-user .ops-language-picker select {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7fafc;
+}
+
+.sidebar-user .notification-menu summary,
+.mobile-nav-user .notification-menu summary {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: #f7fafc;
@@ -3164,6 +3258,14 @@ button {
   .sidebar-user .ops-language-picker {
     flex: 0 0 104px;
     width: 104px;
+  }
+
+  .sidebar-user .notification-menu {
+    flex: 0 0 48px;
+  }
+
+  .sidebar-user .notification-menu summary {
+    min-height: 42px;
   }
 
   .sidebar-user .ops-language-picker span {

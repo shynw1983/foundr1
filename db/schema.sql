@@ -206,6 +206,17 @@ alter table suppliers add column if not exists contact_person text;
 alter table suppliers add column if not exists business_hours text;
 alter table suppliers add column if not exists order_url text;
 
+create table if not exists ops_notifications (
+  id uuid primary key default gen_random_uuid(),
+  recipient_employee_id uuid not null references employees(id) on delete cascade,
+  notification_type text not null,
+  title text not null,
+  message text not null,
+  href text,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
   purchase_order_item_id uuid not null references purchase_order_items(id) on delete cascade,
@@ -277,3 +288,4 @@ create index if not exists idx_purchase_orders_deadline on purchase_orders(deadl
 create index if not exists idx_delivery_batches_order_status on delivery_batches(purchase_order_id, status);
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
+create index if not exists idx_ops_notifications_recipient_read on ops_notifications(recipient_employee_id, read_at, created_at desc);
