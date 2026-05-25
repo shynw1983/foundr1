@@ -312,6 +312,14 @@ button {
   display: none;
 }
 
+.mobile-nav-actions {
+  display: contents;
+}
+
+.mobile-visible-notification {
+  display: none;
+}
+
 .user-panel {
   display: grid;
   gap: 8px;
@@ -3285,6 +3293,27 @@ button {
     display: block;
   }
 
+  .mobile-nav-actions {
+    order: 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .mobile-visible-notification {
+    position: relative;
+    display: block;
+    flex: 0 0 46px;
+  }
+
+  .mobile-visible-notification summary {
+    min-height: 42px;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.07);
+    color: #f7fafc;
+  }
+
   .mobile-nav-menu summary {
     display: inline-flex;
     align-items: center;
@@ -3597,9 +3626,7 @@ button {
   }
 
   .mobile-nav-menu {
-    order: 3;
     flex: 0 0 auto;
-    margin-left: auto;
     display: block;
     gap: 5px;
   }
