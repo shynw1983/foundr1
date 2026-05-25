@@ -73,6 +73,8 @@ type DeliveryBatch = {
 };
 type StoreFeedback = {
   id: string;
+  itemId?: string;
+  kind?: "price" | "quantity" | "note";
   product: string;
   type: string;
   message: string;
@@ -288,6 +290,8 @@ function createStoreFeedbackItems(
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
       items.push({
         id: `${baseId}-price`,
+        itemId: item.id,
+        kind: "price",
         product: item.productName,
         type: "価格異常",
         message: `実際 ¥${formatPrice(actualPrice)} / 基準 ¥${formatPrice(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`,
@@ -299,6 +303,8 @@ function createStoreFeedbackItems(
     if (quantityDiff !== 0) {
       items.push({
         id: `${baseId}-quantity`,
+        itemId: item.id,
+        kind: "quantity",
         product: item.productName,
         type: "数量差異",
         message: `依頼 ${item.requestedQuantity} ${item.unit} / 実数 ${actualQuantity} ${item.unit}`,
@@ -310,6 +316,8 @@ function createStoreFeedbackItems(
     if (item.note) {
       items.push({
         id: `${baseId}-note`,
+        itemId: item.id,
+        kind: "note",
         product: item.productName,
         type: "備考",
         message: item.note,
@@ -683,6 +691,45 @@ export default function OrdersPage() {
       await loadDashboardData();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "店舗確認を保存できませんでした。");
+      await loadDashboardData();
+    }
+  }
+
+  async function confirmStoreFeedback(item: StoreFeedback) {
+    if (!item.itemId || !item.kind || item.kind === "note") return;
+
+    const orderItem = purchaseOrderItems.find((candidate) => candidate.id === item.itemId);
+    if (!orderItem) return;
+
+    const payload = item.kind === "quantity"
+      ? { itemId: item.itemId, actualQuantity: orderItem.requestedQuantity }
+      : { itemId: item.itemId, clearActualPrice: true };
+
+    try {
+      const response = await fetch("/api/procurement/items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "確認状態を保存できませんでした。");
+      }
+
+      setPurchaseOrderItems((items) =>
+        items.map((candidate) => {
+          if (candidate.id !== item.itemId) return candidate;
+
+          return item.kind === "quantity"
+            ? { ...candidate, actualQuantity: candidate.requestedQuantity }
+            : { ...candidate, actualPrice: "" };
+        })
+      );
+      showNotice("確認済みにしました。");
+      await loadDashboardData();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "確認状態を保存できませんでした。");
       await loadDashboardData();
     }
   }
@@ -1182,9 +1229,19 @@ export default function OrdersPage() {
                       <span>{item.type}</span>
                     </div>
                     <p>{item.message}</p>
-                    <small>{item.store} · {item.status}</small>
+                    <div className="feedback-actions">
+                      <small>{item.store} · {item.status}</small>
+                      {item.kind && item.kind !== "note" ? (
+                        <button type="button" className="text-button" onClick={() => confirmStoreFeedback(item)}>
+                          確認済みにする
+                        </button>
+                      ) : null}
+                    </div>
                   </article>
                 ))}
+                {storeFeedbackItems.length === 0 ? (
+                  <div className="empty-state">要確認の連絡はありません</div>
+                ) : null}
               </div>
             </section>
           </aside>

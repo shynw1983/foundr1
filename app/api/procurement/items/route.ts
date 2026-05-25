@@ -13,6 +13,7 @@ export async function PATCH(request: Request) {
     note?: string;
     supplier?: string;
     deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
+    clearActualPrice?: boolean;
   };
 
   if (!body.itemId) {
@@ -36,7 +37,7 @@ export async function PATCH(request: Request) {
   }
 
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
-  const hasActualPrice = body.actualPrice !== undefined;
+  const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
   const actualPriceText = String(body.actualPrice ?? "").trim();
   const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
   const actualPrice = normalizedActualPrice ? Number(normalizedActualPrice) : null;
@@ -80,7 +81,7 @@ export async function PATCH(request: Request) {
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
       actual_price = case
-        when ${hasActualPrice} then ${Number.isFinite(actualPrice) ? actualPrice : null}
+        when ${hasActualPrice} then ${body.clearActualPrice === true ? null : Number.isFinite(actualPrice) ? actualPrice : null}
         else actual_price
       end,
       procurement_note = case

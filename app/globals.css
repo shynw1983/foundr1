@@ -2602,6 +2602,22 @@ button {
   color: var(--muted);
 }
 
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.feedback-actions small {
+  margin-top: 0;
+}
+
+.feedback-actions .text-button {
+  flex: 0 0 auto;
+}
+
 .category-row,
 .brand-strip {
   display: flex;
