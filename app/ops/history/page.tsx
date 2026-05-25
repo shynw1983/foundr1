@@ -220,7 +220,7 @@ export default function ProcurementHistoryPage() {
     [purchaseOrders, purchaseOrderItems, products]
   );
   const stores = Array.from(new Set(rows.map((row) => row.store)));
-  const filteredRows = rows.filter((row) => {
+  const reportBaseRows = rows.filter((row) => {
     const targetText = [
       row.orderId,
       row.store,
@@ -234,12 +234,12 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
-      (statusFilter === "すべて" || row.status === statusFilter) &&
-      (storeFilter === "すべて" || row.store === storeFilter)
+      (statusFilter === "すべて" || row.status === statusFilter)
     );
   });
+  const filteredRows = reportBaseRows.filter((row) => storeFilter === "すべて" || row.store === storeFilter);
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
-  const storeReportRows = createStoreReportRows(filteredRows);
+  const storeReportRows = createStoreReportRows(reportBaseRows);
 
   return (
     <main className="shell">
@@ -287,21 +287,36 @@ export default function ProcurementHistoryPage() {
           </div>
           <div className="history-report-grid">
             <div className="history-report-card">
-              <h4>店舗別サマリー</h4>
+              <h4>店舗を選択</h4>
               <div className="history-report-list">
+                <button
+                  type="button"
+                  className={storeFilter === "すべて" ? "history-report-summary-row is-active" : "history-report-summary-row"}
+                  onClick={() => setStoreFilter("すべて")}
+                >
+                  <strong>すべて</strong>
+                  <span>全店舗</span>
+                  <span>{reportBaseRows.length} 明細</span>
+                  <span>{storeReportRows.length} 店舗</span>
+                </button>
                 {storeReportRows.map((row) => (
-                  <article className="history-report-summary-row" key={row.store}>
+                  <button
+                    type="button"
+                    className={storeFilter === row.store ? "history-report-summary-row is-active" : "history-report-summary-row"}
+                    onClick={() => setStoreFilter(row.store)}
+                    key={row.store}
+                  >
                     <strong>{row.store}</strong>
                     <span>依頼 {row.orderCount} 件</span>
                     <span>明細 {row.itemCount} 件</span>
                     <span>商品 {row.productCount} 種</span>
-                  </article>
+                  </button>
                 ))}
                 {storeReportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
               </div>
             </div>
             <div className="history-report-card">
-              <h4>使用量ランキング</h4>
+              <h4>{storeFilter === "すべて" ? "使用量ランキング" : `${storeFilter} の使用量ランキング`}</h4>
               <div className="history-report-list">
                 {reportRows.map((row, index) => (
                   <article className="history-report-ranking-row" key={row.id}>

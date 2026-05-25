@@ -1402,6 +1402,22 @@ button {
 .history-report-summary-row {
   grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(76px, auto));
   align-items: center;
+  width: 100%;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.history-report-summary-row:hover,
+.history-report-summary-row.is-active {
+  border-color: rgba(31, 128, 97, 0.32);
+  background: var(--green-soft);
+}
+
+.history-report-summary-row:hover {
+  transform: translateY(-1px);
 }
 
 .history-report-summary-row span,
