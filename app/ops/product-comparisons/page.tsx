@@ -676,13 +676,13 @@ function ComparisonCard({
       <div className="comparison-card-body">
         <div className="recommendation-title">
           <strong>{comparison.baseProductName} ⇔ {comparison.candidateProductName}</strong>
-          <span className={rate <= 0 ? "rate-down" : "rate-up"}>{candidateComparableUnitCost === null ? "単位確認" : `${rate > 0 ? "+" : ""}${rate.toFixed(1)}%`}</span>
         </div>
         <div className="comparison-card-actions">
           {comparison.canEdit && !comparison.isArchived ? <button type="button" className="secondary-button" onClick={onEdit}>編集</button> : null}
           {!comparison.isArchived ? <button type="button" className="secondary-button" onClick={onCopy}>コピーして再比較</button> : null}
           {comparison.canArchive ? <button type="button" className="secondary-button" onClick={onArchive}>{comparison.isArchived ? "履歴へ戻す" : "アーカイブ"}</button> : null}
           {comparison.canDelete ? <button type="button" className="danger-button" onClick={onDelete}>削除</button> : null}
+          <span className={`comparison-rate-result ${rate <= 0 ? "rate-down" : "rate-up"}`}>{candidateComparableUnitCost === null ? "単位確認" : `${rate > 0 ? "+" : ""}${rate.toFixed(1)}%`}</span>
         </div>
         <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
         <div className="comparison-result-grid">
@@ -701,14 +701,6 @@ function ComparisonCard({
               </dl>
             ) : null}
             <dl>
-              <dt>輸入費用</dt>
-              <dd>運賃 {formatCurrency(effectiveFreightCost)}</dd>
-              <dt>税費</dt>
-              <dd>{formatCurrency(comparison.taxCost)}</dd>
-              <dt>その他</dt>
-              <dd>{formatCurrency(comparison.otherCost)}</dd>
-            </dl>
-            <dl>
               <dt>候補規格</dt>
               <dd>{formatNumber(comparison.candidateQuantity)} {comparison.candidateUnit}</dd>
               <dt>輸入単位数</dt>
@@ -717,6 +709,14 @@ function ComparisonCard({
               <dd>{formatNumber(importWeightKg)} kg</dd>
               <dt>運賃単価</dt>
               <dd>{formatCurrency(comparison.freightRatePerKg)} / kg{comparison.candidateCurrency !== "JPY" ? ` (${formatForeignCurrency(comparison.freightRateOriginalPerKg, comparison.candidateCurrency)} / kg)` : ""}</dd>
+            </dl>
+            <dl>
+              <dt>輸入費用</dt>
+              <dd>運賃 {formatCurrency(effectiveFreightCost)}</dd>
+              <dt>税費</dt>
+              <dd>{formatCurrency(comparison.taxCost)}</dd>
+              <dt>その他</dt>
+              <dd>{formatCurrency(comparison.otherCost)}</dd>
             </dl>
           </div>
         ) : null}

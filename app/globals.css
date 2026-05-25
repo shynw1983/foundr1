@@ -3113,9 +3113,30 @@ button {
 }
 
 .comparison-card-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, max-content) minmax(160px, 1fr);
   gap: 8px;
+  align-items: stretch;
+}
+
+.comparison-card-actions .comparison-rate-result {
+  display: grid;
+  min-height: 42px;
+  min-width: 160px;
+  place-items: center;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.comparison-card-actions .comparison-rate-result.rate-down {
+  background: var(--green-soft);
+}
+
+.comparison-card-actions .comparison-rate-result.rate-up {
+  background: #fff1f2;
 }
 
 .comparison-import-details dl {
