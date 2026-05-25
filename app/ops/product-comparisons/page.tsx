@@ -643,15 +643,19 @@ function ComparisonCard({
   onEdit: () => void;
 }) {
   const importCount = Math.max(1, comparison.importQuantity ?? 1);
-  const candidateTotal = (comparison.candidatePrice * importCount) + comparison.freightCost + comparison.taxCost + comparison.otherCost;
-  const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
-  const baseUnitCost = comparison.basePrice / Math.max(1, comparison.baseQuantity);
   const importWeightKg = inferCandidateTotalWeightKg(
     comparison.candidateUnit,
     comparison.candidateQuantity,
     comparison.candidateWeightKg,
     importCount
   );
+  const calculatedFreightCost = comparison.isImported ? comparison.freightRatePerKg * importWeightKg : 0;
+  const effectiveFreightCost = comparison.isImported && comparison.freightCost <= 0 && calculatedFreightCost > 0
+    ? calculatedFreightCost
+    : comparison.freightCost;
+  const candidateTotal = (comparison.candidatePrice * importCount) + effectiveFreightCost + comparison.taxCost + comparison.otherCost;
+  const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
+  const baseUnitCost = comparison.basePrice / Math.max(1, comparison.baseQuantity);
   const candidateComparableUnitCost = getComparableUnitCost(
     candidateTotal,
     comparison.candidateQuantity * importCount,
@@ -698,7 +702,7 @@ function ComparisonCard({
             ) : null}
             <dl>
               <dt>輸入費用</dt>
-              <dd>運賃 {formatCurrency(comparison.freightCost)}</dd>
+              <dd>運賃 {formatCurrency(effectiveFreightCost)}</dd>
               <dt>税費</dt>
               <dd>{formatCurrency(comparison.taxCost)}</dd>
               <dt>その他</dt>
