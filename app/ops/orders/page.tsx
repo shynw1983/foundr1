@@ -1231,8 +1231,12 @@ export default function OrdersPage() {
                     <p>{item.message}</p>
                     <div className="feedback-actions">
                       <small>{item.store} · {item.status}</small>
-                      {item.kind && item.kind !== "note" ? (
-                        <button type="button" className="text-button" onClick={() => confirmStoreFeedback(item)}>
+                      {item.status === "店舗確認待ち" ? (
+                        <button
+                          type="button"
+                          className="feedback-confirm-button"
+                          onClick={() => confirmStoreFeedback(item)}
+                        >
                           確認済みにする
                         </button>
                       ) : null}

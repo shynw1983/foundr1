@@ -2618,6 +2618,18 @@ button {
   flex: 0 0 auto;
 }
 
+.feedback-confirm-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: white;
+  background: var(--green);
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .category-row,
 .brand-strip {
   display: flex;
@@ -3679,6 +3691,15 @@ button {
     left: 12px;
     min-height: 68px;
     max-width: none;
+  }
+
+  .feedback-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .feedback-confirm-button {
+    width: 100%;
   }
 
   .metric-grid,
