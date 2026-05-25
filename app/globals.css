@@ -720,8 +720,12 @@ button {
 }
 
 .supplier-management-form {
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.55fr) minmax(180px, 1fr) auto;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   align-items: end;
+}
+
+.supplier-management-form .primary-button {
+  min-height: 42px;
 }
 
 .checkbox-group {
@@ -2487,6 +2491,25 @@ button {
   margin-top: 4px;
   color: var(--muted);
   font-weight: 800;
+}
+
+.supplier-detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.supplier-detail-list a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.supplier-detail-list a:hover {
+  text-decoration: underline;
 }
 
 .price-block {

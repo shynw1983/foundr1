@@ -118,11 +118,11 @@ export const productBrandUsages = [
 ];
 
 export const suppliers = [
-  { name: "城北食材卸", category: "肉類 / 練り物 / 野菜", reliability: "安定", channelType: "実店舗" },
-  { name: "東和包材", category: "カップ / 容器 / 袋", reliability: "時々欠品", channelType: "実店舗" },
-  { name: "南区調味料店", category: "鍋ベース / 茶葉 / 調味料", reliability: "価格変動あり", channelType: "実店舗" },
-  { name: "近隣業務スーパー", category: "緊急補充 / 汎用品", reliability: "即日対応", channelType: "チェーン店" },
-  { name: "オンライン包材 A", category: "包材 / 予備在庫", reliability: "配送に 1-2 日", channelType: "ネットショップ" }
+  { name: "城北食材卸", category: "肉類 / 練り物 / 野菜", reliability: "安定", channelType: "実店舗", address: "", phone: "", contactPerson: "", businessHours: "", orderUrl: "" },
+  { name: "東和包材", category: "カップ / 容器 / 袋", reliability: "時々欠品", channelType: "実店舗", address: "", phone: "", contactPerson: "", businessHours: "", orderUrl: "" },
+  { name: "南区調味料店", category: "鍋ベース / 茶葉 / 調味料", reliability: "価格変動あり", channelType: "実店舗", address: "", phone: "", contactPerson: "", businessHours: "", orderUrl: "" },
+  { name: "近隣業務スーパー", category: "緊急補充 / 汎用品", reliability: "即日対応", channelType: "チェーン店", address: "", phone: "", contactPerson: "", businessHours: "", orderUrl: "" },
+  { name: "オンライン包材 A", category: "包材 / 予備在庫", reliability: "配送に 1-2 日", channelType: "ネットショップ", address: "", phone: "", contactPerson: "", businessHours: "", orderUrl: "" }
 ];
 
 export const supplierLocations = [

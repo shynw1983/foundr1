@@ -187,7 +187,16 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         order by name
       `,
       sql`
-        select name, category, reliability, channel_type as "channelType"
+        select
+          name,
+          category,
+          reliability,
+          channel_type as "channelType",
+          coalesce(address, '') as address,
+          coalesce(phone, '') as phone,
+          coalesce(contact_person, '') as "contactPerson",
+          coalesce(business_hours, '') as "businessHours",
+          coalesce(order_url, '') as "orderUrl"
         from suppliers
         order by name
       `,

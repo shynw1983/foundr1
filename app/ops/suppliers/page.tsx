@@ -48,7 +48,17 @@ export default function SuppliersPage() {
   }, []);
 
   const filteredSuppliers = suppliers.filter((supplier) =>
-    [supplier.name, supplier.category, supplier.channelType, supplier.reliability]
+    [
+      supplier.name,
+      supplier.category,
+      supplier.channelType,
+      supplier.reliability,
+      supplier.address,
+      supplier.phone,
+      supplier.contactPerson,
+      supplier.businessHours,
+      supplier.orderUrl
+    ]
       .join(" ")
       .toLowerCase()
       .includes(query.toLowerCase())
@@ -196,6 +206,26 @@ export default function SuppliersPage() {
               </select>
             </label>
             <label>
+              <span>住所</span>
+              <input name="address" placeholder="例: 福岡市中央区..." />
+            </label>
+            <label>
+              <span>電話番号</span>
+              <input name="phone" placeholder="例: 092-000-0000" />
+            </label>
+            <label>
+              <span>連絡先担当者</span>
+              <input name="contactPerson" placeholder="例: 山田さん" />
+            </label>
+            <label>
+              <span>営業時間</span>
+              <input name="businessHours" placeholder="例: 9:00-18:00 / 日曜休み" />
+            </label>
+            <label>
+              <span>注文URL</span>
+              <input name="orderUrl" placeholder="例: https://example.com/order" />
+            </label>
+            <label>
               <span>メモ</span>
               <input name="reliability" placeholder="例: 即日対応 / 欠品あり / 配送 1-2 日" />
             </label>
@@ -221,6 +251,15 @@ export default function SuppliersPage() {
                   <strong>{supplier.name}</strong>
                   <p>{supplier.category || "取扱内容未設定"}</p>
                   <small>{supplier.reliability || "メモ未設定"}</small>
+                  <div className="supplier-detail-list">
+                    {supplier.address ? <span>住所: {supplier.address}</span> : null}
+                    {supplier.phone ? <span>電話: {supplier.phone}</span> : null}
+                    {supplier.contactPerson ? <span>担当: {supplier.contactPerson}</span> : null}
+                    {supplier.businessHours ? <span>営業時間: {supplier.businessHours}</span> : null}
+                    {supplier.orderUrl ? (
+                      <a href={supplier.orderUrl} target="_blank" rel="noreferrer">注文URL</a>
+                    ) : null}
+                  </div>
                 </div>
                 <span className="supplier-type">{supplier.channelType}</span>
                 <div className="row-actions">
@@ -267,6 +306,26 @@ export default function SuppliersPage() {
                 </select>
               </label>
               <label>
+                <span>住所</span>
+                <input name="address" defaultValue={editingSupplier.address} />
+              </label>
+              <label>
+                <span>電話番号</span>
+                <input name="phone" defaultValue={editingSupplier.phone} />
+              </label>
+              <label>
+                <span>連絡先担当者</span>
+                <input name="contactPerson" defaultValue={editingSupplier.contactPerson} />
+              </label>
+              <label>
+                <span>営業時間</span>
+                <input name="businessHours" defaultValue={editingSupplier.businessHours} />
+              </label>
+              <label>
+                <span>注文URL</span>
+                <input name="orderUrl" defaultValue={editingSupplier.orderUrl} />
+              </label>
+              <label>
                 <span>メモ</span>
                 <input name="reliability" defaultValue={editingSupplier.reliability} />
               </label>
@@ -290,6 +349,11 @@ function readSupplierForm(formData: FormData): Supplier {
     name: String(formData.get("name") ?? "").trim(),
     category: String(formData.get("category") ?? "").trim(),
     channelType: String(formData.get("channelType") ?? "実店舗").trim() || "実店舗",
-    reliability: String(formData.get("reliability") ?? "").trim()
+    reliability: String(formData.get("reliability") ?? "").trim(),
+    address: String(formData.get("address") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    contactPerson: String(formData.get("contactPerson") ?? "").trim(),
+    businessHours: String(formData.get("businessHours") ?? "").trim(),
+    orderUrl: String(formData.get("orderUrl") ?? "").trim()
   };
 }

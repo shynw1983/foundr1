@@ -1253,7 +1253,7 @@ function isStaffAssignedToStore(staff: StaffOption, storeName: string) {
 
 function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOption[], storeName: string, currentUserId: string) {
   const currentStaff = staffOptions.find((staff) => staff.id === currentId);
-  if (currentStaff && currentStaff.role !== "owner" && isStaffAssignedToStore(currentStaff, storeName)) return currentStaff.id;
+  if (currentId && currentStaff) return currentStaff.id;
 
   const storeStaff = staffOptions.filter((staff) => staff.role !== "owner" && isStaffAssignedToStore(staff, storeName));
   if (storeStaff.length > 0) {

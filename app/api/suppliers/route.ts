@@ -10,19 +10,51 @@ export async function POST(request: Request) {
   const category = String(formData.get("category") ?? "").trim();
   const channelType = String(formData.get("channelType") ?? "").trim();
   const reliability = String(formData.get("reliability") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const contactPerson = String(formData.get("contactPerson") ?? "").trim();
+  const businessHours = String(formData.get("businessHours") ?? "").trim();
+  const orderUrl = String(formData.get("orderUrl") ?? "").trim();
 
   if (!name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
   }
 
   await sql`
-    insert into suppliers (name, category, channel_type, reliability, updated_at)
-    values (${name}, ${category || null}, ${channelType || "実店舗"}, ${reliability || null}, now())
+    insert into suppliers (
+      name,
+      category,
+      channel_type,
+      reliability,
+      address,
+      phone,
+      contact_person,
+      business_hours,
+      order_url,
+      updated_at
+    )
+    values (
+      ${name},
+      ${category || null},
+      ${channelType || "実店舗"},
+      ${reliability || null},
+      ${address || null},
+      ${phone || null},
+      ${contactPerson || null},
+      ${businessHours || null},
+      ${orderUrl || null},
+      now()
+    )
     on conflict (name)
     do update set
       category = excluded.category,
       channel_type = excluded.channel_type,
       reliability = excluded.reliability,
+      address = excluded.address,
+      phone = excluded.phone,
+      contact_person = excluded.contact_person,
+      business_hours = excluded.business_hours,
+      order_url = excluded.order_url,
       updated_at = now()
   `;
 
@@ -39,6 +71,11 @@ export async function PUT(request: Request) {
   const category = String(formData.get("category") ?? "").trim();
   const channelType = String(formData.get("channelType") ?? "").trim();
   const reliability = String(formData.get("reliability") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const contactPerson = String(formData.get("contactPerson") ?? "").trim();
+  const businessHours = String(formData.get("businessHours") ?? "").trim();
+  const orderUrl = String(formData.get("orderUrl") ?? "").trim();
 
   if (!currentName || !name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -65,6 +102,11 @@ export async function PUT(request: Request) {
       category = ${category || null},
       channel_type = ${channelType || "実店舗"},
       reliability = ${reliability || null},
+      address = ${address || null},
+      phone = ${phone || null},
+      contact_person = ${contactPerson || null},
+      business_hours = ${businessHours || null},
+      order_url = ${orderUrl || null},
       updated_at = now()
     where name = ${currentName}
     returning id

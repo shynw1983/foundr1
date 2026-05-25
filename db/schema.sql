@@ -119,6 +119,11 @@ create table if not exists suppliers (
   category text,
   channel_type text not null,
   reliability text,
+  address text,
+  phone text,
+  contact_person text,
+  business_hours text,
+  order_url text,
   contact_note text,
   status text not null default 'active',
   created_at timestamptz not null default now(),
@@ -195,6 +200,11 @@ alter table purchase_orders add column if not exists expected_arrival_date date;
 alter table purchase_orders add column if not exists online_order_status text not null default 'not_started';
 alter table purchase_orders add column if not exists requested_by uuid references employees(id);
 alter table purchase_orders add column if not exists assigned_to uuid references employees(id);
+alter table suppliers add column if not exists address text;
+alter table suppliers add column if not exists phone text;
+alter table suppliers add column if not exists contact_person text;
+alter table suppliers add column if not exists business_hours text;
+alter table suppliers add column if not exists order_url text;
 
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
