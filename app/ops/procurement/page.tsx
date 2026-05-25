@@ -814,6 +814,7 @@ export default function ProcurementPage() {
                               const product = findProcurementProduct(item, products);
                               const photoSrc = getProductPhotoSrc(product?.photoUrl);
                               const productSpec = product?.packageSpec || product?.specNote;
+                              const referencePrice = Number(product?.referencePrice ?? 0);
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
 
                               return (
@@ -849,6 +850,9 @@ export default function ProcurementPage() {
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
                                     <small>依頼 {item.requestedQuantity} {item.unit}</small>
+                                    <small>
+                                      参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
+                                    </small>
                                   </div>
                                   <label className="task-actual">
                                     <span>実数</span>
