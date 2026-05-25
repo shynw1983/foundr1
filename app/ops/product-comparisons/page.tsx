@@ -141,7 +141,17 @@ export default function ProductComparisonsPage() {
   const candidateTotal = (candidatePriceJpy * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
   const candidateUnitCost = candidateTotal / Math.max(1, normalizeNumber(candidateQuantity) * importCount);
   const baseUnitCost = normalizeNumber(basePrice) / Math.max(1, normalizeNumber(baseQuantity));
-  const savingRate = baseUnitCost > 0 ? ((candidateUnitCost - baseUnitCost) / baseUnitCost) * 100 : 0;
+  const candidateComparableUnitCost = getComparableUnitCost(
+    candidateTotal,
+    normalizeNumber(candidateQuantity) * importCount,
+    candidateUnit,
+    baseUnit
+  );
+  const previewCandidateUnitCost = candidateComparableUnitCost ?? candidateUnitCost;
+  const previewCandidateUnit = candidateComparableUnitCost === null ? candidateUnit : baseUnit;
+  const savingRate = baseUnitCost > 0 && candidateComparableUnitCost !== null
+    ? ((candidateComparableUnitCost - baseUnitCost) / baseUnitCost) * 100
+    : 0;
 
   async function loadData() {
     const [dashboardResponse, comparisonResponse] = await Promise.all([
@@ -535,10 +545,10 @@ export default function ProductComparisonsPage() {
               </div>
               <div className="comparison-preview">
                 <span>現行 {formatCurrency(baseUnitCost)} / {baseUnit}</span>
-                <span>候補 {formatCurrency(candidateUnitCost)} / {candidateUnit}</span>
+                <span>候補 {formatCurrency(previewCandidateUnitCost)} / {previewCandidateUnit}</span>
                 <span>候補総額 {formatCurrency(candidateTotal)}</span>
                 <strong className={savingRate <= 0 ? "rate-down" : "rate-up"}>
-                  {baseUnitCost > 0 ? `${savingRate > 0 ? "+" : ""}${savingRate.toFixed(1)}%` : "比較待ち"}
+                  {baseUnitCost > 0 && candidateComparableUnitCost !== null ? `${savingRate > 0 ? "+" : ""}${savingRate.toFixed(1)}%` : "単位確認"}
                 </strong>
               </div>
               <div className="modern-file-field">
@@ -605,7 +615,17 @@ function ComparisonCard({
   const candidateTotal = (comparison.candidatePrice * importCount) + comparison.freightCost + comparison.taxCost + comparison.otherCost;
   const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
   const baseUnitCost = comparison.basePrice / Math.max(1, comparison.baseQuantity);
-  const rate = baseUnitCost > 0 ? ((candidateUnitCost - baseUnitCost) / baseUnitCost) * 100 : 0;
+  const candidateComparableUnitCost = getComparableUnitCost(
+    candidateTotal,
+    comparison.candidateQuantity * importCount,
+    comparison.candidateUnit,
+    comparison.baseUnit
+  );
+  const displayedCandidateUnitCost = candidateComparableUnitCost ?? candidateUnitCost;
+  const displayedCandidateUnit = candidateComparableUnitCost === null ? comparison.candidateUnit : comparison.baseUnit;
+  const rate = baseUnitCost > 0 && candidateComparableUnitCost !== null
+    ? ((candidateComparableUnitCost - baseUnitCost) / baseUnitCost) * 100
+    : 0;
 
   return (
     <article className="recommendation-card comparison-card">
@@ -615,7 +635,7 @@ function ComparisonCard({
       <div className="comparison-card-body">
         <div className="recommendation-title">
           <strong>{comparison.baseProductName} ⇔ {comparison.candidateProductName}</strong>
-          <span className={rate <= 0 ? "rate-down" : "rate-up"}>{rate > 0 ? "+" : ""}{rate.toFixed(1)}%</span>
+          <span className={rate <= 0 ? "rate-down" : "rate-up"}>{candidateComparableUnitCost === null ? "単位確認" : `${rate > 0 ? "+" : ""}${rate.toFixed(1)}%`}</span>
         </div>
         <div className="comparison-card-actions">
           {comparison.canEdit ? <button type="button" className="secondary-button" onClick={onEdit}>編集</button> : null}
@@ -625,7 +645,7 @@ function ComparisonCard({
         <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
         <div className="comparison-result-grid">
           <span><small>現行</small><strong>{formatCurrency(baseUnitCost)} / {comparison.baseUnit}</strong></span>
-          <span><small>候補</small><strong>{formatCurrency(candidateUnitCost)} / {comparison.candidateUnit}</strong></span>
+          <span><small>候補</small><strong>{formatCurrency(displayedCandidateUnitCost)} / {displayedCandidateUnit}</strong></span>
           <span><small>候補総額</small><strong>{formatCurrency(candidateTotal)}</strong></span>
         </div>
         {comparison.isImported ? (
@@ -673,6 +693,23 @@ function inferCandidateTotalWeightKg(unit: string, quantityValue: string | numbe
   if (unit === "kg") return quantity * importCount;
   if (unit === "g") return (quantity / 1000) * importCount;
   return manualWeightKg * importCount;
+}
+
+function getComparableUnitCost(totalPrice: number, quantity: number, fromUnit: string, targetUnit: string) {
+  const convertedQuantity = convertQuantity(quantity, fromUnit, targetUnit);
+  if (convertedQuantity === null || convertedQuantity <= 0) return null;
+  return totalPrice / convertedQuantity;
+}
+
+function convertQuantity(quantity: number, fromUnit: string, targetUnit: string) {
+  if (fromUnit === targetUnit) return quantity;
+
+  const weightUnits: Record<string, number> = { g: 1, kg: 1000 };
+  if (fromUnit in weightUnits && targetUnit in weightUnits) {
+    return (quantity * weightUnits[fromUnit]) / weightUnits[targetUnit];
+  }
+
+  return null;
 }
 
 function uniqueSorted(values: string[]) {
