@@ -271,16 +271,18 @@ function groupTasksBySupplier(
   }, []);
 }
 
-function hasOnlineSupplier(items: ProcurementTaskItem[], supplierList: Supplier[]) {
+function hasDeliveryOrderSupplier(items: ProcurementTaskItem[], supplierList: Supplier[]) {
   return items.some((item) => {
     const supplier = supplierList.find((supplierItem) => supplierItem.name === item.supplier);
     const supplierName = item.supplier.toLowerCase();
 
     return (
       supplier?.channelType === "ネットショップ" ||
+      supplier?.channelType === "卸売" ||
       supplierName.includes("online") ||
       supplierName.includes("ネット") ||
       supplierName.includes("オンライン") ||
+      supplierName.includes("卸") ||
       supplierName.includes("amazon") ||
       supplierName.includes("楽天")
     );
@@ -307,7 +309,7 @@ function getOrderStatus(
   if (deliveredCount > 0) return "一部納品済み";
   if (purchasedCount === 0) return "購入待ち";
   if (purchasedCount < items.length) return "一部購入済み";
-  if (hasOnlineSupplier(items, supplierList)) {
+  if (hasDeliveryOrderSupplier(items, supplierList)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
     return "到着日入力待ち";
   }
@@ -516,7 +518,7 @@ export default function ProcurementPage() {
       return;
     }
 
-    updateDeliveryState(orderId, { status: "online_ordered" }, "ネット注文を発注済みにしました。");
+    updateDeliveryState(orderId, { status: "online_ordered" }, "配送発注を発注済みにしました。");
   }
 
   function markOnlineOrderArrived(orderId: string) {
@@ -541,7 +543,7 @@ export default function ProcurementPage() {
     );
 
     void Promise.all(targetItems.map((item) => saveProcurementTaskItem(item)))
-      .then(() => showNotice("ネット注文を納品済みにしました。"))
+      .then(() => showNotice("配送発注を納品済みにしました。"))
       .catch(() => {
         window.alert("到着状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
       });
@@ -758,7 +760,7 @@ export default function ProcurementPage() {
               const readyToDeliverCount = items.filter((item) => item.purchased && item.deliveryStatus === "pending").length;
               const orderDeliveryBatches = deliveryBatches.filter((batch) => batch.orderId === order.id);
               const hasPurchasedItems = completedCount > 0;
-              const isOnlineOrder = hasOnlineSupplier(items, suppliers);
+              const isOnlineOrder = hasDeliveryOrderSupplier(items, suppliers);
               const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, products);
 
               return (
@@ -950,7 +952,7 @@ function OrderFulfillmentPanel({
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
       <div>
-        <span>{isOnlineOrder ? "ネット注文" : "配送フロー"}</span>
+        <span>{isOnlineOrder ? "配送発注" : "配送フロー"}</span>
         <strong>
           {isOnlineOrder
             ? receivedCount === totalCount

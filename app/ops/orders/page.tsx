@@ -1140,7 +1140,7 @@ export default function OrdersPage() {
                       <div className="store-confirmation-panel">
                         <div className="store-confirmation-heading">
                           <strong>到着確認</strong>
-                          <span>ネット注文の到着を店舗側で確認</span>
+                          <span>配送発注の到着を店舗側で確認</span>
                         </div>
                         <div className="delivery-batch-row store-confirmation-row">
                           <div className="delivery-batch-info">
