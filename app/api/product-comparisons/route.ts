@@ -57,7 +57,6 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const baseProductId = String(formData.get("baseProductId") ?? "").trim();
   const candidateProductName = String(formData.get("candidateProductName") ?? "").trim();
-  const candidateSupplierId = String(formData.get("candidateSupplierId") ?? "").trim();
   const candidateSupplierNameInput = String(formData.get("candidateSupplierName") ?? "").trim();
   const candidateOrigin = String(formData.get("candidateOrigin") ?? "").trim();
   const candidatePrice = normalizeNumber(formData.get("candidatePrice"));
@@ -88,16 +87,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "現行品と候補品の価格を入力してください。" }, { status: 400 });
   }
 
-  const supplierRows = candidateSupplierId
-    ? await sql`
-        select id, name
-        from suppliers
-        where id = ${candidateSupplierId}
-        limit 1
-      `
-    : [];
-  const supplierIdValue = supplierRows[0]?.id ?? null;
-  const supplierName = supplierRows[0]?.name ?? candidateSupplierNameInput;
   const photoUrl = await uploadPhotoIfNeeded(file, candidateProductName, "product-comparisons");
   const freightCost = isImported ? freightRatePerKg * candidateWeightKg * importQuantity : freightCostInput;
 
@@ -128,8 +117,8 @@ export async function POST(request: Request) {
     ) values (
       ${baseProductId},
       ${candidateProductName},
-      ${supplierIdValue},
-      ${supplierName},
+      ${null},
+      ${candidateSupplierNameInput},
       ${candidateOrigin},
       ${candidatePrice},
       ${candidateQuantity},

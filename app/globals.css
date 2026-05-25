@@ -2925,6 +2925,12 @@ button {
   gap: 10px;
 }
 
+.comparison-category-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .comparison-preview,
 .comparison-result-grid {
   display: grid;
@@ -4117,6 +4123,7 @@ button {
 
   .recommendations-grid,
   .recommendation-card,
+  .comparison-category-picker,
   .comparison-inline-fields,
   .comparison-preview,
   .comparison-result-grid {

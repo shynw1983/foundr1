@@ -4,14 +4,13 @@ import { Boxes, ClipboardList, FileText, Lightbulb, LogOut, MessageSquareWarning
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { products as initialProducts, suppliers as initialSuppliers } from "../../../lib/mock-data";
+import { products as initialProducts } from "../../../lib/mock-data";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OpsNavList } from "../components/OpsNavList";
 import { UserBadge } from "../components/UserBadge";
 
-type Product = typeof initialProducts[number] & { id?: string; packageSpec?: string; referencePrice?: number };
-type Supplier = typeof initialSuppliers[number] & { id?: string };
+type Product = typeof initialProducts[number] & { id?: string; packageSpec?: string; referencePrice?: number; subcategory?: string };
 type ProductComparison = {
   id: string;
   baseProductId: string;
@@ -57,9 +56,10 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 export default function ProductComparisonsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [products, setProducts] = useState<Product[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [comparisons, setComparisons] = useState<ProductComparison[]>([]);
   const [query, setQuery] = useState("");
+  const [baseCategory, setBaseCategory] = useState("");
+  const [baseSubcategory, setBaseSubcategory] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [baseQuantity, setBaseQuantity] = useState("1");
@@ -80,6 +80,21 @@ export default function ProductComparisonsPage() {
   }, []);
 
   const selectedProduct = products.find((product) => product.id === selectedProductId);
+  const baseCategories = useMemo(
+    () => uniqueSorted(products.map((product) => product.category || "未分類")),
+    [products]
+  );
+  const baseSubcategories = useMemo(() => {
+    const scopedProducts = products.filter((product) => !baseCategory || (product.category || "未分類") === baseCategory);
+    return uniqueSorted(scopedProducts.map((product) => product.subcategory || "未分類"));
+  }, [baseCategory, products]);
+  const baseProductOptions = useMemo(
+    () => [...products]
+      .filter((product) => !baseCategory || (product.category || "未分類") === baseCategory)
+      .filter((product) => !baseSubcategory || (product.subcategory || "未分類") === baseSubcategory)
+      .sort((a, b) => a.name.localeCompare(b.name, "ja")),
+    [baseCategory, baseSubcategory, products]
+  );
   const importCount = Math.max(1, normalizeNumber(importQuantity));
   const candidateFreight = normalizeNumber(freightRatePerKg) * normalizeNumber(candidateWeightKg) * importCount;
   const candidateTotal = (normalizeNumber(candidatePrice) * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
@@ -94,9 +109,8 @@ export default function ProductComparisonsPage() {
     ]);
 
     if (dashboardResponse.ok) {
-      const data = await dashboardResponse.json() as { products?: Product[]; suppliers?: Supplier[] };
+      const data = await dashboardResponse.json() as { products?: Product[] };
       setProducts(data.products ?? []);
-      setSuppliers(data.suppliers ?? []);
     }
 
     if (comparisonResponse.ok) {
@@ -123,10 +137,27 @@ export default function ProductComparisonsPage() {
     );
   }, [comparisons, query]);
 
+  function selectBaseCategory(category: string) {
+    setBaseCategory(category);
+    setBaseSubcategory("");
+    selectBaseProduct("");
+  }
+
+  function selectBaseSubcategory(subcategory: string) {
+    setBaseSubcategory(subcategory);
+    selectBaseProduct("");
+  }
+
   function selectBaseProduct(productId: string) {
     setSelectedProductId(productId);
     const product = products.find((item) => item.id === productId);
-    if (!product) return;
+    if (!product) {
+      setBasePrice("");
+      setBaseQuantity("1");
+      setBaseUnit("g");
+      setCandidateUnit("g");
+      return;
+    }
 
     setBasePrice(String(product.referencePrice ?? 0));
     const inferred = inferSpecQuantity([product.packageSpec, product.specNote].filter(Boolean).join(" "));
@@ -163,6 +194,8 @@ export default function ProductComparisonsPage() {
     }
 
     form.reset();
+    setBaseCategory("");
+    setBaseSubcategory("");
     setSelectedProductId("");
     setBasePrice("");
     setBaseQuantity("1");
@@ -219,15 +252,41 @@ export default function ProductComparisonsPage() {
               </div>
             </div>
             <div className="edit-fields">
-              <label>
-                <span>現行商品</span>
-                <select name="baseProductId" value={selectedProductId} onChange={(event) => selectBaseProduct(event.target.value)} required>
-                  <option value="">選択してください</option>
-                  {products.map((product) => (
-                    <option value={product.id ?? ""} key={product.id ?? product.name}>{product.name}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="comparison-category-picker">
+                <label>
+                  <span>大分類</span>
+                  <select value={baseCategory} onChange={(event) => selectBaseCategory(event.target.value)} required>
+                    <option value="">選択してください</option>
+                    {baseCategories.map((category) => (
+                      <option value={category} key={category}>{category}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>小分類</span>
+                  <select value={baseSubcategory} onChange={(event) => selectBaseSubcategory(event.target.value)} disabled={!baseCategory}>
+                    <option value="">すべての小分類</option>
+                    {baseSubcategories.map((subcategory) => (
+                      <option value={subcategory} key={subcategory}>{subcategory}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>現行商品</span>
+                  <select
+                    name="baseProductId"
+                    value={selectedProductId}
+                    onChange={(event) => selectBaseProduct(event.target.value)}
+                    disabled={!baseCategory}
+                    required
+                  >
+                    <option value="">商品を選択</option>
+                    {baseProductOptions.map((product) => (
+                      <option value={product.id ?? ""} key={product.id ?? product.name}>{product.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               {selectedProduct ? <small className="form-hint">規格: {selectedProduct.packageSpec || selectedProduct.specNote || "未設定"}</small> : null}
               <div className="comparison-inline-fields">
                 <label>
@@ -255,17 +314,8 @@ export default function ProductComparisonsPage() {
                 <input name="candidateProductName" placeholder="例: 緑豆春雨 500g" required />
               </label>
               <label>
-                <span>候補発注先</span>
-                <select name="candidateSupplierId" defaultValue="">
-                  <option value="">新規または未選択</option>
-                  {suppliers.map((supplier) => (
-                    <option value={supplier.id ?? ""} key={supplier.name}>{supplier.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>新規発注先名</span>
-                <input name="candidateSupplierName" placeholder="例: 輸入食品 A" />
+                <span>候補購入先名</span>
+                <input name="candidateSupplierName" placeholder="例: 輸入食品 A / 新しい卸業者名" />
               </label>
               <div className="comparison-inline-fields">
                 <label>
@@ -298,7 +348,7 @@ export default function ProductComparisonsPage() {
               </label>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>候補重量 kg/個</span>
+                  <span>候補規格重量 kg</span>
                   <input value={candidateWeightKg} inputMode="decimal" onChange={(event) => setCandidateWeightKg(event.target.value)} placeholder="例: 0.5" />
                 </label>
                 <label>
@@ -396,7 +446,7 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
           <strong>{comparison.baseProductName} ⇔ {comparison.candidateProductName}</strong>
           <span className={rate <= 0 ? "rate-down" : "rate-up"}>{rate > 0 ? "+" : ""}{rate.toFixed(1)}%</span>
         </div>
-        <p>{comparison.candidateSupplierName || "発注先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
+        <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
         <div className="comparison-result-grid">
           <span>現行 {formatCurrency(baseUnitCost)} / {comparison.baseUnit}</span>
           <span>候補 {formatCurrency(candidateUnitCost)} / {comparison.candidateUnit}</span>
@@ -414,6 +464,10 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
 function normalizeNumber(value: string) {
   const numberValue = Number(String(value).replace(/[¥￥,\s]/g, ""));
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
 function formatNumber(value: number) {
