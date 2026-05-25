@@ -2830,6 +2830,124 @@ button {
   text-decoration: none;
 }
 
+.recommendations-grid {
+  align-items: start;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.2fr);
+}
+
+.recommendation-form {
+  position: sticky;
+  top: 18px;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 12px;
+}
+
+.recommendation-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.recommendation-card > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.recommendation-photo {
+  overflow: hidden;
+  display: block;
+  width: 92px;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.recommendation-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.recommendation-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recommendation-title strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.recommendation-title span {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.recommendation-card p,
+.recommendation-card small,
+.recommendation-card em {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.form-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.comparison-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.comparison-preview,
+.comparison-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.comparison-preview span,
+.comparison-preview strong,
+.comparison-result-grid span {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.comparison-preview strong {
+  text-align: center;
+}
+
 .category-row,
 .brand-strip {
   display: flex;
@@ -3955,6 +4073,23 @@ button {
 
   .report-status-block .secondary-button {
     width: 100%;
+  }
+
+  .recommendations-grid,
+  .recommendation-card,
+  .comparison-inline-fields,
+  .comparison-preview,
+  .comparison-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-form {
+    position: static;
+  }
+
+  .recommendation-photo {
+    width: 100%;
+    max-width: 180px;
   }
 
   .metric-grid,

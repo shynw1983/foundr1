@@ -4,6 +4,7 @@ import {
   Boxes,
   ClipboardList,
   FileText,
+  Lightbulb,
   LogOut,
   MessageSquareWarning,
   PackageCheck,
@@ -43,6 +44,8 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
+  { label: "現場記録", href: "/ops/field-notes", icon: Lightbulb },
+  { label: "商品比較", href: "/ops/product-comparisons", icon: Search },
   { label: "連絡・報告", href: "/ops/reports", icon: MessageSquareWarning },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];

@@ -159,6 +159,78 @@ create table if not exists product_supplier_options (
   unique (product_id, supplier_id, role)
 );
 
+create table if not exists field_notes (
+  id uuid primary key default gen_random_uuid(),
+  note_type text not null default 'idea',
+  title text not null,
+  supplier_id uuid references suppliers(id) on delete set null,
+  supplier_name text,
+  supplier_location text,
+  product_name text,
+  observed_price numeric(12, 2),
+  photo_url text,
+  note text,
+  status text not null default 'open',
+  recorded_by uuid references employees(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table field_notes add column if not exists note_type text not null default 'idea';
+alter table field_notes add column if not exists title text not null default '';
+alter table field_notes add column if not exists supplier_id uuid references suppliers(id) on delete set null;
+alter table field_notes add column if not exists supplier_name text;
+alter table field_notes add column if not exists supplier_location text;
+alter table field_notes add column if not exists product_name text;
+alter table field_notes add column if not exists observed_price numeric(12, 2);
+alter table field_notes add column if not exists photo_url text;
+alter table field_notes add column if not exists note text;
+alter table field_notes add column if not exists status text not null default 'open';
+alter table field_notes add column if not exists recorded_by uuid references employees(id);
+
+create table if not exists product_comparisons (
+  id uuid primary key default gen_random_uuid(),
+  base_product_id uuid references products(id) on delete set null,
+  candidate_product_name text not null,
+  candidate_supplier_id uuid references suppliers(id) on delete set null,
+  candidate_supplier_name text,
+  candidate_origin text,
+  candidate_price numeric(12, 2) not null default 0,
+  candidate_quantity numeric(12, 3) not null default 1,
+  candidate_unit text not null default 'g',
+  base_price numeric(12, 2) not null default 0,
+  base_quantity numeric(12, 3) not null default 1,
+  base_unit text not null default 'g',
+  is_imported boolean not null default false,
+  freight_cost numeric(12, 2) not null default 0,
+  tax_cost numeric(12, 2) not null default 0,
+  other_cost numeric(12, 2) not null default 0,
+  photo_url text,
+  note text,
+  created_by uuid references employees(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table product_comparisons add column if not exists base_product_id uuid references products(id) on delete set null;
+alter table product_comparisons add column if not exists candidate_product_name text not null default '';
+alter table product_comparisons add column if not exists candidate_supplier_id uuid references suppliers(id) on delete set null;
+alter table product_comparisons add column if not exists candidate_supplier_name text;
+alter table product_comparisons add column if not exists candidate_origin text;
+alter table product_comparisons add column if not exists candidate_price numeric(12, 2) not null default 0;
+alter table product_comparisons add column if not exists candidate_quantity numeric(12, 3) not null default 1;
+alter table product_comparisons add column if not exists candidate_unit text not null default 'g';
+alter table product_comparisons add column if not exists base_price numeric(12, 2) not null default 0;
+alter table product_comparisons add column if not exists base_quantity numeric(12, 3) not null default 1;
+alter table product_comparisons add column if not exists base_unit text not null default 'g';
+alter table product_comparisons add column if not exists is_imported boolean not null default false;
+alter table product_comparisons add column if not exists freight_cost numeric(12, 2) not null default 0;
+alter table product_comparisons add column if not exists tax_cost numeric(12, 2) not null default 0;
+alter table product_comparisons add column if not exists other_cost numeric(12, 2) not null default 0;
+alter table product_comparisons add column if not exists photo_url text;
+alter table product_comparisons add column if not exists note text;
+alter table product_comparisons add column if not exists created_by uuid references employees(id);
+
 create table if not exists purchase_orders (
   id uuid primary key default gen_random_uuid(),
   order_no text not null unique,
