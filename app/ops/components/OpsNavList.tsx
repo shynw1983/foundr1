@@ -18,7 +18,8 @@ const masterRoles = new Set(["owner", "manager", "buyer"]);
 function canShowNavItem(role: string, item: OpsNavItem) {
   if (item.href === "/ops/logout") return true;
   if (item.href === "/ops/staff") return role === "owner";
-  if (["/ops/stores", "/ops/products", "/ops/suppliers", "/ops/field-notes", "/ops/product-comparisons"].includes(item.href)) return masterRoles.has(role);
+  if (item.href === "/ops/field-notes") return true;
+  if (["/ops/stores", "/ops/products", "/ops/suppliers", "/ops/product-comparisons"].includes(item.href)) return masterRoles.has(role);
 
   return true;
 }

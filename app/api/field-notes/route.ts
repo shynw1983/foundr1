@@ -2,8 +2,11 @@ import { put } from "@vercel/blob";
 import { requireOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
-const allowedRoles = new Set(["owner", "manager", "buyer"]);
+const allowedRoles = new Set(["owner", "manager", "buyer", "store_owner", "staff"]);
+const adminRoles = new Set(["owner", "manager"]);
+const statusRoles = new Set(["owner", "manager", "buyer"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
+const noteStatuses = new Set(["open", "reviewing", "comparison", "adopted", "rejected"]);
 
 export async function GET() {
   const session = await requireOpsSession();
@@ -24,15 +27,37 @@ export async function GET() {
       coalesce(field_notes.photo_url, '') as "photoUrl",
       coalesce(field_notes.note, '') as note,
       field_notes.status,
+      field_notes.recorded_by::text as "recordedById",
       coalesce(employees.name, '') as "recordedBy",
-      to_char(field_notes.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "createdLabel"
+      to_char(field_notes.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "createdLabel",
+      coalesce((
+        select json_agg(
+          json_build_object(
+            'id', field_note_comments.id::text,
+            'comment', field_note_comments.comment,
+            'createdBy', coalesce(comment_employees.name, ''),
+            'createdLabel', to_char(field_note_comments.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI')
+          )
+          order by field_note_comments.created_at asc
+        )
+        from field_note_comments
+        left join employees comment_employees on comment_employees.id = field_note_comments.created_by
+        where field_note_comments.field_note_id = field_notes.id
+      ), '[]'::json) as comments
     from field_notes
     left join suppliers on suppliers.id = field_notes.supplier_id
     left join employees on employees.id = field_notes.recorded_by
     order by field_notes.created_at desc
   `;
 
-  return Response.json({ notes: rows });
+  return Response.json({
+    notes: rows.map((row) => ({
+      ...row,
+      canEdit: canModifyNote(session.role, session.id, row.recordedById),
+      canDelete: canModifyNote(session.role, session.id, row.recordedById),
+      canChangeStatus: statusRoles.has(session.role)
+    }))
+  });
 }
 
 export async function POST(request: Request) {
@@ -99,12 +124,130 @@ export async function POST(request: Request) {
   return Response.json({ ok: true });
 }
 
+export async function PATCH(request: Request) {
+  const session = await requireOpsSession();
+  if (!session || !allowedRoles.has(session.role)) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as {
+    id?: string;
+    action?: string;
+    status?: string;
+    comment?: string;
+    title?: string;
+    supplierName?: string;
+    supplierLocation?: string;
+    productName?: string;
+    observedPrice?: number | string;
+    note?: string;
+  };
+  const id = String(body.id ?? "").trim();
+  if (!id) return Response.json({ error: "現場記録が見つかりません。" }, { status: 404 });
+
+  const noteRows = await sql`
+    select id, recorded_by::text as "recordedById"
+    from field_notes
+    where id = ${id}
+    limit 1
+  `;
+  const target = noteRows[0];
+  if (!target) return Response.json({ error: "現場記録が見つかりません。" }, { status: 404 });
+
+  if (body.action === "comment") {
+    const comment = String(body.comment ?? "").trim();
+    if (!comment) return Response.json({ error: "コメントを入力してください。" }, { status: 400 });
+
+    await sql`
+      insert into field_note_comments (field_note_id, comment, created_by)
+      values (${id}, ${comment}, ${session.id})
+    `;
+    await sql`update field_notes set updated_at = now() where id = ${id}`;
+    return Response.json({ ok: true });
+  }
+
+  if (body.action === "status") {
+    if (!statusRoles.has(session.role)) {
+      return Response.json({ error: "状態を変更する権限がありません。" }, { status: 403 });
+    }
+
+    const status = normalizeStatus(body.status);
+    await sql`
+      update field_notes
+      set status = ${status}, updated_at = now()
+      where id = ${id}
+    `;
+    return Response.json({ ok: true });
+  }
+
+  if (body.action === "edit") {
+    if (!canModifyNote(session.role, session.id, target.recordedById)) {
+      return Response.json({ error: "この現場記録を編集する権限がありません。" }, { status: 403 });
+    }
+
+    const title = String(body.title ?? "").trim();
+    if (!title) return Response.json({ error: "記録タイトルを入力してください。" }, { status: 400 });
+
+    await sql`
+      update field_notes
+      set
+        title = ${title},
+        supplier_name = ${String(body.supplierName ?? "").trim()},
+        supplier_location = ${String(body.supplierLocation ?? "").trim()},
+        product_name = ${String(body.productName ?? "").trim()},
+        observed_price = ${normalizeNumber(body.observedPrice ?? null) || null},
+        note = ${String(body.note ?? "").trim()},
+        updated_at = now()
+      where id = ${id}
+    `;
+    return Response.json({ ok: true });
+  }
+
+  return Response.json({ error: "操作内容が不正です。" }, { status: 400 });
+}
+
+export async function DELETE(request: Request) {
+  const session = await requireOpsSession();
+  if (!session || !allowedRoles.has(session.role)) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as { id?: string };
+  const id = String(body.id ?? "").trim();
+  if (!id) return Response.json({ error: "現場記録が見つかりません。" }, { status: 404 });
+
+  const noteRows = await sql`
+    select id, recorded_by::text as "recordedById"
+    from field_notes
+    where id = ${id}
+    limit 1
+  `;
+  const target = noteRows[0];
+  if (!target) return Response.json({ error: "現場記録が見つかりません。" }, { status: 404 });
+
+  if (!canModifyNote(session.role, session.id, target.recordedById)) {
+    return Response.json({ error: "この現場記録を削除する権限がありません。" }, { status: 403 });
+  }
+
+  await sql`delete from field_notes where id = ${id}`;
+  return Response.json({ ok: true });
+}
+
 function normalizeNoteType(value: FormDataEntryValue | null) {
   const type = String(value ?? "");
   return ["idea", "new_product", "supplier_visit", "price_hint"].includes(type) ? type : "idea";
 }
 
-function normalizeNumber(value: FormDataEntryValue | null) {
+function normalizeStatus(value: unknown) {
+  const status = String(value ?? "");
+  return noteStatuses.has(status) ? status : "open";
+}
+
+function canModifyNote(role: string, employeeId: string, recordedById?: string) {
+  return adminRoles.has(role) || Boolean(recordedById && recordedById === employeeId);
+}
+
+function normalizeNumber(value: FormDataEntryValue | string | number | null) {
   const normalized = String(value ?? "").replace(/[¥￥,\s]/g, "");
   const numberValue = Number(normalized);
   return Number.isFinite(numberValue) ? numberValue : 0;

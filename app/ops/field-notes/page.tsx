@@ -24,6 +24,16 @@ type FieldNote = {
   status: string;
   recordedBy: string;
   createdLabel: string;
+  comments: FieldNoteComment[];
+  canEdit: boolean;
+  canDelete: boolean;
+  canChangeStatus: boolean;
+};
+type FieldNoteComment = {
+  id: string;
+  comment: string;
+  createdBy: string;
+  createdLabel: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -47,6 +57,14 @@ const noteTypeLabels: Record<string, string> = {
   supplier_visit: "発注先訪問",
   price_hint: "価格情報"
 };
+const noteStatusLabels: Record<string, string> = {
+  open: "未確認",
+  reviewing: "検討中",
+  comparison: "比較対象",
+  adopted: "採用",
+  rejected: "見送り"
+};
+const noteStatusOptions = Object.entries(noteStatusLabels);
 
 export default function FieldNotesPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
@@ -55,6 +73,7 @@ export default function FieldNotesPage() {
   const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [photoFileName, setPhotoFileName] = useState("");
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void loadData();
@@ -113,6 +132,102 @@ export default function FieldNotesPage() {
     form.reset();
     setPhotoFileName("");
     showNotice("現場記録を保存しました。");
+    await loadData();
+  }
+
+  async function updateNoteStatus(noteId: string, status: string) {
+    const response = await fetch("/api/field-notes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: noteId, action: "status", status })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "状態を保存できませんでした。");
+      return;
+    }
+
+    showNotice("状態を更新しました。");
+    await loadData();
+  }
+
+  async function addComment(noteId: string) {
+    const comment = (commentDrafts[noteId] ?? "").trim();
+    if (!comment) return;
+
+    const response = await fetch("/api/field-notes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: noteId, action: "comment", comment })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "コメントを保存できませんでした。");
+      return;
+    }
+
+    setCommentDrafts((drafts) => ({ ...drafts, [noteId]: "" }));
+    showNotice("コメントを追加しました。");
+    await loadData();
+  }
+
+  async function editNote(note: FieldNote) {
+    const title = window.prompt("タイトル", note.title);
+    if (title === null) return;
+    const productName = window.prompt("商品名", note.productName);
+    if (productName === null) return;
+    const supplierName = window.prompt("発注先名", note.supplierName);
+    if (supplierName === null) return;
+    const supplierLocation = window.prompt("場所・売場", note.supplierLocation);
+    if (supplierLocation === null) return;
+    const observedPrice = window.prompt("見かけた価格", note.observedPrice ? String(note.observedPrice) : "");
+    if (observedPrice === null) return;
+    const noteText = window.prompt("メモ", note.note);
+    if (noteText === null) return;
+
+    const response = await fetch("/api/field-notes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: note.id,
+        action: "edit",
+        title,
+        productName,
+        supplierName,
+        supplierLocation,
+        observedPrice,
+        note: noteText
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "現場記録を更新できませんでした。");
+      return;
+    }
+
+    showNotice("現場記録を更新しました。");
+    await loadData();
+  }
+
+  async function deleteNote(note: FieldNote) {
+    if (!window.confirm(`${note.title} を削除しますか？`)) return;
+
+    const response = await fetch("/api/field-notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: note.id })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "現場記録を削除できませんでした。");
+      return;
+    }
+
+    showNotice("現場記録を削除しました。");
     await loadData();
   }
 
@@ -234,9 +349,41 @@ export default function FieldNotesPage() {
                       <strong>{note.title}</strong>
                       <span>{noteTypeLabels[note.noteType] ?? note.noteType}</span>
                     </div>
+                    <div className="field-note-controls">
+                      <label>
+                        <span>状態</span>
+                        <select value={note.status} disabled={!note.canChangeStatus} onChange={(event) => updateNoteStatus(note.id, event.target.value)}>
+                          {noteStatusOptions.map(([status, label]) => (
+                            <option value={status} key={status}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="field-note-actions">
+                        {note.canEdit ? <button type="button" className="secondary-button" onClick={() => editNote(note)}>編集</button> : null}
+                        {note.canDelete ? <button type="button" className="danger-button" onClick={() => deleteNote(note)}>削除</button> : null}
+                      </div>
+                    </div>
                     <p>{[note.productName, note.supplierName, note.supplierLocation].filter(Boolean).join(" · ") || "詳細未設定"}</p>
                     {note.observedPrice ? <small>見かけた価格 ¥{formatNumber(note.observedPrice)}</small> : null}
                     {note.note ? <small>{note.note}</small> : null}
+                    {note.comments.length ? (
+                      <div className="field-note-comments">
+                        {note.comments.map((comment) => (
+                          <small key={comment.id}>
+                            {comment.comment}
+                            <em>{comment.createdLabel}{comment.createdBy ? ` · ${comment.createdBy}` : ""}</em>
+                          </small>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="field-note-comment-form">
+                      <input
+                        value={commentDrafts[note.id] ?? ""}
+                        placeholder="コメントを追加"
+                        onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [note.id]: event.target.value }))}
+                      />
+                      <button type="button" className="secondary-button" onClick={() => addComment(note.id)}>追加</button>
+                    </div>
                     <em>{note.createdLabel}{note.recordedBy ? ` · ${note.recordedBy}` : ""}</em>
                   </div>
                 </article>

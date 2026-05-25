@@ -192,6 +192,14 @@ alter table field_notes add column if not exists note text;
 alter table field_notes add column if not exists status text not null default 'open';
 alter table field_notes add column if not exists recorded_by uuid references employees(id);
 
+create table if not exists field_note_comments (
+  id uuid primary key default gen_random_uuid(),
+  field_note_id uuid not null references field_notes(id) on delete cascade,
+  comment text not null,
+  created_by uuid references employees(id),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists product_comparisons (
   id uuid primary key default gen_random_uuid(),
   base_product_id uuid references products(id) on delete set null,

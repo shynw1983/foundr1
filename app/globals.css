@@ -2855,6 +2855,10 @@ button {
   background: #fbfcfe;
 }
 
+.recommendation-card:not(:has(.recommendation-photo)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .recommendation-card > div {
   display: grid;
   gap: 6px;
@@ -2911,6 +2915,68 @@ button {
   font-weight: 700;
   font-style: normal;
   overflow-wrap: anywhere;
+}
+
+.field-note-controls {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-note-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.field-note-controls label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.field-note-controls select,
+.field-note-comment-form input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field-note-actions,
+.field-note-comment-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-note-comments {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.field-note-comments small {
+  display: grid;
+  gap: 2px;
+}
+
+.field-note-comments em {
+  font-size: 11px;
+}
+
+.field-note-comment-form input {
+  min-width: 0;
 }
 
 .comparison-card {
