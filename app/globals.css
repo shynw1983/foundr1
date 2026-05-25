@@ -3112,21 +3112,29 @@ button {
   gap: 6px;
 }
 
+.comparison-history-title {
+  flex-wrap: wrap;
+}
+
+.archive-toggle-button {
+  flex: 0 0 auto;
+}
+
 .comparison-card-actions {
   display: grid;
-  grid-template-columns: repeat(4, max-content) minmax(160px, 1fr);
+  grid-template-columns: repeat(4, max-content) max-content;
   gap: 8px;
   align-items: stretch;
 }
 
 .comparison-card-actions .comparison-rate-result {
   display: grid;
-  min-height: 42px;
-  min-width: 160px;
+  width: min(100%, 390px);
+  min-height: 84px;
   place-items: center;
   padding: 8px 14px;
   border-radius: 8px;
-  font-size: 22px;
+  font-size: 38px;
   font-weight: 900;
   line-height: 1;
 }
@@ -4423,6 +4431,32 @@ button {
 
   .recommendation-form {
     position: static;
+  }
+
+  .comparison-card-actions .comparison-rate-result {
+    width: 100%;
+    min-height: 42px;
+    font-size: 22px;
+  }
+
+  .comparison-card-actions .secondary-button,
+  .field-note-actions .secondary-button,
+  .report-status-block .secondary-button,
+  .row-actions .secondary-button,
+  .modal-actions .secondary-button {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .comparison-history-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .archive-toggle-button {
+    width: 100%;
   }
 
   .recommendation-photo {

@@ -599,12 +599,12 @@ export default function ProductComparisonsPage() {
           </form>
 
           <section className="panel">
-            <div className="panel-title">
+            <div className="panel-title comparison-history-title">
               <div>
                 <h3>{showArchived ? "アーカイブ済み比較" : "比較履歴"}</h3>
                 <p>{showArchived ? "保管した比較を確認、必要に応じて履歴へ戻す" : "現行品と候補品の単位コスト差を確認"}</p>
               </div>
-              <button type="button" className="secondary-button" onClick={() => setShowArchived((current) => !current)}>
+              <button type="button" className="secondary-button archive-toggle-button" onClick={() => setShowArchived((current) => !current)}>
                 {showArchived ? `比較履歴へ戻る（${activeComparisonCount}）` : `アーカイブを表示（${archivedComparisonCount}）`}
               </button>
             </div>
