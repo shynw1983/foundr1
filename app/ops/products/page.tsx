@@ -1170,7 +1170,7 @@ function ProductEditDialog({
             </label>
           ))}
           <div className="product-spec-grid">
-            <fieldset className="origin-country-picker">
+            <fieldset className="origin-country-picker product-spec-origin">
               <span>原産地</span>
               <input
                 value={originSearch}
@@ -1238,7 +1238,7 @@ function ProductEditDialog({
                 </select>
               </label>
             </div>
-            <label>
+            <label className="product-spec-package">
               <span>規格</span>
               <input
                 value={target.value.packageSpec ?? ""}
@@ -1254,7 +1254,7 @@ function ProductEditDialog({
                 }
               />
             </label>
-            <label>
+            <label className="product-spec-note">
               <span>メモ</span>
               <textarea
                 value={target.value.specNote ?? ""}
