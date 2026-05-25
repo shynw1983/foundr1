@@ -393,6 +393,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             or purchase_actuals.id is not null
           ) as purchased,
           purchase_order_items.status = 'unavailable' as unavailable,
+          purchase_order_items.store_feedback_confirmed_at is not null as "storeFeedbackConfirmed",
           case
             when purchase_order_items.status = 'in_delivery' then 'in_delivery'
             when purchase_order_items.status = 'received' then 'received'

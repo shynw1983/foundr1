@@ -40,6 +40,7 @@ type PurchaseOrderItem = {
   referencePrice?: number;
   unit: string;
   unavailable?: boolean;
+  storeFeedbackConfirmed?: boolean;
   note?: string;
   priceExceptionNote?: string;
 };
@@ -55,7 +56,7 @@ type PriceSignal = {
 type StoreFeedback = {
   id: string;
   itemId?: string;
-  kind?: "price" | "quantity" | "note";
+  kind?: "price" | "quantity" | "note" | "unavailable";
   orderId: string;
   product: string;
   type: string;
@@ -426,14 +427,16 @@ export default function OpsDashboard() {
   }
 
   async function confirmStoreFeedback(item: StoreFeedback) {
-    if (!item.itemId || !item.kind || item.kind === "note") return;
+    if (!item.itemId || !item.kind) return;
 
     const orderItem = purchaseOrderItems.find((candidate) => candidate.id === item.itemId);
-    if (!orderItem) return;
+    if (!orderItem && item.kind === "quantity") return;
 
     const payload = item.kind === "quantity"
-      ? { itemId: item.itemId, actualQuantity: orderItem.requestedQuantity }
-      : { itemId: item.itemId, clearActualPrice: true };
+      ? { itemId: item.itemId, actualQuantity: orderItem?.requestedQuantity }
+      : item.kind === "price"
+        ? { itemId: item.itemId, clearActualPrice: true }
+        : { itemId: item.itemId, confirmStoreFeedback: true };
 
     try {
       const response = await fetch("/api/procurement/items", {
@@ -453,7 +456,9 @@ export default function OpsDashboard() {
 
           return item.kind === "quantity"
             ? { ...candidate, actualQuantity: candidate.requestedQuantity }
-            : { ...candidate, actualPrice: "" };
+            : item.kind === "price"
+              ? { ...candidate, actualPrice: "" }
+              : { ...candidate, storeFeedbackConfirmed: true };
         })
       );
       await loadDashboardData();
@@ -471,8 +476,6 @@ function createStoreFeedbackItems(
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
 
   return purchaseOrderItems.flatMap<StoreFeedback>((item) => {
-    if (item.unavailable) return [];
-
     const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
     const quantityDiff = actualQuantity - item.requestedQuantity;
     const order = orderMap.get(item.orderId);
@@ -481,6 +484,22 @@ function createStoreFeedbackItems(
     const items: StoreFeedback[] = [];
     const actualPrice = parsePriceValue(item.actualPrice);
     const referencePrice = Number(item.referencePrice ?? 0);
+
+    if (item.unavailable && !item.storeFeedbackConfirmed) {
+      items.push({
+        id: `${baseId}-unavailable`,
+        itemId: item.id,
+        kind: "unavailable",
+        orderId: item.orderId,
+        product: item.productName,
+        type: "購入不可",
+        message: item.note ? `購入不可として処理されました。理由: ${item.note}` : "購入不可として処理されました。",
+        store,
+        status: "店舗確認待ち"
+      });
+    }
+
+    if (item.unavailable) return items;
 
     if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice) {
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
@@ -511,7 +530,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (item.note) {
+    if (item.note && !item.storeFeedbackConfirmed && !item.unavailable) {
       items.push({
         id: `${baseId}-note`,
         itemId: item.id,
@@ -521,7 +540,7 @@ function createStoreFeedbackItems(
         type: "備考",
         message: item.note,
         store,
-        status: "共有済み"
+        status: "店舗確認待ち"
       });
     }
 

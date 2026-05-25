@@ -195,6 +195,8 @@ alter table purchase_order_items add column if not exists actual_price numeric(1
 alter table purchase_order_items add column if not exists procurement_note text;
 alter table purchase_order_items add column if not exists price_exception_note text;
 alter table purchase_order_items add column if not exists selected_supplier_id uuid references suppliers(id);
+alter table purchase_order_items add column if not exists store_feedback_confirmed_at timestamptz;
+alter table purchase_order_items add column if not exists store_feedback_confirmed_by uuid references employees(id);
 
 alter table purchase_orders add column if not exists expected_arrival_date date;
 alter table purchase_orders add column if not exists online_order_status text not null default 'not_started';

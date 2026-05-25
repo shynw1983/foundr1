@@ -167,6 +167,8 @@ export async function GET() {
       join products on products.id = purchase_order_items.product_id
       where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         and coalesce(purchase_order_items.note, '') <> ''
+        and purchase_order_items.status <> 'unavailable'
+        and purchase_order_items.store_feedback_confirmed_at is null
     `
   ]);
 

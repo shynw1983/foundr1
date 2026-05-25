@@ -15,6 +15,7 @@ export async function PATCH(request: Request) {
     supplier?: string;
     deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
     clearActualPrice?: boolean;
+    confirmStoreFeedback?: boolean;
   };
 
   if (!body.itemId) {
@@ -44,6 +45,8 @@ export async function PATCH(request: Request) {
       products.name as "productName",
       products.reference_price::float as "referencePrice",
       purchase_order_items.status as "currentStatus",
+      coalesce(purchase_order_items.procurement_note, '') as "currentNote",
+      purchase_order_items.store_feedback_confirmed_at is not null as "storeFeedbackConfirmed",
       purchase_order_items.requested_quantity::float as "requestedQuantity",
       purchase_order_items.requested_unit as "requestedUnit",
       coalesce(
@@ -79,6 +82,9 @@ export async function PATCH(request: Request) {
   const hasNote = body.note !== undefined;
   const note = body.note ?? "";
   const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
+  const shouldResetStoreFeedbackConfirmation =
+    body.confirmStoreFeedback !== true &&
+    ((hasNote && note !== itemDetail?.currentNote) || (body.unavailable === true && itemDetail?.currentStatus !== "unavailable"));
   const deliveryStatus = ["in_delivery", "delivered", "received"].includes(body.deliveryStatus ?? "")
     ? body.deliveryStatus
     : null;
@@ -218,6 +224,66 @@ export async function PATCH(request: Request) {
         )
       `;
     }
+
+    if (body.confirmStoreFeedback === true) {
+      if (itemDetail.currentStatus === "unavailable") {
+        await sql`
+          insert into purchase_exceptions (
+            purchase_order_id,
+            purchase_order_item_id,
+            exception_type,
+            message,
+            resolution_note,
+            needs_store_confirmation,
+            affects_operation,
+            status,
+            resolved_by,
+            resolved_at,
+            updated_at
+          ) values (
+            ${itemDetail.purchaseOrderId},
+            ${itemDetail.itemId},
+            'unavailable',
+            ${`${itemDetail.productName} は本依頼で購入不可として店舗確認済みです。${itemDetail.currentNote ? ` 理由: ${itemDetail.currentNote}` : ""}`},
+            '店舗確認済み',
+            true,
+            true,
+            'resolved',
+            ${session.id},
+            now(),
+            now()
+          )
+        `;
+      } else if (itemDetail.currentNote) {
+        await sql`
+          insert into purchase_exceptions (
+            purchase_order_id,
+            purchase_order_item_id,
+            exception_type,
+            message,
+            resolution_note,
+            needs_store_confirmation,
+            affects_operation,
+            status,
+            resolved_by,
+            resolved_at,
+            updated_at
+          ) values (
+            ${itemDetail.purchaseOrderId},
+            ${itemDetail.itemId},
+            'note',
+            ${itemDetail.currentNote},
+            '店舗確認済み',
+            true,
+            false,
+            'resolved',
+            ${session.id},
+            now(),
+            now()
+          )
+        `;
+      }
+    }
   }
 
   await sql`
@@ -246,7 +312,17 @@ export async function PATCH(request: Request) {
         when ${shouldClearPriceException} then ''
         else price_exception_note
       end,
-      selected_supplier_id = coalesce(${supplierId}, selected_supplier_id)
+      selected_supplier_id = coalesce(${supplierId}, selected_supplier_id),
+      store_feedback_confirmed_at = case
+        when ${body.confirmStoreFeedback === true} then now()
+        when ${shouldResetStoreFeedbackConfirmation} then null
+        else store_feedback_confirmed_at
+      end,
+      store_feedback_confirmed_by = case
+        when ${body.confirmStoreFeedback === true} then ${session.id}
+        when ${shouldResetStoreFeedbackConfirmation} then null
+        else store_feedback_confirmed_by
+      end
     where id = ${body.itemId}
   `;
 
