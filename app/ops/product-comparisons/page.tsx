@@ -487,7 +487,7 @@ export default function ProductComparisonsPage() {
               {isImported ? <small className="form-hint">{exchangeRateLabel || `1 ${candidateCurrency} = ${formatCurrency(activeExchangeRate)}`}</small> : null}
               <label>
                 <span>原産国・輸入元</span>
-                <input name="candidateOrigin" placeholder="例: 中国 / 台湾 / タイ" />
+                <input name="candidateOrigin" placeholder="例: 中国 / 日本 / ベトナム" />
               </label>
               <div className="comparison-inline-fields">
                 <label>
