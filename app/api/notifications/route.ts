@@ -16,6 +16,7 @@ export async function GET() {
       created_at as "createdAt"
     from ops_notifications
     where recipient_employee_id = ${session.id}
+      and read_at is null
     order by created_at desc
     limit 20
   `;

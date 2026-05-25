@@ -35,7 +35,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
   async function markNotificationsRead() {
     await fetch("/api/notifications", { method: "PATCH" });
     setUnreadCount(0);
-    setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+    setNotifications([]);
   }
 
   return (
@@ -47,7 +47,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
       <div className="notification-panel">
         <div className="notification-heading">
           <strong>通知</strong>
-          <button type="button" onClick={() => void markNotificationsRead()}>既読</button>
+          <button type="button" onClick={() => void markNotificationsRead()} disabled={unreadCount === 0}>すべて既読</button>
         </div>
         {notifications.length > 0 ? notifications.map((item) => (
           <a className={item.readAt ? "notification-item" : "notification-item is-unread"} href={item.href || "/ops/procurement"} key={item.id}>
