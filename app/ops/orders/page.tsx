@@ -756,10 +756,6 @@ export default function OrdersPage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <a className="primary-button" href="#create-order-panel">
-              <Plus size={18} />
-              依頼を作成
-            </a>
           </div>
         </header>
 
