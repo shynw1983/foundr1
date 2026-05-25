@@ -40,6 +40,17 @@ type HistoryRow = {
   status: string;
   note: string;
 };
+type HistoryReportRow = {
+  id: string;
+  store: string;
+  productName: string;
+  unit: string;
+  totalActualQuantity: number;
+  totalRequestedQuantity: number;
+  orderCount: number;
+  unavailableCount: number;
+  latestDeadline: string;
+};
 
 const statusTone: Record<string, string> = {
   未購入: "tone-waiting",
@@ -105,6 +116,64 @@ function createHistoryRows(
   });
 }
 
+function createHistoryReportRows(rows: HistoryRow[]) {
+  const reportMap = new Map<string, HistoryReportRow>();
+
+  rows.forEach((row) => {
+    const key = [row.store, row.productName, row.unit].join("\u0000");
+    const current = reportMap.get(key) ?? {
+      id: key,
+      store: row.store,
+      productName: row.productName,
+      unit: row.unit,
+      totalActualQuantity: 0,
+      totalRequestedQuantity: 0,
+      orderCount: 0,
+      unavailableCount: 0,
+      latestDeadline: ""
+    };
+
+    current.totalActualQuantity += row.actualQuantity;
+    current.totalRequestedQuantity += row.requestedQuantity;
+    current.orderCount += 1;
+    current.unavailableCount += row.status === "購入不可" ? 1 : 0;
+    current.latestDeadline = row.deadline > current.latestDeadline ? row.deadline : current.latestDeadline;
+    reportMap.set(key, current);
+  });
+
+  return Array.from(reportMap.values()).sort((a, b) =>
+    (b.totalActualQuantity - a.totalActualQuantity) ||
+    (b.orderCount - a.orderCount) ||
+    a.store.localeCompare(b.store, "ja") ||
+    a.productName.localeCompare(b.productName, "ja")
+  );
+}
+
+function createStoreReportRows(rows: HistoryRow[]) {
+  const reportMap = new Map<string, { store: string; itemCount: number; orderCount: number; productCount: number }>();
+  const productSets = new Map<string, Set<string>>();
+
+  rows.forEach((row) => {
+    const current = reportMap.get(row.store) ?? { store: row.store, itemCount: 0, orderCount: 0, productCount: 0 };
+    const products = productSets.get(row.store) ?? new Set<string>();
+    current.itemCount += 1;
+    products.add(row.productName);
+    productSets.set(row.store, products);
+    reportMap.set(row.store, current);
+  });
+
+  return Array.from(reportMap.values())
+    .map((row) => {
+      const orderIds = new Set(rows.filter((item) => item.store === row.store).map((item) => item.orderId));
+      return { ...row, orderCount: orderIds.size, productCount: productSets.get(row.store)?.size ?? 0 };
+    })
+    .sort((a, b) => b.itemCount - a.itemCount || a.store.localeCompare(b.store, "ja"));
+}
+
+function formatQuantity(value: number) {
+  return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+}
+
 export default function ProcurementHistoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -157,6 +226,8 @@ export default function ProcurementHistoryPage() {
       (storeFilter === "すべて" || row.store === storeFilter)
     );
   });
+  const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
+  const storeReportRows = createStoreReportRows(filteredRows);
 
   return (
     <main className="shell">
@@ -193,6 +264,51 @@ export default function ProcurementHistoryPage() {
             </label>
           </div>
         </header>
+
+        <section className="panel history-report-panel">
+          <div className="panel-title product-master-title">
+            <div>
+              <h3>集計レポート</h3>
+              <p>現在の絞り込み条件で、店舗別の商品使用傾向を確認</p>
+            </div>
+            <span className="source-indicator">{reportRows.length} 件表示</span>
+          </div>
+          <div className="history-report-grid">
+            <div className="history-report-card">
+              <h4>店舗別サマリー</h4>
+              <div className="history-report-list">
+                {storeReportRows.map((row) => (
+                  <article className="history-report-summary-row" key={row.store}>
+                    <strong>{row.store}</strong>
+                    <span>依頼 {row.orderCount} 件</span>
+                    <span>明細 {row.itemCount} 件</span>
+                    <span>商品 {row.productCount} 種</span>
+                  </article>
+                ))}
+                {storeReportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
+              </div>
+            </div>
+            <div className="history-report-card">
+              <h4>使用量ランキング</h4>
+              <div className="history-report-list">
+                {reportRows.map((row, index) => (
+                  <article className="history-report-ranking-row" key={row.id}>
+                    <span className="rank-badge">{index + 1}</span>
+                    <div>
+                      <strong>{row.productName}</strong>
+                      <p>{row.store} · 最終 {row.latestDeadline || "未設定"}</p>
+                    </div>
+                    <div className="history-report-quantity">
+                      <strong>{formatQuantity(row.totalActualQuantity)} {row.unit}</strong>
+                      <small>依頼 {formatQuantity(row.totalRequestedQuantity)} {row.unit} / {row.orderCount} 回{row.unavailableCount ? ` / 不可 ${row.unavailableCount} 回` : ""}</small>
+                    </div>
+                  </article>
+                ))}
+                {reportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="panel history-panel">
           <div className="panel-title product-master-title">
