@@ -266,9 +266,14 @@ create table if not exists purchase_exceptions (
   affects_operation boolean not null default false,
   follow_up_at timestamptz,
   status text not null default 'open',
+  resolved_by uuid references employees(id),
+  resolved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table purchase_exceptions add column if not exists resolved_by uuid references employees(id);
+alter table purchase_exceptions add column if not exists resolved_at timestamptz;
 
 create table if not exists price_records (
   id uuid primary key default gen_random_uuid(),

@@ -36,6 +36,39 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "この発注項目を操作する権限がありません。" }, { status: 403 });
   }
 
+  const detailRows = await sql`
+    select
+      purchase_order_items.purchase_order_id::text as "purchaseOrderId",
+      purchase_order_items.id::text as "itemId",
+      products.name as "productName",
+      products.reference_price::float as "referencePrice",
+      purchase_order_items.requested_quantity::float as "requestedQuantity",
+      purchase_order_items.requested_unit as "requestedUnit",
+      coalesce(
+        purchase_order_items.actual_quantity::float,
+        purchase_actuals.actual_quantity::float,
+        purchase_order_items.requested_quantity::float
+      ) as "currentActualQuantity",
+      coalesce(
+        purchase_order_items.actual_price::float,
+        purchase_actuals.actual_price::float
+      ) as "currentActualPrice"
+    from purchase_order_items
+    join products on products.id = purchase_order_items.product_id
+    left join lateral (
+      select
+        purchase_actuals.actual_quantity,
+        purchase_actuals.actual_price
+      from purchase_actuals
+      where purchase_actuals.purchase_order_item_id = purchase_order_items.id
+      order by purchase_actuals.recorded_at desc
+      limit 1
+    ) purchase_actuals on true
+    where purchase_order_items.id = ${body.itemId}
+    limit 1
+  `;
+  const itemDetail = detailRows[0];
+
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
   const actualPriceText = String(body.actualPrice ?? "").trim();
@@ -67,6 +100,77 @@ export async function PATCH(request: Request) {
       delete from delivery_batch_items
       where purchase_order_item_id = ${body.itemId}
     `;
+  }
+
+  if (itemDetail) {
+    if (body.clearActualPrice === true) {
+      const currentActualPrice = Number(itemDetail.currentActualPrice ?? 0);
+      const referencePrice = Number(itemDetail.referencePrice ?? 0);
+      if (currentActualPrice > 0 && referencePrice > 0 && currentActualPrice !== referencePrice) {
+        const diffRate = Math.round(((currentActualPrice - referencePrice) / referencePrice) * 1000) / 10;
+        await sql`
+          insert into purchase_exceptions (
+            purchase_order_id,
+            purchase_order_item_id,
+            exception_type,
+            message,
+            resolution_note,
+            needs_store_confirmation,
+            affects_operation,
+            status,
+            resolved_by,
+            resolved_at,
+            updated_at
+          ) values (
+            ${itemDetail.purchaseOrderId},
+            ${itemDetail.itemId},
+            'price',
+            ${`実際 ¥${formatPriceForMessage(currentActualPrice)} / 基準 ¥${formatPriceForMessage(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`},
+            '店舗確認済み',
+            true,
+            false,
+            'resolved',
+            ${session.id},
+            now(),
+            now()
+          )
+        `;
+      }
+    }
+
+    if (actualQuantity !== null) {
+      const requestedQuantity = Number(itemDetail.requestedQuantity ?? 0);
+      const currentActualQuantity = Number(itemDetail.currentActualQuantity ?? requestedQuantity);
+      if (currentActualQuantity !== requestedQuantity) {
+        await sql`
+          insert into purchase_exceptions (
+            purchase_order_id,
+            purchase_order_item_id,
+            exception_type,
+            message,
+            resolution_note,
+            needs_store_confirmation,
+            affects_operation,
+            status,
+            resolved_by,
+            resolved_at,
+            updated_at
+          ) values (
+            ${itemDetail.purchaseOrderId},
+            ${itemDetail.itemId},
+            'quantity',
+            ${`依頼 ${formatQuantityForMessage(requestedQuantity)} ${itemDetail.requestedUnit} / 実数 ${formatQuantityForMessage(currentActualQuantity)} ${itemDetail.requestedUnit}`},
+            '店舗確認済み',
+            true,
+            false,
+            'resolved',
+            ${session.id},
+            now(),
+            now()
+          )
+        `;
+      }
+    }
   }
 
   await sql`
@@ -172,4 +276,12 @@ export async function PATCH(request: Request) {
   }
 
   return Response.json({ ok: true });
+}
+
+function formatPriceForMessage(value: number) {
+  return value.toLocaleString("ja-JP", { maximumFractionDigits: 0 });
+}
+
+function formatQuantityForMessage(value: number) {
+  return Number.isInteger(value) ? String(value) : String(value);
 }

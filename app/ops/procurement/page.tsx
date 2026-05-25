@@ -101,7 +101,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
-  { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
+  { label: "連絡・報告", href: "/ops/reports", icon: MessageSquareWarning },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 const procurementStatusFilters: ProcurementStatusFilter[] = ["未完了", "購入待ち", "一部購入済み", "到着日入力待ち", "到着待ち", "配送待ち", "配送中", "一部納品済み", "確認待ち", "完了", "すべて"];

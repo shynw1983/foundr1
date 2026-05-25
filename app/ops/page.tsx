@@ -123,7 +123,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
-  { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
+  { label: "連絡・報告", href: "/ops/reports", icon: MessageSquareWarning },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
@@ -228,7 +228,7 @@ export default function OpsDashboard() {
         <section className="metric-grid" id="ダッシュボード">
           <MetricCard icon={<ClipboardList />} label="進行中の依頼" value={openOrders.length} note="今日見るべき依頼" href="/ops/orders" />
           <MetricCard icon={<Clock3 />} label="高優先度" value={urgentOrders} note="先に処理したい依頼" href="/ops/orders" />
-          <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" href="/ops/procurement#連絡・報告" />
+          <MetricCard icon={<AlertTriangle />} label="未対応の異常" value={activeExceptions} note="欠品・価格異常" href="/ops/reports" />
           <MetricCard icon={<Store />} label="巡回発注先" value={supplierRouteCount || storesData.length} note="主要発注ルート" href="/ops/suppliers" />
         </section>
 

@@ -145,7 +145,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "店舗・ブランド", href: "/ops/stores", icon: Store },
   { label: "スタッフ管理", href: "/ops/staff", icon: UserCog },
   { label: "発注先管理", href: "/ops/suppliers", icon: Truck },
-  { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
+  { label: "連絡・報告", href: "/ops/reports", icon: MessageSquareWarning },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
