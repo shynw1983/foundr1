@@ -2166,7 +2166,7 @@ button {
 
 .delivery-batch-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 
@@ -2204,6 +2204,34 @@ button {
   cursor: default;
   opacity: 1;
   background: #17202b;
+}
+
+.store-confirmation-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.store-confirmation-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.store-confirmation-heading strong {
+  font-size: 13px;
+}
+
+.store-confirmation-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.store-confirmation-row {
+  background: #f8fbfa;
 }
 
 .procurement-supplier-group {

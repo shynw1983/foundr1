@@ -948,14 +948,6 @@ function OrderFulfillmentPanel({
                     >
                       {batch.status === "in_delivery" ? "納品済みにする" : "納品済み"}
                     </button>
-                    <button
-                      type="button"
-                      className="delivery-complete-button"
-                      disabled={batch.status !== "delivered"}
-                      onClick={() => onMarkStatus(batch.id, "received")}
-                    >
-                      {batch.status === "received" ? "店舗確認済み" : "店舗確認済みにする"}
-                    </button>
                   </div>
                 </div>
               ))}

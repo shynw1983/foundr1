@@ -59,6 +59,17 @@ type PurchaseOrderItem = {
   unit: string;
   note?: string;
   priceExceptionNote?: string;
+  deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
+  deliveryBatchId?: string;
+};
+type DeliveryBatch = {
+  id: string;
+  orderId: string;
+  batchNo?: number;
+  itemIds: string[];
+  status: "in_delivery" | "delivered" | "received";
+  createdLabel: string;
+  storeConfirmedLabel?: string;
 };
 type StoreFeedback = {
   id: string;
@@ -94,6 +105,21 @@ function formatPurchaseOrderStatus(status: string) {
   if (status === "確認待ち") return "店舗確認待ち";
 
   return status;
+}
+
+function getDeliveryBatchLabel(batch: DeliveryBatch) {
+  if (batch.batchNo) return `${batch.orderId}-DEL-${String(batch.batchNo).padStart(2, "0")}`;
+
+  return batch.id;
+}
+
+function getCurrentDateTimeLabel() {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date());
 }
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -315,6 +341,7 @@ export default function OrdersPage() {
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
+  const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
@@ -341,6 +368,7 @@ export default function OrdersPage() {
       products?: ProductWithCategory[];
       orders?: PurchaseOrder[];
       purchaseOrderItems?: PurchaseOrderItem[];
+      deliveryBatches?: DeliveryBatch[];
       staffOptions?: StaffOption[];
       currentUserId?: string;
     };
@@ -351,6 +379,7 @@ export default function OrdersPage() {
     }
     if (data.orders) setPurchaseOrders(data.orders);
     if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
     if (data.staffOptions) {
       setStaffOptions(data.staffOptions);
     }
@@ -581,6 +610,43 @@ export default function OrdersPage() {
       await loadDashboardData();
     } finally {
       setIsSubmittingOrder(false);
+    }
+  }
+
+  async function markDeliveryBatchReceived(batch: DeliveryBatch) {
+    const confirmedLabel = getCurrentDateTimeLabel();
+
+    setDeliveryBatches((batches) =>
+      batches.map((item) =>
+        item.id === batch.id ? { ...item, status: "received", storeConfirmedLabel: confirmedLabel } : item
+      )
+    );
+    setPurchaseOrderItems((items) =>
+      items.map((item) =>
+        item.id && batch.itemIds.includes(item.id) ? { ...item, deliveryStatus: "received" } : item
+      )
+    );
+
+    try {
+      const response = await fetch("/api/procurement/delivery-batches", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batchId: batch.id,
+          status: "received"
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "店舗確認を保存できませんでした。");
+      }
+
+      showNotice("店舗確認済みにしました。");
+      await loadDashboardData();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "店舗確認を保存できませんでした。");
+      await loadDashboardData();
     }
   }
 
@@ -942,6 +1008,9 @@ export default function OrdersPage() {
             <div className="order-list">
               {filteredPurchaseOrders.map((order) => {
                 const estimatedAmount = calculateOrderEstimatedAmount(order.id, purchaseOrderItems, products);
+                const storeConfirmationBatches = deliveryBatches.filter(
+                  (batch) => batch.orderId === order.id && ["delivered", "received"].includes(batch.status)
+                );
 
                 return (
                   <article className="order-row" key={order.id}>
@@ -987,6 +1056,40 @@ export default function OrdersPage() {
                         複製
                       </button>
                     </div>
+                    {storeConfirmationBatches.length > 0 ? (
+                      <div className="store-confirmation-panel">
+                        <div className="store-confirmation-heading">
+                          <strong>到着確認</strong>
+                          <span>納品済みの配送を店舗側で確認</span>
+                        </div>
+                        <div className="delivery-batch-list">
+                          {storeConfirmationBatches.map((batch) => (
+                            <div className="delivery-batch-row store-confirmation-row" key={batch.id}>
+                              <div className="delivery-batch-info">
+                                <strong>{getDeliveryBatchLabel(batch)}</strong>
+                                <span>
+                                  {batch.createdLabel} · {batch.itemIds.length} 件 · {
+                                    batch.status === "received"
+                                      ? `店舗確認済み${batch.storeConfirmedLabel ? ` ${batch.storeConfirmedLabel}` : ""}`
+                                      : "納品済み"
+                                  }
+                                </span>
+                              </div>
+                              <div className="delivery-batch-actions">
+                                <button
+                                  type="button"
+                                  className="delivery-complete-button"
+                                  disabled={batch.status !== "delivered"}
+                                  onClick={() => markDeliveryBatchReceived(batch)}
+                                >
+                                  {batch.status === "received" ? "店舗確認済み" : "店舗確認済みにする"}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
