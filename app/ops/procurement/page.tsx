@@ -22,6 +22,7 @@ type Product = typeof initialProducts[number] & {
 type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number] & {
+  deadlineAt?: string | null;
   expectedArrivalDate?: string;
   onlineOrderStatus?: "not_started" | "online_ordered";
   requesterName?: string;
@@ -76,6 +77,7 @@ type SupplierChoice = {
   supplier: string;
   role: string;
 };
+type ProcurementStatusFilter = "未完了" | "購入待ち" | "一部購入済み" | "到着日入力待ち" | "到着待ち" | "配送待ち" | "配送中" | "一部納品済み" | "確認待ち" | "完了" | "すべて";
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -102,6 +104,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "連絡・報告", href: "/ops#連絡・報告", icon: MessageSquareWarning },
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
+const procurementStatusFilters: ProcurementStatusFilter[] = ["未完了", "購入待ち", "一部購入済み", "到着日入力待ち", "到着待ち", "配送待ち", "配送中", "一部納品済み", "確認待ち", "完了", "すべて"];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -317,6 +320,15 @@ function getDeliveryStateForOrder(deliveryStates: Record<string, DeliveryState>,
   return deliveryStates[orderId] ?? { status: "not_started", expectedArrivalDate: "" };
 }
 
+function getOrderDeadlineSortValue(order: PurchaseOrder) {
+  if (order.deadlineAt) {
+    const time = new Date(order.deadlineAt).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
 function createInitialDeliveryStates(purchaseOrders: PurchaseOrder[]) {
   return purchaseOrders.reduce<Record<string, DeliveryState>>((states, order) => {
     states[order.id] = { status: "not_started", expectedArrivalDate: "" };
@@ -390,6 +402,7 @@ export default function ProcurementPage() {
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -597,20 +610,49 @@ export default function ProcurementPage() {
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
-  const displayedPurchaseOrders = (focusedOrderId
-    ? purchaseOrders.filter((order) => order.id === focusedOrderId)
-    : purchaseOrders).filter((order) => {
+  const purchaseOrdersWithStatus = purchaseOrders.map((order) => {
+    const items = procurementTaskItems.filter((item) => item.orderId === order.id);
+    const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
+    const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
+
+    return {
+      order,
+      items,
+      deliveryState,
+      liveStatus
+    };
+  });
+  const statusFilterCounts = procurementStatusFilters.reduce<Record<ProcurementStatusFilter, number>>((counts, filter) => {
+    counts[filter] = purchaseOrdersWithStatus.filter(({ liveStatus }) => {
+      if (filter === "すべて") return true;
+      if (filter === "未完了") return liveStatus !== "完了";
+
+      return liveStatus === filter;
+    }).length;
+
+    return counts;
+  }, {} as Record<ProcurementStatusFilter, number>);
+  const displayedPurchaseOrders = purchaseOrdersWithStatus
+    .filter(({ order }) => !focusedOrderId || order.id === focusedOrderId)
+    .filter(({ liveStatus }) => {
+      if (focusedOrderId) return true;
+      if (statusFilter === "すべて") return true;
+      if (statusFilter === "未完了") return liveStatus !== "完了";
+
+      return liveStatus === statusFilter;
+    })
+    .filter(({ order, items }) => {
       if (!normalizedQuery) return true;
 
-      const orderItems = procurementTaskItems.filter((item) => item.orderId === order.id);
       return [
         order.id,
         order.store,
         order.brand,
         order.priority,
-        ...orderItems.flatMap((item) => [item.productName, item.supplier, item.note, item.priceExceptionNote, item.actualPrice])
+        ...items.flatMap((item) => [item.productName, item.supplier, item.note, item.priceExceptionNote, item.actualPrice])
       ].join(" ").toLowerCase().includes(normalizedQuery);
-    });
+    })
+    .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order));
 
   return (
     <main className="shell">
@@ -662,18 +704,30 @@ export default function ProcurementPage() {
               <a className="text-button" href="/ops/procurement">全体を見る</a>
             </div>
           ) : null}
+          {!focusedOrderId ? (
+            <div className="queue-filter-bar" aria-label="発注管理ステータスフィルター">
+              {procurementStatusFilters.map((filter) => (
+                <button
+                  type="button"
+                  className={statusFilter === filter ? "queue-filter is-active" : "queue-filter"}
+                  onClick={() => setStatusFilter(filter)}
+                  key={filter}
+                >
+                  <span>{filter}</span>
+                  <strong>{statusFilterCounts[filter]}</strong>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="procurement-order-list">
-            {displayedPurchaseOrders.map((order) => {
-              const items = procurementTaskItems.filter((item) => item.orderId === order.id);
+            {displayedPurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
               const completedCount = items.filter((item) => item.purchased).length;
               const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
               const receivedCount = items.filter((item) => item.deliveryStatus === "received").length;
               const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
               const readyToDeliverCount = items.filter((item) => item.purchased && item.deliveryStatus === "pending").length;
-              const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
               const orderDeliveryBatches = deliveryBatches.filter((batch) => batch.orderId === order.id);
-              const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
               const hasPurchasedItems = completedCount > 0;
               const isOnlineOrder = hasOnlineSupplier(items, suppliers);
               const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, products);
@@ -796,8 +850,10 @@ export default function ProcurementPage() {
                 </article>
               );
             })}
-            {focusedOrderId && displayedPurchaseOrders.length === 0 ? (
-              <div className="empty-state">対象の発注依頼が見つかりません</div>
+            {displayedPurchaseOrders.length === 0 ? (
+              <div className="empty-state">
+                {focusedOrderId ? "対象の発注依頼が見つかりません" : "表示できる発注依頼はありません"}
+              </div>
             ) : null}
           </div>
         </section>
