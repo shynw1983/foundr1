@@ -8,6 +8,7 @@ export async function PATCH(request: Request) {
   const body = await request.json() as {
     itemId?: string;
     purchased?: boolean;
+    unavailable?: boolean;
     actualQuantity?: number;
     actualPrice?: string;
     note?: string;
@@ -42,6 +43,7 @@ export async function PATCH(request: Request) {
       purchase_order_items.id::text as "itemId",
       products.name as "productName",
       products.reference_price::float as "referencePrice",
+      purchase_order_items.status as "currentStatus",
       purchase_order_items.requested_quantity::float as "requestedQuantity",
       purchase_order_items.requested_unit as "requestedUnit",
       coalesce(
@@ -95,7 +97,7 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "発注先が見つかりません。" }, { status: 400 });
   }
 
-  if (body.purchased === false) {
+  if (body.purchased === false || body.unavailable === true) {
     await sql`
       delete from delivery_batch_items
       where purchase_order_item_id = ${body.itemId}
@@ -171,12 +173,59 @@ export async function PATCH(request: Request) {
         `;
       }
     }
+
+    if (body.unavailable === true && itemDetail.currentStatus !== "unavailable") {
+      await sql`
+        insert into purchase_exceptions (
+          purchase_order_id,
+          purchase_order_item_id,
+          exception_type,
+          message,
+          resolution_note,
+          needs_store_confirmation,
+          affects_operation,
+          status,
+          resolved_by,
+          resolved_at,
+          updated_at
+        ) values (
+          ${itemDetail.purchaseOrderId},
+          ${itemDetail.itemId},
+          'unavailable',
+          ${`${itemDetail.productName} は本依頼で購入不可として処理しました。${note ? ` 理由: ${note}` : ""}`},
+          '購入不可',
+          false,
+          true,
+          'resolved',
+          ${session.id},
+          now(),
+          now()
+        )
+      `;
+    } else if (body.unavailable === true && itemDetail.currentStatus === "unavailable") {
+      await sql`
+        update purchase_exceptions
+        set
+          message = ${`${itemDetail.productName} は本依頼で購入不可として処理しました。${note ? ` 理由: ${note}` : ""}`},
+          updated_at = now()
+        where id = (
+          select id
+          from purchase_exceptions
+          where purchase_order_item_id = ${itemDetail.itemId}
+            and exception_type = 'unavailable'
+          order by created_at desc
+          limit 1
+        )
+      `;
+    }
   }
 
   await sql`
     update purchase_order_items
     set
       status = case
+        when ${body.unavailable === true} then 'unavailable'
+        when ${body.unavailable === false && itemDetail?.currentStatus === "unavailable"} then 'requested'
         when ${body.purchased === false} then 'requested'
         when ${deliveryStatus}::text is not null then ${deliveryStatus}
         when status in ('in_delivery', 'delivered', 'received') then status
@@ -185,6 +234,7 @@ export async function PATCH(request: Request) {
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
       actual_price = case
+        when ${body.unavailable === true} then null
         when ${hasActualPrice} then ${body.clearActualPrice === true ? null : Number.isFinite(actualPrice) ? actualPrice : null}
         else actual_price
       end,
@@ -216,7 +266,20 @@ export async function PATCH(request: Request) {
     `;
   }
 
-  if (body.purchased) {
+  if (body.unavailable === true) {
+    await sql`
+      delete from purchase_actuals
+      where purchase_order_item_id = ${body.itemId}
+    `;
+
+    await sql`
+      delete from price_records
+      where source = 'purchase_actual'
+        and receipt_note = ${body.itemId}
+    `;
+  }
+
+  if (body.purchased && body.unavailable !== true) {
     await sql`
       delete from purchase_actuals
       where purchase_order_item_id = ${body.itemId}

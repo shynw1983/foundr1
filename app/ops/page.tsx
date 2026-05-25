@@ -39,6 +39,7 @@ type PurchaseOrderItem = {
   actualPrice?: string;
   referencePrice?: number;
   unit: string;
+  unavailable?: boolean;
   note?: string;
   priceExceptionNote?: string;
 };
@@ -470,6 +471,8 @@ function createStoreFeedbackItems(
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
 
   return purchaseOrderItems.flatMap<StoreFeedback>((item) => {
+    if (item.unavailable) return [];
+
     const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
     const quantityDiff = actualQuantity - item.requestedQuantity;
     const order = orderMap.get(item.orderId);

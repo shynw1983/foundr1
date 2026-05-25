@@ -328,12 +328,12 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(purchase_orders.note, '') as note,
           case
             when order_progress.total_count is null or order_progress.total_count = 0 then purchase_orders.status
-            when order_progress.received_count = order_progress.total_count then '完了'
-            when order_progress.delivered_count = order_progress.total_count then '確認待ち'
+            when order_progress.received_count + order_progress.unavailable_count = order_progress.total_count then '完了'
+            when order_progress.delivered_count + order_progress.unavailable_count = order_progress.total_count then '確認待ち'
             when order_progress.in_delivery_count > 0 then '配送中'
             when order_progress.delivered_count > 0 then '一部納品済み'
-            when order_progress.purchased_count = 0 then '購入待ち'
-            when order_progress.purchased_count < order_progress.total_count then '一部購入済み'
+            when order_progress.purchased_count + order_progress.unavailable_count = 0 then '購入待ち'
+            when order_progress.purchased_count + order_progress.unavailable_count < order_progress.total_count then '一部購入済み'
             else '配送待ち'
           end as status
         from purchase_orders
@@ -360,7 +360,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             )::int as purchased_count,
             count(purchase_order_items.id) filter (where purchase_order_items.status = 'in_delivery')::int as in_delivery_count,
             count(purchase_order_items.id) filter (where purchase_order_items.status in ('delivered', 'received'))::int as delivered_count,
-            count(purchase_order_items.id) filter (where purchase_order_items.status = 'received')::int as received_count
+            count(purchase_order_items.id) filter (where purchase_order_items.status = 'received')::int as received_count,
+            count(purchase_order_items.id) filter (where purchase_order_items.status = 'unavailable')::int as unavailable_count
           from purchase_order_items
           where purchase_order_items.purchase_order_id = purchase_orders.id
         ) order_progress on true
@@ -391,6 +392,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null
           ) as purchased,
+          purchase_order_items.status = 'unavailable' as unavailable,
           case
             when purchase_order_items.status = 'in_delivery' then 'in_delivery'
             when purchase_order_items.status = 'received' then 'received'

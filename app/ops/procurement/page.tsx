@@ -38,6 +38,7 @@ type DashboardOrderItem = {
   actualPrice?: string;
   unit: string;
   purchased?: boolean;
+  unavailable?: boolean;
   supplier?: string;
   note?: string;
   priceExceptionNote?: string;
@@ -55,6 +56,7 @@ type ProcurementTaskItem = {
   unit: string;
   supplier: string;
   purchased: boolean;
+  unavailable: boolean;
   note: string;
   priceExceptionNote: string;
   deliveryStatus: "pending" | "in_delivery" | "delivered" | "received";
@@ -148,6 +150,7 @@ function createProcurementTaskItems(
           unit: item.unit,
           supplier: item.supplier || product?.mainSupplier || "",
           purchased: item.purchased ?? false,
+          unavailable: item.unavailable ?? false,
           note: item.note ?? "",
           priceExceptionNote: item.priceExceptionNote ?? "",
           deliveryStatus: item.deliveryStatus ?? "pending",
@@ -173,6 +176,7 @@ function createProcurementTaskItems(
         unit: product.unit,
         supplier: "",
         purchased: false,
+        unavailable: false,
         note: "",
         priceExceptionNote: "",
         deliveryStatus: "pending",
@@ -298,18 +302,19 @@ function getOrderStatus(
 ) {
   if (items.length === 0) return order.status;
 
+  const unavailableCount = items.filter((item) => item.unavailable).length;
   const purchasedCount = items.filter((item) => item.purchased).length;
   const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
   const deliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
 
   const receivedCount = items.filter((item) => item.deliveryStatus === "received").length;
 
-  if (receivedCount === items.length) return "完了";
-  if (deliveredCount === items.length) return "確認待ち";
+  if (receivedCount + unavailableCount === items.length) return "完了";
+  if (deliveredCount + receivedCount + unavailableCount === items.length) return "確認待ち";
   if (deliveryCount > 0) return "配送中";
   if (deliveredCount > 0) return "一部納品済み";
-  if (purchasedCount === 0) return "購入待ち";
-  if (purchasedCount < items.length) return "一部購入済み";
+  if (purchasedCount + unavailableCount === 0) return "購入待ち";
+  if (purchasedCount + unavailableCount < items.length) return "一部購入済み";
   if (hasDeliveryOrderSupplier(items, supplierList)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
     return "到着日入力待ち";
@@ -361,6 +366,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
     body: JSON.stringify({
       itemId: item.id,
       purchased: item.purchased,
+      unavailable: item.unavailable,
       actualQuantity: item.actualQuantity,
       actualPrice: item.actualPrice,
       note: item.note,
@@ -754,11 +760,13 @@ export default function ProcurementPage() {
           <div className="procurement-order-list">
             {displayedPurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
               const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
+              const unavailableCount = items.filter((item) => item.unavailable).length;
               const completedCount = items.filter((item) => item.purchased).length;
+              const handledCount = completedCount + unavailableCount;
               const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
               const receivedCount = items.filter((item) => item.deliveryStatus === "received").length;
               const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
-              const readyToDeliverCount = items.filter((item) => item.purchased && item.deliveryStatus === "pending").length;
+              const readyToDeliverCount = items.filter((item) => item.purchased && !item.unavailable && item.deliveryStatus === "pending").length;
               const orderDeliveryBatches = deliveryBatches.filter((batch) => batch.orderId === order.id);
               const hasPurchasedItems = completedCount > 0;
               const isOnlineOrder = hasDeliveryOrderSupplier(items, suppliers);
@@ -776,13 +784,15 @@ export default function ProcurementPage() {
                     </div>
                     <div className="procurement-order-summary">
                       <span>概算 {formatEstimatedAmount(estimatedAmount)}</span>
-                      <span>{completedCount} / {items.length} 購入済み</span>
+                      <span>{handledCount} / {items.length} 処理済み</span>
+                      {unavailableCount > 0 ? <span>購入不可 {unavailableCount} 件</span> : null}
                     </div>
                   </div>
                   <OrderFulfillmentPanel
                     isOnlineOrder={isOnlineOrder}
                     hasPurchasedItems={hasPurchasedItems}
                     purchasedCount={completedCount}
+                    unavailableCount={unavailableCount}
                     deliveredCount={deliveredCount}
                     receivedCount={receivedCount}
                     inDeliveryCount={inDeliveryCount}
@@ -798,7 +808,7 @@ export default function ProcurementPage() {
                   />
                   <div className="procurement-supplier-list">
                     {supplierGroups.map((group) => {
-                      const supplierCompletedCount = group.items.filter((item) => item.purchased).length;
+                      const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
 
                       return (
                         <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
@@ -807,7 +817,7 @@ export default function ProcurementPage() {
                               <span>発注先</span>
                               <strong>{group.supplier}</strong>
                             </div>
-                            <small>{supplierCompletedCount} / {group.items.length} 購入済み</small>
+                            <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
                           </div>
                           <div className="procurement-task-list">
                             {group.items.map((item) => {
@@ -819,20 +829,22 @@ export default function ProcurementPage() {
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
 
                               return (
-                                <div className={item.purchased ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
+                                <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
                                   <label className="task-check">
                                     <input
                                       type="checkbox"
-                                      checked={item.purchased}
+                                      checked={item.purchased || item.unavailable}
+                                      disabled={item.unavailable}
                                       onChange={(event) =>
                                         updateProcurementTaskItem(item.id, {
                                           purchased: event.target.checked,
+                                          unavailable: false,
                                           deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
                                           deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
                                         })
                                       }
                                     />
-                                    <span>{item.purchased ? "購入済み" : "未購入"}</span>
+                                    <span>{item.unavailable ? "購入不可" : item.purchased ? "購入済み" : "未購入"}</span>
                                   </label>
                                   <span className="task-product-photo">
                                     {photoSrc ? (
@@ -847,6 +859,7 @@ export default function ProcurementPage() {
                                       {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
                                       {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
+                                      {item.unavailable ? <span>購入不可</span> : null}
                                       {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
@@ -923,6 +936,7 @@ function OrderFulfillmentPanel({
   isOnlineOrder,
   hasPurchasedItems,
   purchasedCount,
+  unavailableCount,
   deliveredCount,
   receivedCount,
   inDeliveryCount,
@@ -939,6 +953,7 @@ function OrderFulfillmentPanel({
   isOnlineOrder: boolean;
   hasPurchasedItems: boolean;
   purchasedCount: number;
+  unavailableCount: number;
   deliveredCount: number;
   receivedCount: number;
   inDeliveryCount: number;
@@ -954,7 +969,10 @@ function OrderFulfillmentPanel({
 }) {
   const expectedArrivalLabel = formatExpectedArrivalDate(state.expectedArrivalDate);
   const isOnlineOrdered = state.status === "online_ordered" && Boolean(state.expectedArrivalDate);
-  const onlineArrived = isOnlineOrder && deliveredCount + receivedCount >= totalCount;
+  const handledTotalCount = purchasedCount + unavailableCount;
+  const completedTotalCount = receivedCount + unavailableCount;
+  const deliveredTotalCount = deliveredCount + receivedCount + unavailableCount;
+  const onlineArrived = isOnlineOrder && deliveredTotalCount >= totalCount;
 
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
@@ -962,18 +980,18 @@ function OrderFulfillmentPanel({
         <span>{isOnlineOrder ? "配送発注" : "配送フロー"}</span>
         <strong>
           {isOnlineOrder
-            ? receivedCount === totalCount
+            ? completedTotalCount === totalCount
               ? "店舗確認済み"
-              : deliveredCount === totalCount
+              : deliveredTotalCount === totalCount
                 ? "店舗確認待ち"
                 : isOnlineOrdered && expectedArrivalLabel
                   ? `到着予定 ${expectedArrivalLabel}`
                   : state.expectedArrivalDate
                     ? "到着予定日を確認して発注済みにする"
                     : "発注先へ発注後に到着予定日を入力"
-            : receivedCount === totalCount
+            : completedTotalCount === totalCount
               ? "店舗確認済み"
-              : deliveredCount === totalCount
+              : deliveredTotalCount === totalCount
                 ? "店舗確認待ち"
               : inDeliveryCount > 0
                 ? "配送中"
@@ -982,7 +1000,8 @@ function OrderFulfillmentPanel({
                   : "購入完了後に配送へ"}
         </strong>
         <div className="fulfillment-metrics">
-          <span>購入 {purchasedCount} / {totalCount}</span>
+          <span>処理 {handledTotalCount} / {totalCount}</span>
+          {unavailableCount > 0 ? <span>購入不可 {unavailableCount}</span> : null}
           <span>配送中 {inDeliveryCount}</span>
           <span>納品済み {deliveredCount}</span>
           <span>店舗確認 {receivedCount}</span>
@@ -1118,6 +1137,22 @@ function ExceptionReportDialog({
           </span>
         </div>
         <div className="edit-fields">
+          <label className="exception-toggle">
+            <input
+              type="checkbox"
+              checked={item.unavailable}
+              onChange={(event) =>
+                onChange({
+                  unavailable: event.target.checked,
+                  purchased: event.target.checked ? false : item.purchased,
+                  deliveryStatus: event.target.checked ? "pending" : item.deliveryStatus,
+                  deliveryBatchId: event.target.checked ? undefined : item.deliveryBatchId,
+                  actualPrice: event.target.checked ? "" : item.actualPrice
+                })
+              }
+            />
+            <span>購入不可として処理</span>
+          </label>
           <label>
             <span>購入先変更</span>
             <div className="supplier-choice-list">

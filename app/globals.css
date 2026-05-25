@@ -2477,6 +2477,27 @@ button {
   font-weight: 800;
 }
 
+.edit-fields .exception-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--red-soft);
+  border-radius: 8px;
+  background: #fff8f8;
+}
+
+.edit-fields .exception-toggle input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.edit-fields .exception-toggle span {
+  color: var(--red);
+  font-weight: 800;
+}
+
 .supplier-choice-list {
   display: grid;
   gap: 8px;
@@ -2771,6 +2792,11 @@ button {
 .report-type-quantity {
   color: var(--amber);
   background: var(--amber-soft);
+}
+
+.report-type-unavailable {
+  color: var(--red);
+  background: var(--red-soft);
 }
 
 .report-type-note,

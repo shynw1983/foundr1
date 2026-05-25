@@ -25,7 +25,7 @@ type ReportItem = {
   itemId: string;
   product: string;
   store: string;
-  type: "price" | "quantity" | "note" | "other";
+  type: "price" | "quantity" | "note" | "unavailable" | "other";
   status: "open" | "resolved";
   message: string;
   resolutionNote: string;
@@ -51,6 +51,7 @@ const typeLabels: Record<ReportItem["type"], string> = {
   price: "価格異常",
   quantity: "数量差異",
   note: "備考",
+  unavailable: "購入不可",
   other: "その他"
 };
 
@@ -159,6 +160,7 @@ export default function ReportsPage() {
                 <option value="price">価格異常</option>
                 <option value="quantity">数量差異</option>
                 <option value="note">備考</option>
+                <option value="unavailable">購入不可</option>
                 <option value="other">その他</option>
               </select>
             </label>

@@ -57,6 +57,7 @@ type PurchaseOrderItem = {
   actualQuantity?: number;
   actualPrice?: string;
   unit: string;
+  unavailable?: boolean;
   note?: string;
   priceExceptionNote?: string;
   deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
@@ -278,6 +279,8 @@ function createStoreFeedbackItems(
 ) {
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
   const feedbackItems = purchaseOrderItems.flatMap<StoreFeedback>((item) => {
+    if (item.unavailable) return [];
+
     const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
     const quantityDiff = actualQuantity - item.requestedQuantity;
     const order = orderMap.get(item.orderId);

@@ -9,7 +9,7 @@ type ReportRow = {
   itemId: string;
   product: string;
   store: string;
-  type: "price" | "quantity" | "note" | "other";
+  type: "price" | "quantity" | "note" | "unavailable" | "other";
   status: "open" | "resolved";
   message: string;
   resolutionNote: string;
@@ -36,6 +36,7 @@ export async function GET() {
           when purchase_exceptions.exception_type = 'price' then 'price'
           when purchase_exceptions.exception_type = 'quantity' then 'quantity'
           when purchase_exceptions.exception_type = 'note' then 'note'
+          when purchase_exceptions.exception_type = 'unavailable' then 'unavailable'
           else 'other'
         end as type,
         case when purchase_exceptions.status = 'resolved' then 'resolved' else 'open' end as status,
