@@ -3,6 +3,7 @@ import { requireOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 const allowedRoles = new Set(["owner", "manager", "buyer"]);
+const adminRoles = new Set(["owner", "manager"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function GET() {
@@ -40,6 +41,7 @@ export async function GET() {
       product_comparisons.other_cost::float as "otherCost",
       coalesce(product_comparisons.photo_url, '') as "photoUrl",
       coalesce(product_comparisons.note, '') as note,
+      product_comparisons.created_by::text as "createdById",
       coalesce(employees.name, '') as "createdBy",
       to_char(product_comparisons.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "createdLabel"
     from product_comparisons
@@ -49,7 +51,13 @@ export async function GET() {
     order by product_comparisons.created_at desc
   `;
 
-  return Response.json({ comparisons: rows });
+  return Response.json({
+    comparisons: rows.map((row) => ({
+      ...row,
+      canEdit: canModifyComparison(session.role, session.id, row.createdById),
+      canDelete: canModifyComparison(session.role, session.id, row.createdById)
+    }))
+  });
 }
 
 export async function POST(request: Request) {
@@ -166,6 +174,168 @@ export async function POST(request: Request) {
   `;
 
   return Response.json({ ok: true });
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireOpsSession();
+  if (!session || !allowedRoles.has(session.role)) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const formData = await request.formData();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+
+  const rows = await sql`
+    select id, created_by::text as "createdById", photo_url as "photoUrl"
+    from product_comparisons
+    where id = ${id}
+    limit 1
+  `;
+  const target = rows[0];
+  if (!target) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+  if (!canModifyComparison(session.role, session.id, target.createdById)) {
+    return Response.json({ error: "この商品比較を編集する権限がありません。" }, { status: 403 });
+  }
+
+  const parsed = parseComparisonForm(formData);
+  const validationError = validateComparison(parsed);
+  if (validationError) return validationError;
+
+  await sql`
+    update product_comparisons
+    set
+      base_product_id = ${parsed.baseProductId},
+      candidate_product_name = ${parsed.candidateProductName},
+      candidate_supplier_id = ${null},
+      candidate_supplier_name = ${parsed.candidateSupplierNameInput},
+      candidate_origin = ${parsed.candidateOrigin},
+      candidate_price = ${parsed.candidatePrice},
+      candidate_original_price = ${parsed.candidateOriginalPrice},
+      candidate_currency = ${parsed.candidateCurrency},
+      exchange_rate = ${parsed.exchangeRate},
+      candidate_quantity = ${parsed.candidateQuantity},
+      candidate_unit = ${parsed.candidateUnit},
+      candidate_weight_kg = ${parsed.candidateWeightKg},
+      import_quantity = ${parsed.importQuantity},
+      freight_rate_per_kg = ${parsed.freightRatePerKg},
+      freight_rate_original_per_kg = ${parsed.freightRateOriginalPerKg},
+      base_price = ${parsed.basePrice},
+      base_quantity = ${parsed.baseQuantity},
+      base_unit = ${parsed.baseUnit},
+      is_imported = ${parsed.isImported},
+      freight_cost = ${parsed.freightCost},
+      tax_cost = ${parsed.taxCost},
+      other_cost = ${parsed.otherCost},
+      note = ${parsed.note},
+      updated_at = now()
+    where id = ${id}
+  `;
+
+  return Response.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const session = await requireOpsSession();
+  if (!session || !allowedRoles.has(session.role)) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as { id?: string };
+  const id = String(body.id ?? "").trim();
+  if (!id) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+
+  const rows = await sql`
+    select id, created_by::text as "createdById"
+    from product_comparisons
+    where id = ${id}
+    limit 1
+  `;
+  const target = rows[0];
+  if (!target) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
+  if (!canModifyComparison(session.role, session.id, target.createdById)) {
+    return Response.json({ error: "この商品比較を削除する権限がありません。" }, { status: 403 });
+  }
+
+  await sql`delete from product_comparisons where id = ${id}`;
+  return Response.json({ ok: true });
+}
+
+function parseComparisonForm(formData: FormData) {
+  const candidateOriginalPrice = normalizeNumber(formData.get("candidatePrice"));
+  const candidateCurrencyInput = String(formData.get("candidateCurrency") ?? "JPY").trim().toUpperCase();
+  const isImported = formData.get("isImported") === "on" || formData.get("isImported") === "true";
+  const candidateCurrency = isImported && candidateCurrencyInput === "CNY" ? "CNY" : "JPY";
+  const exchangeRate = candidateCurrency === "JPY" ? 1 : normalizeNumber(formData.get("exchangeRate"));
+  const freightRateOriginalPerKg = normalizeNumber(formData.get("freightRatePerKg"));
+  const freightRatePerKg = freightRateOriginalPerKg * exchangeRate;
+  const candidateWeightKg = normalizeNumber(formData.get("candidateWeightKg"));
+  const importQuantity = normalizeNumber(formData.get("importQuantity")) || 1;
+  const freightCostInput = normalizeNumber(formData.get("freightCost"));
+  const candidatePrice = candidateOriginalPrice * exchangeRate;
+  const candidateQuantity = normalizeNumber(formData.get("candidateQuantity")) || 1;
+  const candidateUnit = String(formData.get("candidateUnit") ?? "g").trim() || "g";
+  const totalWeightKg = inferCandidateTotalWeightKg(candidateUnit, candidateQuantity, candidateWeightKg, importQuantity);
+  const isWeightedImport = isImported && totalWeightKg > 0 && freightRatePerKg > 0;
+
+  return {
+    baseProductId: String(formData.get("baseProductId") ?? "").trim(),
+    candidateProductName: String(formData.get("candidateProductName") ?? "").trim(),
+    candidateSupplierNameInput: String(formData.get("candidateSupplierName") ?? "").trim(),
+    candidateOrigin: String(formData.get("candidateOrigin") ?? "").trim(),
+    candidateOriginalPrice,
+    candidateCurrency,
+    exchangeRate,
+    candidatePrice,
+    candidateQuantity,
+    candidateUnit,
+    candidateWeightKg,
+    importQuantity,
+    freightRateOriginalPerKg,
+    freightRatePerKg,
+    basePrice: normalizeNumber(formData.get("basePrice")),
+    baseQuantity: normalizeNumber(formData.get("baseQuantity")) || 1,
+    baseUnit: String(formData.get("baseUnit") ?? "g").trim() || "g",
+    isImported,
+    freightCost: isImported && isWeightedImport ? freightRatePerKg * totalWeightKg : freightCostInput,
+    taxCost: normalizeNumber(formData.get("taxCost")),
+    otherCost: normalizeNumber(formData.get("otherCost")),
+    note: String(formData.get("note") ?? "").trim()
+  };
+}
+
+function validateComparison(parsed: ReturnType<typeof parseComparisonForm>) {
+  if (!parsed.baseProductId) {
+    return Response.json({ error: "比較対象の商品を選択してください。" }, { status: 400 });
+  }
+
+  if (!parsed.candidateProductName) {
+    return Response.json({ error: "候補商品の名前を入力してください。" }, { status: 400 });
+  }
+
+  if (!Number.isFinite(parsed.candidateOriginalPrice) || parsed.candidateOriginalPrice <= 0 || !Number.isFinite(parsed.basePrice) || parsed.basePrice <= 0) {
+    return Response.json({ error: "現行品と候補品の価格を入力してください。" }, { status: 400 });
+  }
+
+  if (parsed.candidateCurrency !== "JPY" && (!Number.isFinite(parsed.exchangeRate) || parsed.exchangeRate <= 0)) {
+    return Response.json({ error: "為替レートを入力してください。" }, { status: 400 });
+  }
+
+  if (parsed.isImported && parsed.candidateUnit === "箱" && (!Number.isFinite(parsed.candidateWeightKg) || parsed.candidateWeightKg <= 0)) {
+    return Response.json({ error: "海外輸入品で候補単位が箱の場合は、候補1箱重量を入力してください。" }, { status: 400 });
+  }
+
+  return null;
+}
+
+function inferCandidateTotalWeightKg(unit: string, quantity: number, manualWeightKg: number, importQuantity: number) {
+  if (unit === "kg") return quantity * importQuantity;
+  if (unit === "g") return (quantity / 1000) * importQuantity;
+  return manualWeightKg * importQuantity;
+}
+
+function canModifyComparison(role: string, employeeId: string, createdById?: string) {
+  return adminRoles.has(role) || Boolean(createdById && createdById === employeeId);
 }
 
 function normalizeNumber(value: FormDataEntryValue | null) {

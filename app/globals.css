@@ -2996,6 +2996,7 @@ button {
 }
 
 .comparison-card-body .recommendation-title,
+.comparison-card-body .comparison-card-actions,
 .comparison-card-body > p,
 .comparison-card-body > em,
 .comparison-card-body > small {
@@ -3010,6 +3011,12 @@ button {
 .comparison-import-details {
   display: grid;
   gap: 6px;
+}
+
+.comparison-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .comparison-import-details dl {
@@ -4274,6 +4281,7 @@ button {
   .comparison-card:has(.recommendation-photo),
   .comparison-card-body,
   .comparison-card-body .recommendation-title,
+  .comparison-card-body .comparison-card-actions,
   .comparison-card-body > p,
   .comparison-card-body > em,
   .comparison-card-body > small,

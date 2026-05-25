@@ -2,7 +2,7 @@
 
 import { Boxes, ClipboardList, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Store, Truck, UserCog } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { products as initialProducts } from "../../../lib/mock-data";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
@@ -46,7 +46,10 @@ type ProductComparison = {
   photoUrl: string;
   note: string;
   createdBy: string;
+  createdById: string;
   createdLabel: string;
+  canEdit: boolean;
+  canDelete: boolean;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -68,6 +71,7 @@ const comparisonUnits = ["g", "kg", "ml", "L", "個", "袋", "箱"];
 
 export default function ProductComparisonsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const formRef = useRef<HTMLFormElement>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparisons, setComparisons] = useState<ProductComparison[]>([]);
   const [query, setQuery] = useState("");
@@ -91,6 +95,7 @@ export default function ProductComparisonsPage() {
   const [otherCost, setOtherCost] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [photoFileName, setPhotoFileName] = useState("");
+  const [editingComparisonId, setEditingComparisonId] = useState("");
 
   useEffect(() => {
     void loadData();
@@ -98,15 +103,17 @@ export default function ProductComparisonsPage() {
 
   useEffect(() => {
     if (!isImported) {
-      setCandidateCurrency("JPY");
-      setExchangeRate("1");
-      setExchangeRateLabel("");
-      return;
-    }
+    setCandidateCurrency("JPY");
+    setExchangeRate("1");
+    setExchangeRateLabel("");
+    return;
+  }
 
-    setCandidateCurrency("CNY");
-    void loadExchangeRate("CNY");
-  }, [isImported]);
+    if (candidateCurrency === "JPY") {
+      setCandidateCurrency("CNY");
+      void loadExchangeRate("CNY");
+    }
+  }, [candidateCurrency, isImported]);
 
   const selectedProduct = products.find((product) => product.id === selectedProductId);
   const baseCategories = useMemo(
@@ -129,7 +136,8 @@ export default function ProductComparisonsPage() {
   const candidatePriceJpy = normalizeNumber(candidatePrice) * activeExchangeRate;
   const freightRatePerKgJpy = normalizeNumber(freightRatePerKg) * activeExchangeRate;
   const requiresCandidateWeight = isImported && candidateUnit === "箱";
-  const candidateFreight = freightRatePerKgJpy * normalizeNumber(candidateWeightKg) * importCount;
+  const candidateTotalWeightKg = inferCandidateTotalWeightKg(candidateUnit, candidateQuantity, candidateWeightKg, importCount);
+  const candidateFreight = freightRatePerKgJpy * candidateTotalWeightKg;
   const candidateTotal = (candidatePriceJpy * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
   const candidateUnitCost = candidateTotal / Math.max(1, normalizeNumber(candidateQuantity) * importCount);
   const baseUnitCost = normalizeNumber(basePrice) / Math.max(1, normalizeNumber(baseQuantity));
@@ -237,8 +245,10 @@ export default function ProductComparisonsPage() {
     formData.set("taxCost", taxCost);
     formData.set("otherCost", otherCost);
 
+    if (editingComparisonId) formData.set("id", editingComparisonId);
+
     const response = await fetch("/api/product-comparisons", {
-      method: "POST",
+      method: editingComparisonId ? "PATCH" : "POST",
       body: formData
     });
 
@@ -248,7 +258,14 @@ export default function ProductComparisonsPage() {
       return;
     }
 
-    form.reset();
+    resetComparisonForm();
+    showNotice(editingComparisonId ? "商品比較を更新しました。" : "商品比較を保存しました。");
+    await loadData();
+  }
+
+  function resetComparisonForm() {
+    formRef.current?.reset();
+    setEditingComparisonId("");
     setBaseCategory("");
     setBaseSubcategory("");
     setSelectedProductId("");
@@ -268,7 +285,64 @@ export default function ProductComparisonsPage() {
     setTaxCost("");
     setOtherCost("");
     setPhotoFileName("");
-    showNotice("商品比較を保存しました。");
+    setFormField("candidateProductName", "");
+    setFormField("candidateSupplierName", "");
+    setFormField("candidateOrigin", "");
+    setFormField("note", "");
+  }
+
+  function setFormField(name: string, value: string) {
+    const field = formRef.current?.elements.namedItem(name);
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+      field.value = value;
+    }
+  }
+
+  function populateComparisonForm(comparison: ProductComparison, mode: "edit" | "copy") {
+    const product = products.find((item) => item.id === comparison.baseProductId);
+    setEditingComparisonId(mode === "edit" ? comparison.id : "");
+    setBaseCategory(product?.category || "");
+    setBaseSubcategory(product?.subcategory || "");
+    setSelectedProductId(comparison.baseProductId);
+    setBasePrice(String(comparison.basePrice ?? ""));
+    setBaseQuantity(String(comparison.baseQuantity ?? "1"));
+    setBaseUnit(comparison.baseUnit || "g");
+    setIsImported(comparison.isImported);
+    setCandidateCurrency(comparison.candidateCurrency || "JPY");
+    setExchangeRate(String(comparison.exchangeRate || 1));
+    setExchangeRateLabel(comparison.candidateCurrency !== "JPY" ? "保存済みレート" : "");
+    setCandidatePrice(String(comparison.candidateOriginalPrice || comparison.candidatePrice || ""));
+    setCandidateQuantity(String(comparison.candidateQuantity || "1"));
+    setCandidateUnit(comparison.candidateUnit || "g");
+    setCandidateWeightKg(String(comparison.candidateWeightKg || ""));
+    setImportQuantity(String(comparison.importQuantity || "1"));
+    setFreightRatePerKg(String(comparison.freightRateOriginalPerKg || comparison.freightRatePerKg || ""));
+    setTaxCost(String(comparison.taxCost || ""));
+    setOtherCost(String(comparison.otherCost || ""));
+    setPhotoFileName("");
+    setFormField("candidateProductName", comparison.candidateProductName);
+    setFormField("candidateSupplierName", comparison.candidateSupplierName);
+    setFormField("candidateOrigin", comparison.candidateOrigin);
+    setFormField("note", comparison.note);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function deleteComparison(comparison: ProductComparison) {
+    if (!window.confirm(`${comparison.baseProductName} ⇔ ${comparison.candidateProductName} を削除しますか？`)) return;
+
+    const response = await fetch("/api/product-comparisons", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: comparison.id })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "商品比較を削除できませんでした。");
+      return;
+    }
+
+    showNotice("商品比較を削除しました。");
     await loadData();
   }
 
@@ -303,12 +377,13 @@ export default function ProductComparisonsPage() {
         </header>
 
         <section className="workspace-grid recommendations-grid">
-          <form className="panel recommendation-form" onSubmit={createComparison}>
+          <form ref={formRef} className="panel recommendation-form" onSubmit={createComparison}>
             <div className="panel-title">
               <div>
-                <h3>比較を追加</h3>
+                <h3>{editingComparisonId ? "比較を編集" : "比較を追加"}</h3>
                 <p>価格 ÷ 規格数量で単位コストを比較。輸入品は運賃・税費も加算</p>
               </div>
+              {editingComparisonId ? <button type="button" className="secondary-button" onClick={resetComparisonForm}>新規に戻す</button> : null}
             </div>
             <div className="edit-fields">
               <div className="comparison-category-picker">
@@ -436,7 +511,7 @@ export default function ProductComparisonsPage() {
               <div className="comparison-inline-fields">
                 <label>
                   <span>輸入総重量</span>
-                  <input value={`${formatNumber(normalizeNumber(candidateWeightKg) * importCount)} kg`} readOnly />
+                  <input value={`${formatNumber(candidateTotalWeightKg)} kg`} readOnly />
                 </label>
                 <label>
                   <span>運賃合計</span>
@@ -483,7 +558,7 @@ export default function ProductComparisonsPage() {
                 <span>メモ</span>
                 <textarea name="note" placeholder="味、品質、切替時の注意点など" />
               </label>
-              <button className="primary-button" type="submit">比較を保存</button>
+              <button className="primary-button" type="submit">{editingComparisonId ? "比較を更新" : "比較を保存"}</button>
             </div>
           </form>
 
@@ -497,7 +572,13 @@ export default function ProductComparisonsPage() {
             <div className="recommendation-list">
               {filteredComparisons.length === 0 ? <div className="empty-state">商品比較はありません</div> : null}
               {filteredComparisons.map((comparison) => (
-                <ComparisonCard comparison={comparison} key={comparison.id} />
+                <ComparisonCard
+                  comparison={comparison}
+                  key={comparison.id}
+                  onCopy={() => populateComparisonForm(comparison, "copy")}
+                  onDelete={() => deleteComparison(comparison)}
+                  onEdit={() => populateComparisonForm(comparison, "edit")}
+                />
               ))}
             </div>
           </section>
@@ -508,7 +589,17 @@ export default function ProductComparisonsPage() {
   );
 }
 
-function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
+function ComparisonCard({
+  comparison,
+  onCopy,
+  onDelete,
+  onEdit
+}: {
+  comparison: ProductComparison;
+  onCopy: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
   const importCount = Math.max(1, comparison.importQuantity ?? 1);
   const candidateTotal = (comparison.candidatePrice * importCount) + comparison.freightCost + comparison.taxCost + comparison.otherCost;
   const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
@@ -524,6 +615,11 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
         <div className="recommendation-title">
           <strong>{comparison.baseProductName} ⇔ {comparison.candidateProductName}</strong>
           <span className={rate <= 0 ? "rate-down" : "rate-up"}>{rate > 0 ? "+" : ""}{rate.toFixed(1)}%</span>
+        </div>
+        <div className="comparison-card-actions">
+          {comparison.canEdit ? <button type="button" className="secondary-button" onClick={onEdit}>編集</button> : null}
+          <button type="button" className="secondary-button" onClick={onCopy}>コピーして再比較</button>
+          {comparison.canDelete ? <button type="button" className="danger-button" onClick={onDelete}>削除</button> : null}
         </div>
         <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
         <div className="comparison-result-grid">
@@ -567,6 +663,15 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
 function normalizeNumber(value: string) {
   const numberValue = Number(String(value).replace(/[¥￥,\s]/g, ""));
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function inferCandidateTotalWeightKg(unit: string, quantityValue: string | number, weightKgValue: string | number, importCount: number) {
+  const quantity = normalizeNumber(String(quantityValue));
+  const manualWeightKg = normalizeNumber(String(weightKgValue));
+
+  if (unit === "kg") return quantity * importCount;
+  if (unit === "g") return (quantity / 1000) * importCount;
+  return manualWeightKg * importCount;
 }
 
 function uniqueSorted(values: string[]) {

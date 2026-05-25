@@ -12,7 +12,7 @@ type OpsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-ops-language";
 const languagePreferenceStorageKey = "foundr1-ops-language-preference";
-const localeCacheVersion = "20260525-ops-i18n-v23";
+const localeCacheVersion = "20260525-ops-i18n-v24";
 const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
