@@ -2928,7 +2928,7 @@ button {
 .comparison-preview,
 .comparison-result-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px;
 }
 
@@ -2946,6 +2946,46 @@ button {
 
 .comparison-preview strong {
   text-align: center;
+}
+
+.modern-file-field {
+  display: grid;
+  gap: 6px;
+}
+
+.modern-file-field > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modern-file-button {
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px dashed rgba(31, 126, 93, 0.55);
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+  cursor: pointer;
+}
+
+.modern-file-button input {
+  display: none;
+}
+
+.modern-file-button strong {
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.modern-file-button small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .category-row,

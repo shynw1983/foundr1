@@ -198,6 +198,9 @@ create table if not exists product_comparisons (
   candidate_price numeric(12, 2) not null default 0,
   candidate_quantity numeric(12, 3) not null default 1,
   candidate_unit text not null default 'g',
+  candidate_weight_kg numeric(12, 3) not null default 0,
+  import_quantity numeric(12, 3) not null default 1,
+  freight_rate_per_kg numeric(12, 2) not null default 0,
   base_price numeric(12, 2) not null default 0,
   base_quantity numeric(12, 3) not null default 1,
   base_unit text not null default 'g',
@@ -220,6 +223,9 @@ alter table product_comparisons add column if not exists candidate_origin text;
 alter table product_comparisons add column if not exists candidate_price numeric(12, 2) not null default 0;
 alter table product_comparisons add column if not exists candidate_quantity numeric(12, 3) not null default 1;
 alter table product_comparisons add column if not exists candidate_unit text not null default 'g';
+alter table product_comparisons add column if not exists candidate_weight_kg numeric(12, 3) not null default 0;
+alter table product_comparisons add column if not exists import_quantity numeric(12, 3) not null default 1;
+alter table product_comparisons add column if not exists freight_rate_per_kg numeric(12, 2) not null default 0;
 alter table product_comparisons add column if not exists base_price numeric(12, 2) not null default 0;
 alter table product_comparisons add column if not exists base_quantity numeric(12, 3) not null default 1;
 alter table product_comparisons add column if not exists base_unit text not null default 'g';

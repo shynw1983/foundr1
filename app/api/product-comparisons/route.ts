@@ -24,6 +24,9 @@ export async function GET() {
       product_comparisons.candidate_price::float as "candidatePrice",
       product_comparisons.candidate_quantity::float as "candidateQuantity",
       product_comparisons.candidate_unit as "candidateUnit",
+      product_comparisons.candidate_weight_kg::float as "candidateWeightKg",
+      product_comparisons.import_quantity::float as "importQuantity",
+      product_comparisons.freight_rate_per_kg::float as "freightRatePerKg",
       product_comparisons.base_price::float as "basePrice",
       product_comparisons.base_quantity::float as "baseQuantity",
       product_comparisons.base_unit as "baseUnit",
@@ -60,11 +63,14 @@ export async function POST(request: Request) {
   const candidatePrice = normalizeNumber(formData.get("candidatePrice"));
   const candidateQuantity = normalizeNumber(formData.get("candidateQuantity")) || 1;
   const candidateUnit = String(formData.get("candidateUnit") ?? "g").trim() || "g";
+  const candidateWeightKg = normalizeNumber(formData.get("candidateWeightKg"));
+  const importQuantity = normalizeNumber(formData.get("importQuantity")) || 1;
+  const freightRatePerKg = normalizeNumber(formData.get("freightRatePerKg"));
   const basePrice = normalizeNumber(formData.get("basePrice"));
   const baseQuantity = normalizeNumber(formData.get("baseQuantity")) || 1;
   const baseUnit = String(formData.get("baseUnit") ?? candidateUnit).trim() || candidateUnit;
   const isImported = formData.get("isImported") === "on" || formData.get("isImported") === "true";
-  const freightCost = normalizeNumber(formData.get("freightCost"));
+  const freightCostInput = normalizeNumber(formData.get("freightCost"));
   const taxCost = normalizeNumber(formData.get("taxCost"));
   const otherCost = normalizeNumber(formData.get("otherCost"));
   const note = String(formData.get("note") ?? "").trim();
@@ -93,6 +99,7 @@ export async function POST(request: Request) {
   const supplierIdValue = supplierRows[0]?.id ?? null;
   const supplierName = supplierRows[0]?.name ?? candidateSupplierNameInput;
   const photoUrl = await uploadPhotoIfNeeded(file, candidateProductName, "product-comparisons");
+  const freightCost = isImported ? freightRatePerKg * candidateWeightKg * importQuantity : freightCostInput;
 
   await sql`
     insert into product_comparisons (
@@ -104,6 +111,9 @@ export async function POST(request: Request) {
       candidate_price,
       candidate_quantity,
       candidate_unit,
+      candidate_weight_kg,
+      import_quantity,
+      freight_rate_per_kg,
       base_price,
       base_quantity,
       base_unit,
@@ -124,6 +134,9 @@ export async function POST(request: Request) {
       ${candidatePrice},
       ${candidateQuantity},
       ${candidateUnit},
+      ${candidateWeightKg},
+      ${importQuantity},
+      ${freightRatePerKg},
       ${basePrice},
       ${baseQuantity},
       ${baseUnit},

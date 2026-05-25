@@ -23,6 +23,9 @@ type ProductComparison = {
   candidatePrice: number;
   candidateQuantity: number;
   candidateUnit: string;
+  candidateWeightKg: number;
+  importQuantity: number;
+  freightRatePerKg: number;
   basePrice: number;
   baseQuantity: number;
   baseUnit: string;
@@ -64,18 +67,23 @@ export default function ProductComparisonsPage() {
   const [candidatePrice, setCandidatePrice] = useState("");
   const [candidateQuantity, setCandidateQuantity] = useState("1");
   const [candidateUnit, setCandidateUnit] = useState("g");
-  const [freightCost, setFreightCost] = useState("");
+  const [candidateWeightKg, setCandidateWeightKg] = useState("");
+  const [importQuantity, setImportQuantity] = useState("1");
+  const [freightRatePerKg, setFreightRatePerKg] = useState("");
   const [taxCost, setTaxCost] = useState("");
   const [otherCost, setOtherCost] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
+  const [photoFileName, setPhotoFileName] = useState("");
 
   useEffect(() => {
     void loadData();
   }, []);
 
   const selectedProduct = products.find((product) => product.id === selectedProductId);
-  const candidateTotal = normalizeNumber(candidatePrice) + normalizeNumber(freightCost) + normalizeNumber(taxCost) + normalizeNumber(otherCost);
-  const candidateUnitCost = candidateTotal / Math.max(1, normalizeNumber(candidateQuantity));
+  const importCount = Math.max(1, normalizeNumber(importQuantity));
+  const candidateFreight = normalizeNumber(freightRatePerKg) * normalizeNumber(candidateWeightKg) * importCount;
+  const candidateTotal = (normalizeNumber(candidatePrice) * importCount) + candidateFreight + normalizeNumber(taxCost) + normalizeNumber(otherCost);
+  const candidateUnitCost = candidateTotal / Math.max(1, normalizeNumber(candidateQuantity) * importCount);
   const baseUnitCost = normalizeNumber(basePrice) / Math.max(1, normalizeNumber(baseQuantity));
   const savingRate = baseUnitCost > 0 ? ((candidateUnitCost - baseUnitCost) / baseUnitCost) * 100 : 0;
 
@@ -137,7 +145,9 @@ export default function ProductComparisonsPage() {
     formData.set("candidatePrice", candidatePrice);
     formData.set("candidateQuantity", candidateQuantity);
     formData.set("candidateUnit", candidateUnit);
-    formData.set("freightCost", freightCost);
+    formData.set("candidateWeightKg", candidateWeightKg);
+    formData.set("importQuantity", importQuantity);
+    formData.set("freightRatePerKg", freightRatePerKg);
     formData.set("taxCost", taxCost);
     formData.set("otherCost", otherCost);
 
@@ -160,9 +170,12 @@ export default function ProductComparisonsPage() {
     setCandidatePrice("");
     setCandidateQuantity("1");
     setCandidateUnit("g");
-    setFreightCost("");
+    setCandidateWeightKg("");
+    setImportQuantity("1");
+    setFreightRatePerKg("");
     setTaxCost("");
     setOtherCost("");
+    setPhotoFileName("");
     showNotice("商品比較を保存しました。");
     await loadData();
   }
@@ -285,8 +298,26 @@ export default function ProductComparisonsPage() {
               </label>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>運賃</span>
-                  <input value={freightCost} inputMode="decimal" onChange={(event) => setFreightCost(event.target.value)} placeholder="0" />
+                  <span>候補重量 kg/個</span>
+                  <input value={candidateWeightKg} inputMode="decimal" onChange={(event) => setCandidateWeightKg(event.target.value)} placeholder="例: 0.5" />
+                </label>
+                <label>
+                  <span>輸入数量</span>
+                  <input value={importQuantity} inputMode="decimal" onChange={(event) => setImportQuantity(event.target.value)} placeholder="例: 20" />
+                </label>
+                <label>
+                  <span>運賃単価 / kg</span>
+                  <input value={freightRatePerKg} inputMode="decimal" onChange={(event) => setFreightRatePerKg(event.target.value)} placeholder="例: 120" />
+                </label>
+              </div>
+              <div className="comparison-inline-fields">
+                <label>
+                  <span>輸入総重量</span>
+                  <input value={`${formatNumber(normalizeNumber(candidateWeightKg) * importCount)} kg`} readOnly />
+                </label>
+                <label>
+                  <span>運賃合計</span>
+                  <input value={formatCurrency(candidateFreight)} readOnly />
                 </label>
                 <label>
                   <span>税費</span>
@@ -300,14 +331,25 @@ export default function ProductComparisonsPage() {
               <div className="comparison-preview">
                 <span>現行 {formatCurrency(baseUnitCost)} / {baseUnit}</span>
                 <span>候補 {formatCurrency(candidateUnitCost)} / {candidateUnit}</span>
+                <span>候補総額 {formatCurrency(candidateTotal)}</span>
                 <strong className={savingRate <= 0 ? "rate-down" : "rate-up"}>
                   {baseUnitCost > 0 ? `${savingRate > 0 ? "+" : ""}${savingRate.toFixed(1)}%` : "比較待ち"}
                 </strong>
               </div>
-              <label>
+              <div className="modern-file-field">
                 <span>写真</span>
-                <input name="photo" type="file" accept="image/*" capture="environment" />
-              </label>
+                <label className="modern-file-button">
+                  <input
+                    name="photo"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(event) => setPhotoFileName(event.target.files?.[0]?.name ?? "")}
+                  />
+                  <strong>写真を選択</strong>
+                  <small>{photoFileName || "カメラまたは写真ライブラリから追加"}</small>
+                </label>
+              </div>
               <label>
                 <span>メモ</span>
                 <textarea name="note" placeholder="味、品質、切替時の注意点など" />
@@ -338,8 +380,9 @@ export default function ProductComparisonsPage() {
 }
 
 function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
-  const candidateTotal = comparison.candidatePrice + comparison.freightCost + comparison.taxCost + comparison.otherCost;
-  const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity);
+  const importCount = Math.max(1, comparison.importQuantity ?? 1);
+  const candidateTotal = (comparison.candidatePrice * importCount) + comparison.freightCost + comparison.taxCost + comparison.otherCost;
+  const candidateUnitCost = candidateTotal / Math.max(1, comparison.candidateQuantity * importCount);
   const baseUnitCost = comparison.basePrice / Math.max(1, comparison.baseQuantity);
   const rate = baseUnitCost > 0 ? ((candidateUnitCost - baseUnitCost) / baseUnitCost) * 100 : 0;
 
@@ -360,6 +403,7 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
           <span>候補総額 {formatCurrency(candidateTotal)}</span>
         </div>
         {comparison.isImported ? <small>輸入費用: 運賃 {formatCurrency(comparison.freightCost)} / 税費 {formatCurrency(comparison.taxCost)} / その他 {formatCurrency(comparison.otherCost)}</small> : null}
+        {comparison.isImported ? <small>輸入重量 {formatNumber(comparison.candidateWeightKg * importCount)} kg / 運賃単価 {formatCurrency(comparison.freightRatePerKg)} / kg</small> : null}
         {comparison.note ? <small>{comparison.note}</small> : null}
         <em>{comparison.createdLabel}{comparison.createdBy ? ` · ${comparison.createdBy}` : ""}</em>
       </div>
@@ -370,6 +414,10 @@ function ComparisonCard({ comparison }: { comparison: ProductComparison }) {
 function normalizeNumber(value: string) {
   const numberValue = Number(String(value).replace(/[¥￥,\s]/g, ""));
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString("ja-JP", { maximumFractionDigits: 3 });
 }
 
 function inferSpecQuantity(value: string) {

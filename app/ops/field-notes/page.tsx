@@ -54,6 +54,7 @@ export default function FieldNotesPage() {
   const [notes, setNotes] = useState<FieldNote[]>([]);
   const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
+  const [photoFileName, setPhotoFileName] = useState("");
 
   useEffect(() => {
     void loadData();
@@ -110,6 +111,7 @@ export default function FieldNotesPage() {
     }
 
     form.reset();
+    setPhotoFileName("");
     showNotice("現場記録を保存しました。");
     await loadData();
   }
@@ -191,10 +193,20 @@ export default function FieldNotesPage() {
                 <span>見かけた価格</span>
                 <input name="observedPrice" inputMode="decimal" placeholder="例: 298" />
               </label>
-              <label>
+              <div className="modern-file-field">
                 <span>写真</span>
-                <input name="photo" type="file" accept="image/*" capture="environment" />
-              </label>
+                <label className="modern-file-button">
+                  <input
+                    name="photo"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(event) => setPhotoFileName(event.target.files?.[0]?.name ?? "")}
+                  />
+                  <strong>写真を選択</strong>
+                  <small>{photoFileName || "カメラまたは写真ライブラリから追加"}</small>
+                </label>
+              </div>
               <label>
                 <span>メモ</span>
                 <textarea name="note" placeholder="味、規格、使えそうな用途、気づいた点" />
