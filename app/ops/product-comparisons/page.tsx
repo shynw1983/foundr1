@@ -484,51 +484,52 @@ export default function ProductComparisonsPage() {
                 <input type="checkbox" name="isImported" checked={isImported} onChange={(event) => setIsImported(event.target.checked)} />
                 <span>海外輸入品として計算</span>
               </label>
+              {isImported ? <small className="form-hint">海外費用は選択した通貨で入力し、システムが円換算して比較します。税費とその他費用は円で入力してください。</small> : null}
               <label>
                 <span>原産国・輸入元</span>
                 <input name="candidateOrigin" placeholder="例: 中国 / 台湾 / タイ" />
               </label>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>{requiresCandidateWeight ? "候補1箱重量 kg" : "候補規格重量 kg"}</span>
+                  <span>{requiresCandidateWeight ? "候補1箱重量 kg" : "候補1単位重量 kg"}</span>
                   <input
                     value={candidateWeightKg}
                     inputMode="decimal"
                     onChange={(event) => setCandidateWeightKg(event.target.value)}
-                    placeholder={requiresCandidateWeight ? "例: 8" : "任意"}
+                    placeholder={requiresCandidateWeight ? "例: 8" : "g/kgは自動計算"}
                     required={requiresCandidateWeight}
                   />
                 </label>
                 <label>
-                  <span>輸入数量</span>
+                  <span>輸入単位数</span>
                   <input value={importQuantity} inputMode="decimal" onChange={(event) => setImportQuantity(event.target.value)} placeholder="例: 20" />
                 </label>
                 <label>
-                  <span>運賃単価 / kg</span>
+                  <span>{isImported && candidateCurrency !== "JPY" ? "1kg運賃（選択通貨）" : "1kg運賃"}</span>
                   <input value={freightRatePerKg} inputMode="decimal" onChange={(event) => setFreightRatePerKg(event.target.value)} placeholder="例: 120" />
                 </label>
               </div>
               <div className="comparison-inline-fields">
                 <label>
-                  <span>輸入総重量</span>
+                  <span>今回の輸入総重量</span>
                   <input value={`${formatNumber(candidateTotalWeightKg)} kg`} readOnly />
                 </label>
                 <label>
-                  <span>運賃合計</span>
+                  <span>運賃合計（円換算）</span>
                   <input value={formatCurrency(candidateFreight)} readOnly />
                 </label>
                 {isImported ? (
                   <label>
-                    <span>候補価格 円換算</span>
+                    <span>候補単価（円換算）</span>
                     <input value={formatCurrency(candidatePriceJpy)} readOnly />
                   </label>
                 ) : null}
                 <label>
-                  <span>税費</span>
+                  <span>税費（円）</span>
                   <input value={taxCost} inputMode="decimal" onChange={(event) => setTaxCost(event.target.value)} placeholder="0" />
                 </label>
                 <label>
-                  <span>その他費用</span>
+                  <span>その他費用（円）</span>
                   <input value={otherCost} inputMode="decimal" onChange={(event) => setOtherCost(event.target.value)} placeholder="0" />
                 </label>
               </div>
