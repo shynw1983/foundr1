@@ -12,7 +12,7 @@ type OpsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-ops-language";
 const languagePreferenceStorageKey = "foundr1-ops-language-preference";
-const localeCacheVersion = "20260525-ops-i18n-v19";
+const localeCacheVersion = "20260525-ops-i18n-v20";
 const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
@@ -22,7 +22,7 @@ const originalText = new WeakMap<Text, string>();
 const translatedText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Record<string, string>>();
 const translatableAttributes = ["aria-label", "data-label", "placeholder", "title"];
-const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION"]);
+const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT"]);
 
 const OpsTranslationContext = createContext<OpsTranslationContextValue>({
   language: "ja",
