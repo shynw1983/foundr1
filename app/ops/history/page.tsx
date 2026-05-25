@@ -47,9 +47,13 @@ type HistoryReportRow = {
   unit: string;
   totalActualQuantity: number;
   totalRequestedQuantity: number;
-  orderCount: number;
+  orderIds: Set<string>;
   unavailableCount: number;
   latestDeadline: string;
+};
+type DisplayHistoryReportRow = Omit<HistoryReportRow, "orderIds"> & {
+  orderCount: number;
+  averageActualQuantity: number;
 };
 
 const statusTone: Record<string, string> = {
@@ -128,20 +132,28 @@ function createHistoryReportRows(rows: HistoryRow[]) {
       unit: row.unit,
       totalActualQuantity: 0,
       totalRequestedQuantity: 0,
-      orderCount: 0,
+      orderIds: new Set<string>(),
       unavailableCount: 0,
       latestDeadline: ""
     };
 
     current.totalActualQuantity += row.actualQuantity;
     current.totalRequestedQuantity += row.requestedQuantity;
-    current.orderCount += 1;
+    current.orderIds.add(row.orderId);
     current.unavailableCount += row.status === "購入不可" ? 1 : 0;
     current.latestDeadline = row.deadline > current.latestDeadline ? row.deadline : current.latestDeadline;
     reportMap.set(key, current);
   });
 
-  return Array.from(reportMap.values()).sort((a, b) =>
+  return Array.from(reportMap.values()).map<DisplayHistoryReportRow>((row) => {
+    const orderCount = row.orderIds.size;
+
+    return {
+      ...row,
+      orderCount,
+      averageActualQuantity: orderCount > 0 ? row.totalActualQuantity / orderCount : 0
+    };
+  }).sort((a, b) =>
     (b.totalActualQuantity - a.totalActualQuantity) ||
     (b.orderCount - a.orderCount) ||
     a.store.localeCompare(b.store, "ja") ||
@@ -300,7 +312,8 @@ export default function ProcurementHistoryPage() {
                     </div>
                     <div className="history-report-quantity">
                       <strong>{formatQuantity(row.totalActualQuantity)} {row.unit}</strong>
-                      <small>依頼 {formatQuantity(row.totalRequestedQuantity)} {row.unit} / {row.orderCount} 回{row.unavailableCount ? ` / 不可 ${row.unavailableCount} 回` : ""}</small>
+                      <small>依頼合計 {formatQuantity(row.totalRequestedQuantity)} {row.unit} · 依頼回数 {row.orderCount} 回</small>
+                      <small>平均 {formatQuantity(row.averageActualQuantity)} {row.unit} / 回{row.unavailableCount ? ` · 不可 ${row.unavailableCount} 回` : ""}</small>
                     </div>
                   </article>
                 ))}
