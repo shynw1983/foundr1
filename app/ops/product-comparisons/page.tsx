@@ -446,6 +446,11 @@ export default function ProductComparisonsPage() {
                 <span>候補購入先名</span>
                 <input name="candidateSupplierName" placeholder="例: 輸入食品 A / 新しい卸業者名" />
               </label>
+              <label className="exception-toggle">
+                <input type="checkbox" name="isImported" checked={isImported} onChange={(event) => setIsImported(event.target.checked)} />
+                <span>海外輸入品として計算</span>
+              </label>
+              {isImported ? <small className="form-hint">海外費用は選択した通貨で入力し、システムが円換算して比較します。税費とその他費用は円で入力してください。</small> : null}
               <div className="comparison-inline-fields">
                 <label>
                   <span>{isImported ? "候補金額" : "候補価格"}</span>
@@ -480,11 +485,6 @@ export default function ProductComparisonsPage() {
                 </label>
               </div>
               {isImported ? <small className="form-hint">{exchangeRateLabel || `1 ${candidateCurrency} = ${formatCurrency(activeExchangeRate)}`}</small> : null}
-              <label className="exception-toggle">
-                <input type="checkbox" name="isImported" checked={isImported} onChange={(event) => setIsImported(event.target.checked)} />
-                <span>海外輸入品として計算</span>
-              </label>
-              {isImported ? <small className="form-hint">海外費用は選択した通貨で入力し、システムが円換算して比較します。税費とその他費用は円で入力してください。</small> : null}
               <label>
                 <span>原産国・輸入元</span>
                 <input name="candidateOrigin" placeholder="例: 中国 / 台湾 / タイ" />
