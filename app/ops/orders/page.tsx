@@ -650,6 +650,43 @@ export default function OrdersPage() {
     }
   }
 
+  async function markOrderItemsReceived(orderId: string, items: PurchaseOrderItem[]) {
+    const targetItems = items.filter((item) => item.id && item.deliveryStatus === "delivered");
+
+    if (targetItems.length === 0) return;
+
+    setPurchaseOrderItems((currentItems) =>
+      currentItems.map((item) =>
+        item.orderId === orderId && item.id && targetItems.some((target) => target.id === item.id)
+          ? { ...item, deliveryStatus: "received" }
+          : item
+      )
+    );
+
+    try {
+      await Promise.all(targetItems.map((item) =>
+        fetch("/api/procurement/items", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemId: item.id,
+            deliveryStatus: "received"
+          })
+        }).then(async (response) => {
+          if (response.ok) return;
+          const body = await response.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? "店舗確認を保存できませんでした。");
+        })
+      ));
+
+      showNotice("店舗確認済みにしました。");
+      await loadDashboardData();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "店舗確認を保存できませんでした。");
+      await loadDashboardData();
+    }
+  }
+
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
     const product = products.find((candidate) => candidate.id === item.productId) ??
       products.find((candidate) => candidate.name === item.productName);
@@ -1011,6 +1048,15 @@ export default function OrdersPage() {
                 const storeConfirmationBatches = deliveryBatches.filter(
                   (batch) => batch.orderId === order.id && ["delivered", "received"].includes(batch.status)
                 );
+                const directStoreConfirmationItems = purchaseOrderItems.filter(
+                  (item) =>
+                    item.orderId === order.id &&
+                    !item.deliveryBatchId &&
+                    (item.deliveryStatus === "delivered" || item.deliveryStatus === "received")
+                );
+                const hasDirectStoreConfirmation = directStoreConfirmationItems.length > 0;
+                const directStoreConfirmationDone = hasDirectStoreConfirmation &&
+                  directStoreConfirmationItems.every((item) => item.deliveryStatus === "received");
 
                 return (
                   <article className="order-row" key={order.id}>
@@ -1087,6 +1133,32 @@ export default function OrdersPage() {
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {hasDirectStoreConfirmation ? (
+                      <div className="store-confirmation-panel">
+                        <div className="store-confirmation-heading">
+                          <strong>到着確認</strong>
+                          <span>ネット注文の到着を店舗側で確認</span>
+                        </div>
+                        <div className="delivery-batch-row store-confirmation-row">
+                          <div className="delivery-batch-info">
+                            <strong>{order.id}-NET</strong>
+                            <span>
+                              {directStoreConfirmationItems.length} 件 · {directStoreConfirmationDone ? "店舗確認済み" : "納品済み"}
+                            </span>
+                          </div>
+                          <div className="delivery-batch-actions">
+                            <button
+                              type="button"
+                              className="delivery-complete-button"
+                              disabled={directStoreConfirmationDone}
+                              onClick={() => markOrderItemsReceived(order.id, directStoreConfirmationItems)}
+                            >
+                              {directStoreConfirmationDone ? "店舗確認済み" : "店舗確認済みにする"}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : null}

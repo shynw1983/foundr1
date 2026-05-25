@@ -12,6 +12,7 @@ export async function PATCH(request: Request) {
     actualPrice?: string;
     note?: string;
     supplier?: string;
+    deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
   };
 
   if (!body.itemId) {
@@ -35,10 +36,16 @@ export async function PATCH(request: Request) {
   }
 
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
+  const hasActualPrice = body.actualPrice !== undefined;
   const actualPriceText = String(body.actualPrice ?? "").trim();
   const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
   const actualPrice = normalizedActualPrice ? Number(normalizedActualPrice) : null;
+  const hasNote = body.note !== undefined;
   const note = body.note ?? "";
+  const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
+  const deliveryStatus = ["in_delivery", "delivered", "received"].includes(body.deliveryStatus ?? "")
+    ? body.deliveryStatus
+    : null;
   const supplierName = String(body.supplier ?? "").trim();
   const supplierRows = supplierName
     ? await sql`
@@ -66,14 +73,24 @@ export async function PATCH(request: Request) {
     set
       status = case
         when ${body.purchased === false} then 'requested'
-        when status in ('in_delivery', 'delivered') then status
+        when ${deliveryStatus}::text is not null then ${deliveryStatus}
+        when status in ('in_delivery', 'delivered', 'received') then status
         when ${body.purchased === true} then 'purchased'
         else status
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
-      actual_price = ${Number.isFinite(actualPrice) ? actualPrice : null},
-      procurement_note = ${note},
-      price_exception_note = '',
+      actual_price = case
+        when ${hasActualPrice} then ${Number.isFinite(actualPrice) ? actualPrice : null}
+        else actual_price
+      end,
+      procurement_note = case
+        when ${hasNote} then ${note}
+        else procurement_note
+      end,
+      price_exception_note = case
+        when ${shouldClearPriceException} then ''
+        else price_exception_note
+      end,
       selected_supplier_id = coalesce(${supplierId}, selected_supplier_id)
     where id = ${body.itemId}
   `;

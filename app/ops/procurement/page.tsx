@@ -361,7 +361,8 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       actualQuantity: item.actualQuantity,
       actualPrice: item.actualPrice,
       note: item.note,
-      supplier: item.supplier
+      supplier: item.supplier,
+      deliveryStatus: item.deliveryStatus
     })
   });
 
@@ -516,6 +517,34 @@ export default function ProcurementPage() {
     }
 
     updateDeliveryState(orderId, { status: "online_ordered" }, "ネット注文を発注済みにしました。");
+  }
+
+  function markOnlineOrderArrived(orderId: string) {
+    const currentState = getDeliveryStateForOrder(deliveryStates, orderId);
+
+    if (currentState.status !== "online_ordered") {
+      window.alert("先に発注済みにしてください。");
+      return;
+    }
+
+    const targetItems = procurementTaskItems
+      .filter((item) => item.orderId === orderId && item.purchased && item.deliveryStatus !== "received")
+      .map((item) => ({ ...item, deliveryStatus: "delivered" as const }));
+
+    if (targetItems.length === 0) return;
+
+    setProcurementTaskItems((items) =>
+      items.map((item) => {
+        const nextItem = targetItems.find((target) => target.id === item.id);
+        return nextItem ?? item;
+      })
+    );
+
+    void Promise.all(targetItems.map((item) => saveProcurementTaskItem(item)))
+      .then(() => showNotice("ネット注文を納品済みにしました。"))
+      .catch(() => {
+        window.alert("到着状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
+      });
   }
 
   function createDeliveryBatch(orderId: string) {
@@ -759,6 +788,7 @@ export default function ProcurementPage() {
                     state={deliveryState}
                     onChange={(next) => updateDeliveryState(order.id, next)}
                     onConfirmOnlineOrder={() => confirmOnlineOrder(order.id)}
+                    onMarkOnlineArrived={() => markOnlineOrderArrived(order.id)}
                     batches={orderDeliveryBatches}
                     onCreateBatch={() => createDeliveryBatch(order.id)}
                     onMarkStatus={markDeliveryBatchStatus}
@@ -892,6 +922,7 @@ function OrderFulfillmentPanel({
   state,
   onChange,
   onConfirmOnlineOrder,
+  onMarkOnlineArrived,
   batches,
   onCreateBatch,
   onMarkStatus
@@ -907,12 +938,14 @@ function OrderFulfillmentPanel({
   state: DeliveryState;
   onChange: (next: Partial<DeliveryState>) => void;
   onConfirmOnlineOrder: () => void;
+  onMarkOnlineArrived: () => void;
   batches: DeliveryBatch[];
   onCreateBatch: () => void;
   onMarkStatus: (batchId: string, status: "delivered" | "received") => void;
 }) {
   const expectedArrivalLabel = formatExpectedArrivalDate(state.expectedArrivalDate);
   const isOnlineOrdered = state.status === "online_ordered" && Boolean(state.expectedArrivalDate);
+  const onlineArrived = isOnlineOrder && deliveredCount + receivedCount >= totalCount;
 
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
@@ -920,11 +953,15 @@ function OrderFulfillmentPanel({
         <span>{isOnlineOrder ? "ネット注文" : "配送フロー"}</span>
         <strong>
           {isOnlineOrder
-            ? isOnlineOrdered && expectedArrivalLabel
-              ? `到着予定 ${expectedArrivalLabel}`
-              : state.expectedArrivalDate
-                ? "到着予定日を確認して発注済みにする"
-              : "発注先へ発注後に到着予定日を入力"
+            ? receivedCount === totalCount
+              ? "店舗確認済み"
+              : deliveredCount === totalCount
+                ? "店舗確認待ち"
+                : isOnlineOrdered && expectedArrivalLabel
+                  ? `到着予定 ${expectedArrivalLabel}`
+                  : state.expectedArrivalDate
+                    ? "到着予定日を確認して発注済みにする"
+                    : "発注先へ発注後に到着予定日を入力"
             : receivedCount === totalCount
               ? "店舗確認済み"
               : deliveredCount === totalCount
@@ -965,6 +1002,14 @@ function OrderFulfillmentPanel({
             onClick={onConfirmOnlineOrder}
           >
             {isOnlineOrdered ? "発注済み" : "発注済みにする"}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!isOnlineOrdered || onlineArrived}
+            onClick={onMarkOnlineArrived}
+          >
+            {onlineArrived ? "納品済み" : "到着済みにする"}
           </button>
         </div>
       ) : (
