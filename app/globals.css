@@ -2152,6 +2152,15 @@ button {
   opacity: 0.45;
 }
 
+.secondary-button.is-complete:disabled,
+.fulfillment-actions .secondary-button.is-complete:disabled {
+  cursor: default;
+  border-color: #17202b;
+  color: white;
+  background: #17202b;
+  opacity: 1;
+}
+
 .fulfillment-delivery-area {
   display: grid;
   gap: 8px;

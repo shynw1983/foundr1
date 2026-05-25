@@ -997,7 +997,7 @@ function OrderFulfillmentPanel({
           </label>
           <button
             type="button"
-            className="secondary-button"
+            className={isOnlineOrdered ? "secondary-button is-complete" : "secondary-button"}
             disabled={!hasPurchasedItems || !state.expectedArrivalDate || isOnlineOrdered}
             onClick={onConfirmOnlineOrder}
           >
@@ -1005,7 +1005,7 @@ function OrderFulfillmentPanel({
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className={onlineArrived ? "secondary-button is-complete" : "secondary-button"}
             disabled={!isOnlineOrdered || onlineArrived}
             onClick={onMarkOnlineArrived}
           >

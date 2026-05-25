@@ -19,6 +19,7 @@ const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
   "zh-Hant": { htmlLang: "zh-Hant" }
 };
 const originalText = new WeakMap<Text, string>();
+const translatedText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Record<string, string>>();
 const translatableAttributes = ["aria-label", "data-label", "placeholder", "title"];
 const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION"]);
@@ -64,14 +65,24 @@ function translateTextNode(node: Text, dictionary: OpsDictionary, language: OpsL
   if (!node.textContent || !node.textContent.trim()) return;
   if (node.parentElement?.closest("[data-i18n-ignore]")) return;
 
-  const source = originalText.get(node) ?? node.textContent;
-  if (!originalText.has(node)) originalText.set(node, source);
+  const currentText = node.textContent;
+  const previousSource = originalText.get(node);
+  const previousTranslation = translatedText.get(node);
+  let source = previousSource ?? currentText;
+
+  if (!previousSource || (currentText !== previousSource && currentText !== previousTranslation)) {
+    source = currentText;
+    originalText.set(node, source);
+  }
+
   const leadingWhitespace = source.match(/^\s*/)?.[0] ?? "";
   const trailingWhitespace = source.match(/\s*$/)?.[0] ?? "";
   const text = source.trim();
   const nextText = language === "ja"
     ? source
     : `${leadingWhitespace}${translateText(text, dictionary)}${trailingWhitespace}`;
+
+  translatedText.set(node, nextText);
 
   if (node.textContent !== nextText) {
     node.textContent = nextText;
@@ -210,6 +221,7 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => translateNode(node, dictionary, language));
         if (mutation.type === "attributes") translateNode(mutation.target, dictionary, language);
+        if (mutation.type === "characterData") translateNode(mutation.target, dictionary, language);
       }
     });
 
@@ -217,6 +229,7 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
       attributes: true,
       attributeFilter: translatableAttributes,
       childList: true,
+      characterData: true,
       subtree: true
     });
 
