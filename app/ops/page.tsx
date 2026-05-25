@@ -53,12 +53,17 @@ type PriceSignal = {
 };
 type StoreFeedback = {
   id: string;
+  itemId?: string;
+  kind?: "price" | "quantity" | "note";
+  orderId: string;
   product: string;
   type: string;
   message: string;
   store: string;
   status: string;
 };
+
+const dismissedPriceSignalsStorageKey = "foundr1-dismissed-price-signals";
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -75,6 +80,38 @@ function formatPurchaseOrderStatus(status: string) {
   if (status === "確認待ち") return "店舗確認待ち";
 
   return status;
+}
+
+function getPriceSignalKey(signal: PriceSignal) {
+  return [
+    signal.productId,
+    signal.supplierId ?? "none",
+    signal.latestPrice,
+    signal.baselinePrice
+  ].join(":");
+}
+
+function readDismissedPriceSignalKeys() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const rawValue = window.localStorage.getItem(dismissedPriceSignalsStorageKey);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
+
+    return Array.isArray(parsedValue) ? parsedValue.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedPriceSignalKeys(keys: string[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(dismissedPriceSignalsStorageKey, JSON.stringify(keys));
+  } catch {
+    // The dashboard can still dismiss the item for this render even if localStorage is unavailable.
+  }
 }
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -101,45 +138,51 @@ export default function OpsDashboard() {
   const [currentRole, setCurrentRole] = useState("");
   const [updatingBaseline, setUpdatingBaseline] = useState("");
   const [priceMessage, setPriceMessage] = useState("");
+  const [dismissedPriceSignalKeys, setDismissedPriceSignalKeys] = useState<string[]>([]);
+
+  async function loadDashboardData() {
+    const [response, meResponse] = await Promise.all([
+      fetch("/api/dashboard"),
+      fetch("/api/auth/me")
+    ]);
+    if (!response.ok) return;
+
+    const data = await response.json() as {
+      stores?: typeof stores;
+      products?: Product[];
+      productSupplierOptions?: ProductSupplierGroup[];
+      orders?: PurchaseOrder[];
+      purchaseOrderItems?: PurchaseOrderItem[];
+      priceSignals?: PriceSignal[];
+    };
+
+    if (data.stores) setStoresData(data.stores);
+    if (data.products) setProducts(data.products);
+    if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+    if (data.orders) setPurchaseOrders(data.orders);
+    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.priceSignals) setPriceSignals(data.priceSignals);
+    if (meResponse.ok) {
+      const me = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+      setCurrentRole(me.employee?.role ?? "");
+    }
+    setDataSource("neon");
+  }
 
   useEffect(() => {
-    async function loadDashboardData() {
-      const [response, meResponse] = await Promise.all([
-        fetch("/api/dashboard"),
-        fetch("/api/auth/me")
-      ]);
-      if (!response.ok) return;
-
-      const data = await response.json() as {
-        stores?: typeof stores;
-        products?: Product[];
-        productSupplierOptions?: ProductSupplierGroup[];
-        orders?: PurchaseOrder[];
-        purchaseOrderItems?: PurchaseOrderItem[];
-        priceSignals?: PriceSignal[];
-      };
-
-      if (data.stores) setStoresData(data.stores);
-      if (data.products) setProducts(data.products);
-      if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
-      if (data.orders) setPurchaseOrders(data.orders);
-      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
-      if (data.priceSignals) setPriceSignals(data.priceSignals);
-      if (meResponse.ok) {
-        const me = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
-        setCurrentRole(me.employee?.role ?? "");
-      }
-      setDataSource("neon");
-    }
-
     void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    setDismissedPriceSignalKeys(readDismissedPriceSignalKeys());
   }, []);
 
   const openOrders = purchaseOrders.filter((order) => order.status !== "完了");
   const urgentOrders = purchaseOrders.filter((order) => order.priority === "高").length;
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems);
   const activeExceptions = storeFeedbackItems.length;
-  const visiblePriceSignals = priceSignals.filter((item) => item.changeRate !== 0);
+  const dismissedPriceSignalSet = new Set(dismissedPriceSignalKeys);
+  const visiblePriceSignals = priceSignals.filter((item) => item.changeRate !== 0 && !dismissedPriceSignalSet.has(getPriceSignalKey(item)));
   const risingPrices = visiblePriceSignals.filter((item) => item.changeRate > 0);
   const canUpdateBaseline = ["owner", "manager", "buyer"].includes(currentRole);
   const supplierRouteCount = new Set(
@@ -237,7 +280,23 @@ export default function OpsDashboard() {
                       <span>{item.type}</span>
                     </div>
                     <p>{item.message}</p>
-                    <small>{item.store} · {item.status}</small>
+                    <div className="feedback-actions">
+                      <small>
+                        <a className="feedback-order-link" href={`/ops/orders#order-${item.orderId}`}>
+                          依頼番号 {item.orderId}
+                        </a>
+                        <span> · {item.store} · {item.status}</span>
+                      </small>
+                      {item.status === "店舗確認待ち" ? (
+                        <button
+                          type="button"
+                          className="feedback-confirm-button"
+                          onClick={() => confirmStoreFeedback(item)}
+                        >
+                          確認済みにする
+                        </button>
+                      ) : null}
+                    </div>
                   </article>
                 ))}
                 {storeFeedbackItems.length === 0 ? (
@@ -262,16 +321,25 @@ export default function OpsDashboard() {
                           {signal.changeRate > 0 ? "+" : ""}{signal.changeRate}%
                         </em>
                       </span>
-                      {canUpdateBaseline && signal.changeRate !== 0 ? (
+                      <div className="trend-actions">
+                        {canUpdateBaseline && signal.changeRate !== 0 ? (
+                          <button
+                            className="trend-baseline-button"
+                            type="button"
+                            disabled={updatingBaseline === `${signal.productId}-${signal.supplierId ?? "none"}`}
+                            onClick={() => updateBaselinePrice(signal)}
+                          >
+                            基準価格を更新
+                          </button>
+                        ) : null}
                         <button
-                          className="trend-baseline-button"
+                          className="trend-ack-button"
                           type="button"
-                          disabled={updatingBaseline === `${signal.productId}-${signal.supplierId ?? "none"}`}
-                          onClick={() => updateBaselinePrice(signal)}
+                          onClick={() => acknowledgePriceSignal(signal)}
                         >
-                          基準価格を更新
+                          確認済みにする
                         </button>
-                      ) : null}
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -332,8 +400,66 @@ export default function OpsDashboard() {
     }
 
     setPriceSignals((current) => current.filter((item) => item !== signal));
+    dismissPriceSignal(signal);
     setPriceMessage(`${signal.product} の基準価格を ¥${formatPrice(signal.latestPrice)} に更新しました。`);
     setUpdatingBaseline("");
+  }
+
+  function dismissPriceSignal(signal: PriceSignal) {
+    const dismissedKey = getPriceSignalKey(signal);
+    setDismissedPriceSignalKeys((current) => {
+      if (current.includes(dismissedKey)) return current;
+
+      const next = [...current, dismissedKey];
+      writeDismissedPriceSignalKeys(next);
+
+      return next;
+    });
+  }
+
+  function acknowledgePriceSignal(signal: PriceSignal) {
+    const dismissedKey = getPriceSignalKey(signal);
+    dismissPriceSignal(signal);
+    setPriceSignals((current) => current.filter((item) => getPriceSignalKey(item) !== dismissedKey));
+    setPriceMessage(`${signal.product} の価格変動を確認済みにしました。`);
+  }
+
+  async function confirmStoreFeedback(item: StoreFeedback) {
+    if (!item.itemId || !item.kind || item.kind === "note") return;
+
+    const orderItem = purchaseOrderItems.find((candidate) => candidate.id === item.itemId);
+    if (!orderItem) return;
+
+    const payload = item.kind === "quantity"
+      ? { itemId: item.itemId, actualQuantity: orderItem.requestedQuantity }
+      : { itemId: item.itemId, clearActualPrice: true };
+
+    try {
+      const response = await fetch("/api/procurement/items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "確認状態を保存できませんでした。");
+      }
+
+      setPurchaseOrderItems((items) =>
+        items.map((candidate) => {
+          if (candidate.id !== item.itemId) return candidate;
+
+          return item.kind === "quantity"
+            ? { ...candidate, actualQuantity: candidate.requestedQuantity }
+            : { ...candidate, actualPrice: "" };
+        })
+      );
+      await loadDashboardData();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "確認状態を保存できませんでした。");
+      await loadDashboardData();
+    }
   }
 }
 
@@ -357,6 +483,9 @@ function createStoreFeedbackItems(
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
       items.push({
         id: `${baseId}-price`,
+        itemId: item.id,
+        kind: "price",
+        orderId: item.orderId,
         product: item.productName,
         type: "価格異常",
         message: `実際 ¥${formatPrice(actualPrice)} / 基準 ¥${formatPrice(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`,
@@ -368,6 +497,9 @@ function createStoreFeedbackItems(
     if (quantityDiff !== 0) {
       items.push({
         id: `${baseId}-quantity`,
+        itemId: item.id,
+        kind: "quantity",
+        orderId: item.orderId,
         product: item.productName,
         type: "数量差異",
         message: `依頼 ${item.requestedQuantity} ${item.unit} / 実数 ${actualQuantity} ${item.unit}`,
@@ -379,6 +511,9 @@ function createStoreFeedbackItems(
     if (item.note) {
       items.push({
         id: `${baseId}-note`,
+        itemId: item.id,
+        kind: "note",
+        orderId: item.orderId,
         product: item.productName,
         type: "備考",
         message: item.note,

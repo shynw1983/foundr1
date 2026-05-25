@@ -2742,13 +2742,30 @@ button {
   font-style: normal;
 }
 
+.trend-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .trend-baseline-button {
-  justify-self: end;
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--green);
+  background: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trend-ack-button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
   background: white;
   font-size: 12px;
   font-weight: 700;
@@ -3675,6 +3692,24 @@ button {
 
   .workspace {
     padding: 18px;
+  }
+
+  .trend-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trend-price-block {
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .trend-actions {
+    justify-content: stretch;
+  }
+
+  .trend-actions button {
+    flex: 1 1 130px;
   }
 
   .sidebar-user {

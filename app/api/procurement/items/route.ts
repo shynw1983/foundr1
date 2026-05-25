@@ -96,6 +96,22 @@ export async function PATCH(request: Request) {
     where id = ${body.itemId}
   `;
 
+  if (body.clearActualPrice === true) {
+    await sql`
+      update purchase_actuals
+      set
+        actual_price = null,
+        price_is_exception = false
+      where purchase_order_item_id = ${body.itemId}
+    `;
+
+    await sql`
+      delete from price_records
+      where source = 'purchase_actual'
+        and receipt_note = ${body.itemId}
+    `;
+  }
+
   if (body.purchased) {
     await sql`
       delete from purchase_actuals
