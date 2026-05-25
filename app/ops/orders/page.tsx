@@ -573,6 +573,11 @@ export default function OrdersPage() {
       setDraftDeadline(getDefaultDeadlineValue());
       setDraftPriority("中");
       setDraftNote("");
+      setDraftRequesterStaffId("");
+      setDraftBuyerStaffId("");
+      setDraftCategoryFilter("");
+      setDraftSubcategoryFilter("");
+      setOrderItemDrafts([]);
       await loadDashboardData();
     } finally {
       setIsSubmittingOrder(false);
