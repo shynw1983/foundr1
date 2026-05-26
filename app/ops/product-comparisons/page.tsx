@@ -26,6 +26,7 @@ type ProductComparison = {
   candidateProductName: string;
   candidateSupplierName: string;
   candidateOrigin: string;
+  candidatePurchaseUrl: string;
   candidatePrice: number;
   candidateOriginalPrice: number;
   candidateCurrency: string;
@@ -89,7 +90,7 @@ export default function ProductComparisonsPage() {
   const [exchangeRate, setExchangeRate] = useState("1");
   const [exchangeRateLabel, setExchangeRateLabel] = useState("");
   const [candidatePrice, setCandidatePrice] = useState("");
-  const [candidateQuantity, setCandidateQuantity] = useState("1");
+  const [candidateQuantity, setCandidateQuantity] = useState("0");
   const [candidateUnit, setCandidateUnit] = useState("g");
   const [candidateWeightKg, setCandidateWeightKg] = useState("");
   const [importQuantity, setImportQuantity] = useState("1");
@@ -206,6 +207,7 @@ export default function ProductComparisonsPage() {
         comparison.candidateProductName,
         comparison.candidateSupplierName,
         comparison.candidateOrigin,
+        comparison.candidatePurchaseUrl,
         comparison.note,
         comparison.createdBy
       ].join(" ").toLowerCase().includes(keyword)
@@ -294,7 +296,7 @@ export default function ProductComparisonsPage() {
     setExchangeRate("1");
     setExchangeRateLabel("");
     setCandidatePrice("");
-    setCandidateQuantity("1");
+    setCandidateQuantity("0");
     setCandidateUnit("g");
     setCandidateWeightKg("");
     setImportQuantity("1");
@@ -305,6 +307,7 @@ export default function ProductComparisonsPage() {
     setFormField("candidateProductName", "");
     setFormField("candidateSupplierName", "");
     setFormField("candidateOrigin", "");
+    setFormField("candidatePurchaseUrl", "");
     setFormField("note", "");
   }
 
@@ -329,7 +332,7 @@ export default function ProductComparisonsPage() {
     setExchangeRate(String(comparison.exchangeRate || 1));
     setExchangeRateLabel(comparison.candidateCurrency !== "JPY" ? "保存済みレート" : "");
     setCandidatePrice(String(comparison.candidateOriginalPrice || comparison.candidatePrice || ""));
-    setCandidateQuantity(String(comparison.candidateQuantity || "1"));
+    setCandidateQuantity(String(comparison.candidateQuantity || "0"));
     setCandidateUnit(comparison.candidateUnit || "g");
     setCandidateWeightKg(String(comparison.candidateWeightKg || ""));
     setImportQuantity(String(comparison.importQuantity || "1"));
@@ -340,6 +343,7 @@ export default function ProductComparisonsPage() {
     setFormField("candidateProductName", comparison.candidateProductName);
     setFormField("candidateSupplierName", comparison.candidateSupplierName);
     setFormField("candidateOrigin", comparison.candidateOrigin);
+    setFormField("candidatePurchaseUrl", comparison.candidatePurchaseUrl);
     setFormField("note", comparison.note);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -524,6 +528,10 @@ export default function ProductComparisonsPage() {
                 <span>原産国・輸入元</span>
                 <input name="candidateOrigin" placeholder="例: 中国 / 日本 / ベトナム" />
               </label>
+              <label>
+                <span>購入リンク</span>
+                <input name="candidatePurchaseUrl" type="url" placeholder="例: https://example.com/item" />
+              </label>
               <div className="comparison-inline-fields">
                 <label>
                   <span>{requiresCandidateWeight ? "候補1箱重量 kg" : "候補1単位重量 kg"}</span>
@@ -671,7 +679,10 @@ function ComparisonCard({
   return (
     <article className="recommendation-card comparison-card">
       {comparison.photoUrl ? (
-        <span className="recommendation-photo"><img src={comparison.photoUrl} alt={`${comparison.candidateProductName} の写真`} /></span>
+        <span className="recommendation-photo comparison-reference-photo">
+          <img src={comparison.photoUrl} alt={`${comparison.candidateProductName} の参考写真`} />
+          <small>参考写真</small>
+        </span>
       ) : null}
       <div className="comparison-card-body">
         <div className="recommendation-title">
@@ -685,6 +696,11 @@ function ComparisonCard({
           <span className={`comparison-rate-result ${rate <= 0 ? "rate-down" : "rate-up"}`}>{candidateComparableUnitCost === null ? "単位確認" : `${rate > 0 ? "+" : ""}${rate.toFixed(1)}%`}</span>
         </div>
         <p>{comparison.candidateSupplierName || "購入先未設定"}{comparison.candidateOrigin ? ` · ${comparison.candidateOrigin}` : ""}</p>
+        {comparison.candidatePurchaseUrl ? (
+          <a className="comparison-purchase-link" href={comparison.candidatePurchaseUrl} target="_blank" rel="noreferrer">
+            購入リンクを開く
+          </a>
+        ) : null}
         <div className="comparison-result-grid">
           <span><small>現行</small><strong>{formatCurrency(baseUnitCost)} / {comparison.baseUnit}</strong></span>
           <span><small>候補</small><strong>{formatCurrency(displayedCandidateUnitCost)} / {displayedCandidateUnit}</strong></span>

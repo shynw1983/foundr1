@@ -22,6 +22,7 @@ export async function GET() {
       product_comparisons.candidate_supplier_id::text as "candidateSupplierId",
       coalesce(product_comparisons.candidate_supplier_name, suppliers.name, '') as "candidateSupplierName",
       coalesce(product_comparisons.candidate_origin, '') as "candidateOrigin",
+      coalesce(product_comparisons.candidate_purchase_url, '') as "candidatePurchaseUrl",
       product_comparisons.candidate_price::float as "candidatePrice",
       coalesce(nullif(product_comparisons.candidate_original_price, 0), product_comparisons.candidate_price)::float as "candidateOriginalPrice",
       coalesce(product_comparisons.candidate_currency, 'JPY') as "candidateCurrency",
@@ -74,13 +75,14 @@ export async function POST(request: Request) {
   const candidateProductName = String(formData.get("candidateProductName") ?? "").trim();
   const candidateSupplierNameInput = String(formData.get("candidateSupplierName") ?? "").trim();
   const candidateOrigin = String(formData.get("candidateOrigin") ?? "").trim();
+  const candidatePurchaseUrl = String(formData.get("candidatePurchaseUrl") ?? "").trim();
   const candidateOriginalPrice = normalizeNumber(formData.get("candidatePrice"));
   const candidateCurrencyInput = String(formData.get("candidateCurrency") ?? "JPY").trim().toUpperCase();
   const isImported = formData.get("isImported") === "on" || formData.get("isImported") === "true";
   const candidateCurrency = isImported && candidateCurrencyInput === "CNY" ? "CNY" : "JPY";
   const exchangeRate = candidateCurrency === "JPY" ? 1 : normalizeNumber(formData.get("exchangeRate"));
   const candidatePrice = candidateOriginalPrice * exchangeRate;
-  const candidateQuantity = normalizeNumber(formData.get("candidateQuantity")) || 1;
+  const candidateQuantity = normalizeNumber(formData.get("candidateQuantity"));
   const candidateUnit = String(formData.get("candidateUnit") ?? "g").trim() || "g";
   const candidateWeightKg = normalizeNumber(formData.get("candidateWeightKg"));
   const importQuantity = normalizeNumber(formData.get("importQuantity")) || 1;
@@ -128,6 +130,7 @@ export async function POST(request: Request) {
       candidate_supplier_id,
       candidate_supplier_name,
       candidate_origin,
+      candidate_purchase_url,
       candidate_price,
       candidate_original_price,
       candidate_currency,
@@ -155,6 +158,7 @@ export async function POST(request: Request) {
       ${null},
       ${candidateSupplierNameInput},
       ${candidateOrigin},
+      ${candidatePurchaseUrl},
       ${candidatePrice},
       ${candidateOriginalPrice},
       ${candidateCurrency},
@@ -212,6 +216,7 @@ export async function PATCH(request: Request) {
   const parsed = parseComparisonForm(formData);
   const validationError = validateComparison(parsed);
   if (validationError) return validationError;
+  const photoUrl = await uploadPhotoIfNeeded(formData.get("photo"), parsed.candidateProductName, "product-comparisons");
 
   await sql`
     update product_comparisons
@@ -221,6 +226,7 @@ export async function PATCH(request: Request) {
       candidate_supplier_id = ${null},
       candidate_supplier_name = ${parsed.candidateSupplierNameInput},
       candidate_origin = ${parsed.candidateOrigin},
+      candidate_purchase_url = ${parsed.candidatePurchaseUrl},
       candidate_price = ${parsed.candidatePrice},
       candidate_original_price = ${parsed.candidateOriginalPrice},
       candidate_currency = ${parsed.candidateCurrency},
@@ -238,6 +244,7 @@ export async function PATCH(request: Request) {
       freight_cost = ${parsed.freightCost},
       tax_cost = ${parsed.taxCost},
       other_cost = ${parsed.otherCost},
+      photo_url = ${photoUrl || target.photoUrl || ""},
       note = ${parsed.note},
       updated_at = now()
     where id = ${id}
@@ -314,7 +321,7 @@ function parseComparisonForm(formData: FormData) {
   const importQuantity = normalizeNumber(formData.get("importQuantity")) || 1;
   const freightCostInput = normalizeNumber(formData.get("freightCost"));
   const candidatePrice = candidateOriginalPrice * exchangeRate;
-  const candidateQuantity = normalizeNumber(formData.get("candidateQuantity")) || 1;
+  const candidateQuantity = normalizeNumber(formData.get("candidateQuantity"));
   const candidateUnit = String(formData.get("candidateUnit") ?? "g").trim() || "g";
   const totalWeightKg = inferCandidateTotalWeightKg(candidateUnit, candidateQuantity, candidateWeightKg, importQuantity);
   const isWeightedImport = isImported && totalWeightKg > 0 && freightRatePerKg > 0;
@@ -324,6 +331,7 @@ function parseComparisonForm(formData: FormData) {
     candidateProductName: String(formData.get("candidateProductName") ?? "").trim(),
     candidateSupplierNameInput: String(formData.get("candidateSupplierName") ?? "").trim(),
     candidateOrigin: String(formData.get("candidateOrigin") ?? "").trim(),
+    candidatePurchaseUrl: String(formData.get("candidatePurchaseUrl") ?? "").trim(),
     candidateOriginalPrice,
     candidateCurrency,
     exchangeRate,
@@ -356,6 +364,10 @@ function validateComparison(parsed: ReturnType<typeof parseComparisonForm>) {
 
   if (!Number.isFinite(parsed.candidateOriginalPrice) || parsed.candidateOriginalPrice <= 0 || !Number.isFinite(parsed.basePrice) || parsed.basePrice <= 0) {
     return Response.json({ error: "現行品と候補品の価格を入力してください。" }, { status: 400 });
+  }
+
+  if (!Number.isFinite(parsed.candidateQuantity) || parsed.candidateQuantity <= 0) {
+    return Response.json({ error: "候補規格数量を入力してください。" }, { status: 400 });
   }
 
   if (parsed.candidateCurrency !== "JPY" && (!Number.isFinite(parsed.exchangeRate) || parsed.exchangeRate <= 0)) {

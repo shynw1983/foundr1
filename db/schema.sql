@@ -209,6 +209,7 @@ create table if not exists product_comparisons (
   candidate_supplier_id uuid references suppliers(id) on delete set null,
   candidate_supplier_name text,
   candidate_origin text,
+  candidate_purchase_url text,
   candidate_price numeric(12, 2) not null default 0,
   candidate_original_price numeric(12, 2) not null default 0,
   candidate_currency text not null default 'JPY',
@@ -239,6 +240,7 @@ alter table product_comparisons add column if not exists candidate_product_name 
 alter table product_comparisons add column if not exists candidate_supplier_id uuid references suppliers(id) on delete set null;
 alter table product_comparisons add column if not exists candidate_supplier_name text;
 alter table product_comparisons add column if not exists candidate_origin text;
+alter table product_comparisons add column if not exists candidate_purchase_url text;
 alter table product_comparisons add column if not exists candidate_price numeric(12, 2) not null default 0;
 alter table product_comparisons add column if not exists candidate_original_price numeric(12, 2) not null default 0;
 alter table product_comparisons add column if not exists candidate_currency text not null default 'JPY';
