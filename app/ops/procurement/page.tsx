@@ -16,6 +16,7 @@ import {
 
 type Product = typeof initialProducts[number] & {
   id?: string;
+  subcategory?: string;
   packageSpec?: string;
   productBrandName?: string;
 };
@@ -222,6 +223,24 @@ function findProcurementProduct(item: ProcurementTaskItem, productList: Product[
 function findProcurementProductFromLookup(item: ProcurementTaskItem, productLookup: ProductLookup) {
   return (item.productId ? productLookup.byId.get(item.productId) : undefined)
     ?? productLookup.byName.get(item.productName);
+}
+
+function compareProcurementItemsBySubcategory(a: ProcurementTaskItem, b: ProcurementTaskItem, productLookup: ProductLookup) {
+  const productA = findProcurementProductFromLookup(a, productLookup);
+  const productB = findProcurementProductFromLookup(b, productLookup);
+  const subcategoryCompare = String(productA?.subcategory ?? "未分類").localeCompare(
+    String(productB?.subcategory ?? "未分類"),
+    "ja",
+    { numeric: true, sensitivity: "base" }
+  );
+
+  if (subcategoryCompare !== 0) return subcategoryCompare;
+
+  return a.productName.localeCompare(b.productName, "ja", { numeric: true, sensitivity: "base" });
+}
+
+function sortProcurementItemsBySubcategory(items: ProcurementTaskItem[], productLookup: ProductLookup) {
+  return [...items].sort((a, b) => compareProcurementItemsBySubcategory(a, b, productLookup));
 }
 
 function normalizeSupplierName(value?: string) {
@@ -899,7 +918,10 @@ export default function ProcurementPage() {
           ) : null}
           <div className="procurement-order-list">
             {visiblePurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
-              const supplierGroups = groupTasksBySupplierFast(items, supplierByProductName);
+              const supplierGroups = groupTasksBySupplierFast(items, supplierByProductName).map((group) => ({
+                ...group,
+                items: sortProcurementItemsBySubcategory(group.items, productLookup)
+              }));
               const unavailableCount = items.filter((item) => item.unavailable).length;
               const completedCount = items.filter((item) => item.purchased).length;
               const handledCount = completedCount + unavailableCount;
