@@ -1383,18 +1383,117 @@ button {
   gap: 6px;
 }
 
+.history-date-range-field {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
 .history-filter-row span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
 
-.history-filter-row select {
+.history-filter-row select,
+.history-date-range-button {
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 12px;
   background: white;
+}
+
+.history-date-range-button {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.history-date-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  gap: 12px;
+  width: min(720px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.history-date-popover-heading,
+.history-date-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-date-popover-heading strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.history-calendar-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.history-calendar-month {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-calendar-month h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.history-calendar-weekdays,
+.history-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(28px, 1fr));
+  gap: 4px;
+}
+
+.history-calendar-weekdays span {
+  min-height: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.history-calendar-days button,
+.history-calendar-days > span {
+  min-height: 34px;
+  border-radius: 8px;
+}
+
+.history-calendar-days button {
+  border: 1px solid transparent;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.history-calendar-days button:hover,
+.history-calendar-days button.is-in-range {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.history-calendar-days button.is-start,
+.history-calendar-days button.is-end {
+  background: var(--green);
+  color: white;
 }
 
 .history-report-grid {
@@ -5026,6 +5125,20 @@ button {
   .history-report-quantity {
     justify-items: start;
     text-align: left;
+  }
+
+  .history-date-popover {
+    position: fixed;
+    top: 92px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 112px);
+    overflow: auto;
+  }
+
+  .history-calendar-pair {
+    grid-template-columns: 1fr;
   }
 
   .create-order-panel .order-items-builder {

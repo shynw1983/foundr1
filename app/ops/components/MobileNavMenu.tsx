@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Menu } from "lucide-react";
 import { NotificationMenu } from "./NotificationMenu";
 import { UserBadge } from "./UserBadge";
@@ -23,10 +24,10 @@ export function MobileNavMenu({ navItems }: { navItems: OpsNavItem[] }) {
             <UserBadge />
           </div>
           {permittedNavItems.map(({ label, href, icon: Icon }) => (
-            <a href={href} key={label}>
+            <Link href={href} key={label}>
               <Icon size={17} />
               <span>{label}</span>
-            </a>
+            </Link>
           ))}
         </nav>
       </details>

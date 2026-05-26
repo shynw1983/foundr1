@@ -35,6 +35,7 @@ type HistoryRow = {
   brand: string;
   deadline: string;
   deadlineMonth: string;
+  deadlineDate: string;
   productName: string;
   productBrand: string;
   supplier: string;
@@ -66,6 +67,7 @@ type HistoryOrderRow = {
   brand: string;
   deadline: string;
   deadlineMonth: string;
+  deadlineDate: string;
   status: string;
   items: HistoryRow[];
   itemCount: number;
@@ -115,6 +117,33 @@ function getCurrentMonthKey() {
   return `${year}-${month}`;
 }
 
+function getCurrentDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? String(new Date().getFullYear());
+  const month = parts.find((part) => part.type === "month")?.value ?? String(new Date().getMonth() + 1).padStart(2, "0");
+  const day = parts.find((part) => part.type === "day")?.value ?? String(new Date().getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentMonthRange() {
+  const monthKey = getCurrentMonthKey();
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const endDate = new Date(year, monthIndex + 1, 0);
+
+  return {
+    start: `${monthKey}-01`,
+    end: formatDateKey(endDate)
+  };
+}
+
 function getMonthKeyFromDate(value?: string | Date | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -131,10 +160,34 @@ function getMonthKeyFromDate(value?: string | Date | null) {
   return year && month ? `${year}-${month}` : "";
 }
 
+function getDateKeyFromDate(value?: string | Date | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
 function getOrderMonthKey(order?: PurchaseOrder) {
   if (!order) return getCurrentMonthKey();
 
   return getMonthKeyFromDate(order.deadlineAt) || getMonthKeyFromDate(order.createdAt) || getCurrentMonthKey();
+}
+
+function getOrderDateKey(order?: PurchaseOrder) {
+  if (!order) return getCurrentDateKey();
+
+  return getDateKeyFromDate(order.deadlineAt) || getDateKeyFromDate(order.createdAt) || getCurrentDateKey();
 }
 
 function formatMonthLabel(monthKey: string) {
@@ -142,6 +195,48 @@ function formatMonthLabel(monthKey: string) {
   if (!year || !month) return monthKey;
 
   return `${year}年${Number(month)}月`;
+}
+
+function formatDateLabel(dateKey: string) {
+  const [year, month, day] = dateKey.split("-");
+  if (!year || !month || !day) return dateKey;
+
+  return `${year}/${month}/${day}`;
+}
+
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addMonths(monthKey: string, amount: number) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 1 + amount, 1);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getCalendarDays(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const firstDate = new Date(year, month - 1, 1);
+  const firstDay = firstDate.getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const blanks = Array.from({ length: firstDay }, () => "");
+  const days = Array.from({ length: daysInMonth }, (_, index) =>
+    `${monthKey}-${String(index + 1).padStart(2, "0")}`
+  );
+
+  return [...blanks, ...days];
+}
+
+function isDateInRange(dateKey: string, start: string, end: string) {
+  if (!dateKey || !start) return false;
+  if (!end) return dateKey === start;
+
+  return dateKey >= start && dateKey <= end;
 }
 
 function getItemStatus(item: PurchaseOrderItem) {
@@ -173,6 +268,7 @@ function createHistoryRows(
       brand: order?.brand ?? "共通",
       deadline: order?.deadline ?? "",
       deadlineMonth: getOrderMonthKey(order),
+      deadlineDate: getOrderDateKey(order),
       productName: item.productName,
       productBrand: item.brandName ?? product?.brand ?? order?.brand ?? "共通",
       supplier: item.supplier || product?.mainSupplier || "未設定",
@@ -285,6 +381,7 @@ function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRo
       brand: order.brand,
       deadline: order.deadline,
       deadlineMonth: getOrderMonthKey(order),
+      deadlineDate: getOrderDateKey(order),
       status: getOrderStatus(items),
       items,
       itemCount: items.length,
@@ -304,6 +401,54 @@ function formatQuantity(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
 }
 
+function HistoryMonthCalendar({
+  monthKey,
+  startDate,
+  endDate,
+  onSelect
+}: {
+  monthKey: string;
+  startDate: string;
+  endDate: string;
+  onSelect: (dateKey: string) => void;
+}) {
+  const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
+
+  return (
+    <section className="history-calendar-month">
+      <h4>{formatMonthLabel(monthKey)}</h4>
+      <div className="history-calendar-weekdays">
+        {weekDays.map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="history-calendar-days">
+        {getCalendarDays(monthKey).map((dateKey, index) => {
+          if (!dateKey) return <span aria-hidden="true" key={`blank-${monthKey}-${index}`} />;
+
+          const day = Number(dateKey.slice(-2));
+          const isStart = dateKey === startDate;
+          const isEnd = dateKey === endDate;
+          const isInRange = isDateInRange(dateKey, startDate, endDate);
+
+          return (
+            <button
+              type="button"
+              className={[
+                isInRange ? "is-in-range" : "",
+                isStart ? "is-start" : "",
+                isEnd ? "is-end" : ""
+              ].filter(Boolean).join(" ")}
+              onClick={() => onSelect(dateKey)}
+              key={dateKey}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function ProcurementHistoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -311,7 +456,9 @@ export default function ProcurementHistoryPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
   const [storeFilter, setStoreFilter] = useState("すべて");
-  const [monthFilter, setMonthFilter] = useState(getCurrentMonthKey);
+  const [dateRange, setDateRange] = useState(getCurrentMonthRange);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(getCurrentMonthKey);
   const [historyView, setHistoryView] = useState<HistoryView>("orders");
   const [currentRole, setCurrentRole] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
@@ -350,9 +497,6 @@ export default function ProcurementHistoryPage() {
   const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows), [purchaseOrders, rows]);
   const orderStatusById = new Map(orderRows.map((row) => [row.id, row.status]));
   const stores = Array.from(new Set([...orderRows.map((row) => row.store), ...rows.map((row) => row.store)]));
-  const monthOptions = Array.from(new Set([getCurrentMonthKey(), ...purchaseOrders.map((order) => getOrderMonthKey(order))]))
-    .filter(Boolean)
-    .sort((a, b) => b.localeCompare(a));
   const statusOptions = ["未設定", "未購入", "一部購入済み", "購入済み", "購入完了", "購入不可", "配送中", "納品済み", "店舗確認済み"];
   const reportBaseRows = rows.filter((row) => {
     const targetText = [
@@ -368,7 +512,8 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
-      (monthFilter === "すべて" || row.deadlineMonth === monthFilter) &&
+      row.deadlineDate >= dateRange.start &&
+      row.deadlineDate <= dateRange.end &&
       (statusFilter === "すべて" || row.status === statusFilter || orderStatusById.get(row.orderId) === statusFilter)
     );
   });
@@ -386,7 +531,8 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
-      (monthFilter === "すべて" || row.deadlineMonth === monthFilter) &&
+      row.deadlineDate >= dateRange.start &&
+      row.deadlineDate <= dateRange.end &&
       (storeFilter === "すべて" || row.store === storeFilter) &&
       (statusFilter === "すべて" || row.status === statusFilter || row.items.some((item) => item.status === statusFilter))
     );
@@ -394,6 +540,22 @@ export default function ProcurementHistoryPage() {
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
   const storeReportRows = createStoreReportRows(reportBaseRows);
   const canDeleteHistory = currentRole === "owner";
+  const dateRangeLabel = `${formatDateLabel(dateRange.start)} - ${formatDateLabel(dateRange.end)}`;
+
+  function selectDateRangeDay(dateKey: string) {
+    setDateRange((currentRange) => {
+      if (!currentRange.start || currentRange.end) return { start: dateKey, end: "" };
+      if (dateKey < currentRange.start) return { start: dateKey, end: currentRange.start };
+
+      return { start: currentRange.start, end: dateKey };
+    });
+  }
+
+  function applyCurrentMonthRange() {
+    const currentRange = getCurrentMonthRange();
+    setDateRange(currentRange);
+    setCalendarMonth(getCurrentMonthKey());
+  }
 
   async function deleteHistoryOrder(orderId: string) {
     if (!window.confirm(`${orderId} の注文履歴を削除しますか？関連する明細・異常報告も削除されます。`)) return;
@@ -481,15 +643,53 @@ export default function ProcurementHistoryPage() {
         </div>
 
         <div className="history-filter-row">
-          <label>
-            <span>対象月</span>
-            <select value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)}>
-              <option value="すべて">すべての期間</option>
-              {monthOptions.map((month) => (
-                <option value={month} key={month}>{formatMonthLabel(month)}</option>
-              ))}
-            </select>
-          </label>
+          <div className="history-date-range-field">
+            <span>対象期間</span>
+            <button
+              type="button"
+              className="history-date-range-button"
+              onClick={() => setIsDatePickerOpen((isOpen) => !isOpen)}
+            >
+              {dateRangeLabel}
+            </button>
+            {isDatePickerOpen ? (
+              <div className="history-date-popover">
+                <div className="history-date-popover-heading">
+                  <button type="button" className="text-button" onClick={() => setCalendarMonth((month) => addMonths(month, -1))}>
+                    前月
+                  </button>
+                  <strong>{formatMonthLabel(calendarMonth)} - {formatMonthLabel(addMonths(calendarMonth, 1))}</strong>
+                  <button type="button" className="text-button" onClick={() => setCalendarMonth((month) => addMonths(month, 1))}>
+                    次月
+                  </button>
+                </div>
+                <div className="history-calendar-pair">
+                  {[calendarMonth, addMonths(calendarMonth, 1)].map((month) => (
+                    <HistoryMonthCalendar
+                      key={month}
+                      monthKey={month}
+                      startDate={dateRange.start}
+                      endDate={dateRange.end}
+                      onSelect={selectDateRangeDay}
+                    />
+                  ))}
+                </div>
+                <div className="history-date-popover-actions">
+                  <button type="button" className="text-button" onClick={applyCurrentMonthRange}>
+                    今月
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!dateRange.start || !dateRange.end}
+                    onClick={() => setIsDatePickerOpen(false)}
+                  >
+                    適用
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <label>
             <span>店舗</span>
             <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>

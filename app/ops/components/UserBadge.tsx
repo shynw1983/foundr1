@@ -3,12 +3,7 @@
 import { useEffect, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OpsLanguagePicker } from "./OpsTranslationProvider";
-
-type CurrentEmployee = {
-  name: string;
-  loginId: string;
-  role: string;
-};
+import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
 
 const roleLabels: Record<string, string> = {
   owner: "Owner",
@@ -19,17 +14,21 @@ const roleLabels: Record<string, string> = {
 };
 
 export function UserBadge() {
-  const [employee, setEmployee] = useState<CurrentEmployee | null>(null);
+  const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadCurrentUser() {
-      const response = await fetch("/api/auth/me");
-      if (!response.ok) return;
-      const body = await response.json() as { employee?: CurrentEmployee };
-      if (body.employee) setEmployee(body.employee);
+      const currentEmployee = await loadCurrentEmployee();
+      if (isMounted) setEmployee(currentEmployee);
     }
 
     void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!employee) {

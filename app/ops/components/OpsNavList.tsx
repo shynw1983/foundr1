@@ -1,16 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { getCachedCurrentEmployee, loadCurrentEmployee } from "./currentEmployeeStore";
 
 export type OpsNavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
-};
-
-type CurrentEmployee = {
-  role: string;
 };
 
 const masterRoles = new Set(["owner", "manager", "buyer"]);
@@ -27,17 +25,21 @@ function canShowNavItem(role: string, item: OpsNavItem) {
 }
 
 export function usePermittedNavItems(navItems: OpsNavItem[]) {
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadCurrentRole() {
-      const response = await fetch("/api/auth/me");
-      if (!response.ok) return;
-      const body = await response.json().catch(() => ({})) as { employee?: CurrentEmployee };
-      setRole(body.employee?.role ?? "");
+      const employee = await loadCurrentEmployee();
+      if (isMounted) setRole(employee?.role ?? "");
     }
 
     void loadCurrentRole();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return useMemo(() => {
@@ -52,10 +54,10 @@ export function OpsNavList({ navItems }: { navItems: OpsNavItem[] }) {
   return (
     <nav className="nav-list">
       {permittedNavItems.map(({ label, href, icon: Icon }) => (
-        <a href={href} className="nav-item" key={label}>
+        <Link href={href} className="nav-item" key={label}>
           <Icon size={18} />
           <span>{label}</span>
-        </a>
+        </Link>
       ))}
     </nav>
   );
