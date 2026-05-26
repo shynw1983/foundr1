@@ -53,12 +53,24 @@ export function OpsNavList({ navItems }: { navItems: OpsNavItem[] }) {
 
   return (
     <nav className="nav-list">
-      {permittedNavItems.map(({ label, href, icon: Icon }) => (
-        <Link href={href} className="nav-item" key={label}>
-          <Icon size={18} />
-          <span>{label}</span>
-        </Link>
-      ))}
+      {permittedNavItems.map(({ label, href, icon: Icon }) => {
+        const content = (
+          <>
+            <Icon size={18} />
+            <span>{label}</span>
+          </>
+        );
+
+        return href === "/ops/logout" ? (
+          <a href={href} className="nav-item" key={label}>
+            {content}
+          </a>
+        ) : (
+          <Link href={href} className="nav-item" key={label}>
+            {content}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

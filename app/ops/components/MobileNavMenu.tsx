@@ -23,12 +23,24 @@ export function MobileNavMenu({ navItems }: { navItems: OpsNavItem[] }) {
           <div className="mobile-nav-user">
             <UserBadge />
           </div>
-          {permittedNavItems.map(({ label, href, icon: Icon }) => (
-            <Link href={href} key={label}>
-              <Icon size={17} />
-              <span>{label}</span>
-            </Link>
-          ))}
+          {permittedNavItems.map(({ label, href, icon: Icon }) => {
+            const content = (
+              <>
+                <Icon size={17} />
+                <span>{label}</span>
+              </>
+            );
+
+            return href === "/ops/logout" ? (
+              <a href={href} key={label}>
+                {content}
+              </a>
+            ) : (
+              <Link href={href} key={label}>
+                {content}
+              </Link>
+            );
+          })}
         </nav>
       </details>
     </div>
