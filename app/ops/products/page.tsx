@@ -61,6 +61,7 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
 ];
 const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
 const customUnitOption = "__custom_unit__";
+const productManagerRoles = new Set(["owner", "manager", "buyer"]);
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -162,6 +163,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 export default function ProductsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const [currentRole, setCurrentRole] = useState("");
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -181,9 +183,19 @@ export default function ProductsPage() {
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
+  const canManageProducts = productManagerRoles.has(currentRole);
 
   async function loadProductData() {
-    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    const [response, meResponse] = await Promise.all([
+      fetch("/api/dashboard", { cache: "no-store" }),
+      fetch("/api/auth/me", { cache: "no-store" })
+    ]);
+
+    if (meResponse.ok) {
+      const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+      setCurrentRole(body.employee?.role ?? "");
+    }
+
     if (!response.ok) return;
 
     const data = await response.json() as {
@@ -537,10 +549,12 @@ export default function ProductsPage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <button type="button" className="primary-button" onClick={openNewProductEditor}>
-              <Plus size={18} />
-              商品を追加
-            </button>
+            {canManageProducts ? (
+              <button type="button" className="primary-button" onClick={openNewProductEditor}>
+                <Plus size={18} />
+                商品を追加
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -651,7 +665,7 @@ export default function ProductsPage() {
                   ) : null}
                 </button>
               ))}
-              <span>操作</span>
+              <span>{canManageProducts ? "操作" : "権限"}</span>
             </div>
             {pagedProducts.map((product) => (
                 <article className="product-master-row" key={getProductIdentity(product)}>
@@ -695,34 +709,42 @@ export default function ProductsPage() {
                   </div>
                   <div className="mobile-product-price-row">
                     <span className="mobile-product-price"><small>参考価格</small><strong>¥{product.referencePrice}</strong></span>
-                    <div className="mobile-product-actions">
-                      <button
-                        className="text-button"
-                        onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                      >
-                        編集
-                      </button>
-                      <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                        複製
-                      </button>
-                      <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                        削除
-                      </button>
-                    </div>
+                    {canManageProducts ? (
+                      <div className="mobile-product-actions">
+                        <button
+                          className="text-button"
+                          onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                        >
+                          編集
+                        </button>
+                        <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                          複製
+                        </button>
+                        <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                          削除
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="row-actions">
-                    <button
-                      className="text-button"
-                      onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                    >
-                      編集
-                    </button>
-                    <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                      複製
-                    </button>
-                    <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                      削除
-                    </button>
+                    {canManageProducts ? (
+                      <>
+                        <button
+                          className="text-button"
+                          onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                        >
+                          編集
+                        </button>
+                        <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                          複製
+                        </button>
+                        <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                          削除
+                        </button>
+                      </>
+                    ) : (
+                      <span className="product-readonly-badge">閲覧のみ</span>
+                    )}
                   </div>
                   <details className="product-master-detail">
                     <summary>詳細</summary>
@@ -803,92 +825,94 @@ export default function ProductsPage() {
           ) : null}
         </section>
 
-        <section className="panel product-category-admin-panel">
-          <details className="category-maintenance">
-            <summary>
-              <span>分類管理</span>
-              <small>大分類・小分類の追加、編集、削除</small>
-            </summary>
-            <div className="category-maintenance-body">
-              <div className="category-admin-grid">
-                <form
-                  className="management-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const form = event.currentTarget;
-                    void createCategory(new FormData(form)).then(() => form.reset());
-                  }}
-                >
-                  <label>
-                    <span>大分類を追加</span>
-                    <input name="name" placeholder="例: 食材" />
-                  </label>
-                  <button className="primary-button" type="submit">追加</button>
-                </form>
-                <form
-                  className="management-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const form = event.currentTarget;
-                    void createSubcategory(new FormData(form)).then(() => form.reset());
-                  }}
-                >
-                  <label>
-                    <span>大分類</span>
-                    <select name="category" defaultValue={productCategories[0] ?? ""}>
-                      {productCategories.map((category) => (
-                        <option value={category} key={category}>{category}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>小分類を追加</span>
-                    <input name="name" placeholder="例: 新鮮野菜" />
-                  </label>
-                  <button className="primary-button" type="submit">追加</button>
-                </form>
-              </div>
-              <div className="category-master-list">
-                {productCategories.map((category) => {
-                  const subcategories = subcategoryMaster.filter((subcategory) => subcategory.category === category);
+        {canManageProducts ? (
+          <section className="panel product-category-admin-panel">
+            <details className="category-maintenance">
+              <summary>
+                <span>分類管理</span>
+                <small>大分類・小分類の追加、編集、削除</small>
+              </summary>
+              <div className="category-maintenance-body">
+                <div className="category-admin-grid">
+                  <form
+                    className="management-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const form = event.currentTarget;
+                      void createCategory(new FormData(form)).then(() => form.reset());
+                    }}
+                  >
+                    <label>
+                      <span>大分類を追加</span>
+                      <input name="name" placeholder="例: 食材" />
+                    </label>
+                    <button className="primary-button" type="submit">追加</button>
+                  </form>
+                  <form
+                    className="management-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const form = event.currentTarget;
+                      void createSubcategory(new FormData(form)).then(() => form.reset());
+                    }}
+                  >
+                    <label>
+                      <span>大分類</span>
+                      <select name="category" defaultValue={productCategories[0] ?? ""}>
+                        {productCategories.map((category) => (
+                          <option value={category} key={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>小分類を追加</span>
+                      <input name="name" placeholder="例: 新鮮野菜" />
+                    </label>
+                    <button className="primary-button" type="submit">追加</button>
+                  </form>
+                </div>
+                <div className="category-master-list">
+                  {productCategories.map((category) => {
+                    const subcategories = subcategoryMaster.filter((subcategory) => subcategory.category === category);
 
-                  return (
-                    <article className="category-master-row" key={category}>
-                      <div className="category-master-heading">
-                        <strong>{category}</strong>
-                        <div className="row-actions">
-                          <button className="text-button" type="button" onClick={() => setEditingCategory({ type: "category", currentName: category, name: category })}>
-                            編集
-                          </button>
-                          <button className="text-button danger-button" type="button" onClick={() => void deleteCategory(category)}>
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                      <div className="category-chip-list">
-                        {subcategories.map((subcategory) => (
-                          <span key={`${category}-${subcategory.name}`}>
-                            {subcategory.name}
-                            <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
+                    return (
+                      <article className="category-master-row" key={category}>
+                        <div className="category-master-heading">
+                          <strong>{category}</strong>
+                          <div className="row-actions">
+                            <button className="text-button" type="button" onClick={() => setEditingCategory({ type: "category", currentName: category, name: category })}>
                               編集
                             </button>
-                            <button className="danger-button" type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
+                            <button className="text-button danger-button" type="button" onClick={() => void deleteCategory(category)}>
                               削除
                             </button>
-                          </span>
-                        ))}
-                        {subcategories.length === 0 ? <small>小分類未設定</small> : null}
-                      </div>
-                    </article>
-                  );
-                })}
+                          </div>
+                        </div>
+                        <div className="category-chip-list">
+                          {subcategories.map((subcategory) => (
+                            <span key={`${category}-${subcategory.name}`}>
+                              {subcategory.name}
+                              <button type="button" onClick={() => setEditingCategory({ type: "subcategory", currentCategory: category, currentName: subcategory.name, category, name: subcategory.name })}>
+                                編集
+                              </button>
+                              <button className="danger-button" type="button" onClick={() => void deleteSubcategory(category, subcategory.name)}>
+                                削除
+                              </button>
+                            </span>
+                          ))}
+                          {subcategories.length === 0 ? <small>小分類未設定</small> : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </details>
-        </section>
+            </details>
+          </section>
+        ) : null}
       </section>
 
-      {editTarget ? (
+      {canManageProducts && editTarget ? (
         <ProductEditDialog
           target={editTarget}
           suppliers={suppliers}
@@ -902,7 +926,7 @@ export default function ProductsPage() {
           onSave={(target) => void saveProduct(target)}
         />
       ) : null}
-      {editingCategory ? (
+      {canManageProducts && editingCategory ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-edit-title">
           <section className="edit-modal">
             <div className="modal-heading">

@@ -1326,6 +1326,19 @@ button {
   background: var(--blue);
 }
 
+.product-readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: #f5f7fa;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .product-master-table {
   display: grid;
   gap: 8px;
@@ -1339,6 +1352,30 @@ button {
   grid-template-columns: repeat(2, minmax(180px, 240px));
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.history-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.history-view-tabs button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: white;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.history-view-tabs button.is-active {
+  border-color: rgba(31, 128, 97, 0.34);
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 .history-filter-row label {
@@ -1462,6 +1499,81 @@ button {
 .history-table {
   display: grid;
   gap: 8px;
+}
+
+.history-order-table {
+  display: grid;
+  gap: 8px;
+}
+
+.history-order-head,
+.history-order-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.1fr) minmax(140px, 0.8fr) minmax(110px, 0.65fr) minmax(140px, 0.8fr) minmax(96px, auto);
+  align-items: center;
+  gap: 12px;
+}
+
+.history-order-head {
+  padding: 0 12px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.history-order-row {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.history-order-row p,
+.history-order-item p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-order-detail {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.history-order-detail summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 2px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.history-order-items {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.history-order-item {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(110px, auto) minmax(92px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.history-order-item small {
+  display: block;
+  margin-top: 6px;
+  color: var(--amber);
+  font-weight: 800;
 }
 
 .history-table-head,
@@ -4591,6 +4703,8 @@ button {
   .management-row > div:first-child,
   .compact-row > div:first-child,
   .order-row > div:first-child,
+  .history-order-row > div,
+  .history-order-item > div,
   .history-row > div,
   .procurement-order-heading > div,
   .category-master-heading > div,
@@ -4862,6 +4976,9 @@ button {
   .history-report-ranking-row,
   .history-report-summary-row,
   .history-filter-row,
+  .history-order-head,
+  .history-order-row,
+  .history-order-item,
   .history-table-head,
   .history-row,
   .module-card,
@@ -4869,6 +4986,11 @@ button {
   .product-master-head,
   .product-master-row {
     grid-template-columns: 1fr;
+  }
+
+  .history-order-head,
+  .history-table-head {
+    display: none;
   }
 
   .builder-actions {
@@ -5225,10 +5347,13 @@ button {
 }
 
 @media (min-width: 640px) and (max-width: 900px) {
+  .history-order-head,
   .history-table-head {
     display: none;
   }
 
+  .history-order-row,
+  .history-order-item,
   .history-row {
     grid-template-columns: 1fr;
   }

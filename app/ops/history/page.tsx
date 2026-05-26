@@ -55,10 +55,28 @@ type DisplayHistoryReportRow = Omit<HistoryReportRow, "orderIds"> & {
   orderCount: number;
   averageActualQuantity: number;
 };
+type HistoryView = "orders" | "usage" | "items";
+type HistoryOrderRow = {
+  id: string;
+  store: string;
+  brand: string;
+  deadline: string;
+  status: string;
+  items: HistoryRow[];
+  itemCount: number;
+  productCount: number;
+  purchasedCount: number;
+  unavailableCount: number;
+  receivedCount: number;
+  supplierSummary: string;
+};
 
 const statusTone: Record<string, string> = {
+  未設定: "tone-waiting",
   未購入: "tone-waiting",
+  一部購入済み: "tone-route",
   購入済み: "tone-confirm",
+  購入完了: "tone-confirm",
   購入不可: "tone-warning",
   配送中: "tone-route",
   納品済み: "tone-confirm",
@@ -182,6 +200,58 @@ function createStoreReportRows(rows: HistoryRow[]) {
     .sort((a, b) => b.itemCount - a.itemCount || a.store.localeCompare(b.store, "ja"));
 }
 
+function getOrderStatus(items: HistoryRow[]) {
+  if (items.length === 0) return "未設定";
+
+  if (items.every((item) => item.status === "店舗確認済み")) return "店舗確認済み";
+  if (items.every((item) => item.status === "納品済み" || item.status === "店舗確認済み")) return "納品済み";
+  if (items.some((item) => item.status === "配送中")) return "配送中";
+
+  const purchaseCompletedCount = items.filter((item) => item.status === "購入済み" || item.status === "購入不可").length;
+  if (purchaseCompletedCount === items.length) return "購入完了";
+  if (purchaseCompletedCount > 0) return "一部購入済み";
+
+  return "未購入";
+}
+
+function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[]) {
+  const rowsByOrderId = new Map<string, HistoryRow[]>();
+  rows.forEach((row) => {
+    rowsByOrderId.set(row.orderId, [...(rowsByOrderId.get(row.orderId) ?? []), row]);
+  });
+
+  return purchaseOrders.map<HistoryOrderRow>((order) => {
+    const items = rowsByOrderId.get(order.id) ?? [];
+    const productCount = new Set(items.map((item) => item.productName)).size;
+    const suppliers = Array.from(new Set(items.map((item) => item.supplier).filter((supplier) => supplier !== "未設定")));
+    const purchasedCount = items.filter((item) =>
+      item.status === "購入済み" ||
+      item.status === "配送中" ||
+      item.status === "納品済み" ||
+      item.status === "店舗確認済み" ||
+      item.status === "購入不可"
+    ).length;
+
+    return {
+      id: order.id,
+      store: order.store,
+      brand: order.brand,
+      deadline: order.deadline,
+      status: getOrderStatus(items),
+      items,
+      itemCount: items.length,
+      productCount,
+      purchasedCount,
+      unavailableCount: items.filter((item) => item.status === "購入不可").length,
+      receivedCount: items.filter((item) => item.status === "店舗確認済み").length,
+      supplierSummary: suppliers.length > 0 ? `${suppliers.slice(0, 2).join(" / ")}${suppliers.length > 2 ? " ほか" : ""}` : "未設定"
+    };
+  }).sort((a, b) =>
+    (b.deadline || "").localeCompare(a.deadline || "", "ja") ||
+    b.id.localeCompare(a.id, "ja")
+  );
+}
+
 function formatQuantity(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
 }
@@ -193,6 +263,7 @@ export default function ProcurementHistoryPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
   const [storeFilter, setStoreFilter] = useState("すべて");
+  const [historyView, setHistoryView] = useState<HistoryView>("orders");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
   useEffect(() => {
@@ -219,7 +290,10 @@ export default function ProcurementHistoryPage() {
     () => createHistoryRows(purchaseOrders, purchaseOrderItems, products),
     [purchaseOrders, purchaseOrderItems, products]
   );
-  const stores = Array.from(new Set(rows.map((row) => row.store)));
+  const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows), [purchaseOrders, rows]);
+  const orderStatusById = new Map(orderRows.map((row) => [row.id, row.status]));
+  const stores = Array.from(new Set([...orderRows.map((row) => row.store), ...rows.map((row) => row.store)]));
+  const statusOptions = ["未設定", "未購入", "一部購入済み", "購入済み", "購入完了", "購入不可", "配送中", "納品済み", "店舗確認済み"];
   const reportBaseRows = rows.filter((row) => {
     const targetText = [
       row.orderId,
@@ -234,10 +308,27 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
-      (statusFilter === "すべて" || row.status === statusFilter)
+      (statusFilter === "すべて" || row.status === statusFilter || orderStatusById.get(row.orderId) === statusFilter)
     );
   });
   const filteredRows = reportBaseRows.filter((row) => storeFilter === "すべて" || row.store === storeFilter);
+  const filteredOrderRows = orderRows.filter((row) => {
+    const targetText = [
+      row.id,
+      row.store,
+      row.brand,
+      row.deadline,
+      row.status,
+      row.supplierSummary,
+      ...row.items.flatMap((item) => [item.productName, item.productBrand, item.supplier, item.status, item.note])
+    ].join(" ");
+
+    return (
+      targetText.toLowerCase().includes(query.toLowerCase()) &&
+      (storeFilter === "すべて" || row.store === storeFilter) &&
+      (statusFilter === "すべて" || row.status === statusFilter || row.items.some((item) => item.status === statusFilter))
+    );
+  });
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
   const storeReportRows = createStoreReportRows(reportBaseRows);
 
@@ -261,7 +352,7 @@ export default function ProcurementHistoryPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">店舗単位の発注明細</p>
+            <p className="eyebrow">依頼番号単位の発注履歴</p>
             <h2>発注履歴</h2>
             <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
           </div>
@@ -270,134 +361,211 @@ export default function ProcurementHistoryPage() {
               <Search size={17} />
               <input
                 value={query}
-                placeholder="店舗・商品・発注先を検索"
+                placeholder="依頼番号・店舗・商品・発注先を検索"
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
           </div>
         </header>
 
-        <section className="panel history-report-panel">
-          <div className="panel-title product-master-title">
-            <div>
-              <h3>集計レポート</h3>
-              <p>現在の絞り込み条件で、店舗別の商品使用傾向を確認</p>
+        <div className="history-view-tabs" aria-label="履歴表示切替">
+          <button type="button" className={historyView === "orders" ? "is-active" : ""} onClick={() => setHistoryView("orders")}>
+            発注履歴
+          </button>
+          <button type="button" className={historyView === "usage" ? "is-active" : ""} onClick={() => setHistoryView("usage")}>
+            商品使用量
+          </button>
+          <button type="button" className={historyView === "items" ? "is-active" : ""} onClick={() => setHistoryView("items")}>
+            明細一覧
+          </button>
+        </div>
+
+        <div className="history-filter-row">
+          <label>
+            <span>店舗</span>
+            <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+              <option value="すべて">すべて</option>
+              {stores.map((store) => (
+                <option value={store} key={store}>{store}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>状態</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="すべて">すべて</option>
+              {statusOptions.map((status) => (
+                <option value={status} key={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {historyView === "orders" ? (
+          <section className="panel history-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>発注履歴</h3>
+                <p>依頼番号ごとに過去の発注内容と進行結果を確認</p>
+              </div>
+              <span className="source-indicator">{filteredOrderRows.length} 件</span>
             </div>
-            <span className="source-indicator">{reportRows.length} 件表示</span>
-          </div>
-          <div className="history-report-grid">
-            <div className="history-report-card">
-              <h4>店舗を選択</h4>
-              <div className="history-report-list">
-                <button
-                  type="button"
-                  className={storeFilter === "すべて" ? "history-report-summary-row is-active" : "history-report-summary-row"}
-                  onClick={() => setStoreFilter("すべて")}
-                >
-                  <strong>すべて</strong>
-                  <span>全店舗</span>
-                  <span>{reportBaseRows.length} 明細</span>
-                  <span>{storeReportRows.length} 店舗</span>
-                </button>
-                {storeReportRows.map((row) => (
+            <div className="history-order-table">
+              <div className="history-order-head">
+                <span>依頼番号 / 店舗</span>
+                <span>締切</span>
+                <span>商品</span>
+                <span>購入状況</span>
+                <span>状態</span>
+              </div>
+              {filteredOrderRows.map((row) => (
+                <article className="history-order-row" key={row.id}>
+                  <div>
+                    <strong>{row.id}</strong>
+                    <p>{row.store} / {row.brand}</p>
+                  </div>
+                  <div>
+                    <strong>{row.deadline || "締切未設定"}</strong>
+                    <p>{row.supplierSummary}</p>
+                  </div>
+                  <div>
+                    <strong>商品 {row.itemCount} 件</strong>
+                    <p>{row.productCount} 種類</p>
+                  </div>
+                  <div>
+                    <strong>{row.purchasedCount} / {row.itemCount} 件</strong>
+                    <p>確認済み {row.receivedCount} 件{row.unavailableCount ? ` · 購入不可 ${row.unavailableCount} 件` : ""}</p>
+                  </div>
+                  <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                  {row.items.length > 0 ? (
+                    <details className="history-order-detail">
+                      <summary>明細を見る</summary>
+                      <div className="history-order-items">
+                        {row.items.map((item) => (
+                          <div className="history-order-item" key={item.id}>
+                            <div>
+                              <strong>{item.productName}</strong>
+                              <p>{item.supplier} · 適用ブランド: {item.productBrand}</p>
+                              {item.note ? <small>{item.note}</small> : null}
+                            </div>
+                            <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
+                            <span className={`status-pill ${statusTone[item.status]}`}>{item.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </article>
+              ))}
+              {filteredOrderRows.length === 0 ? (
+                <div className="empty-state">該当する発注履歴はありません</div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {historyView === "usage" ? (
+          <section className="panel history-report-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>商品使用量レポート</h3>
+                <p>現在の絞り込み条件で、店舗別の商品使用傾向を確認</p>
+              </div>
+              <span className="source-indicator">{reportRows.length} 件表示</span>
+            </div>
+            <div className="history-report-grid">
+              <div className="history-report-card">
+                <h4>店舗を選択</h4>
+                <div className="history-report-list">
                   <button
                     type="button"
-                    className={storeFilter === row.store ? "history-report-summary-row is-active" : "history-report-summary-row"}
-                    onClick={() => setStoreFilter(row.store)}
-                    key={row.store}
+                    className={storeFilter === "すべて" ? "history-report-summary-row is-active" : "history-report-summary-row"}
+                    onClick={() => setStoreFilter("すべて")}
                   >
-                    <strong>{row.store}</strong>
-                    <span>依頼 {row.orderCount} 件</span>
-                    <span>明細 {row.itemCount} 件</span>
-                    <span>商品 {row.productCount} 種</span>
+                    <strong>すべて</strong>
+                    <span>全店舗</span>
+                    <span>{reportBaseRows.length} 明細</span>
+                    <span>{storeReportRows.length} 店舗</span>
                   </button>
-                ))}
-                {storeReportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
+                  {storeReportRows.map((row) => (
+                    <button
+                      type="button"
+                      className={storeFilter === row.store ? "history-report-summary-row is-active" : "history-report-summary-row"}
+                      onClick={() => setStoreFilter(row.store)}
+                      key={row.store}
+                    >
+                      <strong>{row.store}</strong>
+                      <span>依頼 {row.orderCount} 件</span>
+                      <span>明細 {row.itemCount} 件</span>
+                      <span>商品 {row.productCount} 種</span>
+                    </button>
+                  ))}
+                  {storeReportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
+                </div>
+              </div>
+              <div className="history-report-card">
+                <h4>{storeFilter === "すべて" ? "使用量ランキング" : `${storeFilter} の使用量ランキング`}</h4>
+                <div className="history-report-list">
+                  {reportRows.map((row, index) => (
+                    <article className="history-report-ranking-row" key={row.id}>
+                      <span className="rank-badge">{index + 1}</span>
+                      <div>
+                        <strong>{row.productName}</strong>
+                        <p>{row.store} · 最終 {row.latestDeadline || "未設定"}</p>
+                      </div>
+                      <div className="history-report-quantity">
+                        <strong>{formatQuantity(row.totalActualQuantity)} {row.unit}</strong>
+                        <small>依頼合計 {formatQuantity(row.totalRequestedQuantity)} {row.unit} · 依頼回数 {row.orderCount} 回</small>
+                        <small>平均 {formatQuantity(row.averageActualQuantity)} {row.unit} / 回{row.unavailableCount ? ` · 不可 ${row.unavailableCount} 回` : ""}</small>
+                      </div>
+                    </article>
+                  ))}
+                  {reportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
+                </div>
               </div>
             </div>
-            <div className="history-report-card">
-              <h4>{storeFilter === "すべて" ? "使用量ランキング" : `${storeFilter} の使用量ランキング`}</h4>
-              <div className="history-report-list">
-                {reportRows.map((row, index) => (
-                  <article className="history-report-ranking-row" key={row.id}>
-                    <span className="rank-badge">{index + 1}</span>
-                    <div>
-                      <strong>{row.productName}</strong>
-                      <p>{row.store} · 最終 {row.latestDeadline || "未設定"}</p>
-                    </div>
-                    <div className="history-report-quantity">
-                      <strong>{formatQuantity(row.totalActualQuantity)} {row.unit}</strong>
-                      <small>依頼合計 {formatQuantity(row.totalRequestedQuantity)} {row.unit} · 依頼回数 {row.orderCount} 回</small>
-                      <small>平均 {formatQuantity(row.averageActualQuantity)} {row.unit} / 回{row.unavailableCount ? ` · 不可 ${row.unavailableCount} 回` : ""}</small>
-                    </div>
-                  </article>
-                ))}
-                {reportRows.length === 0 ? <div className="empty-state">集計できる履歴はありません</div> : null}
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
-        <section className="panel history-panel">
-          <div className="panel-title product-master-title">
-            <div>
-              <h3>全発注明細</h3>
-              <p>配送は店舗単位、ブランドは商品の用途として確認</p>
+        {historyView === "items" ? (
+          <section className="panel history-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>明細一覧</h3>
+                <p>配送は店舗単位、ブランドは商品の用途として確認</p>
+              </div>
+              <span className="source-indicator">{filteredRows.length} 件</span>
             </div>
-            <span className="source-indicator">{filteredRows.length} 件</span>
-          </div>
-          <div className="history-filter-row">
-            <label>
-              <span>店舗</span>
-              <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
-                <option value="すべて">すべて</option>
-                {stores.map((store) => (
-                  <option value={store} key={store}>{store}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>状態</span>
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="すべて">すべて</option>
-                <option value="未購入">未購入</option>
-                <option value="購入済み">購入済み</option>
-                <option value="購入不可">購入不可</option>
-                <option value="配送中">配送中</option>
-                <option value="納品済み">納品済み</option>
-                <option value="店舗確認済み">店舗確認済み</option>
-              </select>
-            </label>
-          </div>
-          <div className="history-table">
-            <div className="history-table-head">
-              <span>店舗 / 依頼番号</span>
-              <span>商品</span>
-              <span>発注先</span>
-              <span>数量</span>
-              <span>状態</span>
+            <div className="history-table">
+              <div className="history-table-head">
+                <span>店舗 / 依頼番号</span>
+                <span>商品</span>
+                <span>発注先</span>
+                <span>数量</span>
+                <span>状態</span>
+              </div>
+              {filteredRows.map((row) => (
+                <article className="history-row" key={row.id}>
+                  <div>
+                    <strong>{row.store}</strong>
+                    <p>{row.orderId} · {row.deadline || "締切未設定"}</p>
+                  </div>
+                  <div>
+                    <strong>{row.productName}</strong>
+                    <p>適用ブランド: {row.productBrand}</p>
+                    {row.note ? <small>{row.note}</small> : null}
+                  </div>
+                  <span>{row.supplier}</span>
+                  <strong>{row.actualQuantity} / {row.requestedQuantity} {row.unit}</strong>
+                  <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                </article>
+              ))}
+              {filteredRows.length === 0 ? (
+                <div className="empty-state">該当する発注明細はありません</div>
+              ) : null}
             </div>
-            {filteredRows.map((row) => (
-              <article className="history-row" key={row.id}>
-                <div>
-                  <strong>{row.store}</strong>
-                  <p>{row.orderId} · {row.deadline || "締切未設定"}</p>
-                </div>
-                <div>
-                  <strong>{row.productName}</strong>
-                  <p>適用ブランド: {row.productBrand}</p>
-                  {row.note ? <small>{row.note}</small> : null}
-                </div>
-                <span>{row.supplier}</span>
-                <strong>{row.actualQuantity} / {row.requestedQuantity} {row.unit}</strong>
-                <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
-              </article>
-            ))}
-            {filteredRows.length === 0 ? (
-              <div className="empty-state">該当する発注明細はありません</div>
-            ) : null}
-          </div>
-        </section>
+          </section>
+        ) : null}
       </section>
     </main>
   );
