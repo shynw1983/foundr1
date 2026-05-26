@@ -61,7 +61,15 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
 ];
 const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
 const customUnitOption = "__custom_unit__";
+const unsetSupplierFilterValue = "__unset_supplier__";
 const productManagerRoles = new Set(["owner", "manager", "buyer"]);
+const missingProductInfoOptions = [
+  { value: "すべて", label: "すべて" },
+  { value: "spec", label: "規格未設定" },
+  { value: "supplier", label: "発注先未設定" },
+  { value: "mainSupplier", label: "メイン発注先未設定" },
+  { value: "backupSupplier", label: "予備発注先未設定" }
+];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -92,6 +100,23 @@ function formatPackageQuantity(product: ProductWithCategory) {
   const quantity = Number(product.packageQuantity ?? 0);
   if (!Number.isFinite(quantity) || quantity <= 0) return "未設定";
   return `${quantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })} ${product.packageQuantityUnit || product.unit || "個"}`;
+}
+
+function isBlankValue(value: unknown) {
+  return String(value ?? "").trim().length === 0;
+}
+
+function hasPackageQuantity(product: ProductWithCategory) {
+  const quantity = Number(product.packageQuantity ?? 0);
+  return Number.isFinite(quantity) && quantity > 0;
+}
+
+function isProductSpecMissing(product: ProductWithCategory) {
+  return isBlankValue(product.packageSpec) && !hasPackageQuantity(product);
+}
+
+function hasAnySupplier(product: ProductWithCategory) {
+  return !isBlankValue(product.mainSupplier) || !isBlankValue(product.backupSupplier);
 }
 
 function getProductDisplaySpec(product: ProductWithCategory) {
@@ -154,6 +179,15 @@ function productMatchesStore(product: ProductWithCategory, store: StoreItem | un
   return productBrands.includes("共通") || storeBrands.some((brandName) => productBrands.includes(brandName));
 }
 
+function productMatchesMissingInfo(product: ProductWithCategory, missingInfoFilter: string) {
+  if (missingInfoFilter === "すべて") return true;
+  if (missingInfoFilter === "spec") return isProductSpecMissing(product);
+  if (missingInfoFilter === "supplier") return !hasAnySupplier(product);
+  if (missingInfoFilter === "mainSupplier") return isBlankValue(product.mainSupplier);
+  if (missingInfoFilter === "backupSupplier") return isBlankValue(product.backupSupplier);
+  return true;
+}
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
   { label: "発注依頼", href: "/ops/orders", icon: PackageCheck },
@@ -182,6 +216,7 @@ export default function ProductsPage() {
   const [storeFilter, setStoreFilter] = useState("すべて");
   const [brandFilter, setBrandFilter] = useState("すべて");
   const [supplierFilter, setSupplierFilter] = useState("すべて");
+  const [missingInfoFilter, setMissingInfoFilter] = useState("すべて");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
   const [subcategoryFilter, setSubcategoryFilter] = useState("すべて");
   const [productPage, setProductPage] = useState(1);
@@ -242,6 +277,7 @@ export default function ProductsPage() {
     ...suppliers.map((supplier) => supplier.name),
     ...products.flatMap((product) => [product.mainSupplier, product.backupSupplier])
   ]);
+  const hasUnsetSupplierProducts = products.some((product) => !hasAnySupplier(product));
   const selectedStore = storesData.find((store) => store.name === storeFilter);
   const visibleSubcategories = Array.from(new Set(
     subcategoryMaster.length > 0
@@ -261,6 +297,9 @@ export default function ProductsPage() {
       product.subcategory,
       product.brand,
       product.unit,
+      product.packageQuantity,
+      product.packageQuantityUnit,
+      product.packageSpec,
       product.mainSupplier,
       product.backupSupplier,
       product.storageType,
@@ -272,7 +311,11 @@ export default function ProductsPage() {
       targetText.toLowerCase().includes(query.toLowerCase()) &&
       productMatchesStore(product, selectedStore) &&
       productMatchesBrand(product, brandFilter) &&
-      (supplierFilter === "すべて" || product.mainSupplier === supplierFilter || product.backupSupplier === supplierFilter) &&
+      (
+        supplierFilter === "すべて" ||
+        (supplierFilter === unsetSupplierFilterValue ? !hasAnySupplier(product) : product.mainSupplier === supplierFilter || product.backupSupplier === supplierFilter)
+      ) &&
+      productMatchesMissingInfo(product, missingInfoFilter) &&
       (categoryFilter === "すべて" || product.category === categoryFilter) &&
       (subcategoryFilter === "すべて" || (product.subcategory ?? "未分類") === subcategoryFilter)
     );
@@ -295,7 +338,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setProductPage(1);
-  }, [query, storeFilter, brandFilter, supplierFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
+  }, [query, storeFilter, brandFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
     const matchingProducts = products.filter((product) =>
@@ -624,8 +667,17 @@ export default function ProductsPage() {
                 <span>発注先</span>
                 <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
+                  {hasUnsetSupplierProducts ? <option value={unsetSupplierFilterValue}>未設定</option> : null}
                   {supplierOptions.map((supplierName) => (
                     <option value={supplierName} key={supplierName}>{supplierName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>未入力項目</span>
+                <select value={missingInfoFilter} onChange={(event) => setMissingInfoFilter(event.target.value)}>
+                  {missingProductInfoOptions.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
                   ))}
                 </select>
               </label>
