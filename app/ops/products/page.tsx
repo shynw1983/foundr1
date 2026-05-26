@@ -215,6 +215,7 @@ export default function ProductsPage() {
   const [query, setQuery] = useState("");
   const [storeFilter, setStoreFilter] = useState("すべて");
   const [brandFilter, setBrandFilter] = useState("すべて");
+  const [productBrandFilter, setProductBrandFilter] = useState("すべて");
   const [supplierFilter, setSupplierFilter] = useState("すべて");
   const [missingInfoFilter, setMissingInfoFilter] = useState("すべて");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
@@ -273,6 +274,10 @@ export default function ProductsPage() {
     ...brandsData.map((brand) => brand.name),
     ...products.flatMap((product) => getProductBrands(product))
   ]);
+  const productBrandOptions = uniqueOptions([
+    "未設定",
+    ...products.map((product) => product.productBrandName?.trim() || "未設定")
+  ]);
   const supplierOptions = uniqueOptions([
     ...suppliers.map((supplier) => supplier.name),
     ...products.flatMap((product) => [product.mainSupplier, product.backupSupplier])
@@ -311,6 +316,7 @@ export default function ProductsPage() {
       targetText.toLowerCase().includes(query.toLowerCase()) &&
       productMatchesStore(product, selectedStore) &&
       productMatchesBrand(product, brandFilter) &&
+      (productBrandFilter === "すべて" || (product.productBrandName?.trim() || "未設定") === productBrandFilter) &&
       (
         supplierFilter === "すべて" ||
         (supplierFilter === unsetSupplierFilterValue ? !hasAnySupplier(product) : product.mainSupplier === supplierFilter || product.backupSupplier === supplierFilter)
@@ -338,7 +344,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setProductPage(1);
-  }, [query, storeFilter, brandFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
+  }, [query, storeFilter, brandFilter, productBrandFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
     const matchingProducts = products.filter((product) =>
@@ -646,7 +652,7 @@ export default function ProductsPage() {
           <div className="product-filter-stack">
             <div className="product-structured-filters" aria-label="商品マスタ詳細フィルター">
               <label>
-                <span>店舗</span>
+                <span>対象店舗</span>
                 <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
                   {storeOptions.map((storeName) => (
@@ -659,6 +665,15 @@ export default function ProductsPage() {
                 <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
                   {brandOptions.map((brandName) => (
+                    <option value={brandName} key={brandName}>{brandName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>商品ブランド</span>
+                <select value={productBrandFilter} onChange={(event) => setProductBrandFilter(event.target.value)}>
+                  <option value="すべて">すべて</option>
+                  {productBrandOptions.map((brandName) => (
                     <option value={brandName} key={brandName}>{brandName}</option>
                   ))}
                 </select>
