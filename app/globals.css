@@ -3129,12 +3129,12 @@ button {
 
 .comparison-card-actions .comparison-rate-result {
   display: grid;
-  width: min(100%, 390px);
-  min-height: 84px;
+  min-width: 148px;
+  min-height: 42px;
   place-items: center;
-  padding: 8px 14px;
+  padding: 0 16px;
   border-radius: 8px;
-  font-size: 38px;
+  font-size: 22px;
   font-weight: 900;
   line-height: 1;
 }
@@ -4434,7 +4434,6 @@ button {
   }
 
   .comparison-card-actions .comparison-rate-result {
-    width: 100%;
     min-height: 42px;
     font-size: 22px;
   }
