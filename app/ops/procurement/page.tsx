@@ -6,7 +6,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OpsNavList } from "../components/OpsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   orders,
   productSupplierOptions as initialProductSupplierOptions,
@@ -80,6 +80,10 @@ type SupplierChoice = {
   role: string;
 };
 type ProcurementStatusFilter = "未完了" | "購入待ち" | "一部購入済み" | "到着日入力待ち" | "到着待ち" | "配送待ち" | "配送中" | "一部納品済み" | "確認待ち" | "完了" | "すべて";
+type ProductLookup = {
+  byId: Map<string, Product>;
+  byName: Map<string, Product>;
+};
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -134,12 +138,20 @@ function createProcurementTaskItems(
 ): ProcurementTaskItem[] {
   if (productList.length === 0) return [];
 
+  const productByName = new Map(productList.map((product) => [product.name, product]));
+  const itemsByOrderId = new Map<string, DashboardOrderItem[]>();
+  purchaseOrderItems.forEach((item) => {
+    const items = itemsByOrderId.get(item.orderId) ?? [];
+    items.push(item);
+    itemsByOrderId.set(item.orderId, items);
+  });
+
   return purchaseOrders.flatMap((order, orderIndex) => {
-    const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+    const orderItems = itemsByOrderId.get(order.id) ?? [];
 
     if (orderItems.length > 0) {
       return orderItems.map((item, itemIndex) => {
-        const product = productList.find((candidate) => candidate.name === item.productName);
+        const product = productByName.get(item.productName);
 
         return {
           id: item.id ?? `${order.id}-${item.productName}-${itemIndex}`,
@@ -204,6 +216,11 @@ function getProcurementSupplier(
 function findProcurementProduct(item: ProcurementTaskItem, productList: Product[]) {
   return productList.find((product) => product.id === item.productId)
     ?? productList.find((product) => product.name === item.productName);
+}
+
+function findProcurementProductFromLookup(item: ProcurementTaskItem, productLookup: ProductLookup) {
+  return (item.productId ? productLookup.byId.get(item.productId) : undefined)
+    ?? productLookup.byName.get(item.productName);
 }
 
 function normalizeSupplierName(value?: string) {
@@ -278,9 +295,43 @@ function groupTasksBySupplier(
   }, []);
 }
 
+function groupTasksBySupplierFast(
+  items: ProcurementTaskItem[],
+  supplierByProductName: Map<string, string>
+) {
+  const groups = new Map<string, ProcurementTaskItem[]>();
+
+  items.forEach((item) => {
+    const supplier = item.supplier || supplierByProductName.get(item.productName) || "未設定";
+    const groupItems = groups.get(supplier) ?? [];
+    groupItems.push(item);
+    groups.set(supplier, groupItems);
+  });
+
+  return Array.from(groups.entries()).map(([supplier, groupItems]) => ({ supplier, items: groupItems }));
+}
+
 function hasDeliveryOrderSupplier(items: ProcurementTaskItem[], supplierList: Supplier[]) {
   return items.some((item) => {
     const supplier = supplierList.find((supplierItem) => supplierItem.name === item.supplier);
+    const supplierName = item.supplier.toLowerCase();
+
+    return (
+      supplier?.channelType === "ネットショップ" ||
+      supplier?.channelType === "卸売" ||
+      supplierName.includes("online") ||
+      supplierName.includes("ネット") ||
+      supplierName.includes("オンライン") ||
+      supplierName.includes("卸") ||
+      supplierName.includes("amazon") ||
+      supplierName.includes("楽天")
+    );
+  });
+}
+
+function hasDeliveryOrderSupplierFast(items: ProcurementTaskItem[], supplierByName: Map<string, Supplier>) {
+  return items.some((item) => {
+    const supplier = supplierByName.get(item.supplier);
     const supplierName = item.supplier.toLowerCase();
 
     return (
@@ -318,6 +369,43 @@ function getOrderStatus(
   if (purchasedCount + unavailableCount === 0) return "購入待ち";
   if (purchasedCount + unavailableCount < items.length) return "一部購入済み";
   if (hasDeliveryOrderSupplier(items, supplierList)) {
+    if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
+    return "到着日入力待ち";
+  }
+  if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
+
+  return "配送待ち";
+}
+
+function getOrderStatusFast(
+  order: PurchaseOrder,
+  items: ProcurementTaskItem[],
+  deliveryState: DeliveryState,
+  supplierByName: Map<string, Supplier>
+) {
+  if (items.length === 0) return order.status;
+
+  let unavailableCount = 0;
+  let purchasedCount = 0;
+  let deliveredCount = 0;
+  let deliveryCount = 0;
+  let receivedCount = 0;
+
+  items.forEach((item) => {
+    if (item.unavailable) unavailableCount += 1;
+    if (item.purchased) purchasedCount += 1;
+    if (item.deliveryStatus === "delivered") deliveredCount += 1;
+    if (item.deliveryStatus === "in_delivery") deliveryCount += 1;
+    if (item.deliveryStatus === "received") receivedCount += 1;
+  });
+
+  if (receivedCount + unavailableCount === items.length) return "完了";
+  if (deliveredCount + receivedCount + unavailableCount === items.length) return "確認待ち";
+  if (deliveryCount > 0) return "配送中";
+  if (deliveredCount > 0) return "一部納品済み";
+  if (purchasedCount + unavailableCount === 0) return "購入待ち";
+  if (purchasedCount + unavailableCount < items.length) return "一部購入済み";
+  if (hasDeliveryOrderSupplierFast(items, supplierByName)) {
     if (deliveryState.status === "online_ordered" && deliveryState.expectedArrivalDate) return "到着待ち";
     return "到着日入力待ち";
   }
@@ -402,6 +490,7 @@ async function saveOrderDeliveryState(orderId: string, state: DeliveryState) {
 
 export default function ProcurementPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const [, startStatusTransition] = useTransition();
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -415,6 +504,25 @@ export default function ProcurementPage() {
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
+  const productLookup = useMemo<ProductLookup>(() => ({
+    byId: new Map(products.flatMap((product) => product.id ? [[product.id, product] as const] : [])),
+    byName: new Map(products.map((product) => [product.name, product]))
+  }), [products]);
+  const supplierByName = useMemo(() => new Map(suppliers.map((supplier) => [supplier.name, supplier])), [suppliers]);
+  const supplierByProductName = useMemo(() => {
+    const supplierMap = new Map<string, string>();
+
+    products.forEach((product) => {
+      if (product.mainSupplier) supplierMap.set(product.name, product.mainSupplier);
+    });
+    productSupplierOptions.forEach((group) => {
+      if (supplierMap.has(group.product)) return;
+      const mainOption = group.options.find((option) => option.role === "メイン");
+      if (mainOption?.supplier) supplierMap.set(group.product, mainOption.supplier);
+    });
+
+    return supplierMap;
+  }, [products, productSupplierOptions]);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -650,29 +758,38 @@ export default function ProcurementPage() {
 
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
-  const purchaseOrdersWithStatus = purchaseOrders.map((order) => {
-    const items = procurementTaskItems.filter((item) => item.orderId === order.id);
+  const itemsByOrderId = useMemo(() => {
+    const itemMap = new Map<string, ProcurementTaskItem[]>();
+    procurementTaskItems.forEach((item) => {
+      const items = itemMap.get(item.orderId) ?? [];
+      items.push(item);
+      itemMap.set(item.orderId, items);
+    });
+
+    return itemMap;
+  }, [procurementTaskItems]);
+  const purchaseOrdersWithStatus = useMemo(() => purchaseOrders.map((order) => {
+    const items = itemsByOrderId.get(order.id) ?? [];
     const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
-    const liveStatus = getOrderStatus(order, items, deliveryState, suppliers);
+    const liveStatus = getOrderStatusFast(order, items, deliveryState, supplierByName);
 
-    return {
-      order,
-      items,
-      deliveryState,
-      liveStatus
-    };
-  });
-  const statusFilterCounts = procurementStatusFilters.reduce<Record<ProcurementStatusFilter, number>>((counts, filter) => {
-    counts[filter] = purchaseOrdersWithStatus.filter(({ liveStatus }) => {
-      if (filter === "すべて") return true;
-      if (filter === "未完了") return liveStatus !== "完了";
+    return { order, items, deliveryState, liveStatus };
+  }), [purchaseOrders, itemsByOrderId, deliveryStates, supplierByName]);
+  const statusFilterCounts = useMemo(() => {
+    const counts = procurementStatusFilters.reduce<Record<ProcurementStatusFilter, number>>((nextCounts, filter) => {
+      nextCounts[filter] = 0;
+      return nextCounts;
+    }, {} as Record<ProcurementStatusFilter, number>);
 
-      return liveStatus === filter;
-    }).length;
+    purchaseOrdersWithStatus.forEach(({ liveStatus }) => {
+      counts["すべて"] += 1;
+      if (liveStatus !== "完了") counts["未完了"] += 1;
+      if (liveStatus in counts) counts[liveStatus as ProcurementStatusFilter] += 1;
+    });
 
     return counts;
-  }, {} as Record<ProcurementStatusFilter, number>);
-  const displayedPurchaseOrders = purchaseOrdersWithStatus
+  }, [purchaseOrdersWithStatus]);
+  const displayedPurchaseOrders = useMemo(() => purchaseOrdersWithStatus
     .filter(({ order }) => !focusedOrderId || order.id === focusedOrderId)
     .filter(({ liveStatus }) => {
       if (focusedOrderId) return true;
@@ -692,7 +809,7 @@ export default function ProcurementPage() {
         ...items.flatMap((item) => [item.productName, item.supplier, item.note, item.priceExceptionNote, item.actualPrice])
       ].join(" ").toLowerCase().includes(normalizedQuery);
     })
-    .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order));
+    .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order)), [purchaseOrdersWithStatus, focusedOrderId, statusFilter, normalizedQuery]);
 
   return (
     <main className="shell">
@@ -750,7 +867,7 @@ export default function ProcurementPage() {
                 <button
                   type="button"
                   className={statusFilter === filter ? "queue-filter is-active" : "queue-filter"}
-                  onClick={() => setStatusFilter(filter)}
+                  onClick={() => startStatusTransition(() => setStatusFilter(filter))}
                   key={filter}
                 >
                   <span>{filter}</span>
@@ -761,7 +878,7 @@ export default function ProcurementPage() {
           ) : null}
           <div className="procurement-order-list">
             {displayedPurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
-              const supplierGroups = groupTasksBySupplier(items, products, productSupplierOptions);
+              const supplierGroups = groupTasksBySupplierFast(items, supplierByProductName);
               const unavailableCount = items.filter((item) => item.unavailable).length;
               const completedCount = items.filter((item) => item.purchased).length;
               const handledCount = completedCount + unavailableCount;
@@ -772,7 +889,7 @@ export default function ProcurementPage() {
               const orderDeliveryBatches = deliveryBatches.filter((batch) => batch.orderId === order.id);
               const hasPurchasedItems = completedCount > 0;
               const isOnlineOrder = hasDeliveryOrderSupplier(items, suppliers);
-              const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, products);
+              const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, productLookup);
 
               return (
                 <article className="procurement-order-card" key={order.id}>
@@ -824,7 +941,7 @@ export default function ProcurementPage() {
                           <div className="procurement-task-list">
                             {group.items.map((item) => {
                               const quantityDiff = item.actualQuantity - item.requestedQuantity;
-                              const product = findProcurementProduct(item, products);
+                              const product = findProcurementProductFromLookup(item, productLookup);
                               const photoSrc = getProductPhotoSrc(product?.photoUrl);
                               const productSpec = product?.packageSpec || product?.specNote;
                               const referencePrice = Number(product?.referencePrice ?? 0);
@@ -1230,9 +1347,9 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productList: Product[]) {
+function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
   return items.reduce((total, item) => {
-    const product = findProcurementProduct(item, productList);
+    const product = findProcurementProductFromLookup(item, productLookup);
     const price = Number(product?.referencePrice ?? 0);
     return total + item.requestedQuantity * (Number.isFinite(price) ? price : 0);
   }, 0);
