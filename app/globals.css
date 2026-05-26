@@ -51,10 +51,14 @@ button {
 .sidebar {
   position: sticky;
   top: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
   padding: 24px 18px;
   color: #f7fafc;
   background: #202a36;
+  overflow: hidden;
 }
 
 .brand-block {
@@ -282,7 +286,23 @@ button {
 
 .nav-list {
   display: grid;
+  align-content: start;
   gap: 5px;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.nav-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nav-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .sidebar-user {
@@ -4227,6 +4247,7 @@ button {
   .sidebar {
     position: static;
     display: flex;
+    overflow: visible;
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
@@ -4549,6 +4570,7 @@ button {
     z-index: 30;
     height: auto;
     display: flex;
+    overflow: visible;
     align-items: center;
     justify-content: flex-start;
     gap: 10px;
