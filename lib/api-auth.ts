@@ -43,6 +43,13 @@ export async function requireMasterOpsSession() {
   return session;
 }
 
+export async function requireOwnerOpsSession() {
+  const session = await requireOpsSession();
+  if (!session || session.role !== "owner") return null;
+
+  return session;
+}
+
 export async function getSessionStoreScope(session: EmployeeSession): Promise<StoreScope> {
   if (allStoreAccessRoles.has(session.role)) {
     return { allStores: true, storeIds: [] };

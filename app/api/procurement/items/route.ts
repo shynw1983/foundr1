@@ -1,4 +1,4 @@
-import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireOwnerOpsSession, requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
@@ -413,6 +413,49 @@ export async function PATCH(request: Request) {
       `;
     }
   }
+
+  return Response.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const session = await requireOwnerOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
+  const body = await request.json() as { itemId?: string };
+  const itemId = String(body.itemId ?? "").trim();
+
+  if (!itemId) {
+    return Response.json({ error: "itemId is required" }, { status: 400 });
+  }
+
+  const itemRows = await sql`
+    select purchase_order_id as "purchaseOrderId"
+    from purchase_order_items
+    where id = ${itemId}
+    limit 1
+  `;
+  const purchaseOrderId = itemRows[0]?.purchaseOrderId;
+
+  if (!purchaseOrderId) {
+    return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
+  }
+
+  await sql`
+    delete from purchase_order_items
+    where id = ${itemId}
+  `;
+
+  await sql`
+    update purchase_orders
+    set
+      requested_item_count = (
+        select count(*)::int
+        from purchase_order_items
+        where purchase_order_id = ${purchaseOrderId}
+      ),
+      updated_at = now()
+    where id = ${purchaseOrderId}
+  `;
 
   return Response.json({ ok: true });
 }

@@ -9,7 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 import { orders, products as initialProducts } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
-type PurchaseOrder = typeof orders[number];
+type PurchaseOrder = typeof orders[number] & {
+  deadlineAt?: string | null;
+  createdAt?: string | null;
+};
 type PurchaseOrderItem = {
   id?: string;
   orderId: string;
@@ -31,6 +34,7 @@ type HistoryRow = {
   store: string;
   brand: string;
   deadline: string;
+  deadlineMonth: string;
   productName: string;
   productBrand: string;
   supplier: string;
@@ -61,6 +65,7 @@ type HistoryOrderRow = {
   store: string;
   brand: string;
   deadline: string;
+  deadlineMonth: string;
   status: string;
   items: HistoryRow[];
   itemCount: number;
@@ -98,6 +103,47 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/ops/logout", icon: LogOut }
 ];
 
+function getCurrentMonthKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? String(new Date().getFullYear());
+  const month = parts.find((part) => part.type === "month")?.value ?? String(new Date().getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function getMonthKeyFromDate(value?: string | Date | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+
+  return year && month ? `${year}-${month}` : "";
+}
+
+function getOrderMonthKey(order?: PurchaseOrder) {
+  if (!order) return getCurrentMonthKey();
+
+  return getMonthKeyFromDate(order.deadlineAt) || getMonthKeyFromDate(order.createdAt) || getCurrentMonthKey();
+}
+
+function formatMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-");
+  if (!year || !month) return monthKey;
+
+  return `${year}年${Number(month)}月`;
+}
+
 function getItemStatus(item: PurchaseOrderItem) {
   if (item.unavailable) return "購入不可";
   if (item.deliveryStatus === "delivered") return "納品済み";
@@ -126,6 +172,7 @@ function createHistoryRows(
       store: order?.store ?? "未設定",
       brand: order?.brand ?? "共通",
       deadline: order?.deadline ?? "",
+      deadlineMonth: getOrderMonthKey(order),
       productName: item.productName,
       productBrand: item.brandName ?? product?.brand ?? order?.brand ?? "共通",
       supplier: item.supplier || product?.mainSupplier || "未設定",
@@ -237,6 +284,7 @@ function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRo
       store: order.store,
       brand: order.brand,
       deadline: order.deadline,
+      deadlineMonth: getOrderMonthKey(order),
       status: getOrderStatus(items),
       items,
       itemCount: items.length,
@@ -263,12 +311,21 @@ export default function ProcurementHistoryPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
   const [storeFilter, setStoreFilter] = useState("すべて");
+  const [monthFilter, setMonthFilter] = useState(getCurrentMonthKey);
   const [historyView, setHistoryView] = useState<HistoryView>("orders");
+  const [currentRole, setCurrentRole] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
   useEffect(() => {
     async function loadHistoryData() {
-      const response = await fetch("/api/dashboard");
+      const [response, meResponse] = await Promise.all([
+        fetch("/api/dashboard"),
+        fetch("/api/auth/me", { cache: "no-store" })
+      ]);
+      if (meResponse.ok) {
+        const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+        setCurrentRole(body.employee?.role ?? "");
+      }
       if (!response.ok) return;
 
       const data = await response.json() as {
@@ -293,6 +350,9 @@ export default function ProcurementHistoryPage() {
   const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows), [purchaseOrders, rows]);
   const orderStatusById = new Map(orderRows.map((row) => [row.id, row.status]));
   const stores = Array.from(new Set([...orderRows.map((row) => row.store), ...rows.map((row) => row.store)]));
+  const monthOptions = Array.from(new Set([getCurrentMonthKey(), ...purchaseOrders.map((order) => getOrderMonthKey(order))]))
+    .filter(Boolean)
+    .sort((a, b) => b.localeCompare(a));
   const statusOptions = ["未設定", "未購入", "一部購入済み", "購入済み", "購入完了", "購入不可", "配送中", "納品済み", "店舗確認済み"];
   const reportBaseRows = rows.filter((row) => {
     const targetText = [
@@ -308,6 +368,7 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
+      (monthFilter === "すべて" || row.deadlineMonth === monthFilter) &&
       (statusFilter === "すべて" || row.status === statusFilter || orderStatusById.get(row.orderId) === statusFilter)
     );
   });
@@ -325,12 +386,51 @@ export default function ProcurementHistoryPage() {
 
     return (
       targetText.toLowerCase().includes(query.toLowerCase()) &&
+      (monthFilter === "すべて" || row.deadlineMonth === monthFilter) &&
       (storeFilter === "すべて" || row.store === storeFilter) &&
       (statusFilter === "すべて" || row.status === statusFilter || row.items.some((item) => item.status === statusFilter))
     );
   });
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
   const storeReportRows = createStoreReportRows(reportBaseRows);
+  const canDeleteHistory = currentRole === "owner";
+
+  async function deleteHistoryOrder(orderId: string) {
+    if (!window.confirm(`${orderId} の注文履歴を削除しますか？関連する明細・異常報告も削除されます。`)) return;
+
+    const response = await fetch("/api/orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "注文履歴を削除できませんでした。");
+      return;
+    }
+
+    setPurchaseOrders((items) => items.filter((item) => item.id !== orderId));
+    setPurchaseOrderItems((items) => items.filter((item) => item.orderId !== orderId));
+  }
+
+  async function deleteHistoryItem(itemId: string) {
+    if (!window.confirm("この注文明細を削除しますか？関連する異常報告も削除されます。")) return;
+
+    const response = await fetch("/api/procurement/items", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "注文明細を削除できませんでした。");
+      return;
+    }
+
+    setPurchaseOrderItems((items) => items.filter((item) => item.id !== itemId));
+  }
 
   return (
     <main className="shell">
@@ -381,6 +481,15 @@ export default function ProcurementHistoryPage() {
         </div>
 
         <div className="history-filter-row">
+          <label>
+            <span>対象月</span>
+            <select value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)}>
+              <option value="すべて">すべての期間</option>
+              {monthOptions.map((month) => (
+                <option value={month} key={month}>{formatMonthLabel(month)}</option>
+              ))}
+            </select>
+          </label>
           <label>
             <span>店舗</span>
             <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
@@ -436,7 +545,14 @@ export default function ProcurementHistoryPage() {
                     <strong>{row.purchasedCount} / {row.itemCount} 件</strong>
                     <p>確認済み {row.receivedCount} 件{row.unavailableCount ? ` · 購入不可 ${row.unavailableCount} 件` : ""}</p>
                   </div>
-                  <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                  <div className="history-owner-actions">
+                    <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                    {canDeleteHistory ? (
+                      <button type="button" className="text-button danger-button" onClick={() => void deleteHistoryOrder(row.id)}>
+                        削除
+                      </button>
+                    ) : null}
+                  </div>
                   {row.items.length > 0 ? (
                     <details className="history-order-detail">
                       <summary>明細を見る</summary>
@@ -449,7 +565,14 @@ export default function ProcurementHistoryPage() {
                               {item.note ? <small>{item.note}</small> : null}
                             </div>
                             <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
-                            <span className={`status-pill ${statusTone[item.status]}`}>{item.status}</span>
+                            <div className="history-owner-actions">
+                              <span className={`status-pill ${statusTone[item.status]}`}>{item.status}</span>
+                              {canDeleteHistory ? (
+                                <button type="button" className="text-button danger-button" onClick={() => void deleteHistoryItem(item.id)}>
+                                  削除
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -557,7 +680,14 @@ export default function ProcurementHistoryPage() {
                   </div>
                   <span>{row.supplier}</span>
                   <strong>{row.actualQuantity} / {row.requestedQuantity} {row.unit}</strong>
-                  <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                  <div className="history-owner-actions">
+                    <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                    {canDeleteHistory ? (
+                      <button type="button" className="text-button danger-button" onClick={() => void deleteHistoryItem(row.id)}>
+                        削除
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               ))}
               {filteredRows.length === 0 ? (

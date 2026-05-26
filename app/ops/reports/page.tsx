@@ -69,11 +69,19 @@ export default function ReportsPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | ReportItem["type"]>("all");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [currentRole, setCurrentRole] = useState("");
 
   useEffect(() => {
     async function loadReports() {
       setIsLoading(true);
-      const response = await fetch("/api/reports");
+      const [response, meResponse] = await Promise.all([
+        fetch("/api/reports"),
+        fetch("/api/auth/me", { cache: "no-store" })
+      ]);
+      if (meResponse.ok) {
+        const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+        setCurrentRole(body.employee?.role ?? "");
+      }
       if (response.ok) {
         const data = await response.json() as { reports?: ReportItem[] };
         setReports(data.reports ?? []);
@@ -107,6 +115,30 @@ export default function ReportsPage() {
 
   const openCount = reports.filter((report) => report.status === "open").length;
   const resolvedCount = reports.filter((report) => report.status === "resolved").length;
+  const canDeleteReports = currentRole === "owner";
+
+  async function deleteReport(report: ReportItem) {
+    if (!window.confirm(`${typeLabels[report.type]} の連絡・報告を削除しますか？`)) return;
+
+    const response = await fetch("/api/reports", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: report.id,
+        source: report.source,
+        itemId: report.itemId,
+        type: report.type
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "連絡・報告を削除できませんでした。");
+      return;
+    }
+
+    setReports((items) => items.filter((item) => item.id !== report.id));
+  }
 
   return (
     <main className="shell">
@@ -196,6 +228,11 @@ export default function ReportsPage() {
                     <a className="secondary-button" href={`/ops/orders#order-${report.orderId}`}>詳細を見る</a>
                   )}
                   {report.resolutionNote ? <em>{report.resolutionNote}</em> : null}
+                  {canDeleteReports ? (
+                    <button type="button" className="text-button danger-button" onClick={() => void deleteReport(report)}>
+                      削除
+                    </button>
+                  ) : null}
                 </div>
               </article>
             ))}

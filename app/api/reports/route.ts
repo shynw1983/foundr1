@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionStoreScope, requireOpsSession } from "../../../lib/api-auth";
+import { getSessionStoreScope, requireOpsSession, requireOwnerOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 type ReportRow = {
@@ -180,4 +180,90 @@ export async function GET() {
     });
 
   return NextResponse.json({ reports });
+}
+
+export async function DELETE(request: Request) {
+  const session = await requireOwnerOpsSession();
+  if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
+
+  const body = await request.json() as {
+    id?: string;
+    source?: ReportRow["source"];
+    itemId?: string;
+    type?: ReportRow["type"];
+  };
+  const source = body.source;
+  const type = body.type;
+  const id = String(body.id ?? "").trim();
+  const itemId = String(body.itemId ?? "").trim();
+
+  if (source === "history") {
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    await sql`
+      delete from purchase_exceptions
+      where id = ${id}
+    `;
+
+    return NextResponse.json({ ok: true });
+  }
+
+  if (source !== "current" || !itemId) {
+    return NextResponse.json({ error: "itemId is required" }, { status: 400 });
+  }
+
+  const itemRows = await sql`
+    select
+      purchase_order_items.purchase_order_id as "purchaseOrderId",
+      purchase_order_items.note
+    from purchase_order_items
+    where purchase_order_items.id = ${itemId}
+    limit 1
+  `;
+  const item = itemRows[0];
+
+  if (!item?.purchaseOrderId) {
+    return NextResponse.json({ error: "連絡・報告が見つかりません。" }, { status: 404 });
+  }
+
+  if (type === "price" || type === "quantity") {
+    await sql`
+      insert into purchase_exceptions (
+        purchase_order_id,
+        purchase_order_item_id,
+        exception_type,
+        message,
+        status,
+        resolved_by,
+        resolved_at,
+        resolution_note
+      )
+      values (
+        ${item.purchaseOrderId},
+        ${itemId},
+        ${type},
+        ${"owner により履歴から削除"},
+        ${"resolved"},
+        ${session.id},
+        now(),
+        ${"履歴一覧から非表示"}
+      )
+    `;
+
+    return NextResponse.json({ ok: true });
+  }
+
+  if (type === "note" || type === "unavailable") {
+    await sql`
+      update purchase_order_items
+      set
+        store_feedback_confirmed_at = now(),
+        store_feedback_confirmed_by = ${session.id}
+      where id = ${itemId}
+    `;
+
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: "削除できない種類です。" }, { status: 400 });
 }

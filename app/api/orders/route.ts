@@ -1,4 +1,4 @@
-import { canAccessStore, getSessionStoreScope, requireWritableOpsSession } from "../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireOwnerOpsSession, requireWritableOpsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
@@ -351,7 +351,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { orderId?: string };
