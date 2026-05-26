@@ -2196,6 +2196,20 @@ button {
   gap: 12px;
 }
 
+.procurement-list-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.procurement-list-more span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .focused-order-bar {
   display: flex;
   align-items: center;
