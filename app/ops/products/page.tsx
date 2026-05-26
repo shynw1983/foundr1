@@ -94,6 +94,14 @@ function formatPackageQuantity(product: ProductWithCategory) {
   return `${quantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })} ${product.packageQuantityUnit || product.unit || "個"}`;
 }
 
+function getProductDisplaySpec(product: ProductWithCategory) {
+  const packageSpec = String(product.packageSpec ?? "").trim();
+  if (packageSpec) return packageSpec;
+
+  const quantitySpec = formatPackageQuantity(product);
+  return quantitySpec === "未設定" ? "" : quantitySpec;
+}
+
 function compareText(a: string | undefined, b: string | undefined) {
   return String(a ?? "").localeCompare(String(b ?? ""), "ja", { numeric: true, sensitivity: "base" });
 }
@@ -667,7 +675,10 @@ export default function ProductsPage() {
               ))}
               <span>{canManageProducts ? "操作" : "権限"}</span>
             </div>
-            {pagedProducts.map((product) => (
+            {pagedProducts.map((product) => {
+              const displaySpec = getProductDisplaySpec(product);
+
+              return (
                 <article className="product-master-row" key={getProductIdentity(product)}>
                   <div className="product-title-block">
                     <div className="product-title-photo">
@@ -678,7 +689,10 @@ export default function ProductsPage() {
                       )}
                     </div>
                     <div>
-                      <strong>{product.name || "未設定の商品"}</strong>
+                      <div className="product-name-line">
+                        <strong>{product.name || "未設定の商品"}</strong>
+                        {displaySpec ? <span>{displaySpec}</span> : null}
+                      </div>
                       <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
@@ -692,7 +706,10 @@ export default function ProductsPage() {
                     </div>
                     <div>
                       <small>基本情報</small>
-                      <strong>{product.name || "未設定の商品"}</strong>
+                      <div className="product-name-line">
+                        <strong>{product.name || "未設定の商品"}</strong>
+                        {displaySpec ? <span>{displaySpec}</span> : null}
+                      </div>
                       <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
@@ -797,7 +814,8 @@ export default function ProductsPage() {
                     </div>
                   </details>
                 </article>
-              ))}
+              );
+            })}
             {filteredProducts.length === 0 ? (
               <div className="empty-state">登録済みの商品はありません</div>
             ) : null}
