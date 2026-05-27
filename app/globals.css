@@ -1225,6 +1225,28 @@ button {
   box-shadow: 0 18px 42px rgba(18, 28, 43, 0.16);
 }
 
+.product-summary-picker-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.product-summary-picker-actions .primary-button {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.product-summary-picker-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .product-summary-picker label {
   display: flex;
   min-width: 0;

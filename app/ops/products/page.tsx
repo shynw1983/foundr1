@@ -325,6 +325,9 @@ export default function ProductsPage() {
   const [productSortKey, setProductSortKey] = useState<ProductSortKey>("category");
   const [productSortDirection, setProductSortDirection] = useState<SortDirection>("asc");
   const [productSummaryFields, setProductSummaryFields] = useState(defaultProductSummaryFields);
+  const [draftProductSummaryFields, setDraftProductSummaryFields] = useState(defaultProductSummaryFields);
+  const [productSummarySaveStatus, setProductSummarySaveStatus] = useState("");
+  const [isSavingProductSummaryFields, setIsSavingProductSummaryFields] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -351,7 +354,10 @@ export default function ProductsPage() {
         const validFields = savedSummaryFields.filter((field) =>
           productSummaryFieldOptions.some((option) => option.value === field)
         );
-        if (validFields.length > 0) setProductSummaryFields(validFields);
+        if (validFields.length > 0) {
+          setProductSummaryFields(validFields);
+          setDraftProductSummaryFields(validFields);
+        }
       }
     }
 
@@ -531,17 +537,38 @@ export default function ProductsPage() {
     });
   }
 
-  function updateProductSummaryFields(field: string, checked: boolean) {
+  function updateDraftProductSummaryFields(field: string, checked: boolean) {
     const nextFields = checked
-      ? [...productSummaryFields, field]
-      : productSummaryFields.filter((item) => item !== field);
+      ? [...draftProductSummaryFields, field]
+      : draftProductSummaryFields.filter((item) => item !== field);
     const normalizedFields = nextFields.length > 0 ? nextFields.slice(0, 6) : defaultProductSummaryFields;
-    setProductSummaryFields(normalizedFields);
-    void fetch("/api/me/preferences", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productMasterSummaryFields: normalizedFields })
-    });
+    setDraftProductSummaryFields(normalizedFields);
+    setProductSummarySaveStatus("");
+  }
+
+  async function saveProductSummaryFields() {
+    setIsSavingProductSummaryFields(true);
+    setProductSummarySaveStatus("保存中...");
+
+    try {
+      const response = await fetch("/api/me/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productMasterSummaryFields: draftProductSummaryFields })
+      });
+
+      if (!response.ok) {
+        setProductSummarySaveStatus("保存できませんでした。");
+        return;
+      }
+
+      setProductSummaryFields(draftProductSummaryFields);
+      setProductSummarySaveStatus("保存しました。");
+    } catch {
+      setProductSummarySaveStatus("保存できませんでした。");
+    } finally {
+      setIsSavingProductSummaryFields(false);
+    }
   }
 
   function copyProductToNewDraft(product: ProductWithCategory) {
@@ -784,12 +811,23 @@ export default function ProductsPage() {
                     <label key={option.value}>
                       <input
                         type="checkbox"
-                        checked={productSummaryFields.includes(option.value)}
-                        onChange={(event) => updateProductSummaryFields(option.value, event.target.checked)}
+                        checked={draftProductSummaryFields.includes(option.value)}
+                        onChange={(event) => updateDraftProductSummaryFields(option.value, event.target.checked)}
                       />
                       <span>{option.label}</span>
                     </label>
                   ))}
+                  <div className="product-summary-picker-actions">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={isSavingProductSummaryFields}
+                      onClick={() => void saveProductSummaryFields()}
+                    >
+                      {isSavingProductSummaryFields ? "保存中..." : "保存"}
+                    </button>
+                    {productSummarySaveStatus ? <small>{productSummarySaveStatus}</small> : null}
+                  </div>
                 </div>
               </details>
             </div>
@@ -951,10 +989,12 @@ export default function ProductsPage() {
                   <strong className="product-master-cell" data-label="参考価格">¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong>
                   <span className="product-master-cell product-unit-price-cell" data-label="規格単価">{unitPriceLabel}</span>
                   <div className="mobile-product-summary" aria-label="商品概要">
-                    <span><small>大分類</small><strong>{product.category}</strong></span>
-                    <span><small>小分類</small><strong>{product.subcategory || "未分類"}</strong></span>
-                    <span><small>単位</small><strong>{product.unit}</strong></span>
-                    <span><small>保管</small><strong>{product.storageType || "未設定"}</strong></span>
+                    {summaryItems.map((item) => (
+                      <span key={`${product.name}-summary-${item.label}`}>
+                        <small>{item.label}</small>
+                        <strong>{item.value}</strong>
+                      </span>
+                    ))}
                   </div>
                   <div className="mobile-product-price-row">
                     <span className="mobile-product-price"><small>参考価格</small><strong>¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong></span>
