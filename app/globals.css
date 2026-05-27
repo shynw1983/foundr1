@@ -1362,7 +1362,7 @@ button {
 .product-master-table {
   display: grid;
   gap: 8px;
-  --product-master-columns: minmax(260px, 1.35fr) minmax(92px, 0.42fr) minmax(124px, 0.52fr) minmax(58px, 0.22fr) minmax(70px, 0.28fr) minmax(96px, 0.38fr) minmax(258px, auto);
+  --product-master-columns: minmax(240px, 1.25fr) minmax(82px, 0.36fr) minmax(112px, 0.46fr) minmax(54px, 0.2fr) minmax(64px, 0.24fr) minmax(88px, 0.34fr) minmax(108px, 0.42fr) minmax(250px, auto);
   --product-master-gap: 12px;
   --product-master-x: 20px;
 }
@@ -1876,6 +1876,10 @@ button {
 
 .product-master-row > strong {
   font-weight: 500;
+}
+
+.product-unit-price-cell {
+  color: var(--muted);
 }
 
 .product-master-row .row-actions .text-button {

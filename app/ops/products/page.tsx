@@ -34,7 +34,7 @@ type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: 
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
-type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice";
+type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice" | "unitPrice";
 type SortDirection = "asc" | "desc";
 const productPageSizeOptions = [20, 50, 100];
 const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection; label: string }> = [
@@ -49,7 +49,9 @@ const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection;
   { key: "storageType", direction: "asc", label: "保管 昇順" },
   { key: "storageType", direction: "desc", label: "保管 降順" },
   { key: "referencePrice", direction: "asc", label: "参考価格 安い順" },
-  { key: "referencePrice", direction: "desc", label: "参考価格 高い順" }
+  { key: "referencePrice", direction: "desc", label: "参考価格 高い順" },
+  { key: "unitPrice", direction: "asc", label: "規格単価 安い順" },
+  { key: "unitPrice", direction: "desc", label: "規格単価 高い順" }
 ];
 const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "name", label: "商品名" },
@@ -57,7 +59,8 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "subcategory", label: "小分類" },
   { key: "unit", label: "単位" },
   { key: "storageType", label: "保管" },
-  { key: "referencePrice", label: "参考価格" }
+  { key: "referencePrice", label: "参考価格" },
+  { key: "unitPrice", label: "規格単価" }
 ];
 const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
 const customUnitOption = "__custom_unit__";
@@ -96,6 +99,12 @@ function parseReferencePrice(value: number | string) {
   return Number.isFinite(price) ? price : 0;
 }
 
+function formatYenAmount(value: number) {
+  return value.toLocaleString("ja-JP", {
+    maximumFractionDigits: value >= 100 ? 0 : 2
+  });
+}
+
 function formatPackageQuantity(product: ProductWithCategory) {
   const quantity = Number(product.packageQuantity ?? 0);
   if (!Number.isFinite(quantity) || quantity <= 0) return "未設定";
@@ -109,6 +118,22 @@ function isBlankValue(value: unknown) {
 function hasPackageQuantity(product: ProductWithCategory) {
   const quantity = Number(product.packageQuantity ?? 0);
   return Number.isFinite(quantity) && quantity > 0;
+}
+
+function getProductUnitPriceValue(product: ProductWithCategory) {
+  const price = parseReferencePrice(product.referencePrice);
+  const quantity = Number(product.packageQuantity ?? 0);
+
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(quantity) || quantity <= 0) return null;
+
+  return price / quantity;
+}
+
+function formatProductUnitPrice(product: ProductWithCategory) {
+  const unitPrice = getProductUnitPriceValue(product);
+  if (unitPrice === null) return "未設定";
+
+  return `¥${formatYenAmount(unitPrice)} / ${product.packageQuantityUnit || product.unit || "単位"}`;
 }
 
 function isProductSpecMissing(product: ProductWithCategory) {
@@ -137,6 +162,8 @@ function compareProducts(a: ProductWithCategory, b: ProductWithCategory, key: Pr
 
   if (key === "referencePrice") {
     result = Number(a.referencePrice ?? 0) - Number(b.referencePrice ?? 0);
+  } else if (key === "unitPrice") {
+    result = (getProductUnitPriceValue(a) ?? Number.POSITIVE_INFINITY) - (getProductUnitPriceValue(b) ?? Number.POSITIVE_INFINITY);
   } else if (key === "subcategory") {
     result = compareText(a.subcategory ?? "未分類", b.subcategory ?? "未分類");
   } else {
@@ -744,6 +771,7 @@ export default function ProductsPage() {
             </div>
             {pagedProducts.map((product) => {
               const displaySpec = getProductDisplaySpec(product);
+              const unitPriceLabel = formatProductUnitPrice(product);
 
               return (
                 <article className="product-master-row" key={getProductIdentity(product)}>
@@ -784,7 +812,8 @@ export default function ProductsPage() {
                   <span className="product-master-cell" data-label="小分類">{product.subcategory || "未分類"}</span>
                   <span className="product-master-cell" data-label="単位">{product.unit}</span>
                   <span className="product-master-cell" data-label="保管">{product.storageType || "未設定"}</span>
-                  <strong className="product-master-cell" data-label="参考価格">¥{product.referencePrice}</strong>
+                  <strong className="product-master-cell" data-label="参考価格">¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong>
+                  <span className="product-master-cell product-unit-price-cell" data-label="規格単価">{unitPriceLabel}</span>
                   <div className="mobile-product-summary" aria-label="商品概要">
                     <span><small>大分類</small><strong>{product.category}</strong></span>
                     <span><small>小分類</small><strong>{product.subcategory || "未分類"}</strong></span>
@@ -792,7 +821,8 @@ export default function ProductsPage() {
                     <span><small>保管</small><strong>{product.storageType || "未設定"}</strong></span>
                   </div>
                   <div className="mobile-product-price-row">
-                    <span className="mobile-product-price"><small>参考価格</small><strong>¥{product.referencePrice}</strong></span>
+                    <span className="mobile-product-price"><small>参考価格</small><strong>¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong></span>
+                    <span className="mobile-product-price"><small>規格単価</small><strong>{unitPriceLabel}</strong></span>
                     {canManageProducts ? (
                       <div className="mobile-product-actions">
                         <button
