@@ -603,7 +603,7 @@ export default function OrdersPage() {
     setDraftPriority(order.priority || "中");
     setDraftNote(order.note ?? "");
     setDraftRequesterStaffId(currentUserId || order.requesterStaffId || "");
-    setDraftBuyerStaffId(currentUserId || order.buyerStaffId || order.requesterStaffId || "");
+    setDraftBuyerStaffId("");
     setOrderItemDrafts(items.length > 0 ? items : [
       createOrderItemDraftFromProduct(availableProducts[0])
     ]);
@@ -1555,11 +1555,10 @@ function getSelectedBuyerStaffId(currentId: string, staffOptions: StaffOption[],
   const currentStaff = staffOptions.find((staff) => staff.id === currentId);
   if (currentStaff && (isStaffAssignedToStore(currentStaff, storeName) || currentStaff.role === "owner")) return currentStaff.id;
 
-  const currentUser = staffOptions.find((staff) => staff.id === currentUserId);
-  if (currentUser) return currentUser.id;
-
   return staffOptions.find((staff) => staff.role === "store_owner" && isStaffAssignedToStore(staff, storeName))?.id ??
     staffOptions.find((staff) => staff.role === "owner")?.id ??
+    staffOptions.find((staff) => staff.role === "buyer")?.id ??
+    staffOptions.find((staff) => staff.id === currentUserId)?.id ??
     staffOptions[0]?.id ??
     "";
 }
