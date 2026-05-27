@@ -19,6 +19,8 @@ type StaffMember = {
   name: string;
   loginId: string;
   email: string | null;
+  larkOpenId?: string | null;
+  larkUserId?: string | null;
   role: string;
   status: string;
   lastSeenAt?: string | null;
@@ -122,6 +124,8 @@ export default function StaffPage() {
       name: String(formData.get("name") ?? ""),
       loginId: String(formData.get("loginId") ?? ""),
       email: String(formData.get("email") ?? ""),
+      larkOpenId: String(formData.get("larkOpenId") ?? ""),
+      larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
       role: String(formData.get("role") ?? "staff"),
       status: String(formData.get("status") ?? "active"),
@@ -230,7 +234,10 @@ export default function StaffPage() {
                         </span>
                       </div>
                       <p>{member.loginId} / {roleLabels[member.role] ?? member.role}</p>
-                      <small>{member.status === "active" ? "有効" : "停止中"} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}</small>
+                      <small>
+                        {member.status === "active" ? "有効" : "停止中"} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}
+                        {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
+                      </small>
                     </div>
                     <div className="row-actions">
                       <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
@@ -297,6 +304,14 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
       <label>
         <span>メール</span>
         <input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="任意" />
+      </label>
+      <label>
+        <span>Lark open_id</span>
+        <input name="larkOpenId" defaultValue={member?.larkOpenId ?? ""} placeholder="任意" />
+      </label>
+      <label>
+        <span>Lark user_id</span>
+        <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
       </label>
       <label>
         <span>{member ? "新しいパスワード" : "初期パスワード"}</span>

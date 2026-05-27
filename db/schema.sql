@@ -30,6 +30,8 @@ create table if not exists employees (
   name text not null,
   login_id text unique,
   email text unique,
+  lark_open_id text,
+  lark_user_id text,
   password_hash text,
   role text not null,
   status text not null default 'active',
@@ -41,6 +43,8 @@ create table if not exists employees (
 
 alter table employees add column if not exists last_seen_at timestamptz;
 alter table employees add column if not exists ui_preferences jsonb not null default '{}'::jsonb;
+alter table employees add column if not exists lark_open_id text;
+alter table employees add column if not exists lark_user_id text;
 
 create table if not exists employee_scopes (
   id uuid primary key default gen_random_uuid(),
@@ -339,9 +343,14 @@ create table if not exists ops_notifications (
   title text not null,
   message text not null,
   href text,
+  lark_sent_at timestamptz,
+  lark_error text,
   read_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table ops_notifications add column if not exists lark_sent_at timestamptz;
+alter table ops_notifications add column if not exists lark_error text;
 
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),

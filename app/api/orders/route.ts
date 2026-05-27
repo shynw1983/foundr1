@@ -1,6 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOwnerOpsSession, requireWritableOpsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
 
 function toTokyoDateParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -131,6 +132,84 @@ async function validateStaffAssignee(session: EmployeeSession, staffId: string, 
   return rows[0]?.id ? targetStaffId : fallbackId;
 }
 
+async function notifyBuyerAboutOrder({
+  buyerStaffId,
+  orderNo,
+  storeName,
+  itemCount,
+  deadline
+}: {
+  buyerStaffId: string;
+  orderNo: string;
+  storeName: string;
+  itemCount: number;
+  deadline: string;
+}) {
+  const href = `/ops/procurement?order=${encodeURIComponent(orderNo)}`;
+  const title = "新しい発注依頼";
+  const message = `${storeName} から ${itemCount} 件の発注依頼が届きました。`;
+  const insertedNotifications = await sql`
+    insert into ops_notifications (
+      recipient_employee_id,
+      notification_type,
+      title,
+      message,
+      href
+    )
+    values (
+      ${buyerStaffId},
+      ${"new_order"},
+      ${title},
+      ${message},
+      ${href}
+    )
+    returning id
+  `;
+  const notificationId = insertedNotifications[0]?.id;
+
+  const buyerRows = await sql`
+    select
+      name,
+      lark_open_id as "larkOpenId",
+      lark_user_id as "larkUserId"
+    from employees
+    where id = ${buyerStaffId}
+    limit 1
+  `;
+  const buyer = buyerRows[0] as { name?: string; larkOpenId?: string | null; larkUserId?: string | null } | undefined;
+  const larkResult = await sendPurchaseOrderLarkNotification(
+    {
+      larkOpenId: buyer?.larkOpenId,
+      larkUserId: buyer?.larkUserId
+    },
+    {
+      orderNo,
+      storeName,
+      itemCount,
+      deadline,
+      buyerName: buyer?.name,
+      href
+    }
+  );
+
+  if (!notificationId) return;
+
+  if (larkResult.delivered) {
+    await sql`
+      update ops_notifications
+      set lark_sent_at = now(),
+          lark_error = null
+      where id = ${notificationId}
+    `;
+  } else if (!larkResult.ok) {
+    await sql`
+      update ops_notifications
+      set lark_error = ${larkResult.error}
+      where id = ${notificationId}
+    `;
+  }
+}
+
 export async function POST(request: Request) {
   const session = await requireWritableOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -186,23 +265,6 @@ export async function POST(request: Request) {
   const purchaseOrderId = insertedOrders[0]?.id;
 
   if (purchaseOrderId) {
-    await sql`
-      insert into ops_notifications (
-        recipient_employee_id,
-        notification_type,
-        title,
-        message,
-        href
-      )
-      values (
-        ${buyerStaffId},
-        ${"new_order"},
-        ${"新しい発注依頼"},
-        ${`${storeName} から ${itemCount} 件の発注依頼が届きました。`},
-        ${`/ops/procurement?order=${encodeURIComponent(orderNo)}`}
-      )
-    `;
-
     for (const [index, productName] of productNames.entries()) {
       const quantity = normalizeRequestedQuantity(quantities[index]);
       const unit = units[index] || "個";
@@ -221,10 +283,18 @@ export async function POST(request: Request) {
           ${productId},
           ${quantity},
           ${unit},
-          ${"requested"}
-        )
-      `;
+        ${"requested"}
+      )
+    `;
     }
+
+    await notifyBuyerAboutOrder({
+      buyerStaffId,
+      orderNo,
+      storeName,
+      itemCount,
+      deadline
+    });
   }
 
   return Response.json({ ok: true, orderId: orderNo });
@@ -263,7 +333,10 @@ export async function PUT(request: Request) {
   const buyerStaffId = await validateStaffAssignee(session, buyerStaffIdInput, validation.storeId, requesterStaffId);
 
   const existingOrder = await sql`
-    select id, store_id::text as "storeId"
+    select
+      id,
+      store_id::text as "storeId",
+      assigned_to::text as "assignedTo"
     from purchase_orders
     where order_no = ${orderId}
     limit 1
@@ -345,6 +418,16 @@ export async function PUT(request: Request) {
         ${"requested"}
       )
     `;
+  }
+
+  if (String(existingOrder[0]?.assignedTo ?? "") !== buyerStaffId) {
+    await notifyBuyerAboutOrder({
+      buyerStaffId,
+      orderNo: orderId,
+      storeName,
+      itemCount: productNames.length,
+      deadline
+    });
   }
 
   return Response.json({ ok: true });

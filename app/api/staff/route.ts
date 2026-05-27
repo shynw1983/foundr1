@@ -7,6 +7,8 @@ type StaffPayload = {
   name?: string;
   loginId?: string;
   email?: string;
+  larkOpenId?: string;
+  larkUserId?: string;
   password?: string;
   role?: string;
   status?: string;
@@ -38,6 +40,8 @@ export async function GET() {
       employees.name,
       employees.login_id as "loginId",
       employees.email,
+      employees.lark_open_id as "larkOpenId",
+      employees.lark_user_id as "larkUserId",
       employees.role,
       employees.status,
       employees.last_seen_at as "lastSeenAt",
@@ -75,6 +79,8 @@ export async function POST(request: Request) {
   const name = String(body.name ?? "").trim();
   const loginId = String(body.loginId ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const larkOpenId = String(body.larkOpenId ?? "").trim();
+  const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
   const role = normalizeRole(body.role);
   const status = normalizeStatus(body.status);
@@ -85,8 +91,8 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into employees (name, login_id, email, role, status, password_hash, updated_at)
-    values (${name}, ${loginId}, ${email || null}, ${role}, ${status}, ${hashPassword(password)}, now())
+    insert into employees (name, login_id, email, lark_open_id, lark_user_id, role, status, password_hash, updated_at)
+    values (${name}, ${loginId}, ${email || null}, ${larkOpenId || null}, ${larkUserId || null}, ${role}, ${status}, ${hashPassword(password)}, now())
     returning id
   `;
   const employeeId = rows[0]?.id;

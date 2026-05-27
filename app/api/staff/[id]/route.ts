@@ -6,6 +6,8 @@ type StaffPayload = {
   name?: string;
   loginId?: string;
   email?: string;
+  larkOpenId?: string;
+  larkUserId?: string;
   password?: string;
   role?: string;
   status?: string;
@@ -35,6 +37,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const name = String(body.name ?? "").trim();
   const loginId = String(body.loginId ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const larkOpenId = String(body.larkOpenId ?? "").trim();
+  const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
   const role = normalizeRole(body.role);
   const status = id === session.id ? "active" : normalizeStatus(body.status);
@@ -50,6 +54,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       set name = ${name},
           login_id = ${loginId},
           email = ${email || null},
+          lark_open_id = ${larkOpenId || null},
+          lark_user_id = ${larkUserId || null},
           role = ${role},
           status = ${status},
           password_hash = ${hashPassword(password)},
@@ -62,6 +68,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       set name = ${name},
           login_id = ${loginId},
           email = ${email || null},
+          lark_open_id = ${larkOpenId || null},
+          lark_user_id = ${larkUserId || null},
           role = ${role},
           status = ${status},
           updated_at = now()
