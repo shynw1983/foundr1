@@ -63,9 +63,13 @@ button {
 
 .brand-block {
   display: flex;
+  align-self: start;
   gap: 12px;
   align-items: center;
-  padding: 8px 6px 24px;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 16px;
+  padding: 8px 6px;
   color: inherit;
   text-decoration: none;
   border-radius: 8px;
@@ -4332,6 +4336,7 @@ button {
   .brand-block {
     flex: 1 1 auto;
     min-width: 0;
+    margin-bottom: 0;
     padding: 0;
   }
 
@@ -4655,6 +4660,7 @@ button {
     display: flex;
     flex: 1 1 auto;
     min-width: 0;
+    margin-bottom: 0;
     padding: 0;
   }
 
