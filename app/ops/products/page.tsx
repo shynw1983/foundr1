@@ -582,12 +582,11 @@ export default function ProductsPage() {
       value: {
         ...product,
         id: undefined,
-        name: "",
         photoUrl: ""
       }
     });
 
-    showNotice("商品情報をコピーしました。商品名を入力して保存してください。", "info");
+    showNotice("商品情報をコピーしました。必要な項目を変更して保存してください。", "info");
   }
 
   function deleteProduct(product: ProductWithCategory) {
