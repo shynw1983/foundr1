@@ -328,6 +328,7 @@ export default function ProductsPage() {
   const [draftProductSummaryFields, setDraftProductSummaryFields] = useState(defaultProductSummaryFields);
   const [productSummarySaveStatus, setProductSummarySaveStatus] = useState("");
   const [isSavingProductSummaryFields, setIsSavingProductSummaryFields] = useState(false);
+  const [isProductSummaryPickerOpen, setIsProductSummaryPickerOpen] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -564,6 +565,9 @@ export default function ProductsPage() {
 
       setProductSummaryFields(draftProductSummaryFields);
       setProductSummarySaveStatus("保存しました。");
+      window.setTimeout(() => {
+        setIsProductSummaryPickerOpen(false);
+      }, 450);
     } catch {
       setProductSummarySaveStatus("保存できませんでした。");
     } finally {
@@ -804,7 +808,11 @@ export default function ProductsPage() {
                 </select>
               </label>
               <span className="source-indicator">{filteredProducts.length} 件</span>
-              <details className="product-summary-picker">
+              <details
+                className="product-summary-picker"
+                open={isProductSummaryPickerOpen}
+                onToggle={(event) => setIsProductSummaryPickerOpen(event.currentTarget.open)}
+              >
                 <summary>基本情報表示</summary>
                 <div>
                   {productSummaryFieldOptions.map((option) => (
