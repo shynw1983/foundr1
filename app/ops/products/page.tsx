@@ -77,6 +77,21 @@ const missingProductInfoOptions = [
   { value: "mainSupplier", label: "メイン発注先未設定" },
   { value: "backupSupplier", label: "予備発注先未設定" }
 ];
+const defaultProductSummaryFields = ["japaneseNote", "productBrandName"];
+const productSummaryFieldOptions = [
+  { value: "japaneseNote", label: "日本語メモ" },
+  { value: "productBrandName", label: "商品ブランド" },
+  { value: "manufacturer", label: "メーカー" },
+  { value: "category", label: "大分類" },
+  { value: "subcategory", label: "小分類" },
+  { value: "unit", label: "単位" },
+  { value: "storageType", label: "保管" },
+  { value: "brand", label: "適用ブランド" },
+  { value: "mainSupplier", label: "メイン発注先" },
+  { value: "backupSupplier", label: "予備発注先" },
+  { value: "referencePrice", label: "参考価格" },
+  { value: "unitPrice", label: "規格単価" }
+];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -175,6 +190,23 @@ function formatProductUnitPrice(product: ProductWithCategory) {
 
   const specQuantity = hasPackageQuantity(product) ? null : parsePackageSpecForUnitPrice(product.packageSpec);
   return `¥${formatYenAmount(unitPrice)} / ${specQuantity?.unit || product.packageQuantityUnit || product.unit || "単位"}`;
+}
+
+function getProductSummaryFieldValue(product: ProductWithCategory, field: string, unitPriceLabel: string) {
+  if (field === "japaneseNote") return product.japaneseNote || "";
+  if (field === "productBrandName") return product.productBrandName || "";
+  if (field === "manufacturer") return product.manufacturer || "";
+  if (field === "category") return product.category || "";
+  if (field === "subcategory") return product.subcategory || "未分類";
+  if (field === "unit") return product.unit || "";
+  if (field === "storageType") return product.storageType || "未設定";
+  if (field === "brand") return product.brand || "共通";
+  if (field === "mainSupplier") return product.mainSupplier || "未設定";
+  if (field === "backupSupplier") return product.backupSupplier || "無";
+  if (field === "referencePrice") return `¥${formatYenAmount(parseReferencePrice(product.referencePrice))}`;
+  if (field === "unitPrice") return unitPriceLabel;
+
+  return "";
 }
 
 function isProductSpecMissing(product: ProductWithCategory) {
@@ -292,6 +324,7 @@ export default function ProductsPage() {
   const [productPageSize, setProductPageSize] = useState(20);
   const [productSortKey, setProductSortKey] = useState<ProductSortKey>("category");
   const [productSortDirection, setProductSortDirection] = useState<SortDirection>("asc");
+  const [productSummaryFields, setProductSummaryFields] = useState(defaultProductSummaryFields);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -304,8 +337,22 @@ export default function ProductsPage() {
     ]);
 
     if (meResponse.ok) {
-      const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+      const body = await meResponse.json().catch(() => ({})) as {
+        employee?: {
+          role?: string;
+          uiPreferences?: {
+            productMasterSummaryFields?: string[];
+          };
+        };
+      };
       setCurrentRole(body.employee?.role ?? "");
+      const savedSummaryFields = body.employee?.uiPreferences?.productMasterSummaryFields;
+      if (Array.isArray(savedSummaryFields) && savedSummaryFields.length > 0) {
+        const validFields = savedSummaryFields.filter((field) =>
+          productSummaryFieldOptions.some((option) => option.value === field)
+        );
+        if (validFields.length > 0) setProductSummaryFields(validFields);
+      }
     }
 
     if (!response.ok) return;
@@ -481,6 +528,19 @@ export default function ProductsPage() {
         photoUrl: "",
         storageType: "常温"
       }
+    });
+  }
+
+  function updateProductSummaryFields(field: string, checked: boolean) {
+    const nextFields = checked
+      ? [...productSummaryFields, field]
+      : productSummaryFields.filter((item) => item !== field);
+    const normalizedFields = nextFields.length > 0 ? nextFields.slice(0, 6) : defaultProductSummaryFields;
+    setProductSummaryFields(normalizedFields);
+    void fetch("/api/me/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productMasterSummaryFields: normalizedFields })
     });
   }
 
@@ -717,6 +777,21 @@ export default function ProductsPage() {
                 </select>
               </label>
               <span className="source-indicator">{filteredProducts.length} 件</span>
+              <details className="product-summary-picker">
+                <summary>基本情報表示</summary>
+                <div>
+                  {productSummaryFieldOptions.map((option) => (
+                    <label key={option.value}>
+                      <input
+                        type="checkbox"
+                        checked={productSummaryFields.includes(option.value)}
+                        onChange={(event) => updateProductSummaryFields(option.value, event.target.checked)}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
             </div>
           </div>
           <div className="product-filter-stack">
@@ -815,6 +890,13 @@ export default function ProductsPage() {
             {pagedProducts.map((product) => {
               const displaySpec = getProductDisplaySpec(product);
               const unitPriceLabel = formatProductUnitPrice(product);
+              const summaryItems = productSummaryFields
+                .map((field) => {
+                  const option = productSummaryFieldOptions.find((item) => item.value === field);
+                  const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
+                  return option && value ? { label: option.label, value } : null;
+                })
+                .filter(Boolean) as Array<{ label: string; value: string }>;
 
               return (
                 <article className="product-master-row" key={getProductIdentity(product)}>
@@ -831,7 +913,18 @@ export default function ProductsPage() {
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
                       </div>
-                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
+                      {summaryItems.length > 0 ? (
+                        <div className="mobile-product-meta">
+                          {summaryItems.map((item) => (
+                            <span key={`${product.name}-${item.label}`}>
+                              <small>{item.label}</small>
+                              <em>{item.value}</em>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>基本情報未設定</p>
+                      )}
                     </div>
                   </div>
                   <div className="mobile-product-head">
@@ -906,13 +999,6 @@ export default function ProductsPage() {
                   <details className="product-master-detail">
                     <summary>詳細</summary>
                     <div className="product-master-detail-body">
-                      <div className="product-photo-thumb">
-                        {product.photoUrl ? (
-                          <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
-                        ) : (
-                          <span>写真</span>
-                        )}
-                      </div>
                       <dl>
                         <div>
                           <dt>適用ブランド</dt>
