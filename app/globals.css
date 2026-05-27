@@ -4625,7 +4625,7 @@ button {
 
   .mobile-product-price-row {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
     gap: 8px;
   }
@@ -4653,10 +4653,16 @@ button {
   }
 
   .mobile-product-actions {
-    display: flex;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 7px;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .mobile-product-actions .text-button {
+    width: 100%;
+    min-height: 36px;
   }
 
   .product-master-row > .row-actions {
@@ -5580,17 +5586,17 @@ button {
   }
 
   .mobile-product-price-row {
-    grid-template-columns: minmax(86px, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
   .mobile-product-actions {
-    gap: 6px;
+    gap: 8px;
   }
 
   .mobile-product-actions .text-button {
     min-height: 34px;
-    padding: 0 10px;
+    padding: 0 8px;
   }
 
   .product-master-detail {
