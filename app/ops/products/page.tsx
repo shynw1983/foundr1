@@ -979,7 +979,18 @@ export default function ProductsPage() {
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
                       </div>
-                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
+                      {summaryItems.length > 0 ? (
+                        <div className="mobile-product-meta">
+                          {summaryItems.map((item) => (
+                            <span key={`${product.name}-mobile-meta-${item.label}`}>
+                              <small>{item.label}</small>
+                              <em>{item.value}</em>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>基本情報未設定</p>
+                      )}
                     </div>
                   </div>
                   <span className="product-master-cell" data-label="大分類">{product.category}</span>

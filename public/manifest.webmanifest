@@ -1,0 +1,19 @@
+{
+  "name": "FOUNDR1 発注管理",
+  "short_name": "発注管理",
+  "description": "複数店舗・複数ブランド向け発注管理システム",
+  "start_url": "/ops",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#202a36",
+  "theme_color": "#202a36",
+  "icons": [
+    {
+      "src": "/icons/foundr1-app.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
