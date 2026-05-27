@@ -4534,6 +4534,19 @@ button {
     grid-column: 1 / -1;
   }
 
+  .product-filter-stack,
+  .product-category-strip,
+  .product-master-table,
+  .product-master-row,
+  .mobile-product-head > div,
+  .mobile-product-price {
+    min-width: 0;
+  }
+
+  .product-structured-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .product-master-table {
     max-width: 100%;
     overflow: hidden;
@@ -4649,6 +4662,10 @@ button {
   }
 
   .mobile-product-price strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 500;
   }
 
