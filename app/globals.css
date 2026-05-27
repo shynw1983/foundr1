@@ -2535,7 +2535,8 @@ button {
 }
 
 .secondary-button.is-complete:disabled,
-.fulfillment-actions .secondary-button.is-complete:disabled {
+.fulfillment-actions .secondary-button.is-complete:disabled,
+.fulfillment-mark-button.is-complete:disabled {
   cursor: default;
   border-color: #17202b;
   color: white;
@@ -2548,6 +2549,20 @@ button {
   gap: 8px;
   justify-items: end;
   min-width: min(360px, 100%);
+}
+
+.fulfillment-mark-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: white;
+  background: var(--green);
+  font: inherit;
+  font-weight: 800;
 }
 
 .online-fulfillment-list {

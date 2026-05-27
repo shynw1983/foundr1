@@ -1318,7 +1318,7 @@ function OrderFulfillmentPanel({
                   </label>
                   <button
                     type="button"
-                    className={groupOrdered ? "secondary-button is-complete" : "secondary-button"}
+                    className={groupOrdered ? "fulfillment-mark-button is-complete" : "fulfillment-mark-button"}
                     disabled={groupHandledCount === 0 || !group.state.expectedArrivalDate || groupOrdered}
                     onClick={() => onConfirmOnlineOrder(group.supplier)}
                   >
@@ -1326,7 +1326,7 @@ function OrderFulfillmentPanel({
                   </button>
                   <button
                     type="button"
-                    className={groupArrived ? "secondary-button is-complete" : "secondary-button"}
+                    className={groupArrived ? "fulfillment-mark-button is-complete" : "fulfillment-mark-button"}
                     disabled={!groupOrdered || groupArrived}
                     onClick={() => onMarkOnlineArrived(group.supplier)}
                   >
