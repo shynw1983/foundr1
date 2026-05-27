@@ -24,8 +24,6 @@ type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
 type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number] & {
   deadlineAt?: string | null;
-  expectedArrivalDate?: string;
-  onlineOrderStatus?: "not_started" | "online_ordered";
   requesterName?: string;
   buyerName?: string;
 };
@@ -67,6 +65,11 @@ type DeliveryState = {
   status: "not_started" | "online_ordered";
   expectedArrivalDate: string;
 };
+type SupplierFulfillment = DeliveryState & {
+  id?: string;
+  orderId: string;
+  supplier: string;
+};
 type DeliveryBatch = {
   id: string;
   orderId: string;
@@ -79,6 +82,15 @@ type DeliveryBatch = {
 type SupplierChoice = {
   supplier: string;
   role: string;
+};
+type OnlineSupplierFulfillmentGroup = {
+  supplier: string;
+  totalCount: number;
+  purchasedCount: number;
+  unavailableCount: number;
+  deliveredCount: number;
+  receivedCount: number;
+  state: DeliveryState;
 };
 type ProcurementStatusFilter = "未完了" | "購入待ち" | "一部購入済み" | "到着日入力待ち" | "到着待ち" | "配送待ち" | "配送中" | "一部納品済み" | "確認待ち" | "完了" | "すべて";
 type ProductLookup = {
@@ -436,8 +448,40 @@ function getOrderStatusFast(
   return "配送待ち";
 }
 
-function getDeliveryStateForOrder(deliveryStates: Record<string, DeliveryState>, orderId: string) {
-  return deliveryStates[orderId] ?? { status: "not_started", expectedArrivalDate: "" };
+function getSupplierDeliveryStateKey(orderId: string, supplier: string) {
+  return `${orderId}::${supplier}`;
+}
+
+function getSupplierDeliveryState(
+  deliveryStates: Record<string, DeliveryState>,
+  orderId: string,
+  supplier: string
+) {
+  return deliveryStates[getSupplierDeliveryStateKey(orderId, supplier)] ?? { status: "not_started", expectedArrivalDate: "" };
+}
+
+function getAggregateDeliveryStateForOrder(
+  deliveryStates: Record<string, DeliveryState>,
+  orderId: string,
+  items: ProcurementTaskItem[],
+  supplierByName: Map<string, Supplier>
+) {
+  const deliverySuppliers = Array.from(new Set(
+    items
+      .filter((item) => isDeliveryOrderItem(item, supplierByName))
+      .map((item) => item.supplier)
+      .filter(Boolean)
+  ));
+
+  if (deliverySuppliers.length === 0) return { status: "not_started" as const, expectedArrivalDate: "" };
+
+  const supplierStates = deliverySuppliers.map((supplier) => getSupplierDeliveryState(deliveryStates, orderId, supplier));
+  const allOrdered = supplierStates.every((state) => state.status === "online_ordered" && Boolean(state.expectedArrivalDate));
+
+  return {
+    status: allOrdered ? "online_ordered" as const : "not_started" as const,
+    expectedArrivalDate: allOrdered ? supplierStates.map((state) => state.expectedArrivalDate).sort().at(-1) ?? "" : ""
+  };
 }
 
 function getOrderDeadlineSortValue(order: PurchaseOrder) {
@@ -447,14 +491,6 @@ function getOrderDeadlineSortValue(order: PurchaseOrder) {
   }
 
   return Number.POSITIVE_INFINITY;
-}
-
-function createInitialDeliveryStates(purchaseOrders: PurchaseOrder[]) {
-  return purchaseOrders.reduce<Record<string, DeliveryState>>((states, order) => {
-    states[order.id] = { status: "not_started", expectedArrivalDate: "" };
-
-    return states;
-  }, {});
 }
 
 function formatExpectedArrivalDate(date: string) {
@@ -493,12 +529,13 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   }
 }
 
-async function saveOrderDeliveryState(orderId: string, state: DeliveryState) {
+async function saveOrderDeliveryState(orderId: string, supplier: string, state: DeliveryState) {
   const response = await fetch("/api/procurement/orders", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       orderId,
+      supplier,
       expectedArrivalDate: state.expectedArrivalDate,
       onlineOrderStatus: state.status
     })
@@ -522,6 +559,7 @@ export default function ProcurementPage() {
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
+  const [supplierFulfillments, setSupplierFulfillments] = useState<SupplierFulfillment[]>([]);
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [query, setQuery] = useState("");
@@ -568,6 +606,7 @@ export default function ProcurementPage() {
         suppliers?: Supplier[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: DashboardOrderItem[];
+        supplierFulfillments?: SupplierFulfillment[];
         deliveryBatches?: DeliveryBatch[];
       };
 
@@ -581,6 +620,7 @@ export default function ProcurementPage() {
         setPurchaseOrders(data.orders);
       }
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+      if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
       if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
       setDataSource("neon");
     }
@@ -607,16 +647,16 @@ export default function ProcurementPage() {
     setDeliveryStates((states) => {
       const nextStates = { ...states };
 
-      purchaseOrders.forEach((order) => {
-        nextStates[order.id] = nextStates[order.id] ?? {
-          status: order.onlineOrderStatus ?? "not_started",
-          expectedArrivalDate: order.expectedArrivalDate ?? ""
+      supplierFulfillments.forEach((fulfillment) => {
+        nextStates[getSupplierDeliveryStateKey(fulfillment.orderId, fulfillment.supplier)] = {
+          status: fulfillment.status,
+          expectedArrivalDate: fulfillment.expectedArrivalDate
         };
       });
 
       return nextStates;
     });
-  }, [purchaseOrders]);
+  }, [supplierFulfillments]);
 
   useEffect(() => {
     setVisibleOrderLimit(procurementOrderRenderBatchSize);
@@ -643,18 +683,22 @@ export default function ProcurementPage() {
     });
   }
 
-  function updateDeliveryState(orderId: string, next: Partial<DeliveryState>, successMessage?: string) {
+  function updateDeliveryState(orderId: string, supplier: string, next: Partial<DeliveryState>, successMessage?: string) {
     let nextState: DeliveryState | null = null;
+    const stateKey = getSupplierDeliveryStateKey(orderId, supplier);
 
     setDeliveryStates((states) => ({
       ...states,
-      [orderId]: (nextState = { ...getDeliveryStateForOrder(states, orderId), ...next })
+      [stateKey]: (nextState = {
+        ...getSupplierDeliveryState(states, orderId, supplier),
+        ...next
+      })
     }));
 
     queueMicrotask(() => {
       if (!nextState) return;
 
-      void saveOrderDeliveryState(orderId, nextState)
+      void saveOrderDeliveryState(orderId, supplier, nextState)
         .then(() => {
           if (successMessage) showNotice(successMessage);
         })
@@ -664,19 +708,19 @@ export default function ProcurementPage() {
     });
   }
 
-  function confirmOnlineOrder(orderId: string) {
-    const currentState = getDeliveryStateForOrder(deliveryStates, orderId);
+  function confirmOnlineOrder(orderId: string, supplier: string) {
+    const currentState = getSupplierDeliveryState(deliveryStates, orderId, supplier);
 
     if (!currentState.expectedArrivalDate) {
       window.alert("到着予定日を入力してください。");
       return;
     }
 
-    updateDeliveryState(orderId, { status: "online_ordered" }, "配送発注を発注済みにしました。");
+    updateDeliveryState(orderId, supplier, { status: "online_ordered" }, `${supplier} を発注済みにしました。`);
   }
 
-  function markOnlineOrderArrived(orderId: string) {
-    const currentState = getDeliveryStateForOrder(deliveryStates, orderId);
+  function markOnlineOrderArrived(orderId: string, supplier: string) {
+    const currentState = getSupplierDeliveryState(deliveryStates, orderId, supplier);
 
     if (currentState.status !== "online_ordered") {
       window.alert("先に発注済みにしてください。");
@@ -688,7 +732,8 @@ export default function ProcurementPage() {
         item.orderId === orderId &&
         item.purchased &&
         item.deliveryStatus !== "received" &&
-        isDeliveryOrderItem(item, supplierByName)
+        isDeliveryOrderItem(item, supplierByName) &&
+        item.supplier === supplier
       )
       .map((item) => ({ ...item, deliveryStatus: "delivered" as const }));
 
@@ -702,7 +747,7 @@ export default function ProcurementPage() {
     );
 
     void Promise.all(targetItems.map((item) => saveProcurementTaskItem(item)))
-      .then(() => showNotice("配送発注を納品済みにしました。"))
+      .then(() => showNotice(`${supplier} を納品済みにしました。`))
       .catch(() => {
         window.alert("到着状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
       });
@@ -816,7 +861,7 @@ export default function ProcurementPage() {
   }, [procurementTaskItems]);
   const purchaseOrdersWithStatus = useMemo(() => purchaseOrders.map((order) => {
     const items = itemsByOrderId.get(order.id) ?? [];
-    const deliveryState = getDeliveryStateForOrder(deliveryStates, order.id);
+    const deliveryState = getAggregateDeliveryStateForOrder(deliveryStates, order.id, items, supplierByName);
     const liveStatus = getOrderStatusFast(order, items, deliveryState, supplierByName);
 
     return { order, items, deliveryState, liveStatus };
@@ -946,6 +991,22 @@ export default function ProcurementPage() {
               const onlineUnavailableCount = onlineOrderItems.filter((item) => item.unavailable).length;
               const onlineDeliveredCount = onlineOrderItems.filter((item) => item.deliveryStatus === "delivered").length;
               const onlineReceivedCount = onlineOrderItems.filter((item) => item.deliveryStatus === "received").length;
+              const onlineSupplierGroups = groupTasksBySupplierFast(onlineOrderItems, supplierByProductName).map((group) => {
+                const groupPurchasedCount = group.items.filter((item) => item.purchased).length;
+                const groupUnavailableCount = group.items.filter((item) => item.unavailable).length;
+                const groupDeliveredCount = group.items.filter((item) => item.deliveryStatus === "delivered").length;
+                const groupReceivedCount = group.items.filter((item) => item.deliveryStatus === "received").length;
+
+                return {
+                  supplier: group.supplier,
+                  totalCount: group.items.length,
+                  purchasedCount: groupPurchasedCount,
+                  unavailableCount: groupUnavailableCount,
+                  deliveredCount: groupDeliveredCount,
+                  receivedCount: groupReceivedCount,
+                  state: getSupplierDeliveryState(deliveryStates, order.id, group.supplier)
+                };
+              });
               const orderDeliveryBatches = deliveryBatchesByOrderId.get(order.id) ?? [];
               const hasPurchasedItems = completedCount > 0;
               const hasOnlineOrderItems = onlineOrderItems.length > 0;
@@ -979,15 +1040,16 @@ export default function ProcurementPage() {
                     onlineDeliveredCount={onlineDeliveredCount}
                     onlineReceivedCount={onlineReceivedCount}
                     onlineTotalCount={onlineOrderItems.length}
+                    onlineSupplierGroups={onlineSupplierGroups}
                     deliveredCount={deliveredCount}
                     receivedCount={receivedCount}
                     inDeliveryCount={inDeliveryCount}
                     readyToDeliverCount={readyToDeliverCount}
                     totalCount={items.length}
                     state={deliveryState}
-                    onChange={(next) => updateDeliveryState(order.id, next)}
-                    onConfirmOnlineOrder={() => confirmOnlineOrder(order.id)}
-                    onMarkOnlineArrived={() => markOnlineOrderArrived(order.id)}
+                    onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
+                    onConfirmOnlineOrder={(supplier) => confirmOnlineOrder(order.id, supplier)}
+                    onMarkOnlineArrived={(supplier) => markOnlineOrderArrived(order.id, supplier)}
                     batches={orderDeliveryBatches}
                     onCreateBatch={() => createDeliveryBatch(order.id)}
                     onMarkStatus={markDeliveryBatchStatus}
@@ -1141,6 +1203,7 @@ function OrderFulfillmentPanel({
   onlineDeliveredCount,
   onlineReceivedCount,
   onlineTotalCount,
+  onlineSupplierGroups,
   deliveredCount,
   receivedCount,
   inDeliveryCount,
@@ -1164,15 +1227,16 @@ function OrderFulfillmentPanel({
   onlineDeliveredCount: number;
   onlineReceivedCount: number;
   onlineTotalCount: number;
+  onlineSupplierGroups: OnlineSupplierFulfillmentGroup[];
   deliveredCount: number;
   receivedCount: number;
   inDeliveryCount: number;
   readyToDeliverCount: number;
   totalCount: number;
   state: DeliveryState;
-  onChange: (next: Partial<DeliveryState>) => void;
-  onConfirmOnlineOrder: () => void;
-  onMarkOnlineArrived: () => void;
+  onChange: (supplier: string, next: Partial<DeliveryState>) => void;
+  onConfirmOnlineOrder: (supplier: string) => void;
+  onMarkOnlineArrived: (supplier: string) => void;
   batches: DeliveryBatch[];
   onCreateBatch: () => void;
   onMarkStatus: (batchId: string, status: "delivered" | "received") => void;
@@ -1223,37 +1287,55 @@ function OrderFulfillmentPanel({
         </div>
       </div>
       {hasOnlineOrderItems ? (
-        <div className="fulfillment-actions">
-          <label>
-            <span>到着予定日</span>
-            <input
-              type="date"
-              value={state.expectedArrivalDate}
-              disabled={onlineHandledCount === 0}
-              onChange={(event) =>
-                onChange({
-                  expectedArrivalDate: event.target.value,
-                  ...(event.target.value ? {} : { status: "not_started" as const })
-                })
-              }
-            />
-          </label>
-          <button
-            type="button"
-            className={isOnlineOrdered ? "secondary-button is-complete" : "secondary-button"}
-            disabled={onlineHandledCount === 0 || !state.expectedArrivalDate || isOnlineOrdered}
-            onClick={onConfirmOnlineOrder}
-          >
-            {isOnlineOrdered ? "発注済み" : "発注済みにする"}
-          </button>
-          <button
-            type="button"
-            className={onlineArrived ? "secondary-button is-complete" : "secondary-button"}
-            disabled={!isOnlineOrdered || onlineArrived}
-            onClick={onMarkOnlineArrived}
-          >
-            {onlineArrived ? "納品済み" : "到着済みにする"}
-          </button>
+        <div className="online-fulfillment-list">
+          {onlineSupplierGroups.map((group) => {
+            const groupHandledCount = group.purchasedCount + group.unavailableCount;
+            const groupDeliveredTotalCount = group.deliveredCount + group.receivedCount + group.unavailableCount;
+            const groupOrdered = group.state.status === "online_ordered" && Boolean(group.state.expectedArrivalDate);
+            const groupArrived = groupDeliveredTotalCount >= group.totalCount;
+
+            return (
+              <div className="online-fulfillment-row" key={group.supplier}>
+                <div className="online-fulfillment-info">
+                  <span>配送発注先</span>
+                  <strong>{group.supplier}</strong>
+                  <small>{groupHandledCount} / {group.totalCount} 処理済み</small>
+                </div>
+                <div className="fulfillment-actions">
+                  <label>
+                    <span>到着予定日</span>
+                    <input
+                      type="date"
+                      value={group.state.expectedArrivalDate}
+                      disabled={groupHandledCount === 0}
+                      onChange={(event) =>
+                        onChange(group.supplier, {
+                          expectedArrivalDate: event.target.value,
+                          ...(event.target.value ? {} : { status: "not_started" as const })
+                        })
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={groupOrdered ? "secondary-button is-complete" : "secondary-button"}
+                    disabled={groupHandledCount === 0 || !group.state.expectedArrivalDate || groupOrdered}
+                    onClick={() => onConfirmOnlineOrder(group.supplier)}
+                  >
+                    {groupOrdered ? "発注済み" : "発注済みにする"}
+                  </button>
+                  <button
+                    type="button"
+                    className={groupArrived ? "secondary-button is-complete" : "secondary-button"}
+                    disabled={!groupOrdered || groupArrived}
+                    onClick={() => onMarkOnlineArrived(group.supplier)}
+                  >
+                    {groupArrived ? "納品済み" : "到着済みにする"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
       {hasStoreDeliveryItems ? (

@@ -104,6 +104,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     orders,
     purchaseOrderItems,
     deliveryBatches,
+    supplierFulfillments,
     priceSignals
   ] =
     await Promise.all([
@@ -324,8 +325,6 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(purchase_orders.deadline_label, '') as "deadlineLabel",
           purchase_orders.deadline_at as "deadlineAt",
           purchase_orders.created_at as "createdAt",
-          coalesce(purchase_orders.online_order_status, 'not_started') as "onlineOrderStatus",
-          coalesce(to_char(purchase_orders.expected_arrival_date, 'YYYY-MM-DD'), '') as "expectedArrivalDate",
           purchase_orders.requested_item_count as items,
           purchase_orders.priority,
           coalesce(purchase_orders.note, '') as note,
@@ -458,6 +457,19 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         order by delivery_batches.created_at desc
       `,
       sql`
+        select
+          purchase_order_supplier_fulfillments.id::text as id,
+          purchase_orders.order_no as "orderId",
+          coalesce(suppliers.name, purchase_order_supplier_fulfillments.supplier_name) as supplier,
+          coalesce(to_char(purchase_order_supplier_fulfillments.expected_arrival_date, 'YYYY-MM-DD'), '') as "expectedArrivalDate",
+          coalesce(purchase_order_supplier_fulfillments.online_order_status, 'not_started') as status
+        from purchase_order_supplier_fulfillments
+        join purchase_orders on purchase_orders.id = purchase_order_supplier_fulfillments.purchase_order_id
+        left join suppliers on suppliers.id = purchase_order_supplier_fulfillments.supplier_id
+        where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+        order by purchase_orders.created_at desc, supplier
+      `,
+      sql`
         with ranked_prices as (
           select
             price_records.product_id,
@@ -544,6 +556,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     orders: displayOrders,
     purchaseOrderItems,
     deliveryBatches,
+    supplierFulfillments,
     priceSignals,
     currentUserId: session?.id ?? ""
   };

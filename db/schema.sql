@@ -272,8 +272,6 @@ create table if not exists purchase_orders (
   assigned_to uuid references employees(id),
   deadline_label text,
   deadline_at timestamptz,
-  expected_arrival_date date,
-  online_order_status text not null default 'not_started',
   requested_item_count integer not null default 0,
   priority text not null default 'medium',
   status text not null default 'submitted',
@@ -302,15 +300,32 @@ alter table purchase_order_items add column if not exists selected_supplier_id u
 alter table purchase_order_items add column if not exists store_feedback_confirmed_at timestamptz;
 alter table purchase_order_items add column if not exists store_feedback_confirmed_by uuid references employees(id);
 
-alter table purchase_orders add column if not exists expected_arrival_date date;
-alter table purchase_orders add column if not exists online_order_status text not null default 'not_started';
 alter table purchase_orders add column if not exists requested_by uuid references employees(id);
 alter table purchase_orders add column if not exists assigned_to uuid references employees(id);
+alter table purchase_orders drop column if exists expected_arrival_date;
+alter table purchase_orders drop column if exists online_order_status;
 alter table suppliers add column if not exists address text;
 alter table suppliers add column if not exists phone text;
 alter table suppliers add column if not exists contact_person text;
 alter table suppliers add column if not exists business_hours text;
 alter table suppliers add column if not exists order_url text;
+
+create table if not exists purchase_order_supplier_fulfillments (
+  id uuid primary key default gen_random_uuid(),
+  purchase_order_id uuid not null references purchase_orders(id) on delete cascade,
+  supplier_id uuid references suppliers(id) on delete set null,
+  supplier_name text not null,
+  expected_arrival_date date,
+  online_order_status text not null default 'not_started',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (purchase_order_id, supplier_name)
+);
+
+alter table purchase_order_supplier_fulfillments add column if not exists supplier_id uuid references suppliers(id) on delete set null;
+alter table purchase_order_supplier_fulfillments add column if not exists supplier_name text not null default '';
+alter table purchase_order_supplier_fulfillments add column if not exists expected_arrival_date date;
+alter table purchase_order_supplier_fulfillments add column if not exists online_order_status text not null default 'not_started';
 
 create table if not exists ops_notifications (
   id uuid primary key default gen_random_uuid(),
@@ -396,6 +411,7 @@ create table if not exists price_records (
 
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
+create index if not exists idx_purchase_order_supplier_fulfillments_order on purchase_order_supplier_fulfillments(purchase_order_id);
 create index if not exists idx_delivery_batches_order_status on delivery_batches(purchase_order_id, status);
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
