@@ -287,7 +287,7 @@ export default function StoresPage() {
           <div>
             <p className="eyebrow">店舗とブランドの基本情報</p>
             <h2>店舗・ブランド</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
         </header>
 

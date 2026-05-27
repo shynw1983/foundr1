@@ -938,7 +938,7 @@ export default function ProcurementPage() {
           <div>
             <p className="eyebrow">現場の発注実行</p>
             <h2>発注管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

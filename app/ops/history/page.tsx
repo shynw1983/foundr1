@@ -9,6 +9,11 @@ import { useEffect, useMemo, useState } from "react";
 import { orders, products as initialProducts } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
+type ProductWithSpec = Product & {
+  packageQuantity?: number | string;
+  packageQuantityUnit?: string;
+  packageSpec?: string;
+};
 type PurchaseOrder = typeof orders[number] & {
   deadlineAt?: string | null;
   createdAt?: string | null;
@@ -37,6 +42,7 @@ type HistoryRow = {
   deadlineMonth: string;
   deadlineDate: string;
   productName: string;
+  productSpec: string;
   productBrand: string;
   supplier: string;
   requestedQuantity: number;
@@ -49,6 +55,7 @@ type HistoryReportRow = {
   id: string;
   store: string;
   productName: string;
+  productSpec: string;
   unit: string;
   totalActualQuantity: number;
   totalRequestedQuantity: number;
@@ -249,10 +256,28 @@ function getItemStatus(item: PurchaseOrderItem) {
   return "未購入";
 }
 
+function formatPackageQuantity(product: ProductWithSpec) {
+  const quantity = Number(product.packageQuantity ?? 0);
+  if (!Number.isFinite(quantity) || quantity <= 0) return "";
+
+  return `${quantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })} ${product.packageQuantityUnit || product.unit || "個"}`;
+}
+
+function getProductDisplaySpec(product?: ProductWithSpec) {
+  if (!product) return "";
+
+  const packageQuantity = formatPackageQuantity(product);
+  const packageSpec = String(product.packageSpec ?? "").trim();
+  if (packageQuantity && packageSpec) return `${packageSpec} / ${packageQuantity}`;
+  if (packageSpec) return packageSpec;
+
+  return packageQuantity;
+}
+
 function createHistoryRows(
   purchaseOrders: PurchaseOrder[],
   orderItems: PurchaseOrderItem[],
-  products: Product[]
+  products: ProductWithSpec[]
 ) {
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
   const productMap = new Map(products.map((product) => [product.name, product]));
@@ -270,6 +295,7 @@ function createHistoryRows(
       deadlineMonth: getOrderMonthKey(order),
       deadlineDate: getOrderDateKey(order),
       productName: item.productName,
+      productSpec: getProductDisplaySpec(product),
       productBrand: item.brandName ?? product?.brand ?? order?.brand ?? "共通",
       supplier: item.supplier || product?.mainSupplier || "未設定",
       requestedQuantity: item.requestedQuantity,
@@ -285,11 +311,12 @@ function createHistoryReportRows(rows: HistoryRow[]) {
   const reportMap = new Map<string, HistoryReportRow>();
 
   rows.forEach((row) => {
-    const key = [row.store, row.productName, row.unit].join("\u0000");
+    const key = [row.store, row.productName, row.productSpec, row.unit].join("\u0000");
     const current = reportMap.get(key) ?? {
       id: key,
       store: row.store,
       productName: row.productName,
+      productSpec: row.productSpec,
       unit: row.unit,
       totalActualQuantity: 0,
       totalRequestedQuantity: 0,
@@ -450,7 +477,7 @@ function HistoryMonthCalendar({
 }
 
 export default function ProcurementHistoryPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithSpec[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [query, setQuery] = useState("");
@@ -476,7 +503,7 @@ export default function ProcurementHistoryPage() {
       if (!response.ok) return;
 
       const data = await response.json() as {
-        products?: Product[];
+        products?: ProductWithSpec[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: PurchaseOrderItem[];
       };
@@ -505,6 +532,7 @@ export default function ProcurementHistoryPage() {
       row.brand,
       row.productBrand,
       row.productName,
+      row.productSpec,
       row.supplier,
       row.status,
       row.note
@@ -526,7 +554,7 @@ export default function ProcurementHistoryPage() {
       row.deadline,
       row.status,
       row.supplierSummary,
-      ...row.items.flatMap((item) => [item.productName, item.productBrand, item.supplier, item.status, item.note])
+      ...row.items.flatMap((item) => [item.productName, item.productSpec, item.productBrand, item.supplier, item.status, item.note])
     ].join(" ");
 
     return (
@@ -616,7 +644,7 @@ export default function ProcurementHistoryPage() {
           <div>
             <p className="eyebrow">依頼番号単位の発注履歴</p>
             <h2>発注履歴</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -760,7 +788,10 @@ export default function ProcurementHistoryPage() {
                         {row.items.map((item) => (
                           <div className="history-order-item" key={item.id}>
                             <div>
-                              <strong>{item.productName}</strong>
+                              <div className="history-product-name">
+                                <strong>{item.productName}</strong>
+                                {item.productSpec ? <span>{item.productSpec}</span> : null}
+                              </div>
                               <p>{item.supplier} · 適用ブランド: {item.productBrand}</p>
                               {item.note ? <small>{item.note}</small> : null}
                             </div>
@@ -833,7 +864,10 @@ export default function ProcurementHistoryPage() {
                     <article className="history-report-ranking-row" key={row.id}>
                       <span className="rank-badge">{index + 1}</span>
                       <div>
-                        <strong>{row.productName}</strong>
+                        <div className="history-product-name">
+                          <strong>{row.productName}</strong>
+                          {row.productSpec ? <span>{row.productSpec}</span> : null}
+                        </div>
                         <p>{row.store} · 最終 {row.latestDeadline || "未設定"}</p>
                       </div>
                       <div className="history-report-quantity">
@@ -874,7 +908,10 @@ export default function ProcurementHistoryPage() {
                     <p>{row.orderId} · {row.deadline || "締切未設定"}</p>
                   </div>
                   <div>
-                    <strong>{row.productName}</strong>
+                    <div className="history-product-name">
+                      <strong>{row.productName}</strong>
+                      {row.productSpec ? <span>{row.productSpec}</span> : null}
+                    </div>
                     <p>適用ブランド: {row.productBrand}</p>
                     {row.note ? <small>{row.note}</small> : null}
                   </div>

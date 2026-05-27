@@ -407,7 +407,7 @@ export default function ProductComparisonsPage() {
           <div>
             <p className="eyebrow">現行品と候補品の単位コスト比較</p>
             <h2>商品比較</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <label className="search-box">
             <Search size={17} />

@@ -216,7 +216,7 @@ export default function OpsDashboard() {
           <div>
             <p className="eyebrow">複数店舗の日常発注オペレーション</p>
             <h2>発注ダッシュボード</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

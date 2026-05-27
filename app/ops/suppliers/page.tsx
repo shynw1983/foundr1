@@ -169,7 +169,7 @@ export default function SuppliersPage() {
           <div>
             <p className="eyebrow">発注先データベース</p>
             <h2>発注先管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

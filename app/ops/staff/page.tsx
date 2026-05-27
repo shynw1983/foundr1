@@ -207,7 +207,7 @@ export default function StaffPage() {
           <div>
             <p className="eyebrow">社員アカウントと店舗権限</p>
             <h2>スタッフ管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : dataSource === "forbidden" ? "Owner 権限が必要" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : dataSource === "forbidden" ? "Owner 権限が必要" : "読み込み中"}</span>
           </div>
         </header>
 

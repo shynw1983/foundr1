@@ -923,7 +923,7 @@ export default function OrdersPage() {
           <div>
             <p className="eyebrow">店舗からの発注依頼</p>
             <h2>発注依頼</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">

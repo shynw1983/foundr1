@@ -162,7 +162,7 @@ export default function ReportsPage() {
           <div>
             <p className="eyebrow">店舗連絡と異常報告の履歴</p>
             <h2>連絡・報告</h2>
-            <span className="source-indicator">Neon 接続済み</span>
+            <span className="source-indicator">データ同期済み</span>
           </div>
           <div className="report-summary">
             <span>未確認 {openCount} 件</span>

@@ -253,7 +253,7 @@ export default function FieldNotesPage() {
           <div>
             <p className="eyebrow">現場で見つけたヒントを残す</p>
             <h2>現場記録</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <label className="search-box">
             <Search size={17} />

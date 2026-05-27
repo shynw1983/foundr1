@@ -6,6 +6,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OpsNavList } from "../components/OpsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
   brands,
@@ -67,6 +68,7 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
 const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
 const customUnitOption = "__custom_unit__";
 const unsetSupplierFilterValue = "__unset_supplier__";
+const addSupplierOption = "__add_supplier__";
 const productManagerRoles = new Set(["owner", "manager", "buyer"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
@@ -663,7 +665,7 @@ export default function ProductsPage() {
           <div>
             <p className="eyebrow">商品データベース</p>
             <h2>商品マスタ</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "Neon 接続済み" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -1094,6 +1096,9 @@ export default function ProductsPage() {
           onChange={setEditTarget}
           onClose={() => setEditTarget(null)}
           onSave={(target) => void saveProduct(target)}
+          onSupplierCreated={(supplier) =>
+            setSuppliers((items) => (items.some((item) => item.name === supplier.name) ? items : [...items, supplier]))
+          }
         />
       ) : null}
       {canManageProducts && editingCategory ? (
@@ -1148,7 +1153,8 @@ function ProductEditDialog({
   subcategoryOptions,
   onChange,
   onClose,
-  onSave
+  onSave,
+  onSupplierCreated
 }: {
   target: ProductEditTarget;
   suppliers: Supplier[];
@@ -1158,6 +1164,7 @@ function ProductEditDialog({
   onChange: (target: ProductEditTarget) => void;
   onClose: () => void;
   onSave: (target: ProductEditTarget) => void;
+  onSupplierCreated: (supplier: Supplier) => void;
 }) {
   const fields = getProductFields(target.value, suppliers, brands, categoryOptions, subcategoryOptions);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1168,6 +1175,9 @@ function ProductEditDialog({
   const selectedOriginCountries = target.value.originCountries ?? [];
   const filteredOriginOptions = originOptions.filter((option) => option.includes(originSearch.trim()));
   const currentUnit = String(target.value.unit ?? "");
+  const [supplierCreateTarget, setSupplierCreateTarget] = useState<"mainSupplier" | "backupSupplier" | null>(null);
+  const [supplierSaveStatus, setSupplierSaveStatus] = useState("");
+  const [isSavingSupplier, setIsSavingSupplier] = useState(false);
   const [isCustomUnitMode, setIsCustomUnitMode] = useState(() =>
     Boolean(currentUnit && !commonUnitOptions.includes(currentUnit))
   );
@@ -1253,15 +1263,73 @@ function ProductEditDialog({
     }
   }
 
+  async function createSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supplierCreateTarget) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const name = String(formData.get("name") ?? "").trim();
+    const category = String(formData.get("category") ?? "").trim();
+    const channelType = String(formData.get("channelType") ?? "実店舗").trim();
+    const address = String(formData.get("address") ?? "").trim();
+    const phone = String(formData.get("phone") ?? "").trim();
+    const contactPerson = String(formData.get("contactPerson") ?? "").trim();
+    const orderUrl = String(formData.get("orderUrl") ?? "").trim();
+
+    if (!name) {
+      setSupplierSaveStatus("発注先名を入力してください。");
+      return;
+    }
+
+    setIsSavingSupplier(true);
+    setSupplierSaveStatus("保存中...");
+
+    try {
+      const response = await fetch("/api/suppliers", {
+        method: "POST",
+        body: formData
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setSupplierSaveStatus(body.error ?? "発注先を保存できませんでした。");
+        return;
+      }
+
+      const supplier = {
+        name,
+        category,
+        reliability: "",
+        channelType: channelType || "実店舗",
+        address,
+        phone,
+        contactPerson,
+        businessHours: "",
+        orderUrl
+      } satisfies Supplier;
+      onSupplierCreated(supplier);
+      setProductValue(supplierCreateTarget, name);
+      setSupplierCreateTarget(null);
+      setSupplierSaveStatus("");
+      form.reset();
+    } catch {
+      setSupplierSaveStatus("発注先を保存できませんでした。");
+    } finally {
+      setIsSavingSupplier(false);
+    }
+  }
+
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="product-edit-title">
-      <form
-        className="edit-modal"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave(target);
-        }}
-      >
+    <>
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="product-edit-title">
+        <form
+          className="edit-modal"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave(target);
+          }}
+        >
         <div className="modal-heading">
           <div>
             <p className="eyebrow">Product Data</p>
@@ -1352,11 +1420,22 @@ function ProductEditDialog({
               ) : field.options ? (
                 <select
                   value={String((target.value as unknown as Record<string, string | number>)[field.key] ?? "")}
-                  onChange={(event) => setProductValue(field.key, event.target.value)}
+                  onChange={(event) => {
+                    if (event.target.value === addSupplierOption && (field.key === "mainSupplier" || field.key === "backupSupplier")) {
+                      setSupplierCreateTarget(field.key);
+                      setSupplierSaveStatus("");
+                      return;
+                    }
+
+                    setProductValue(field.key, event.target.value);
+                  }}
                 >
                   {field.options.map((option) => (
                     <option value={option} key={option}>{option || field.emptyLabel || ""}</option>
                   ))}
+                  {field.key === "mainSupplier" || field.key === "backupSupplier" ? (
+                    <option value={addSupplierOption}>発注先を追加...</option>
+                  ) : null}
                 </select>
               ) : (
                 <input
@@ -1497,8 +1576,69 @@ function ProductEditDialog({
             保存
           </button>
         </div>
-      </form>
-    </div>
+        </form>
+      </div>
+      {supplierCreateTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="supplier-quick-create-title">
+          <form className="edit-modal compact-modal" onSubmit={createSupplier}>
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">Quick Add</p>
+                <h3 id="supplier-quick-create-title">発注先を追加</h3>
+                <p>{supplierCreateTarget === "mainSupplier" ? "メイン発注先" : "予備発注先"}に設定します</p>
+              </div>
+              <button type="button" className="text-button" onClick={() => setSupplierCreateTarget(null)}>
+                閉じる
+              </button>
+            </div>
+            <div className="edit-fields">
+              <label>
+                <span>発注先名</span>
+                <input name="name" placeholder="例: 業務スーパー" autoFocus />
+              </label>
+              <label>
+                <span>分類</span>
+                <input name="category" placeholder="例: 冷凍野菜 / 包材" />
+              </label>
+              <label>
+                <span>区分</span>
+                <select name="channelType" defaultValue="実店舗">
+                  <option value="実店舗">実店舗</option>
+                  <option value="チェーン店">チェーン店</option>
+                  <option value="卸売">卸売</option>
+                  <option value="ネットショップ">ネットショップ</option>
+                </select>
+              </label>
+              <label>
+                <span>住所</span>
+                <input name="address" placeholder="任意" />
+              </label>
+              <label>
+                <span>電話番号</span>
+                <input name="phone" placeholder="任意" />
+              </label>
+              <label>
+                <span>担当者</span>
+                <input name="contactPerson" placeholder="任意" />
+              </label>
+              <label className="full-span">
+                <span>注文・購入リンク</span>
+                <input name="orderUrl" placeholder="任意" />
+              </label>
+            </div>
+            {supplierSaveStatus ? <small className="form-hint">{supplierSaveStatus}</small> : null}
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setSupplierCreateTarget(null)}>
+                キャンセル
+              </button>
+              <button type="submit" className="primary-button" disabled={isSavingSupplier}>
+                {isSavingSupplier ? "保存中..." : "保存して選択"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </>
   );
 }
 
