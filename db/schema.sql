@@ -160,10 +160,13 @@ create table if not exists product_supplier_options (
   reference_price numeric(12, 2),
   min_order_quantity text,
   lead_time text,
+  purchase_url text,
   note text,
   is_active boolean not null default true,
   unique (product_id, supplier_id, role)
 );
+
+alter table product_supplier_options add column if not exists purchase_url text;
 
 create table if not exists field_notes (
   id uuid primary key default gen_random_uuid(),

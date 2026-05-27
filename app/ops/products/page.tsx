@@ -26,6 +26,8 @@ type ProductWithCategory = Product & {
   productBrandName?: string;
   manufacturer?: string;
   japaneseNote?: string;
+  mainPurchaseUrl?: string;
+  backupPurchaseUrl?: string;
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
@@ -433,6 +435,8 @@ export default function ProductsPage() {
         packageSpec: "",
         mainSupplier: suppliers[0]?.name ?? "",
         backupSupplier: "",
+        mainPurchaseUrl: "",
+        backupPurchaseUrl: "",
         specNote: "",
         japaneseNote: "",
         photoUrl: "",
@@ -885,11 +889,25 @@ export default function ProductsPage() {
                         </div>
                         <div>
                           <dt>メイン発注先</dt>
-                          <dd>{product.mainSupplier || "未設定"}</dd>
+                          <dd>
+                            {product.mainSupplier || "未設定"}
+                            {product.mainPurchaseUrl ? (
+                              <a className="purchase-link-button" href={product.mainPurchaseUrl} target="_blank" rel="noreferrer">
+                                購入ページ
+                              </a>
+                            ) : null}
+                          </dd>
                         </div>
                         <div>
                           <dt>予備発注先</dt>
-                          <dd>{product.backupSupplier || "未設定"}</dd>
+                          <dd>
+                            {product.backupSupplier || "未設定"}
+                            {product.backupPurchaseUrl ? (
+                              <a className="purchase-link-button" href={product.backupPurchaseUrl} target="_blank" rel="noreferrer">
+                                購入ページ
+                              </a>
+                            ) : null}
+                          </dd>
                         </div>
                         <div>
                           <dt>原産地</dt>
@@ -1471,7 +1489,9 @@ function getProductFields(
     { key: "unit", label: "単位" },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
+    { key: "mainPurchaseUrl", label: "メイン購入リンク" },
     { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
+    { key: "backupPurchaseUrl", label: "予備購入リンク" },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
   ];

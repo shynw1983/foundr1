@@ -18,6 +18,8 @@ type ProductPayload = {
   brand?: string;
   mainSupplier?: string;
   backupSupplier?: string;
+  mainPurchaseUrl?: string;
+  backupPurchaseUrl?: string;
   specNote?: string;
   japaneseNote?: string;
   photoUrl?: string;
@@ -178,20 +180,21 @@ export async function PUT(request: Request) {
   `;
 
   for (const option of [
-    { role: "メイン", supplier: body.mainSupplier, price: Number.isFinite(referencePrice) ? referencePrice : 0 },
-    { role: "予備", supplier: body.backupSupplier, price: null }
+    { role: "メイン", supplier: body.mainSupplier, purchaseUrl: body.mainPurchaseUrl, price: Number.isFinite(referencePrice) ? referencePrice : 0 },
+    { role: "予備", supplier: body.backupSupplier, purchaseUrl: body.backupPurchaseUrl, price: null }
   ]) {
     const supplierName = String(option.supplier ?? "").trim();
     if (!supplierName) continue;
 
     await sql`
-      insert into product_supplier_options (product_id, supplier_id, role, reference_price, is_active)
-      select ${productId}, suppliers.id, ${option.role}, ${option.price}, true
+      insert into product_supplier_options (product_id, supplier_id, role, reference_price, purchase_url, is_active)
+      select ${productId}, suppliers.id, ${option.role}, ${option.price}, ${String(option.purchaseUrl ?? "").trim() || null}, true
       from suppliers
       where suppliers.name = ${supplierName}
       on conflict (product_id, supplier_id, role)
       do update set
         reference_price = excluded.reference_price,
+        purchase_url = excluded.purchase_url,
         is_active = true
     `;
   }

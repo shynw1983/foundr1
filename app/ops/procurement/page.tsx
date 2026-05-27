@@ -20,7 +20,9 @@ type Product = typeof initialProducts[number] & {
   packageSpec?: string;
   productBrandName?: string;
 };
-type ProductSupplierGroup = typeof initialProductSupplierOptions[number];
+type ProductSupplierGroup = Omit<typeof initialProductSupplierOptions[number], "options"> & {
+  options: Array<typeof initialProductSupplierOptions[number]["options"][number] & { purchaseUrl?: string }>;
+};
 type Supplier = typeof initialSuppliers[number];
 type PurchaseOrder = typeof orders[number] & {
   deadlineAt?: string | null;
@@ -282,6 +284,16 @@ function getSupplierChoicesForItem(
   addChoice(item.supplier, "現在");
 
   return Array.from(choices.values());
+}
+
+function getPurchaseUrlForItem(item: ProcurementTaskItem, supplierOptions: ProductSupplierGroup[]) {
+  const supplier = normalizeSupplierName(item.supplier);
+  if (!supplier) return "";
+
+  return supplierOptions
+    .find((group) => group.product === item.productName)
+    ?.options.find((option) => normalizeSupplierName(option.supplier) === supplier)
+    ?.purchaseUrl ?? "";
 }
 
 function getTemporarySupplierNote(note: string) {
@@ -1075,6 +1087,7 @@ export default function ProcurementPage() {
                               const productSpec = product?.packageSpec || product?.specNote;
                               const referencePrice = Number(product?.referencePrice ?? 0);
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
+                              const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
 
                               return (
                                 <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1115,6 +1128,11 @@ export default function ProcurementPage() {
                                     <small>
                                       参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
                                     </small>
+                                    {purchaseUrl ? (
+                                      <a className="purchase-link-button" href={purchaseUrl} target="_blank" rel="noreferrer">
+                                        購入ページ
+                                      </a>
+                                    ) : null}
                                   </div>
                                   <label className="task-actual">
                                     <span>実数</span>

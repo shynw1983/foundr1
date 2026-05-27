@@ -151,6 +151,16 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             limit 1
           ), '') as "mainSupplier",
           coalesce((
+            select product_supplier_options.purchase_url
+            from product_supplier_options
+            join suppliers on suppliers.id = product_supplier_options.supplier_id
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = 'メイン'
+              and product_supplier_options.is_active = true
+            order by suppliers.name
+            limit 1
+          ), '') as "mainPurchaseUrl",
+          coalesce((
             select suppliers.name
             from product_supplier_options
             join suppliers on suppliers.id = product_supplier_options.supplier_id
@@ -160,6 +170,16 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             order by suppliers.name
             limit 1
           ), '') as "backupSupplier",
+          coalesce((
+            select product_supplier_options.purchase_url
+            from product_supplier_options
+            join suppliers on suppliers.id = product_supplier_options.supplier_id
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = '予備'
+              and product_supplier_options.is_active = true
+            order by suppliers.name
+            limit 1
+          ), '') as "backupPurchaseUrl",
           case
             when coalesce(products.brand_scope, 'unset') = 'common' then '共通'
             when exists (
@@ -263,6 +283,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
               'referencePrice', product_supplier_options.reference_price::float,
               'minOrder', product_supplier_options.min_order_quantity,
               'leadTime', product_supplier_options.lead_time,
+              'purchaseUrl', coalesce(product_supplier_options.purchase_url, ''),
               'note', product_supplier_options.note
             )
             order by
