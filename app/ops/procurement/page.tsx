@@ -350,21 +350,23 @@ function hasDeliveryOrderSupplier(items: ProcurementTaskItem[], supplierList: Su
 }
 
 function hasDeliveryOrderSupplierFast(items: ProcurementTaskItem[], supplierByName: Map<string, Supplier>) {
-  return items.some((item) => {
-    const supplier = supplierByName.get(item.supplier);
-    const supplierName = item.supplier.toLowerCase();
+  return items.some((item) => isDeliveryOrderItem(item, supplierByName));
+}
 
-    return (
-      supplier?.channelType === "ネットショップ" ||
-      supplier?.channelType === "卸売" ||
-      supplierName.includes("online") ||
-      supplierName.includes("ネット") ||
-      supplierName.includes("オンライン") ||
-      supplierName.includes("卸") ||
-      supplierName.includes("amazon") ||
-      supplierName.includes("楽天")
-    );
-  });
+function isDeliveryOrderItem(item: ProcurementTaskItem, supplierByName: Map<string, Supplier>) {
+  const supplier = supplierByName.get(item.supplier);
+  const supplierName = item.supplier.toLowerCase();
+
+  return (
+    supplier?.channelType === "ネットショップ" ||
+    supplier?.channelType === "卸売" ||
+    supplierName.includes("online") ||
+    supplierName.includes("ネット") ||
+    supplierName.includes("オンライン") ||
+    supplierName.includes("卸") ||
+    supplierName.includes("amazon") ||
+    supplierName.includes("楽天")
+  );
 }
 
 function getOrderStatus(
@@ -682,7 +684,12 @@ export default function ProcurementPage() {
     }
 
     const targetItems = procurementTaskItems
-      .filter((item) => item.orderId === orderId && item.purchased && item.deliveryStatus !== "received")
+      .filter((item) =>
+        item.orderId === orderId &&
+        item.purchased &&
+        item.deliveryStatus !== "received" &&
+        isDeliveryOrderItem(item, supplierByName)
+      )
       .map((item) => ({ ...item, deliveryStatus: "delivered" as const }));
 
     if (targetItems.length === 0) return;
@@ -703,7 +710,11 @@ export default function ProcurementPage() {
 
   function createDeliveryBatch(orderId: string) {
     const readyItems = procurementTaskItems.filter(
-      (item) => item.orderId === orderId && item.purchased && item.deliveryStatus === "pending"
+      (item) =>
+        item.orderId === orderId &&
+        item.purchased &&
+        item.deliveryStatus === "pending" &&
+        !isDeliveryOrderItem(item, supplierByName)
     );
 
     if (readyItems.length === 0) return;
@@ -928,10 +939,17 @@ export default function ProcurementPage() {
               const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
               const receivedCount = items.filter((item) => item.deliveryStatus === "received").length;
               const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
-              const readyToDeliverCount = items.filter((item) => item.purchased && !item.unavailable && item.deliveryStatus === "pending").length;
+              const onlineOrderItems = items.filter((item) => isDeliveryOrderItem(item, supplierByName));
+              const storeDeliveryItems = items.filter((item) => !isDeliveryOrderItem(item, supplierByName));
+              const readyToDeliverCount = storeDeliveryItems.filter((item) => item.purchased && !item.unavailable && item.deliveryStatus === "pending").length;
+              const onlinePurchasedCount = onlineOrderItems.filter((item) => item.purchased).length;
+              const onlineUnavailableCount = onlineOrderItems.filter((item) => item.unavailable).length;
+              const onlineDeliveredCount = onlineOrderItems.filter((item) => item.deliveryStatus === "delivered").length;
+              const onlineReceivedCount = onlineOrderItems.filter((item) => item.deliveryStatus === "received").length;
               const orderDeliveryBatches = deliveryBatchesByOrderId.get(order.id) ?? [];
               const hasPurchasedItems = completedCount > 0;
-              const isOnlineOrder = hasDeliveryOrderSupplierFast(items, supplierByName);
+              const hasOnlineOrderItems = onlineOrderItems.length > 0;
+              const hasStoreDeliveryItems = storeDeliveryItems.length > 0;
               const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, productLookup);
 
               return (
@@ -951,10 +969,16 @@ export default function ProcurementPage() {
                     </div>
                   </div>
                   <OrderFulfillmentPanel
-                    isOnlineOrder={isOnlineOrder}
+                    hasOnlineOrderItems={hasOnlineOrderItems}
+                    hasStoreDeliveryItems={hasStoreDeliveryItems}
                     hasPurchasedItems={hasPurchasedItems}
                     purchasedCount={completedCount}
                     unavailableCount={unavailableCount}
+                    onlinePurchasedCount={onlinePurchasedCount}
+                    onlineUnavailableCount={onlineUnavailableCount}
+                    onlineDeliveredCount={onlineDeliveredCount}
+                    onlineReceivedCount={onlineReceivedCount}
+                    onlineTotalCount={onlineOrderItems.length}
                     deliveredCount={deliveredCount}
                     receivedCount={receivedCount}
                     inDeliveryCount={inDeliveryCount}
@@ -1107,10 +1131,16 @@ export default function ProcurementPage() {
 }
 
 function OrderFulfillmentPanel({
-  isOnlineOrder,
+  hasOnlineOrderItems,
+  hasStoreDeliveryItems,
   hasPurchasedItems,
   purchasedCount,
   unavailableCount,
+  onlinePurchasedCount,
+  onlineUnavailableCount,
+  onlineDeliveredCount,
+  onlineReceivedCount,
+  onlineTotalCount,
   deliveredCount,
   receivedCount,
   inDeliveryCount,
@@ -1124,10 +1154,16 @@ function OrderFulfillmentPanel({
   onCreateBatch,
   onMarkStatus
 }: {
-  isOnlineOrder: boolean;
+  hasOnlineOrderItems: boolean;
+  hasStoreDeliveryItems: boolean;
   hasPurchasedItems: boolean;
   purchasedCount: number;
   unavailableCount: number;
+  onlinePurchasedCount: number;
+  onlineUnavailableCount: number;
+  onlineDeliveredCount: number;
+  onlineReceivedCount: number;
+  onlineTotalCount: number;
   deliveredCount: number;
   receivedCount: number;
   inDeliveryCount: number;
@@ -1146,14 +1182,17 @@ function OrderFulfillmentPanel({
   const handledTotalCount = purchasedCount + unavailableCount;
   const completedTotalCount = receivedCount + unavailableCount;
   const deliveredTotalCount = deliveredCount + receivedCount + unavailableCount;
-  const onlineArrived = isOnlineOrder && deliveredTotalCount >= totalCount;
+  const onlineHandledCount = onlinePurchasedCount + onlineUnavailableCount;
+  const onlineDeliveredTotalCount = onlineDeliveredCount + onlineReceivedCount + onlineUnavailableCount;
+  const onlineArrived = hasOnlineOrderItems && onlineDeliveredTotalCount >= onlineTotalCount;
+  const isMixedOrder = hasOnlineOrderItems && hasStoreDeliveryItems;
 
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
       <div>
-        <span>{isOnlineOrder ? "配送発注" : "配送フロー"}</span>
+        <span>{isMixedOrder ? "配送・到着フロー" : hasOnlineOrderItems ? "配送発注" : "配送フロー"}</span>
         <strong>
-          {isOnlineOrder
+          {hasOnlineOrderItems && !hasStoreDeliveryItems
             ? completedTotalCount === totalCount
               ? "店舗確認済み"
               : deliveredTotalCount === totalCount
@@ -1171,7 +1210,9 @@ function OrderFulfillmentPanel({
                 ? "配送中"
                 : readyToDeliverCount > 0
                   ? "配送待ち"
-                  : "購入完了後に配送へ"}
+                  : hasOnlineOrderItems
+                    ? "到着予定日と配送をそれぞれ処理"
+                    : "購入完了後に配送へ"}
         </strong>
         <div className="fulfillment-metrics">
           <span>処理 {handledTotalCount} / {totalCount}</span>
@@ -1181,14 +1222,14 @@ function OrderFulfillmentPanel({
           <span>店舗確認 {receivedCount}</span>
         </div>
       </div>
-      {isOnlineOrder ? (
+      {hasOnlineOrderItems ? (
         <div className="fulfillment-actions">
           <label>
             <span>到着予定日</span>
             <input
               type="date"
               value={state.expectedArrivalDate}
-              disabled={!hasPurchasedItems}
+              disabled={onlineHandledCount === 0}
               onChange={(event) =>
                 onChange({
                   expectedArrivalDate: event.target.value,
@@ -1200,7 +1241,7 @@ function OrderFulfillmentPanel({
           <button
             type="button"
             className={isOnlineOrdered ? "secondary-button is-complete" : "secondary-button"}
-            disabled={!hasPurchasedItems || !state.expectedArrivalDate || isOnlineOrdered}
+            disabled={onlineHandledCount === 0 || !state.expectedArrivalDate || isOnlineOrdered}
             onClick={onConfirmOnlineOrder}
           >
             {isOnlineOrdered ? "発注済み" : "発注済みにする"}
@@ -1214,7 +1255,8 @@ function OrderFulfillmentPanel({
             {onlineArrived ? "納品済み" : "到着済みにする"}
           </button>
         </div>
-      ) : (
+      ) : null}
+      {hasStoreDeliveryItems ? (
         <div className="fulfillment-delivery-area">
           <div className="fulfillment-actions">
             <button
@@ -1257,7 +1299,7 @@ function OrderFulfillmentPanel({
             </div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
