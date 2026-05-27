@@ -122,11 +122,47 @@ function hasPackageQuantity(product: ProductWithCategory) {
   return Number.isFinite(quantity) && quantity > 0;
 }
 
+function normalizeSpecNumber(value: string) {
+  return value
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/，/g, ",");
+}
+
+function parsePackageSpecForUnitPrice(packageSpec?: string) {
+  const normalizedSpec = normalizeSpecNumber(String(packageSpec ?? ""));
+  if (!normalizedSpec.trim()) return null;
+
+  const matches = Array.from(normalizedSpec.matchAll(/(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(kg|キロ|g|グラム|l|L|リットル|ml|mL|ML|個|枚|本|袋|箱|缶|瓶|束|玉|パック|ケース|セット|ロール|トレー|カートン)/g));
+  if (matches.length === 0) return null;
+
+  const preferredMatch =
+    matches.find((match) => ["kg", "キロ", "g", "グラム"].includes(match[2])) ??
+    matches.find((match) => ["l", "L", "リットル", "ml", "mL", "ML"].includes(match[2])) ??
+    matches[0];
+
+  const rawQuantity = Number(preferredMatch[1].replace(/,/g, ""));
+  const rawUnit = preferredMatch[2];
+  if (!Number.isFinite(rawQuantity) || rawQuantity <= 0) return null;
+
+  if (rawUnit === "kg" || rawUnit === "キロ") return { quantity: rawQuantity * 1000, unit: "g" };
+  if (rawUnit === "グラム") return { quantity: rawQuantity, unit: "g" };
+  if (rawUnit === "l" || rawUnit === "L" || rawUnit === "リットル") return { quantity: rawQuantity * 1000, unit: "ml" };
+  if (rawUnit === "mL" || rawUnit === "ML") return { quantity: rawQuantity, unit: "ml" };
+
+  return { quantity: rawQuantity, unit: rawUnit };
+}
+
 function getProductUnitPriceValue(product: ProductWithCategory) {
   const price = parseReferencePrice(product.referencePrice);
   const quantity = Number(product.packageQuantity ?? 0);
 
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(quantity) || quantity <= 0) return null;
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    const specQuantity = parsePackageSpecForUnitPrice(product.packageSpec);
+    if (!specQuantity) return null;
+
+    return price / specQuantity.quantity;
+  }
 
   return price / quantity;
 }
@@ -135,7 +171,8 @@ function formatProductUnitPrice(product: ProductWithCategory) {
   const unitPrice = getProductUnitPriceValue(product);
   if (unitPrice === null) return "未設定";
 
-  return `¥${formatYenAmount(unitPrice)} / ${product.packageQuantityUnit || product.unit || "単位"}`;
+  const specQuantity = hasPackageQuantity(product) ? null : parsePackageSpecForUnitPrice(product.packageSpec);
+  return `¥${formatYenAmount(unitPrice)} / ${specQuantity?.unit || product.packageQuantityUnit || product.unit || "単位"}`;
 }
 
 function isProductSpecMissing(product: ProductWithCategory) {
