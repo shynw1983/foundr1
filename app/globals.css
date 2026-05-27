@@ -1169,19 +1169,38 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 44px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+  line-height: 1;
+}
+
+.product-list-controls label > span {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+.product-list-controls .source-indicator {
+  display: inline-flex;
+  min-height: 44px;
+  margin-top: 0;
+  align-self: center;
+  align-items: center;
+  padding: 0 12px;
+  line-height: 1;
 }
 
 .product-list-controls select {
-  min-height: 32px;
+  min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0 8px;
+  padding: 0 12px;
   background: white;
   font: inherit;
   font-weight: 500;
+  line-height: 1;
 }
 
 .product-summary-picker {
