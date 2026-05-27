@@ -1281,6 +1281,10 @@ button {
   flex: 0 0 auto;
 }
 
+.product-filter-toggle {
+  display: none;
+}
+
 .product-filter-stack {
   display: grid;
   gap: 8px;
@@ -5309,6 +5313,29 @@ button {
     right: 0;
     left: auto;
     width: min(320px, calc(100vw - 36px));
+  }
+
+  .product-filter-toggle {
+    display: flex;
+    width: 100%;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--blue);
+    background: white;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .product-filter-stack {
+    display: none;
+  }
+
+  .product-filter-stack.is-open {
+    display: grid;
   }
 
   .create-order-panel .order-items-builder,

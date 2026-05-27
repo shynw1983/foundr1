@@ -329,6 +329,7 @@ export default function ProductsPage() {
   const [productSummarySaveStatus, setProductSummarySaveStatus] = useState("");
   const [isSavingProductSummaryFields, setIsSavingProductSummaryFields] = useState(false);
   const [isProductSummaryPickerOpen, setIsProductSummaryPickerOpen] = useState(false);
+  const [isProductFilterOpen, setIsProductFilterOpen] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
@@ -840,7 +841,14 @@ export default function ProductsPage() {
               </details>
             </div>
           </div>
-          <div className="product-filter-stack">
+          <button
+            type="button"
+            className="product-filter-toggle"
+            onClick={() => setIsProductFilterOpen((current) => !current)}
+          >
+            {isProductFilterOpen ? "絞り込みを閉じる" : "絞り込み"}
+          </button>
+          <div className={isProductFilterOpen ? "product-filter-stack is-open" : "product-filter-stack"}>
             <div className="product-structured-filters" aria-label="商品マスタ詳細フィルター">
               <label>
                 <span>対象店舗</span>
