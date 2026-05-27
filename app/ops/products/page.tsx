@@ -910,19 +910,8 @@ export default function ProductsPage() {
           </div>
           <div className="product-master-table">
             <div className="product-master-head">
-              {sortableProductColumns.map((column) => (
-                <button
-                  type="button"
-                  className={productSortKey === column.key ? "sortable-heading is-active" : "sortable-heading"}
-                  onClick={() => updateProductSort(column.key)}
-                  key={column.key}
-                >
-                  {column.label}
-                  {productSortKey === column.key ? (
-                    <span>{productSortDirection === "asc" ? "↑" : "↓"}</span>
-                  ) : null}
-                </button>
-              ))}
+              <span>商品</span>
+              <span>表示項目</span>
               <span>{canManageProducts ? "操作" : "権限"}</span>
             </div>
             {pagedProducts.map((product) => {
@@ -951,18 +940,7 @@ export default function ProductsPage() {
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
                       </div>
-                      {summaryItems.length > 0 ? (
-                        <div className="mobile-product-meta">
-                          {summaryItems.map((item) => (
-                            <span key={`${product.name}-${item.label}`}>
-                              <small>{item.label}</small>
-                              <em>{item.value}</em>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p>基本情報未設定</p>
-                      )}
+                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
                   <div className="mobile-product-head">
@@ -979,54 +957,39 @@ export default function ProductsPage() {
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
                       </div>
-                      {summaryItems.length > 0 ? (
-                        <div className="mobile-product-meta">
-                          {summaryItems.map((item) => (
-                            <span key={`${product.name}-mobile-meta-${item.label}`}>
-                              <small>{item.label}</small>
-                              <em>{item.value}</em>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p>基本情報未設定</p>
-                      )}
+                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
-                  <span className="product-master-cell" data-label="大分類">{product.category}</span>
-                  <span className="product-master-cell" data-label="小分類">{product.subcategory || "未分類"}</span>
-                  <span className="product-master-cell" data-label="単位">{product.unit}</span>
-                  <span className="product-master-cell" data-label="保管">{product.storageType || "未設定"}</span>
-                  <strong className="product-master-cell" data-label="参考価格">¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong>
-                  <span className="product-master-cell product-unit-price-cell" data-label="規格単価">{unitPriceLabel}</span>
-                  <div className="mobile-product-summary" aria-label="商品概要">
+                  <div className="product-master-info-grid" aria-label="商品情報">
                     {summaryItems.map((item) => (
                       <span key={`${product.name}-summary-${item.label}`}>
                         <small>{item.label}</small>
                         <strong>{item.value}</strong>
                       </span>
                     ))}
-                  </div>
-                  <div className="mobile-product-price-row">
-                    <span className="mobile-product-price"><small>参考価格</small><strong>¥{formatYenAmount(parseReferencePrice(product.referencePrice))}</strong></span>
-                    <span className="mobile-product-price"><small>規格単価</small><strong>{unitPriceLabel}</strong></span>
-                    {canManageProducts ? (
-                      <div className="mobile-product-actions">
-                        <button
-                          className="text-button"
-                          onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                        >
-                          編集
-                        </button>
-                        <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                          複製
-                        </button>
-                        <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                          削除
-                        </button>
-                      </div>
+                    {summaryItems.length === 0 ? (
+                      <span>
+                        <small>基本情報</small>
+                        <strong>未設定</strong>
+                      </span>
                     ) : null}
                   </div>
+                  {canManageProducts ? (
+                    <div className="mobile-product-actions">
+                      <button
+                        className="text-button"
+                        onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                      >
+                        編集
+                      </button>
+                      <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                        複製
+                      </button>
+                      <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                        削除
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="row-actions">
                     {canManageProducts ? (
                       <>
