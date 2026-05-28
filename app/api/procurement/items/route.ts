@@ -146,40 +146,6 @@ export async function PATCH(request: Request) {
       }
     }
 
-    if (actualQuantity !== null) {
-      const requestedQuantity = Number(itemDetail.requestedQuantity ?? 0);
-      const currentActualQuantity = Number(itemDetail.currentActualQuantity ?? requestedQuantity);
-      if (currentActualQuantity !== requestedQuantity) {
-        await sql`
-          insert into purchase_exceptions (
-            purchase_order_id,
-            purchase_order_item_id,
-            exception_type,
-            message,
-            resolution_note,
-            needs_store_confirmation,
-            affects_operation,
-            status,
-            resolved_by,
-            resolved_at,
-            updated_at
-          ) values (
-            ${itemDetail.purchaseOrderId},
-            ${itemDetail.itemId},
-            'quantity',
-            ${`依頼 ${formatQuantityForMessage(requestedQuantity)} ${itemDetail.requestedUnit} / 実数 ${formatQuantityForMessage(currentActualQuantity)} ${itemDetail.requestedUnit}`},
-            '店舗確認済み',
-            true,
-            false,
-            'resolved',
-            ${session.id},
-            now(),
-            now()
-          )
-        `;
-      }
-    }
-
     if (body.unavailable === true && itemDetail.currentStatus !== "unavailable") {
       await sql`
         insert into purchase_exceptions (
@@ -462,8 +428,4 @@ export async function DELETE(request: Request) {
 
 function formatPriceForMessage(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 0 });
-}
-
-function formatQuantityForMessage(value: number) {
-  return Number.isInteger(value) ? String(value) : String(value);
 }

@@ -307,7 +307,7 @@ function createStoreFeedbackItems(
 
     if (item.unavailable) return items;
 
-    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice) {
+    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
       items.push({
         id: `${baseId}-price`,
@@ -322,7 +322,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (quantityDiff !== 0) {
+    if (quantityDiff !== 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       items.push({
         id: `${baseId}-quantity`,
         itemId: item.id,
@@ -336,7 +336,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (item.note && !item.storeFeedbackConfirmed && !item.unavailable) {
+    if (item.note && !item.storeFeedbackConfirmed && !item.unavailable && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       items.push({
         id: `${baseId}-note`,
         itemId: item.id,

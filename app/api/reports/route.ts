@@ -89,6 +89,7 @@ export async function GET() {
         limit 1
       ) purchase_actuals on true
       where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+        and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
         and coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price) > 0
         and products.reference_price > 0
         and coalesce(purchase_order_items.actual_price, purchase_actuals.actual_price) <> products.reference_price
@@ -136,6 +137,7 @@ export async function GET() {
         limit 1
       ) purchase_actuals on true
       where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+        and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
         and coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity) is not null
         and coalesce(purchase_order_items.actual_quantity, purchase_actuals.actual_quantity) <> purchase_order_items.requested_quantity
         and not exists (
@@ -156,7 +158,7 @@ export async function GET() {
         stores.name as store,
         'note' as type,
         'open' as status,
-        purchase_order_items.note as message,
+        purchase_order_items.procurement_note as message,
         '' as "resolutionNote",
         to_char(purchase_orders.updated_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI') as "createdLabel",
         '' as "resolvedLabel",
@@ -166,8 +168,8 @@ export async function GET() {
       join stores on stores.id = purchase_orders.store_id
       join products on products.id = purchase_order_items.product_id
       where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
-        and coalesce(purchase_order_items.note, '') <> ''
-        and purchase_order_items.status <> 'unavailable'
+        and coalesce(purchase_order_items.procurement_note, '') <> ''
+        and purchase_order_items.status in ('in_delivery', 'delivered', 'received')
         and purchase_order_items.store_feedback_confirmed_at is null
     `
   ]);

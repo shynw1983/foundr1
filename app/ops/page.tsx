@@ -44,6 +44,7 @@ type PurchaseOrderItem = {
   storeFeedbackConfirmed?: boolean;
   note?: string;
   priceExceptionNote?: string;
+  deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
 };
 type PriceSignal = {
   productId: string;
@@ -481,6 +482,7 @@ function createStoreFeedbackItems(
   return purchaseOrderItems.flatMap<StoreFeedback>((item) => {
     const actualQuantity = item.actualQuantity ?? item.requestedQuantity;
     const quantityDiff = actualQuantity - item.requestedQuantity;
+    const hasEnteredDeliveryFlow = ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "");
     const order = orderMap.get(item.orderId);
     const store = order?.store ?? "店舗未設定";
     const baseId = item.id ?? `${item.orderId}-${item.productName}`;
@@ -504,7 +506,7 @@ function createStoreFeedbackItems(
 
     if (item.unavailable) return items;
 
-    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice) {
+    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice && hasEnteredDeliveryFlow) {
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
       items.push({
         id: `${baseId}-price`,
@@ -519,7 +521,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (quantityDiff !== 0) {
+    if (quantityDiff !== 0 && hasEnteredDeliveryFlow) {
       items.push({
         id: `${baseId}-quantity`,
         itemId: item.id,
@@ -533,7 +535,7 @@ function createStoreFeedbackItems(
       });
     }
 
-    if (item.note && !item.storeFeedbackConfirmed && !item.unavailable) {
+    if (item.note && !item.storeFeedbackConfirmed && !item.unavailable && hasEnteredDeliveryFlow) {
       items.push({
         id: `${baseId}-note`,
         itemId: item.id,
