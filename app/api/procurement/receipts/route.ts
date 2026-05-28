@@ -9,59 +9,68 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
-  const itemId = String(formData.get("itemId") ?? "").trim();
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  const supplierName = String(formData.get("supplier") ?? "").trim();
   const file = formData.get("receipt");
 
-  if (!itemId) {
-    return Response.json({ error: "itemId is required" }, { status: 400 });
+  if (!orderId || !supplierName) {
+    return Response.json({ error: "orderId and supplier are required" }, { status: 400 });
   }
 
-  const itemRows = await sql`
+  const orderRows = await sql`
     select
+      purchase_orders.id,
       purchase_orders.store_id::text as "storeId",
-      purchase_orders.order_no as "orderNo",
-      products.name as "productName"
-    from purchase_order_items
-    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
-    join products on products.id = purchase_order_items.product_id
-    where purchase_order_items.id = ${itemId}
+      purchase_orders.order_no as "orderNo"
+    from purchase_orders
+    where purchase_orders.order_no = ${orderId}
     limit 1
   `;
-  const item = itemRows[0];
+  const order = orderRows[0];
 
-  if (!item) {
-    return Response.json({ error: "発注項目が見つかりません。" }, { status: 404 });
+  if (!order) {
+    return Response.json({ error: "発注依頼が見つかりません。" }, { status: 404 });
   }
 
-  if (!await canAccessStore(session, item.storeId)) {
-    return Response.json({ error: "この発注項目を操作する権限がありません。" }, { status: 403 });
+  if (!await canAccessStore(session, order.storeId)) {
+    return Response.json({ error: "この発注依頼を操作する権限がありません。" }, { status: 403 });
   }
 
   try {
-    const receiptUrl = await uploadReceiptIfNeeded(file, `${item.orderNo}-${item.productName}`);
-
-    await sql`
-      update purchase_order_items
-      set receipt_photo_url = ${receiptUrl}
-      where id = ${itemId}
+    const receiptUrl = await uploadReceiptIfNeeded(file, `${order.orderNo}-${supplierName}`);
+    const supplierRows = await sql`
+      select id
+      from suppliers
+      where name = ${supplierName}
+      limit 1
     `;
 
     await sql`
-      update purchase_actuals
-      set receipt_photo_url = ${receiptUrl}
-      where id = (
-        select id
-        from purchase_actuals
-        where purchase_order_item_id = ${itemId}
-        order by recorded_at desc
-        limit 1
+      insert into purchase_order_supplier_fulfillments (
+        purchase_order_id,
+        supplier_id,
+        supplier_name,
+        receipt_photo_url,
+        updated_at
       )
+      values (
+        ${order.id},
+        ${supplierRows[0]?.id ?? null},
+        ${supplierName},
+        ${receiptUrl},
+        now()
+      )
+      on conflict (purchase_order_id, supplier_name)
+      do update set
+        supplier_id = excluded.supplier_id,
+        receipt_photo_url = excluded.receipt_photo_url,
+        updated_at = now()
     `;
 
     return Response.json({ ok: true, receiptUrl });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "小票写真を保存できませんでした。" },
+      { error: error instanceof Error ? error.message : "レシート写真を保存できませんでした。" },
       { status: 400 }
     );
   }
@@ -69,7 +78,7 @@ export async function POST(request: Request) {
 
 async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: string) {
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("小票写真を選択してください。");
+    throw new Error("レシート写真を選択してください。");
   }
 
   if (!file.type.startsWith("image/")) {
@@ -77,7 +86,7 @@ async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: stri
   }
 
   if (file.size > maxReceiptSizeBytes) {
-    throw new Error("小票写真は4MB以下にしてください。");
+    throw new Error("レシート写真は4MB以下にしてください。");
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {

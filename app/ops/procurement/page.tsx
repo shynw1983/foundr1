@@ -37,7 +37,6 @@ type DashboardOrderItem = {
   requestedQuantity: number;
   actualQuantity?: number;
   actualPrice?: string;
-  receiptPhotoUrl?: string;
   unit: string;
   purchased?: boolean;
   unavailable?: boolean;
@@ -55,7 +54,6 @@ type ProcurementTaskItem = {
   requestedQuantity: number;
   actualQuantity: number;
   actualPrice: string;
-  receiptPhotoUrl: string;
   unit: string;
   supplier: string;
   purchased: boolean;
@@ -73,6 +71,7 @@ type SupplierFulfillment = DeliveryState & {
   id?: string;
   orderId: string;
   supplier: string;
+  receiptPhotoUrl?: string;
 };
 type DeliveryBatch = {
   id: string;
@@ -179,7 +178,6 @@ function createProcurementTaskItems(
           requestedQuantity: item.requestedQuantity,
           actualQuantity: item.actualQuantity ?? item.requestedQuantity,
           actualPrice: item.actualPrice ?? "",
-          receiptPhotoUrl: item.receiptPhotoUrl ?? "",
           unit: item.unit,
           supplier: item.supplier || product?.mainSupplier || "",
           purchased: item.purchased ?? false,
@@ -206,7 +204,6 @@ function createProcurementTaskItems(
         requestedQuantity: quantity,
         actualQuantity: quantity,
         actualPrice: "",
-        receiptPhotoUrl: "",
         unit: product.unit,
         supplier: "",
         purchased: false,
@@ -545,9 +542,10 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   }
 }
 
-async function uploadProcurementReceipt(itemId: string, file: File) {
+async function uploadProcurementReceipt(orderId: string, supplier: string, file: File) {
   const formData = new FormData();
-  formData.set("itemId", itemId);
+  formData.set("orderId", orderId);
+  formData.set("supplier", supplier);
   formData.set("receipt", file);
 
   const response = await fetch("/api/procurement/receipts", {
@@ -557,7 +555,7 @@ async function uploadProcurementReceipt(itemId: string, file: File) {
   const body = await response.json().catch(() => ({})) as { receiptUrl?: string; error?: string };
 
   if (!response.ok || !body.receiptUrl) {
-    throw new Error(body.error ?? "小票写真を保存できませんでした。");
+    throw new Error(body.error ?? "レシート写真を保存できませんでした。");
   }
 
   return body.receiptUrl;
@@ -628,6 +626,14 @@ export default function ProcurementPage() {
 
     return batchMap;
   }, [deliveryBatches]);
+  const supplierFulfillmentByKey = useMemo(() => {
+    const fulfillmentMap = new Map<string, SupplierFulfillment>();
+    supplierFulfillments.forEach((fulfillment) => {
+      fulfillmentMap.set(getSupplierDeliveryStateKey(fulfillment.orderId, fulfillment.supplier), fulfillment);
+    });
+
+    return fulfillmentMap;
+  }, [supplierFulfillments]);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -717,23 +723,33 @@ export default function ProcurementPage() {
     });
   }
 
-  function uploadReceiptPhoto(id: string, file: File) {
+  function uploadReceiptPhoto(orderId: string, supplier: string, file: File) {
     if (!file.type.startsWith("image/")) {
       window.alert("画像ファイルを選択してください。");
       return;
     }
 
     if (file.size > 4 * 1024 * 1024) {
-      window.alert("小票写真は4MB以下にしてください。");
+      window.alert("レシート写真は4MB以下にしてください。");
       return;
     }
 
-    void uploadProcurementReceipt(id, file)
+    void uploadProcurementReceipt(orderId, supplier, file)
       .then((receiptUrl) => {
-        setProcurementTaskItems((items) =>
-          items.map((item) => item.id === id ? { ...item, receiptPhotoUrl: receiptUrl } : item)
-        );
-        showNotice("小票写真を保存しました。");
+        setSupplierFulfillments((fulfillments) => {
+          const existingIndex = fulfillments.findIndex(
+            (fulfillment) => fulfillment.orderId === orderId && fulfillment.supplier === supplier
+          );
+          const nextFulfillment: SupplierFulfillment = {
+            ...(existingIndex >= 0 ? fulfillments[existingIndex] : { orderId, supplier, status: "not_started", expectedArrivalDate: "" }),
+            receiptPhotoUrl: receiptUrl
+          };
+
+          if (existingIndex < 0) return [...fulfillments, nextFulfillment];
+
+          return fulfillments.map((fulfillment, index) => index === existingIndex ? nextFulfillment : fulfillment);
+        });
+        showNotice("レシート写真を保存しました。");
       })
       .catch((error: Error) => {
         window.alert(error.message);
@@ -1114,6 +1130,8 @@ export default function ProcurementPage() {
                   <div className="procurement-supplier-list">
                     {supplierGroups.map((group) => {
                       const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
+                      const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
+                      const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
 
                       return (
                         <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
@@ -1122,7 +1140,30 @@ export default function ProcurementPage() {
                               <span>発注先</span>
                               <strong>{group.supplier}</strong>
                             </div>
-                            <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
+                            <div className="supplier-group-meta">
+                              <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
+                              <div className="receipt-upload-control">
+                                {supplierReceipt ? (
+                                  <a href={supplierReceipt} target="_blank" rel="noreferrer">
+                                    レシートを見る
+                                  </a>
+                                ) : null}
+                                <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    disabled={!canUploadReceipt}
+                                    onChange={(event) => {
+                                      const file = event.target.files?.[0];
+                                      if (file) uploadReceiptPhoto(order.id, group.supplier, file);
+                                      event.currentTarget.value = "";
+                                    }}
+                                  />
+                                  <span>{supplierReceipt ? "レシートを差替" : "レシートを撮影"}</span>
+                                </label>
+                              </div>
+                            </div>
                           </div>
                           <div className="procurement-task-list">
                             {group.items.map((item) => {
@@ -1133,7 +1174,6 @@ export default function ProcurementPage() {
                               const referencePrice = Number(product?.referencePrice ?? 0);
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
                               const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
-                              const canUploadReceipt = item.purchased && !item.unavailable;
 
                               return (
                                 <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1203,27 +1243,6 @@ export default function ProcurementPage() {
                                   >
                                     異常報告
                                   </button>
-                                  <div className="receipt-upload-control">
-                                    {item.receiptPhotoUrl ? (
-                                      <a href={item.receiptPhotoUrl} target="_blank" rel="noreferrer">
-                                        小票を見る
-                                      </a>
-                                    ) : null}
-                                    <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        capture="environment"
-                                        disabled={!canUploadReceipt}
-                                        onChange={(event) => {
-                                          const file = event.target.files?.[0];
-                                          if (file) uploadReceiptPhoto(item.id, file);
-                                          event.currentTarget.value = "";
-                                        }}
-                                      />
-                                      <span>{item.receiptPhotoUrl ? "小票を差替" : "小票を撮影"}</span>
-                                    </label>
-                                  </div>
                                 </div>
                               );
                             })}

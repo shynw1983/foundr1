@@ -297,7 +297,6 @@ create table if not exists purchase_order_items (
   requested_quantity numeric(12, 2) not null,
   requested_unit text not null,
   note text,
-  receipt_photo_url text,
   status text not null default 'requested'
 );
 
@@ -306,10 +305,10 @@ alter table purchase_order_items add column if not exists actual_quantity numeri
 alter table purchase_order_items add column if not exists actual_price numeric(12, 2);
 alter table purchase_order_items add column if not exists procurement_note text;
 alter table purchase_order_items add column if not exists price_exception_note text;
-alter table purchase_order_items add column if not exists receipt_photo_url text;
 alter table purchase_order_items add column if not exists selected_supplier_id uuid references suppliers(id);
 alter table purchase_order_items add column if not exists store_feedback_confirmed_at timestamptz;
 alter table purchase_order_items add column if not exists store_feedback_confirmed_by uuid references employees(id);
+alter table purchase_order_items drop column if exists receipt_photo_url;
 
 alter table purchase_orders add column if not exists requested_by uuid references employees(id);
 alter table purchase_orders add column if not exists assigned_to uuid references employees(id);
@@ -328,6 +327,7 @@ create table if not exists purchase_order_supplier_fulfillments (
   supplier_name text not null,
   expected_arrival_date date,
   online_order_status text not null default 'not_started',
+  receipt_photo_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (purchase_order_id, supplier_name)
@@ -337,6 +337,7 @@ alter table purchase_order_supplier_fulfillments add column if not exists suppli
 alter table purchase_order_supplier_fulfillments add column if not exists supplier_name text not null default '';
 alter table purchase_order_supplier_fulfillments add column if not exists expected_arrival_date date;
 alter table purchase_order_supplier_fulfillments add column if not exists online_order_status text not null default 'not_started';
+alter table purchase_order_supplier_fulfillments add column if not exists receipt_photo_url text;
 
 create table if not exists ops_notifications (
   id uuid primary key default gen_random_uuid(),
@@ -364,13 +365,12 @@ create table if not exists purchase_actuals (
   actual_price numeric(12, 2),
   price_is_exception boolean not null default false,
   note text,
-  receipt_photo_url text,
   recorded_by uuid references employees(id),
   recorded_at timestamptz not null default now()
 );
 
 alter table purchase_actuals add column if not exists actual_price numeric(12, 2);
-alter table purchase_actuals add column if not exists receipt_photo_url text;
+alter table purchase_actuals drop column if exists receipt_photo_url;
 
 create table if not exists delivery_batches (
   id uuid primary key default gen_random_uuid(),

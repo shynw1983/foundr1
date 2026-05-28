@@ -411,11 +411,6 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.actual_price::text,
             ''
           ) as "actualPrice",
-          coalesce(
-            purchase_order_items.receipt_photo_url,
-            purchase_actuals.receipt_photo_url,
-            ''
-          ) as "receiptPhotoUrl",
           (
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null
@@ -455,7 +450,6 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.id,
             purchase_actuals.actual_quantity,
             purchase_actuals.actual_price,
-            purchase_actuals.receipt_photo_url,
             purchase_actuals.note,
             purchase_actuals.price_is_exception
           from purchase_actuals
@@ -489,7 +483,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           purchase_orders.order_no as "orderId",
           coalesce(suppliers.name, purchase_order_supplier_fulfillments.supplier_name) as supplier,
           coalesce(to_char(purchase_order_supplier_fulfillments.expected_arrival_date, 'YYYY-MM-DD'), '') as "expectedArrivalDate",
-          coalesce(purchase_order_supplier_fulfillments.online_order_status, 'not_started') as status
+          coalesce(purchase_order_supplier_fulfillments.online_order_status, 'not_started') as status,
+          coalesce(purchase_order_supplier_fulfillments.receipt_photo_url, '') as "receiptPhotoUrl"
         from purchase_order_supplier_fulfillments
         join purchase_orders on purchase_orders.id = purchase_order_supplier_fulfillments.purchase_order_id
         left join suppliers on suppliers.id = purchase_order_supplier_fulfillments.supplier_id
