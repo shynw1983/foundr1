@@ -131,6 +131,10 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 const procurementStatusFilters: ProcurementStatusFilter[] = ["未完了", "購入待ち", "一部購入済み", "到着日入力待ち", "到着待ち", "配送待ち", "配送中", "一部納品済み", "確認待ち", "完了", "すべて"];
 const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
 const procurementOrderRenderBatchSize = 20;
+const maxReceiptUploadBytes = 4 * 1024 * 1024;
+const receiptCompressionTargetBytes = 2 * 1024 * 1024;
+const receiptCompressionEdges = [1800, 1400, 1100];
+const receiptCompressionQualities = [0.82, 0.72, 0.62];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -561,6 +565,71 @@ async function uploadProcurementReceipt(orderId: string, supplier: string, file:
   return body.receiptUrl;
 }
 
+async function compressReceiptImage(file: File) {
+  if (file.size <= receiptCompressionTargetBytes && file.type === "image/jpeg") return file;
+
+  const image = await loadImageFromFile(file);
+  let bestBlob: Blob | null = null;
+
+  for (const maxEdge of receiptCompressionEdges) {
+    const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) continue;
+
+    context.drawImage(image, 0, 0, width, height);
+
+    for (const quality of receiptCompressionQualities) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+
+      if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+      if (blob.size <= receiptCompressionTargetBytes) {
+        return createCompressedReceiptFile(file, blob);
+      }
+    }
+  }
+
+  if (bestBlob && bestBlob.size < file.size) return createCompressedReceiptFile(file, bestBlob);
+
+  return file;
+}
+
+function loadImageFromFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("レシート写真を読み込めませんでした。別の画像を選択してください。"));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+function createCompressedReceiptFile(originalFile: File, blob: Blob) {
+  const baseName = originalFile.name.replace(/\.[^.]+$/, "") || "receipt";
+  return new File([blob], `${baseName}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now()
+  });
+}
+
 async function saveOrderDeliveryState(orderId: string, supplier: string, state: DeliveryState) {
   const response = await fetch("/api/procurement/orders", {
     method: "PATCH",
@@ -729,12 +798,14 @@ export default function ProcurementPage() {
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      window.alert("レシート写真は4MB以下にしてください。");
-      return;
-    }
+    void compressReceiptImage(file)
+      .then((compressedFile) => {
+        if (compressedFile.size > maxReceiptUploadBytes) {
+          throw new Error("レシート写真を自動圧縮しても4MBを超えています。少し離れて全体を撮り直してください。");
+        }
 
-    void uploadProcurementReceipt(orderId, supplier, file)
+        return uploadProcurementReceipt(orderId, supplier, compressedFile);
+      })
       .then((receiptUrl) => {
         setSupplierFulfillments((fulfillments) => {
           const existingIndex = fulfillments.findIndex(
