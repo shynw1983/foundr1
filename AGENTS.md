@@ -1,0 +1,203 @@
+# AGENTS.md
+
+This file is the working guide for coding agents and future maintainers of FOUNDR1 Ops.
+
+## Project
+
+- Framework: Next.js App Router.
+- Language: TypeScript/React.
+- Database: Neon/Postgres via `@neondatabase/serverless`.
+- File storage: Vercel Blob for uploaded images.
+- Styling: global CSS in `app/globals.css`.
+- Main app path: `/ops`.
+
+## Commands
+
+Use these commands from the repository root:
+
+```bash
+npm run dev
+npm run build
+npm run db:check
+npm run db:push
+```
+
+Before finishing code changes, run:
+
+```bash
+npm run build
+git diff --check
+```
+
+Schema changes are made in `db/schema.sql` and applied with:
+
+```bash
+npm run db:push
+```
+
+## Important Product Language
+
+Keep Japanese UI terminology consistent.
+
+- Use `発注` for store-side requests/orders.
+- Use `購入` for the actual buying work.
+- Use `納品` for delivery/arrival to the store.
+- Use `店舗確認` for store-side confirmation.
+- Use `レシート` for receipts. Do not use `小票`.
+- Use `発注先` for supplier/order destination in Japanese UI.
+- Use `メイン発注先`, `予備発注先`, and `臨時発注先` for supplier roles.
+
+Do not reintroduce mixed terms such as using `仕入れ` for the primary flow unless the business owner explicitly changes the vocabulary again.
+
+## Workflow Rules
+
+The workflow has two separate sides:
+
+- Store/request side: `/ops/orders`.
+- Buyer/procurement side: `/ops/procurement`.
+
+Rules:
+
+- Requester defaults to the current logged-in user.
+- Buyer defaults to store owner first, then owner/manager fallback.
+- Changing actual quantity alone must not create a store confirmation/report.
+- Store confirmation is created only after an execution action such as delivery, arrival, or confirmed purchase state.
+- Store confirmation should be handled on the order/request side, not mainly in procurement.
+- Procurement is the buyer work area.
+- Online shops and wholesalers are supplier-level order/arrival flows, not physical delivery batch flows.
+- A single order may have multiple online/wholesale suppliers with different arrival dates.
+- Unavailable items can be marked as `購入不可`; the order can still be completed.
+- Completed disabled buttons should use black background and white text.
+
+## Receipts
+
+Receipt data is supplier-fulfillment level.
+
+- Do not attach receipt photos to individual items.
+- Use `purchase_order_supplier_fulfillments.receipt_photo_url`.
+- Receipt uploads happen in procurement.
+- Receipt review happens in history.
+- Receipt preview should be a modal, not a new tab.
+- If items were purchased and no receipt exists, make `レシート未アップロード` visible.
+- Client-side image compression should be preserved for mobile uploads.
+
+## Permissions
+
+Role names currently used:
+
+- `owner`
+- `manager`
+- `buyer`
+- `store_owner`
+- `staff`
+
+Permission rules are role plus scope.
+
+- `employees.role` controls broad rights.
+- `employee_scopes` controls store/brand/supplier visibility.
+- Menus should hide inaccessible sections instead of showing dead links.
+- `owner` can delete order history, order items, and contact reports.
+- Franchise/store owners may view product master but should not receive edit/delete/copy/create controls unless explicitly allowed.
+
+## Notifications
+
+In-app notifications are stored in `ops_notifications`.
+
+Lark integration lives in `lib/lark.ts`.
+
+Do not make Lark a hard dependency. If Lark fails, the core operation should still work with in-app notifications.
+
+Known Lark status:
+
+- Internal employee direct messages can work with Lark open_id/user_id.
+- Owner can look up Lark user ID by email after Lark permissions are configured.
+- External/franchise group webhook support is planned but not verified yet because no external store group is available for testing.
+
+## Product Master Rules
+
+Product master is operational data, not only display data.
+
+Important fields include:
+
+- `name`
+- `japanese_note`
+- `category`
+- `subcategory`
+- `unit`
+- `package_quantity`
+- `package_quantity_unit`
+- `package_spec`
+- `reference_price`
+- supplier options and purchase URLs.
+
+Unit price rules:
+
+- If package quantity exists, use quantity first.
+- If no quantity exists, use weight where appropriate.
+- Convert g and kg.
+- Do not convert ml/L into weight.
+- Do not calculate cup/container cost from capacity when count exists.
+
+User-selected basic info display belongs in `employees.ui_preferences` and should affect the right-side product card info area without causing horizontal overflow.
+
+## Product Comparison Rules
+
+Product comparison is for candidate channel/product evaluation.
+
+- Existing product selection should be category-aware.
+- Candidate supplier can be a free text supplier name.
+- Candidate purchase URL should be kept for online/import products.
+- Imported products can use CNY and exchange rate conversion to JPY.
+- Freight is calculated from total import weight and freight per kg.
+- For `箱`, require case weight when freight comparison needs weight.
+- Only g/kg auto-convert for weight comparison.
+- ml/L are not treated as weight.
+- History supports edit, copy to re-compare, archive/restore, and delete.
+
+## Styling and Responsive Layout
+
+The app is heavily used on mobile and half-width/tablet browser windows.
+
+When editing UI:
+
+- Check mobile, tablet, half-width desktop, and wide desktop behavior.
+- Avoid horizontal overflow.
+- Keep dense operational screens compact.
+- Do not add marketing-style hero sections.
+- Avoid nested cards.
+- Use normal button heights for mobile action rows.
+- Sidebar/mobile menu must be scrollable when content is long.
+- Product cards and comparison history must wrap before tablet widths overflow.
+
+## Translation
+
+The app supports Japanese, Simplified Chinese, and Traditional Chinese UI text.
+
+When adding new visible text:
+
+- Add translations where the local translation system expects them.
+- Include labels, placeholders, select options, button text, empty states, notices, and errors.
+- Product names and product master content are data and are not automatically translated.
+
+## Data Compatibility
+
+The system is not live yet. Do not preserve old fields or legacy compatibility paths unless the user explicitly asks for compatibility.
+
+Prefer clean schema and clean UI language over backwards-compatible clutter.
+
+## Git
+
+The main branch is used for the current working product.
+
+Typical finish flow:
+
+```bash
+npm run build
+git diff --check
+git status --short
+git add <changed files>
+git commit -m "<clear message>"
+git push origin main
+```
+
+Never revert user changes unless explicitly asked.
