@@ -148,12 +148,14 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: true });
   }
 
-  await sql`
+  const deliveredRows = await sql`
     update delivery_batches
     set
       status = 'delivered',
       delivered_at = now()
     where id = ${body.batchId}
+      and status = 'in_delivery'
+    returning purchase_order_id as "purchaseOrderId"
   `;
 
   await sql`
@@ -163,8 +165,42 @@ export async function PATCH(request: Request) {
       select purchase_order_item_id
       from delivery_batch_items
       where delivery_batch_id = ${body.batchId}
-    )
+      )
   `;
+
+  if (deliveredRows[0]?.purchaseOrderId) {
+    await sql`
+      insert into ops_notifications (
+        recipient_employee_id,
+        notification_type,
+        title,
+        message,
+        href
+      )
+      select distinct
+        employees.id,
+        'store_confirmation_required',
+        '店舗確認が必要です',
+        concat(stores.name, ' に ', item_counts.item_count, ' 件の納品済み商品があります。'),
+        concat('/ops/orders#order-', purchase_orders.order_no)
+      from purchase_orders
+      join stores on stores.id = purchase_orders.store_id
+      cross join lateral (
+        select count(*)::int as item_count
+        from delivery_batch_items
+        where delivery_batch_items.delivery_batch_id = ${body.batchId}
+      ) item_counts
+      join employees on employees.status = 'active'
+      left join employee_scopes
+        on employee_scopes.employee_id = employees.id
+        and employee_scopes.scope_type = 'store'
+      where purchase_orders.id = ${deliveredRows[0].purchaseOrderId}
+        and (
+          employees.role in ('owner', 'manager')
+          or employee_scopes.store_id = purchase_orders.store_id
+        )
+    `;
+  }
 
   return Response.json({ ok: true });
 }

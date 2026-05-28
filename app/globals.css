@@ -2729,6 +2729,33 @@ button {
   white-space: nowrap;
 }
 
+.workflow-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(33, 104, 176, 0.16);
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-hint a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid rgba(33, 104, 176, 0.22);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--blue);
+  background: white;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .procurement-order-summary {
   display: flex;
   flex-wrap: wrap;
@@ -5733,6 +5760,15 @@ button {
   .category-master-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .workflow-hint {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-hint a {
+    justify-content: center;
   }
 
   .compact-row,

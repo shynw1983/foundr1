@@ -1173,6 +1173,12 @@ export default function ProcurementPage() {
                       {unavailableCount > 0 ? <span>購入不可 {unavailableCount} 件</span> : null}
                     </div>
                   </div>
+                  {liveStatus === "確認待ち" ? (
+                    <div className="workflow-hint">
+                      <span>購入側の作業は納品済みです。最終確認は店舗側で行います。</span>
+                      <a href={`/ops/orders#order-${order.id}`}>店舗確認へ</a>
+                    </div>
+                  ) : null}
                   <OrderFulfillmentPanel
                     hasOnlineOrderItems={hasOnlineOrderItems}
                     hasStoreDeliveryItems={hasStoreDeliveryItems}

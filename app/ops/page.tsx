@@ -86,6 +86,15 @@ function formatPurchaseOrderStatus(status: string) {
   return status;
 }
 
+function getStoreFeedbackConfirmLabel(kind?: StoreFeedback["kind"]) {
+  if (kind === "price") return "確認して非表示";
+  if (kind === "quantity") return "数量差異を確認";
+  if (kind === "unavailable") return "購入不可を確認";
+  if (kind === "note") return "連絡内容を確認";
+
+  return "確認済みにする";
+}
+
 function getPriceSignalKey(signal: PriceSignal) {
   return [
     signal.productId,
@@ -299,7 +308,7 @@ export default function OpsDashboard() {
                           className="feedback-confirm-button"
                           onClick={() => confirmStoreFeedback(item)}
                         >
-                          確認済みにする
+                          {getStoreFeedbackConfirmLabel(item.kind)}
                         </button>
                       ) : null}
                     </div>
@@ -343,7 +352,7 @@ export default function OpsDashboard() {
                           type="button"
                           onClick={() => acknowledgePriceSignal(signal)}
                         >
-                          確認済みにする
+                          確認して非表示
                         </button>
                       </div>
                     </div>

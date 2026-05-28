@@ -225,7 +225,7 @@ export default function ReportsPage() {
                       {report.resolvedBy ? ` · ${report.resolvedBy}` : ""}
                     </small>
                   ) : (
-                    <a className="secondary-button" href={`/ops/orders#order-${report.orderId}`}>詳細を見る</a>
+                    <a className="secondary-button" href={`/ops/orders#order-${report.orderId}`}>店舗確認へ</a>
                   )}
                   {report.resolutionNote ? <em>{report.resolutionNote}</em> : null}
                   {canDeleteReports ? (

@@ -112,6 +112,15 @@ function formatPurchaseOrderStatus(status: string) {
   return status;
 }
 
+function getStoreFeedbackConfirmLabel(kind?: StoreFeedback["kind"]) {
+  if (kind === "price") return "確認して非表示";
+  if (kind === "quantity") return "数量差異を確認";
+  if (kind === "unavailable") return "購入不可を確認";
+  if (kind === "note") return "連絡内容を確認";
+
+  return "確認済みにする";
+}
+
 function getDeliveryBatchLabel(batch: DeliveryBatch) {
   if (batch.batchNo) return `${batch.orderId}-DEL-${String(batch.batchNo).padStart(2, "0")}`;
 
@@ -1270,7 +1279,7 @@ export default function OrdersPage() {
                           className="feedback-confirm-button"
                           onClick={() => confirmStoreFeedback(item)}
                         >
-                          確認済みにする
+                          {getStoreFeedbackConfirmLabel(item.kind)}
                         </button>
                       ) : null}
                     </div>
