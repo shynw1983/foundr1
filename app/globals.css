@@ -2903,6 +2903,7 @@ button {
 .supplier-group-heading small {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 26px;
   padding: 0 9px;
   border-radius: 8px;
@@ -2945,6 +2946,7 @@ button {
 .receipt-upload-control {
   display: grid;
   gap: 5px;
+  align-items: center;
 }
 
 .receipt-upload-control a {
@@ -5564,18 +5566,30 @@ button {
   }
 
   .supplier-group-heading {
-    align-items: stretch;
+    align-items: start;
     flex-direction: column;
     padding-bottom: 6px;
   }
 
   .supplier-group-heading .supplier-group-meta {
-    align-items: stretch;
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    align-items: end;
+    width: 100%;
   }
 
   .supplier-group-heading .supplier-group-meta .receipt-upload-control {
-    flex: 1;
+    min-width: 0;
+  }
+
+  .supplier-group-heading .supplier-group-meta small,
+  .supplier-group-heading .supplier-group-meta .receipt-upload-button {
+    min-height: 48px;
+  }
+
+  .supplier-group-heading .supplier-group-meta .receipt-upload-control a {
+    min-height: 18px;
+    line-height: 18px;
   }
 
   .procurement-order-heading,
