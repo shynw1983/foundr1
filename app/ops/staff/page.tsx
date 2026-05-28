@@ -1,7 +1,7 @@
 "use client";
 
 import { Boxes, ClipboardList, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Store, Truck, UserCog } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
@@ -290,6 +290,47 @@ export default function StaffPage() {
 function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMember; stores: StoreOption[]; currentUserId?: string }) {
   const selectedStoreIds = new Set(member?.stores.map((store) => store.id) ?? []);
   const isSelf = Boolean(member && member.id === currentUserId);
+  const [larkStatus, setLarkStatus] = useState("");
+
+  async function lookupLarkUser(event: MouseEvent<HTMLButtonElement>) {
+    const form = event.currentTarget.form;
+    if (!form) return;
+
+    const formData = new FormData(form);
+    const email = String(formData.get("email") ?? "").trim();
+    if (!email) {
+      setLarkStatus("メールを入力してください。");
+      return;
+    }
+
+    setLarkStatus("Lark を確認中...");
+    const response = await fetch("/api/staff/lark-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employeeId: member?.id,
+        email
+      })
+    });
+    const body = await response.json().catch(() => ({})) as {
+      openId?: string;
+      userId?: string;
+      testDelivered?: boolean;
+      testError?: string;
+      error?: string;
+    };
+
+    if (!response.ok || !body.openId) {
+      setLarkStatus(body.error ?? "Lark ユーザーを確認できませんでした。");
+      return;
+    }
+
+    const openIdInput = form.elements.namedItem("larkOpenId") as HTMLInputElement | null;
+    const userIdInput = form.elements.namedItem("larkUserId") as HTMLInputElement | null;
+    if (openIdInput) openIdInput.value = body.openId;
+    if (userIdInput) userIdInput.value = body.userId ?? "";
+    setLarkStatus(body.testDelivered ? "Lark 連携を確認しました。" : `open_id を取得しました。${body.testError ? ` テスト送信: ${body.testError}` : ""}`);
+  }
 
   return (
     <>
@@ -313,6 +354,12 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         <span>Lark user_id</span>
         <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
       </label>
+      <div className="staff-lark-lookup">
+        <button className="secondary-button" type="button" onClick={lookupLarkUser}>
+          Lark 連携を確認
+        </button>
+        {larkStatus ? <small>{larkStatus}</small> : null}
+      </div>
       <label>
         <span>{member ? "新しいパスワード" : "初期パスワード"}</span>
         <input name="password" type="password" placeholder={member ? "変更時のみ入力" : "必須"} required={!member} />

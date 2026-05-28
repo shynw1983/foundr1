@@ -7,6 +7,13 @@ type LarkRecipient = {
   larkUserId?: string | null;
 };
 
+type LarkUserLookupResult = {
+  openId: string;
+  userId?: string;
+  email: string;
+  isActive: boolean;
+};
+
 type PurchaseOrderLarkMessage = {
   orderNo: string;
   storeName: string;
@@ -113,6 +120,78 @@ async function sendDirectText(recipient: LarkRecipient, text: string): Promise<L
   }
 
   return { ok: true, delivered: true, channel: "direct" };
+}
+
+export async function sendLarkTextMessage(recipient: LarkRecipient, text: string): Promise<LarkSendResult> {
+  try {
+    return await sendDirectText(recipient, text);
+  } catch (error) {
+    return {
+      ok: false,
+      delivered: false,
+      channel: "direct",
+      error: error instanceof Error ? error.message : "Lark message failed"
+    };
+  }
+}
+
+export async function lookupLarkUserByEmail(email: string): Promise<LarkUserLookupResult> {
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail) {
+    throw new Error("メールアドレスを入力してください。");
+  }
+
+  const token = await getTenantAccessToken();
+  if (!token) {
+    throw new Error("Lark の App ID / App Secret が設定されていません。");
+  }
+
+  const response = await fetchLark("https://open.larksuite.com/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    body: JSON.stringify({ emails: [trimmedEmail] })
+  });
+  const body = await response.json().catch(() => ({})) as {
+    code?: number;
+    msg?: string;
+    data?: {
+      user_list?: Array<{
+        user_id?: string;
+        open_id?: string;
+        email?: string;
+        status?: {
+          is_frozen?: boolean;
+          is_resigned?: boolean;
+          is_activated?: boolean;
+          is_exited?: boolean;
+          is_unjoin?: boolean;
+        };
+      }>;
+    };
+  };
+
+  if (!response.ok || body.code !== 0) {
+    throw new Error(body.msg || `Lark user lookup failed: ${response.status}`);
+  }
+
+  const user = body.data?.user_list?.find((item) => item.email?.toLowerCase() === trimmedEmail.toLowerCase()) ??
+    body.data?.user_list?.[0];
+  const openId = user?.open_id || user?.user_id;
+
+  if (!openId) {
+    throw new Error("このメールアドレスに一致する Lark ユーザーが見つかりません。");
+  }
+
+  const status = user.status;
+  return {
+    openId,
+    userId: user.user_id,
+    email: user.email || trimmedEmail,
+    isActive: Boolean(status?.is_activated) && !status?.is_frozen && !status?.is_resigned && !status?.is_exited && !status?.is_unjoin
+  };
 }
 
 async function sendWebhookText(text: string): Promise<LarkSendResult> {

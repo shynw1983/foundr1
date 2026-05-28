@@ -1020,6 +1020,16 @@ button {
   margin-bottom: 0;
 }
 
+.staff-lark-lookup {
+  display: grid;
+  gap: 6px;
+}
+
+.staff-lark-lookup small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .staff-store-scope {
   display: grid;
   gap: 9px;
