@@ -1128,7 +1128,7 @@ export default function ProcurementHistoryPage() {
                     </span>
                     {row.receiptConfirmedLabel ? <p>{row.receiptConfirmedLabel} · {row.receiptConfirmedBy || "確認者未設定"}</p> : null}
                   </div>
-                  <div className="history-owner-actions">
+                  <div className="history-owner-actions history-receipt-actions">
                     {row.receiptPhotoUrl ? (
                       <a className="text-button" href={row.receiptPhotoUrl} download={`receipt-${row.orderId}-${row.supplier}.jpg`}>
                         ダウンロード
