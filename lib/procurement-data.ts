@@ -455,6 +455,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.id,
             purchase_actuals.actual_quantity,
             purchase_actuals.actual_price,
+            purchase_actuals.receipt_photo_url,
             purchase_actuals.note,
             purchase_actuals.price_is_exception
           from purchase_actuals
