@@ -3120,6 +3120,13 @@ button {
   text-decoration: none;
 }
 
+.receipt-missing-label {
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .receipt-upload-button {
   display: inline-grid;
   min-height: 34px;

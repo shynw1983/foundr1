@@ -1209,6 +1209,7 @@ export default function ProcurementPage() {
                       const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
                       const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
                       const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
+                      const needsReceiptUpload = canUploadReceipt && !supplierReceipt;
 
                       return (
                         <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
@@ -1224,6 +1225,8 @@ export default function ProcurementPage() {
                                   <a href={supplierReceipt} target="_blank" rel="noreferrer">
                                     レシートを見る
                                   </a>
+                                ) : needsReceiptUpload ? (
+                                  <span className="receipt-missing-label">レシート未アップロード</span>
                                 ) : null}
                                 <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
                                   <input

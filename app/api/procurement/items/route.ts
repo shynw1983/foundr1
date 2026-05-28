@@ -42,6 +42,9 @@ export async function PATCH(request: Request) {
     select
       purchase_order_items.purchase_order_id::text as "purchaseOrderId",
       purchase_order_items.id::text as "itemId",
+      purchase_orders.order_no as "orderNo",
+      purchase_orders.store_id::text as "storeId",
+      stores.name as "storeName",
       products.name as "productName",
       products.reference_price::float as "referencePrice",
       purchase_order_items.status as "currentStatus",
@@ -59,6 +62,8 @@ export async function PATCH(request: Request) {
         purchase_actuals.actual_price::float
       ) as "currentActualPrice"
     from purchase_order_items
+    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+    join stores on stores.id = purchase_orders.store_id
     join products on products.id = purchase_order_items.product_id
     left join lateral (
       select
@@ -291,6 +296,45 @@ export async function PATCH(request: Request) {
       end
     where id = ${body.itemId}
   `;
+
+  if (
+    deliveryStatus === "delivered" &&
+    itemDetail &&
+    !["delivered", "received"].includes(String(itemDetail.currentStatus ?? ""))
+  ) {
+    await sql`
+      insert into ops_notifications (
+        recipient_employee_id,
+        notification_type,
+        title,
+        message,
+        href
+      )
+      select distinct
+        employees.id,
+        'store_confirmation_required',
+        '店舗確認が必要です',
+        ${`${itemDetail.storeName} に ${itemDetail.productName} が納品済みです。`},
+        ${`/ops/orders#order-${itemDetail.orderNo}`}
+      from employees
+      left join employee_scopes
+        on employee_scopes.employee_id = employees.id
+        and employee_scopes.scope_type = 'store'
+      where employees.status = 'active'
+        and (
+          employees.role in ('owner', 'manager')
+          or employee_scopes.store_id::text = ${itemDetail.storeId}
+        )
+        and not exists (
+          select 1
+          from ops_notifications
+          where ops_notifications.recipient_employee_id = employees.id
+            and ops_notifications.notification_type = 'store_confirmation_required'
+            and ops_notifications.href = ${`/ops/orders#order-${itemDetail.orderNo}`}
+            and ops_notifications.created_at > now() - interval '30 minutes'
+        )
+    `;
+  }
 
   if (body.clearActualPrice === true) {
     await sql`
