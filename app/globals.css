@@ -2908,7 +2908,7 @@ button {
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto;
+  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto minmax(96px, 0.7fr);
   align-items: start;
   gap: 8px;
   min-height: 52px;
@@ -2931,8 +2931,47 @@ button {
 
 .procurement-task .task-actual,
 .procurement-task > .quantity-diff,
-.procurement-task > .exception-button {
+.procurement-task > .exception-button,
+.procurement-task > .receipt-upload-control {
   align-self: end;
+}
+
+.receipt-upload-control {
+  display: grid;
+  gap: 5px;
+}
+
+.receipt-upload-control a {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+
+.receipt-upload-button {
+  display: inline-grid;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid rgba(31, 126, 93, 0.45);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.receipt-upload-button input {
+  display: none;
+}
+
+.receipt-upload-button.is-disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  background: #f6f8fb;
+  cursor: not-allowed;
 }
 
 .procurement-task label > span,
@@ -5721,7 +5760,8 @@ button {
     grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
       "check photo product product"
-      "actual actual diff exception";
+      "actual actual diff exception"
+      "receipt receipt receipt receipt";
     align-items: end;
     gap: 8px;
     padding: 8px;
@@ -5767,6 +5807,10 @@ button {
     align-self: end;
   }
 
+  .procurement-task > .receipt-upload-control {
+    grid-area: receipt;
+  }
+
   .task-product-line strong {
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -5784,7 +5828,8 @@ button {
   .procurement-task input,
   .procurement-task select,
   .quantity-diff,
-  .exception-button {
+  .exception-button,
+  .receipt-upload-button {
     min-height: 36px;
     padding: 0 7px;
   }

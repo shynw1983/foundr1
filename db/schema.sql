@@ -297,6 +297,7 @@ create table if not exists purchase_order_items (
   requested_quantity numeric(12, 2) not null,
   requested_unit text not null,
   note text,
+  receipt_photo_url text,
   status text not null default 'requested'
 );
 
@@ -305,6 +306,7 @@ alter table purchase_order_items add column if not exists actual_quantity numeri
 alter table purchase_order_items add column if not exists actual_price numeric(12, 2);
 alter table purchase_order_items add column if not exists procurement_note text;
 alter table purchase_order_items add column if not exists price_exception_note text;
+alter table purchase_order_items add column if not exists receipt_photo_url text;
 alter table purchase_order_items add column if not exists selected_supplier_id uuid references suppliers(id);
 alter table purchase_order_items add column if not exists store_feedback_confirmed_at timestamptz;
 alter table purchase_order_items add column if not exists store_feedback_confirmed_by uuid references employees(id);
@@ -362,11 +364,13 @@ create table if not exists purchase_actuals (
   actual_price numeric(12, 2),
   price_is_exception boolean not null default false,
   note text,
+  receipt_photo_url text,
   recorded_by uuid references employees(id),
   recorded_at timestamptz not null default now()
 );
 
 alter table purchase_actuals add column if not exists actual_price numeric(12, 2);
+alter table purchase_actuals add column if not exists receipt_photo_url text;
 
 create table if not exists delivery_batches (
   id uuid primary key default gen_random_uuid(),

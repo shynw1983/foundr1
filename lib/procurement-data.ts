@@ -411,6 +411,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.actual_price::text,
             ''
           ) as "actualPrice",
+          coalesce(
+            purchase_order_items.receipt_photo_url,
+            purchase_actuals.receipt_photo_url,
+            ''
+          ) as "receiptPhotoUrl",
           (
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null
