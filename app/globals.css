@@ -1921,7 +1921,7 @@ button {
   font-weight: 700;
 }
 
-.history-receipt-preview a,
+.history-receipt-preview button,
 .history-receipt-preview span {
   display: inline-flex;
   align-items: center;
@@ -1936,9 +1936,42 @@ button {
   text-decoration: none;
 }
 
+.history-receipt-preview button {
+  cursor: pointer;
+}
+
 .history-receipt-preview span {
   color: var(--muted);
   background: #f6f8fb;
+}
+
+.receipt-preview-modal {
+  width: min(780px, 100%);
+}
+
+.receipt-preview-modal .modal-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.receipt-preview-frame {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  max-height: min(68vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8fb;
+}
+
+.receipt-preview-frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .history-row p {

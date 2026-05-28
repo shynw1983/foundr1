@@ -564,6 +564,7 @@ export default function ProcurementHistoryPage() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(getCurrentMonthKey);
   const [historyView, setHistoryView] = useState<HistoryView>("orders");
+  const [activeReceipt, setActiveReceipt] = useState<ReceiptRow | null>(null);
   const [currentRole, setCurrentRole] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
@@ -736,14 +737,24 @@ export default function ProcurementHistoryPage() {
 
     setSupplierFulfillments((fulfillments) =>
       fulfillments.map((fulfillment) => fulfillment.id === row.fulfillmentId
-        ? {
-            ...fulfillment,
-            receiptConfirmedBy: body.receiptConfirmedBy ?? "",
-            receiptConfirmedLabel: body.receiptConfirmedLabel ?? ""
-          }
+          ? {
+              ...fulfillment,
+              receiptConfirmedBy: body.receiptConfirmedBy ?? "",
+              receiptConfirmedLabel: body.receiptConfirmedLabel ?? ""
+            }
         : fulfillment
       )
     );
+    setActiveReceipt((current) => {
+      if (!current || current.fulfillmentId !== row.fulfillmentId) return current;
+
+      return {
+        ...current,
+        receiptConfirmedBy: body.receiptConfirmedBy ?? "",
+        receiptConfirmedLabel: body.receiptConfirmedLabel ?? "",
+        status: "確認済み"
+      };
+    });
   }
 
   return (
@@ -1104,9 +1115,9 @@ export default function ProcurementHistoryPage() {
                   </div>
                   <div className="history-receipt-preview">
                     {row.receiptPhotoUrl ? (
-                      <a href={row.receiptPhotoUrl} target="_blank" rel="noreferrer">
+                      <button type="button" onClick={() => setActiveReceipt(row)}>
                         レシートを見る
-                      </a>
+                      </button>
                     ) : (
                       <span>未アップロード</span>
                     )}
@@ -1136,6 +1147,36 @@ export default function ProcurementHistoryPage() {
               ) : null}
             </div>
           </section>
+        ) : null}
+        {activeReceipt ? (
+          <div className="modal-backdrop" role="presentation" onMouseDown={() => setActiveReceipt(null)}>
+            <div className="edit-modal receipt-preview-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="modal-heading">
+                <div>
+                  <h3 id="receipt-preview-title">レシート確認</h3>
+                  <p>{activeReceipt.orderId} · {activeReceipt.store} · {activeReceipt.supplier}</p>
+                </div>
+                <button type="button" className="text-button" onClick={() => setActiveReceipt(null)}>
+                  閉じる
+                </button>
+              </div>
+              <div className="receipt-preview-frame">
+                <img src={activeReceipt.receiptPhotoUrl} alt={`${activeReceipt.orderId} ${activeReceipt.supplier} のレシート`} />
+              </div>
+              <div className="modal-actions">
+                <a className="text-button" href={activeReceipt.receiptPhotoUrl} download={`receipt-${activeReceipt.orderId}-${activeReceipt.supplier}.jpg`}>
+                  ダウンロード
+                </a>
+                {activeReceipt.status !== "確認済み" ? (
+                  <button type="button" className="primary-button" onClick={() => void confirmReceipt(activeReceipt)}>
+                    確認済みにする
+                  </button>
+                ) : (
+                  <span className="status-pill tone-done">確認済み</span>
+                )}
+              </div>
+            </div>
+          </div>
         ) : null}
       </section>
     </main>
