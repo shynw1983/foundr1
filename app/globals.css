@@ -1759,6 +1759,25 @@ button {
   gap: 8px;
 }
 
+.receipt-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.receipt-summary-strip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .history-order-table {
   display: grid;
   gap: 8px;
@@ -1866,6 +1885,60 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
+}
+
+.history-receipt-table {
+  display: grid;
+  gap: 8px;
+}
+
+.history-receipt-head,
+.history-receipt-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.05fr) minmax(130px, 0.75fr) minmax(120px, 0.6fr) minmax(130px, 0.75fr) minmax(160px, auto);
+  align-items: center;
+  gap: 12px;
+}
+
+.history-receipt-head {
+  padding: 0 12px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.history-receipt-row {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.history-receipt-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-receipt-preview a,
+.history-receipt-preview span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--blue);
+  background: white;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.history-receipt-preview span {
+  color: var(--muted);
+  background: #f6f8fb;
 }
 
 .history-row p {
@@ -5241,6 +5314,7 @@ button {
   .history-order-row > div,
   .history-order-item > div,
   .history-row > div,
+  .history-receipt-row > div,
   .procurement-order-heading > div,
   .category-master-heading > div,
   .supplier-option > div {
@@ -5608,6 +5682,7 @@ button {
   .history-order-item,
   .history-table-head,
   .history-row,
+  .history-receipt-row,
   .module-card,
   .order-item-row,
   .product-master-head,
@@ -5616,7 +5691,8 @@ button {
   }
 
   .history-order-head,
-  .history-table-head {
+  .history-table-head,
+  .history-receipt-head {
     display: none;
   }
 

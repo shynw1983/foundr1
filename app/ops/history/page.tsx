@@ -33,6 +33,15 @@ type PurchaseOrderItem = {
   priceExceptionNote?: string;
   deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
 };
+type SupplierFulfillment = {
+  id?: string;
+  orderId: string;
+  supplier: string;
+  receiptPhotoUrl?: string;
+  receiptUploadedLabel?: string;
+  receiptConfirmedLabel?: string;
+  receiptConfirmedBy?: string;
+};
 type HistoryRow = {
   id: string;
   orderId: string;
@@ -67,7 +76,24 @@ type DisplayHistoryReportRow = Omit<HistoryReportRow, "orderIds"> & {
   orderCount: number;
   averageActualQuantity: number;
 };
-type HistoryView = "orders" | "usage" | "items";
+type ReceiptStatusFilter = "すべて" | "未アップロード" | "未確認" | "確認済み";
+type ReceiptRow = {
+  id: string;
+  fulfillmentId?: string;
+  orderId: string;
+  store: string;
+  brand: string;
+  deadline: string;
+  deadlineDate: string;
+  supplier: string;
+  itemCount: number;
+  receiptPhotoUrl: string;
+  receiptUploadedLabel: string;
+  receiptConfirmedLabel: string;
+  receiptConfirmedBy: string;
+  status: Exclude<ReceiptStatusFilter, "すべて">;
+};
+type HistoryView = "orders" | "usage" | "items" | "receipts";
 type HistoryOrderRow = {
   id: string;
   store: string;
@@ -424,6 +450,55 @@ function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRo
   );
 }
 
+function createReceiptRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], supplierFulfillments: SupplierFulfillment[]) {
+  const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
+  const fulfillmentMap = new Map(supplierFulfillments.map((fulfillment) => [
+    [fulfillment.orderId, fulfillment.supplier].join("\u0000"),
+    fulfillment
+  ]));
+  const receiptMap = new Map<string, ReceiptRow>();
+
+  rows.forEach((row) => {
+    const supplier = row.supplier || "未設定";
+    const key = [row.orderId, supplier].join("\u0000");
+    const order = orderMap.get(row.orderId);
+    const fulfillment = fulfillmentMap.get(key);
+    const current = receiptMap.get(key) ?? {
+      id: key,
+      fulfillmentId: fulfillment?.id,
+      orderId: row.orderId,
+      store: row.store,
+      brand: row.brand,
+      deadline: order?.deadline ?? row.deadline,
+      deadlineDate: getOrderDateKey(order),
+      supplier,
+      itemCount: 0,
+      receiptPhotoUrl: fulfillment?.receiptPhotoUrl ?? "",
+      receiptUploadedLabel: fulfillment?.receiptUploadedLabel ?? "",
+      receiptConfirmedLabel: fulfillment?.receiptConfirmedLabel ?? "",
+      receiptConfirmedBy: fulfillment?.receiptConfirmedBy ?? "",
+      status: "未アップロード" as const
+    };
+
+    current.itemCount += 1;
+    current.fulfillmentId = fulfillment?.id ?? current.fulfillmentId;
+    current.receiptPhotoUrl = fulfillment?.receiptPhotoUrl ?? current.receiptPhotoUrl;
+    current.receiptUploadedLabel = fulfillment?.receiptUploadedLabel ?? current.receiptUploadedLabel;
+    current.receiptConfirmedLabel = fulfillment?.receiptConfirmedLabel ?? current.receiptConfirmedLabel;
+    current.receiptConfirmedBy = fulfillment?.receiptConfirmedBy ?? current.receiptConfirmedBy;
+    current.status = current.receiptPhotoUrl
+      ? current.receiptConfirmedLabel ? "確認済み" : "未確認"
+      : "未アップロード";
+    receiptMap.set(key, current);
+  });
+
+  return Array.from(receiptMap.values()).sort((a, b) =>
+    b.deadlineDate.localeCompare(a.deadlineDate, "ja") ||
+    b.orderId.localeCompare(a.orderId, "ja") ||
+    a.supplier.localeCompare(b.supplier, "ja")
+  );
+}
+
 function formatQuantity(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
 }
@@ -480,8 +555,10 @@ export default function ProcurementHistoryPage() {
   const [products, setProducts] = useState<ProductWithSpec[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
+  const [supplierFulfillments, setSupplierFulfillments] = useState<SupplierFulfillment[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
+  const [receiptStatusFilter, setReceiptStatusFilter] = useState<ReceiptStatusFilter>("すべて");
   const [storeFilter, setStoreFilter] = useState("すべて");
   const [dateRange, setDateRange] = useState(getCurrentMonthRange);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -506,11 +583,13 @@ export default function ProcurementHistoryPage() {
         products?: ProductWithSpec[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: PurchaseOrderItem[];
+        supplierFulfillments?: SupplierFulfillment[];
       };
 
       if (data.products) setProducts(data.products);
       if (data.orders) setPurchaseOrders(data.orders);
       if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+      if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
       setDataSource("neon");
     }
 
@@ -522,9 +601,11 @@ export default function ProcurementHistoryPage() {
     [purchaseOrders, purchaseOrderItems, products]
   );
   const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows), [purchaseOrders, rows]);
+  const receiptRows = useMemo(() => createReceiptRows(purchaseOrders, rows, supplierFulfillments), [purchaseOrders, rows, supplierFulfillments]);
   const orderStatusById = new Map(orderRows.map((row) => [row.id, row.status]));
   const stores = Array.from(new Set([...orderRows.map((row) => row.store), ...rows.map((row) => row.store)]));
   const statusOptions = ["未設定", "未購入", "一部購入済み", "購入済み", "購入完了", "購入不可", "配送中", "納品済み", "店舗確認済み"];
+  const receiptStatusOptions: ReceiptStatusFilter[] = ["すべて", "未アップロード", "未確認", "確認済み"];
   const reportBaseRows = rows.filter((row) => {
     const targetText = [
       row.orderId,
@@ -567,6 +648,17 @@ export default function ProcurementHistoryPage() {
   });
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
   const storeReportRows = createStoreReportRows(reportBaseRows);
+  const filteredReceiptRows = receiptRows.filter((row) => {
+    const targetText = [row.orderId, row.store, row.brand, row.supplier, row.status].join(" ");
+
+    return (
+      targetText.toLowerCase().includes(query.toLowerCase()) &&
+      row.deadlineDate >= dateRange.start &&
+      row.deadlineDate <= dateRange.end &&
+      (storeFilter === "すべて" || row.store === storeFilter) &&
+      (receiptStatusFilter === "すべて" || row.status === receiptStatusFilter)
+    );
+  });
   const canDeleteHistory = currentRole === "owner";
   const dateRangeLabel = `${formatDateLabel(dateRange.start)} - ${formatDateLabel(dateRange.end)}`;
 
@@ -622,6 +714,38 @@ export default function ProcurementHistoryPage() {
     setPurchaseOrderItems((items) => items.filter((item) => item.id !== itemId));
   }
 
+  async function confirmReceipt(row: ReceiptRow) {
+    if (!row.fulfillmentId || !row.receiptPhotoUrl) return;
+
+    const response = await fetch("/api/procurement/receipts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fulfillmentId: row.fulfillmentId })
+    });
+
+    const body = await response.json().catch(() => ({})) as {
+      error?: string;
+      receiptConfirmedBy?: string;
+      receiptConfirmedLabel?: string;
+    };
+
+    if (!response.ok) {
+      window.alert(body.error ?? "レシートを確認済みにできませんでした。");
+      return;
+    }
+
+    setSupplierFulfillments((fulfillments) =>
+      fulfillments.map((fulfillment) => fulfillment.id === row.fulfillmentId
+        ? {
+            ...fulfillment,
+            receiptConfirmedBy: body.receiptConfirmedBy ?? "",
+            receiptConfirmedLabel: body.receiptConfirmedLabel ?? ""
+          }
+        : fulfillment
+      )
+    );
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -667,6 +791,9 @@ export default function ProcurementHistoryPage() {
           </button>
           <button type="button" className={historyView === "items" ? "is-active" : ""} onClick={() => setHistoryView("items")}>
             明細一覧
+          </button>
+          <button type="button" className={historyView === "receipts" ? "is-active" : ""} onClick={() => setHistoryView("receipts")}>
+            レシート確認
           </button>
         </div>
 
@@ -728,13 +855,21 @@ export default function ProcurementHistoryPage() {
             </select>
           </label>
           <label>
-            <span>状態</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="すべて">すべて</option>
-              {statusOptions.map((status) => (
-                <option value={status} key={status}>{status}</option>
-              ))}
-            </select>
+            <span>{historyView === "receipts" ? "レシート状態" : "状態"}</span>
+            {historyView === "receipts" ? (
+              <select value={receiptStatusFilter} onChange={(event) => setReceiptStatusFilter(event.target.value as ReceiptStatusFilter)}>
+                {receiptStatusOptions.map((status) => (
+                  <option value={status} key={status}>{status}</option>
+                ))}
+              </select>
+            ) : (
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="すべて">すべて</option>
+                {statusOptions.map((status) => (
+                  <option value={status} key={status}>{status}</option>
+                ))}
+              </select>
+            )}
           </label>
         </div>
 
@@ -929,6 +1064,75 @@ export default function ProcurementHistoryPage() {
               ))}
               {filteredRows.length === 0 ? (
                 <div className="empty-state">該当する発注明細はありません</div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {historyView === "receipts" ? (
+          <section className="panel history-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>レシート確認</h3>
+                <p>発注先ごとのレシート提出状況を確認し、必要な画像をダウンロード</p>
+              </div>
+              <span className="source-indicator">{filteredReceiptRows.length} 件</span>
+            </div>
+            <div className="receipt-summary-strip">
+              <span>未アップロード {filteredReceiptRows.filter((row) => row.status === "未アップロード").length} 件</span>
+              <span>未確認 {filteredReceiptRows.filter((row) => row.status === "未確認").length} 件</span>
+              <span>確認済み {filteredReceiptRows.filter((row) => row.status === "確認済み").length} 件</span>
+            </div>
+            <div className="history-receipt-table">
+              <div className="history-receipt-head">
+                <span>依頼番号 / 店舗</span>
+                <span>発注先</span>
+                <span>レシート</span>
+                <span>確認状況</span>
+                <span>操作</span>
+              </div>
+              {filteredReceiptRows.map((row) => (
+                <article className="history-receipt-row" key={row.id}>
+                  <div>
+                    <strong>{row.orderId}</strong>
+                    <p>{row.store} / {row.brand}</p>
+                    <p>{row.deadline || "締切未設定"} · 商品 {row.itemCount} 件</p>
+                  </div>
+                  <div>
+                    <strong>{row.supplier}</strong>
+                    <p>{row.receiptUploadedLabel ? `アップロード ${row.receiptUploadedLabel}` : "未アップロード"}</p>
+                  </div>
+                  <div className="history-receipt-preview">
+                    {row.receiptPhotoUrl ? (
+                      <a href={row.receiptPhotoUrl} target="_blank" rel="noreferrer">
+                        レシートを見る
+                      </a>
+                    ) : (
+                      <span>未アップロード</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className={`status-pill ${row.status === "確認済み" ? "tone-done" : row.status === "未確認" ? "tone-warning" : "tone-waiting"}`}>
+                      {row.status}
+                    </span>
+                    {row.receiptConfirmedLabel ? <p>{row.receiptConfirmedLabel} · {row.receiptConfirmedBy || "確認者未設定"}</p> : null}
+                  </div>
+                  <div className="history-owner-actions">
+                    {row.receiptPhotoUrl ? (
+                      <a className="text-button" href={row.receiptPhotoUrl} download={`receipt-${row.orderId}-${row.supplier}.jpg`}>
+                        ダウンロード
+                      </a>
+                    ) : null}
+                    {row.receiptPhotoUrl && row.status !== "確認済み" ? (
+                      <button type="button" className="text-button" onClick={() => void confirmReceipt(row)}>
+                        確認済みにする
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+              {filteredReceiptRows.length === 0 ? (
+                <div className="empty-state">該当するレシート記録はありません</div>
               ) : null}
             </div>
           </section>

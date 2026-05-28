@@ -76,6 +76,61 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  const session = await requireWritableOpsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
+  const body = await request.json().catch(() => ({})) as { fulfillmentId?: string };
+  const fulfillmentId = String(body.fulfillmentId ?? "").trim();
+  if (!fulfillmentId) {
+    return Response.json({ error: "fulfillmentId is required" }, { status: 400 });
+  }
+
+  const rows = await sql`
+    select
+      purchase_order_supplier_fulfillments.id,
+      purchase_order_supplier_fulfillments.receipt_photo_url as "receiptPhotoUrl",
+      purchase_orders.store_id::text as "storeId"
+    from purchase_order_supplier_fulfillments
+    join purchase_orders on purchase_orders.id = purchase_order_supplier_fulfillments.purchase_order_id
+    where purchase_order_supplier_fulfillments.id = ${fulfillmentId}
+    limit 1
+  `;
+  const fulfillment = rows[0];
+  if (!fulfillment) {
+    return Response.json({ error: "レシート記録が見つかりません。" }, { status: 404 });
+  }
+  if (!fulfillment.receiptPhotoUrl) {
+    return Response.json({ error: "レシート写真が未アップロードです。" }, { status: 400 });
+  }
+  if (!await canAccessStore(session, fulfillment.storeId)) {
+    return Response.json({ error: "このレシートを操作する権限がありません。" }, { status: 403 });
+  }
+
+  await sql`
+    update purchase_order_supplier_fulfillments
+    set
+      receipt_confirmed_at = now(),
+      receipt_confirmed_by = ${session.id},
+      updated_at = now()
+    where id = ${fulfillmentId}
+  `;
+
+  return Response.json({
+    ok: true,
+    receiptConfirmedBy: session.name,
+    receiptConfirmedLabel: new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).format(new Date())
+  });
+}
+
 async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: string) {
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("レシート写真を選択してください。");

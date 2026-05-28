@@ -328,6 +328,8 @@ create table if not exists purchase_order_supplier_fulfillments (
   expected_arrival_date date,
   online_order_status text not null default 'not_started',
   receipt_photo_url text,
+  receipt_confirmed_at timestamptz,
+  receipt_confirmed_by uuid references employees(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (purchase_order_id, supplier_name)
@@ -338,6 +340,8 @@ alter table purchase_order_supplier_fulfillments add column if not exists suppli
 alter table purchase_order_supplier_fulfillments add column if not exists expected_arrival_date date;
 alter table purchase_order_supplier_fulfillments add column if not exists online_order_status text not null default 'not_started';
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_photo_url text;
+alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_at timestamptz;
+alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_by uuid references employees(id);
 
 create table if not exists ops_notifications (
   id uuid primary key default gen_random_uuid(),

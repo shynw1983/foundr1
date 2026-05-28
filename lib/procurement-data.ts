@@ -484,10 +484,14 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(suppliers.name, purchase_order_supplier_fulfillments.supplier_name) as supplier,
           coalesce(to_char(purchase_order_supplier_fulfillments.expected_arrival_date, 'YYYY-MM-DD'), '') as "expectedArrivalDate",
           coalesce(purchase_order_supplier_fulfillments.online_order_status, 'not_started') as status,
-          coalesce(purchase_order_supplier_fulfillments.receipt_photo_url, '') as "receiptPhotoUrl"
+          coalesce(purchase_order_supplier_fulfillments.receipt_photo_url, '') as "receiptPhotoUrl",
+          coalesce(to_char(purchase_order_supplier_fulfillments.updated_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI'), '') as "receiptUploadedLabel",
+          coalesce(to_char(purchase_order_supplier_fulfillments.receipt_confirmed_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI'), '') as "receiptConfirmedLabel",
+          coalesce(receipt_confirmers.name, '') as "receiptConfirmedBy"
         from purchase_order_supplier_fulfillments
         join purchase_orders on purchase_orders.id = purchase_order_supplier_fulfillments.purchase_order_id
         left join suppliers on suppliers.id = purchase_order_supplier_fulfillments.supplier_id
+        left join employees receipt_confirmers on receipt_confirmers.id = purchase_order_supplier_fulfillments.receipt_confirmed_by
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         order by purchase_orders.created_at desc, supplier
       `,
