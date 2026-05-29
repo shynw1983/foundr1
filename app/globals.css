@@ -5425,10 +5425,15 @@ button {
   }
 
   .mobile-nav-list {
-    right: 0;
-    left: auto;
-    max-height: calc(100vh - 84px);
-    max-height: calc(100dvh - 84px);
+    position: fixed;
+    top: 58px;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: none;
+    align-content: start;
+    padding: 10px;
   }
 
   .source-indicator,
