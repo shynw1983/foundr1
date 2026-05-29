@@ -5152,7 +5152,8 @@ button {
     position: sticky;
     top: 0;
     z-index: 30;
-    height: auto;
+    height: 58px;
+    max-height: 58px;
     display: flex;
     overflow: visible;
     align-items: center;
@@ -5434,6 +5435,10 @@ button {
     max-height: none;
     align-content: start;
     padding: 10px;
+  }
+
+  .mobile-nav-menu:not([open]) .mobile-nav-list {
+    display: none;
   }
 
   .source-indicator,

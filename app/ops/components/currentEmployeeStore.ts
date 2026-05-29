@@ -19,7 +19,14 @@ export async function loadCurrentEmployee() {
 
   inflightRequest = fetch("/api/auth/me", { cache: "no-store" })
     .then(async (response) => {
-      if (!response.ok) return null;
+      if (!response.ok) {
+        cachedEmployee = null;
+        if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/ops/login")) {
+          const nextPath = `${window.location.pathname}${window.location.search}`;
+          window.location.href = `/ops/login?next=${encodeURIComponent(nextPath)}`;
+        }
+        return null;
+      }
       const body = await response.json().catch(() => ({})) as { employee?: CurrentEmployee };
       cachedEmployee = body.employee ?? null;
       return cachedEmployee;
