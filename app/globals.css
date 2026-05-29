@@ -26,6 +26,7 @@ html {
 }
 
 body {
+  min-width: 320px;
   margin: 0;
   color: var(--ink);
   font-family: Arial, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
@@ -562,7 +563,12 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
   margin-bottom: 22px;
+}
+
+.topbar > div {
+  min-width: 0;
 }
 
 .topbar h2 {
@@ -571,8 +577,11 @@ button {
 
 .topbar-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
 }
 
 .user-badge {
@@ -632,7 +641,9 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  max-width: 100%;
   border-radius: 8px;
+  text-align: center;
 }
 
 .primary-button {
@@ -2654,9 +2665,20 @@ button {
   grid-template-columns: minmax(170px, 1.4fr) minmax(88px, 0.65fr) minmax(64px, 0.45fr) minmax(92px, 0.75fr) minmax(92px, 0.7fr) minmax(64px, 0.45fr) minmax(92px, auto);
   align-items: center;
   gap: 12px;
+  min-width: 0;
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.order-row > div,
+.procurement-order-card,
+.procurement-supplier-group,
+.fulfillment-panel,
+.online-fulfillment-row,
+.delivery-batch-row,
+.procurement-task {
+  min-width: 0;
 }
 
 .procurement-order-list,
@@ -2709,6 +2731,7 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .procurement-order-heading p {
@@ -3041,6 +3064,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
 }
@@ -3048,6 +3072,7 @@ button {
 .supplier-group-heading div {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .supplier-group-heading .supplier-group-meta {
@@ -3055,6 +3080,7 @@ button {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .supplier-group-heading span {
@@ -4846,6 +4872,7 @@ button {
     gap: 12px;
     height: auto;
     min-height: 62px;
+    min-width: 0;
     padding: 10px 14px;
   }
 
@@ -4939,6 +4966,7 @@ button {
     flex: 0 0 auto;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     margin-left: auto;
   }
 
@@ -5017,11 +5045,11 @@ button {
   }
 
   .order-row {
-    grid-template-columns: minmax(0, 1.35fr) minmax(96px, 0.65fr) minmax(84px, 0.5fr) minmax(84px, 0.5fr) auto;
+    grid-template-columns: minmax(0, 1.35fr) minmax(88px, 0.65fr) minmax(62px, 0.45fr) minmax(84px, 0.55fr) minmax(92px, 0.65fr) minmax(56px, 0.4fr) minmax(96px, auto);
   }
 
   .procurement-task {
-    grid-template-columns: 92px minmax(180px, 1fr) 72px 86px auto;
+    grid-template-columns: 92px 42px minmax(160px, 1fr) 72px 86px auto;
   }
 
   .panel.wide,
@@ -5131,6 +5159,7 @@ button {
     justify-content: flex-start;
     gap: 10px;
     min-height: 58px;
+    min-width: 0;
     padding: 8px 10px;
   }
 
@@ -5296,6 +5325,20 @@ button {
     padding: 0 10px;
     font-size: 13px;
     font-weight: 800;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .danger-button,
+  .queue-filter,
+  .receipt-upload-button,
+  .exception-button,
+  .delivery-complete-button,
+  .fulfillment-mark-button {
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
   }
 
   .comparison-history-title {
@@ -6191,6 +6234,50 @@ button {
   .management-row small {
     overflow-wrap: anywhere;
     word-break: keep-all;
+  }
+}
+
+@media (max-width: 360px) {
+  .sidebar {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  .brand-block {
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand-block h1 {
+    font-size: 16px;
+  }
+
+  .brand-block .eyebrow {
+    font-size: 9px;
+  }
+
+  .mobile-nav-actions {
+    gap: 6px;
+  }
+
+  .mobile-visible-notification {
+    flex-basis: 42px;
+  }
+
+  .mobile-nav-menu {
+    flex-basis: 108px;
+  }
+
+  .mobile-nav-menu summary {
+    padding: 0 9px;
+  }
+
+  .workspace {
+    padding: 14px;
   }
 }
 
