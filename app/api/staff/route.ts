@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
-import { touchEmployeeLastSeen } from "../../../lib/api-auth";
-import { authCookieName, hashPassword, readSessionToken } from "../../../lib/auth";
+import { requireOwnerOpsSession } from "../../../lib/api-auth";
+import { writeAuditLog } from "../../../lib/audit-log";
+import { hashPassword, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
 type StaffPayload = {
@@ -15,13 +15,6 @@ type StaffPayload = {
   storeIds?: string[];
 };
 
-async function requireOwner() {
-  const cookieStore = await cookies();
-  const session = readSessionToken(cookieStore.get(authCookieName)?.value);
-  if (session) await touchEmployeeLastSeen(session.id);
-  return session?.role === "owner" ? session : null;
-}
-
 function normalizeRole(role?: string) {
   return ["owner", "manager", "buyer", "store_owner", "staff"].includes(role ?? "") ? role as string : "staff";
 }
@@ -31,7 +24,7 @@ function normalizeStatus(status?: string) {
 }
 
 export async function GET() {
-  const session = await requireOwner();
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const employees = await sql`
@@ -72,7 +65,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await requireOwner();
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as StaffPayload;
@@ -89,6 +82,10 @@ export async function POST(request: Request) {
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
   }
+  const passwordError = validatePasswordStrength(password);
+  if (passwordError) {
+    return Response.json({ error: passwordError }, { status: 400 });
+  }
 
   const rows = await sql`
     insert into employees (name, login_id, email, lark_open_id, lark_user_id, role, status, password_hash, updated_at)
@@ -104,6 +101,15 @@ export async function POST(request: Request) {
       on conflict do nothing
     `;
   }
+
+  await writeAuditLog({
+    actorEmployeeId: session.id,
+    action: "staff.created",
+    targetType: "employee",
+    targetId: String(employeeId ?? ""),
+    metadata: { role, status, storeCount: storeIds.length },
+    request
+  });
 
   return Response.json({ ok: true });
 }

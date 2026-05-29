@@ -1,5 +1,6 @@
-import { cookies } from "next/headers";
-import { authCookieName, hashPassword, readSessionToken } from "../../../../lib/auth";
+import { requireOwnerOpsSession } from "../../../../lib/api-auth";
+import { writeAuditLog } from "../../../../lib/audit-log";
+import { hashPassword, validatePasswordStrength } from "../../../../lib/auth";
 import { sql } from "../../../../lib/db";
 
 type StaffPayload = {
@@ -14,12 +15,6 @@ type StaffPayload = {
   storeIds?: string[];
 };
 
-async function requireOwner() {
-  const cookieStore = await cookies();
-  const session = readSessionToken(cookieStore.get(authCookieName)?.value);
-  return session?.role === "owner" ? session : null;
-}
-
 function normalizeRole(role?: string) {
   return ["owner", "manager", "buyer", "store_owner", "staff"].includes(role ?? "") ? role as string : "staff";
 }
@@ -29,7 +24,7 @@ function normalizeStatus(status?: string) {
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwner();
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const { id } = await context.params;
@@ -47,6 +42,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
   }
+  if (password) {
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return Response.json({ error: passwordError }, { status: 400 });
+    }
+  }
 
   if (password) {
     await sql`
@@ -59,6 +60,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           role = ${role},
           status = ${status},
           password_hash = ${hashPassword(password)},
+          session_version = session_version + 1,
           updated_at = now()
       where id = ${id}
     `;
@@ -72,6 +74,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           lark_user_id = ${larkUserId || null},
           role = ${role},
           status = ${status},
+          session_version = session_version + 1,
           updated_at = now()
       where id = ${id}
     `;
@@ -87,11 +90,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     `;
   }
 
+  await writeAuditLog({
+    actorEmployeeId: session.id,
+    action: "staff.updated",
+    targetType: "employee",
+    targetId: id,
+    metadata: { role, status, passwordChanged: Boolean(password), storeCount: storeIds.length },
+    request
+  });
+
   return Response.json({ ok: true });
 }
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwner();
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const { id } = await context.params;
@@ -100,5 +112,12 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await sql`delete from employees where id = ${id}`;
+  await writeAuditLog({
+    actorEmployeeId: session.id,
+    action: "staff.deleted",
+    targetType: "employee",
+    targetId: id,
+    request
+  });
   return Response.json({ ok: true });
 }

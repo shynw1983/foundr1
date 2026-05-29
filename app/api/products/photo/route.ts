@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { requireMasterOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
@@ -17,13 +18,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "file is required" }, { status: 400 });
     }
 
-    if (!file.type.startsWith("image/")) {
-      return Response.json({ error: "画像ファイルを選択してください。" }, { status: 400 });
-    }
-
-    if (file.size > maxPhotoSizeBytes) {
-      return Response.json({ error: "写真は4MB以下にしてください。" }, { status: 413 });
-    }
+    const extension = validateImageUpload(file, maxPhotoSizeBytes, "写真");
 
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return Response.json(
@@ -32,7 +27,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase() || "product";
     const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
       access: "private"
@@ -54,7 +48,11 @@ export async function POST(request: Request) {
     console.error(error);
     const message = error instanceof Error ? error.message : "";
 
-    if (message.toLowerCase().includes("body") || message.toLowerCase().includes("size")) {
+    if (message.includes("形式を選択")) {
+      return Response.json({ error: message }, { status: 400 });
+    }
+
+    if (message.includes("MB以下") || message.toLowerCase().includes("body") || message.toLowerCase().includes("size")) {
       return Response.json(
         { error: "写真ファイルが大きすぎます。4MB以下に圧縮してからアップロードしてください。" },
         { status: 413 }

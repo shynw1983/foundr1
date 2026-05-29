@@ -52,6 +52,16 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (pathname.startsWith("/api")) {
+    const isMutatingRequest = !["GET", "HEAD", "OPTIONS"].includes(request.method);
+    const origin = request.headers.get("origin");
+    if (isMutatingRequest && origin && origin !== request.nextUrl.origin) {
+      return NextResponse.json({ error: "不正なリクエスト元です。" }, { status: 403 });
+    }
+
+    return NextResponse.next();
+  }
+
   if (!pathname.startsWith("/ops") || pathname === "/ops/login") {
     return NextResponse.next();
   }
@@ -84,5 +94,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/ops/:path*"]
+  matcher: ["/ops/:path*", "/api/:path*"]
 };

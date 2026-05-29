@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { requireOpsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { validateImageUpload } from "../../../lib/upload-security";
 
 const allowedRoles = new Set(["owner", "manager", "buyer"]);
 const adminRoles = new Set(["owner", "manager"]);
@@ -400,19 +401,12 @@ function normalizeNumber(value: FormDataEntryValue | null) {
 async function uploadPhotoIfNeeded(file: FormDataEntryValue | null, name: string, folder: string) {
   if (!(file instanceof File) || file.size === 0) return "";
 
-  if (!file.type.startsWith("image/")) {
-    throw new Error("画像ファイルを選択してください。");
-  }
-
-  if (file.size > maxPhotoSizeBytes) {
-    throw new Error("写真は4MB以下にしてください。");
-  }
+  const extension = validateImageUpload(file, maxPhotoSizeBytes, "写真");
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error("Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。");
   }
 
-  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const safeName = name.replace(/[^\w.-]+/g, "-").toLowerCase() || "comparison";
   const blob = await put(`${folder}/${safeName}-${Date.now()}.${extension}`, file, {
     access: "private"

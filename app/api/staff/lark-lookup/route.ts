@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { authCookieName, readSessionToken } from "../../../../lib/auth";
+import { requireOwnerOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { lookupLarkUserByEmail, sendLarkTextMessage } from "../../../../lib/lark";
 
@@ -8,14 +7,8 @@ type LarkLookupPayload = {
   email?: string;
 };
 
-async function requireOwner() {
-  const cookieStore = await cookies();
-  const session = readSessionToken(cookieStore.get(authCookieName)?.value);
-  return session?.role === "owner" ? session : null;
-}
-
 export async function POST(request: Request) {
-  const session = await requireOwner();
+  const session = await requireOwnerOpsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as LarkLookupPayload;

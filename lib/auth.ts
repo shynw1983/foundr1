@@ -5,6 +5,7 @@ export type EmployeeSession = {
   name: string;
   loginId: string;
   role: string;
+  sessionVersion: number;
 };
 
 export const authCookieName = "foundr1_ops_session";
@@ -12,6 +13,7 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 const hashIterations = 210_000;
 const hashKeyLength = 32;
 const hashDigest = "sha256";
+const minPasswordLength = 10;
 
 function getAuthSecret() {
   return process.env.AUTH_SECRET || process.env.DATABASE_URL || "foundr1-local-dev-secret";
@@ -29,6 +31,18 @@ export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("base64url");
   const hash = pbkdf2Sync(password, salt, hashIterations, hashKeyLength, hashDigest).toString("base64url");
   return `pbkdf2:${hashIterations}:${salt}:${hash}`;
+}
+
+export function validatePasswordStrength(password: string) {
+  if (password.length < minPasswordLength) {
+    return `パスワードは${minPasswordLength}文字以上にしてください。`;
+  }
+
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return "パスワードには英字と数字を含めてください。";
+  }
+
+  return "";
 }
 
 export function verifyPassword(password: string, storedHash: string) {
@@ -64,7 +78,13 @@ export function readSessionToken(token?: string | null): (EmployeeSession & { ex
 
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as EmployeeSession & { expiresAt: number };
-    if (!session.id || !session.loginId || !session.role || Date.now() > session.expiresAt) return null;
+    if (
+      !session.id ||
+      !session.loginId ||
+      !session.role ||
+      !Number.isInteger(session.sessionVersion) ||
+      Date.now() > session.expiresAt
+    ) return null;
     return session;
   } catch {
     return null;

@@ -13,8 +13,26 @@ export type StoreScope = {
 export async function requireOpsSession(): Promise<EmployeeSession | null> {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(authCookieName)?.value);
-  if (session) await touchEmployeeLastSeen(session.id);
-  return session;
+  if (!session) return null;
+
+  const rows = await sql`
+    select
+      id::text,
+      name,
+      coalesce(login_id, email, '') as "loginId",
+      role,
+      session_version as "sessionVersion"
+    from employees
+    where id = ${session.id}
+      and status = 'active'
+    limit 1
+  `;
+  const employee = rows[0] as EmployeeSession | undefined;
+  if (!employee) return null;
+  if (employee.sessionVersion !== session.sessionVersion) return null;
+
+  await touchEmployeeLastSeen(employee.id);
+  return employee;
 }
 
 export async function touchEmployeeLastSeen(employeeId: string) {

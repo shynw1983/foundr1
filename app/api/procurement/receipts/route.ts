@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
 
@@ -136,19 +137,12 @@ async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: stri
     throw new Error("レシート写真を選択してください。");
   }
 
-  if (!file.type.startsWith("image/")) {
-    throw new Error("画像ファイルを選択してください。");
-  }
-
-  if (file.size > maxReceiptSizeBytes) {
-    throw new Error("レシート写真は4MB以下にしてください。");
-  }
+  const extension = validateImageUpload(file, maxReceiptSizeBytes, "レシート写真");
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error("Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。");
   }
 
-  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const safeName = name.replace(/[^\w.-]+/g, "-").toLowerCase() || "receipt";
   const blob = await put(`purchase-receipts/${safeName}-${Date.now()}.${extension}`, file, {
     access: "private"
