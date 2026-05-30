@@ -26,7 +26,9 @@ type ProcedureActionPayload = {
   materialId?: string;
   locationId?: string;
   equipmentId?: string;
+  equipmentProductId?: string;
   containerId?: string;
+  containerProductId?: string;
   quantity?: string | number | null;
   unit?: string;
   targetText?: string;
@@ -191,9 +193,13 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           procedure_locations.id::text as "locationId",
           coalesce(procedure_locations.name, '') as location,
           procedure_equipment.id::text as "equipmentId",
+          equipment_products.id::text as "equipmentProductId",
           coalesce(procedure_equipment.name, '') as equipment,
+          coalesce(equipment_products.name, '') as "equipmentProductName",
           procedure_containers.id::text as "containerId",
+          container_products.id::text as "containerProductId",
           coalesce(procedure_containers.name, '') as container,
+          coalesce(container_products.name, '') as "containerProductName",
           procedure_step_actions.quantity::float as quantity,
           coalesce(procedure_step_actions.unit, products.unit, procedure_materials.unit, '') as unit,
           coalesce(procedure_step_actions.target_text, '') as "targetText",
@@ -207,7 +213,9 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         left join procedure_materials on procedure_materials.id = procedure_step_actions.material_id
         left join procedure_locations on procedure_locations.id = procedure_step_actions.location_id
         left join procedure_equipment on procedure_equipment.id = procedure_step_actions.equipment_id
+        left join products equipment_products on equipment_products.id = procedure_step_actions.equipment_product_id
         left join procedure_containers on procedure_containers.id = procedure_step_actions.container_id
+        left join products container_products on container_products.id = procedure_step_actions.container_product_id
         where procedure_step_actions.procedure_step_id::text = any(${stepIds})
         order by procedure_step_actions.procedure_step_id, procedure_step_actions.sort_order
       `
@@ -312,6 +320,7 @@ async function readAdminOptions() {
         coalesce(subcategory, '未分類') as subcategory,
         unit,
         coalesce(brand_scope, 'unset') as "brandScope",
+        coalesce(usage_type, 'ingredient') as "usageType",
         coalesce((
           select array_agg(product_brand_usages.brand_id::text order by product_brand_usages.brand_id::text)
           from product_brand_usages
@@ -592,8 +601,10 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
       const materialId = String(action.materialId ?? "").trim() || null;
       const locationId = String(action.locationId ?? "").trim() || null;
       const equipmentId = String(action.equipmentId ?? "").trim() || null;
+      const equipmentProductId = String(action.equipmentProductId ?? "").trim() || null;
       const containerId = String(action.containerId ?? "").trim() || null;
-      const hasContent = actionTypeId || productId || materialId || locationId || equipmentId || containerId || action.quantity || action.targetText || action.standardText || action.note;
+      const containerProductId = String(action.containerProductId ?? "").trim() || null;
+      const hasContent = actionTypeId || productId || materialId || locationId || equipmentId || equipmentProductId || containerId || containerProductId || action.quantity || action.targetText || action.standardText || action.note;
       if (!hasContent) continue;
 
       await sql`
@@ -605,7 +616,9 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           material_id,
           location_id,
           equipment_id,
+          equipment_product_id,
           container_id,
+          container_product_id,
           quantity,
           unit,
           target_text,
@@ -621,7 +634,9 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           ${materialId},
           ${locationId},
           ${equipmentId},
+          ${equipmentProductId},
           ${containerId},
+          ${containerProductId},
           ${parseOptionalNumber(action.quantity)},
           ${String(action.unit ?? "").trim()},
           ${String(action.targetText ?? "").trim()},

@@ -111,6 +111,7 @@ create table if not exists products (
   is_key_item boolean not null default false,
   is_price_sensitive boolean not null default false,
   storage_type text,
+  usage_type text not null default 'ingredient',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -127,6 +128,7 @@ alter table products add column if not exists product_brand_name text;
 alter table products add column if not exists manufacturer text;
 alter table products add column if not exists japanese_note text;
 alter table products add column if not exists brand_scope text not null default 'unset';
+alter table products add column if not exists usage_type text not null default 'ingredient';
 alter table products drop constraint if exists products_name_key;
 
 create table if not exists product_brand_usages (
@@ -582,6 +584,8 @@ create table if not exists procedure_step_actions (
   action_type_id uuid references procedure_action_types(id) on delete set null,
   product_id uuid references products(id) on delete restrict,
   material_id uuid references procedure_materials(id) on delete restrict,
+  equipment_product_id uuid references products(id) on delete restrict,
+  container_product_id uuid references products(id) on delete restrict,
   location_id uuid references procedure_locations(id) on delete set null,
   equipment_id uuid references procedure_equipment(id) on delete set null,
   container_id uuid references procedure_containers(id) on delete set null,
@@ -594,6 +598,8 @@ create table if not exists procedure_step_actions (
 );
 
 alter table procedure_step_actions add column if not exists material_id uuid references procedure_materials(id) on delete restrict;
+alter table procedure_step_actions add column if not exists equipment_product_id uuid references products(id) on delete restrict;
+alter table procedure_step_actions add column if not exists container_product_id uuid references products(id) on delete restrict;
 
 insert into procedure_materials (name, material_type, category, subcategory, unit, note, sort_order)
 values

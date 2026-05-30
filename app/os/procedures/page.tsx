@@ -41,6 +41,7 @@ type ProductOption = OptionItem & {
   japaneseNote: string;
   photoUrl: string;
   materialType?: string;
+  usageType?: string;
   note?: string;
   isActive?: boolean;
   sortOrder?: number;
@@ -60,7 +61,9 @@ type ProcedureAction = {
   selectedSubcategory?: string;
   locationId: string;
   equipmentId: string;
+  equipmentProductId: string;
   containerId: string;
+  containerProductId: string;
   quantity: string;
   unit: string;
   targetText: string;
@@ -171,6 +174,17 @@ const defaultVariants: ProcedureVariant[] = [
   { variantType: "delivery", name: "配送" }
 ];
 
+function getProductUsageTypeLabel(value?: string) {
+  const labels: Record<string, string> = {
+    ingredient: "原材料",
+    packaging: "包材・消耗品",
+    durable_supply: "備品・消耗工具",
+    equipment: "設備",
+    other: "その他"
+  };
+  return labels[value ?? ""] ?? "原材料";
+}
+
 const emptyBook: ProcedureBook = {
   title: "",
   category: "ドリンク",
@@ -189,7 +203,9 @@ const emptyAction: ProcedureAction = {
   materialId: "",
   locationId: "",
   equipmentId: "",
+  equipmentProductId: "",
   containerId: "",
+  containerProductId: "",
   quantity: "",
   unit: "",
   targetText: "",
@@ -257,12 +273,23 @@ function getSelectionValue(item: ProductOption) {
   return `${item.sourceType}:${item.id}`;
 }
 
+function getChoiceValue(sourceType: "master" | "product", id: string) {
+  return id ? `${sourceType}:${id}` : "";
+}
+
+function splitChoiceValue(value: string) {
+  const [sourceType, id] = value.split(":");
+  return { sourceType, id };
+}
+
 function renderActionSentence(action: ProcedureAction, actionTypes: ActionTypeOption[], products: ProductOption[], locations: ProcedureMasterItem[], equipment: ProcedureMasterItem[], containers: ProcedureMasterItem[]) {
   const actionType = actionTypes.find((item) => item.id === action.actionTypeId);
   const product = getActionItem(action, products);
   const location = locations.find((item) => item.id === action.locationId);
   const equipmentItem = equipment.find((item) => item.id === action.equipmentId);
+  const equipmentProduct = products.find((item) => item.sourceType === "product" && item.id === action.equipmentProductId);
   const container = containers.find((item) => item.id === action.containerId);
+  const containerProduct = products.find((item) => item.sourceType === "product" && item.id === action.containerProductId);
   const quantity = action.quantity ? `${action.quantity}${action.unit}` : "";
   const template = actionType?.sentenceTemplate || "{action} {product} {quantity}";
 
@@ -270,8 +297,8 @@ function renderActionSentence(action: ProcedureAction, actionTypes: ActionTypeOp
     .replaceAll("{action}", actionType?.label ?? "")
     .replaceAll("{product}", product?.name ?? "")
     .replaceAll("{location}", location?.name ?? "")
-    .replaceAll("{equipment}", equipmentItem?.name ?? "")
-    .replaceAll("{container}", container?.name ?? "")
+    .replaceAll("{equipment}", equipmentItem?.name ?? equipmentProduct?.name ?? "")
+    .replaceAll("{container}", container?.name ?? containerProduct?.name ?? "")
     .replaceAll("{quantity}", quantity)
     .replaceAll("{unit}", action.unit)
     .replaceAll("{target}", action.targetText)
@@ -468,6 +495,14 @@ export default function ProcedureAdminPage() {
       product.category === category &&
       product.subcategory === subcategory
     ));
+  }
+
+  function getEquipmentProductOptions() {
+    return brandFilteredProducts.filter((product) => product.sourceType === "product" && ["durable_supply", "equipment"].includes(product.usageType ?? ""));
+  }
+
+  function getContainerProductOptions() {
+    return brandFilteredProducts.filter((product) => product.sourceType === "product" && ["packaging", "durable_supply"].includes(product.usageType ?? ""));
   }
 
   function getActionProductForLink(action: ProcedureAction) {
@@ -1027,9 +1062,20 @@ export default function ProcedureAdminPage() {
                               {shouldShowActionField(actionKey, "equipment") ? (
                                 <label>
                                   <span>設備 / 工具</span>
-                                  <select value={action.equipmentId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { equipmentId: event.target.value })} disabled={!canEdit}>
+                                  <select value={action.equipmentId ? getChoiceValue("master", action.equipmentId) : getChoiceValue("product", action.equipmentProductId)} onChange={(event) => {
+                                    const choice = splitChoiceValue(event.target.value);
+                                    updateStepAction(stepIndex, actionIndex, {
+                                      equipmentId: choice.sourceType === "master" ? choice.id : "",
+                                      equipmentProductId: choice.sourceType === "product" ? choice.id : ""
+                                    });
+                                  }} disabled={!canEdit}>
                                     <option value="">設備・工具を選択</option>
-                                    {equipment.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                                    <optgroup label="手順書設定">
+                                      {equipment.filter((item) => item.isActive).map((item) => <option value={getChoiceValue("master", item.id)} key={`master-${item.id}`}>{item.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="商品マスタ">
+                                      {getEquipmentProductOptions().map((item) => <option value={getChoiceValue("product", item.id)} key={`product-${item.id}`}>{item.name} / {getProductUsageTypeLabel(item.usageType)}</option>)}
+                                    </optgroup>
                                   </select>
                                 </label>
                               ) : null}
@@ -1037,9 +1083,20 @@ export default function ProcedureAdminPage() {
                               {shouldShowActionField(actionKey, "container") ? (
                                 <label>
                                   <span>容器</span>
-                                  <select value={action.containerId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { containerId: event.target.value })} disabled={!canEdit}>
+                                  <select value={action.containerId ? getChoiceValue("master", action.containerId) : getChoiceValue("product", action.containerProductId)} onChange={(event) => {
+                                    const choice = splitChoiceValue(event.target.value);
+                                    updateStepAction(stepIndex, actionIndex, {
+                                      containerId: choice.sourceType === "master" ? choice.id : "",
+                                      containerProductId: choice.sourceType === "product" ? choice.id : ""
+                                    });
+                                  }} disabled={!canEdit}>
                                     <option value="">容器を選択</option>
-                                    {containers.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                                    <optgroup label="手順書設定">
+                                      {containers.filter((item) => item.isActive).map((item) => <option value={getChoiceValue("master", item.id)} key={`master-${item.id}`}>{item.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="商品マスタ">
+                                      {getContainerProductOptions().map((item) => <option value={getChoiceValue("product", item.id)} key={`product-${item.id}`}>{item.name} / {getProductUsageTypeLabel(item.usageType)}</option>)}
+                                    </optgroup>
                                   </select>
                                 </label>
                               ) : null}

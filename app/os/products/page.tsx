@@ -29,6 +29,7 @@ type ProductWithCategory = Product & {
   japaneseNote?: string;
   mainPurchaseUrl?: string;
   backupPurchaseUrl?: string;
+  usageType?: string;
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
@@ -39,6 +40,13 @@ type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
 type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice" | "unitPrice";
 type SortDirection = "asc" | "desc";
+const productUsageTypeOptions = [
+  { value: "ingredient", label: "原材料" },
+  { value: "packaging", label: "包材・消耗品" },
+  { value: "durable_supply", label: "備品・消耗工具" },
+  { value: "equipment", label: "設備" },
+  { value: "other", label: "その他" }
+];
 const productPageSizeOptions = [20, 50, 100];
 const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection; label: string }> = [
   { key: "category", direction: "asc", label: "分類順" },
@@ -86,6 +94,7 @@ const productSummaryFieldOptions = [
   { value: "subcategory", label: "小分類" },
   { value: "unit", label: "単位" },
   { value: "storageType", label: "保管" },
+  { value: "usageType", label: "用途区分" },
   { value: "brand", label: "適用ブランド" },
   { value: "mainSupplier", label: "メイン発注先" },
   { value: "backupSupplier", label: "予備発注先" },
@@ -200,6 +209,7 @@ function getProductSummaryFieldValue(product: ProductWithCategory, field: string
   if (field === "subcategory") return product.subcategory || "未分類";
   if (field === "unit") return product.unit || "";
   if (field === "storageType") return product.storageType || "未設定";
+  if (field === "usageType") return getProductUsageTypeLabel(product.usageType);
   if (field === "brand") return product.brand || "共通";
   if (field === "mainSupplier") return product.mainSupplier || "未設定";
   if (field === "backupSupplier") return product.backupSupplier || "無";
@@ -207,6 +217,10 @@ function getProductSummaryFieldValue(product: ProductWithCategory, field: string
   if (field === "unitPrice") return unitPriceLabel;
 
   return "";
+}
+
+function getProductUsageTypeLabel(value?: string) {
+  return productUsageTypeOptions.find((option) => option.value === value)?.label ?? "原材料";
 }
 
 function isProductSpecMissing(product: ProductWithCategory) {
@@ -534,7 +548,8 @@ export default function ProductsPage() {
         specNote: "",
         japaneseNote: "",
         photoUrl: "",
-        storageType: "常温"
+        storageType: "常温",
+        usageType: "ingredient"
       }
     });
   }
@@ -1546,7 +1561,7 @@ function ProductEditDialog({
                   }}
                 >
                   {field.options.map((option) => (
-                    <option value={option} key={option}>{option || field.emptyLabel || ""}</option>
+                    <option value={option} key={option}>{field.key === "usageType" ? getProductUsageTypeLabel(option) : option || field.emptyLabel || ""}</option>
                   ))}
                   {field.key === "mainSupplier" || field.key === "backupSupplier" ? (
                     <option value={addSupplierOption}>発注先を追加...</option>
@@ -1784,6 +1799,7 @@ function getProductFields(
     { key: "mainPurchaseUrl", label: "メイン購入リンク" },
     { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
     { key: "backupPurchaseUrl", label: "予備購入リンク" },
+    { key: "usageType", label: "用途区分", options: uniqueOptions([...productUsageTypeOptions.map((option) => option.value), product.usageType ?? "ingredient"]) },
     { key: "storageType", label: "保管属性", options: uniqueOptions(["常温", "冷蔵", "冷凍", product.storageType]) },
     { key: "photoUrl", label: "写真URL" }
   ];
