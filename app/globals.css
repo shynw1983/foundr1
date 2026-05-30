@@ -76,6 +76,46 @@ button {
   min-width: 0;
 }
 
+.os-home-user .user-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  min-width: 0;
+}
+
+.os-home-user .user-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.os-home-user .notification-menu {
+  flex: 0 0 48px;
+}
+
+.os-home-user .notification-menu summary {
+  min-height: 42px;
+}
+
+.os-home-user .ops-language-picker {
+  flex: 0 0 148px;
+  width: 148px;
+}
+
+.os-home-user .ops-language-picker span {
+  display: none;
+}
+
+.os-home-user .ops-language-picker select {
+  min-height: 42px;
+}
+
+.os-home-user .secondary-button {
+  flex: 0 0 auto;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 .os-home-hero {
   display: flex;
   align-items: end;
@@ -5852,6 +5892,17 @@ button {
   .os-home-user {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .os-home-user .user-panel {
+    display: grid;
+    grid-template-columns: 1fr 48px;
+    width: 100%;
+  }
+
+  .os-home-user .ops-language-picker {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .os-home-topbar .brand-block,

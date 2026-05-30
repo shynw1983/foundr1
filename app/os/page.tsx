@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { OpsLanguagePicker } from "./components/OpsTranslationProvider";
 import { UserBadge } from "./components/UserBadge";
 import { getCachedCurrentEmployee, loadCurrentEmployee } from "./components/currentEmployeeStore";
 
@@ -144,7 +143,6 @@ export default function Foundr1OsHome() {
           </div>
         </a>
         <div className="os-home-user">
-          <OpsLanguagePicker />
           <UserBadge />
           <a className="secondary-button" href="/os/logout">
             <LogOut size={17} />
