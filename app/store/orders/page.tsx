@@ -158,13 +158,13 @@ export default function StoreOrdersPage() {
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refreshWhenVisible);
-    const timer = window.setInterval(refresh, 8000);
+    const timer = window.setInterval(refresh, realtimeStatus === "connected" ? 60000 : 8000);
     return () => {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [realtimeStatus]);
 
   useEffect(() => {
     let pusher: any;
