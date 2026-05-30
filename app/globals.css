@@ -1096,6 +1096,43 @@ button {
   flex: 0 0 auto;
 }
 
+.procedure-settings-panel {
+  margin-bottom: 18px;
+}
+
+.procedure-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.62fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.procedure-setting-form {
+  margin: 0;
+}
+
+.procedure-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.procedure-setting-toggle input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.procedure-setting-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.procedure-setting-row {
+  box-shadow: none;
+}
+
 .procedure-form {
   margin: 0;
 }
@@ -1114,6 +1151,22 @@ button {
 .procedure-step-editor-list {
   display: grid;
   gap: 14px;
+}
+
+.procedure-variant-editor,
+.procedure-structured-actions {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.procedure-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .procedure-step-editor {
@@ -1162,6 +1215,48 @@ button {
 
 .procedure-product-link-row .icon-button {
   justify-self: end;
+}
+
+.procedure-action-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) 38px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.procedure-action-row select,
+.procedure-action-row input {
+  min-height: 38px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+}
+
+.procedure-action-row select:nth-of-type(6),
+.procedure-action-row input:nth-of-type(5),
+.procedure-action-row input:nth-of-type(6),
+.procedure-action-row input:nth-of-type(7) {
+  grid-column: span 2;
+}
+
+.procedure-action-row .icon-button {
+  justify-self: end;
+}
+
+.procedure-action-preview {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .procedure-product-link-row input,
@@ -6802,6 +6897,7 @@ button {
 
 @media (max-width: 1100px) {
   .procedures-admin-grid,
+  .procedure-settings-grid,
   .procedure-reader-layout {
     grid-template-columns: 1fr;
   }
@@ -6829,8 +6925,16 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 
+  .procedure-variant-grid,
+  .procedure-action-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .procedure-product-link-row select,
-  .procedure-product-link-row input:nth-of-type(3) {
+  .procedure-product-link-row input:nth-of-type(3),
+  .procedure-action-row select,
+  .procedure-action-row input,
+  .procedure-action-row .icon-button {
     grid-column: 1 / -1;
   }
 

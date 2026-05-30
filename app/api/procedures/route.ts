@@ -16,6 +16,26 @@ type ProcedureStepPayload = {
   estimatedMinutes?: string | number | null;
   mediaUrl?: string;
   products?: ProcedureProductPayload[];
+  actions?: ProcedureActionPayload[];
+};
+
+type ProcedureActionPayload = {
+  variantType?: string;
+  actionTypeId?: string;
+  productId?: string;
+  locationId?: string;
+  equipmentId?: string;
+  containerId?: string;
+  quantity?: string | number | null;
+  unit?: string;
+  targetText?: string;
+  standardText?: string;
+  note?: string;
+};
+
+type ProcedureVariantPayload = {
+  variantType?: string;
+  name?: string;
 };
 
 type ProcedureBookPayload = {
@@ -26,6 +46,7 @@ type ProcedureBookPayload = {
   status?: string;
   brandId?: string;
   storeIds?: string[];
+  variants?: ProcedureVariantPayload[];
   steps?: ProcedureStepPayload[];
 };
 
@@ -49,6 +70,11 @@ function parseOptionalNumber(value: unknown) {
 function parseOptionalInteger(value: unknown) {
   const numberValue = parseOptionalNumber(value);
   return numberValue === null ? null : Math.round(numberValue);
+}
+
+function normalizeVariantType(value: unknown) {
+  const variantType = String(value ?? "").trim();
+  return variantType || "base";
 }
 
 async function readProcedures(session: EmployeeSession, mode: string) {
@@ -112,6 +138,19 @@ async function readProcedures(session: EmployeeSession, mode: string) {
     : [];
 
   const stepIds = steps.map((step) => String(step.id));
+  const variants = bookIds.length
+    ? await sql`
+        select
+          id::text,
+          procedure_book_id::text as "bookId",
+          variant_type as "variantType",
+          name,
+          sort_order as "sortOrder"
+        from procedure_variants
+        where procedure_book_id::text = any(${bookIds})
+        order by procedure_book_id, sort_order, name
+      `
+    : [];
   const stepProducts = stepIds.length
     ? await sql`
         select
@@ -133,11 +172,52 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         order by procedure_step_products.procedure_step_id, procedure_step_products.sort_order, products.name
       `
     : [];
+  const stepActions = stepIds.length
+    ? await sql`
+        select
+          procedure_step_actions.id::text,
+          procedure_step_actions.procedure_step_id::text as "stepId",
+          coalesce(procedure_variants.variant_type, 'base') as "variantType",
+          procedure_action_types.id::text as "actionTypeId",
+          coalesce(procedure_action_types.label, '') as "actionLabel",
+          products.id::text as "productId",
+          coalesce(products.name, '') as "productName",
+          coalesce(products.category, '') as category,
+          coalesce(products.subcategory, '未分類') as subcategory,
+          procedure_locations.id::text as "locationId",
+          coalesce(procedure_locations.name, '') as location,
+          procedure_equipment.id::text as "equipmentId",
+          coalesce(procedure_equipment.name, '') as equipment,
+          procedure_containers.id::text as "containerId",
+          coalesce(procedure_containers.name, '') as container,
+          procedure_step_actions.quantity::float as quantity,
+          coalesce(procedure_step_actions.unit, products.unit, '') as unit,
+          coalesce(procedure_step_actions.target_text, '') as "targetText",
+          coalesce(procedure_step_actions.standard_text, '') as "standardText",
+          coalesce(procedure_step_actions.note, '') as note,
+          procedure_step_actions.sort_order as "sortOrder"
+        from procedure_step_actions
+        left join procedure_variants on procedure_variants.id = procedure_step_actions.procedure_variant_id
+        left join procedure_action_types on procedure_action_types.id = procedure_step_actions.action_type_id
+        left join products on products.id = procedure_step_actions.product_id
+        left join procedure_locations on procedure_locations.id = procedure_step_actions.location_id
+        left join procedure_equipment on procedure_equipment.id = procedure_step_actions.equipment_id
+        left join procedure_containers on procedure_containers.id = procedure_step_actions.container_id
+        where procedure_step_actions.procedure_step_id::text = any(${stepIds})
+        order by procedure_step_actions.procedure_step_id, procedure_step_actions.sort_order
+      `
+    : [];
 
   const productsByStep = new Map<string, unknown[]>();
   for (const item of stepProducts) {
     const stepId = String(item.stepId);
     productsByStep.set(stepId, [...(productsByStep.get(stepId) ?? []), item]);
+  }
+
+  const actionsByStep = new Map<string, unknown[]>();
+  for (const item of stepActions) {
+    const stepId = String(item.stepId);
+    actionsByStep.set(stepId, [...(actionsByStep.get(stepId) ?? []), item]);
   }
 
   const stepsByBook = new Map<string, unknown[]>();
@@ -147,19 +227,27 @@ async function readProcedures(session: EmployeeSession, mode: string) {
       ...(stepsByBook.get(bookId) ?? []),
       {
         ...step,
-        products: productsByStep.get(String(step.id)) ?? []
+        products: productsByStep.get(String(step.id)) ?? [],
+        actions: actionsByStep.get(String(step.id)) ?? []
       }
     ]);
   }
 
+  const variantsByBook = new Map<string, unknown[]>();
+  for (const variant of variants) {
+    const bookId = String(variant.bookId);
+    variantsByBook.set(bookId, [...(variantsByBook.get(bookId) ?? []), variant]);
+  }
+
   return books.map((book) => ({
     ...book,
+    variants: variantsByBook.get(String(book.id)) ?? [],
     steps: stepsByBook.get(String(book.id)) ?? []
   }));
 }
 
 async function readAdminOptions() {
-  const [stores, brands, products] = await Promise.all([
+  const [stores, brands, products, actionTypes, locations, equipment, containers] = await Promise.all([
     sql`
       select id::text, name
       from stores
@@ -189,10 +277,36 @@ async function readAdminOptions() {
         coalesce(photo_url, '') as "photoUrl"
       from products
       order by category, subcategory, name
+    `,
+    sql`
+      select
+        id::text,
+        action_key as "actionKey",
+        label,
+        sentence_template as "sentenceTemplate",
+        is_active as "isActive",
+        sort_order as "sortOrder"
+      from procedure_action_types
+      order by sort_order, label
+    `,
+    sql`
+      select id::text, name, coalesce(category, '') as category, coalesce(note, '') as note, is_active as "isActive", sort_order as "sortOrder"
+      from procedure_locations
+      order by sort_order, name
+    `,
+    sql`
+      select id::text, name, coalesce(category, '') as category, coalesce(note, '') as note, is_active as "isActive", sort_order as "sortOrder"
+      from procedure_equipment
+      order by sort_order, name
+    `,
+    sql`
+      select id::text, name, coalesce(category, '') as category, coalesce(note, '') as note, is_active as "isActive", sort_order as "sortOrder"
+      from procedure_containers
+      order by sort_order, name
     `
   ]);
 
-  return { stores, brands, products };
+  return { stores, brands, products, actionTypes, locations, equipment, containers };
 }
 
 export async function GET(request: Request) {
@@ -269,6 +383,13 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   const storeIds = Array.isArray(body.storeIds)
     ? Array.from(new Set(body.storeIds.map((item) => String(item).trim()).filter(Boolean)))
     : [];
+  const variants = Array.isArray(body.variants) && body.variants.length
+    ? body.variants
+    : [
+      { variantType: "base", name: "共通" },
+      { variantType: "dine_in", name: "堂食" },
+      { variantType: "takeout", name: "外卖" }
+    ];
   const steps = Array.isArray(body.steps) ? body.steps : [];
 
   if (!title) {
@@ -320,6 +441,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   }
 
   await sql`delete from procedure_book_stores where procedure_book_id = ${procedureId}`;
+  await sql`delete from procedure_variants where procedure_book_id = ${procedureId}`;
   for (const storeId of storeIds) {
     await sql`
       insert into procedure_book_stores (procedure_book_id, store_id)
@@ -328,12 +450,30 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
     `;
   }
 
+  const variantIdByType = new Map<string, string>();
+  for (const [variantIndex, variant] of variants.entries()) {
+    const variantType = normalizeVariantType(variant.variantType);
+    const name = String(variant.name ?? "").trim() || variantType;
+    const rows = await sql`
+      insert into procedure_variants (procedure_book_id, variant_type, name, sort_order)
+      values (${procedureId}, ${variantType}, ${name}, ${variantIndex})
+      on conflict (procedure_book_id, variant_type)
+      do update set
+        name = excluded.name,
+        sort_order = excluded.sort_order
+      returning id::text
+    `;
+    if (rows[0]?.id) variantIdByType.set(variantType, String(rows[0].id));
+  }
+
   await sql`delete from procedure_steps where procedure_book_id = ${procedureId}`;
 
   for (const [stepIndex, step] of steps.entries()) {
     const stepTitle = String(step.title ?? "").trim();
     const instruction = String(step.instruction ?? "").trim();
-    if (!stepTitle && !instruction) continue;
+    const products = Array.isArray(step.products) ? step.products : [];
+    const actions = Array.isArray(step.actions) ? step.actions : [];
+    if (!stepTitle && !instruction && !products.length && !actions.length) continue;
 
     const stepRows = await sql`
       insert into procedure_steps (
@@ -362,7 +502,6 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
     const stepId = stepRows[0]?.id;
     if (!stepId) continue;
 
-    const products = Array.isArray(step.products) ? step.products : [];
     for (const [productIndex, product] of products.entries()) {
       const productId = String(product.productId ?? "").trim();
       if (!productId) continue;
@@ -383,6 +522,51 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           ${String(product.unit ?? "").trim()},
           ${String(product.note ?? "").trim()},
           ${productIndex}
+        )
+      `;
+    }
+
+    for (const [actionIndex, action] of actions.entries()) {
+      const variantType = normalizeVariantType(action.variantType);
+      const variantId = variantIdByType.get(variantType) ?? variantIdByType.get("base") ?? null;
+      const actionTypeId = String(action.actionTypeId ?? "").trim() || null;
+      const productId = String(action.productId ?? "").trim() || null;
+      const locationId = String(action.locationId ?? "").trim() || null;
+      const equipmentId = String(action.equipmentId ?? "").trim() || null;
+      const containerId = String(action.containerId ?? "").trim() || null;
+      const hasContent = actionTypeId || productId || locationId || equipmentId || containerId || action.quantity || action.targetText || action.standardText || action.note;
+      if (!hasContent) continue;
+
+      await sql`
+        insert into procedure_step_actions (
+          procedure_step_id,
+          procedure_variant_id,
+          action_type_id,
+          product_id,
+          location_id,
+          equipment_id,
+          container_id,
+          quantity,
+          unit,
+          target_text,
+          standard_text,
+          note,
+          sort_order
+        )
+        values (
+          ${stepId},
+          ${variantId},
+          ${actionTypeId},
+          ${productId},
+          ${locationId},
+          ${equipmentId},
+          ${containerId},
+          ${parseOptionalNumber(action.quantity)},
+          ${String(action.unit ?? "").trim()},
+          ${String(action.targetText ?? "").trim()},
+          ${String(action.standardText ?? "").trim()},
+          ${String(action.note ?? "").trim()},
+          ${actionIndex}
         )
       `;
     }

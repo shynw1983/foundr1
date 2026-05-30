@@ -40,6 +40,27 @@ type ProductOption = OptionItem & {
   photoUrl: string;
 };
 
+type ProcedureVariant = {
+  variantType: string;
+  name: string;
+};
+
+type ProcedureAction = {
+  variantType: string;
+  actionTypeId: string;
+  productId: string;
+  selectedCategory?: string;
+  selectedSubcategory?: string;
+  locationId: string;
+  equipmentId: string;
+  containerId: string;
+  quantity: string;
+  unit: string;
+  targetText: string;
+  standardText: string;
+  note: string;
+};
+
 type ProcedureStepProduct = {
   productId: string;
   productName?: string;
@@ -58,6 +79,7 @@ type ProcedureStep = {
   estimatedMinutes: string;
   mediaUrl: string;
   products: ProcedureStepProduct[];
+  actions: ProcedureAction[];
 };
 
 type ProcedureBook = {
@@ -70,9 +92,28 @@ type ProcedureBook = {
   brand?: string;
   storeIds: string[];
   stores?: OptionItem[];
+  variants: ProcedureVariant[];
   steps: ProcedureStep[];
   versionNumber?: number;
 };
+
+type ActionTypeOption = {
+  id: string;
+  actionKey: string;
+  label: string;
+  sentenceTemplate: string;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+type ProcedureMasterItem = OptionItem & {
+  category: string;
+  note: string;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+type SettingKind = "action_types" | "locations" | "equipment" | "containers";
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
@@ -96,8 +137,16 @@ const emptyStep: ProcedureStep = {
   caution: "",
   estimatedMinutes: "",
   mediaUrl: "",
-  products: []
+  products: [],
+  actions: []
 };
+
+const defaultVariants: ProcedureVariant[] = [
+  { variantType: "base", name: "共通" },
+  { variantType: "dine_in", name: "堂食" },
+  { variantType: "takeout", name: "外卖" },
+  { variantType: "delivery", name: "配送" }
+];
 
 const emptyBook: ProcedureBook = {
   title: "",
@@ -106,7 +155,22 @@ const emptyBook: ProcedureBook = {
   status: "draft",
   brandId: "",
   storeIds: [],
+  variants: defaultVariants,
   steps: [{ ...emptyStep, title: "準備", instruction: "" }]
+};
+
+const emptyAction: ProcedureAction = {
+  variantType: "base",
+  actionTypeId: "",
+  productId: "",
+  locationId: "",
+  equipmentId: "",
+  containerId: "",
+  quantity: "",
+  unit: "",
+  targetText: "",
+  standardText: "",
+  note: ""
 };
 
 function normalizeBook(book: ProcedureBook): ProcedureBook {
@@ -115,10 +179,16 @@ function normalizeBook(book: ProcedureBook): ProcedureBook {
     ...book,
     brandId: book.brandId ?? "",
     storeIds: book.stores?.map((store) => store.id) ?? book.storeIds ?? [],
+    variants: book.variants?.length ? book.variants : defaultVariants,
     steps: book.steps?.length ? book.steps.map((step) => ({
       ...emptyStep,
       ...step,
       estimatedMinutes: String(step.estimatedMinutes ?? ""),
+      actions: step.actions?.map((action) => ({
+        ...emptyAction,
+        ...action,
+        quantity: action.quantity === null || action.quantity === undefined ? "" : String(action.quantity)
+      })) ?? [],
       products: step.products?.map((product) => ({
         productId: product.productId,
         productName: product.productName,
@@ -150,12 +220,41 @@ function canUseProductForBrand(product: ProductOption, brandId: string) {
   return Array.isArray(product.brandIds) && product.brandIds.includes(brandId);
 }
 
+function renderActionSentence(action: ProcedureAction, actionTypes: ActionTypeOption[], products: ProductOption[], locations: ProcedureMasterItem[], equipment: ProcedureMasterItem[], containers: ProcedureMasterItem[]) {
+  const actionType = actionTypes.find((item) => item.id === action.actionTypeId);
+  const product = products.find((item) => item.id === action.productId);
+  const location = locations.find((item) => item.id === action.locationId);
+  const equipmentItem = equipment.find((item) => item.id === action.equipmentId);
+  const container = containers.find((item) => item.id === action.containerId);
+  const quantity = action.quantity ? `${action.quantity}${action.unit}` : "";
+  const template = actionType?.sentenceTemplate || "{action} {product} {quantity}";
+
+  return template
+    .replaceAll("{action}", actionType?.label ?? "")
+    .replaceAll("{product}", product?.name ?? "")
+    .replaceAll("{location}", location?.name ?? "")
+    .replaceAll("{equipment}", equipmentItem?.name ?? "")
+    .replaceAll("{container}", container?.name ?? "")
+    .replaceAll("{quantity}", quantity)
+    .replaceAll("{unit}", action.unit)
+    .replaceAll("{target}", action.targetText)
+    .replaceAll("{standard}", action.standardText)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function ProcedureAdminPage() {
   const [procedures, setProcedures] = useState<ProcedureBook[]>([]);
   const [stores, setStores] = useState<OptionItem[]>([]);
   const [brands, setBrands] = useState<OptionItem[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
+  const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
+  const [locations, setLocations] = useState<ProcedureMasterItem[]>([]);
+  const [equipment, setEquipment] = useState<ProcedureMasterItem[]>([]);
+  const [containers, setContainers] = useState<ProcedureMasterItem[]>([]);
   const [editingBook, setEditingBook] = useState<ProcedureBook>(() => cloneBook(emptyBook));
+  const [settingKind, setSettingKind] = useState<SettingKind>("action_types");
+  const [settingDraft, setSettingDraft] = useState({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -176,6 +275,10 @@ export default function ProcedureAdminPage() {
       stores?: OptionItem[];
       brands?: OptionItem[];
       products?: ProductOption[];
+      actionTypes?: ActionTypeOption[];
+      locations?: ProcedureMasterItem[];
+      equipment?: ProcedureMasterItem[];
+      containers?: ProcedureMasterItem[];
       canEdit?: boolean;
     };
 
@@ -183,6 +286,10 @@ export default function ProcedureAdminPage() {
     setStores(data.stores ?? []);
     setBrands(data.brands ?? []);
     setProducts(data.products ?? []);
+    setActionTypes(data.actionTypes ?? []);
+    setLocations(data.locations ?? []);
+    setEquipment(data.equipment ?? []);
+    setContainers(data.containers ?? []);
     setCanEdit(Boolean(data.canEdit));
     setLoading(false);
   }
@@ -231,6 +338,18 @@ export default function ProcedureAdminPage() {
     }));
   }
 
+  function updateStepAction(stepIndex: number, actionIndex: number, nextAction: Partial<ProcedureAction>) {
+    setEditingBook((current) => ({
+      ...current,
+      steps: current.steps.map((step, currentStepIndex) => currentStepIndex === stepIndex
+        ? {
+          ...step,
+          actions: step.actions.map((action, currentActionIndex) => currentActionIndex === actionIndex ? { ...action, ...nextAction } : action)
+        }
+        : step)
+    }));
+  }
+
   function updateBookBrand(brandId: string) {
     setEditingBook((current) => {
       const nextProducts = products.filter((product) => canUseProductForBrand(product, brandId));
@@ -243,7 +362,10 @@ export default function ProcedureAdminPage() {
           ...step,
           products: step.products.map((product) => product.productId && !nextProductIds.has(product.productId)
             ? { ...product, productId: "", productName: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
-            : product)
+            : product),
+          actions: step.actions.map((action) => action.productId && !nextProductIds.has(action.productId)
+            ? { ...action, productId: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
+            : action)
         }))
       };
     });
@@ -272,6 +394,42 @@ export default function ProcedureAdminPage() {
       product.category === category &&
       product.subcategory === subcategory
     ));
+  }
+
+  function getActionProductForLink(action: ProcedureAction) {
+    return products.find((item) => item.id === action.productId);
+  }
+
+  function getActionSelectedCategory(action: ProcedureAction) {
+    return action.selectedCategory ?? getActionProductForLink(action)?.category ?? "";
+  }
+
+  function getActionSelectedSubcategory(action: ProcedureAction) {
+    return action.selectedSubcategory ?? getActionProductForLink(action)?.subcategory ?? "";
+  }
+
+  function getSettingItems() {
+    if (settingKind === "action_types") return actionTypes;
+    if (settingKind === "locations") return locations;
+    if (settingKind === "equipment") return equipment;
+    return containers;
+  }
+
+  async function saveSetting() {
+    setMessage("");
+    const response = await fetch("/api/procedures/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: settingKind, ...settingDraft })
+    });
+    const data = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setMessage(data.error ?? "設定を保存できませんでした。");
+      return;
+    }
+    setSettingDraft({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+    setMessage("設定を保存しました。");
+    await loadProcedures();
   }
 
   async function saveProcedure() {
@@ -351,6 +509,85 @@ export default function ProcedureAdminPage() {
 
         {message ? <div className="inline-alert">{message}</div> : null}
         {!canEdit && !loading ? <div className="inline-alert is-warning">手順書の編集権限がありません。</div> : null}
+
+        <section className="panel procedure-settings-panel">
+          <div className="panel-title">
+            <div>
+              <p>現場に合わせて変更可能</p>
+              <h3>手順書設定</h3>
+            </div>
+          </div>
+          <div className="procedure-settings-grid">
+            <form className="management-form procedure-setting-form" onSubmit={(event) => {
+              event.preventDefault();
+              void saveSetting();
+            }}>
+              <label>
+                <span>設定種別</span>
+                <select value={settingKind} onChange={(event) => setSettingKind(event.target.value as SettingKind)} disabled={!canEdit}>
+                  <option value="action_types">動作</option>
+                  <option value="locations">位置</option>
+                  <option value="equipment">設備・工具</option>
+                  <option value="containers">容器</option>
+                </select>
+              </label>
+              {settingKind === "action_types" ? (
+                <>
+                  <label>
+                    <span>アクションキー</span>
+                    <input value={settingDraft.actionKey} onChange={(event) => setSettingDraft({ ...settingDraft, actionKey: event.target.value })} placeholder="例: pour" disabled={!canEdit} />
+                  </label>
+                  <label>
+                    <span>表示名</span>
+                    <input value={settingDraft.label} onChange={(event) => setSettingDraft({ ...settingDraft, label: event.target.value })} placeholder="例: 注ぐ" disabled={!canEdit} />
+                  </label>
+                  <label>
+                    <span>文生成テンプレート</span>
+                    <input value={settingDraft.sentenceTemplate} onChange={(event) => setSettingDraft({ ...settingDraft, sentenceTemplate: event.target.value })} placeholder="{container}に{product}{quantity}を入れる" disabled={!canEdit} />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label>
+                    <span>名称</span>
+                    <input value={settingDraft.name} onChange={(event) => setSettingDraft({ ...settingDraft, name: event.target.value })} placeholder="例: 冷蔵庫" disabled={!canEdit} />
+                  </label>
+                  <label>
+                    <span>分類</span>
+                    <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / 外卖" disabled={!canEdit} />
+                  </label>
+                  <label>
+                    <span>メモ</span>
+                    <input value={settingDraft.note} onChange={(event) => setSettingDraft({ ...settingDraft, note: event.target.value })} disabled={!canEdit} />
+                  </label>
+                </>
+              )}
+              <label>
+                <span>並び順</span>
+                <input value={settingDraft.sortOrder} onChange={(event) => setSettingDraft({ ...settingDraft, sortOrder: event.target.value })} inputMode="numeric" disabled={!canEdit} />
+              </label>
+              <label className="procedure-setting-toggle">
+                <input type="checkbox" checked={settingDraft.isActive} onChange={(event) => setSettingDraft({ ...settingDraft, isActive: event.target.checked })} disabled={!canEdit} />
+                <span>有効</span>
+              </label>
+              <button className="primary-button" type="submit" disabled={!canEdit}>
+                <Save size={18} />
+                設定を保存
+              </button>
+            </form>
+            <div className="procedure-setting-list">
+              {getSettingItems().map((item) => (
+                <article className="management-row procedure-setting-row" key={item.id}>
+                  <div>
+                    <strong>{"label" in item ? item.label : item.name}</strong>
+                    <p>{"sentenceTemplate" in item ? item.sentenceTemplate : [item.category, item.note].filter(Boolean).join(" / ") || "メモ未設定"}</p>
+                    <small>{item.isActive ? "有効" : "停止中"} / {item.sortOrder}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <div className="procedures-admin-grid">
           <section className="panel">
@@ -443,6 +680,28 @@ export default function ProcedureAdminPage() {
                 </label>
               </div>
               <small className="form-hint">適用店舗を選ばない場合は全店共通として扱います。</small>
+
+              <div className="procedure-variant-editor">
+                <div className="procedure-step-editor-head">
+                  <strong>提供形式</strong>
+                  <p>共通手順に堂食・外卖などの差分を追加します。</p>
+                </div>
+                <div className="procedure-variant-grid">
+                  {editingBook.variants.map((variant, variantIndex) => (
+                    <label key={variant.variantType}>
+                      <span>{variant.variantType}</span>
+                      <input
+                        value={variant.name}
+                        onChange={(event) => setEditingBook({
+                          ...editingBook,
+                          variants: editingBook.variants.map((item, currentIndex) => currentIndex === variantIndex ? { ...item, name: event.target.value } : item)
+                        })}
+                        disabled={!canEdit}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
 
               <div className="procedure-step-editor-list">
                 {editingBook.steps.map((step, stepIndex) => (
@@ -561,6 +820,92 @@ export default function ProcedureAdminPage() {
                           >
                             <Trash2 size={15} />
                           </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="procedure-structured-actions">
+                      <div className="procedure-step-editor-head">
+                        <div>
+                          <strong>構造化アクション</strong>
+                          <p>位置・商品・数量・設備を指令として保存します。</p>
+                        </div>
+                        <button
+                          className="text-button"
+                          type="button"
+                          onClick={() => updateStep(stepIndex, { actions: [...step.actions, { ...emptyAction }] })}
+                          disabled={!canEdit}
+                        >
+                          <Plus size={14} />
+                          アクションを追加
+                        </button>
+                      </div>
+                      {step.actions.map((action, actionIndex) => (
+                        <div className="procedure-action-row" key={actionIndex}>
+                          <select value={action.variantType} onChange={(event) => updateStepAction(stepIndex, actionIndex, { variantType: event.target.value })} disabled={!canEdit} aria-label="提供形式">
+                            {editingBook.variants.map((variant) => <option value={variant.variantType} key={variant.variantType}>{variant.name}</option>)}
+                          </select>
+                          <select value={action.actionTypeId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { actionTypeId: event.target.value })} disabled={!canEdit} aria-label="動作">
+                            <option value="">動作</option>
+                            {actionTypes.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+                          </select>
+                          <select value={action.locationId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { locationId: event.target.value })} disabled={!canEdit} aria-label="位置">
+                            <option value="">位置</option>
+                            {locations.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                          </select>
+                          <select
+                            value={getActionSelectedCategory(action)}
+                            onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", unit: "" })}
+                            disabled={!canEdit || !brandFilteredProducts.length}
+                            aria-label="大分類"
+                          >
+                            <option value="">大分類</option>
+                            {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
+                          </select>
+                          <select
+                            value={getActionSelectedSubcategory(action)}
+                            onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", unit: "" })}
+                            disabled={!canEdit || !getActionSelectedCategory(action)}
+                            aria-label="小分類"
+                          >
+                            <option value="">小分類</option>
+                            {getSubcategoriesForCategory(getActionSelectedCategory(action)).map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
+                          </select>
+                          <select value={action.productId} onChange={(event) => {
+                            const selectedProduct = products.find((item) => item.id === event.target.value);
+                            updateStepAction(stepIndex, actionIndex, {
+                              productId: event.target.value,
+                              selectedCategory: selectedProduct?.category ?? getActionSelectedCategory(action),
+                              selectedSubcategory: selectedProduct?.subcategory ?? getActionSelectedSubcategory(action),
+                              unit: selectedProduct?.unit ?? action.unit
+                            });
+                          }} disabled={!canEdit || !getActionSelectedCategory(action) || !getActionSelectedSubcategory(action)} aria-label="商品">
+                            <option value="">商品</option>
+                            {getProductsForSelection(getActionSelectedCategory(action), getActionSelectedSubcategory(action)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
+                          </select>
+                          <input value={action.quantity} onChange={(event) => updateStepAction(stepIndex, actionIndex, { quantity: event.target.value })} placeholder="数量" disabled={!canEdit} />
+                          <input value={action.unit} onChange={(event) => updateStepAction(stepIndex, actionIndex, { unit: event.target.value })} placeholder="単位" disabled={!canEdit} />
+                          <select value={action.equipmentId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { equipmentId: event.target.value })} disabled={!canEdit} aria-label="設備・工具">
+                            <option value="">設備・工具</option>
+                            {equipment.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                          </select>
+                          <select value={action.containerId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { containerId: event.target.value })} disabled={!canEdit} aria-label="容器">
+                            <option value="">容器</option>
+                            {containers.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                          </select>
+                          <input value={action.targetText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { targetText: event.target.value })} placeholder="目標状態" disabled={!canEdit} />
+                          <input value={action.standardText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { standardText: event.target.value })} placeholder="確認基準" disabled={!canEdit} />
+                          <input value={action.note} onChange={(event) => updateStepAction(stepIndex, actionIndex, { note: event.target.value })} placeholder="補足" disabled={!canEdit} />
+                          <button
+                            className="icon-button"
+                            type="button"
+                            aria-label="アクションを削除"
+                            onClick={() => updateStep(stepIndex, { actions: step.actions.filter((_, currentIndex) => currentIndex !== actionIndex) })}
+                            disabled={!canEdit}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                          <p className="procedure-action-preview">{renderActionSentence(action, actionTypes, products, locations, equipment, containers) || "文生成プレビュー"}</p>
                         </div>
                       ))}
                     </div>

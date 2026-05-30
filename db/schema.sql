@@ -503,6 +503,122 @@ create table if not exists procedure_step_products (
   sort_order integer not null default 0
 );
 
+create table if not exists procedure_action_types (
+  id uuid primary key default gen_random_uuid(),
+  action_key text not null unique,
+  label text not null,
+  field_config jsonb not null default '{}'::jsonb,
+  sentence_template text not null default '',
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists procedure_locations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text,
+  note text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists procedure_equipment (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text,
+  note text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists procedure_containers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text,
+  note text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists procedure_variants (
+  id uuid primary key default gen_random_uuid(),
+  procedure_book_id uuid not null references procedure_books(id) on delete cascade,
+  variant_type text not null,
+  name text not null,
+  sort_order integer not null default 0,
+  unique (procedure_book_id, variant_type)
+);
+
+create table if not exists procedure_step_actions (
+  id uuid primary key default gen_random_uuid(),
+  procedure_step_id uuid not null references procedure_steps(id) on delete cascade,
+  procedure_variant_id uuid references procedure_variants(id) on delete cascade,
+  action_type_id uuid references procedure_action_types(id) on delete set null,
+  product_id uuid references products(id) on delete restrict,
+  location_id uuid references procedure_locations(id) on delete set null,
+  equipment_id uuid references procedure_equipment(id) on delete set null,
+  container_id uuid references procedure_containers(id) on delete set null,
+  quantity numeric(12, 3),
+  unit text,
+  target_text text,
+  standard_text text,
+  note text,
+  sort_order integer not null default 0
+);
+
+insert into procedure_action_types (action_key, label, sentence_template, sort_order)
+values
+  ('take', '取出', '{location}から{product}{quantity}{unit}を取り出す', 10),
+  ('measure', '計量', '{product}を{quantity}{unit}計量する', 20),
+  ('add', '加入', '{container}に{product}{quantity}{unit}を入れる', 30),
+  ('mix', '混合', '{equipment}で{target}まで混合する', 40),
+  ('heat', '加熱', '{equipment}で{target}まで加熱する', 50),
+  ('check', '確認', '{standard}を確認する', 60),
+  ('wash', '洗浄', '{equipment}を洗浄する', 70),
+  ('cut', 'カット', '{product}を{target}にカットする', 80),
+  ('discard', '廃棄', '{product}{quantity}{unit}を廃棄する', 90),
+  ('serve', '提供', '{container}で提供する', 100)
+on conflict (action_key)
+do update set
+  label = excluded.label,
+  sentence_template = excluded.sentence_template,
+  sort_order = excluded.sort_order;
+
+insert into procedure_locations (name, category, sort_order)
+values
+  ('冷蔵庫', '保管', 10),
+  ('冷凍庫', '保管', 20),
+  ('常温棚', '保管', 30),
+  ('調理台', '作業場', 40),
+  ('ドリンクバー', '作業場', 50),
+  ('展示ケース', '売場', 60)
+on conflict (name) do nothing;
+
+insert into procedure_equipment (name, category, sort_order)
+values
+  ('電子秤', '計量', 10),
+  ('計量カップ', '計量', 20),
+  ('鍋', '加熱', 30),
+  ('煮篮', '加熱', 40),
+  ('シェーカー', 'ドリンク', 50),
+  ('封口機', '包装', 60),
+  ('レードル', '調理', 70)
+on conflict (name) do nothing;
+
+insert into procedure_containers (name, category, sort_order)
+values
+  ('内用碗', '堂食', 10),
+  ('外卖碗', '外卖', 20),
+  ('Mカップ', 'ドリンク', 30),
+  ('Lカップ', 'ドリンク', 40),
+  ('シェーカー', 'ドリンク', 50),
+  ('外卖袋', '外卖', 60)
+on conflict (name) do nothing;
+
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
 create index if not exists idx_purchase_order_supplier_fulfillments_order on purchase_order_supplier_fulfillments(purchase_order_id);
@@ -515,3 +631,6 @@ create index if not exists idx_procedure_books_brand on procedure_books(brand_id
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);
 create index if not exists idx_procedure_step_products_step on procedure_step_products(procedure_step_id, sort_order);
+create index if not exists idx_procedure_variants_book on procedure_variants(procedure_book_id, sort_order);
+create index if not exists idx_procedure_step_actions_step on procedure_step_actions(procedure_step_id, sort_order);
+create index if not exists idx_procedure_step_actions_variant on procedure_step_actions(procedure_variant_id);
