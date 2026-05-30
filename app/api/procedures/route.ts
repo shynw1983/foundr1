@@ -21,6 +21,7 @@ type ProcedureStepPayload = {
 
 type ProcedureActionPayload = {
   variantType?: string;
+  conditionJson?: unknown;
   actionTypeId?: string;
   productId?: string;
   materialId?: string;
@@ -39,12 +40,15 @@ type ProcedureActionPayload = {
 type ProcedureVariantPayload = {
   variantType?: string;
   name?: string;
+  conditionJson?: unknown;
 };
 
 type ProcedureBookPayload = {
   id?: string;
   title?: string;
   category?: string;
+  procedureType?: string;
+  menuCatalogItemId?: string;
   summary?: string;
   status?: string;
   brandId?: string;
@@ -80,6 +84,18 @@ function normalizeVariantType(value: unknown) {
   return variantType || "base";
 }
 
+function parseJsonObject(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
 async function readProcedures(session: EmployeeSession, mode: string) {
   const scope = await getSessionStoreScope(session);
   const includeDraft = mode === "admin" && canEditProcedures(session);
@@ -89,6 +105,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
       procedure_books.id::text,
       procedure_books.title,
       procedure_books.category,
+      coalesce(procedure_books.procedure_type, 'product') as "procedureType",
       coalesce(procedure_books.summary, '') as summary,
       procedure_books.status,
       procedure_books.version_number as "versionNumber",
@@ -96,6 +113,9 @@ async function readProcedures(session: EmployeeSession, mode: string) {
       procedure_books.updated_at as "updatedAt",
       brands.id::text as "brandId",
       coalesce(brands.name, '') as brand,
+      menu_catalog_items.id::text as "menuCatalogItemId",
+      coalesce(menu_catalog_items.name, '') as "menuCatalogItemName",
+      coalesce(menu_catalog_items.item_kind, '') as "menuItemKind",
       coalesce((
         select json_agg(json_build_object('id', stores.id::text, 'name', stores.name) order by stores.name)
         from procedure_book_stores
@@ -104,6 +124,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
       ), '[]'::json) as stores
     from procedure_books
     left join brands on brands.id = procedure_books.brand_id
+    left join menu_catalog_items on menu_catalog_items.id = procedure_books.menu_catalog_item_id
     where (${includeDraft} or procedure_books.status = 'published')
       and (
         ${scope.allStores}
@@ -148,6 +169,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           procedure_book_id::text as "bookId",
           variant_type as "variantType",
           name,
+          condition_json as "conditionJson",
           sort_order as "sortOrder"
         from procedure_variants
         where procedure_book_id::text = any(${bookIds})
@@ -204,6 +226,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           coalesce(procedure_step_actions.unit, products.unit, procedure_materials.unit, '') as unit,
           coalesce(procedure_step_actions.target_text, '') as "targetText",
           coalesce(procedure_step_actions.standard_text, '') as "standardText",
+          procedure_step_actions.condition_json as "conditionJson",
           coalesce(procedure_step_actions.note, '') as note,
           procedure_step_actions.sort_order as "sortOrder"
         from procedure_step_actions
@@ -299,9 +322,16 @@ async function readProcedures(session: EmployeeSession, mode: string) {
 }
 
 async function readAdminOptions() {
-  const [stores, brands, products, materials, actionTypes, locations, equipment, containers] = await Promise.all([
+  const [stores, brands, menuCatalogItems, menuOptionGroups, menuOptions, products, materials, actionTypes, locations, equipment, containers] = await Promise.all([
     sql`
-      select id::text, name
+      select
+        stores.id::text,
+        stores.name,
+        coalesce((
+          select array_agg(store_brands.brand_id::text order by store_brands.brand_id::text)
+          from store_brands
+          where store_brands.store_id = stores.id
+        ), '{}') as "brandIds"
       from stores
       where status = 'active'
       order by name
@@ -311,6 +341,52 @@ async function readAdminOptions() {
       from brands
       where status = 'active'
       order by name
+    `,
+    sql`
+      select
+        menu_catalog_items.id::text,
+        menu_catalog_items.name,
+        coalesce(menu_catalog_items.item_kind, 'fixed_product') as "itemKind",
+        coalesce(menu_catalog_items.category, '') as category,
+        coalesce(menu_catalog_items.description, '') as description,
+        coalesce(menu_catalog_items.image_url, '') as "imageUrl",
+        menu_catalog_items.base_price::float as "basePrice",
+        menu_catalog_items.variable_schema as "variableSchema",
+        menu_catalog_items.brand_id::text as "brandId",
+        coalesce(menu_catalog_items.store_id::text, '') as "storeId",
+        coalesce(menu_sources.name, '') as "sourceName",
+        coalesce(menu_sources.source_url, '') as "sourceUrl"
+      from menu_catalog_items
+      left join menu_sources on menu_sources.id = menu_catalog_items.menu_source_id
+      where menu_catalog_items.is_active = true
+      order by menu_catalog_items.category, menu_catalog_items.name
+    `,
+    sql`
+      select
+        id::text,
+        brand_id::text as "brandId",
+        menu_catalog_item_id::text as "menuCatalogItemId",
+        group_key as "groupKey",
+        name,
+        selection_type as "selectionType",
+        affects_procedure as "affectsProcedure",
+        sort_order as "sortOrder"
+      from menu_option_groups
+      where is_active = true
+      order by sort_order, name
+    `,
+    sql`
+      select
+        id::text,
+        option_group_id::text as "optionGroupId",
+        option_key as "optionKey",
+        name,
+        price_delta::float as "priceDelta",
+        affects_procedure as "affectsProcedure",
+        sort_order as "sortOrder"
+      from menu_options
+      where is_active = true
+      order by sort_order, name
     `,
     sql`
       select
@@ -373,7 +449,7 @@ async function readAdminOptions() {
     `
   ]);
 
-  return { stores, brands, products, materials, actionTypes, locations, equipment, containers };
+  return { stores, brands, menuCatalogItems, menuOptionGroups, menuOptions, products, materials, actionTypes, locations, equipment, containers };
 }
 
 export async function GET(request: Request) {
@@ -444,6 +520,8 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   const id = String(body.id ?? "").trim();
   const title = String(body.title ?? "").trim();
   const category = String(body.category ?? "").trim() || "未分類";
+  const procedureType = String(body.procedureType ?? "").trim() || "product";
+  const menuCatalogItemId = String(body.menuCatalogItemId ?? "").trim() || null;
   const summary = String(body.summary ?? "").trim();
   const status = cleanStatus(body.status);
   const brandId = String(body.brandId ?? "").trim() || null;
@@ -469,6 +547,8 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
         set
           title = ${title},
           category = ${category},
+          procedure_type = ${procedureType},
+          menu_catalog_item_id = ${menuCatalogItemId},
           summary = ${summary},
           status = ${status},
           brand_id = ${brandId},
@@ -482,6 +562,8 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
         insert into procedure_books (
           title,
           category,
+          procedure_type,
+          menu_catalog_item_id,
           summary,
           status,
           brand_id,
@@ -492,6 +574,8 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
         values (
           ${title},
           ${category},
+          ${procedureType},
+          ${menuCatalogItemId},
           ${summary},
           ${status},
           ${brandId},
@@ -521,12 +605,14 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   for (const [variantIndex, variant] of variants.entries()) {
     const variantType = normalizeVariantType(variant.variantType);
     const name = String(variant.name ?? "").trim() || variantType;
+    const conditionJson = JSON.stringify(parseJsonObject(variant.conditionJson));
     const rows = await sql`
-      insert into procedure_variants (procedure_book_id, variant_type, name, sort_order)
-      values (${procedureId}, ${variantType}, ${name}, ${variantIndex})
+      insert into procedure_variants (procedure_book_id, variant_type, name, condition_json, sort_order)
+      values (${procedureId}, ${variantType}, ${name}, ${conditionJson}::jsonb, ${variantIndex})
       on conflict (procedure_book_id, variant_type)
       do update set
         name = excluded.name,
+        condition_json = excluded.condition_json,
         sort_order = excluded.sort_order
       returning id::text
     `;
@@ -597,6 +683,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
       const variantType = normalizeVariantType(action.variantType);
       const variantId = variantIdByType.get(variantType) ?? variantIdByType.get("base") ?? null;
       const actionTypeId = String(action.actionTypeId ?? "").trim() || null;
+      const conditionJson = JSON.stringify(parseJsonObject(action.conditionJson));
       const productId = String(action.productId ?? "").trim() || null;
       const materialId = String(action.materialId ?? "").trim() || null;
       const locationId = String(action.locationId ?? "").trim() || null;
@@ -623,6 +710,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           unit,
           target_text,
           standard_text,
+          condition_json,
           note,
           sort_order
         )
@@ -641,6 +729,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           ${String(action.unit ?? "").trim()},
           ${String(action.targetText ?? "").trim()},
           ${String(action.standardText ?? "").trim()},
+          ${conditionJson}::jsonb,
           ${String(action.note ?? "").trim()},
           ${actionIndex}
         )

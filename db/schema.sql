@@ -472,6 +472,89 @@ alter table procedure_books add column if not exists version_number integer not 
 alter table procedure_books add column if not exists published_at timestamptz;
 alter table procedure_books add column if not exists created_by uuid references employees(id) on delete set null;
 
+create table if not exists menu_sources (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  name text not null,
+  source_type text not null default 'manual',
+  source_url text,
+  status text not null default 'active',
+  last_synced_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists menu_catalog_items (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  menu_source_id uuid references menu_sources(id) on delete set null,
+  external_id text,
+  item_kind text not null default 'fixed_product',
+  name text not null,
+  category text,
+  description text,
+  image_url text,
+  base_price numeric(12, 2),
+  variable_schema jsonb not null default '{}'::jsonb,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_id, store_id, item_kind, name)
+);
+
+create table if not exists menu_option_groups (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  menu_catalog_item_id uuid references menu_catalog_items(id) on delete cascade,
+  external_id text,
+  group_key text not null,
+  name text not null,
+  selection_type text not null default 'single',
+  affects_procedure boolean not null default true,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_id, menu_catalog_item_id, group_key)
+);
+
+create table if not exists menu_options (
+  id uuid primary key default gen_random_uuid(),
+  option_group_id uuid not null references menu_option_groups(id) on delete cascade,
+  external_id text,
+  option_key text not null,
+  name text not null,
+  price_delta numeric(12, 2),
+  affects_procedure boolean not null default true,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (option_group_id, option_key)
+);
+
+alter table menu_sources add column if not exists store_id uuid references stores(id) on delete cascade;
+alter table menu_sources add column if not exists source_url text;
+alter table menu_sources add column if not exists status text not null default 'active';
+alter table menu_sources add column if not exists last_synced_at timestamptz;
+alter table menu_catalog_items add column if not exists store_id uuid references stores(id) on delete cascade;
+alter table menu_catalog_items add column if not exists menu_source_id uuid references menu_sources(id) on delete set null;
+alter table menu_catalog_items add column if not exists external_id text;
+alter table menu_catalog_items add column if not exists item_kind text not null default 'fixed_product';
+alter table menu_catalog_items add column if not exists category text;
+alter table menu_catalog_items add column if not exists description text;
+alter table menu_catalog_items add column if not exists image_url text;
+alter table menu_catalog_items add column if not exists base_price numeric(12, 2);
+alter table menu_catalog_items add column if not exists variable_schema jsonb not null default '{}'::jsonb;
+alter table menu_catalog_items add column if not exists is_active boolean not null default true;
+alter table menu_option_groups add column if not exists affects_procedure boolean not null default true;
+alter table menu_options add column if not exists affects_procedure boolean not null default true;
+
+alter table procedure_books add column if not exists procedure_type text not null default 'product';
+alter table procedure_books add column if not exists menu_catalog_item_id uuid references menu_catalog_items(id) on delete set null;
+
 create table if not exists procedure_book_stores (
   procedure_book_id uuid not null references procedure_books(id) on delete cascade,
   store_id uuid not null references stores(id) on delete cascade,
@@ -573,9 +656,12 @@ create table if not exists procedure_variants (
   procedure_book_id uuid not null references procedure_books(id) on delete cascade,
   variant_type text not null,
   name text not null,
+  condition_json jsonb not null default '{}'::jsonb,
   sort_order integer not null default 0,
   unique (procedure_book_id, variant_type)
 );
+
+alter table procedure_variants add column if not exists condition_json jsonb not null default '{}'::jsonb;
 
 create table if not exists procedure_step_actions (
   id uuid primary key default gen_random_uuid(),
@@ -593,6 +679,7 @@ create table if not exists procedure_step_actions (
   unit text,
   target_text text,
   standard_text text,
+  condition_json jsonb not null default '{}'::jsonb,
   note text,
   sort_order integer not null default 0
 );
@@ -600,6 +687,7 @@ create table if not exists procedure_step_actions (
 alter table procedure_step_actions add column if not exists material_id uuid references procedure_materials(id) on delete restrict;
 alter table procedure_step_actions add column if not exists equipment_product_id uuid references products(id) on delete restrict;
 alter table procedure_step_actions add column if not exists container_product_id uuid references products(id) on delete restrict;
+alter table procedure_step_actions add column if not exists condition_json jsonb not null default '{}'::jsonb;
 
 insert into procedure_materials (name, material_type, category, subcategory, unit, note, sort_order)
 values
@@ -675,6 +763,11 @@ create index if not exists idx_price_records_product_recorded on price_records(p
 create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
+create index if not exists idx_menu_sources_brand on menu_sources(brand_id, status);
+create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
+create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
+create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);
+create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);
 create index if not exists idx_procedure_step_products_step on procedure_step_products(procedure_step_id, sort_order);

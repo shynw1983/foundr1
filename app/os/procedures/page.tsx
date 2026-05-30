@@ -31,6 +31,23 @@ type OptionItem = {
   name: string;
 };
 
+type StoreOption = OptionItem & {
+  brandIds: string[];
+};
+
+type MenuCatalogItemOption = OptionItem & {
+  brandId: string;
+  storeId: string;
+  itemKind: string;
+  category: string;
+  description: string;
+  imageUrl: string;
+  basePrice: number | null;
+  variableSchema: Record<string, unknown>;
+  sourceName: string;
+  sourceUrl: string;
+};
+
 type ProductOption = OptionItem & {
   sourceType: "product" | "material";
   category: string;
@@ -50,10 +67,12 @@ type ProductOption = OptionItem & {
 type ProcedureVariant = {
   variantType: string;
   name: string;
+  conditionJson: string;
 };
 
 type ProcedureAction = {
   variantType: string;
+  conditionJson?: string;
   actionTypeId: string;
   productId: string;
   materialId: string;
@@ -96,6 +115,10 @@ type ProcedureBook = {
   id?: string;
   title: string;
   category: string;
+  procedureType: string;
+  menuCatalogItemId: string;
+  menuCatalogItemName?: string;
+  menuItemKind?: string;
   summary: string;
   status: "draft" | "published";
   brandId: string;
@@ -168,10 +191,27 @@ const emptyStep: ProcedureStep = {
 };
 
 const defaultVariants: ProcedureVariant[] = [
-  { variantType: "base", name: "共通" },
-  { variantType: "dine_in", name: "店内" },
-  { variantType: "takeout", name: "テイクアウト" },
-  { variantType: "delivery", name: "配送" }
+  { variantType: "base", name: "共通", conditionJson: "{}" }
+];
+
+const optionalVariants: ProcedureVariant[] = [
+  { variantType: "dine_in", name: "店内", conditionJson: "{\"service\":\"dine_in\"}" },
+  { variantType: "takeout", name: "テイクアウト", conditionJson: "{\"service\":\"takeout\"}" },
+  { variantType: "delivery", name: "デリバリー", conditionJson: "{\"service\":\"delivery\"}" },
+  { variantType: "size", name: "サイズ差分", conditionJson: "{\"size\":\"R\"}" },
+  { variantType: "temperature", name: "温度差分", conditionJson: "{\"temperature\":\"ICE\"}" },
+  { variantType: "spice", name: "辛さ差分", conditionJson: "{\"heat\":\"hot\"}" },
+  { variantType: "numb", name: "痺れ差分", conditionJson: "{\"numb\":\"numb\"}" }
+];
+
+const procedureTypes = [
+  { value: "product", label: "商品制作" },
+  { value: "buildable_product", label: "組み立て商品" },
+  { value: "prep", label: "仕込み" },
+  { value: "cleaning", label: "清掃" },
+  { value: "opening", label: "開店" },
+  { value: "closing", label: "閉店" },
+  { value: "equipment", label: "設備操作" }
 ];
 
 function getProductUsageTypeLabel(value?: string) {
@@ -187,7 +227,9 @@ function getProductUsageTypeLabel(value?: string) {
 
 const emptyBook: ProcedureBook = {
   title: "",
-  category: "ドリンク",
+  category: "商品制作",
+  procedureType: "product",
+  menuCatalogItemId: "",
   summary: "",
   status: "draft",
   brandId: "",
@@ -218,8 +260,13 @@ function normalizeBook(book: ProcedureBook): ProcedureBook {
     ...emptyBook,
     ...book,
     brandId: book.brandId ?? "",
+    procedureType: book.procedureType ?? "product",
+    menuCatalogItemId: book.menuCatalogItemId ?? "",
     storeIds: book.stores?.map((store) => store.id) ?? book.storeIds ?? [],
-    variants: book.variants?.length ? book.variants : defaultVariants,
+    variants: book.variants?.length ? book.variants.map((variant) => ({
+      ...variant,
+      conditionJson: typeof variant.conditionJson === "string" ? variant.conditionJson : JSON.stringify(variant.conditionJson ?? {}, null, 2)
+    })) : defaultVariants,
     steps: book.steps?.length ? book.steps.map((step) => ({
       ...emptyStep,
       ...step,
@@ -335,8 +382,9 @@ function shouldShowActionField(actionKey: string, field: ActionField) {
 
 export default function ProcedureAdminPage() {
   const [procedures, setProcedures] = useState<ProcedureBook[]>([]);
-  const [stores, setStores] = useState<OptionItem[]>([]);
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<OptionItem[]>([]);
+  const [menuCatalogItems, setMenuCatalogItems] = useState<MenuCatalogItemOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [materials, setMaterials] = useState<ProductOption[]>([]);
   const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
@@ -364,8 +412,9 @@ export default function ProcedureAdminPage() {
 
     const data = await response.json() as {
       procedures?: ProcedureBook[];
-      stores?: OptionItem[];
+      stores?: StoreOption[];
       brands?: OptionItem[];
+      menuCatalogItems?: MenuCatalogItemOption[];
       products?: ProductOption[];
       materials?: ProductOption[];
       actionTypes?: ActionTypeOption[];
@@ -378,6 +427,7 @@ export default function ProcedureAdminPage() {
     setProcedures((data.procedures ?? []).map(normalizeBook));
     setStores(data.stores ?? []);
     setBrands(data.brands ?? []);
+    setMenuCatalogItems(data.menuCatalogItems ?? []);
     setProducts((data.products ?? []).map((product) => ({ ...product, sourceType: "product" as const })));
     setMaterials((data.materials ?? []).map((material) => ({
       ...material,
@@ -419,6 +469,19 @@ export default function ProcedureAdminPage() {
   }, [brandFilteredProducts]);
 
   const selectedBrandName = brands.find((brand) => brand.id === editingBook.brandId)?.name ?? "";
+  const brandFilteredStores = useMemo(() => {
+    if (!editingBook.brandId) return [];
+    return stores.filter((store) => store.brandIds.includes(editingBook.brandId));
+  }, [editingBook.brandId, stores]);
+  const brandFilteredMenuCatalogItems = useMemo(() => {
+    if (!editingBook.brandId) return [];
+    const selectedStoreIds = new Set(editingBook.storeIds);
+    return menuCatalogItems.filter((item) => (
+      item.brandId === editingBook.brandId &&
+      (!item.storeId || !selectedStoreIds.size || selectedStoreIds.has(item.storeId))
+    ));
+  }, [editingBook.brandId, editingBook.storeIds, menuCatalogItems]);
+  const selectedMenuCatalogItem = brandFilteredMenuCatalogItems.find((item) => item.id === editingBook.menuCatalogItemId);
 
   function updateStep(index: number, nextStep: Partial<ProcedureStep>) {
     setEditingBook((current) => ({
@@ -459,6 +522,9 @@ export default function ProcedureAdminPage() {
       return {
         ...current,
         brandId,
+        storeIds: [],
+        menuCatalogItemId: "",
+        menuCatalogItemName: "",
         steps: current.steps.map((step) => ({
           ...step,
           products: step.products.map((product) => product.productId && !nextProductIds.has(product.productId)
@@ -821,7 +887,7 @@ export default function ProcedureAdminPage() {
                 <article className="management-row procedure-admin-row" key={procedure.id}>
                   <div>
                     <strong>{procedure.title}</strong>
-                    <p>{procedure.category} / {procedure.brand || "ブランド未設定"} / {procedure.stores?.length ? `${procedure.stores.length}店舗` : "全店共通"}</p>
+                    <p>{procedure.category} / {procedure.brand || "ブランド未設定"} / {procedure.menuCatalogItemName || "メニュー未連携"} / {procedure.stores?.length ? `${procedure.stores.length}店舗` : "全店共通"}</p>
                     <small>{procedure.status === "published" ? "公開中" : "下書き"} / v{procedure.versionNumber ?? 1} / {procedure.steps.length}ステップ</small>
                   </div>
                   <div className="row-actions">
@@ -849,14 +915,81 @@ export default function ProcedureAdminPage() {
               event.preventDefault();
               void saveProcedure();
             }}>
+              <div className="procedure-form-row">
+                <label>
+                  <span>1. ブランド</span>
+                  <select value={editingBook.brandId} onChange={(event) => updateBookBrand(event.target.value)} disabled={!canEdit}>
+                    <option value="">ブランドを選択</option>
+                    {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>2. 適用店舗</span>
+                  <select
+                    multiple
+                    value={editingBook.storeIds}
+                    onChange={(event) => setEditingBook({
+                      ...editingBook,
+                      storeIds: Array.from(event.target.selectedOptions).map((option) => option.value),
+                      menuCatalogItemId: ""
+                    })}
+                    disabled={!canEdit || !editingBook.brandId}
+                  >
+                    {brandFilteredStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <small className="form-hint">まずブランドを選びます。店舗を選ばない場合は、そのブランドの全店共通として扱います。</small>
+
+              <div className="procedure-form-row">
+                <label>
+                  <span>3. 手順タイプ</span>
+                  <select value={editingBook.procedureType} onChange={(event) => setEditingBook({
+                    ...editingBook,
+                    procedureType: event.target.value,
+                    category: procedureTypes.find((item) => item.value === event.target.value)?.label ?? editingBook.category,
+                    menuCatalogItemId: event.target.value === "product" || event.target.value === "buildable_product" ? editingBook.menuCatalogItemId : ""
+                  })} disabled={!canEdit}>
+                    {procedureTypes.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>4. メニュー対象</span>
+                  <select value={editingBook.menuCatalogItemId} onChange={(event) => {
+                    const item = brandFilteredMenuCatalogItems.find((candidate) => candidate.id === event.target.value);
+                    setEditingBook({
+                      ...editingBook,
+                      menuCatalogItemId: event.target.value,
+                      title: editingBook.title || item?.name || "",
+                      category: item?.category || editingBook.category,
+                      procedureType: item?.itemKind === "buildable_product" ? "buildable_product" : editingBook.procedureType
+                    });
+                  }} disabled={!canEdit || !editingBook.brandId || !["product", "buildable_product"].includes(editingBook.procedureType)}>
+                    <option value="">メニューを選択</option>
+                    {brandFilteredMenuCatalogItems.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.category ? `${item.category} / ` : ""}{item.name}{item.itemKind === "buildable_product" ? " / 組み立て" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <small className="form-hint">
+                メニュー対象はブランドサイトや既存メニューから同期する想定です。nanacha はサイズ・温度、maaamaa は辛さ・痺れなどを差分条件として扱います。
+              </small>
+
               <label>
                 <span>手順書名</span>
-                <input value={editingBook.title} onChange={(event) => setEditingBook({ ...editingBook, title: event.target.value })} placeholder="例: 抹茶ラテ標準手順" disabled={!canEdit} />
+                <input value={editingBook.title} onChange={(event) => setEditingBook({ ...editingBook, title: event.target.value })} placeholder={selectedMenuCatalogItem?.name || "例: 黒糖タピオカミルク"} disabled={!canEdit} />
+              </label>
+              <label>
+                <span>概要</span>
+                <textarea value={editingBook.summary} onChange={(event) => setEditingBook({ ...editingBook, summary: event.target.value })} placeholder="現場で見る短い説明" disabled={!canEdit} />
               </label>
               <div className="procedure-form-row">
                 <label>
-                  <span>分類</span>
-                  <input value={editingBook.category} onChange={(event) => setEditingBook({ ...editingBook, category: event.target.value })} placeholder="ドリンク / 仕込み / 清掃" disabled={!canEdit} />
+                  <span>管理分類</span>
+                  <input value={editingBook.category} onChange={(event) => setEditingBook({ ...editingBook, category: event.target.value })} placeholder="商品制作 / 仕込み / 清掃" disabled={!canEdit} />
                 </label>
                 <label>
                   <span>状態</span>
@@ -866,39 +999,21 @@ export default function ProcedureAdminPage() {
                   </select>
                 </label>
               </div>
-              <label>
-                <span>概要</span>
-                <textarea value={editingBook.summary} onChange={(event) => setEditingBook({ ...editingBook, summary: event.target.value })} placeholder="現場で見る短い説明" disabled={!canEdit} />
-              </label>
-              <div className="procedure-form-row">
-                <label>
-                  <span>ブランド</span>
-                  <select value={editingBook.brandId} onChange={(event) => updateBookBrand(event.target.value)} disabled={!canEdit}>
-                    <option value="">ブランド未設定</option>
-                    {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>適用店舗</span>
-                  <select
-                    multiple
-                    value={editingBook.storeIds}
-                    onChange={(event) => setEditingBook({
-                      ...editingBook,
-                      storeIds: Array.from(event.target.selectedOptions).map((option) => option.value)
-                    })}
-                    disabled={!canEdit}
-                  >
-                    {stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-                  </select>
-                </label>
-              </div>
-              <small className="form-hint">適用店舗を選ばない場合は全店共通として扱います。</small>
 
               <div className="procedure-variant-editor">
                 <div className="procedure-step-editor-head">
-                  <strong>提供形式</strong>
-                  <p>共通手順に店内・テイクアウトなどの差分を追加します。</p>
+                  <div>
+                    <strong>差分条件</strong>
+                    <p>基本は共通手順だけで始めます。サイズ、温度、辛さ、痺れ、提供形式などで作り方が変わる場合だけ差分を追加します。</p>
+                  </div>
+                  <div className="procedure-variant-actions">
+                    {optionalVariants.filter((variant) => !editingBook.variants.some((item) => item.variantType === variant.variantType)).slice(0, 4).map((variant) => (
+                      <button className="text-button" type="button" key={variant.variantType} onClick={() => setEditingBook({ ...editingBook, variants: [...editingBook.variants, variant] })} disabled={!canEdit}>
+                        <Plus size={14} />
+                        {variant.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="procedure-variant-grid">
                   {editingBook.variants.map((variant, variantIndex) => (
@@ -910,8 +1025,23 @@ export default function ProcedureAdminPage() {
                           ...editingBook,
                           variants: editingBook.variants.map((item, currentIndex) => currentIndex === variantIndex ? { ...item, name: event.target.value } : item)
                         })}
-                        disabled={!canEdit}
+                        disabled={!canEdit || variant.variantType === "base"}
                       />
+                      <textarea
+                        value={variant.conditionJson}
+                        onChange={(event) => setEditingBook({
+                          ...editingBook,
+                          variants: editingBook.variants.map((item, currentIndex) => currentIndex === variantIndex ? { ...item, conditionJson: event.target.value } : item)
+                        })}
+                        disabled={!canEdit || variant.variantType === "base"}
+                        rows={3}
+                        placeholder='{"size":"R","temperature":"ICE"}'
+                      />
+                      {variant.variantType !== "base" ? (
+                        <button className="text-button" type="button" onClick={() => setEditingBook({ ...editingBook, variants: editingBook.variants.filter((_, currentIndex) => currentIndex !== variantIndex) })} disabled={!canEdit}>
+                          差分を削除
+                        </button>
+                      ) : null}
                     </label>
                   ))}
                 </div>
@@ -1008,7 +1138,7 @@ export default function ProcedureAdminPage() {
 
                             <div className="procedure-action-fields">
                               <label>
-                                <span>提供形式</span>
+                                <span>差分条件</span>
                                 <select value={action.variantType} onChange={(event) => updateStepAction(stepIndex, actionIndex, { variantType: event.target.value })} disabled={!canEdit}>
                                   {editingBook.variants.map((variant) => <option value={variant.variantType} key={variant.variantType}>{variant.name}</option>)}
                                 </select>

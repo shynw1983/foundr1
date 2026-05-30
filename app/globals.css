@@ -1440,8 +1440,26 @@ button {
 
 .procedure-variant-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.procedure-variant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.procedure-variant-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.procedure-variant-grid textarea {
+  min-height: 74px;
+  resize: vertical;
 }
 
 .procedure-step-editor {
@@ -7380,9 +7398,12 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .procedure-variant-grid,
   .procedure-action-fields {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .procedure-variant-grid {
+    grid-template-columns: 1fr;
   }
 
   .procedure-action-fields label {
