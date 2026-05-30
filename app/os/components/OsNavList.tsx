@@ -23,12 +23,16 @@ const orderModulePaths = new Set([
   "/os/product-comparisons",
   "/os/reports"
 ]);
-const procedureModulePaths = new Set(["/os/procedures"]);
-const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff"]);
+const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
+const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 
 function getModuleNavPaths(pathname: string) {
   if (pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")) {
     return procedureModulePaths;
+  }
+
+  if (pathname === "/os/menus" || pathname.startsWith("/os/menus/")) {
+    return sharedDataPaths;
   }
 
   if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff") {
@@ -48,6 +52,7 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
+  if (item.href === "/os/menus") return ["owner", "manager"].includes(role);
   if (item.href === "/os/products") return productViewerRoles.has(role);
   if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);
 

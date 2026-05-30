@@ -1258,11 +1258,107 @@ button {
   background: var(--amber-soft);
 }
 
+.info-panel {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(40, 105, 168, 0.2);
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.info-panel strong {
+  color: var(--ink);
+}
+
+.info-panel p {
+  margin: 0;
+  color: #496177;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.filter-bar label {
+  display: grid;
+  gap: 6px;
+  min-width: min(230px, 100%);
+}
+
+.filter-bar span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filter-bar select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+}
+
+.filter-bar code {
+  min-width: min(360px, 100%);
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #40566e;
+  background: white;
+  white-space: normal;
+  word-break: break-all;
+}
+
 .empty-state {
   margin: 0;
   color: var(--muted);
   font-weight: 700;
   line-height: 1.5;
+}
+
+.menu-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.menu-admin-page .management-form {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.menu-admin-two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.menu-admin-json {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.menu-admin-list-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.menu-admin-list-grid .management-list {
+  min-width: 0;
 }
 
 .procedures-admin-grid {
@@ -7365,6 +7461,8 @@ button {
 }
 
 @media (max-width: 1100px) {
+  .menu-admin-grid,
+  .menu-admin-list-grid,
   .procedures-admin-grid,
   .procedure-settings-grid,
   .procedure-reader-layout {
@@ -7385,6 +7483,7 @@ button {
 }
 
 @media (max-width: 760px) {
+  .menu-admin-two-columns,
   .procedure-form-row,
   .procedure-reader-step {
     grid-template-columns: 1fr;

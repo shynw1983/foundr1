@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   Clock3,
   LogOut,
+  MenuSquare,
   PackageCheck,
   ShoppingCart,
   Store,
@@ -59,6 +60,14 @@ const osModules: OsModule[] = [
 ];
 
 const systemModules: OsModule[] = [
+  {
+    title: "メニュー管理",
+    description: "ブランドサイト、POS、手順書で共有する販売メニューと選択肢を管理",
+    href: "/os/menus",
+    icon: MenuSquare,
+    status: "active",
+    roles: ["owner", "manager"]
+  },
   {
     title: "店舗・ブランド",
     description: "全機能で共有する店舗、ブランド、表示範囲を管理",
