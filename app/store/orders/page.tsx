@@ -30,7 +30,7 @@ const statusLabels: Record<string, string> = {
   ready: "受け取り可",
   completed: "完了",
   cancelled: "キャンセル",
-  pending_payment: "未決済",
+  pending_payment: "決済待ち",
   checkout_failed: "決済作成失敗",
   payment_failed: "決済失敗"
 };
