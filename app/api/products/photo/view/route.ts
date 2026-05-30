@@ -1,13 +1,13 @@
 import { get } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessStore, requireOpsSession } from "../../../../../lib/api-auth";
+import { canAccessStore, requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 
 const comparisonPhotoRoles = new Set(["owner", "manager", "buyer"]);
 const fieldNotePhotoRoles = new Set(["owner", "manager", "buyer", "store_owner", "staff"]);
 
 export async function GET(request: NextRequest) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof requireOpsSession>>>, pathname: string) {
+async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, pathname: string) {
   if (pathname.startsWith("products/")) return true;
   if (pathname.startsWith("field-notes/")) return fieldNotePhotoRoles.has(session.role);
   if (pathname.startsWith("product-comparisons/")) return comparisonPhotoRoles.has(session.role);

@@ -1,4 +1,4 @@
-import { requireOwnerOpsSession } from "../../../../lib/api-auth";
+import { requireOwnerOsSession } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { hashPassword, validatePasswordStrength } from "../../../../lib/auth";
 import { sql } from "../../../../lib/db";
@@ -24,7 +24,7 @@ function normalizeStatus(status?: string) {
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const { id } = await context.params;
@@ -103,7 +103,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const { id } = await context.params;

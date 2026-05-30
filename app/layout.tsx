@@ -1,16 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { OpsTranslationProvider } from "./ops/components/OpsTranslationProvider";
-import { PwaRegister } from "./ops/components/PwaRegister";
+import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
+import { PwaRegister } from "./os/components/PwaRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "店舗発注管理",
-  description: "複数店舗・複数ブランド向け発注管理システム",
+  title: "Foundr1 OS",
+  description: "飲食店向けオペレーション管理システム",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "発注管理"
+    title: "Foundr1 OS"
   },
   icons: {
     icon: "/icons/foundr1-app.svg",
@@ -33,7 +33,7 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <PwaRegister />
-        <OpsTranslationProvider>{children}</OpsTranslationProvider>
+        <OsTranslationProvider>{children}</OsTranslationProvider>
       </body>
     </html>
   );

@@ -10,7 +10,7 @@ export type StoreScope = {
   storeIds: string[];
 };
 
-export async function requireOpsSession(): Promise<EmployeeSession | null> {
+export async function requireOsSession(): Promise<EmployeeSession | null> {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(authCookieName)?.value);
   if (!session) return null;
@@ -47,22 +47,22 @@ export async function touchEmployeeLastSeen(employeeId: string) {
   `;
 }
 
-export async function requireWritableOpsSession() {
-  const session = await requireOpsSession();
+export async function requireWritableOsSession() {
+  const session = await requireOsSession();
   if (!session || !writableRoles.has(session.role)) return null;
 
   return session;
 }
 
-export async function requireMasterOpsSession() {
-  const session = await requireOpsSession();
+export async function requireMasterOsSession() {
+  const session = await requireOsSession();
   if (!session || !allStoreAccessRoles.has(session.role)) return null;
 
   return session;
 }
 
-export async function requireOwnerOpsSession() {
-  const session = await requireOpsSession();
+export async function requireOwnerOsSession() {
+  const session = await requireOsSession();
   if (!session || session.role !== "owner") return null;
 
   return session;

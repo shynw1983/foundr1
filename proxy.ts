@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const authCookieName = "foundr1_ops_session";
+const authCookieName = "foundr1_os_session";
 const masterPageRoles = new Set(["owner", "manager", "buyer"]);
-const masterPagePaths = ["/ops/stores", "/ops/suppliers", "/ops/products"];
+const masterPagePaths = ["/os/stores", "/os/suppliers", "/os/products"];
 
 type ProxySession = {
   role?: string;
@@ -52,6 +52,9 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isOsPath = pathname.startsWith("/os");
+  const isStorePath = pathname.startsWith("/store");
+
   if (pathname.startsWith("/api")) {
     const isMutatingRequest = !["GET", "HEAD", "OPTIONS"].includes(request.method);
     const origin = request.headers.get("origin");
@@ -62,16 +65,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!pathname.startsWith("/ops") || pathname === "/ops/login") {
+  if (pathname === "/os/procedures/view") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/store/procedures";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  if ((!isOsPath && !isStorePath) || pathname === "/os/login") {
     return NextResponse.next();
   }
 
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
-    const isStaffPage = pathname === "/ops/staff" || pathname.startsWith("/ops/staff/");
+    const isStaffPage = pathname === "/os/staff" || pathname.startsWith("/os/staff/");
     if (isStaffPage && session.role !== "owner") {
       const url = request.nextUrl.clone();
-      url.pathname = "/ops";
+      url.pathname = "/os";
       url.search = "";
       return NextResponse.redirect(url);
     }
@@ -79,7 +89,7 @@ export async function proxy(request: NextRequest) {
     const isMasterPage = masterPagePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
     if (isMasterPage && !masterPageRoles.has(session.role ?? "")) {
       const url = request.nextUrl.clone();
-      url.pathname = "/ops";
+      url.pathname = "/os";
       url.search = "";
       return NextResponse.redirect(url);
     }
@@ -88,11 +98,11 @@ export async function proxy(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone();
-  url.pathname = "/ops/login";
+  url.pathname = "/os/login";
   url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
   return NextResponse.redirect(url);
 }
 
 export const config = {
-  matcher: ["/ops/:path*", "/api/:path*"]
+  matcher: ["/os/:path*", "/store/:path*", "/api/:path*"]
 };

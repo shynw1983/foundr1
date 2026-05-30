@@ -18,7 +18,7 @@ function getClientIp(request?: Request) {
 export async function writeAuditLog(input: AuditLogInput) {
   try {
     await sql`
-      insert into ops_audit_logs (
+      insert into os_audit_logs (
         actor_employee_id,
         action,
         target_type,

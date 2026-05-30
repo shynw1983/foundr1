@@ -1,8 +1,8 @@
-import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function POST(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as {
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as {
@@ -170,7 +170,7 @@ export async function PATCH(request: Request) {
 
   if (deliveredRows[0]?.purchaseOrderId) {
     await sql`
-      insert into ops_notifications (
+      insert into os_notifications (
         recipient_employee_id,
         notification_type,
         title,
@@ -182,7 +182,7 @@ export async function PATCH(request: Request) {
         'store_confirmation_required',
         '店舗確認が必要です',
         concat(stores.name, ' に ', item_counts.item_count, ' 件の納品済み商品があります。'),
-        concat('/ops/orders#order-', purchase_orders.order_no)
+        concat('/os/orders#order-', purchase_orders.order_no)
       from purchase_orders
       join stores on stores.id = purchase_orders.store_id
       cross join lateral (

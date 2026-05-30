@@ -23,7 +23,9 @@ const tables = [
   "purchase_order_items",
   "purchase_actuals",
   "purchase_exceptions",
-  "price_records"
+  "price_records",
+  "os_audit_logs",
+  "os_notifications"
 ];
 
 const rows = await sql`
@@ -34,4 +36,6 @@ const rows = await sql`
   order by table_name
 `;
 
-console.log(JSON.stringify({ tables: rows.map((row) => row.table_name) }, null, 2));
+console.log(JSON.stringify({
+  tables: rows.map((row) => row.table_name)
+}, null, 2));

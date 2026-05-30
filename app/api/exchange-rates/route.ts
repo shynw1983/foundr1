@@ -1,9 +1,9 @@
-import { requireOpsSession } from "../../../lib/api-auth";
+import { requireOsSession } from "../../../lib/api-auth";
 
 const supportedPairs = new Set(["CNY-JPY"]);
 
 export async function GET(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) {
     return Response.json({ error: "ログインしてください。" }, { status: 401 });
   }

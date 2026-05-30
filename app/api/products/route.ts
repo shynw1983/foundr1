@@ -1,4 +1,4 @@
-import { requireMasterOpsSession } from "../../../lib/api-auth";
+import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 type ProductPayload = {
@@ -24,10 +24,11 @@ type ProductPayload = {
   japaneseNote?: string;
   photoUrl?: string;
   storageType?: string;
+  usageType?: string;
 };
 
 export async function PUT(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as ProductPayload;
@@ -50,6 +51,7 @@ export async function PUT(request: Request) {
   const japaneseNote = String(body.japaneseNote ?? "");
   const photoUrl = String(body.photoUrl ?? "");
   const storageType = String(body.storageType ?? "");
+  const usageType = String(body.usageType ?? "ingredient").trim() || "ingredient";
   const selectedBrands = String(body.brand ?? "")
     .split("/")
     .map((item) => item.trim())
@@ -84,6 +86,7 @@ export async function PUT(request: Request) {
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
           storage_type = ${storageType},
+          usage_type = ${usageType},
           updated_at = now()
         where id = ${id}
         returning id
@@ -108,6 +111,7 @@ export async function PUT(request: Request) {
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
           storage_type = ${storageType},
+          usage_type = ${usageType},
           updated_at = now()
         where name = ${currentName}
         returning id
@@ -130,6 +134,7 @@ export async function PUT(request: Request) {
           photo_url,
           brand_scope,
           storage_type,
+          usage_type,
           updated_at
         )
         values (
@@ -149,6 +154,7 @@ export async function PUT(request: Request) {
           ${photoUrl},
           ${brandScope},
           ${storageType},
+          ${usageType},
           now()
         )
         returning id
@@ -210,7 +216,7 @@ function parseOptionalNumber(value: unknown) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { id?: string; productName?: string };

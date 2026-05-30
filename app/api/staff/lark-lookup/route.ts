@@ -1,4 +1,4 @@
-import { requireOwnerOpsSession } from "../../../../lib/api-auth";
+import { requireOwnerOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { lookupLarkUserByEmail, sendLarkTextMessage } from "../../../../lib/lark";
 
@@ -8,7 +8,7 @@ type LarkLookupPayload = {
 };
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as LarkLookupPayload;
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const testResult = await sendLarkTextMessage(
       { larkOpenId: larkUser.openId },
       [
-        "FOUND R1 発注管理の Lark 連携テストです。",
+        "Foundr1 OS の Lark 連携テストです。",
         "このメッセージが届いていれば、発注依頼の通知を Lark で受け取れます。"
       ].join("\n")
     );

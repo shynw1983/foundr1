@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file is the working guide for coding agents and future maintainers of FOUNDR1 Ops.
+This file is the working guide for coding agents and future maintainers of Foundr1 OS.
 
 ## Project
 
@@ -9,8 +9,10 @@ This file is the working guide for coding agents and future maintainers of FOUND
 - Database: Neon/Postgres via `@neondatabase/serverless`.
 - File storage: Vercel Blob for uploaded images.
 - Styling: global CSS in `app/globals.css`.
-- Main app path: `/ops`.
-- Product direction: FOUNDR1 should grow from procurement ops into a brand/store operations platform. Keep `/ops` as the current procurement/admin area, but design future store execution systems such as electronic procedures, checklists, training, inventory, audits, and analytics as related modules that share product master, employees, stores, brands, and permissions.
+- Product name: Foundr1 OS.
+- Public site path/domain: `foundr1.jp` is reserved for the front-facing site and is not the current focus.
+- Backoffice app path: `/os`.
+- Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
 
 ## Commands
 
@@ -54,8 +56,8 @@ Do not reintroduce mixed terms such as using `仕入れ` for the primary flow un
 
 The workflow has two separate sides:
 
-- Store/request side: `/ops/orders`.
-- Buyer/procurement side: `/ops/procurement`.
+- Store/request side: `/os/orders`.
+- Buyer/procurement side: `/os/procurement`.
 
 Rules:
 
@@ -72,11 +74,14 @@ Rules:
 
 ## Future Operations Modules
 
-Electronic procedures should be planned as a sibling business system, not only as a procurement subpage:
+Electronic procedures are a sibling Foundr1 OS module, not a procurement subpage:
 
-- Store-facing reader: prefer a route such as `/procedures`, tablet landscape first, with mobile and desktop support.
-- Admin/editor area: prefer `/ops/procedures`.
+- Store-facing reader: `/store/procedures`, tablet landscape first, with mobile and desktop support.
+- Admin/editor area: `/os/procedures`.
+- Store operation surfaces live under `/store` as a sibling workbench. Timecard and POS staff operation screens can live under `/store/timecard` and `/store/pos`, while detailed settings, reports, permissions, and management remain under `/os/timecard` and `/os/pos`.
+- Menu management lives at `/os/menus`. It is the OS-side source of truth for customer-facing menu items and options used by brand websites, POS, and procedure variants.
 - Procedure steps should link to product master data instead of copying product names where possible.
+- Procedure books can link to menu catalog data. Fixed products such as nanacha drinks and buildable products such as maaamaa malatang must both support variant conditions through JSON, for example size/temperature for drinks and heat/numb/toppings for malatang.
 - Keep procedures, checklists, training, inventory, audits, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
 
 ## Receipts
@@ -111,7 +116,7 @@ Permission rules are role plus scope.
 
 ## Notifications
 
-In-app notifications are stored in `ops_notifications`.
+In-app notifications are stored in `os_notifications`.
 
 Lark integration lives in `lib/lark.ts`.
 
