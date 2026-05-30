@@ -6,8 +6,8 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileText,
+  Info,
   Lightbulb,
-  LinkIcon,
   LogOut,
   MessageSquareWarning,
   PackageCheck,
@@ -653,7 +653,35 @@ export default function ProcedureAdminPage() {
         {message ? <div className="inline-alert">{message}</div> : null}
         {!canEdit && !loading ? <div className="inline-alert is-warning">手順書の編集権限がありません。</div> : null}
 
-        <details className="procedure-settings-disclosure">
+        <div className="procedure-helper-actions">
+          <details className="procedure-reference-disclosure">
+            <summary>
+              <Info size={17} />
+              商品総表と手順書素材の関係
+            </summary>
+            <div className="panel procedure-reference-panel">
+              <div className="procedure-reference-grid">
+                <article>
+                  <strong>商品マスタ</strong>
+                  <p>発注・補充する物を管理します。原材料、包材・消耗品、shaker などの備品・消耗工具、設備は商品マスタに登録します。</p>
+                </article>
+                <article>
+                  <strong>手順書素材</strong>
+                  <p>氷、冷水、お湯、抽出済み茶など、発注商品ではない物や中間製品を管理します。</p>
+                </article>
+                <article>
+                  <strong>設備 / 工具</strong>
+                  <p>手順書設定の工具に加えて、商品マスタの「備品・消耗工具」「設備」も選択できます。</p>
+                </article>
+                <article>
+                  <strong>容器</strong>
+                  <p>手順書設定の容器に加えて、商品マスタの「包材・消耗品」「備品・消耗工具」も選択できます。</p>
+                </article>
+              </div>
+            </div>
+          </details>
+
+          <details className="procedure-settings-disclosure">
           <summary>
             <SlidersHorizontal size={17} />
             手順書設定
@@ -772,7 +800,8 @@ export default function ProcedureAdminPage() {
               </div>
             </div>
           </section>
-        </details>
+          </details>
+        </div>
 
         <div className="procedures-admin-grid">
           <section className="panel">
@@ -1155,16 +1184,6 @@ export default function ProcedureAdminPage() {
           </section>
         </div>
 
-        <section className="panel procedure-admin-note">
-          <div className="panel-title">
-            <div>
-              <p>商品総表・手順書素材と連動</p>
-              <h3>運用メモ</h3>
-            </div>
-            <LinkIcon size={19} />
-          </div>
-          <p>発注商品は商品マスタを参照し、氷・水・抽出済み茶などは手順書素材として保存します。発注商品と中間製品を分けることで、将来のレシピ、原価、在庫、発注量分析に接続できる形にします。</p>
-        </section>
       </section>
     </main>
   );

@@ -1281,10 +1281,20 @@ button {
   flex: 0 0 auto;
 }
 
-.procedure-settings-disclosure {
+.procedure-helper-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 14px;
 }
 
+.procedure-reference-disclosure,
+.procedure-settings-disclosure {
+  min-width: 0;
+}
+
+.procedure-reference-disclosure summary,
 .procedure-settings-disclosure summary {
   width: fit-content;
   min-height: 38px;
@@ -1302,17 +1312,50 @@ button {
   list-style: none;
 }
 
+.procedure-reference-disclosure summary::-webkit-details-marker,
 .procedure-settings-disclosure summary::-webkit-details-marker {
   display: none;
 }
 
+.procedure-reference-disclosure summary:hover,
 .procedure-settings-disclosure summary:hover {
   border-color: #b7cadc;
   background: #f8fbff;
 }
 
+.procedure-reference-panel,
 .procedure-settings-panel {
   margin-top: 10px;
+}
+
+.procedure-reference-panel {
+  width: min(860px, calc(100vw - 300px));
+}
+
+.procedure-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.procedure-reference-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fbff;
+}
+
+.procedure-reference-grid strong {
+  display: block;
+  color: var(--ink);
+}
+
+.procedure-reference-grid p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.55;
 }
 
 .procedure-settings-grid {
@@ -7233,6 +7276,14 @@ button {
 @media (max-width: 760px) {
   .procedure-form-row,
   .procedure-reader-step {
+    grid-template-columns: 1fr;
+  }
+
+  .procedure-reference-panel {
+    width: 100%;
+  }
+
+  .procedure-reference-grid {
     grid-template-columns: 1fr;
   }
 
