@@ -1336,6 +1336,13 @@ button {
   min-height: 16px;
 }
 
+.procedure-setting-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .procedure-setting-list {
   display: grid;
   align-content: start;
@@ -1345,7 +1352,14 @@ button {
 }
 
 .procedure-setting-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   box-shadow: none;
+}
+
+.procedure-setting-row.is-editing {
+  border-color: #8bb6dd;
+  background: #f5faff;
 }
 
 .procedure-form {

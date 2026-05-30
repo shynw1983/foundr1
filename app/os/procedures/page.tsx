@@ -283,6 +283,7 @@ export default function ProcedureAdminPage() {
   const [editingBook, setEditingBook] = useState<ProcedureBook>(() => cloneBook(emptyBook));
   const [settingKind, setSettingKind] = useState<SettingKind>("action_types");
   const [settingDraft, setSettingDraft] = useState({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+  const [editingSettingId, setEditingSettingId] = useState("");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -443,19 +444,53 @@ export default function ProcedureAdminPage() {
     return containers;
   }
 
+  function resetSettingDraft() {
+    setEditingSettingId("");
+    setSettingDraft({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+  }
+
+  function editSetting(item: ActionTypeOption | ProcedureMasterItem) {
+    setEditingSettingId(item.id);
+    if ("actionKey" in item) {
+      setSettingDraft({
+        name: "",
+        actionKey: item.actionKey,
+        label: item.label,
+        sentenceTemplate: item.sentenceTemplate,
+        category: "",
+        note: "",
+        sortOrder: String(item.sortOrder),
+        isActive: item.isActive
+      });
+      return;
+    }
+
+    setSettingDraft({
+      name: item.name,
+      actionKey: "",
+      label: "",
+      sentenceTemplate: "",
+      category: item.category,
+      note: item.note,
+      sortOrder: String(item.sortOrder),
+      isActive: item.isActive
+    });
+  }
+
   async function saveSetting() {
     setMessage("");
+    const method = editingSettingId ? "PATCH" : "POST";
     const response = await fetch("/api/procedures/settings", {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: settingKind, ...settingDraft })
+      body: JSON.stringify({ kind: settingKind, id: editingSettingId, ...settingDraft })
     });
     const data = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
       setMessage(data.error ?? "設定を保存できませんでした。");
       return;
     }
-    setSettingDraft({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+    resetSettingDraft();
     setMessage("設定を保存しました。");
     await loadProcedures();
   }
@@ -557,7 +592,10 @@ export default function ProcedureAdminPage() {
               }}>
                 <label>
                   <span>設定種別</span>
-                  <select value={settingKind} onChange={(event) => setSettingKind(event.target.value as SettingKind)} disabled={!canEdit}>
+                  <select value={settingKind} onChange={(event) => {
+                    setSettingKind(event.target.value as SettingKind);
+                    resetSettingDraft();
+                  }} disabled={!canEdit}>
                     <option value="action_types">動作</option>
                     <option value="locations">位置</option>
                     <option value="equipment">設備・工具</option>
@@ -568,7 +606,7 @@ export default function ProcedureAdminPage() {
                   <>
                     <label>
                       <span>アクションキー</span>
-                      <input value={settingDraft.actionKey} onChange={(event) => setSettingDraft({ ...settingDraft, actionKey: event.target.value })} placeholder="例: pour" disabled={!canEdit} />
+                      <input value={settingDraft.actionKey} onChange={(event) => setSettingDraft({ ...settingDraft, actionKey: event.target.value })} placeholder="例: pour" disabled={!canEdit || Boolean(editingSettingId)} />
                     </label>
                     <label>
                       <span>表示名</span>
@@ -603,19 +641,29 @@ export default function ProcedureAdminPage() {
                   <input type="checkbox" checked={settingDraft.isActive} onChange={(event) => setSettingDraft({ ...settingDraft, isActive: event.target.checked })} disabled={!canEdit} />
                   <span>有効</span>
                 </label>
-                <button className="primary-button" type="submit" disabled={!canEdit}>
-                  <Save size={18} />
-                  設定を保存
-                </button>
+                <div className="procedure-setting-actions">
+                  {editingSettingId ? (
+                    <button className="secondary-button" type="button" onClick={resetSettingDraft} disabled={!canEdit}>
+                      新規追加に戻す
+                    </button>
+                  ) : null}
+                  <button className="primary-button" type="submit" disabled={!canEdit}>
+                    <Save size={18} />
+                    {editingSettingId ? "設定を更新" : "設定を保存"}
+                  </button>
+                </div>
               </form>
               <div className="procedure-setting-list">
                 {getSettingItems().map((item) => (
-                  <article className="management-row procedure-setting-row" key={item.id}>
+                  <article className={`management-row procedure-setting-row${editingSettingId === item.id ? " is-editing" : ""}`} key={item.id}>
                     <div>
                       <strong>{"label" in item ? item.label : item.name}</strong>
                       <p>{"sentenceTemplate" in item ? item.sentenceTemplate : [item.category, item.note].filter(Boolean).join(" / ") || "メモ未設定"}</p>
                       <small>{item.isActive ? "有効" : "停止中"} / {item.sortOrder}</small>
                     </div>
+                    <button className="text-button" type="button" onClick={() => editSetting(item)} disabled={!canEdit}>
+                      編集
+                    </button>
                   </article>
                 ))}
               </div>
