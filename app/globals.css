@@ -1484,6 +1484,7 @@ button {
 
 .menu-form-grid input,
 .menu-form-grid select,
+.menu-full-field input,
 .menu-full-field textarea,
 .menu-option-form input,
 .menu-option-form select {
@@ -1499,6 +1500,10 @@ button {
   min-height: 88px;
   padding-top: 10px;
   resize: vertical;
+}
+
+.menu-photo-upload {
+  margin-top: 2px;
 }
 
 .menu-inline-check {

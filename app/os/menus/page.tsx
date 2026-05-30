@@ -15,6 +15,7 @@ import {
   Store,
   Trash2,
   Truck,
+  Upload,
   UserCog
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -240,6 +241,7 @@ export default function MenuAdminPage() {
   const [optionDraft, setOptionDraft] = useState<MenuOption>(emptyOption);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [photoStatus, setPhotoStatus] = useState("");
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -366,6 +368,28 @@ export default function MenuAdminPage() {
     }
     setMessage("削除しました。");
     await loadMenus("");
+  }
+
+  async function uploadMenuPhoto(file: File) {
+    setPhotoStatus("アップロード中...");
+    setMessage("");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("itemName", itemDraft.name || "menu-item");
+
+    const response = await fetch("/api/menus/photo", {
+      method: "POST",
+      body: formData
+    });
+    const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+    if (!response.ok || !result.url) {
+      setPhotoStatus("");
+      setMessage(result.error || "写真をアップロードできませんでした。");
+      return;
+    }
+
+    setItemDraft({ ...itemDraft, imageUrl: result.url });
+    setPhotoStatus("アップロードしました。商品を保存すると公開メニューに反映されます。");
   }
 
   function updateAllowedOption(group: MenuGroup, option: MenuOption, checked: boolean) {
@@ -564,6 +588,34 @@ export default function MenuAdminPage() {
                 <span>説明</span>
                 <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
               </label>
+              <div className="photo-upload-box menu-photo-upload">
+                <div className="product-photo-preview">
+                  {itemDraft.imageUrl ? <img src={itemDraft.imageUrl} alt="" /> : <span>No image</span>}
+                </div>
+                <div>
+                  <label className="menu-full-field">
+                    <span>商品画像 URL</span>
+                    <input value={itemDraft.imageUrl} onChange={(event) => setItemDraft({ ...itemDraft, imageUrl: event.target.value })} placeholder="https://..." />
+                  </label>
+                  <p>ブランドサイトに表示する成品写真です。OS にアップロードした公開 URL がメニュー API に出力されます。</p>
+                  <div className="photo-upload-actions">
+                    <label className="secondary-button">
+                      <Upload size={16} />
+                      写真を選択
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.currentTarget.value = "";
+                          if (file) void uploadMenuPhoto(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {photoStatus ? <small>{photoStatus}</small> : null}
+                </div>
+              </div>
             </div>
 
             <section className="menu-edit-card">
