@@ -1379,23 +1379,62 @@ button {
 
 .procedure-action-card {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8fbff;
 }
 
-.procedure-action-card-head,
-.procedure-action-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) 38px;
-  gap: 8px;
-  align-items: end;
+.procedure-action-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.procedure-action-card-head div {
+  min-width: 0;
+}
+
+.procedure-action-card-head strong {
+  display: block;
+  color: var(--ink);
+}
+
+.procedure-action-card-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.procedure-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.procedure-action-summary span {
+  max-width: 100%;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d8e5f4;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: white;
+  color: #244460;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .procedure-action-fields {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
 }
 
 .procedure-action-card label {
@@ -1418,10 +1457,6 @@ button {
   background: white;
 }
 
-.procedure-action-card-head .icon-button {
-  justify-self: end;
-}
-
 .procedure-action-field-wide,
 .procedure-action-preview {
   grid-column: 1 / -1;
@@ -1440,6 +1475,25 @@ button {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.procedure-action-empty {
+  padding: 14px;
+  border: 1px dashed #c8d8e8;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.procedure-action-empty strong {
+  display: block;
+  color: var(--ink);
+}
+
+.procedure-action-empty p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .procedure-form-actions {
@@ -7139,15 +7193,16 @@ button {
   }
 
   .procedure-variant-grid,
-  .procedure-action-card-head,
   .procedure-action-fields {
     grid-template-columns: 1fr 1fr;
   }
 
-  .procedure-action-card-head label,
-  .procedure-action-card-head .icon-button,
   .procedure-action-fields label {
     grid-column: 1 / -1;
+  }
+
+  .procedure-action-card-head {
+    align-items: flex-start;
   }
 
   .procedure-reader-shell {

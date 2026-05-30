@@ -248,6 +248,10 @@ function getActionKey(action: ProcedureAction, actionTypes: ActionTypeOption[]) 
   return actionTypes.find((item) => item.id === action.actionTypeId)?.actionKey ?? "";
 }
 
+function getItemName(items: ProcedureMasterItem[], id: string) {
+  return items.find((item) => item.id === id)?.name ?? "";
+}
+
 function shouldShowActionField(actionKey: string, field: ActionField) {
   const visibleFields: Record<string, ActionField[]> = {
     take: ["location", "product", "quantity", "note"],
@@ -784,10 +788,38 @@ export default function ProcedureAdminPage() {
                       </div>
                       {step.actions.map((action, actionIndex) => {
                         const actionKey = getActionKey(action, actionTypes);
+                        const actionSentence = renderActionSentence(action, actionTypes, products, locations, equipment, containers);
+                        const selectedProduct = products.find((item) => item.id === action.productId);
 
                         return (
                           <div className="procedure-action-card" key={actionIndex}>
                             <div className="procedure-action-card-head">
+                              <div>
+                                <strong>指令 {actionIndex + 1}</strong>
+                                <p>{actionSentence || "動作を選ぶと、現場向けの一文がここに表示されます。"}</p>
+                              </div>
+                              <button
+                                className="icon-button"
+                                type="button"
+                                aria-label="アクションを削除"
+                                onClick={() => updateStep(stepIndex, { actions: step.actions.filter((_, currentIndex) => currentIndex !== actionIndex) })}
+                                disabled={!canEdit}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+
+                            <div className="procedure-action-summary" aria-label="指令の内容">
+                              <span>{editingBook.variants.find((variant) => variant.variantType === action.variantType)?.name ?? "共通"}</span>
+                              <span>{actionTypes.find((item) => item.id === action.actionTypeId)?.label || "動作未選択"}</span>
+                              {getItemName(locations, action.locationId) ? <span>{getItemName(locations, action.locationId)}</span> : null}
+                              {selectedProduct ? <span>{selectedProduct.name}</span> : null}
+                              {action.quantity ? <span>{action.quantity}{action.unit}</span> : null}
+                            </div>
+
+                            {!actionKey ? <p className="procedure-action-help">まず「何をする」を選びます。選んだ動作に合わせて、必要な入力だけ表示します。</p> : null}
+
+                            <div className="procedure-action-fields">
                               <label>
                                 <span>提供形式</span>
                                 <select value={action.variantType} onChange={(event) => updateStepAction(stepIndex, actionIndex, { variantType: event.target.value })} disabled={!canEdit}>
@@ -801,23 +833,10 @@ export default function ProcedureAdminPage() {
                                   {actionTypes.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
                                 </select>
                               </label>
-                              <button
-                                className="icon-button"
-                                type="button"
-                                aria-label="アクションを削除"
-                                onClick={() => updateStep(stepIndex, { actions: step.actions.filter((_, currentIndex) => currentIndex !== actionIndex) })}
-                                disabled={!canEdit}
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
 
-                            {!actionKey ? <p className="procedure-action-help">先に動作を選ぶと、必要な入力だけ表示されます。</p> : null}
-
-                            <div className="procedure-action-fields">
                               {shouldShowActionField(actionKey, "location") ? (
                                 <label>
-                                  <span>どこから / どこで</span>
+                                  <span>場所</span>
                                   <select value={action.locationId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { locationId: event.target.value })} disabled={!canEdit}>
                                     <option value="">位置を選択</option>
                                     {locations.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -828,7 +847,7 @@ export default function ProcedureAdminPage() {
                               {shouldShowActionField(actionKey, "product") ? (
                                 <>
                                   <label>
-                                    <span>商品大分類</span>
+                                    <span>商品 大分類</span>
                                     <select
                                       value={getActionSelectedCategory(action)}
                                       onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", unit: "" })}
@@ -839,7 +858,7 @@ export default function ProcedureAdminPage() {
                                     </select>
                                   </label>
                                   <label>
-                                    <span>商品小分類</span>
+                                    <span>商品 小分類</span>
                                     <select
                                       value={getActionSelectedSubcategory(action)}
                                       onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", unit: "" })}
@@ -850,7 +869,7 @@ export default function ProcedureAdminPage() {
                                     </select>
                                   </label>
                                   <label className="procedure-action-field-wide">
-                                    <span>何を使う</span>
+                                    <span>商品</span>
                                     <select value={action.productId} onChange={(event) => {
                                       const selectedProduct = products.find((item) => item.id === event.target.value);
                                       updateStepAction(stepIndex, actionIndex, {
@@ -870,7 +889,7 @@ export default function ProcedureAdminPage() {
                               {shouldShowActionField(actionKey, "quantity") ? (
                                 <>
                                   <label>
-                                    <span>どれだけ</span>
+                                    <span>数量</span>
                                     <input value={action.quantity} onChange={(event) => updateStepAction(stepIndex, actionIndex, { quantity: event.target.value })} placeholder="例: 180" disabled={!canEdit} />
                                   </label>
                                   <label>
@@ -882,7 +901,7 @@ export default function ProcedureAdminPage() {
 
                               {shouldShowActionField(actionKey, "equipment") ? (
                                 <label>
-                                  <span>何を使って</span>
+                                  <span>設備 / 工具</span>
                                   <select value={action.equipmentId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { equipmentId: event.target.value })} disabled={!canEdit}>
                                     <option value="">設備・工具を選択</option>
                                     {equipment.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -892,7 +911,7 @@ export default function ProcedureAdminPage() {
 
                               {shouldShowActionField(actionKey, "container") ? (
                                 <label>
-                                  <span>どこに / 何で</span>
+                                  <span>容器</span>
                                   <select value={action.containerId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { containerId: event.target.value })} disabled={!canEdit}>
                                     <option value="">容器を選択</option>
                                     {containers.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -902,14 +921,14 @@ export default function ProcedureAdminPage() {
 
                               {shouldShowActionField(actionKey, "target") ? (
                                 <label className="procedure-action-field-wide">
-                                  <span>どうなったら完了</span>
+                                  <span>完了条件</span>
                                   <input value={action.targetText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { targetText: event.target.value })} placeholder="例: 10秒 / 規定ラインまで / 透明になるまで" disabled={!canEdit} />
                                 </label>
                               ) : null}
 
                               {shouldShowActionField(actionKey, "standard") ? (
                                 <label className="procedure-action-field-wide">
-                                  <span>確認すること</span>
+                                  <span>確認基準</span>
                                   <input value={action.standardText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { standardText: event.target.value })} placeholder="例: 漏れがない / 75℃以上 / ラベル確認" disabled={!canEdit} />
                                 </label>
                               ) : null}
@@ -921,10 +940,15 @@ export default function ProcedureAdminPage() {
                                 </label>
                               ) : null}
                             </div>
-                            <p className="procedure-action-preview">{renderActionSentence(action, actionTypes, products, locations, equipment, containers) || "文生成プレビュー"}</p>
                           </div>
                         );
                       })}
+                      {!step.actions.length ? (
+                        <div className="procedure-action-empty">
+                          <strong>まだ指令がありません</strong>
+                          <p>「アクションを追加」から、現場で行う動作を一つずつ登録します。</p>
+                        </div>
+                      ) : null}
                     </div>
                   </section>
                 ))}
