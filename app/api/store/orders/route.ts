@@ -64,7 +64,13 @@ export async function PATCH(request: Request) {
 
   const rows = await sql`
     update store_customer_orders
-    set status = ${status}, updated_at = now()
+    set
+      status = ${status},
+      preparing_at = case when ${status} = 'preparing' and preparing_at is null then now() else preparing_at end,
+      ready_at = case when ${status} = 'ready' and ready_at is null then now() else ready_at end,
+      completed_at = case when ${status} = 'completed' and completed_at is null then now() else completed_at end,
+      cancelled_at = case when ${status} = 'cancelled' and cancelled_at is null then now() else cancelled_at end,
+      updated_at = now()
     where id = ${orderId}
     returning id::text
   `;

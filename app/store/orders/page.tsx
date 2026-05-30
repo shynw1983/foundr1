@@ -24,6 +24,20 @@ type StoreOrder = {
   squareReceiptUrl: string;
 };
 
+type StoreOrderStats = {
+  days: number;
+  summary: {
+    paidOrders: number;
+    completedOrders: number;
+    cancelledOrders: number;
+    activeOrders: number;
+    grossSales: number;
+    averageCompletionMinutes: number;
+  };
+  productRanking: Array<{ name: string; count: number; sales: number }>;
+  storeBreakdown: Array<{ name: string; paidOrders: number; sales: number }>;
+};
+
 const statusLabels: Record<string, string> = {
   new: "新規",
   preparing: "制作中",
@@ -60,6 +74,8 @@ function splitLines(value = "") {
 
 export default function StoreOrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
+  const [stats, setStats] = useState<StoreOrderStats | null>(null);
+  const [statsDays, setStatsDays] = useState(1);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
   const [selectedId, setSelectedId] = useState("");
@@ -114,12 +130,18 @@ export default function StoreOrdersPage() {
 
   const refresh = async () => {
     setIsRefreshing(true);
-    const response = await fetch("/api/store/orders", { cache: "no-store" });
+    const [response, statsResponse] = await Promise.all([
+      fetch("/api/store/orders", { cache: "no-store" }),
+      fetch(`/api/store/order-stats?days=${statsDays}`, { cache: "no-store" })
+    ]);
     if (!response.ok) {
       setError("注文を読み込めませんでした。");
       setLoading(false);
       setIsRefreshing(false);
       return;
+    }
+    if (statsResponse.ok) {
+      setStats(await statsResponse.json());
     }
     const body = await response.json();
     const nextOrders = body.orders ?? [];
@@ -164,7 +186,7 @@ export default function StoreOrdersPage() {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.clearInterval(timer);
     };
-  }, [realtimeStatus]);
+  }, [realtimeStatus, statsDays]);
 
   useEffect(() => {
     let pusher: any;
@@ -266,6 +288,8 @@ export default function StoreOrdersPage() {
     ready: orders.filter((order) => order.status === "ready").length
   };
 
+  const summary = stats?.summary;
+
   const updateStatus = async (orderId: string, nextStatus: string) => {
     const response = await fetch("/api/store/orders", {
       method: "PATCH",
@@ -290,6 +314,43 @@ export default function StoreOrdersPage() {
 
       <section className="store-orders-layout">
         <aside className="panel store-orders-list">
+          <div className="store-stats-heading">
+            <h2>実績</h2>
+            <select value={statsDays} onChange={(event) => setStatsDays(Number(event.target.value))} aria-label="集計期間">
+              <option value={1}>今日</option>
+              <option value={7}>7日</option>
+              <option value={31}>31日</option>
+            </select>
+          </div>
+          <section className="store-order-performance" aria-label="注文実績">
+            <article>
+              <span>売上</span>
+              <strong>¥{Number(summary?.grossSales ?? 0).toLocaleString("ja-JP")}</strong>
+            </article>
+            <article>
+              <span>支払済み</span>
+              <strong>{summary?.paidOrders ?? 0}</strong>
+            </article>
+            <article>
+              <span>完了</span>
+              <strong>{summary?.completedOrders ?? 0}</strong>
+            </article>
+            <article>
+              <span>平均完了</span>
+              <strong>{summary?.averageCompletionMinutes ? `${summary.averageCompletionMinutes}分` : "—"}</strong>
+            </article>
+          </section>
+          {stats?.productRanking?.length ? (
+            <section className="store-product-ranking" aria-label="商品ランキング">
+              <h3>商品ランキング</h3>
+              {stats.productRanking.slice(0, 4).map((item) => (
+                <div key={item.name}>
+                  <span>{item.name}</span>
+                  <strong>{item.count}件</strong>
+                </div>
+              ))}
+            </section>
+          ) : null}
           <section className="store-order-stats" aria-label="注文数">
             <article>
               <span>新規</span>

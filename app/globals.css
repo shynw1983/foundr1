@@ -2130,6 +2130,80 @@ button {
   margin-bottom: 14px;
 }
 
+.store-stats-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.store-stats-heading h2,
+.store-product-ranking h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.store-stats-heading select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  font-weight: 800;
+}
+
+.store-order-performance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.store-order-performance article,
+.store-product-ranking {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.store-order-performance article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.store-order-performance span,
+.store-product-ranking span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-order-performance strong {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.store-product-ranking {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.store-product-ranking div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.store-product-ranking span {
+  overflow-wrap: anywhere;
+}
+
 .store-order-stats article {
   display: grid;
   gap: 3px;

@@ -573,9 +573,18 @@ create table if not exists store_customer_orders (
   option_text text not null default '',
   toppings text not null default '',
   paid_at timestamptz,
+  preparing_at timestamptz,
+  ready_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table store_customer_orders add column if not exists preparing_at timestamptz;
+alter table store_customer_orders add column if not exists ready_at timestamptz;
+alter table store_customer_orders add column if not exists completed_at timestamptz;
+alter table store_customer_orders add column if not exists cancelled_at timestamptz;
 
 create table if not exists store_customer_order_items (
   id uuid primary key default gen_random_uuid(),
