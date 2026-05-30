@@ -1,8 +1,8 @@
 {
-  "name": "FOUNDR1 発注管理",
-  "short_name": "発注管理",
-  "description": "複数店舗・複数ブランド向け発注管理システム",
-  "start_url": "/ops",
+  "name": "Foundr1 OS",
+  "short_name": "Foundr1 OS",
+  "description": "飲食店向けオペレーションバックオフィス",
+  "start_url": "/os",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

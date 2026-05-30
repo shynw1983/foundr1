@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const testResult = await sendLarkTextMessage(
       { larkOpenId: larkUser.openId },
       [
-        "FOUND R1 発注管理の Lark 連携テストです。",
+        "Foundr1 OS の Lark 連携テストです。",
         "このメッセージが届いていれば、発注依頼の通知を Lark で受け取れます。"
       ].join("\n")
     );

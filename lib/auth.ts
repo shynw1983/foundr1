@@ -8,7 +8,7 @@ export type EmployeeSession = {
   sessionVersion: number;
 };
 
-export const authCookieName = "foundr1_ops_session";
+export const authCookieName = "foundr1_os_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 const hashIterations = 210_000;
 const hashKeyLength = 32;

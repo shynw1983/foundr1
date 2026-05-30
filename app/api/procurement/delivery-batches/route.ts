@@ -182,7 +182,7 @@ export async function PATCH(request: Request) {
         'store_confirmation_required',
         '店舗確認が必要です',
         concat(stores.name, ' に ', item_counts.item_count, ' 件の納品済み商品があります。'),
-        concat('/ops/orders#order-', purchase_orders.order_no)
+        concat('/os/orders#order-', purchase_orders.order_no)
       from purchase_orders
       join stores on stores.id = purchase_orders.store_id
       cross join lateral (

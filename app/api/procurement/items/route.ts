@@ -315,7 +315,7 @@ export async function PATCH(request: Request) {
         'store_confirmation_required',
         '店舗確認が必要です',
         ${`${itemDetail.storeName} に ${itemDetail.productName} が納品済みです。`},
-        ${`/ops/orders#order-${itemDetail.orderNo}`}
+        ${`/os/orders#order-${itemDetail.orderNo}`}
       from employees
       left join employee_scopes
         on employee_scopes.employee_id = employees.id
@@ -330,7 +330,7 @@ export async function PATCH(request: Request) {
           from ops_notifications
           where ops_notifications.recipient_employee_id = employees.id
             and ops_notifications.notification_type = 'store_confirmation_required'
-            and ops_notifications.href = ${`/ops/orders#order-${itemDetail.orderNo}`}
+            and ops_notifications.href = ${`/os/orders#order-${itemDetail.orderNo}`}
             and ops_notifications.created_at > now() - interval '30 minutes'
         )
     `;

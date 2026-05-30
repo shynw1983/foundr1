@@ -145,7 +145,7 @@ async function notifyBuyerAboutOrder({
   itemCount: number;
   deadline: string;
 }) {
-  const href = `/ops/procurement?order=${encodeURIComponent(orderNo)}`;
+  const href = `/os/procurement?order=${encodeURIComponent(orderNo)}`;
   const title = "新しい発注依頼";
   const message = `${storeName} から ${itemCount} 件の発注依頼が届きました。`;
   const insertedNotifications = await sql`
