@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getCachedCurrentEmployee, loadCurrentEmployee } from "./currentEmployeeStore";
 
-export type OpsNavItem = {
+export type OsNavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
@@ -38,12 +38,12 @@ function getModuleNavPaths(pathname: string) {
   return orderModulePaths;
 }
 
-function canShowInCurrentModule(pathname: string, item: OpsNavItem) {
+function canShowInCurrentModule(pathname: string, item: OsNavItem) {
   if (item.href === "/os" || item.href === "/os/logout") return true;
   return getModuleNavPaths(pathname).has(item.href);
 }
 
-function canShowNavItem(role: string, item: OpsNavItem) {
+function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return true;
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/field-notes") return true;
@@ -54,7 +54,7 @@ function canShowNavItem(role: string, item: OpsNavItem) {
   return true;
 }
 
-export function usePermittedNavItems(navItems: OpsNavItem[]) {
+export function usePermittedNavItems(navItems: OsNavItem[]) {
   const pathname = usePathname();
   const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
 
@@ -80,7 +80,7 @@ export function usePermittedNavItems(navItems: OpsNavItem[]) {
   }, [navItems, pathname, role]);
 }
 
-export function OpsNavList({ navItems }: { navItems: OpsNavItem[] }) {
+export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const permittedNavItems = usePermittedNavItems(navItems);
 
   return (

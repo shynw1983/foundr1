@@ -1,8 +1,8 @@
-import { canAccessStore, requireOwnerOpsSession, requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireOwnerOsSession, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as {
@@ -303,7 +303,7 @@ export async function PATCH(request: Request) {
     !["delivered", "received"].includes(String(itemDetail.currentStatus ?? ""))
   ) {
     await sql`
-      insert into ops_notifications (
+      insert into os_notifications (
         recipient_employee_id,
         notification_type,
         title,
@@ -327,11 +327,11 @@ export async function PATCH(request: Request) {
         )
         and not exists (
           select 1
-          from ops_notifications
-          where ops_notifications.recipient_employee_id = employees.id
-            and ops_notifications.notification_type = 'store_confirmation_required'
-            and ops_notifications.href = ${`/os/orders#order-${itemDetail.orderNo}`}
-            and ops_notifications.created_at > now() - interval '30 minutes'
+          from os_notifications
+          where os_notifications.recipient_employee_id = employees.id
+            and os_notifications.notification_type = 'store_confirmation_required'
+            and os_notifications.href = ${`/os/orders#order-${itemDetail.orderNo}`}
+            and os_notifications.created_at > now() - interval '30 minutes'
         )
     `;
   }
@@ -428,7 +428,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { itemId?: string };

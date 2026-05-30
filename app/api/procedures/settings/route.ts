@@ -1,4 +1,4 @@
-import { requireOpsSession } from "../../../../lib/api-auth";
+import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 const procedureEditorRoles = new Set(["owner", "manager"]);
@@ -34,7 +34,7 @@ function parseSortOrder(value: unknown) {
 }
 
 async function requireProcedureEditor() {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   return session && procedureEditorRoles.has(session.role) ? session : null;
 }
 

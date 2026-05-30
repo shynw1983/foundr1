@@ -1,4 +1,4 @@
-import { requireMasterOpsSession } from "../../../lib/api-auth";
+import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 type ProductPayload = {
@@ -27,7 +27,7 @@ type ProductPayload = {
 };
 
 export async function PUT(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as ProductPayload;
@@ -210,7 +210,7 @@ function parseOptionalNumber(value: unknown) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { id?: string; productName?: string };

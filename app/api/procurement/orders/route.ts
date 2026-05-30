@@ -1,8 +1,8 @@
-import { canAccessStore, requireWritableOpsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function PATCH(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as {

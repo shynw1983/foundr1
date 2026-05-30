@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob";
-import { requireOpsSession } from "../../../lib/api-auth";
+import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { validateImageUpload } from "../../../lib/upload-security";
 
@@ -8,7 +8,7 @@ const adminRoles = new Set(["owner", "manager"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function GET() {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -66,7 +66,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -188,7 +188,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -254,7 +254,7 @@ export async function PATCH(request: Request) {
   return Response.json({ ok: true });
 }
 
-async function updateComparisonArchive(session: Awaited<ReturnType<typeof requireOpsSession>>, id: string, action: string) {
+async function updateComparisonArchive(session: Awaited<ReturnType<typeof requireOsSession>>, id: string, action: string) {
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
   if (!id) return Response.json({ error: "商品比較が見つかりません。" }, { status: 404 });
   if (!["archive", "restore"].includes(action)) {
@@ -285,7 +285,7 @@ async function updateComparisonArchive(session: Awaited<ReturnType<typeof requir
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }

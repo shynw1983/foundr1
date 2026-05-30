@@ -1,4 +1,4 @@
-import { requireOpsSession } from "../../../../lib/api-auth";
+import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 const allowedProductSummaryFields = new Set([
@@ -21,7 +21,7 @@ type UiPreferences = {
 };
 
 export async function PATCH(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) return Response.json({ error: "認証が必要です。" }, { status: 401 });
 
   const body = await request.json().catch(() => ({})) as UiPreferences;

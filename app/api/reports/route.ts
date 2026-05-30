@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionStoreScope, requireOpsSession, requireOwnerOpsSession } from "../../../lib/api-auth";
+import { getSessionStoreScope, requireOsSession, requireOwnerOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 type ReportRow = {
@@ -19,7 +19,7 @@ type ReportRow = {
 };
 
 export async function GET() {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
 
   const scope = await getSessionStoreScope(session);
@@ -185,7 +185,7 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as {

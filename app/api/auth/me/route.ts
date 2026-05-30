@@ -1,8 +1,8 @@
-import { requireOpsSession } from "../../../../lib/api-auth";
+import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
 export async function GET() {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) {
     return Response.json({ employee: null }, { status: 401 });
   }

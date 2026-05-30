@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { OpsTranslationProvider } from "./os/components/OpsTranslationProvider";
+import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
 import { PwaRegister } from "./os/components/PwaRegister";
 import "./globals.css";
 
@@ -33,7 +33,7 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <PwaRegister />
-        <OpsTranslationProvider>{children}</OpsTranslationProvider>
+        <OsTranslationProvider>{children}</OsTranslationProvider>
       </body>
     </html>
   );

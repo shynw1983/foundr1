@@ -1,5 +1,11 @@
 create extension if not exists pgcrypto;
 
+alter table if exists ops_audit_logs rename to os_audit_logs;
+alter table if exists ops_notifications rename to os_notifications;
+alter index if exists ops_audit_logs_created_at_idx rename to os_audit_logs_created_at_idx;
+alter index if exists ops_audit_logs_actor_idx rename to os_audit_logs_actor_idx;
+alter index if exists idx_ops_notifications_recipient_read rename to idx_os_notifications_recipient_read;
+
 create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -48,7 +54,7 @@ alter table employees add column if not exists lark_open_id text;
 alter table employees add column if not exists lark_user_id text;
 alter table employees add column if not exists session_version integer not null default 1;
 
-create table if not exists ops_audit_logs (
+create table if not exists os_audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor_employee_id uuid references employees(id) on delete set null,
   action text not null,
@@ -60,8 +66,8 @@ create table if not exists ops_audit_logs (
   created_at timestamptz not null default now()
 );
 
-create index if not exists ops_audit_logs_created_at_idx on ops_audit_logs (created_at desc);
-create index if not exists ops_audit_logs_actor_idx on ops_audit_logs (actor_employee_id, created_at desc);
+create index if not exists os_audit_logs_created_at_idx on os_audit_logs (created_at desc);
+create index if not exists os_audit_logs_actor_idx on os_audit_logs (actor_employee_id, created_at desc);
 
 create table if not exists employee_scopes (
   id uuid primary key default gen_random_uuid(),
@@ -360,7 +366,7 @@ alter table purchase_order_supplier_fulfillments add column if not exists receip
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_at timestamptz;
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_by uuid references employees(id);
 
-create table if not exists ops_notifications (
+create table if not exists os_notifications (
   id uuid primary key default gen_random_uuid(),
   recipient_employee_id uuid not null references employees(id) on delete cascade,
   notification_type text not null,
@@ -373,8 +379,8 @@ create table if not exists ops_notifications (
   created_at timestamptz not null default now()
 );
 
-alter table ops_notifications add column if not exists lark_sent_at timestamptz;
-alter table ops_notifications add column if not exists lark_error text;
+alter table os_notifications add column if not exists lark_sent_at timestamptz;
+alter table os_notifications add column if not exists lark_error text;
 
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
@@ -625,7 +631,7 @@ create index if not exists idx_purchase_order_supplier_fulfillments_order on pur
 create index if not exists idx_delivery_batches_order_status on delivery_batches(purchase_order_id, status);
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
-create index if not exists idx_ops_notifications_recipient_read on ops_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);

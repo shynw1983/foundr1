@@ -113,7 +113,7 @@ Permission rules are role plus scope.
 
 ## Notifications
 
-In-app notifications are stored in `ops_notifications`.
+In-app notifications are stored in `os_notifications`.
 
 Lark integration lives in `lib/lark.ts`.
 

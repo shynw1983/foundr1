@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { OpsLanguagePicker } from "../components/OpsTranslationProvider";
+import { OsLanguagePicker } from "../components/OsTranslationProvider";
 
 function getDefaultPathForRole(role?: string) {
   if (role === "buyer") return "/os/procurement";
@@ -11,7 +11,7 @@ function getDefaultPathForRole(role?: string) {
   return "/os";
 }
 
-export default function OpsLoginPage() {
+export default function OsLoginPage() {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -43,7 +43,7 @@ export default function OpsLoginPage() {
   return (
     <main className="login-shell">
       <section className="login-card">
-        <OpsLanguagePicker />
+        <OsLanguagePicker />
         <div className="brand-mark">F1</div>
         <div>
           <p className="eyebrow">Foundr1 OS</p>

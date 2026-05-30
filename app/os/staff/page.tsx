@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OpsNavList } from "../components/OpsNavList";
+import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 
 type StoreOption = {
@@ -203,7 +203,7 @@ export default function StaffPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OpsNavList navItems={navItems} />
+        <OsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">

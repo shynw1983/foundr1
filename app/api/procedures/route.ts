@@ -1,4 +1,4 @@
-import { getSessionStoreScope, requireOpsSession } from "../../../lib/api-auth";
+import { getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
@@ -344,7 +344,7 @@ async function readAdminOptions() {
 }
 
 export async function GET(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const mode = new URL(request.url).searchParams.get("mode") ?? "";
@@ -361,7 +361,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !canEditProcedures(session)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -376,7 +376,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !canEditProcedures(session)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -394,7 +394,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !canEditProcedures(session)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }

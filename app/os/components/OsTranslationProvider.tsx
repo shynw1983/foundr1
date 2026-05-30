@@ -2,18 +2,18 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-type OpsLanguage = "ja" | "zh-Hans" | "zh-Hant";
-type OpsDictionary = Record<string, string>;
-type OpsTranslationContextValue = {
-  language: OpsLanguage;
-  setLanguage: (language: OpsLanguage) => void;
+type OsLanguage = "ja" | "zh-Hans" | "zh-Hant";
+type OsDictionary = Record<string, string>;
+type OsTranslationContextValue = {
+  language: OsLanguage;
+  setLanguage: (language: OsLanguage) => void;
   t: (value: string) => string;
 };
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
 const localeCacheVersion = "20260530-os-i18n-v30";
-const languageMeta: Record<OpsLanguage, { htmlLang: string }> = {
+const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
   "zh-Hant": { htmlLang: "zh-Hant" }
@@ -24,13 +24,13 @@ const originalAttributes = new WeakMap<Element, Record<string, string>>();
 const translatableAttributes = ["aria-label", "data-label", "placeholder", "title"];
 const ignoredTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT"]);
 
-const OpsTranslationContext = createContext<OpsTranslationContextValue>({
+const OsTranslationContext = createContext<OsTranslationContextValue>({
   language: "ja",
   setLanguage: () => {},
   t: (value) => value
 });
 
-function getBrowserDefaultLanguage(): OpsLanguage {
+function getBrowserDefaultLanguage(): OsLanguage {
   if (typeof navigator === "undefined") return "ja";
 
   const browserLanguages = [navigator.language, ...(navigator.languages ?? [])];
@@ -42,14 +42,14 @@ function getBrowserDefaultLanguage(): OpsLanguage {
   return normalizedLanguages.some((value) => value.startsWith("zh")) ? "zh-Hans" : "ja";
 }
 
-function normalizeStoredLanguage(value: string | null): OpsLanguage | null {
+function normalizeStoredLanguage(value: string | null): OsLanguage | null {
   if (value === "ja" || value === "zh-Hans" || value === "zh-Hant") return value;
   if (value === "zh") return "zh-Hans";
 
   return null;
 }
 
-function translateText(value: string, dictionary: OpsDictionary) {
+function translateText(value: string, dictionary: OsDictionary) {
   if (!value || Object.keys(dictionary).length === 0) return value;
 
   const exact = dictionary[value];
@@ -61,7 +61,7 @@ function translateText(value: string, dictionary: OpsDictionary) {
     .reduce((translated, [source, target]) => translated.split(source).join(target), value);
 }
 
-function translateTextNode(node: Text, dictionary: OpsDictionary, language: OpsLanguage) {
+function translateTextNode(node: Text, dictionary: OsDictionary, language: OsLanguage) {
   if (!node.textContent || !node.textContent.trim()) return;
   if (node.parentElement?.closest("[data-i18n-ignore]")) return;
 
@@ -89,7 +89,7 @@ function translateTextNode(node: Text, dictionary: OpsDictionary, language: OpsL
   }
 }
 
-function translateElementAttributes(element: Element, dictionary: OpsDictionary, language: OpsLanguage) {
+function translateElementAttributes(element: Element, dictionary: OsDictionary, language: OsLanguage) {
   if (element.closest("[data-i18n-ignore]")) return;
 
   for (const attr of translatableAttributes) {
@@ -109,7 +109,7 @@ function translateElementAttributes(element: Element, dictionary: OpsDictionary,
   }
 }
 
-function translateNode(root: Node, dictionary: OpsDictionary, language: OpsLanguage) {
+function translateNode(root: Node, dictionary: OsDictionary, language: OsLanguage) {
   if (root.nodeType === Node.TEXT_NODE) {
     translateTextNode(root as Text, dictionary, language);
     return;
@@ -149,9 +149,9 @@ function translateNode(root: Node, dictionary: OpsDictionary, language: OpsLangu
   }
 }
 
-export function OpsTranslationProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<OpsLanguage>("ja");
-  const [dictionary, setDictionary] = useState<OpsDictionary>({});
+export function OsTranslationProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<OsLanguage>("ja");
+  const [dictionary, setDictionary] = useState<OsDictionary>({});
 
   useEffect(() => {
     try {
@@ -182,7 +182,7 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
     async function loadDictionary() {
       try {
         const cached = localStorage.getItem(storageKey);
-        if (cached && active) setDictionary(JSON.parse(cached) as OpsDictionary);
+        if (cached && active) setDictionary(JSON.parse(cached) as OsDictionary);
       } catch {
         // Fetch a fresh copy below.
       }
@@ -194,7 +194,7 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
         });
         if (!response.ok) return;
 
-        const nextDictionary = await response.json() as OpsDictionary;
+        const nextDictionary = await response.json() as OsDictionary;
         if (active) setDictionary(nextDictionary);
 
         try {
@@ -236,7 +236,7 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
     return () => observer.disconnect();
   }, [dictionary, language]);
 
-  const setLanguage = useCallback((nextLanguage: OpsLanguage) => {
+  const setLanguage = useCallback((nextLanguage: OsLanguage) => {
     setLanguageState(nextLanguage);
 
     try {
@@ -252,22 +252,22 @@ export function OpsTranslationProvider({ children }: { children: React.ReactNode
     t: (text: string) => language === "ja" ? text : translateText(text, dictionary)
   }), [dictionary, language, setLanguage]);
 
-  return <OpsTranslationContext.Provider value={value}>{children}</OpsTranslationContext.Provider>;
+  return <OsTranslationContext.Provider value={value}>{children}</OsTranslationContext.Provider>;
 }
 
-export function useOpsTranslation() {
-  return useContext(OpsTranslationContext);
+export function useOsTranslation() {
+  return useContext(OsTranslationContext);
 }
 
-export function OpsLanguagePicker() {
-  const { language, setLanguage, t } = useOpsTranslation();
+export function OsLanguagePicker() {
+  const { language, setLanguage, t } = useOsTranslation();
 
   return (
-    <label className="ops-language-picker" data-i18n-ignore>
+    <label className="os-language-picker" data-i18n-ignore>
       <span>{t("Language")}</span>
       <select
         value={language}
-        onChange={(event) => setLanguage(event.target.value as OpsLanguage)}
+        onChange={(event) => setLanguage(event.target.value as OsLanguage)}
         aria-label="Language"
       >
         <option value="ja">日本語</option>

@@ -1,4 +1,4 @@
-import { requireOwnerOpsSession } from "../../../lib/api-auth";
+import { requireOwnerOsSession } from "../../../lib/api-auth";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { hashPassword, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
@@ -24,7 +24,7 @@ function normalizeStatus(status?: string) {
 }
 
 export async function GET() {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const employees = await sql`
@@ -65,7 +65,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as StaffPayload;

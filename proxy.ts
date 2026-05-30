@@ -52,12 +52,6 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/ops" || pathname.startsWith("/ops/")) {
-    const url = request.nextUrl.clone();
-    url.pathname = pathname.replace(/^\/ops/, "/os");
-    return NextResponse.redirect(url);
-  }
-
   if (pathname.startsWith("/api")) {
     const isMutatingRequest = !["GET", "HEAD", "OPTIONS"].includes(request.method);
     const origin = request.headers.get("origin");
@@ -100,5 +94,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/os/:path*", "/ops/:path*", "/api/:path*"]
+  matcher: ["/os/:path*", "/api/:path*"]
 };

@@ -97,16 +97,16 @@ button {
   min-height: 42px;
 }
 
-.os-home-user .ops-language-picker {
+.os-home-user .os-language-picker {
   flex: 0 0 148px;
   width: 148px;
 }
 
-.os-home-user .ops-language-picker span {
+.os-home-user .os-language-picker span {
   display: none;
 }
 
-.os-home-user .ops-language-picker select {
+.os-home-user .os-language-picker select {
   min-height: 42px;
 }
 
@@ -640,20 +640,20 @@ button {
   max-width: 100%;
 }
 
-.ops-language-picker {
+.os-language-picker {
   display: grid;
   gap: 5px;
   width: 100%;
 }
 
-.ops-language-picker span {
+.os-language-picker span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.ops-language-picker select {
+.os-language-picker select {
   min-height: 36px;
   width: 100%;
   border: 1px solid var(--line);
@@ -665,13 +665,13 @@ button {
   outline: 0;
 }
 
-.sidebar-user .ops-language-picker span,
-.mobile-nav-user .ops-language-picker span {
+.sidebar-user .os-language-picker span,
+.mobile-nav-user .os-language-picker span {
   color: #dce5ee;
 }
 
-.sidebar-user .ops-language-picker select,
-.mobile-nav-user .ops-language-picker select {
+.sidebar-user .os-language-picker select,
+.mobile-nav-user .os-language-picker select {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: #f7fafc;
@@ -684,8 +684,8 @@ button {
   color: #f7fafc;
 }
 
-.sidebar-user .ops-language-picker option,
-.mobile-nav-user .ops-language-picker option {
+.sidebar-user .os-language-picker option,
+.mobile-nav-user .os-language-picker option {
   color: var(--ink);
   background: white;
 }
@@ -1006,7 +1006,7 @@ button {
   gap: 18px;
 }
 
-.ops-main-stack {
+.os-main-stack {
   display: grid;
   gap: 18px;
 }
@@ -5658,7 +5658,7 @@ button {
     min-height: 42px;
   }
 
-  .sidebar-user .ops-language-picker {
+  .sidebar-user .os-language-picker {
     flex: 0 0 104px;
     width: 104px;
   }
@@ -5678,11 +5678,11 @@ button {
     max-width: calc(100vw - 24px);
   }
 
-  .sidebar-user .ops-language-picker span {
+  .sidebar-user .os-language-picker span {
     display: none;
   }
 
-  .sidebar-user .ops-language-picker select {
+  .sidebar-user .os-language-picker select {
     min-height: 42px;
     font-size: 13px;
     font-weight: 700;
@@ -5776,7 +5776,7 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .ops-main-stack {
+  .os-main-stack {
     grid-column: 1 / -1;
   }
 
@@ -5900,7 +5900,7 @@ button {
     width: 100%;
   }
 
-  .os-home-user .ops-language-picker {
+  .os-home-user .os-language-picker {
     grid-column: 1 / -1;
     width: 100%;
   }

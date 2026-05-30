@@ -109,7 +109,7 @@ Foundr1 OS の訂貨システムは、複数店舗・複数ブランドの発注
 
 ## 通知
 
-アプリ内通知は `ops_notifications` に保存する。
+アプリ内通知は `os_notifications` に保存する。
 
 通知対象：
 

@@ -1,4 +1,4 @@
-import { canAccessStore, getSessionStoreScope, requireOwnerOpsSession, requireWritableOpsSession } from "../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireOwnerOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
@@ -149,7 +149,7 @@ async function notifyBuyerAboutOrder({
   const title = "新しい発注依頼";
   const message = `${storeName} から ${itemCount} 件の発注依頼が届きました。`;
   const insertedNotifications = await sql`
-    insert into ops_notifications (
+    insert into os_notifications (
       recipient_employee_id,
       notification_type,
       title,
@@ -196,14 +196,14 @@ async function notifyBuyerAboutOrder({
 
   if (larkResult.delivered) {
     await sql`
-      update ops_notifications
+      update os_notifications
       set lark_sent_at = now(),
           lark_error = null
       where id = ${notificationId}
     `;
   } else if (!larkResult.ok) {
     await sql`
-      update ops_notifications
+      update os_notifications
       set lark_error = ${larkResult.error}
       where id = ${notificationId}
     `;
@@ -211,7 +211,7 @@ async function notifyBuyerAboutOrder({
 }
 
 export async function POST(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
@@ -301,7 +301,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const session = await requireWritableOpsSession();
+  const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
@@ -434,7 +434,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { orderId?: string };

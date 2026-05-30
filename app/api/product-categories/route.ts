@@ -1,8 +1,8 @@
-import { requireMasterOpsSession } from "../../../lib/api-auth";
+import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 
 export async function POST(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
@@ -66,7 +66,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json() as { name?: string };

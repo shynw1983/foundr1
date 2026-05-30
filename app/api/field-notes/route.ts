@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob";
-import { requireOpsSession } from "../../../lib/api-auth";
+import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { validateImageUpload } from "../../../lib/upload-security";
 
@@ -10,7 +10,7 @@ const maxPhotoSizeBytes = 4 * 1024 * 1024;
 const noteStatuses = new Set(["open", "reviewing", "comparison", "adopted", "rejected"]);
 
 export async function GET() {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -62,7 +62,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
@@ -208,7 +208,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOpsSession();
+  const session = await requireOsSession();
   if (!session || !allowedRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }

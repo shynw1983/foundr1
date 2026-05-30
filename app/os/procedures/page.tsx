@@ -22,7 +22,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OpsNavList } from "../components/OpsNavList";
+import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
 type OptionItem = {
@@ -508,7 +508,7 @@ export default function ProcedureAdminPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OpsNavList navItems={navItems} />
+        <OsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace procedures-admin-page">

@@ -1,12 +1,12 @@
 import { put } from "@vercel/blob";
-import { requireMasterOpsSession } from "../../../../lib/api-auth";
+import { requireMasterOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const session = await requireMasterOpsSession();
+  const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   try {

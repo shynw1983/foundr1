@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { suppliers as initialSuppliers } from "../../../lib/mock-data";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OpsNavList } from "../components/OpsNavList";
+import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
 type Supplier = typeof initialSuppliers[number] & { id?: string };
@@ -245,7 +245,7 @@ export default function FieldNotesPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OpsNavList navItems={navItems} />
+        <OsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">

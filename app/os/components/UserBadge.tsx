@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
-import { OpsLanguagePicker } from "./OpsTranslationProvider";
+import { OsLanguagePicker } from "./OsTranslationProvider";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
 
 const roleLabels: Record<string, string> = {
@@ -35,7 +35,7 @@ export function UserBadge() {
     return (
       <div className="user-panel">
         <span className="user-badge user-badge-muted">ログイン確認中</span>
-        <OpsLanguagePicker />
+        <OsLanguagePicker />
       </div>
     );
   }
@@ -47,7 +47,7 @@ export function UserBadge() {
         <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
       </span>
       <NotificationMenu />
-      <OpsLanguagePicker />
+      <OsLanguagePicker />
     </div>
   );
 }

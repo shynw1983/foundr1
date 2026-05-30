@@ -3,7 +3,7 @@
 import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OpsNavList } from "../components/OpsNavList";
+import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -1062,7 +1062,7 @@ export default function ProcurementPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OpsNavList navItems={navItems} />
+        <OsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">

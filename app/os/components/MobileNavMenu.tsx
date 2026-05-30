@@ -4,9 +4,9 @@ import Link from "next/link";
 import { Menu } from "lucide-react";
 import { NotificationMenu } from "./NotificationMenu";
 import { UserBadge } from "./UserBadge";
-import { type OpsNavItem, usePermittedNavItems } from "./OpsNavList";
+import { type OsNavItem, usePermittedNavItems } from "./OsNavList";
 
-export function MobileNavMenu({ navItems }: { navItems: OpsNavItem[] }) {
+export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
   const permittedNavItems = usePermittedNavItems(navItems);
 
   return (

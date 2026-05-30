@@ -3,7 +3,7 @@
 import { Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 
-type OpsNotification = {
+type OsNotification = {
   id: string;
   title: string;
   message: string;
@@ -12,14 +12,14 @@ type OpsNotification = {
 };
 
 export function NotificationMenu({ className = "" }: { className?: string }) {
-  const [notifications, setNotifications] = useState<OpsNotification[]>([]);
+  const [notifications, setNotifications] = useState<OsNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   async function loadNotifications() {
     const response = await fetch("/api/notifications", { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json() as {
-      notifications?: OpsNotification[];
+      notifications?: OsNotification[];
       unreadCount?: number;
     };
     setNotifications(body.notifications ?? []);

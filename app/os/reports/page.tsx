@@ -16,7 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OpsNavList } from "../components/OpsNavList";
+import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
 type ReportItem = {
@@ -154,7 +154,7 @@ export default function ReportsPage() {
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OpsNavList navItems={navItems} />
+        <OsNavList navItems={navItems} />
       </aside>
 
       <section className="workspace">

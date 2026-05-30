@@ -1,4 +1,4 @@
-import { requireOwnerOpsSession } from "../../../../lib/api-auth";
+import { requireOwnerOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { lookupLarkUserByEmail, sendLarkTextMessage } from "../../../../lib/lark";
 
@@ -8,7 +8,7 @@ type LarkLookupPayload = {
 };
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOpsSession();
+  const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as LarkLookupPayload;
