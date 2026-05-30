@@ -52,6 +52,9 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isOsPath = pathname.startsWith("/os");
+  const isStorePath = pathname.startsWith("/store");
+
   if (pathname.startsWith("/api")) {
     const isMutatingRequest = !["GET", "HEAD", "OPTIONS"].includes(request.method);
     const origin = request.headers.get("origin");
@@ -62,7 +65,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!pathname.startsWith("/os") || pathname === "/os/login") {
+  if (pathname === "/os/procedures/view") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/store/procedures";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  if ((!isOsPath && !isStorePath) || pathname === "/os/login") {
     return NextResponse.next();
   }
 
@@ -94,5 +104,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/os/:path*", "/api/:path*"]
+  matcher: ["/os/:path*", "/store/:path*", "/api/:path*"]
 };

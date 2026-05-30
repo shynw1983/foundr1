@@ -639,7 +639,7 @@ export default function ProcedureAdminPage() {
             <span className="source-indicator">{loading ? "読み込み中" : "データ同期済み"}</span>
           </div>
           <div className="topbar-actions">
-            <a className="secondary-button" href="/os/procedures/view">
+            <a className="secondary-button" href="/store/procedures">
               <BookOpen size={18} />
               閲覧画面
             </a>

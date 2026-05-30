@@ -1606,9 +1606,79 @@ button {
   background: #eef2f6;
 }
 
+.store-workbench-shell {
+  min-height: 100vh;
+  padding: 18px;
+  background: #eef2f6;
+}
+
+.store-workbench-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.store-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px;
+  background: white;
+}
+
+.store-nav-tabs a {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 7px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.store-nav-tabs a.is-active {
+  background: #1f6f55;
+  color: white;
+}
+
+.store-workbench-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.store-placeholder-panel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.store-placeholder-panel > svg {
+  flex: 0 0 auto;
+  color: #1f6f55;
+}
+
+.store-placeholder-panel h2,
+.store-placeholder-panel p {
+  margin: 0;
+}
+
+.store-placeholder-panel p {
+  color: var(--muted);
+  font-weight: 750;
+}
+
 .procedure-reader-topbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   margin-bottom: 14px;
@@ -7304,8 +7374,31 @@ button {
     padding: 12px;
   }
 
-  .procedure-reader-topbar {
+  .store-workbench-shell {
+    padding: 12px;
+  }
+
+  .store-workbench-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-workbench-grid {
     grid-template-columns: 1fr;
+  }
+
+  .store-nav-tabs {
+    overflow-x: auto;
+  }
+
+  .store-nav-tabs a {
+    flex: 0 0 auto;
+  }
+
+  .procedure-reader-topbar {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .procedure-reader-topbar .secondary-button {

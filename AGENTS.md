@@ -76,8 +76,9 @@ Rules:
 
 Electronic procedures are a sibling Foundr1 OS module, not a procurement subpage:
 
-- Store-facing reader: tablet landscape first, with mobile and desktop support.
+- Store-facing reader: `/store/procedures`, tablet landscape first, with mobile and desktop support.
 - Admin/editor area: `/os/procedures`.
+- Store operation surfaces live under `/store` as a sibling workbench. Timecard and POS staff operation screens can live under `/store/timecard` and `/store/pos`, while detailed settings, reports, permissions, and management remain under `/os/timecard` and `/os/pos`.
 - Procedure steps should link to product master data instead of copying product names where possible.
 - Keep procedures, checklists, training, inventory, audits, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
 

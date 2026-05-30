@@ -1,0 +1,69 @@
+import { BookOpen, Clock3, ShoppingCart } from "lucide-react";
+import { StoreNavTabs } from "./components/StoreNavTabs";
+
+const storeModules = [
+  {
+    title: "手順書",
+    description: "公開中の作業手順を確認し、店舗オペレーションを進めます。",
+    href: "/store/procedures",
+    icon: BookOpen,
+    status: "利用可能"
+  },
+  {
+    title: "タイムカード",
+    description: "出退勤、休憩、シフト確認を行います。",
+    href: "/store/timecard",
+    icon: Clock3,
+    status: "準備中"
+  },
+  {
+    title: "POS",
+    description: "会計、販売、メニュー操作を行います。",
+    href: "/store/pos",
+    icon: ShoppingCart,
+    status: "準備中"
+  }
+];
+
+export default function StoreHomePage() {
+  return (
+    <main className="store-workbench-shell">
+      <header className="store-workbench-topbar">
+        <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
+          <div className="brand-mark">F1</div>
+          <div>
+            <p className="eyebrow">Foundr1 Store</p>
+            <h1>店舗ワークベンチ</h1>
+          </div>
+        </a>
+        <StoreNavTabs active="home" />
+      </header>
+
+      <section className="store-workbench-grid">
+        {storeModules.map((module) => {
+          const Icon = module.icon;
+          const content = (
+            <>
+              <div className="os-module-icon">
+                <Icon size={24} />
+              </div>
+              <div>
+                <div className="os-module-heading">
+                  <h2>{module.title}</h2>
+                  <span className={module.status === "利用可能" ? "status-pill is-active" : "status-pill"}>{module.status}</span>
+                </div>
+                <p>{module.description}</p>
+              </div>
+            </>
+          );
+
+          return module.status === "利用可能" ? (
+            <a className="os-module-card" href={module.href} key={module.href}>{content}</a>
+          ) : (
+            <div className="os-module-card is-disabled" aria-disabled="true" key={module.href}>{content}</div>
+          );
+        })}
+      </section>
+    </main>
+  );
+}

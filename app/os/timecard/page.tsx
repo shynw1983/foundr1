@@ -16,7 +16,7 @@ export default function TimecardPage() {
         <div>
           <p className="eyebrow">Coming Soon</p>
           <h2>タイムカード</h2>
-          <p>出退勤、休憩、シフト、勤怠確認を Foundr1 OS のスタッフ・店舗データに接続して開発します。</p>
+          <p>店舗側の打刻操作は Store、勤怠設定・確認・集計は OS で管理します。</p>
         </div>
       </section>
       <section className="panel">

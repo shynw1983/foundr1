@@ -16,7 +16,7 @@ export default function PosPage() {
         <div>
           <p className="eyebrow">Coming Soon</p>
           <h2>POS</h2>
-          <p>販売、会計、メニュー、売上レポートを Foundr1 OS の商品・店舗・スタッフデータに接続して開発します。</p>
+          <p>店舗側の会計操作は Store、メニュー設定・売上確認・権限管理は OS で管理します。</p>
         </div>
       </section>
       <section className="panel">
