@@ -19,6 +19,7 @@ type MenuOptionGroup = {
   name: string;
   selectionType: string;
   affectsProcedure: boolean;
+  ruleJson: Record<string, unknown>;
   sortOrder: number;
   options: MenuOption[];
 };
@@ -99,6 +100,7 @@ export async function GET(request: Request) {
       name,
       selection_type as "selectionType",
       affects_procedure as "affectsProcedure",
+      rule_json as "ruleJson",
       sort_order as "sortOrder"
     from menu_option_groups
     where brand_id = ${brand.id}

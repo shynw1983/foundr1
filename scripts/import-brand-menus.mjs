@@ -24,6 +24,11 @@ function slugKey(value, fallback = "option") {
     .replace(/^-|-$/g, "") || fallback;
 }
 
+function choiceKey(choice, index) {
+  if (typeof choice === "string") return choice;
+  return choice.id || slugKey(choice.label ?? choice.name, `choice-${index + 1}`);
+}
+
 async function ensureBrand(name, brandType) {
   const rows = await sql`
     insert into brands (name, brand_type, status, updated_at)
@@ -148,6 +153,7 @@ async function upsertGroup({
   name,
   selectionType,
   affectsProcedure = true,
+  ruleJson = {},
   sortOrder = 100,
   isActive = true
 }) {
@@ -177,6 +183,7 @@ async function upsertGroup({
         name = ${name},
         selection_type = ${selectionType},
         affects_procedure = ${affectsProcedure},
+        rule_json = ${JSON.stringify(ruleJson)}::jsonb,
         sort_order = ${sortOrder},
         is_active = ${isActive},
         updated_at = now()
@@ -195,6 +202,7 @@ async function upsertGroup({
       name,
       selection_type,
       affects_procedure,
+      rule_json,
       sort_order,
       is_active,
       updated_at
@@ -207,6 +215,7 @@ async function upsertGroup({
       ${name},
       ${selectionType},
       ${affectsProcedure},
+      ${JSON.stringify(ruleJson)}::jsonb,
       ${sortOrder},
       ${isActive},
       now()
@@ -281,7 +290,7 @@ async function upsertOption({
 
 async function upsertOptions(groupId, choices, { affectsProcedure = true } = {}) {
   for (const [index, choice] of choices.entries()) {
-    const id = typeof choice === "string" ? slugKey(choice, `choice-${index + 1}`) : choice.id;
+    const id = choiceKey(choice, index);
     const name = typeof choice === "string" ? choice : choice.label ?? choice.name;
     const price = typeof choice === "string" ? 0 : choice.price ?? 0;
     await upsertOption({
@@ -338,12 +347,12 @@ async function importNanacha() {
   }
 
   const groups = [
-    { key: "temperature", name: "温度", type: "single", choices: [{ id: "ICE", label: "ICE", price: 0 }, { id: "HOT", label: "HOT", price: 0 }], affectsProcedure: true },
-    { key: "size", name: "サイズ", type: "single", choices: menu.sizes, affectsProcedure: true },
-    { key: "sweetness", name: "甘さ", type: "single", choices: menu.sweetness, affectsProcedure: true },
-    { key: "ice", name: "氷", type: "single", choices: menu.ice, affectsProcedure: true },
-    { key: "option", name: "オプション", type: "multiple", choices: menu.options, affectsProcedure: true },
-    { key: "topping", name: "トッピング", type: "multiple", choices: menu.toppings, affectsProcedure: true }
+    { key: "temperature", name: "温度", type: "single", choices: [{ id: "ICE", label: "ICE", price: 0 }, { id: "HOT", label: "HOT", price: 0 }], affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "temperatures", defaultBehavior: "ice_when_missing", optionValueType: "id" } },
+    { key: "size", name: "サイズ", type: "single", choices: menu.sizes, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedSizes", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id" } },
+    { key: "sweetness", name: "甘さ", type: "single", choices: menu.sweetness, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedSweetness", defaultBehavior: "all_when_missing_or_empty", optionValueType: "label" } },
+    { key: "ice", name: "氷", type: "single", choices: menu.ice, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedIce", defaultBehavior: "all_when_missing_or_empty", optionValueType: "label", hotValue: menu.hotIce } },
+    { key: "option", name: "オプション", type: "multiple", choices: menu.options, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedOptions", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id", alwaysAllowed: ["none"] } },
+    { key: "topping", name: "トッピング", type: "multiple", choices: menu.toppings, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedToppings", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id", categoryRules: ["tapiocaFreeCategories", "whippedCategories"] } }
   ];
 
   for (const [index, group] of groups.entries()) {
@@ -354,6 +363,7 @@ async function importNanacha() {
       name: group.name,
       selectionType: group.type,
       affectsProcedure: group.affectsProcedure,
+      ruleJson: group.ruleJson,
       sortOrder: (index + 1) * 10
     });
     await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure });
@@ -365,7 +375,7 @@ async function importNanacha() {
     where menu_options.option_group_id = menu_option_groups.id
       and menu_option_groups.brand_id = ${brand.id}
       and menu_option_groups.group_key in ('sweetness', 'ice')
-      and menu_options.option_key = 'option'
+      and menu_options.option_key like 'choice-%'
   `;
 
   return { brand: brand.name, items: menu.drinks.length, groups: groups.length };
@@ -407,10 +417,10 @@ async function importMaamaa() {
   });
 
   const fixedGroups = [
-    { key: "medicinal-spice", name: "薬膳スパイス", type: "single", choices: menu.medicinalSpiceOptions, affectsProcedure: true },
-    { key: "heat", name: "辛さ", type: "single", choices: menu.heatLevels, affectsProcedure: true },
-    { key: "numb", name: "痺れ", type: "single", choices: menu.numbLevels, affectsProcedure: true },
-    { key: "special-flavor", name: "味変・追加調味", type: "multiple", choices: menu.specialFlavors, affectsProcedure: true }
+    { key: "medicinal-spice", name: "薬膳スパイス", type: "single", choices: menu.medicinalSpiceOptions, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: menu.medicinalSpiceOptions[0]?.id, optionValueType: "id" } },
+    { key: "heat", name: "辛さ", type: "single", choices: menu.heatLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "normal", optionValueType: "id" } },
+    { key: "numb", name: "痺れ", type: "single", choices: menu.numbLevels, affectsProcedure: true, ruleJson: { source: "maamaa", defaultChoice: "tiny", optionValueType: "id" } },
+    { key: "special-flavor", name: "味変・追加調味", type: "multiple", choices: menu.specialFlavors, affectsProcedure: true, ruleJson: { source: "maamaa", limit: 6, optionValueType: "id" } }
   ];
 
   let groupCount = 0;
@@ -423,6 +433,7 @@ async function importMaamaa() {
       name: group.name,
       selectionType: group.type,
       affectsProcedure: group.affectsProcedure,
+      ruleJson: group.ruleJson,
       sortOrder: (index + 1) * 10
     });
     await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure });
@@ -439,6 +450,7 @@ async function importMaamaa() {
       name: section.title,
       selectionType: "quantity",
       affectsProcedure: true,
+      ruleJson: { source: "maamaa", limit: section.limit, optionValueType: "id" },
       sortOrder: 100 + (index + 1) * 10
     });
     await upsertOptions(groupId, section.items, { affectsProcedure: true });

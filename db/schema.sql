@@ -513,6 +513,7 @@ create table if not exists menu_option_groups (
   name text not null,
   selection_type text not null default 'single',
   affects_procedure boolean not null default true,
+  rule_json jsonb not null default '{}'::jsonb,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -550,6 +551,7 @@ alter table menu_catalog_items add column if not exists base_price numeric(12, 2
 alter table menu_catalog_items add column if not exists variable_schema jsonb not null default '{}'::jsonb;
 alter table menu_catalog_items add column if not exists is_active boolean not null default true;
 alter table menu_option_groups add column if not exists affects_procedure boolean not null default true;
+alter table menu_option_groups add column if not exists rule_json jsonb not null default '{}'::jsonb;
 alter table menu_options add column if not exists affects_procedure boolean not null default true;
 
 alter table procedure_books add column if not exists procedure_type text not null default 'product';

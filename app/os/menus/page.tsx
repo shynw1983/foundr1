@@ -67,6 +67,7 @@ type MenuGroup = {
   name: string;
   selectionType: string;
   affectsProcedure: boolean;
+  ruleJson: Record<string, unknown>;
   sortOrder: number;
   isActive: boolean;
 };
@@ -133,6 +134,7 @@ const emptyGroup: MenuGroup = {
   name: "",
   selectionType: "single",
   affectsProcedure: true,
+  ruleJson: {},
   sortOrder: 100,
   isActive: true
 };
@@ -196,6 +198,10 @@ function getAllowedKeys(item: MenuItem, group: MenuGroup, options: MenuOption[])
   const rawValue = item.variableSchema?.[ruleKey];
   if (Array.isArray(rawValue)) return new Set(rawValue.map(String));
   return new Set(options.map(getOptionKey));
+}
+
+function groupUsesFallbackAll(group: MenuGroup) {
+  return group.ruleJson?.defaultBehavior === "all_when_missing_or_empty";
 }
 
 function buildPublicMenuUrl(brandId: string, storeId: string) {
@@ -369,10 +375,21 @@ export default function MenuAdminPage() {
     if (checked) currentAllowed.add(optionKey);
     else currentAllowed.delete(optionKey);
 
+    if (!checked && groupUsesFallbackAll(group) && currentAllowed.size === 0) {
+      setMessage("元サイトとの互換性のため、最後の選択肢は外せません。");
+      return;
+    }
+
+    const ruleKey = getRuleKey(group.groupKey);
+    const allKeys = groupOptions.map(getOptionKey);
+    const normalizedAllowed = Array.from(currentAllowed);
     const nextSchema = {
       ...itemDraft.variableSchema,
-      [getRuleKey(group.groupKey)]: Array.from(currentAllowed)
+      [ruleKey]: normalizedAllowed.length === allKeys.length && groupUsesFallbackAll(group)
+        ? undefined
+        : normalizedAllowed
     };
+    if (nextSchema[ruleKey] === undefined) delete nextSchema[ruleKey];
     setItemDraft({ ...itemDraft, variableSchema: nextSchema });
   }
 

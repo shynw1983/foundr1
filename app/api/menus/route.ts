@@ -95,6 +95,7 @@ async function readMenuAdminData() {
         name,
         selection_type as "selectionType",
         affects_procedure as "affectsProcedure",
+        rule_json as "ruleJson",
         sort_order as "sortOrder",
         is_active as "isActive"
       from menu_option_groups
@@ -286,6 +287,7 @@ async function upsertGroup(body: Record<string, unknown>) {
           name = ${name},
           selection_type = ${String(body.selectionType ?? "single").trim() || "single"},
           affects_procedure = ${body.affectsProcedure !== false},
+          rule_json = ${JSON.stringify(parseJsonObject(body.ruleJson))}::jsonb,
           sort_order = ${Math.round(parseOptionalNumber(body.sortOrder) ?? 0)},
           is_active = ${body.isActive !== false},
           updated_at = now()
@@ -301,6 +303,7 @@ async function upsertGroup(body: Record<string, unknown>) {
           name,
           selection_type,
           affects_procedure,
+          rule_json,
           sort_order,
           is_active,
           updated_at
@@ -313,6 +316,7 @@ async function upsertGroup(body: Record<string, unknown>) {
           ${name},
           ${String(body.selectionType ?? "single").trim() || "single"},
           ${body.affectsProcedure !== false},
+          ${JSON.stringify(parseJsonObject(body.ruleJson))}::jsonb,
           ${Math.round(parseOptionalNumber(body.sortOrder) ?? 0)},
           ${body.isActive !== false},
           now()
