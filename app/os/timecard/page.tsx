@@ -1,6 +1,6 @@
 import { Clock3 } from "lucide-react";
 
-export default function TimeCardPage() {
+export default function TimecardPage() {
   return (
     <main className="os-home-shell">
       <header className="os-home-topbar">
@@ -8,14 +8,14 @@ export default function TimeCardPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 OS</p>
-            <h1>Time Card</h1>
+            <h1>Timecard</h1>
           </div>
         </a>
       </header>
       <section className="os-home-hero">
         <div>
           <p className="eyebrow">Coming Soon</p>
-          <h2>Time Card</h2>
+          <h2>Timecard</h2>
           <p>出退勤、休憩、シフト、勤怠確認を Foundr1 OS の共有スタッフ・店舗データに接続して開発します。</p>
         </div>
       </section>

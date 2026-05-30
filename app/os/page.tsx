@@ -41,9 +41,9 @@ const osModules: OsModule[] = [
     roles: ["owner", "manager"]
   },
   {
-    title: "Time Card",
+    title: "Timecard",
     description: "出退勤、休憩、シフト、勤怠確認",
-    href: "/os/time-card",
+    href: "/os/timecard",
     icon: Clock3,
     status: "building",
     roles: ["owner", "manager", "store_owner", "staff"]

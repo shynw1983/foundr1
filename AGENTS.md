@@ -12,7 +12,7 @@ This file is the working guide for coding agents and future maintainers of Found
 - Product name: Foundr1 OS.
 - Public site path/domain: `foundr1.jp` is reserved for the front-facing site and is not the current focus.
 - Backoffice app path: `/os`.
-- Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Time Card, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
+- Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
 
 ## Commands
 
