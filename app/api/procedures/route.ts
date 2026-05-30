@@ -23,6 +23,7 @@ type ProcedureActionPayload = {
   variantType?: string;
   actionTypeId?: string;
   productId?: string;
+  materialId?: string;
   locationId?: string;
   equipmentId?: string;
   containerId?: string;
@@ -181,9 +182,12 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           procedure_action_types.id::text as "actionTypeId",
           coalesce(procedure_action_types.label, '') as "actionLabel",
           products.id::text as "productId",
+          procedure_materials.id::text as "materialId",
           coalesce(products.name, '') as "productName",
-          coalesce(products.category, '') as category,
-          coalesce(products.subcategory, '未分類') as subcategory,
+          coalesce(procedure_materials.name, '') as "materialName",
+          coalesce(procedure_materials.material_type, '') as "materialType",
+          coalesce(products.category, procedure_materials.category, '') as category,
+          coalesce(products.subcategory, procedure_materials.subcategory, '未分類') as subcategory,
           procedure_locations.id::text as "locationId",
           coalesce(procedure_locations.name, '') as location,
           procedure_equipment.id::text as "equipmentId",
@@ -191,7 +195,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
           procedure_containers.id::text as "containerId",
           coalesce(procedure_containers.name, '') as container,
           procedure_step_actions.quantity::float as quantity,
-          coalesce(procedure_step_actions.unit, products.unit, '') as unit,
+          coalesce(procedure_step_actions.unit, products.unit, procedure_materials.unit, '') as unit,
           coalesce(procedure_step_actions.target_text, '') as "targetText",
           coalesce(procedure_step_actions.standard_text, '') as "standardText",
           coalesce(procedure_step_actions.note, '') as note,
@@ -200,6 +204,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         left join procedure_variants on procedure_variants.id = procedure_step_actions.procedure_variant_id
         left join procedure_action_types on procedure_action_types.id = procedure_step_actions.action_type_id
         left join products on products.id = procedure_step_actions.product_id
+        left join procedure_materials on procedure_materials.id = procedure_step_actions.material_id
         left join procedure_locations on procedure_locations.id = procedure_step_actions.location_id
         left join procedure_equipment on procedure_equipment.id = procedure_step_actions.equipment_id
         left join procedure_containers on procedure_containers.id = procedure_step_actions.container_id
@@ -235,7 +240,10 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         const action = item as {
           id?: string;
           productId?: string;
+          materialId?: string;
           productName?: string;
+          materialName?: string;
+          materialType?: string;
           category?: string;
           subcategory?: string;
           quantity?: number | null;
@@ -244,9 +252,11 @@ async function readProcedures(session: EmployeeSession, mode: string) {
         };
 
         return {
-          id: `action-${action.id ?? action.productId}`,
+          id: `action-${action.id ?? action.productId ?? action.materialId}`,
           productId: action.productId,
-          productName: action.productName,
+          materialId: action.materialId,
+          productName: action.productName || action.materialName,
+          materialType: action.materialType,
           japaneseNote: "",
           category: action.category,
           subcategory: action.subcategory,
@@ -281,7 +291,7 @@ async function readProcedures(session: EmployeeSession, mode: string) {
 }
 
 async function readAdminOptions() {
-  const [stores, brands, products, actionTypes, locations, equipment, containers] = await Promise.all([
+  const [stores, brands, products, materials, actionTypes, locations, equipment, containers] = await Promise.all([
     sql`
       select id::text, name
       from stores
@@ -315,6 +325,20 @@ async function readAdminOptions() {
     sql`
       select
         id::text,
+        name,
+        coalesce(material_type, 'utility') as "materialType",
+        coalesce(category, '手順書素材') as category,
+        coalesce(subcategory, '未分類') as subcategory,
+        coalesce(unit, '') as unit,
+        coalesce(note, '') as note,
+        is_active as "isActive",
+        sort_order as "sortOrder"
+      from procedure_materials
+      order by sort_order, category, subcategory, name
+    `,
+    sql`
+      select
+        id::text,
         action_key as "actionKey",
         label,
         sentence_template as "sentenceTemplate",
@@ -340,7 +364,7 @@ async function readAdminOptions() {
     `
   ]);
 
-  return { stores, brands, products, actionTypes, locations, equipment, containers };
+  return { stores, brands, products, materials, actionTypes, locations, equipment, containers };
 }
 
 export async function GET(request: Request) {
@@ -351,7 +375,7 @@ export async function GET(request: Request) {
   const procedures = await readProcedures(session, mode);
   const options = mode === "admin" && canEditProcedures(session)
     ? await readAdminOptions()
-    : { stores: [], brands: [], products: [] };
+    : { stores: [], brands: [], products: [], materials: [] };
 
   return Response.json({
     procedures,
@@ -565,10 +589,11 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
       const variantId = variantIdByType.get(variantType) ?? variantIdByType.get("base") ?? null;
       const actionTypeId = String(action.actionTypeId ?? "").trim() || null;
       const productId = String(action.productId ?? "").trim() || null;
+      const materialId = String(action.materialId ?? "").trim() || null;
       const locationId = String(action.locationId ?? "").trim() || null;
       const equipmentId = String(action.equipmentId ?? "").trim() || null;
       const containerId = String(action.containerId ?? "").trim() || null;
-      const hasContent = actionTypeId || productId || locationId || equipmentId || containerId || action.quantity || action.targetText || action.standardText || action.note;
+      const hasContent = actionTypeId || productId || materialId || locationId || equipmentId || containerId || action.quantity || action.targetText || action.standardText || action.note;
       if (!hasContent) continue;
 
       await sql`
@@ -577,6 +602,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           procedure_variant_id,
           action_type_id,
           product_id,
+          material_id,
           location_id,
           equipment_id,
           container_id,
@@ -592,6 +618,7 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
           ${variantId},
           ${actionTypeId},
           ${productId},
+          ${materialId},
           ${locationId},
           ${equipmentId},
           ${containerId},

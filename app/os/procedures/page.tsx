@@ -32,6 +32,7 @@ type OptionItem = {
 };
 
 type ProductOption = OptionItem & {
+  sourceType: "product" | "material";
   category: string;
   subcategory: string;
   unit: string;
@@ -39,6 +40,10 @@ type ProductOption = OptionItem & {
   brandIds: string[];
   japaneseNote: string;
   photoUrl: string;
+  materialType?: string;
+  note?: string;
+  isActive?: boolean;
+  sortOrder?: number;
 };
 
 type ProcedureVariant = {
@@ -50,6 +55,7 @@ type ProcedureAction = {
   variantType: string;
   actionTypeId: string;
   productId: string;
+  materialId: string;
   selectedCategory?: string;
   selectedSubcategory?: string;
   locationId: string;
@@ -114,8 +120,23 @@ type ProcedureMasterItem = OptionItem & {
   sortOrder: number;
 };
 
-type SettingKind = "action_types" | "locations" | "equipment" | "containers";
+type SettingKind = "action_types" | "materials" | "locations" | "equipment" | "containers";
 type ActionField = "location" | "product" | "quantity" | "equipment" | "container" | "target" | "standard" | "note";
+type SettingItem = ActionTypeOption | ProcedureMasterItem | ProductOption;
+
+const emptySettingDraft = {
+  name: "",
+  actionKey: "",
+  label: "",
+  sentenceTemplate: "",
+  materialType: "utility",
+  category: "",
+  subcategory: "",
+  unit: "",
+  note: "",
+  sortOrder: "100",
+  isActive: true
+};
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -165,6 +186,7 @@ const emptyAction: ProcedureAction = {
   variantType: "base",
   actionTypeId: "",
   productId: "",
+  materialId: "",
   locationId: "",
   equipmentId: "",
   containerId: "",
@@ -209,7 +231,8 @@ function cloneBook(book: ProcedureBook): ProcedureBook {
 }
 
 function getProductLabel(product: ProductOption) {
-  return product.japaneseNote ? `${product.name} / ${product.japaneseNote}` : product.name;
+  const suffix = product.sourceType === "material" ? "手順書素材" : product.japaneseNote;
+  return suffix ? `${product.name} / ${suffix}` : product.name;
 }
 
 function uniqueSorted(values: string[]) {
@@ -217,14 +240,26 @@ function uniqueSorted(values: string[]) {
 }
 
 function canUseProductForBrand(product: ProductOption, brandId: string) {
+  if (product.sourceType === "material") return product.isActive !== false;
   if (!brandId) return true;
   if (product.brandScope === "common") return true;
   return Array.isArray(product.brandIds) && product.brandIds.includes(brandId);
 }
 
+function getActionItem(action: ProcedureAction, products: ProductOption[]) {
+  return products.find((item) => (
+    (action.productId && item.sourceType === "product" && item.id === action.productId) ||
+    (action.materialId && item.sourceType === "material" && item.id === action.materialId)
+  ));
+}
+
+function getSelectionValue(item: ProductOption) {
+  return `${item.sourceType}:${item.id}`;
+}
+
 function renderActionSentence(action: ProcedureAction, actionTypes: ActionTypeOption[], products: ProductOption[], locations: ProcedureMasterItem[], equipment: ProcedureMasterItem[], containers: ProcedureMasterItem[]) {
   const actionType = actionTypes.find((item) => item.id === action.actionTypeId);
-  const product = products.find((item) => item.id === action.productId);
+  const product = getActionItem(action, products);
   const location = locations.find((item) => item.id === action.locationId);
   const equipmentItem = equipment.find((item) => item.id === action.equipmentId);
   const container = containers.find((item) => item.id === action.containerId);
@@ -276,13 +311,14 @@ export default function ProcedureAdminPage() {
   const [stores, setStores] = useState<OptionItem[]>([]);
   const [brands, setBrands] = useState<OptionItem[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
+  const [materials, setMaterials] = useState<ProductOption[]>([]);
   const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
   const [locations, setLocations] = useState<ProcedureMasterItem[]>([]);
   const [equipment, setEquipment] = useState<ProcedureMasterItem[]>([]);
   const [containers, setContainers] = useState<ProcedureMasterItem[]>([]);
   const [editingBook, setEditingBook] = useState<ProcedureBook>(() => cloneBook(emptyBook));
   const [settingKind, setSettingKind] = useState<SettingKind>("action_types");
-  const [settingDraft, setSettingDraft] = useState({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+  const [settingDraft, setSettingDraft] = useState(emptySettingDraft);
   const [editingSettingId, setEditingSettingId] = useState("");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
@@ -304,6 +340,7 @@ export default function ProcedureAdminPage() {
       stores?: OptionItem[];
       brands?: OptionItem[];
       products?: ProductOption[];
+      materials?: ProductOption[];
       actionTypes?: ActionTypeOption[];
       locations?: ProcedureMasterItem[];
       equipment?: ProcedureMasterItem[];
@@ -314,7 +351,15 @@ export default function ProcedureAdminPage() {
     setProcedures((data.procedures ?? []).map(normalizeBook));
     setStores(data.stores ?? []);
     setBrands(data.brands ?? []);
-    setProducts(data.products ?? []);
+    setProducts((data.products ?? []).map((product) => ({ ...product, sourceType: "product" as const })));
+    setMaterials((data.materials ?? []).map((material) => ({
+      ...material,
+      sourceType: "material" as const,
+      brandScope: "common",
+      brandIds: [],
+      japaneseNote: material.note ?? "",
+      photoUrl: ""
+    })));
     setActionTypes(data.actionTypes ?? []);
     setLocations(data.locations ?? []);
     setEquipment(data.equipment ?? []);
@@ -339,8 +384,8 @@ export default function ProcedureAdminPage() {
   }, [procedures, query]);
 
   const brandFilteredProducts = useMemo(() => {
-    return products.filter((product) => canUseProductForBrand(product, editingBook.brandId));
-  }, [editingBook.brandId, products]);
+    return [...products, ...materials].filter((product) => canUseProductForBrand(product, editingBook.brandId));
+  }, [editingBook.brandId, materials, products]);
 
   const productCategories = useMemo(() => {
     return uniqueSorted(brandFilteredProducts.map((product) => product.category || "未分類"));
@@ -393,7 +438,7 @@ export default function ProcedureAdminPage() {
             ? { ...product, productId: "", productName: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
             : product),
           actions: step.actions.map((action) => action.productId && !nextProductIds.has(action.productId)
-            ? { ...action, productId: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
+            ? { ...action, productId: "", materialId: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
             : action)
         }))
       };
@@ -426,7 +471,7 @@ export default function ProcedureAdminPage() {
   }
 
   function getActionProductForLink(action: ProcedureAction) {
-    return products.find((item) => item.id === action.productId);
+    return getActionItem(action, [...products, ...materials]);
   }
 
   function getActionSelectedCategory(action: ProcedureAction) {
@@ -439,6 +484,7 @@ export default function ProcedureAdminPage() {
 
   function getSettingItems() {
     if (settingKind === "action_types") return actionTypes;
+    if (settingKind === "materials") return materials;
     if (settingKind === "locations") return locations;
     if (settingKind === "equipment") return equipment;
     return containers;
@@ -446,19 +492,17 @@ export default function ProcedureAdminPage() {
 
   function resetSettingDraft() {
     setEditingSettingId("");
-    setSettingDraft({ name: "", actionKey: "", label: "", sentenceTemplate: "", category: "", note: "", sortOrder: "100", isActive: true });
+    setSettingDraft(emptySettingDraft);
   }
 
-  function editSetting(item: ActionTypeOption | ProcedureMasterItem) {
+  function editSetting(item: SettingItem) {
     setEditingSettingId(item.id);
     if ("actionKey" in item) {
       setSettingDraft({
-        name: "",
+        ...emptySettingDraft,
         actionKey: item.actionKey,
         label: item.label,
         sentenceTemplate: item.sentenceTemplate,
-        category: "",
-        note: "",
         sortOrder: String(item.sortOrder),
         isActive: item.isActive
       });
@@ -466,14 +510,15 @@ export default function ProcedureAdminPage() {
     }
 
     setSettingDraft({
+      ...emptySettingDraft,
       name: item.name,
-      actionKey: "",
-      label: "",
-      sentenceTemplate: "",
+      materialType: "materialType" in item ? item.materialType ?? "utility" : "utility",
       category: item.category,
-      note: item.note,
-      sortOrder: String(item.sortOrder),
-      isActive: item.isActive
+      subcategory: "subcategory" in item ? item.subcategory : "",
+      unit: "unit" in item ? item.unit : "",
+      note: item.note ?? "",
+      sortOrder: String(item.sortOrder ?? 100),
+      isActive: item.isActive !== false
     });
   }
 
@@ -597,6 +642,7 @@ export default function ProcedureAdminPage() {
                     resetSettingDraft();
                   }} disabled={!canEdit}>
                     <option value="action_types">動作</option>
+                    <option value="materials">手順書素材</option>
                     <option value="locations">位置</option>
                     <option value="equipment">設備・工具</option>
                     <option value="containers">容器</option>
@@ -621,12 +667,34 @@ export default function ProcedureAdminPage() {
                   <>
                     <label>
                       <span>名称</span>
-                      <input value={settingDraft.name} onChange={(event) => setSettingDraft({ ...settingDraft, name: event.target.value })} placeholder="例: 冷蔵庫" disabled={!canEdit} />
+                      <input value={settingDraft.name} onChange={(event) => setSettingDraft({ ...settingDraft, name: event.target.value })} placeholder={settingKind === "materials" ? "例: 氷 / 冷水 / 抽出済み紅茶" : "例: 冷蔵庫"} disabled={!canEdit} />
                     </label>
+                    {settingKind === "materials" ? (
+                      <label>
+                        <span>素材区分</span>
+                        <select value={settingDraft.materialType} onChange={(event) => setSettingDraft({ ...settingDraft, materialType: event.target.value })} disabled={!canEdit}>
+                          <option value="utility">店内素材</option>
+                          <option value="intermediate">中間製品</option>
+                          <option value="prepared">仕込み品</option>
+                        </select>
+                      </label>
+                    ) : null}
                     <label>
                       <span>分類</span>
-                      <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / テイクアウト" disabled={!canEdit} />
+                      <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder={settingKind === "materials" ? "例: ドリンク素材 / 仕込み" : "例: 保管 / 調理 / テイクアウト"} disabled={!canEdit} />
                     </label>
+                    {settingKind === "materials" ? (
+                      <>
+                        <label>
+                          <span>小分類</span>
+                          <input value={settingDraft.subcategory} onChange={(event) => setSettingDraft({ ...settingDraft, subcategory: event.target.value })} placeholder="例: 水 / 茶湯 / トッピング" disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>標準単位</span>
+                          <input value={settingDraft.unit} onChange={(event) => setSettingDraft({ ...settingDraft, unit: event.target.value })} placeholder="g / ml / 個" disabled={!canEdit} />
+                        </label>
+                      </>
+                    ) : null}
                     <label>
                       <span>メモ</span>
                       <input value={settingDraft.note} onChange={(event) => setSettingDraft({ ...settingDraft, note: event.target.value })} disabled={!canEdit} />
@@ -829,7 +897,7 @@ export default function ProcedureAdminPage() {
                       <div className="procedure-step-editor-head">
                         <div>
                           <strong>構造化アクション</strong>
-                          <p>位置・商品・数量・設備を指令として保存します。</p>
+                          <p>位置・商品/素材・数量・設備を指令として保存します。</p>
                         </div>
                         <button
                           className="text-button"
@@ -844,7 +912,7 @@ export default function ProcedureAdminPage() {
                       {step.actions.map((action, actionIndex) => {
                         const actionKey = getActionKey(action, actionTypes);
                         const actionSentence = renderActionSentence(action, actionTypes, products, locations, equipment, containers);
-                        const selectedProduct = products.find((item) => item.id === action.productId);
+                        const selectedProduct = getActionItem(action, [...products, ...materials]);
 
                         return (
                           <div className="procedure-action-card" key={actionIndex}>
@@ -902,10 +970,10 @@ export default function ProcedureAdminPage() {
                               {shouldShowActionField(actionKey, "product") ? (
                                 <>
                                   <label>
-                                    <span>商品 大分類</span>
+                                    <span>商品・素材 大分類</span>
                                     <select
                                       value={getActionSelectedCategory(action)}
-                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", unit: "" })}
+                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", materialId: "", unit: "" })}
                                       disabled={!canEdit || !brandFilteredProducts.length}
                                     >
                                       <option value="">大分類を選択</option>
@@ -913,10 +981,10 @@ export default function ProcedureAdminPage() {
                                     </select>
                                   </label>
                                   <label>
-                                    <span>商品 小分類</span>
+                                    <span>商品・素材 小分類</span>
                                     <select
                                       value={getActionSelectedSubcategory(action)}
-                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", unit: "" })}
+                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", materialId: "", unit: "" })}
                                       disabled={!canEdit || !getActionSelectedCategory(action)}
                                     >
                                       <option value="">小分類を選択</option>
@@ -924,18 +992,20 @@ export default function ProcedureAdminPage() {
                                     </select>
                                   </label>
                                   <label className="procedure-action-field-wide">
-                                    <span>商品</span>
-                                    <select value={action.productId} onChange={(event) => {
-                                      const selectedProduct = products.find((item) => item.id === event.target.value);
+                                    <span>商品・素材</span>
+                                    <select value={selectedProduct ? getSelectionValue(selectedProduct) : ""} onChange={(event) => {
+                                      const [sourceType, itemId] = event.target.value.split(":");
+                                      const selectedProduct = brandFilteredProducts.find((item) => item.sourceType === sourceType && item.id === itemId);
                                       updateStepAction(stepIndex, actionIndex, {
-                                        productId: event.target.value,
+                                        productId: selectedProduct?.sourceType === "product" ? selectedProduct.id : "",
+                                        materialId: selectedProduct?.sourceType === "material" ? selectedProduct.id : "",
                                         selectedCategory: selectedProduct?.category ?? getActionSelectedCategory(action),
                                         selectedSubcategory: selectedProduct?.subcategory ?? getActionSelectedSubcategory(action),
                                         unit: selectedProduct?.unit ?? action.unit
                                       });
                                     }} disabled={!canEdit || !getActionSelectedCategory(action) || !getActionSelectedSubcategory(action)}>
-                                      <option value="">商品を選択</option>
-                                      {getProductsForSelection(getActionSelectedCategory(action), getActionSelectedSubcategory(action)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
+                                      <option value="">商品・素材を選択</option>
+                                      {getProductsForSelection(getActionSelectedCategory(action), getActionSelectedSubcategory(action)).map((item) => <option value={getSelectionValue(item)} key={getSelectionValue(item)}>{getProductLabel(item)}</option>)}
                                     </select>
                                   </label>
                                 </>
@@ -1031,12 +1101,12 @@ export default function ProcedureAdminPage() {
         <section className="panel procedure-admin-note">
           <div className="panel-title">
             <div>
-              <p>商品総表と連動</p>
+              <p>商品総表・手順書素材と連動</p>
               <h3>運用メモ</h3>
             </div>
             <LinkIcon size={19} />
           </div>
-          <p>各ステップの商品は構造化アクションから商品マスタを参照します。商品名や日本語メモをコピーせず、将来の配方、原価、在庫、発注量分析に接続できる形で保存します。</p>
+          <p>発注商品は商品マスタを参照し、氷・水・抽出済み茶などは手順書素材として保存します。発注商品と中間製品を分けることで、将来のレシピ、原価、在庫、発注量分析に接続できる形にします。</p>
         </section>
       </section>
     </main>

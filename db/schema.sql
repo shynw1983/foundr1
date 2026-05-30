@@ -544,6 +544,28 @@ create table if not exists procedure_containers (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists procedure_materials (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  material_type text not null default 'utility',
+  category text,
+  subcategory text,
+  unit text,
+  note text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+alter table procedure_materials add column if not exists material_type text not null default 'utility';
+alter table procedure_materials add column if not exists category text;
+alter table procedure_materials add column if not exists subcategory text;
+alter table procedure_materials add column if not exists unit text;
+alter table procedure_materials add column if not exists note text;
+alter table procedure_materials add column if not exists is_active boolean not null default true;
+alter table procedure_materials add column if not exists sort_order integer not null default 0;
+alter table procedure_materials add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists procedure_variants (
   id uuid primary key default gen_random_uuid(),
   procedure_book_id uuid not null references procedure_books(id) on delete cascade,
@@ -559,6 +581,7 @@ create table if not exists procedure_step_actions (
   procedure_variant_id uuid references procedure_variants(id) on delete cascade,
   action_type_id uuid references procedure_action_types(id) on delete set null,
   product_id uuid references products(id) on delete restrict,
+  material_id uuid references procedure_materials(id) on delete restrict,
   location_id uuid references procedure_locations(id) on delete set null,
   equipment_id uuid references procedure_equipment(id) on delete set null,
   container_id uuid references procedure_containers(id) on delete set null,
@@ -569,6 +592,24 @@ create table if not exists procedure_step_actions (
   note text,
   sort_order integer not null default 0
 );
+
+alter table procedure_step_actions add column if not exists material_id uuid references procedure_materials(id) on delete restrict;
+
+insert into procedure_materials (name, material_type, category, subcategory, unit, note, sort_order)
+values
+  ('氷', 'utility', '手順書素材', '水・氷', 'g', '発注商品ではなく、店舗内で使用する素材。', 10),
+  ('冷水', 'utility', '手順書素材', '水・氷', 'ml', '発注商品ではなく、店舗内で使用する素材。', 20),
+  ('お湯', 'utility', '手順書素材', '水・氷', 'ml', '発注商品ではなく、店舗内で使用する素材。', 30),
+  ('抽出済み茶', 'intermediate', '中間製品', '茶湯', 'ml', '茶葉などの発注商品から作る中間製品。', 40)
+on conflict (name)
+do update set
+  material_type = excluded.material_type,
+  category = excluded.category,
+  subcategory = excluded.subcategory,
+  unit = excluded.unit,
+  note = excluded.note,
+  sort_order = excluded.sort_order,
+  updated_at = now();
 
 insert into procedure_action_types (action_key, label, sentence_template, sort_order)
 values

@@ -4,6 +4,7 @@ import { sql } from "../../../../lib/db";
 const procedureEditorRoles = new Set(["owner", "manager"]);
 const settingTables = {
   action_types: "procedure_action_types",
+  materials: "procedure_materials",
   locations: "procedure_locations",
   equipment: "procedure_equipment",
   containers: "procedure_containers"
@@ -18,7 +19,10 @@ type SettingPayload = {
   label?: string;
   sentenceTemplate?: string;
   name?: string;
+  materialType?: string;
   category?: string;
+  subcategory?: string;
+  unit?: string;
   note?: string;
   isActive?: boolean;
   sortOrder?: number | string;
@@ -71,7 +75,32 @@ export async function POST(request: Request) {
   const name = String(body.name ?? "").trim();
   if (!name) return Response.json({ error: "名称を入力してください。" }, { status: 400 });
 
-  if (kind === "locations") {
+  if (kind === "materials") {
+    await sql`
+      insert into procedure_materials (name, material_type, category, subcategory, unit, note, is_active, sort_order, updated_at)
+      values (
+        ${name},
+        ${String(body.materialType ?? "utility").trim() || "utility"},
+        ${String(body.category ?? "").trim()},
+        ${String(body.subcategory ?? "").trim()},
+        ${String(body.unit ?? "").trim()},
+        ${String(body.note ?? "").trim()},
+        ${isActive},
+        ${sortOrder},
+        now()
+      )
+      on conflict (name)
+      do update set
+        material_type = excluded.material_type,
+        category = excluded.category,
+        subcategory = excluded.subcategory,
+        unit = excluded.unit,
+        note = excluded.note,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = now()
+    `;
+  } else if (kind === "locations") {
     await upsertMaster("procedure_locations", name, body.category, body.note, isActive, sortOrder);
   } else if (kind === "equipment") {
     await upsertMaster("procedure_equipment", name, body.category, body.note, isActive, sortOrder);
@@ -133,7 +162,22 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: true });
   }
 
-  if (kind === "locations") {
+  if (kind === "materials") {
+    await sql`
+      update procedure_materials
+      set
+        name = ${String(body.name ?? "").trim()},
+        material_type = ${String(body.materialType ?? "utility").trim() || "utility"},
+        category = ${String(body.category ?? "").trim()},
+        subcategory = ${String(body.subcategory ?? "").trim()},
+        unit = ${String(body.unit ?? "").trim()},
+        note = ${String(body.note ?? "").trim()},
+        is_active = ${isActive},
+        sort_order = ${sortOrder},
+        updated_at = now()
+      where id = ${id}
+    `;
+  } else if (kind === "locations") {
     await updateMaster("procedure_locations", id, body.name, body.category, body.note, isActive, sortOrder);
   } else if (kind === "equipment") {
     await updateMaster("procedure_equipment", id, body.name, body.category, body.note, isActive, sortOrder);
