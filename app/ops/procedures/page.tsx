@@ -114,6 +114,7 @@ type ProcedureMasterItem = OptionItem & {
 };
 
 type SettingKind = "action_types" | "locations" | "equipment" | "containers";
+type ActionField = "location" | "product" | "quantity" | "equipment" | "container" | "target" | "standard" | "note";
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ダッシュボード", href: "/ops#ダッシュボード", icon: ClipboardList },
@@ -241,6 +242,28 @@ function renderActionSentence(action: ProcedureAction, actionTypes: ActionTypeOp
     .replaceAll("{standard}", action.standardText)
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getActionKey(action: ProcedureAction, actionTypes: ActionTypeOption[]) {
+  return actionTypes.find((item) => item.id === action.actionTypeId)?.actionKey ?? "";
+}
+
+function shouldShowActionField(actionKey: string, field: ActionField) {
+  const visibleFields: Record<string, ActionField[]> = {
+    take: ["location", "product", "quantity", "note"],
+    measure: ["product", "quantity", "equipment", "note"],
+    add: ["product", "quantity", "container", "note"],
+    mix: ["equipment", "container", "target", "note"],
+    heat: ["equipment", "container", "target", "note"],
+    check: ["standard", "note"],
+    wash: ["location", "equipment", "standard", "note"],
+    cut: ["product", "target", "equipment", "note"],
+    discard: ["location", "product", "quantity", "note"],
+    serve: ["container", "standard", "note"]
+  };
+
+  if (!actionKey) return false;
+  return (visibleFields[actionKey] ?? ["location", "product", "quantity", "equipment", "container", "target", "standard", "note"]).includes(field);
 }
 
 export default function ProcedureAdminPage() {
@@ -743,87 +766,6 @@ export default function ProcedureAdminPage() {
                       </label>
                     </div>
 
-                    <div className="procedure-linked-products">
-                      <div className="procedure-step-editor-head">
-                        <div>
-                          <strong>関連商品</strong>
-                          <p>{editingBook.brandId ? <><span>{selectedBrandName}</span><span>の商品だけを表示</span></> : "ブランド未設定時は全商品を表示"}</p>
-                        </div>
-                        <button
-                          className="text-button"
-                          type="button"
-                          onClick={() => updateStep(stepIndex, {
-                            products: [...step.products, { productId: "", quantity: "", unit: "", note: "" }]
-                          })}
-                          disabled={!canEdit}
-                        >
-                          <Plus size={14} />
-                          商品を追加
-                        </button>
-                      </div>
-                      {!brandFilteredProducts.length ? <p className="empty-state">選択中のブランドで使用できる商品がありません。</p> : null}
-                      {step.products.map((product, productIndex) => (
-                        <div className="procedure-product-link-row" key={productIndex}>
-                          <select
-                            value={getSelectedCategory(product)}
-                            onChange={(event) => updateStepProduct(stepIndex, productIndex, {
-                              selectedCategory: event.target.value,
-                              selectedSubcategory: "",
-                              productId: "",
-                              productName: "",
-                              unit: ""
-                            })}
-                            disabled={!canEdit || !brandFilteredProducts.length}
-                            aria-label="大分類"
-                          >
-                            <option value="">大分類</option>
-                            {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
-                          </select>
-                          <select
-                            value={getSelectedSubcategory(product)}
-                            onChange={(event) => updateStepProduct(stepIndex, productIndex, {
-                              selectedSubcategory: event.target.value,
-                              productId: "",
-                              productName: "",
-                              unit: ""
-                            })}
-                            disabled={!canEdit || !getSelectedCategory(product)}
-                            aria-label="小分類"
-                          >
-                            <option value="">小分類</option>
-                            {getSubcategoriesForCategory(getSelectedCategory(product)).map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
-                          </select>
-                          <select value={product.productId} onChange={(event) => {
-                            const selectedProduct = products.find((item) => item.id === event.target.value);
-                            updateStepProduct(stepIndex, productIndex, {
-                              productId: event.target.value,
-                              productName: selectedProduct?.name ?? "",
-                              selectedCategory: selectedProduct?.category ?? getSelectedCategory(product),
-                              selectedSubcategory: selectedProduct?.subcategory ?? getSelectedSubcategory(product),
-                              unit: selectedProduct?.unit ?? product.unit
-                            });
-                          }} disabled={!canEdit || !getSelectedCategory(product) || !getSelectedSubcategory(product)}>
-                            <option value="">商品を選択</option>
-                            {getProductsForSelection(getSelectedCategory(product), getSelectedSubcategory(product)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
-                          </select>
-                          <input value={product.quantity} onChange={(event) => updateStepProduct(stepIndex, productIndex, { quantity: event.target.value })} placeholder="数量" disabled={!canEdit} />
-                          <input value={product.unit} onChange={(event) => updateStepProduct(stepIndex, productIndex, { unit: event.target.value })} placeholder="単位" disabled={!canEdit} />
-                          <input value={product.note} onChange={(event) => updateStepProduct(stepIndex, productIndex, { note: event.target.value })} placeholder="使用メモ" disabled={!canEdit} />
-                          <button
-                            className="icon-button"
-                            type="button"
-                            aria-label="関連商品を削除"
-                            onClick={() => updateStep(stepIndex, {
-                              products: step.products.filter((_, currentIndex) => currentIndex !== productIndex)
-                            })}
-                            disabled={!canEdit}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
                     <div className="procedure-structured-actions">
                       <div className="procedure-step-editor-head">
                         <div>
@@ -840,74 +782,149 @@ export default function ProcedureAdminPage() {
                           アクションを追加
                         </button>
                       </div>
-                      {step.actions.map((action, actionIndex) => (
-                        <div className="procedure-action-row" key={actionIndex}>
-                          <select value={action.variantType} onChange={(event) => updateStepAction(stepIndex, actionIndex, { variantType: event.target.value })} disabled={!canEdit} aria-label="提供形式">
-                            {editingBook.variants.map((variant) => <option value={variant.variantType} key={variant.variantType}>{variant.name}</option>)}
-                          </select>
-                          <select value={action.actionTypeId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { actionTypeId: event.target.value })} disabled={!canEdit} aria-label="動作">
-                            <option value="">動作</option>
-                            {actionTypes.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
-                          </select>
-                          <select value={action.locationId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { locationId: event.target.value })} disabled={!canEdit} aria-label="位置">
-                            <option value="">位置</option>
-                            {locations.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-                          </select>
-                          <select
-                            value={getActionSelectedCategory(action)}
-                            onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", unit: "" })}
-                            disabled={!canEdit || !brandFilteredProducts.length}
-                            aria-label="大分類"
-                          >
-                            <option value="">大分類</option>
-                            {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
-                          </select>
-                          <select
-                            value={getActionSelectedSubcategory(action)}
-                            onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", unit: "" })}
-                            disabled={!canEdit || !getActionSelectedCategory(action)}
-                            aria-label="小分類"
-                          >
-                            <option value="">小分類</option>
-                            {getSubcategoriesForCategory(getActionSelectedCategory(action)).map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
-                          </select>
-                          <select value={action.productId} onChange={(event) => {
-                            const selectedProduct = products.find((item) => item.id === event.target.value);
-                            updateStepAction(stepIndex, actionIndex, {
-                              productId: event.target.value,
-                              selectedCategory: selectedProduct?.category ?? getActionSelectedCategory(action),
-                              selectedSubcategory: selectedProduct?.subcategory ?? getActionSelectedSubcategory(action),
-                              unit: selectedProduct?.unit ?? action.unit
-                            });
-                          }} disabled={!canEdit || !getActionSelectedCategory(action) || !getActionSelectedSubcategory(action)} aria-label="商品">
-                            <option value="">商品</option>
-                            {getProductsForSelection(getActionSelectedCategory(action), getActionSelectedSubcategory(action)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
-                          </select>
-                          <input value={action.quantity} onChange={(event) => updateStepAction(stepIndex, actionIndex, { quantity: event.target.value })} placeholder="数量" disabled={!canEdit} />
-                          <input value={action.unit} onChange={(event) => updateStepAction(stepIndex, actionIndex, { unit: event.target.value })} placeholder="単位" disabled={!canEdit} />
-                          <select value={action.equipmentId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { equipmentId: event.target.value })} disabled={!canEdit} aria-label="設備・工具">
-                            <option value="">設備・工具</option>
-                            {equipment.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-                          </select>
-                          <select value={action.containerId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { containerId: event.target.value })} disabled={!canEdit} aria-label="容器">
-                            <option value="">容器</option>
-                            {containers.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-                          </select>
-                          <input value={action.targetText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { targetText: event.target.value })} placeholder="目標状態" disabled={!canEdit} />
-                          <input value={action.standardText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { standardText: event.target.value })} placeholder="確認基準" disabled={!canEdit} />
-                          <input value={action.note} onChange={(event) => updateStepAction(stepIndex, actionIndex, { note: event.target.value })} placeholder="補足" disabled={!canEdit} />
-                          <button
-                            className="icon-button"
-                            type="button"
-                            aria-label="アクションを削除"
-                            onClick={() => updateStep(stepIndex, { actions: step.actions.filter((_, currentIndex) => currentIndex !== actionIndex) })}
-                            disabled={!canEdit}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                          <p className="procedure-action-preview">{renderActionSentence(action, actionTypes, products, locations, equipment, containers) || "文生成プレビュー"}</p>
-                        </div>
-                      ))}
+                      {step.actions.map((action, actionIndex) => {
+                        const actionKey = getActionKey(action, actionTypes);
+
+                        return (
+                          <div className="procedure-action-card" key={actionIndex}>
+                            <div className="procedure-action-card-head">
+                              <label>
+                                <span>提供形式</span>
+                                <select value={action.variantType} onChange={(event) => updateStepAction(stepIndex, actionIndex, { variantType: event.target.value })} disabled={!canEdit}>
+                                  {editingBook.variants.map((variant) => <option value={variant.variantType} key={variant.variantType}>{variant.name}</option>)}
+                                </select>
+                              </label>
+                              <label>
+                                <span>何をする</span>
+                                <select value={action.actionTypeId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { actionTypeId: event.target.value })} disabled={!canEdit}>
+                                  <option value="">動作を選択</option>
+                                  {actionTypes.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+                                </select>
+                              </label>
+                              <button
+                                className="icon-button"
+                                type="button"
+                                aria-label="アクションを削除"
+                                onClick={() => updateStep(stepIndex, { actions: step.actions.filter((_, currentIndex) => currentIndex !== actionIndex) })}
+                                disabled={!canEdit}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+
+                            {!actionKey ? <p className="procedure-action-help">先に動作を選ぶと、必要な入力だけ表示されます。</p> : null}
+
+                            <div className="procedure-action-fields">
+                              {shouldShowActionField(actionKey, "location") ? (
+                                <label>
+                                  <span>どこから / どこで</span>
+                                  <select value={action.locationId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { locationId: event.target.value })} disabled={!canEdit}>
+                                    <option value="">位置を選択</option>
+                                    {locations.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                                  </select>
+                                </label>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "product") ? (
+                                <>
+                                  <label>
+                                    <span>商品大分類</span>
+                                    <select
+                                      value={getActionSelectedCategory(action)}
+                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedCategory: event.target.value, selectedSubcategory: "", productId: "", unit: "" })}
+                                      disabled={!canEdit || !brandFilteredProducts.length}
+                                    >
+                                      <option value="">大分類を選択</option>
+                                      {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    <span>商品小分類</span>
+                                    <select
+                                      value={getActionSelectedSubcategory(action)}
+                                      onChange={(event) => updateStepAction(stepIndex, actionIndex, { selectedSubcategory: event.target.value, productId: "", unit: "" })}
+                                      disabled={!canEdit || !getActionSelectedCategory(action)}
+                                    >
+                                      <option value="">小分類を選択</option>
+                                      {getSubcategoriesForCategory(getActionSelectedCategory(action)).map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
+                                    </select>
+                                  </label>
+                                  <label className="procedure-action-field-wide">
+                                    <span>何を使う</span>
+                                    <select value={action.productId} onChange={(event) => {
+                                      const selectedProduct = products.find((item) => item.id === event.target.value);
+                                      updateStepAction(stepIndex, actionIndex, {
+                                        productId: event.target.value,
+                                        selectedCategory: selectedProduct?.category ?? getActionSelectedCategory(action),
+                                        selectedSubcategory: selectedProduct?.subcategory ?? getActionSelectedSubcategory(action),
+                                        unit: selectedProduct?.unit ?? action.unit
+                                      });
+                                    }} disabled={!canEdit || !getActionSelectedCategory(action) || !getActionSelectedSubcategory(action)}>
+                                      <option value="">商品を選択</option>
+                                      {getProductsForSelection(getActionSelectedCategory(action), getActionSelectedSubcategory(action)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
+                                    </select>
+                                  </label>
+                                </>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "quantity") ? (
+                                <>
+                                  <label>
+                                    <span>どれだけ</span>
+                                    <input value={action.quantity} onChange={(event) => updateStepAction(stepIndex, actionIndex, { quantity: event.target.value })} placeholder="例: 180" disabled={!canEdit} />
+                                  </label>
+                                  <label>
+                                    <span>単位</span>
+                                    <input value={action.unit} onChange={(event) => updateStepAction(stepIndex, actionIndex, { unit: event.target.value })} placeholder="g / ml / 個" disabled={!canEdit} />
+                                  </label>
+                                </>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "equipment") ? (
+                                <label>
+                                  <span>何を使って</span>
+                                  <select value={action.equipmentId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { equipmentId: event.target.value })} disabled={!canEdit}>
+                                    <option value="">設備・工具を選択</option>
+                                    {equipment.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                                  </select>
+                                </label>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "container") ? (
+                                <label>
+                                  <span>どこに / 何で</span>
+                                  <select value={action.containerId} onChange={(event) => updateStepAction(stepIndex, actionIndex, { containerId: event.target.value })} disabled={!canEdit}>
+                                    <option value="">容器を選択</option>
+                                    {containers.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                                  </select>
+                                </label>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "target") ? (
+                                <label className="procedure-action-field-wide">
+                                  <span>どうなったら完了</span>
+                                  <input value={action.targetText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { targetText: event.target.value })} placeholder="例: 10秒 / 規定ラインまで / 透明になるまで" disabled={!canEdit} />
+                                </label>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "standard") ? (
+                                <label className="procedure-action-field-wide">
+                                  <span>確認すること</span>
+                                  <input value={action.standardText} onChange={(event) => updateStepAction(stepIndex, actionIndex, { standardText: event.target.value })} placeholder="例: 漏れがない / 75℃以上 / ラベル確認" disabled={!canEdit} />
+                                </label>
+                              ) : null}
+
+                              {shouldShowActionField(actionKey, "note") ? (
+                                <label className="procedure-action-field-wide">
+                                  <span>補足</span>
+                                  <input value={action.note} onChange={(event) => updateStepAction(stepIndex, actionIndex, { note: event.target.value })} placeholder="現場向けメモ" disabled={!canEdit} />
+                                </label>
+                              ) : null}
+                            </div>
+                            <p className="procedure-action-preview">{renderActionSentence(action, actionTypes, products, locations, equipment, containers) || "文生成プレビュー"}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </section>
                 ))}
@@ -940,7 +957,7 @@ export default function ProcedureAdminPage() {
             </div>
             <LinkIcon size={19} />
           </div>
-          <p>各ステップの関連商品は商品マスタを参照します。商品名や日本語メモをコピーせず、将来の配方、原価、在庫、発注量分析に接続できる形で保存します。</p>
+          <p>各ステップの商品は構造化アクションから商品マスタを参照します。商品名や日本語メモをコピーせず、将来の配方、原価、在庫、発注量分析に接続できる形で保存します。</p>
         </section>
       </section>
     </main>

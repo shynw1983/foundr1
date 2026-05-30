@@ -223,12 +223,46 @@ async function readProcedures(session: EmployeeSession, mode: string) {
   const stepsByBook = new Map<string, unknown[]>();
   for (const step of steps) {
     const bookId = String(step.bookId);
+    const stepRelatedProducts = productsByStep.get(String(step.id)) ?? [];
+    const stepStructuredActions = actionsByStep.get(String(step.id)) ?? [];
+    const relatedProductIds = new Set(stepRelatedProducts.map((item) => String((item as { productId?: string }).productId ?? "")));
+    const structuredProducts = stepStructuredActions
+      .filter((item) => {
+        const productId = String((item as { productId?: string }).productId ?? "");
+        return productId && !relatedProductIds.has(productId);
+      })
+      .map((item) => {
+        const action = item as {
+          id?: string;
+          productId?: string;
+          productName?: string;
+          category?: string;
+          subcategory?: string;
+          quantity?: number | null;
+          unit?: string;
+          note?: string;
+        };
+
+        return {
+          id: `action-${action.id ?? action.productId}`,
+          productId: action.productId,
+          productName: action.productName,
+          japaneseNote: "",
+          category: action.category,
+          subcategory: action.subcategory,
+          photoUrl: "",
+          quantity: action.quantity,
+          unit: action.unit,
+          note: action.note
+        };
+      });
+
     stepsByBook.set(bookId, [
       ...(stepsByBook.get(bookId) ?? []),
       {
         ...step,
-        products: productsByStep.get(String(step.id)) ?? [],
-        actions: actionsByStep.get(String(step.id)) ?? []
+        products: [...stepRelatedProducts, ...structuredProducts],
+        actions: stepStructuredActions
       }
     ]);
   }

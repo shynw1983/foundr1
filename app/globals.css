@@ -1192,44 +1192,38 @@ button {
   font-weight: 700;
 }
 
-.procedure-linked-products {
+.procedure-action-card {
   display: grid;
   gap: 10px;
-  padding-top: 2px;
-}
-
-.procedure-product-link-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.procedure-product-link-row select {
-  grid-column: span 2;
-}
-
-.procedure-product-link-row input:nth-of-type(3) {
-  grid-column: span 3;
-}
-
-.procedure-product-link-row .icon-button {
-  justify-self: end;
-}
-
-.procedure-action-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr)) 38px;
-  gap: 8px;
-  align-items: center;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8fbff;
 }
 
-.procedure-action-row select,
-.procedure-action-row input {
+.procedure-action-card-head,
+.procedure-action-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 38px;
+  gap: 8px;
+  align-items: end;
+}
+
+.procedure-action-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.procedure-action-card label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.procedure-action-card select,
+.procedure-action-card input {
   min-height: 38px;
   width: 100%;
   min-width: 0;
@@ -1239,35 +1233,28 @@ button {
   background: white;
 }
 
-.procedure-action-row select:nth-of-type(6),
-.procedure-action-row input:nth-of-type(5),
-.procedure-action-row input:nth-of-type(6),
-.procedure-action-row input:nth-of-type(7) {
-  grid-column: span 2;
-}
-
-.procedure-action-row .icon-button {
+.procedure-action-card-head .icon-button {
   justify-self: end;
 }
 
+.procedure-action-field-wide,
 .procedure-action-preview {
   grid-column: 1 / -1;
+}
+
+.procedure-action-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.procedure-action-preview {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
   line-height: 1.45;
-}
-
-.procedure-product-link-row input,
-.procedure-product-link-row select {
-  min-height: 38px;
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  background: white;
 }
 
 .procedure-form-actions {
@@ -6921,20 +6908,15 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .procedure-product-link-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .procedure-variant-grid,
-  .procedure-action-row {
+  .procedure-action-card-head,
+  .procedure-action-fields {
     grid-template-columns: 1fr 1fr;
   }
 
-  .procedure-product-link-row select,
-  .procedure-product-link-row input:nth-of-type(3),
-  .procedure-action-row select,
-  .procedure-action-row input,
-  .procedure-action-row .icon-button {
+  .procedure-action-card-head label,
+  .procedure-action-card-head .icon-button,
+  .procedure-action-fields label {
     grid-column: 1 / -1;
   }
 
