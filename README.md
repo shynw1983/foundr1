@@ -2,6 +2,8 @@
 
 FOUNDR1 Ops is a Next.js back-office app for store ordering, purchasing, supplier management, receipt review, product master data, field notes, and product cost comparison.
 
+The long-term product direction is a brand/store operations platform, not only a purchasing tool. Procurement remains the current core module under `/ops`, while future store execution systems such as electronic procedures, checklists, training, inventory, audits, and analytics should be designed as related business modules that share employees, stores, brands, permissions, and product master data.
+
 The current product language separates two ideas clearly:
 
 - `発注`: a store-side order/request, meaning "what the store needs".
@@ -36,6 +38,21 @@ This distinction is important throughout the UI, API, and documents.
 - Reports: contact/report history with owner delete support.
 - Field Notes: on-site product ideas, supplier findings, comments, and photos.
 - Product Comparisons: compare current products with candidate products, including import currency, exchange rate, freight, tax, archive, edit, and re-compare.
+
+## Product Direction
+
+Planned expansion areas:
+
+- Electronic procedures: tablet-first store/brand operating manuals linked to product master data. The recommended shape is a store-facing route such as `/procedures` with an admin area such as `/ops/procedures`.
+- Store execution: opening, closing, cleaning, equipment, temperature, prep, waste, handoff, daily report, and incident checklists.
+- Training: staff learning records, procedure read confirmations, tests, skill levels, role certification, and new-product training.
+- Menu and recipe management: recipe/BOM cost, serving cost, gross margin, substitutions, seasonal products, and store-specific menu availability.
+- Inventory and loss: stock counts, waste, expiration reminders, batch tracking, transfers, and theoretical-vs-actual inventory.
+- Audits and quality: store inspections, photo evidence, corrective tasks, rechecks, food-safety records, customer complaints, and SOP violations.
+- Analytics and franchise operations: purchase cost trends, supplier spend, store budgets, franchise/store scopes, new-store launch tasks, and brand-specific operations data.
+- AI assistance: receipt OCR, procedure draft generation, product data cleanup, price anomaly detection, and operating summaries.
+
+See `docs/operations-platform-roadmap.md` for the working product roadmap.
 
 ## Roles
 
@@ -152,4 +169,5 @@ Optional:
 
 - Chinese business framework: `docs/procurement-backoffice-framework.md`
 - Japanese operation framework: `docs/procurement-backoffice-framework.ja.md`
+- Operations platform roadmap: `docs/operations-platform-roadmap.md`
 - Agent/developer guide: `AGENTS.md`

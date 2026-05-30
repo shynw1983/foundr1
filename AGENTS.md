@@ -10,6 +10,7 @@ This file is the working guide for coding agents and future maintainers of FOUND
 - File storage: Vercel Blob for uploaded images.
 - Styling: global CSS in `app/globals.css`.
 - Main app path: `/ops`.
+- Product direction: FOUNDR1 should grow from procurement ops into a brand/store operations platform. Keep `/ops` as the current procurement/admin area, but design future store execution systems such as electronic procedures, checklists, training, inventory, audits, and analytics as related modules that share product master, employees, stores, brands, and permissions.
 
 ## Commands
 
@@ -68,6 +69,15 @@ Rules:
 - A single order may have multiple online/wholesale suppliers with different arrival dates.
 - Unavailable items can be marked as `購入不可`; the order can still be completed.
 - Completed disabled buttons should use black background and white text.
+
+## Future Operations Modules
+
+Electronic procedures should be planned as a sibling business system, not only as a procurement subpage:
+
+- Store-facing reader: prefer a route such as `/procedures`, tablet landscape first, with mobile and desktop support.
+- Admin/editor area: prefer `/ops/procedures`.
+- Procedure steps should link to product master data instead of copying product names where possible.
+- Keep procedures, checklists, training, inventory, audits, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
 
 ## Receipts
 
