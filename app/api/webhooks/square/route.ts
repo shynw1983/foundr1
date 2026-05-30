@@ -8,8 +8,16 @@ function verifySignature(rawBody: string, signature: string) {
   const notificationUrl = process.env.SQUARE_WEBHOOK_NOTIFICATION_URL || "";
   if (!key || !notificationUrl || !signature) return false;
 
-  const expected = createHmac("sha256", key).update(`${notificationUrl}${rawBody}`).digest("base64");
-  return signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const candidates = new Set([notificationUrl]);
+  if (notificationUrl.includes("://www.")) candidates.add(notificationUrl.replace("://www.", "://"));
+  else candidates.add(notificationUrl.replace("://", "://www."));
+
+  for (const candidateUrl of candidates) {
+    const expected = createHmac("sha256", key).update(`${candidateUrl}${rawBody}`).digest("base64");
+    if (signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return true;
+  }
+
+  return false;
 }
 
 export async function POST(request: Request) {

@@ -2123,6 +2123,35 @@ button {
   gap: 12px;
 }
 
+.store-order-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.store-order-stats article {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-order-stats span,
+.store-orders-live-note,
+.store-orders-sound-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-order-stats strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
 .store-orders-toolbar h2,
 .store-order-detail h2,
 .store-order-lines h3 {
@@ -2130,13 +2159,33 @@ button {
   letter-spacing: 0;
 }
 
-.store-orders-toolbar select {
+.store-orders-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.store-orders-controls input,
+.store-orders-controls select {
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0 34px 0 12px;
+  padding: 0 12px;
   background: white;
   font-weight: 800;
+  min-width: 0;
+}
+
+.store-orders-sound-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.store-orders-live-note {
+  margin: 10px 0 0;
 }
 
 .store-order-cards {
@@ -2160,6 +2209,21 @@ button {
 .store-order-card.is-active {
   border-color: #1f6f55;
   box-shadow: 0 0 0 2px rgba(31, 111, 85, 0.12);
+}
+
+.store-order-card.is-new {
+  animation: storeNewOrderPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes storeNewOrderPulse {
+  0%,
+  100% {
+    background: #ffffff;
+  }
+
+  50% {
+    background: #e7f7ef;
+  }
 }
 
 .store-order-card strong,
