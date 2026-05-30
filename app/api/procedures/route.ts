@@ -179,6 +179,12 @@ async function readAdminOptions() {
         category,
         coalesce(subcategory, '未分類') as subcategory,
         unit,
+        coalesce(brand_scope, 'unset') as "brandScope",
+        coalesce((
+          select array_agg(product_brand_usages.brand_id::text order by product_brand_usages.brand_id::text)
+          from product_brand_usages
+          where product_brand_usages.product_id = products.id
+        ), '{}') as "brandIds",
         coalesce(japanese_note, '') as "japaneseNote",
         coalesce(photo_url, '') as "photoUrl"
       from products

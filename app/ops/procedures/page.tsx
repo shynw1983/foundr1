@@ -34,6 +34,8 @@ type ProductOption = OptionItem & {
   category: string;
   subcategory: string;
   unit: string;
+  brandScope: string;
+  brandIds: string[];
   japaneseNote: string;
   photoUrl: string;
 };
@@ -41,6 +43,8 @@ type ProductOption = OptionItem & {
 type ProcedureStepProduct = {
   productId: string;
   productName?: string;
+  selectedCategory?: string;
+  selectedSubcategory?: string;
   quantity: string;
   unit: string;
   note: string;
@@ -118,6 +122,8 @@ function normalizeBook(book: ProcedureBook): ProcedureBook {
       products: step.products?.map((product) => ({
         productId: product.productId,
         productName: product.productName,
+        selectedCategory: product.selectedCategory,
+        selectedSubcategory: product.selectedSubcategory,
         quantity: product.quantity === null || product.quantity === undefined ? "" : String(product.quantity),
         unit: product.unit ?? "",
         note: product.note ?? ""
@@ -131,7 +137,17 @@ function cloneBook(book: ProcedureBook): ProcedureBook {
 }
 
 function getProductLabel(product: ProductOption) {
-  return `${product.category} / ${product.subcategory} / ${product.name}`;
+  return product.japaneseNote ? `${product.name} / ${product.japaneseNote}` : product.name;
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, "ja"));
+}
+
+function canUseProductForBrand(product: ProductOption, brandId: string) {
+  if (!brandId) return true;
+  if (product.brandScope === "common") return true;
+  return Array.isArray(product.brandIds) && product.brandIds.includes(brandId);
 }
 
 export default function ProcedureAdminPage() {
@@ -186,6 +202,16 @@ export default function ProcedureAdminPage() {
     ].join(" ").toLowerCase().includes(normalizedQuery));
   }, [procedures, query]);
 
+  const brandFilteredProducts = useMemo(() => {
+    return products.filter((product) => canUseProductForBrand(product, editingBook.brandId));
+  }, [editingBook.brandId, products]);
+
+  const productCategories = useMemo(() => {
+    return uniqueSorted(brandFilteredProducts.map((product) => product.category || "未分類"));
+  }, [brandFilteredProducts]);
+
+  const selectedBrandName = brands.find((brand) => brand.id === editingBook.brandId)?.name ?? "";
+
   function updateStep(index: number, nextStep: Partial<ProcedureStep>) {
     setEditingBook((current) => ({
       ...current,
@@ -203,6 +229,49 @@ export default function ProcedureAdminPage() {
         }
         : step)
     }));
+  }
+
+  function updateBookBrand(brandId: string) {
+    setEditingBook((current) => {
+      const nextProducts = products.filter((product) => canUseProductForBrand(product, brandId));
+      const nextProductIds = new Set(nextProducts.map((product) => product.id));
+
+      return {
+        ...current,
+        brandId,
+        steps: current.steps.map((step) => ({
+          ...step,
+          products: step.products.map((product) => product.productId && !nextProductIds.has(product.productId)
+            ? { ...product, productId: "", productName: "", selectedCategory: "", selectedSubcategory: "", unit: "" }
+            : product)
+        }))
+      };
+    });
+  }
+
+  function getProductForLink(product: ProcedureStepProduct) {
+    return products.find((item) => item.id === product.productId);
+  }
+
+  function getSelectedCategory(product: ProcedureStepProduct) {
+    return product.selectedCategory ?? getProductForLink(product)?.category ?? "";
+  }
+
+  function getSelectedSubcategory(product: ProcedureStepProduct) {
+    return product.selectedSubcategory ?? getProductForLink(product)?.subcategory ?? "";
+  }
+
+  function getSubcategoriesForCategory(category: string) {
+    return uniqueSorted(brandFilteredProducts
+      .filter((product) => product.category === category)
+      .map((product) => product.subcategory || "未分類"));
+  }
+
+  function getProductsForSelection(category: string, subcategory: string) {
+    return brandFilteredProducts.filter((product) => (
+      product.category === category &&
+      product.subcategory === subcategory
+    ));
   }
 
   async function saveProcedure() {
@@ -353,7 +422,7 @@ export default function ProcedureAdminPage() {
               <div className="procedure-form-row">
                 <label>
                   <span>ブランド</span>
-                  <select value={editingBook.brandId} onChange={(event) => setEditingBook({ ...editingBook, brandId: event.target.value })} disabled={!canEdit}>
+                  <select value={editingBook.brandId} onChange={(event) => updateBookBrand(event.target.value)} disabled={!canEdit}>
                     <option value="">ブランド未設定</option>
                     {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
                   </select>
@@ -417,7 +486,10 @@ export default function ProcedureAdminPage() {
 
                     <div className="procedure-linked-products">
                       <div className="procedure-step-editor-head">
-                        <strong>関連商品</strong>
+                        <div>
+                          <strong>関連商品</strong>
+                          <p>{editingBook.brandId ? <><span>{selectedBrandName}</span><span>の商品だけを表示</span></> : "ブランド未設定時は全商品を表示"}</p>
+                        </div>
                         <button
                           className="text-button"
                           type="button"
@@ -430,17 +502,50 @@ export default function ProcedureAdminPage() {
                           商品を追加
                         </button>
                       </div>
+                      {!brandFilteredProducts.length ? <p className="empty-state">選択中のブランドで使用できる商品がありません。</p> : null}
                       {step.products.map((product, productIndex) => (
                         <div className="procedure-product-link-row" key={productIndex}>
+                          <select
+                            value={getSelectedCategory(product)}
+                            onChange={(event) => updateStepProduct(stepIndex, productIndex, {
+                              selectedCategory: event.target.value,
+                              selectedSubcategory: "",
+                              productId: "",
+                              productName: "",
+                              unit: ""
+                            })}
+                            disabled={!canEdit || !brandFilteredProducts.length}
+                            aria-label="大分類"
+                          >
+                            <option value="">大分類</option>
+                            {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
+                          </select>
+                          <select
+                            value={getSelectedSubcategory(product)}
+                            onChange={(event) => updateStepProduct(stepIndex, productIndex, {
+                              selectedSubcategory: event.target.value,
+                              productId: "",
+                              productName: "",
+                              unit: ""
+                            })}
+                            disabled={!canEdit || !getSelectedCategory(product)}
+                            aria-label="小分類"
+                          >
+                            <option value="">小分類</option>
+                            {getSubcategoriesForCategory(getSelectedCategory(product)).map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
+                          </select>
                           <select value={product.productId} onChange={(event) => {
                             const selectedProduct = products.find((item) => item.id === event.target.value);
                             updateStepProduct(stepIndex, productIndex, {
                               productId: event.target.value,
+                              productName: selectedProduct?.name ?? "",
+                              selectedCategory: selectedProduct?.category ?? getSelectedCategory(product),
+                              selectedSubcategory: selectedProduct?.subcategory ?? getSelectedSubcategory(product),
                               unit: selectedProduct?.unit ?? product.unit
                             });
-                          }} disabled={!canEdit}>
+                          }} disabled={!canEdit || !getSelectedCategory(product) || !getSelectedSubcategory(product)}>
                             <option value="">商品を選択</option>
-                            {products.map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
+                            {getProductsForSelection(getSelectedCategory(product), getSelectedSubcategory(product)).map((item) => <option value={item.id} key={item.id}>{getProductLabel(item)}</option>)}
                           </select>
                           <input value={product.quantity} onChange={(event) => updateStepProduct(stepIndex, productIndex, { quantity: event.target.value })} placeholder="数量" disabled={!canEdit} />
                           <input value={product.unit} onChange={(event) => updateStepProduct(stepIndex, productIndex, { unit: event.target.value })} placeholder="単位" disabled={!canEdit} />
