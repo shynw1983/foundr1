@@ -1620,6 +1620,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 62px;
   margin-bottom: 18px;
 }
 
@@ -1630,6 +1631,14 @@ button {
   min-width: 0;
   margin-bottom: 0;
   padding: 8px 6px;
+}
+
+.store-workbench-topbar .brand-block h1,
+.procedure-reader-topbar .brand-block h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0;
 }
 
 .store-nav-tabs {
@@ -1696,17 +1705,12 @@ button {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-  margin-bottom: 14px;
+  min-height: 62px;
+  margin-bottom: 18px;
 }
 
 .procedure-reader-topbar .store-nav-tabs {
   justify-self: end;
-}
-
-.procedure-reader-topbar h1 {
-  margin: 0;
-  font-size: 26px;
-  letter-spacing: 0;
 }
 
 .procedure-reader-home {
