@@ -448,6 +448,61 @@ create table if not exists price_records (
   recorded_by uuid references employees(id)
 );
 
+create table if not exists procedure_books (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  category text not null default '未分類',
+  summary text,
+  status text not null default 'draft',
+  brand_id uuid references brands(id) on delete set null,
+  version_number integer not null default 1,
+  published_at timestamptz,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table procedure_books add column if not exists category text not null default '未分類';
+alter table procedure_books add column if not exists summary text;
+alter table procedure_books add column if not exists status text not null default 'draft';
+alter table procedure_books add column if not exists brand_id uuid references brands(id) on delete set null;
+alter table procedure_books add column if not exists version_number integer not null default 1;
+alter table procedure_books add column if not exists published_at timestamptz;
+alter table procedure_books add column if not exists created_by uuid references employees(id) on delete set null;
+
+create table if not exists procedure_book_stores (
+  procedure_book_id uuid not null references procedure_books(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  primary key (procedure_book_id, store_id)
+);
+
+create table if not exists procedure_steps (
+  id uuid primary key default gen_random_uuid(),
+  procedure_book_id uuid not null references procedure_books(id) on delete cascade,
+  sort_order integer not null default 0,
+  title text not null,
+  instruction text not null default '',
+  caution text,
+  estimated_minutes integer,
+  media_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table procedure_steps add column if not exists caution text;
+alter table procedure_steps add column if not exists estimated_minutes integer;
+alter table procedure_steps add column if not exists media_url text;
+
+create table if not exists procedure_step_products (
+  id uuid primary key default gen_random_uuid(),
+  procedure_step_id uuid not null references procedure_steps(id) on delete cascade,
+  product_id uuid not null references products(id) on delete restrict,
+  quantity numeric(12, 3),
+  unit text,
+  note text,
+  sort_order integer not null default 0
+);
+
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
 create index if not exists idx_purchase_order_supplier_fulfillments_order on purchase_order_supplier_fulfillments(purchase_order_id);
@@ -455,3 +510,8 @@ create index if not exists idx_delivery_batches_order_status on delivery_batches
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
 create index if not exists idx_ops_notifications_recipient_read on ops_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
+create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
+create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
+create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);
+create index if not exists idx_procedure_step_products_step on procedure_step_products(procedure_step_id, sort_order);
