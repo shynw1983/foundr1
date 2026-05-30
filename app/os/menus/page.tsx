@@ -242,6 +242,7 @@ export default function MenuAdminPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
+  const [savingKind, setSavingKind] = useState<"item" | "group" | "option" | "">("");
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -334,25 +335,32 @@ export default function MenuAdminPage() {
 
   async function save(kind: "item" | "group" | "option", payload: Record<string, unknown>) {
     setMessage("");
-    const response = await fetch("/api/menus", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, ...payload })
-    });
-    const result = await response.json().catch(() => ({})) as { id?: string; error?: string };
-    if (!response.ok) {
-      setMessage(result.error || "保存できませんでした。");
-      return;
-    }
+    setSavingKind(kind);
+    try {
+      const response = await fetch("/api/menus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, ...payload })
+      });
+      const result = await response.json().catch(() => ({})) as { id?: string; error?: string };
+      if (!response.ok) {
+        setMessage(result.error || "保存できませんでした。");
+        return;
+      }
 
-    setMessage("保存しました。");
-    if (kind === "item") {
-      await loadMenus(result.id || itemDraft.id);
-      return;
+      setMessage("保存しました。");
+      if (kind === "item") {
+        await loadMenus(result.id || itemDraft.id);
+        return;
+      }
+      if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
+      if (kind === "option") setOptionDraft(emptyOption);
+      await loadMenus(itemDraft.id);
+    } catch {
+      setMessage("通信エラーで保存できませんでした。");
+    } finally {
+      setSavingKind("");
     }
-    if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
-    if (kind === "option") setOptionDraft(emptyOption);
-    await loadMenus(itemDraft.id);
   }
 
   async function deleteEntry(kind: "item" | "group" | "option", id: string) {
@@ -371,25 +379,99 @@ export default function MenuAdminPage() {
   }
 
   async function uploadMenuPhoto(file: File) {
-    setPhotoStatus("アップロード中...");
+    setPhotoStatus("写真を処理中...");
     setMessage("");
+    const uploadFile = await prepareMenuPhoto(file);
+    setPhotoStatus("アップロード中...");
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", uploadFile);
     formData.append("itemName", itemDraft.name || "menu-item");
 
-    const response = await fetch("/api/menus/photo", {
-      method: "POST",
-      body: formData
-    });
-    const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
-    if (!response.ok || !result.url) {
-      setPhotoStatus("");
-      setMessage(result.error || "写真をアップロードできませんでした。");
-      return;
+    try {
+      const response = await fetch("/api/menus/photo", {
+        method: "POST",
+        body: formData
+      });
+      const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!response.ok || !result.url) {
+        setPhotoStatus(result.error || "写真をアップロードできませんでした。");
+        return;
+      }
+
+      setItemDraft((current) => ({ ...current, imageUrl: result.url ?? "" }));
+      setPhotoStatus("アップロードしました。商品を保存すると公開メニューに反映されます。");
+    } catch {
+      setPhotoStatus("通信エラーで写真をアップロードできませんでした。");
+      setMessage("写真をアップロードできませんでした。");
+    }
+  }
+
+  async function prepareMenuPhoto(file: File) {
+    if (!file.type.startsWith("image/") || file.type.includes("heic") || file.type.includes("heif")) return file;
+    if (file.size <= 1.5 * 1024 * 1024) return file;
+
+    try {
+      const compressed = await compressImageFile(file);
+      return compressed.size < file.size ? compressed : file;
+    } catch {
+      return file;
+    }
+  }
+
+  async function compressImageFile(file: File) {
+    const image = await loadImageForCompression(file);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of [0.82, 0.72, 0.62]) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+      if (blob.size <= 1.5 * 1024 * 1024 || quality === 0.62) {
+        return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "menu-item"}.jpg`, {
+          type: "image/jpeg",
+          lastModified: Date.now()
+        });
+      }
     }
 
-    setItemDraft({ ...itemDraft, imageUrl: result.url });
-    setPhotoStatus("アップロードしました。商品を保存すると公開メニューに反映されます。");
+    return file;
+  }
+
+  function loadImageForCompression(file: File) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("image load failed"));
+      };
+      image.src = url;
+    });
+  }
+
+  function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), type, quality);
+    });
+  }
+
+  function selectMenuPhoto(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setPhotoStatus("");
+      setMessage("画像ファイルを選択してください。");
+      return;
+    }
+    void uploadMenuPhoto(file);
   }
 
   function updateAllowedOption(group: MenuGroup, option: MenuOption, checked: boolean) {
@@ -545,9 +627,9 @@ export default function MenuAdminPage() {
                     <Trash2 size={15} />
                   </button>
                 ) : null}
-                <button className="primary-button" type="button" onClick={() => void save("item", itemDraft)}>
+                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", itemDraft)}>
                   <Save size={16} />
-                  商品を保存
+                  {savingKind === "item" ? "保存中..." : "商品を保存"}
                 </button>
               </div>
             </div>
@@ -608,7 +690,7 @@ export default function MenuAdminPage() {
                         onChange={(event) => {
                           const file = event.target.files?.[0];
                           event.currentTarget.value = "";
-                          if (file) void uploadMenuPhoto(file);
+                          if (file) selectMenuPhoto(file);
                         }}
                       />
                     </label>
@@ -624,9 +706,9 @@ export default function MenuAdminPage() {
                   <p className="eyebrow">Rules</p>
                   <h3>この商品で選べる内容</h3>
                 </div>
-                <button className="primary-button" type="button" onClick={() => void save("item", itemDraft)}>
+                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", itemDraft)}>
                   <Save size={16} />
-                  選択可否を保存
+                  {savingKind === "item" ? "保存中..." : "選択可否を保存"}
                 </button>
               </div>
               <div className="menu-rule-list">
@@ -710,9 +792,9 @@ export default function MenuAdminPage() {
                     <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
                     <span>手順に影響する</span>
                   </label>
-                  <button className="primary-button" type="button" onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
+                  <button className="primary-button" type="button" disabled={savingKind === "group"} onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
                     <Save size={16} />
-                    グループを保存
+                    {savingKind === "group" ? "保存中..." : "グループを保存"}
                   </button>
                 </div>
 
@@ -747,9 +829,9 @@ export default function MenuAdminPage() {
                     <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
                     <span>手順に影響する</span>
                   </label>
-                  <button className="primary-button" type="button" onClick={() => void save("option", optionDraft)}>
+                  <button className="primary-button" type="button" disabled={savingKind === "option"} onClick={() => void save("option", optionDraft)}>
                     <Save size={16} />
-                    選択肢を保存
+                    {savingKind === "option" ? "保存中..." : "選択肢を保存"}
                   </button>
                 </div>
               </div>
