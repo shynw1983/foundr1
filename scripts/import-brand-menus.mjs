@@ -14,14 +14,14 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL);
 
-function slugKey(value) {
+function slugKey(value, fallback = "option") {
   return String(value ?? "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9._-]/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "") || "option";
+    .replace(/^-|-$/g, "") || fallback;
 }
 
 async function ensureBrand(name, brandType) {
@@ -281,7 +281,7 @@ async function upsertOption({
 
 async function upsertOptions(groupId, choices, { affectsProcedure = true } = {}) {
   for (const [index, choice] of choices.entries()) {
-    const id = typeof choice === "string" ? slugKey(choice) : choice.id;
+    const id = typeof choice === "string" ? slugKey(choice, `choice-${index + 1}`) : choice.id;
     const name = typeof choice === "string" ? choice : choice.label ?? choice.name;
     const price = typeof choice === "string" ? 0 : choice.price ?? 0;
     await upsertOption({
@@ -358,6 +358,15 @@ async function importNanacha() {
     });
     await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure });
   }
+
+  await sql`
+    delete from menu_options
+    using menu_option_groups
+    where menu_options.option_group_id = menu_option_groups.id
+      and menu_option_groups.brand_id = ${brand.id}
+      and menu_option_groups.group_key in ('sweetness', 'ice')
+      and menu_options.option_key = 'option'
+  `;
 
   return { brand: brand.name, items: menu.drinks.length, groups: groups.length };
 }

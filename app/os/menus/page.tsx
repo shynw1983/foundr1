@@ -108,16 +108,6 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
 
-const emptySource: MenuSource = {
-  id: "",
-  brandId: "",
-  storeId: "",
-  name: "",
-  sourceType: "manual",
-  sourceUrl: "",
-  status: "active"
-};
-
 const emptyItem: MenuItem = {
   id: "",
   brandId: "",
@@ -159,31 +149,53 @@ const emptyOption: MenuOption = {
   isActive: true
 };
 
-const sourceTypeOptions = [
-  { value: "manual", label: "OS 手入力" },
-  { value: "imported_site", label: "ブランドサイト取込" },
-  { value: "external_api", label: "外部 API" }
-];
-
 const itemKindOptions = [
-  { value: "fixed_product", label: "固定商品" },
+  { value: "fixed_product", label: "通常商品" },
   { value: "buildable_product", label: "組み立て商品" },
   { value: "modifier", label: "追加・変更" },
-  { value: "option", label: "選択肢" }
+  { value: "option", label: "単独オプション" }
 ];
 
 const selectionTypeOptions = [
-  { value: "single", label: "単一選択" },
-  { value: "multiple", label: "複数選択" },
-  { value: "quantity", label: "数量選択" }
+  { value: "single", label: "1つ選ぶ" },
+  { value: "multiple", label: "複数選べる" },
+  { value: "quantity", label: "数量で選ぶ" }
 ];
 
-function stringifySchema(value: Record<string, unknown>) {
-  return Object.keys(value ?? {}).length ? JSON.stringify(value, null, 2) : "{}";
+const schemaRuleKeys: Record<string, string> = {
+  size: "allowedSizes",
+  temperature: "temperatures",
+  sweetness: "allowedSweetness",
+  ice: "allowedIce",
+  option: "allowedOptions",
+  topping: "allowedToppings"
+};
+
+function cloneItem(item: MenuItem): MenuItem {
+  return JSON.parse(JSON.stringify(item)) as MenuItem;
 }
 
-function getName(items: OptionItem[], id: string) {
-  return items.find((item) => item.id === id)?.name ?? "";
+function getLabel(options: Array<{ value: string; label: string }>, value: string) {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
+function getBrandName(brands: OptionItem[], id: string) {
+  return brands.find((brand) => brand.id === id)?.name ?? "";
+}
+
+function getRuleKey(groupKey: string) {
+  return schemaRuleKeys[groupKey] ?? `allowed_${groupKey}`;
+}
+
+function getOptionKey(option: MenuOption) {
+  return option.optionKey || option.externalId || option.id;
+}
+
+function getAllowedKeys(item: MenuItem, group: MenuGroup, options: MenuOption[]) {
+  const ruleKey = getRuleKey(group.groupKey);
+  const rawValue = item.variableSchema?.[ruleKey];
+  if (Array.isArray(rawValue)) return new Set(rawValue.map(String));
+  return new Set(options.map(getOptionKey));
 }
 
 function buildPublicMenuUrl(brandId: string, storeId: string) {
@@ -191,6 +203,17 @@ function buildPublicMenuUrl(brandId: string, storeId: string) {
   if (brandId) params.set("brand", brandId);
   if (storeId) params.set("store", storeId);
   return `/api/public/menus${params.size ? `?${params.toString()}` : ""}`;
+}
+
+function getCategoryCounts(items: MenuItem[]) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const category = item.category || "未分類";
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
 export default function MenuAdminPage() {
@@ -204,15 +227,15 @@ export default function MenuAdminPage() {
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeStoreId, setActiveStoreId] = useState("");
-  const [sourceDraft, setSourceDraft] = useState<MenuSource>(emptySource);
+  const [activeCategory, setActiveCategory] = useState("");
+  const [selectedItemId, setSelectedItemId] = useState("");
   const [itemDraft, setItemDraft] = useState<MenuItem>(emptyItem);
   const [groupDraft, setGroupDraft] = useState<MenuGroup>(emptyGroup);
   const [optionDraft, setOptionDraft] = useState<MenuOption>(emptyOption);
-  const [schemaText, setSchemaText] = useState("{}");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  async function loadMenus() {
+  async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
     const response = await fetch("/api/menus");
     if (!response.ok) {
@@ -222,13 +245,21 @@ export default function MenuAdminPage() {
     }
 
     const nextData = await response.json() as MenuAdminData;
+    const nextBrandId = activeBrandId || nextData.brands[0]?.id || "";
+    const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId);
+    const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
+
     setData(nextData);
-    setActiveBrandId((current) => current || nextData.brands[0]?.id || "");
+    setActiveBrandId(nextBrandId);
+    setSelectedItemId(nextItem?.id ?? "");
+    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: activeStoreId });
+    setActiveCategory((current) => current || nextItem?.category || "");
     setLoading(false);
   }
 
   useEffect(() => {
-    void loadMenus();
+    void loadMenus("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visibleStores = useMemo(() => {
@@ -236,53 +267,84 @@ export default function MenuAdminPage() {
     return data.stores.filter((store) => store.brandIds.includes(activeBrandId));
   }, [activeBrandId, data.stores]);
 
-  const filteredSources = useMemo(() => data.sources.filter((source) => {
-    if (activeBrandId && source.brandId !== activeBrandId) return false;
-    if (activeStoreId && source.storeId && source.storeId !== activeStoreId) return false;
-    return true;
-  }), [activeBrandId, activeStoreId, data.sources]);
-
   const filteredItems = useMemo(() => data.items.filter((item) => {
     if (activeBrandId && item.brandId !== activeBrandId) return false;
     if (activeStoreId && item.storeId && item.storeId !== activeStoreId) return false;
     return true;
   }), [activeBrandId, activeStoreId, data.items]);
 
-  const filteredGroups = useMemo(() => data.groups.filter((group) => {
-    if (activeBrandId && group.brandId !== activeBrandId) return false;
-    return true;
-  }), [activeBrandId, data.groups]);
+  const categoryCounts = useMemo(() => getCategoryCounts(filteredItems), [filteredItems]);
+  const currentCategory = activeCategory || categoryCounts[0]?.name || "";
+  const categoryItems = useMemo(() => filteredItems.filter((item) => {
+    if (!currentCategory) return true;
+    return (item.category || "未分類") === currentCategory;
+  }), [currentCategory, filteredItems]);
 
-  const filteredOptions = useMemo(() => data.options.filter((option) => {
-    if (!activeBrandId) return true;
-    const group = data.groups.find((entry) => entry.id === option.optionGroupId);
-    return group?.brandId === activeBrandId;
-  }), [activeBrandId, data.groups, data.options]);
+  const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
+  const publicMenuUrl = buildPublicMenuUrl(activeBrandId, activeStoreId);
 
-  async function save(kind: "source" | "item" | "group" | "option", payload: Record<string, unknown>) {
+  const visibleGroups = useMemo(() => data.groups.filter((group) => {
+    if (!activeBrandId || group.brandId !== activeBrandId) return false;
+    return !group.menuCatalogItemId || group.menuCatalogItemId === itemDraft.id;
+  }), [activeBrandId, data.groups, itemDraft.id]);
+
+  function selectBrand(brandId: string) {
+    const brandItems = data.items.filter((item) => item.brandId === brandId);
+    const nextItem = brandItems[0];
+    setActiveBrandId(brandId);
+    setActiveStoreId("");
+    setActiveCategory(nextItem?.category || "");
+    setSelectedItemId(nextItem?.id ?? "");
+    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
+    setGroupDraft({ ...emptyGroup, brandId });
+    setOptionDraft(emptyOption);
+  }
+
+  function selectItem(item: MenuItem) {
+    setSelectedItemId(item.id);
+    setActiveCategory(item.category || "未分類");
+    setItemDraft(cloneItem(item));
+    setGroupDraft({ ...emptyGroup, brandId: item.brandId, menuCatalogItemId: item.id });
+    setOptionDraft(emptyOption);
+  }
+
+  function startNewItem() {
+    const nextItem = {
+      ...emptyItem,
+      brandId: activeBrandId,
+      storeId: activeStoreId,
+      category: currentCategory === "未分類" ? "" : currentCategory
+    };
+    setSelectedItemId("");
+    setItemDraft(nextItem);
+    setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
+    setOptionDraft(emptyOption);
+  }
+
+  async function save(kind: "item" | "group" | "option", payload: Record<string, unknown>) {
     setMessage("");
     const response = await fetch("/api/menus", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, ...payload })
     });
-    const result = await response.json().catch(() => ({})) as { error?: string };
+    const result = await response.json().catch(() => ({})) as { id?: string; error?: string };
     if (!response.ok) {
       setMessage(result.error || "保存できませんでした。");
       return;
     }
+
     setMessage("保存しました。");
-    if (kind === "source") setSourceDraft({ ...emptySource, brandId: activeBrandId, storeId: activeStoreId });
     if (kind === "item") {
-      setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: activeStoreId });
-      setSchemaText("{}");
+      await loadMenus(result.id || itemDraft.id);
+      return;
     }
-    if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
+    if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
     if (kind === "option") setOptionDraft(emptyOption);
-    await loadMenus();
+    await loadMenus(itemDraft.id);
   }
 
-  async function deleteEntry(kind: "source" | "item" | "group" | "option", id: string) {
+  async function deleteEntry(kind: "item" | "group" | "option", id: string) {
     if (!confirm("削除しますか。")) return;
     const response = await fetch("/api/menus", {
       method: "DELETE",
@@ -294,25 +356,26 @@ export default function MenuAdminPage() {
       return;
     }
     setMessage("削除しました。");
-    await loadMenus();
+    await loadMenus("");
   }
 
-  function beginEditItem(item: MenuItem) {
-    setItemDraft(item);
-    setSchemaText(stringifySchema(item.variableSchema));
+  function updateAllowedOption(group: MenuGroup, option: MenuOption, checked: boolean) {
+    const groupOptions = data.options.filter((entry) => entry.optionGroupId === group.id);
+    const currentAllowed = getAllowedKeys(itemDraft, group, groupOptions);
+    const optionKey = getOptionKey(option);
+    if (checked) currentAllowed.add(optionKey);
+    else currentAllowed.delete(optionKey);
+
+    const nextSchema = {
+      ...itemDraft.variableSchema,
+      [getRuleKey(group.groupKey)]: Array.from(currentAllowed)
+    };
+    setItemDraft({ ...itemDraft, variableSchema: nextSchema });
   }
 
-  function resetDraftsForBrand(brandId: string) {
-    setActiveBrandId(brandId);
-    setActiveStoreId("");
-    setSourceDraft({ ...emptySource, brandId });
-    setItemDraft({ ...emptyItem, brandId });
-    setGroupDraft({ ...emptyGroup, brandId });
-    setOptionDraft(emptyOption);
-    setSchemaText("{}");
+  function resetGroupDraftForItem() {
+    setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
   }
-
-  const publicMenuUrl = buildPublicMenuUrl(activeBrandId, activeStoreId);
 
   return (
     <main className="shell">
@@ -332,9 +395,9 @@ export default function MenuAdminPage() {
       <section className="workspace menu-admin-page">
         <div className="workspace-heading">
           <div>
-            <p className="eyebrow">Menu Source</p>
+            <p className="eyebrow">Menu Master</p>
             <h2>メニュー管理</h2>
-            <p>ブランドサイト、POS、手順書で使うメニューを Foundr1 OS 側で一元管理します。</p>
+            <p>分類、商品、サイズ・温度・辛さなどの選択肢を人が編集しやすい単位で管理します。</p>
           </div>
           <a className="secondary-button" href={publicMenuUrl} target="_blank" rel="noreferrer">
             公開 API を確認
@@ -342,29 +405,24 @@ export default function MenuAdminPage() {
         </div>
 
         <section className="info-panel">
-          <strong>運用方針</strong>
+          <strong>編集の考え方</strong>
           <p>
-            商品マスタは原材料・包材・備品などの運営物品、メニュー管理はお客様に販売する商品と選択肢です。
-            手順書はメニューの商品・サイズ・温度・辛さなどを条件として読み取り、必要な材料は商品マスタにリンクします。
+            商品を先に選び、その商品に使える選択肢だけを調整します。取込元や内部キーは補助情報に下げ、
+            日常編集では分類、商品名、価格、公開状態、選択可否だけを触れるようにしています。
           </p>
         </section>
 
         <div className="filter-bar">
           <label>
             <span>ブランド</span>
-            <select value={activeBrandId} onChange={(event) => resetDraftsForBrand(event.target.value)}>
-              <option value="">すべて</option>
+            <select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
+              <option value="">選択</option>
               {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
             </select>
           </label>
           <label>
             <span>店舗</span>
-            <select value={activeStoreId} onChange={(event) => {
-              const storeId = event.target.value;
-              setActiveStoreId(storeId);
-              setSourceDraft((draft) => ({ ...draft, storeId }));
-              setItemDraft((draft) => ({ ...draft, storeId }));
-            }}>
+            <select value={activeStoreId} onChange={(event) => setActiveStoreId(event.target.value)}>
               <option value="">全店共通</option>
               {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
             </select>
@@ -374,312 +432,294 @@ export default function MenuAdminPage() {
 
         {message ? <div className="inline-alert">{message}</div> : null}
 
-        <div className="menu-admin-grid">
-          <section className="management-form">
+        <div className="menu-editor-layout">
+          <aside className="menu-category-panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Source</p>
-                <h3>メニューソース</h3>
+                <p className="eyebrow">Categories</p>
+                <h3>分類</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={() => setSourceDraft({ ...emptySource, brandId: activeBrandId, storeId: activeStoreId })}>
-                <Plus size={16} />
-                新規
-              </button>
+              <span className="status-pill">{filteredItems.length}件</span>
             </div>
-            <label>
-              <span>ブランド</span>
-              <select value={sourceDraft.brandId || activeBrandId} onChange={(event) => setSourceDraft({ ...sourceDraft, brandId: event.target.value })}>
-                <option value="">選択</option>
-                {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>店舗</span>
-              <select value={sourceDraft.storeId} onChange={(event) => setSourceDraft({ ...sourceDraft, storeId: event.target.value })}>
-                <option value="">全店共通</option>
-                {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>名称</span>
-              <input value={sourceDraft.name} onChange={(event) => setSourceDraft({ ...sourceDraft, name: event.target.value })} placeholder="nanacha 公式メニュー" />
-            </label>
-            <label>
-              <span>種別</span>
-              <select value={sourceDraft.sourceType} onChange={(event) => setSourceDraft({ ...sourceDraft, sourceType: event.target.value })}>
-                {sourceTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>URL</span>
-              <input value={sourceDraft.sourceUrl} onChange={(event) => setSourceDraft({ ...sourceDraft, sourceUrl: event.target.value })} placeholder="https://..." />
-            </label>
-            <button className="primary-button" type="button" onClick={() => void save("source", { ...sourceDraft, brandId: sourceDraft.brandId || activeBrandId, storeId: sourceDraft.storeId || activeStoreId })}>
-              <Save size={16} />
-              ソースを保存
+            <button
+              className={!currentCategory ? "menu-category-button is-active" : "menu-category-button"}
+              type="button"
+              onClick={() => setActiveCategory("")}
+            >
+              <span>すべて</span>
+              <strong>{filteredItems.length}</strong>
             </button>
-          </section>
+            {categoryCounts.map((category) => (
+              <button
+                className={currentCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
+                type="button"
+                onClick={() => setActiveCategory(category.name)}
+                key={category.name}
+              >
+                <span>{category.name}</span>
+                <strong>{category.count}</strong>
+              </button>
+            ))}
+          </aside>
 
-          <section className="management-form">
+          <aside className="menu-item-panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Item</p>
-                <h3>メニュー商品</h3>
+                <p className="eyebrow">Items</p>
+                <h3>商品</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={() => {
-                setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: activeStoreId });
-                setSchemaText("{}");
-              }}>
+              <button className="secondary-button" type="button" onClick={startNewItem}>
                 <Plus size={16} />
-                新規
+                商品追加
               </button>
             </div>
-            <label>
-              <span>ブランド</span>
-              <select value={itemDraft.brandId || activeBrandId} onChange={(event) => setItemDraft({ ...itemDraft, brandId: event.target.value })}>
-                <option value="">選択</option>
-                {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>店舗</span>
-              <select value={itemDraft.storeId} onChange={(event) => setItemDraft({ ...itemDraft, storeId: event.target.value })}>
-                <option value="">全店共通</option>
-                {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>ソース</span>
-              <select value={itemDraft.menuSourceId} onChange={(event) => setItemDraft({ ...itemDraft, menuSourceId: event.target.value })}>
-                <option value="">未指定</option>
-                {filteredSources.map((source) => <option value={source.id} key={source.id}>{source.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>商品名</span>
-              <input value={itemDraft.name} onChange={(event) => setItemDraft({ ...itemDraft, name: event.target.value })} placeholder="抹茶ラテ" />
-            </label>
-            <label>
-              <span>商品タイプ</span>
-              <select value={itemDraft.itemKind} onChange={(event) => setItemDraft({ ...itemDraft, itemKind: event.target.value })}>
-                {itemKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <div className="menu-admin-two-columns">
-              <label>
-                <span>カテゴリ</span>
-                <input value={itemDraft.category} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })} placeholder="ドリンク" />
-              </label>
-              <label>
-                <span>基本価格</span>
-                <input value={itemDraft.basePrice ?? ""} onChange={(event) => setItemDraft({ ...itemDraft, basePrice: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
-              </label>
+            <div className="menu-item-list">
+              {categoryItems.map((item) => (
+                <button
+                  className={selectedItemId === item.id ? "menu-item-button is-active" : "menu-item-button"}
+                  type="button"
+                  onClick={() => selectItem(item)}
+                  key={item.id}
+                >
+                  <strong>{item.name}</strong>
+                  <span>{item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}</span>
+                </button>
+              ))}
+              {!categoryItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
             </div>
-            <label>
-              <span>説明</span>
-              <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={2} />
-            </label>
-            <label>
-              <span>差分条件 JSON</span>
-              <textarea className="menu-admin-json" value={schemaText} onChange={(event) => setSchemaText(event.target.value)} rows={5} placeholder="{&quot;sizes&quot;:[&quot;M&quot;,&quot;L&quot;],&quot;temperatures&quot;:[&quot;ICE&quot;,&quot;HOT&quot;]}" />
-            </label>
-            <label className="checkbox-group">
-              <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
-              <span>公開中</span>
-            </label>
-            <button className="primary-button" type="button" onClick={() => void save("item", { ...itemDraft, brandId: itemDraft.brandId || activeBrandId, storeId: itemDraft.storeId || activeStoreId, variableSchema: schemaText })}>
-              <Save size={16} />
-              メニュー商品を保存
-            </button>
-          </section>
+          </aside>
 
-          <section className="management-form">
+          <section className="menu-detail-panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Options</p>
-                <h3>選択グループ</h3>
+                <p className="eyebrow">{getBrandName(data.brands, itemDraft.brandId) || "Menu Item"}</p>
+                <h3>{itemDraft.id ? "商品編集" : "新規商品"}</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={() => setGroupDraft({ ...emptyGroup, brandId: activeBrandId })}>
-                <Plus size={16} />
-                新規
-              </button>
+              <div className="row-actions">
+                {itemDraft.id ? (
+                  <button className="danger-button" type="button" onClick={() => void deleteEntry("item", itemDraft.id)}>
+                    <Trash2 size={15} />
+                  </button>
+                ) : null}
+                <button className="primary-button" type="button" onClick={() => void save("item", itemDraft)}>
+                  <Save size={16} />
+                  商品を保存
+                </button>
+              </div>
             </div>
-            <label>
-              <span>ブランド</span>
-              <select value={groupDraft.brandId || activeBrandId} onChange={(event) => setGroupDraft({ ...groupDraft, brandId: event.target.value })}>
-                <option value="">選択</option>
-                {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>対象商品</span>
-              <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
-                <option value="">ブランド共通</option>
-                {filteredItems.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
-            </label>
-            <div className="menu-admin-two-columns">
-              <label>
-                <span>キー</span>
-                <input value={groupDraft.groupKey} onChange={(event) => setGroupDraft({ ...groupDraft, groupKey: event.target.value })} placeholder="temperature" />
-              </label>
-              <label>
-                <span>表示名</span>
-                <input value={groupDraft.name} onChange={(event) => setGroupDraft({ ...groupDraft, name: event.target.value })} placeholder="温度" />
-              </label>
-            </div>
-            <label>
-              <span>選択方式</span>
-              <select value={groupDraft.selectionType} onChange={(event) => setGroupDraft({ ...groupDraft, selectionType: event.target.value })}>
-                {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <div className="menu-admin-two-columns">
-              <label>
-                <span>並び順</span>
-                <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-              </label>
-              <label className="checkbox-group">
-                <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
-                <span>手順に影響</span>
-              </label>
-            </div>
-            <label className="checkbox-group">
-              <input type="checkbox" checked={groupDraft.isActive} onChange={(event) => setGroupDraft({ ...groupDraft, isActive: event.target.checked })} />
-              <span>公開中</span>
-            </label>
-            <button className="primary-button" type="button" onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
-              <Save size={16} />
-              グループを保存
-            </button>
-          </section>
 
-          <section className="management-form">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Choice</p>
-                <h3>選択肢</h3>
+            <div className="menu-edit-card">
+              <div className="menu-form-grid">
+                <label>
+                  <span>商品名</span>
+                  <input value={itemDraft.name} onChange={(event) => setItemDraft({ ...itemDraft, name: event.target.value })} placeholder="商品名" />
+                </label>
+                <label>
+                  <span>分類</span>
+                  <input value={itemDraft.category} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })} placeholder="例: タピオカフラッペ" />
+                </label>
+                <label>
+                  <span>商品タイプ</span>
+                  <select value={itemDraft.itemKind} onChange={(event) => setItemDraft({ ...itemDraft, itemKind: event.target.value })}>
+                    {itemKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>基本価格</span>
+                  <input value={itemDraft.basePrice ?? ""} onChange={(event) => setItemDraft({ ...itemDraft, basePrice: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
+                </label>
+                <label>
+                  <span>店舗</span>
+                  <select value={itemDraft.storeId} onChange={(event) => setItemDraft({ ...itemDraft, storeId: event.target.value })}>
+                    <option value="">全店共通</option>
+                    {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
+                  </select>
+                </label>
+                <label className="checkbox-group menu-inline-check">
+                  <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
+                  <span>公開中</span>
+                </label>
               </div>
-              <button className="secondary-button" type="button" onClick={() => setOptionDraft(emptyOption)}>
-                <Plus size={16} />
-                新規
-              </button>
-            </div>
-            <label>
-              <span>グループ</span>
-              <select value={optionDraft.optionGroupId} onChange={(event) => setOptionDraft({ ...optionDraft, optionGroupId: event.target.value })}>
-                <option value="">選択</option>
-                {filteredGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-              </select>
-            </label>
-            <div className="menu-admin-two-columns">
-              <label>
-                <span>キー</span>
-                <input value={optionDraft.optionKey} onChange={(event) => setOptionDraft({ ...optionDraft, optionKey: event.target.value })} placeholder="ice" />
-              </label>
-              <label>
-                <span>表示名</span>
-                <input value={optionDraft.name} onChange={(event) => setOptionDraft({ ...optionDraft, name: event.target.value })} placeholder="ICE" />
+              <label className="menu-full-field">
+                <span>説明</span>
+                <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
               </label>
             </div>
-            <div className="menu-admin-two-columns">
-              <label>
-                <span>価格差額</span>
-                <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
-              </label>
-              <label>
-                <span>並び順</span>
-                <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-              </label>
-            </div>
-            <label className="checkbox-group">
-              <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
-              <span>手順に影響</span>
-            </label>
-            <label className="checkbox-group">
-              <input type="checkbox" checked={optionDraft.isActive} onChange={(event) => setOptionDraft({ ...optionDraft, isActive: event.target.checked })} />
-              <span>公開中</span>
-            </label>
-            <button className="primary-button" type="button" onClick={() => void save("option", optionDraft)}>
-              <Save size={16} />
-              選択肢を保存
-            </button>
+
+            <section className="menu-edit-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Rules</p>
+                  <h3>この商品で選べる内容</h3>
+                </div>
+                <button className="primary-button" type="button" onClick={() => void save("item", itemDraft)}>
+                  <Save size={16} />
+                  選択可否を保存
+                </button>
+              </div>
+              <div className="menu-rule-list">
+                {visibleGroups.map((group) => {
+                  const groupOptions = data.options.filter((option) => option.optionGroupId === group.id);
+                  const allowedKeys = getAllowedKeys(itemDraft, group, groupOptions);
+                  return (
+                    <article className="menu-rule-card" key={group.id}>
+                      <div className="menu-rule-card-head">
+                        <div>
+                          <strong>{group.name}</strong>
+                          <span>{getLabel(selectionTypeOptions, group.selectionType)} / {group.affectsProcedure ? "手順に影響" : "表示のみ"}</span>
+                        </div>
+                        <button className="secondary-button" type="button" onClick={() => setGroupDraft(group)}>
+                          グループ編集
+                        </button>
+                      </div>
+                      <div className="menu-choice-grid">
+                        {groupOptions.map((option) => (
+                          <label className={allowedKeys.has(getOptionKey(option)) ? "menu-choice-chip is-allowed" : "menu-choice-chip"} key={option.id}>
+                            <input
+                              type="checkbox"
+                              checked={allowedKeys.has(getOptionKey(option))}
+                              onChange={(event) => updateAllowedOption(group, option, event.target.checked)}
+                            />
+                            <span>{option.name}</span>
+                            {option.priceDelta ? <small>{option.priceDelta > 0 ? "+" : ""}{option.priceDelta}円</small> : null}
+                          </label>
+                        ))}
+                        {!groupOptions.length ? <p className="empty-state">選択肢がありません。</p> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+                {!visibleGroups.length ? <p className="empty-state">このブランドの選択グループはまだありません。</p> : null}
+              </div>
+            </section>
+
+            <section className="menu-edit-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Option Editing</p>
+                  <h3>選択肢の追加・編集</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={resetGroupDraftForItem}>
+                  <Plus size={16} />
+                  商品専用グループ
+                </button>
+              </div>
+              <div className="menu-option-editor">
+                <div className="menu-option-form">
+                  <h4>選択グループ</h4>
+                  <label>
+                    <span>対象</span>
+                    <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
+                      <option value="">ブランド共通</option>
+                      {itemDraft.id ? <option value={itemDraft.id}>{itemDraft.name || "現在の商品"}</option> : null}
+                    </select>
+                  </label>
+                  <div className="menu-form-grid">
+                    <label>
+                      <span>表示名</span>
+                      <input value={groupDraft.name} onChange={(event) => setGroupDraft({ ...groupDraft, name: event.target.value })} placeholder="例: サイズ" />
+                    </label>
+                    <label>
+                      <span>内部キー</span>
+                      <input value={groupDraft.groupKey} onChange={(event) => setGroupDraft({ ...groupDraft, groupKey: event.target.value })} placeholder="例: size" />
+                    </label>
+                    <label>
+                      <span>選択方式</span>
+                      <select value={groupDraft.selectionType} onChange={(event) => setGroupDraft({ ...groupDraft, selectionType: event.target.value })}>
+                        {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span>並び順</span>
+                      <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                    </label>
+                  </div>
+                  <label className="checkbox-group menu-inline-check">
+                    <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
+                    <span>手順に影響する</span>
+                  </label>
+                  <button className="primary-button" type="button" onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
+                    <Save size={16} />
+                    グループを保存
+                  </button>
+                </div>
+
+                <div className="menu-option-form">
+                  <h4>選択肢</h4>
+                  <label>
+                    <span>グループ</span>
+                    <select value={optionDraft.optionGroupId} onChange={(event) => setOptionDraft({ ...optionDraft, optionGroupId: event.target.value })}>
+                      <option value="">選択</option>
+                      {visibleGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
+                    </select>
+                  </label>
+                  <div className="menu-form-grid">
+                    <label>
+                      <span>表示名</span>
+                      <input value={optionDraft.name} onChange={(event) => setOptionDraft({ ...optionDraft, name: event.target.value })} placeholder="例: HOT" />
+                    </label>
+                    <label>
+                      <span>内部キー</span>
+                      <input value={optionDraft.optionKey} onChange={(event) => setOptionDraft({ ...optionDraft, optionKey: event.target.value })} placeholder="例: hot" />
+                    </label>
+                    <label>
+                      <span>価格差額</span>
+                      <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
+                    </label>
+                    <label>
+                      <span>並び順</span>
+                      <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                    </label>
+                  </div>
+                  <label className="checkbox-group menu-inline-check">
+                    <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
+                    <span>手順に影響する</span>
+                  </label>
+                  <button className="primary-button" type="button" onClick={() => void save("option", optionDraft)}>
+                    <Save size={16} />
+                    選択肢を保存
+                  </button>
+                </div>
+              </div>
+
+              <div className="menu-option-list">
+                {visibleGroups.map((group) => (
+                  <article className="menu-option-group-row" key={group.id}>
+                    <div>
+                      <strong>{group.name}</strong>
+                      <p>{group.menuCatalogItemId ? "商品専用" : "ブランド共通"} / {group.groupKey}</p>
+                    </div>
+                    <div className="menu-option-tags">
+                      {data.options.filter((option) => option.optionGroupId === group.id).map((option) => (
+                        <button className="menu-option-tag" type="button" onClick={() => setOptionDraft(option)} key={option.id}>
+                          {option.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="row-actions">
+                      <button className="secondary-button" type="button" onClick={() => setGroupDraft(group)}>
+                        編集
+                      </button>
+                      <button className="danger-button" type="button" onClick={() => void deleteEntry("group", group.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <details className="menu-source-details">
+              <summary>取込元・内部情報</summary>
+              <div>
+                <p>取込元: {selectedSource?.name || "未指定"}</p>
+                <p>外部 ID: {itemDraft.externalId || "未設定"}</p>
+                <p>Source URL: {selectedSource?.sourceUrl || "未設定"}</p>
+              </div>
+            </details>
           </section>
         </div>
-
-        <section className="menu-admin-list-grid">
-          <MenuList
-            title="メニュー商品"
-            emptyText={loading ? "読み込み中..." : "メニュー商品はまだありません。"}
-            rows={filteredItems.map((item) => ({
-              id: item.id,
-              title: item.name,
-              meta: `${getName(data.brands, item.brandId)} / ${item.category || "カテゴリ未設定"} / ${item.isActive ? "公開中" : "非公開"}`,
-              body: item.description || itemKindOptions.find((option) => option.value === item.itemKind)?.label || item.itemKind,
-              onEdit: () => beginEditItem(item),
-              onDelete: () => void deleteEntry("item", item.id)
-            }))}
-          />
-          <MenuList
-            title="選択グループ"
-            emptyText="選択グループはまだありません。"
-            rows={filteredGroups.map((group) => ({
-              id: group.id,
-              title: group.name,
-              meta: `${group.groupKey} / ${selectionTypeOptions.find((option) => option.value === group.selectionType)?.label || group.selectionType}`,
-              body: group.menuCatalogItemId ? getName(filteredItems, group.menuCatalogItemId) : "ブランド共通",
-              onEdit: () => setGroupDraft(group),
-              onDelete: () => void deleteEntry("group", group.id)
-            }))}
-          />
-          <MenuList
-            title="選択肢"
-            emptyText="選択肢はまだありません。"
-            rows={filteredOptions.map((option) => ({
-              id: option.id,
-              title: option.name,
-              meta: `${option.optionKey} / ${option.priceDelta ? `+${option.priceDelta}` : "価格差なし"}`,
-              body: data.groups.find((group) => group.id === option.optionGroupId)?.name || "グループ未設定",
-              onEdit: () => setOptionDraft(option),
-              onDelete: () => void deleteEntry("option", option.id)
-            }))}
-          />
-        </section>
       </section>
     </main>
-  );
-}
-
-function MenuList({
-  title,
-  emptyText,
-  rows
-}: {
-  title: string;
-  emptyText: string;
-  rows: Array<{ id: string; title: string; meta: string; body: string; onEdit: () => void; onDelete: () => void }>;
-}) {
-  return (
-    <section className="management-list">
-      <h3>{title}</h3>
-      {rows.map((row) => (
-        <div className="management-row" key={row.id}>
-          <div>
-            <strong>{row.title}</strong>
-            <p>{row.meta}</p>
-            <small>{row.body}</small>
-          </div>
-          <div className="row-actions">
-            <button className="secondary-button" type="button" onClick={row.onEdit}>
-              編集
-            </button>
-            <button className="danger-button" type="button" onClick={row.onDelete}>
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
-      ))}
-      {!rows.length ? <p className="empty-state">{emptyText}</p> : null}
-    </section>
   );
 }
