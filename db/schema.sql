@@ -3,12 +3,15 @@ create extension if not exists pgcrypto;
 create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
+  external_id text,
   address text,
   owner_name text,
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table stores add column if not exists external_id text;
 
 create table if not exists brands (
   id uuid primary key default gen_random_uuid(),
@@ -536,6 +539,63 @@ create table if not exists menu_options (
   unique (option_group_id, option_key)
 );
 
+create table if not exists store_operations (
+  store_id uuid primary key references stores(id) on delete cascade,
+  reservations_enabled boolean not null default true,
+  status_note text not null default '',
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists store_customer_orders (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid references brands(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  order_source text not null default 'nanacha_web',
+  pickup_code text not null,
+  status text not null default 'pending_payment',
+  payment_status text not null default 'pending',
+  square_order_id text,
+  square_payment_id text,
+  square_receipt_url text,
+  square_payment_updated_at timestamptz,
+  pickup_date date not null,
+  pickup_time text not null,
+  amount integer not null default 0,
+  currency text not null default 'JPY',
+  customer_summary jsonb not null default '{}'::jsonb,
+  drink text not null default '',
+  size text not null default '',
+  temperature text not null default '',
+  sweetness text not null default '',
+  ice text not null default '',
+  option_text text not null default '',
+  toppings text not null default '',
+  paid_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists store_customer_order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  menu_catalog_item_id uuid references menu_catalog_items(id) on delete set null,
+  item_name text not null,
+  size_key text not null default '',
+  size_label text not null default '',
+  temperature text not null default '',
+  sweetness text not null default '',
+  ice text not null default '',
+  option_key text not null default '',
+  option_label text not null default '',
+  topping_keys text[] not null default '{}',
+  topping_labels text[] not null default '{}',
+  amount integer not null default 0,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 alter table menu_sources add column if not exists store_id uuid references stores(id) on delete cascade;
 alter table menu_sources add column if not exists source_url text;
 alter table menu_sources add column if not exists status text not null default 'active';
@@ -769,6 +829,11 @@ create index if not exists idx_menu_sources_brand on menu_sources(brand_id, stat
 create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);
+create index if not exists idx_stores_external_id on stores(external_id);
+create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);
+create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
+create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
+create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);

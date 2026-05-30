@@ -2101,6 +2101,118 @@ button {
   gap: 14px;
 }
 
+.store-orders-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.store-orders-list,
+.store-order-detail {
+  min-width: 0;
+}
+
+.store-orders-toolbar,
+.store-order-detail-head,
+.store-order-total,
+.store-order-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-orders-toolbar h2,
+.store-order-detail h2,
+.store-order-lines h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.store-orders-toolbar select {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 34px 0 12px;
+  background: white;
+  font-weight: 800;
+}
+
+.store-order-cards {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.store-order-card {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+
+.store-order-card.is-active {
+  border-color: #1f6f55;
+  box-shadow: 0 0 0 2px rgba(31, 111, 85, 0.12);
+}
+
+.store-order-card strong,
+.store-order-card small,
+.store-order-lines p {
+  overflow-wrap: anywhere;
+}
+
+.store-order-code {
+  color: #1f6f55;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.store-order-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.store-order-lines {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.store-order-lines p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.store-order-total {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.store-order-total strong {
+  font-size: 24px;
+}
+
+.store-order-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
 .store-placeholder-panel {
   display: flex;
   align-items: center;
@@ -7860,6 +7972,10 @@ button {
   }
 
   .store-workbench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .store-orders-layout {
     grid-template-columns: 1fr;
   }
 

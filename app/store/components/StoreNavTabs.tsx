@@ -1,13 +1,14 @@
-import { BookOpen, Clock3, Home, ShoppingCart } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, Home, ShoppingCart } from "lucide-react";
 
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
+  { label: "注文", href: "/store/orders", icon: ClipboardList },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "POS", href: "/store/pos", icon: ShoppingCart }
 ];
 
-export function StoreNavTabs({ active }: { active: "home" | "procedures" | "timecard" | "pos" }) {
+export function StoreNavTabs({ active }: { active: "home" | "orders" | "procedures" | "timecard" | "pos" }) {
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
 
   return (
