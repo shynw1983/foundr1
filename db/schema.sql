@@ -1,11 +1,5 @@
 create extension if not exists pgcrypto;
 
-alter table if exists ops_audit_logs rename to os_audit_logs;
-alter table if exists ops_notifications rename to os_notifications;
-alter index if exists ops_audit_logs_created_at_idx rename to os_audit_logs_created_at_idx;
-alter index if exists ops_audit_logs_actor_idx rename to os_audit_logs_actor_idx;
-alter index if exists idx_ops_notifications_recipient_read rename to idx_os_notifications_recipient_read;
-
 create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,

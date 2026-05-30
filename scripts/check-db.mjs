@@ -35,15 +35,7 @@ const rows = await sql`
     and table_name = any(${tables})
   order by table_name
 `;
-const legacyRows = await sql`
-  select table_name
-  from information_schema.tables
-  where table_schema = 'public'
-    and table_name in ('ops_audit_logs', 'ops_notifications')
-  order by table_name
-`;
 
 console.log(JSON.stringify({
-  tables: rows.map((row) => row.table_name),
-  legacyTables: legacyRows.map((row) => row.table_name)
+  tables: rows.map((row) => row.table_name)
 }, null, 2));
