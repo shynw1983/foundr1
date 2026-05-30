@@ -24,7 +24,7 @@ export default function PosPage() {
           <ShoppingCart />
           <div>
             <h3>準備中</h3>
-            <p>このモジュールは入口だけ先に配置しています。</p>
+            <p>この機能は入口だけ先に配置しています。</p>
           </div>
         </div>
       </section>

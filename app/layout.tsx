@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Foundr1 OS",
-  description: "飲食店向けオペレーションバックオフィス",
+  description: "飲食店向けオペレーション管理システム",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

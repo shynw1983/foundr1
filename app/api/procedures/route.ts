@@ -421,8 +421,8 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
     ? body.variants
     : [
       { variantType: "base", name: "共通" },
-      { variantType: "dine_in", name: "堂食" },
-      { variantType: "takeout", name: "外卖" }
+      { variantType: "dine_in", name: "店内" },
+      { variantType: "takeout", name: "テイクアウト" }
     ];
   const steps = Array.isArray(body.steps) ? body.steps : [];
 

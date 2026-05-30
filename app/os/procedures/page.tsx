@@ -144,8 +144,8 @@ const emptyStep: ProcedureStep = {
 
 const defaultVariants: ProcedureVariant[] = [
   { variantType: "base", name: "共通" },
-  { variantType: "dine_in", name: "堂食" },
-  { variantType: "takeout", name: "外卖" },
+  { variantType: "dine_in", name: "店内" },
+  { variantType: "takeout", name: "テイクアウト" },
   { variantType: "delivery", name: "配送" }
 ];
 
@@ -577,7 +577,7 @@ export default function ProcedureAdminPage() {
                   </label>
                   <label>
                     <span>分類</span>
-                    <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / 外卖" disabled={!canEdit} />
+                    <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / テイクアウト" disabled={!canEdit} />
                   </label>
                   <label>
                     <span>メモ</span>
@@ -707,7 +707,7 @@ export default function ProcedureAdminPage() {
               <div className="procedure-variant-editor">
                 <div className="procedure-step-editor-head">
                   <strong>提供形式</strong>
-                  <p>共通手順に堂食・外卖などの差分を追加します。</p>
+                  <p>共通手順に店内・テイクアウトなどの差分を追加します。</p>
                 </div>
                 <div className="procedure-variant-grid">
                   {editingBook.variants.map((variant, variantIndex) => (

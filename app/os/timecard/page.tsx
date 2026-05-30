@@ -8,15 +8,15 @@ export default function TimecardPage() {
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 OS</p>
-            <h1>Timecard</h1>
+            <h1>タイムカード</h1>
           </div>
         </a>
       </header>
       <section className="os-home-hero">
         <div>
           <p className="eyebrow">Coming Soon</p>
-          <h2>Timecard</h2>
-          <p>出退勤、休憩、シフト、勤怠確認を Foundr1 OS の共有スタッフ・店舗データに接続して開発します。</p>
+          <h2>タイムカード</h2>
+          <p>出退勤、休憩、シフト、勤怠確認を Foundr1 OS のスタッフ・店舗データに接続して開発します。</p>
         </div>
       </section>
       <section className="panel">
@@ -24,7 +24,7 @@ export default function TimecardPage() {
           <Clock3 />
           <div>
             <h3>準備中</h3>
-            <p>このモジュールは入口だけ先に配置しています。</p>
+            <p>この機能は入口だけ先に配置しています。</p>
           </div>
         </div>
       </section>
