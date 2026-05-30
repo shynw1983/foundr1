@@ -1,7 +1,14 @@
-import { BookOpen, Clock3, ShoppingCart } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, ShoppingCart } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
+  {
+    title: "注文",
+    description: "Web予約注文を確認し、制作開始から受け渡し完了まで処理します。",
+    href: "/store/orders",
+    icon: ClipboardList,
+    status: "利用可能"
+  },
   {
     title: "手順書",
     description: "公開中の作業手順を確認し、店舗オペレーションを進めます。",
