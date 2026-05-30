@@ -14,6 +14,7 @@ import {
   Plus,
   Save,
   Search,
+  SlidersHorizontal,
   Store,
   Trash2,
   Truck,
@@ -537,84 +538,90 @@ export default function ProcedureAdminPage() {
         {message ? <div className="inline-alert">{message}</div> : null}
         {!canEdit && !loading ? <div className="inline-alert is-warning">手順書の編集権限がありません。</div> : null}
 
-        <section className="panel procedure-settings-panel">
-          <div className="panel-title">
-            <div>
-              <p>現場に合わせて変更可能</p>
-              <h3>手順書設定</h3>
+        <details className="procedure-settings-disclosure">
+          <summary>
+            <SlidersHorizontal size={17} />
+            手順書設定
+          </summary>
+          <section className="panel procedure-settings-panel">
+            <div className="panel-title">
+              <div>
+                <p>現場に合わせて変更可能</p>
+                <h3>手順書設定</h3>
+              </div>
             </div>
-          </div>
-          <div className="procedure-settings-grid">
-            <form className="management-form procedure-setting-form" onSubmit={(event) => {
-              event.preventDefault();
-              void saveSetting();
-            }}>
-              <label>
-                <span>設定種別</span>
-                <select value={settingKind} onChange={(event) => setSettingKind(event.target.value as SettingKind)} disabled={!canEdit}>
-                  <option value="action_types">動作</option>
-                  <option value="locations">位置</option>
-                  <option value="equipment">設備・工具</option>
-                  <option value="containers">容器</option>
-                </select>
-              </label>
-              {settingKind === "action_types" ? (
-                <>
-                  <label>
-                    <span>アクションキー</span>
-                    <input value={settingDraft.actionKey} onChange={(event) => setSettingDraft({ ...settingDraft, actionKey: event.target.value })} placeholder="例: pour" disabled={!canEdit} />
-                  </label>
-                  <label>
-                    <span>表示名</span>
-                    <input value={settingDraft.label} onChange={(event) => setSettingDraft({ ...settingDraft, label: event.target.value })} placeholder="例: 注ぐ" disabled={!canEdit} />
-                  </label>
-                  <label>
-                    <span>文生成テンプレート</span>
-                    <input value={settingDraft.sentenceTemplate} onChange={(event) => setSettingDraft({ ...settingDraft, sentenceTemplate: event.target.value })} placeholder="{container}に{product}{quantity}を入れる" disabled={!canEdit} />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label>
-                    <span>名称</span>
-                    <input value={settingDraft.name} onChange={(event) => setSettingDraft({ ...settingDraft, name: event.target.value })} placeholder="例: 冷蔵庫" disabled={!canEdit} />
-                  </label>
-                  <label>
-                    <span>分類</span>
-                    <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / テイクアウト" disabled={!canEdit} />
-                  </label>
-                  <label>
-                    <span>メモ</span>
-                    <input value={settingDraft.note} onChange={(event) => setSettingDraft({ ...settingDraft, note: event.target.value })} disabled={!canEdit} />
-                  </label>
-                </>
-              )}
-              <label>
-                <span>並び順</span>
-                <input value={settingDraft.sortOrder} onChange={(event) => setSettingDraft({ ...settingDraft, sortOrder: event.target.value })} inputMode="numeric" disabled={!canEdit} />
-              </label>
-              <label className="procedure-setting-toggle">
-                <input type="checkbox" checked={settingDraft.isActive} onChange={(event) => setSettingDraft({ ...settingDraft, isActive: event.target.checked })} disabled={!canEdit} />
-                <span>有効</span>
-              </label>
-              <button className="primary-button" type="submit" disabled={!canEdit}>
-                <Save size={18} />
-                設定を保存
-              </button>
-            </form>
-            <div className="procedure-setting-list">
-              {getSettingItems().map((item) => (
-                <article className="management-row procedure-setting-row" key={item.id}>
-                  <div>
-                    <strong>{"label" in item ? item.label : item.name}</strong>
-                    <p>{"sentenceTemplate" in item ? item.sentenceTemplate : [item.category, item.note].filter(Boolean).join(" / ") || "メモ未設定"}</p>
-                    <small>{item.isActive ? "有効" : "停止中"} / {item.sortOrder}</small>
-                  </div>
-                </article>
-              ))}
+            <div className="procedure-settings-grid">
+              <form className="management-form procedure-setting-form" onSubmit={(event) => {
+                event.preventDefault();
+                void saveSetting();
+              }}>
+                <label>
+                  <span>設定種別</span>
+                  <select value={settingKind} onChange={(event) => setSettingKind(event.target.value as SettingKind)} disabled={!canEdit}>
+                    <option value="action_types">動作</option>
+                    <option value="locations">位置</option>
+                    <option value="equipment">設備・工具</option>
+                    <option value="containers">容器</option>
+                  </select>
+                </label>
+                {settingKind === "action_types" ? (
+                  <>
+                    <label>
+                      <span>アクションキー</span>
+                      <input value={settingDraft.actionKey} onChange={(event) => setSettingDraft({ ...settingDraft, actionKey: event.target.value })} placeholder="例: pour" disabled={!canEdit} />
+                    </label>
+                    <label>
+                      <span>表示名</span>
+                      <input value={settingDraft.label} onChange={(event) => setSettingDraft({ ...settingDraft, label: event.target.value })} placeholder="例: 注ぐ" disabled={!canEdit} />
+                    </label>
+                    <label>
+                      <span>文生成テンプレート</span>
+                      <input value={settingDraft.sentenceTemplate} onChange={(event) => setSettingDraft({ ...settingDraft, sentenceTemplate: event.target.value })} placeholder="{container}に{product}{quantity}を入れる" disabled={!canEdit} />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      <span>名称</span>
+                      <input value={settingDraft.name} onChange={(event) => setSettingDraft({ ...settingDraft, name: event.target.value })} placeholder="例: 冷蔵庫" disabled={!canEdit} />
+                    </label>
+                    <label>
+                      <span>分類</span>
+                      <input value={settingDraft.category} onChange={(event) => setSettingDraft({ ...settingDraft, category: event.target.value })} placeholder="例: 保管 / 調理 / テイクアウト" disabled={!canEdit} />
+                    </label>
+                    <label>
+                      <span>メモ</span>
+                      <input value={settingDraft.note} onChange={(event) => setSettingDraft({ ...settingDraft, note: event.target.value })} disabled={!canEdit} />
+                    </label>
+                  </>
+                )}
+                <label>
+                  <span>並び順</span>
+                  <input value={settingDraft.sortOrder} onChange={(event) => setSettingDraft({ ...settingDraft, sortOrder: event.target.value })} inputMode="numeric" disabled={!canEdit} />
+                </label>
+                <label className="procedure-setting-toggle">
+                  <input type="checkbox" checked={settingDraft.isActive} onChange={(event) => setSettingDraft({ ...settingDraft, isActive: event.target.checked })} disabled={!canEdit} />
+                  <span>有効</span>
+                </label>
+                <button className="primary-button" type="submit" disabled={!canEdit}>
+                  <Save size={18} />
+                  設定を保存
+                </button>
+              </form>
+              <div className="procedure-setting-list">
+                {getSettingItems().map((item) => (
+                  <article className="management-row procedure-setting-row" key={item.id}>
+                    <div>
+                      <strong>{"label" in item ? item.label : item.name}</strong>
+                      <p>{"sentenceTemplate" in item ? item.sentenceTemplate : [item.category, item.note].filter(Boolean).join(" / ") || "メモ未設定"}</p>
+                      <small>{item.isActive ? "有効" : "停止中"} / {item.sortOrder}</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </details>
 
         <div className="procedures-admin-grid">
           <section className="panel">

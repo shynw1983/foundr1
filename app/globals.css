@@ -1281,8 +1281,38 @@ button {
   flex: 0 0 auto;
 }
 
+.procedure-settings-disclosure {
+  margin-bottom: 14px;
+}
+
+.procedure-settings-disclosure summary {
+  width: fit-content;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.procedure-settings-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.procedure-settings-disclosure summary:hover {
+  border-color: #b7cadc;
+  background: #f8fbff;
+}
+
 .procedure-settings-panel {
-  margin-bottom: 18px;
+  margin-top: 10px;
 }
 
 .procedure-settings-grid {
