@@ -227,7 +227,7 @@ export default function MenuAdminPage() {
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeStoreId, setActiveStoreId] = useState("");
-  const [activeCategory, setActiveCategory] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemDraft, setItemDraft] = useState<MenuItem>(emptyItem);
   const [groupDraft, setGroupDraft] = useState<MenuGroup>(emptyGroup);
@@ -253,7 +253,7 @@ export default function MenuAdminPage() {
     setActiveBrandId(nextBrandId);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: activeStoreId });
-    setActiveCategory((current) => current || nextItem?.category || "");
+    setActiveCategory((current) => current ?? nextItem?.category ?? null);
     setLoading(false);
   }
 
@@ -274,9 +274,9 @@ export default function MenuAdminPage() {
   }), [activeBrandId, activeStoreId, data.items]);
 
   const categoryCounts = useMemo(() => getCategoryCounts(filteredItems), [filteredItems]);
-  const currentCategory = activeCategory || categoryCounts[0]?.name || "";
+  const currentCategory = activeCategory;
   const categoryItems = useMemo(() => filteredItems.filter((item) => {
-    if (!currentCategory) return true;
+    if (currentCategory === null) return true;
     return (item.category || "未分類") === currentCategory;
   }), [currentCategory, filteredItems]);
 
@@ -293,7 +293,7 @@ export default function MenuAdminPage() {
     const nextItem = brandItems[0];
     setActiveBrandId(brandId);
     setActiveStoreId("");
-    setActiveCategory(nextItem?.category || "");
+    setActiveCategory(nextItem?.category || null);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
     setGroupDraft({ ...emptyGroup, brandId });
@@ -309,16 +309,19 @@ export default function MenuAdminPage() {
   }
 
   function startNewItem() {
+    const categoryForNewItem = currentCategory === null ? "" : currentCategory;
     const nextItem = {
       ...emptyItem,
       brandId: activeBrandId,
       storeId: activeStoreId,
-      category: currentCategory === "未分類" ? "" : currentCategory
+      category: categoryForNewItem === "未分類" ? "" : categoryForNewItem
     };
     setSelectedItemId("");
+    setActiveCategory(null);
     setItemDraft(nextItem);
     setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
     setOptionDraft(emptyOption);
+    setMessage("新しい商品を入力できます。");
   }
 
   async function save(kind: "item" | "group" | "option", payload: Record<string, unknown>) {
@@ -442,9 +445,9 @@ export default function MenuAdminPage() {
               <span className="status-pill">{filteredItems.length}件</span>
             </div>
             <button
-              className={!currentCategory ? "menu-category-button is-active" : "menu-category-button"}
+              className={currentCategory === null ? "menu-category-button is-active" : "menu-category-button"}
               type="button"
-              onClick={() => setActiveCategory("")}
+              onClick={() => setActiveCategory(null)}
             >
               <span>すべて</span>
               <strong>{filteredItems.length}</strong>
