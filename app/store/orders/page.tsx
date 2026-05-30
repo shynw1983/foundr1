@@ -66,6 +66,7 @@ export default function StoreOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
@@ -165,6 +166,91 @@ export default function StoreOrdersPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let pusher: any;
+    let channels: any[] = [];
+    let active = true;
+    const upsertOrder = ({ order }: { order: StoreOrder }) => {
+      setOrders((current) => {
+        const previousOrder = current.find((item) => item.id === order.id);
+        const exists = Boolean(previousOrder);
+        const next = exists
+          ? current.map((item) => (item.id === order.id ? order : item))
+          : [order, ...current];
+
+        if (shouldNotifyNewOrder(previousOrder, order)) {
+          setNewOrderIds([order.id]);
+          setSelectedId(order.id);
+          playNewOrderSound();
+          window.setTimeout(() => setNewOrderIds([]), 10000);
+        }
+
+        return next;
+      });
+      setLastUpdatedAt(
+        new Intl.DateTimeFormat("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        }).format(new Date())
+      );
+    };
+
+    setRealtimeStatus("connecting");
+    fetch("/api/store/realtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active) return;
+        if (!config?.key || !config?.cluster || !config?.channels?.length) {
+          setRealtimeStatus("polling");
+          return;
+        }
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("failed", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("disconnected", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => {
+            if (active) setRealtimeStatus("connected");
+          });
+          channel.bind("pusher:subscription_error", () => {
+            if (active) setRealtimeStatus("polling");
+          });
+          channel.bind("order.created", upsertOrder);
+          channel.bind("order.updated", upsertOrder);
+          return channel;
+        });
+      })
+      .catch(() => {
+        if (active) setRealtimeStatus("polling");
+      });
+
+    return () => {
+      active = false;
+      channels.forEach((channel) => {
+        channel.unbind("order.created", upsertOrder);
+        channel.unbind("order.updated", upsertOrder);
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
+    };
+  }, [soundEnabled]);
+
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matchesQuery = `${order.pickupCode} ${order.drink}`.toLowerCase().includes(query.toLowerCase());
     if (status === "all") return matchesQuery;
@@ -255,7 +341,10 @@ export default function StoreOrdersPage() {
             </button>
             <span>{soundEnabled && soundReady ? "新規注文を音で通知します" : "通知音を有効にできます"}</span>
           </div>
-          <p className="store-orders-live-note">自動更新中{lastUpdatedAt ? ` · ${lastUpdatedAt}` : ""}</p>
+          <p className="store-orders-live-note">
+            {realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}
+            {lastUpdatedAt ? ` · ${lastUpdatedAt}` : ""}
+          </p>
           {loading ? <p className="muted-text">読み込み中...</p> : null}
           {error ? <p className="form-error">{error}</p> : null}
           <div className="store-order-cards">

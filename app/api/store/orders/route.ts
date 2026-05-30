@@ -1,5 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { findCustomerOrderById } from "../../../../lib/customer-orders";
+import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,9 @@ export async function PATCH(request: Request) {
     where id = ${orderId}
     returning id::text
   `;
+  if (rows[0]?.id) {
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
+  }
 
   return Response.json({ ok: Boolean(rows[0]?.id) });
 }

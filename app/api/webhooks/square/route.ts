@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { findCustomerOrderBySquareOrderId, updateCustomerOrder } from "../../../../lib/customer-orders";
+import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   if (!order) return Response.json({ ok: true });
 
   if (payment.status === "COMPLETED") {
-    await updateCustomerOrder(order.id, {
+    const updatedOrder = await updateCustomerOrder(order.id, {
       status: order.status === "pending_payment" ? "new" : order.status,
       paymentStatus: "paid",
       squarePaymentId: payment.id || "",
@@ -48,14 +49,16 @@ export async function POST(request: Request) {
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString(),
       paidAt: payment.updated_at || payment.created_at || new Date().toISOString()
     });
+    await publishCustomerOrderEvent("order.created", updatedOrder);
   } else if (["FAILED", "CANCELED"].includes(payment.status)) {
-    await updateCustomerOrder(order.id, {
+    const updatedOrder = await updateCustomerOrder(order.id, {
       status: "payment_failed",
       paymentStatus: String(payment.status).toLowerCase(),
       squarePaymentId: payment.id || "",
       squareReceiptUrl: payment.receipt_url || "",
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString()
     });
+    await publishCustomerOrderEvent("order.updated", updatedOrder);
   }
 
   return Response.json({ ok: true });

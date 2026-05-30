@@ -46,6 +46,28 @@ export function createPickupCode(prefix = "N") {
   return `${prefix}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
 }
 
+export function toPublicCustomerOrder(order: CustomerOrderRow) {
+  return {
+    orderId: order.id,
+    pickupCode: order.pickupCode,
+    storeId: order.storeId,
+    storeName: order.storeName,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    squareReceiptUrl: order.squareReceiptUrl,
+    drink: order.drink,
+    size: order.size,
+    temperature: order.temperature,
+    sweetness: order.sweetness,
+    ice: order.ice,
+    option: order.option,
+    toppings: order.toppings,
+    amount: order.amount,
+    pickupDate: order.pickupDate,
+    pickupTime: order.pickupTime
+  };
+}
+
 export async function createCustomerOrder(input: {
   brandId: string;
   storeId: string;

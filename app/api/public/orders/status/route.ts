@@ -1,4 +1,4 @@
-import { findPublicCustomerOrder } from "../../../../../lib/customer-orders";
+import { findPublicCustomerOrder, toPublicCustomerOrder } from "../../../../../lib/customer-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -14,5 +14,5 @@ export async function GET(request: Request) {
     return Response.json({ error: "Not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   }
 
-  return Response.json({ order }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ order: toPublicCustomerOrder(order) }, { headers: { "Cache-Control": "no-store" } });
 }
