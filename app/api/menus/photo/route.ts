@@ -31,10 +31,11 @@ export async function POST(request: Request) {
 
     const safeName = itemName.replace(/[^\w.-]+/g, "-").toLowerCase() || "menu-item";
     const blob = await put(`menu-items/${safeName}-${Date.now()}.${extension}`, file, {
-      access: "public"
+      access: "private"
     });
+    const photoUrl = `/api/public/menu-image?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 
-    return Response.json({ url: blob.url, pathname: blob.pathname });
+    return Response.json({ url: photoUrl, pathname: blob.pathname });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "";

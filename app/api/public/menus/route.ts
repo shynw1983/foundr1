@@ -28,6 +28,13 @@ function normalizeSearchValue(value: string | null) {
   return String(value ?? "").trim();
 }
 
+function publicUrl(value: unknown, requestUrl: string) {
+  const url = String(value ?? "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url.startsWith("/") ? url : `/${url}`, requestUrl).toString();
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const brandQuery = normalizeSearchValue(searchParams.get("brand"));
@@ -155,6 +162,7 @@ export async function GET(request: Request) {
     store,
     items: items.map((item) => ({
       ...item,
+      imageUrl: publicUrl(item.imageUrl, request.url),
       optionGroups: [...globalGroups, ...(groupsByItem.get(item.id) ?? [])]
     })),
     generatedAt: new Date().toISOString()

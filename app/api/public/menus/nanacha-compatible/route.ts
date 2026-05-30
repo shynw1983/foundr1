@@ -52,7 +52,14 @@ function optionObjects(options: MenuOptionRow[]) {
   }));
 }
 
-export async function GET() {
+function publicUrl(value: unknown, requestUrl: string) {
+  const url = String(value ?? "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url.startsWith("/") ? url : `/${url}`, requestUrl).toString();
+}
+
+export async function GET(request: Request) {
   const brands = await sql`
     select id::text
     from brands
@@ -170,7 +177,7 @@ export async function GET() {
         category: categoryId,
         price: item.basePrice ?? 0,
         description: item.description,
-        imageUrl: item.imageUrl,
+        imageUrl: publicUrl(item.imageUrl, request.url),
         temperatures: asStringArray(schema.temperatures).length ? asStringArray(schema.temperatures) : ["ICE"],
         isRecommended: asBoolean(schema.isRecommended),
         isFeatured: asBoolean(schema.isFeatured),
