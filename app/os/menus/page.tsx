@@ -296,6 +296,7 @@ export default function MenuAdminPage() {
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [detailMode, setDetailMode] = useState<"item" | "category">("item");
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemDraft, setItemDraft] = useState<MenuItem>(emptyItem);
   const [categoryDraft, setCategoryDraft] = useState<MenuCategory>(emptyCategory);
@@ -327,6 +328,7 @@ export default function MenuAdminPage() {
     setActiveBrandId(nextBrandId);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: "" });
+    setDetailMode("item");
     setActiveCategory((current) => current ?? nextItem?.category ?? null);
     setLoading(false);
   }
@@ -395,6 +397,7 @@ export default function MenuAdminPage() {
     setActiveCategory(nextItem?.category || null);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
+    setDetailMode("item");
     setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
@@ -405,6 +408,7 @@ export default function MenuAdminPage() {
     setSelectedItemId(item.id);
     setActiveCategory(item.category || "未分類");
     setItemDraft(cloneItem(item));
+    setDetailMode("item");
     setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId: item.brandId, menuCatalogItemId: item.id });
     setOptionDraft(emptyOption);
@@ -422,6 +426,7 @@ export default function MenuAdminPage() {
     setSelectedItemId("");
     setActiveCategory(null);
     setItemDraft(nextItem);
+    setDetailMode("item");
     setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
     setOptionDraft(emptyOption);
@@ -430,10 +435,10 @@ export default function MenuAdminPage() {
   }
 
   function selectCategory(category: MenuCategorySummary) {
-    const firstItem = filteredItems.find((item) => (item.category || "未分類") === category.name);
     setActiveCategory(category.name);
-    setSelectedItemId(firstItem?.id ?? "");
-    setItemDraft(firstItem ? cloneItem(firstItem) : { ...emptyItem, brandId: activeBrandId, storeId: "", category: category.name === "未分類" ? "" : category.name });
+    setSelectedItemId("");
+    setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: "", category: category.name === "未分類" ? "" : category.name });
+    setDetailMode("category");
     setCategoryDraft({
       id: category.id,
       brandId: category.brandId || activeBrandId,
@@ -451,6 +456,7 @@ export default function MenuAdminPage() {
     setActiveCategory(null);
     setSelectedItemId("");
     setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: "" });
+    setDetailMode("category");
     setCategoryDraft({
       ...emptyCategory,
       brandId: activeBrandId,
@@ -479,7 +485,9 @@ export default function MenuAdminPage() {
         const nextName = String(payload.name ?? "").trim();
         setCategoryDraft((current) => ({ ...current, id: result.id || current.id, name: nextName }));
         setActiveCategory(nextName || null);
-        await loadMenus(itemDraft.id);
+        await loadMenus("");
+        setSelectedItemId("");
+        setDetailMode("category");
         return;
       }
       if (kind === "item") {
@@ -797,6 +805,9 @@ export default function MenuAdminPage() {
               type="button"
               onClick={() => {
                 setActiveCategory(null);
+                setSelectedItemId("");
+                setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: "" });
+                setDetailMode("item");
                 setCategoryDraft(emptyCategory);
               }}
             >
@@ -1060,7 +1071,7 @@ export default function MenuAdminPage() {
               </section>
             ) : (
               <>
-            {(categoryDraft.id || categoryDraft.name) ? (
+            {detailMode === "category" ? (
               <section className="menu-edit-card category-edit-card">
                 <div className="section-heading">
                   <div>
@@ -1118,6 +1129,8 @@ export default function MenuAdminPage() {
               </section>
             ) : null}
 
+            {detailMode === "item" ? (
+              <>
             <div className="section-heading">
               <div>
                 <p className="eyebrow">{getBrandName(data.brands, itemDraft.brandId) || "Menu Item"}</p>
@@ -1256,6 +1269,8 @@ export default function MenuAdminPage() {
                 <p>Source URL: {selectedSource?.sourceUrl || "未設定"}</p>
               </div>
             </details>
+              </>
+            ) : null}
               </>
             )}
           </section>
