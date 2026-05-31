@@ -25,6 +25,7 @@ const orderModulePaths = new Set([
   "/os/reports"
 ]);
 const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
+const timecardModulePaths = new Set(["/os/timecard", "/os/staff", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 
@@ -35,6 +36,10 @@ function getModuleNavPaths(pathname: string) {
 
   if (pathname === "/os/menus" || pathname.startsWith("/os/menus/")) {
     return sharedDataPaths;
+  }
+
+  if (pathname === "/os/timecard" || pathname.startsWith("/os/timecard/")) {
+    return timecardModulePaths;
   }
 
   if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff") {

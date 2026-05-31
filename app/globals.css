@@ -3118,6 +3118,237 @@ button {
   font-weight: 750;
 }
 
+.timecard-toolbar,
+.timecard-store-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.timecard-toolbar input,
+.timecard-toolbar select,
+.timecard-store-select select {
+  min-height: 42px;
+  min-width: 160px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.timecard-store-select {
+  justify-content: space-between;
+  margin: 18px 0;
+}
+
+.timecard-store-select label {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 260px);
+}
+
+.timecard-store-select label span,
+.timecard-settings-form .timecard-checkbox span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.store-timecard-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.store-timecard-punch,
+.store-timecard-history {
+  padding: 18px;
+}
+
+.store-timecard-punch .panel-title,
+.store-timecard-history .panel-title {
+  align-items: center;
+}
+
+.store-timecard-punch .panel-title svg,
+.store-timecard-history .panel-title svg,
+.timecard-management-grid .panel-title svg,
+.timecard-workspace > .panel .panel-title svg {
+  color: var(--green);
+}
+
+.timecard-status {
+  display: grid;
+  gap: 6px;
+  min-height: 118px;
+  margin-bottom: 18px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fbfd;
+  text-align: center;
+}
+
+.timecard-status span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.timecard-status strong {
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.timecard-status.is-working {
+  border-color: rgba(33, 116, 91, 0.35);
+  background: var(--green-soft);
+}
+
+.timecard-status.is-break {
+  border-color: rgba(169, 101, 20, 0.35);
+  background: var(--amber-soft);
+}
+
+.timecard-message {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.timecard-punch-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.timecard-punch-button {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  place-items: center;
+  border: 1px solid rgba(33, 116, 91, 0.22);
+  border-radius: 8px;
+  background: white;
+  color: var(--green);
+  font-weight: 900;
+}
+
+.timecard-punch-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.timecard-day-list {
+  display: grid;
+  gap: 10px;
+}
+
+.timecard-day-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.timecard-day-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.timecard-day-row div:last-child {
+  justify-items: end;
+}
+
+.timecard-day-row span,
+.timecard-day-row small,
+.empty-state-text {
+  color: var(--muted);
+}
+
+.timecard-day-row small {
+  grid-column: 1 / -1;
+  color: var(--amber);
+  font-weight: 800;
+}
+
+.timecard-metric {
+  min-height: 120px;
+}
+
+.timecard-management-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+}
+
+.timecard-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.timecard-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.timecard-table th,
+.timecard-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.timecard-table th {
+  color: var(--muted);
+  background: #f4f6f9;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.timecard-table td strong,
+.timecard-table td span {
+  display: block;
+}
+
+.timecard-table td span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-pill.is-warning {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.timecard-settings-form .timecard-checkbox {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.timecard-settings-form .timecard-checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
 .procedure-reader-topbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -8977,5 +9208,39 @@ button {
   .procedure-reader-controls .primary-button,
   .procedure-reader-controls .secondary-button {
     flex: 1 1 0;
+  }
+
+  .store-timecard-grid,
+  .timecard-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timecard-toolbar {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .timecard-toolbar input,
+  .timecard-toolbar select,
+  .timecard-store-select select,
+  .timecard-store-select .secondary-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .timecard-punch-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .timecard-punch-button {
+    min-height: 96px;
+  }
+
+  .timecard-day-row {
+    grid-template-columns: 1fr;
+  }
+
+  .timecard-day-row div:last-child {
+    justify-items: start;
   }
 }

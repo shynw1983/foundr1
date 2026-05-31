@@ -91,6 +91,63 @@ create table if not exists employee_scopes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists timecard_store_settings (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  workday_change_time time not null default '05:00',
+  rounding_minutes integer not null default 15,
+  clock_in_rounding text not null default 'ceil',
+  clock_out_rounding text not null default 'floor',
+  break_start_rounding text not null default 'floor',
+  break_end_rounding text not null default 'ceil',
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id)
+);
+
+create table if not exists timecard_employee_settings (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  employment_type text not null default 'hourly',
+  hourly_wage numeric(12, 2),
+  monthly_salary numeric(12, 2),
+  commute_allowance_per_workday numeric(12, 2) not null default 0,
+  payroll_enabled boolean not null default true,
+  valid_from date not null default '1970-01-01',
+  valid_to date,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists timecard_punches (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  punch_type text not null,
+  punched_at timestamptz not null default now(),
+  source text not null default 'store',
+  note text,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists timecard_shifts (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  work_date date not null,
+  scheduled_start time,
+  scheduled_end time,
+  break_minutes integer not null default 0,
+  note text,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (employee_id, store_id, work_date)
+);
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -946,6 +1003,10 @@ create index if not exists idx_delivery_batches_order_status on delivery_batches
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
 create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_timecard_punches_employee_punched on timecard_punches(employee_id, punched_at desc);
+create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);
+create index if not exists idx_timecard_shifts_store_date on timecard_shifts(store_id, work_date);
+create index if not exists idx_timecard_employee_settings_employee on timecard_employee_settings(employee_id, valid_from desc);
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
 create index if not exists idx_menu_sources_brand on menu_sources(brand_id, status);

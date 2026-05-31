@@ -46,7 +46,7 @@ const osModules: OsModule[] = [
     description: "出退勤、休憩、シフト、勤怠を管理",
     href: "/os/timecard",
     icon: Clock3,
-    status: "building",
+    status: "active",
     roles: ["owner", "manager", "store_owner", "staff"]
   },
   {

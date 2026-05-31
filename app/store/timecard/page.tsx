@@ -1,7 +1,113 @@
-import { Clock3 } from "lucide-react";
+"use client";
+
+import { BriefcaseBusiness, Clock3, Coffee, LogIn, LogOut, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
+import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
+
+type StoreOption = {
+  id: string;
+  name: string;
+};
+
+type LatestPunch = {
+  punchType: string;
+  punchedAt: string;
+} | null;
+
+type DailySummary = {
+  key: string;
+  workDate: string;
+  storeName: string;
+  clockIn: string | null;
+  clockOut: string | null;
+  breakMinutes: number;
+  workMinutes: number;
+  alerts: string[];
+};
+
+type TimecardPayload = {
+  month: string;
+  currentEmployeeId: string;
+  stores: StoreOption[];
+  selectedStoreId: string;
+  latestPunch: LatestPunch;
+  dailySummaries: DailySummary[];
+};
+
+const punchActions = [
+  { type: "clock_in", label: "出勤", icon: LogIn },
+  { type: "break_start", label: "休憩開始", icon: Coffee },
+  { type: "break_end", label: "休憩終了", icon: Coffee },
+  { type: "clock_out", label: "退勤", icon: LogOut }
+];
+
+function getPunchState(latestPunch: LatestPunch) {
+  if (!latestPunch || latestPunch.punchType === "clock_out") return "off";
+  if (latestPunch.punchType === "break_start") return "break";
+  return "working";
+}
+
+function canUsePunch(type: string, state: string) {
+  if (type === "clock_in") return state === "off";
+  if (type === "break_start") return state === "working";
+  if (type === "break_end") return state === "break";
+  if (type === "clock_out") return state === "working";
+  return false;
+}
 
 export default function StoreTimecardPage() {
+  const [data, setData] = useState<TimecardPayload | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPunching, setIsPunching] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadTimecard(nextStoreId = selectedStoreId) {
+    setIsLoading(true);
+    const params = new URLSearchParams({ month: getJstMonthLabel() });
+    if (nextStoreId) params.set("storeId", nextStoreId);
+    const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
+    if (response.ok) {
+      const body = await response.json() as TimecardPayload;
+      setData(body);
+      setSelectedStoreId(body.selectedStoreId);
+    }
+    setIsLoading(false);
+  }
+
+  useEffect(() => {
+    void loadTimecard("");
+  }, []);
+
+  const currentEmployeeDays = useMemo(() => {
+    if (!data) return [];
+    return data.dailySummaries.filter((day) => day.key.startsWith(`${data.currentEmployeeId}:`)).slice(0, 8);
+  }, [data]);
+
+  const state = getPunchState(data?.latestPunch ?? null);
+  const statusLabel = state === "working" ? "勤務中" : state === "break" ? "休憩中" : "未出勤";
+  const selectedStoreName = data?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択";
+
+  async function punch(punchType: string) {
+    if (!selectedStoreId) return;
+    setIsPunching(punchType);
+    setMessage("");
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: selectedStoreId, punchType })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setMessage(body.error ?? "打刻できませんでした。");
+    } else {
+      setMessage("打刻しました。");
+      await loadTimecard(selectedStoreId);
+    }
+    setIsPunching("");
+  }
+
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -14,12 +120,88 @@ export default function StoreTimecardPage() {
         </a>
         <StoreNavTabs active="timecard" />
       </header>
-      <section className="panel store-placeholder-panel">
-        <Clock3 />
-        <div>
-          <h2>準備中</h2>
-          <p>店舗現場の出退勤、休憩、シフト確認をここに集約します。</p>
-        </div>
+
+      <section className="store-timecard-grid">
+        <section className="panel store-timecard-punch">
+          <div className="panel-title">
+            <Clock3 />
+            <div>
+              <h2>タイムカード</h2>
+              <p>{selectedStoreName}・{isLoading ? "読み込み中" : statusLabel}</p>
+            </div>
+          </div>
+
+          <div className="timecard-store-select">
+            <label>
+              <span>打刻店舗</span>
+              <select value={selectedStoreId} onChange={(event) => {
+                setSelectedStoreId(event.target.value);
+                void loadTimecard(event.target.value);
+              }}>
+                {data?.stores.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+            <button className="secondary-button" type="button" onClick={() => loadTimecard(selectedStoreId)}>
+              <RefreshCw size={16} />
+              更新
+            </button>
+          </div>
+
+          <div className={`timecard-status is-${state}`}>
+            <span>{statusLabel}</span>
+            <strong>{data?.latestPunch ? `${formatJstTime(data.latestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
+          </div>
+
+          {message ? <div className="timecard-message">{message}</div> : null}
+
+          <div className="timecard-punch-actions">
+            {punchActions.map((action) => {
+              const Icon = action.icon;
+              const enabled = canUsePunch(action.type, state) && !isPunching;
+              return (
+                <button
+                  className="timecard-punch-button"
+                  type="button"
+                  disabled={!enabled}
+                  onClick={() => punch(action.type)}
+                  key={action.type}
+                >
+                  <Icon size={22} />
+                  <span>{isPunching === action.type ? "処理中" : action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="panel store-timecard-history">
+          <div className="panel-title">
+            <BriefcaseBusiness />
+            <div>
+              <h2>今月の実績</h2>
+              <p>自分の打刻から集計した勤務時間</p>
+            </div>
+          </div>
+          <div className="timecard-day-list">
+            {currentEmployeeDays.length ? currentEmployeeDays.map((day) => (
+              <article className="timecard-day-row" key={day.key}>
+                <div>
+                  <strong>{day.workDate}</strong>
+                  <span>{day.storeName}</span>
+                </div>
+                <div>
+                  <span>{formatJstTime(day.clockIn) ?? "--:--"} - {formatJstTime(day.clockOut) ?? "--:--"}</span>
+                  <strong>{formatDuration(day.workMinutes)}</strong>
+                </div>
+                {day.alerts.length ? <small>{day.alerts.join("、")}</small> : null}
+              </article>
+            )) : (
+              <p className="empty-state-text">今月の打刻はまだありません。</p>
+            )}
+          </div>
+        </section>
       </section>
     </main>
   );
