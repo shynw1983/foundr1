@@ -2675,6 +2675,15 @@ button {
   font-weight: 800;
 }
 
+.store-nav-menu {
+  display: none;
+}
+
+.store-nav-list a.is-active {
+  background: rgba(31, 111, 85, 0.34);
+  color: #f7fafc;
+}
+
 .store-workbench-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7821,8 +7830,8 @@ button {
   }
 
   .mobile-visible-notification {
+    display: none;
     position: relative;
-    display: block;
     flex: 0 0 46px;
   }
 
@@ -8135,6 +8144,10 @@ button {
 
   .sidebar-user {
     display: none;
+  }
+
+  .mobile-visible-notification {
+    display: block;
   }
 
   .topbar,
@@ -9232,6 +9245,59 @@ button {
 }
 
 @media (max-width: 1100px) {
+  .store-workbench-topbar {
+    align-items: center;
+  }
+
+  .store-workbench-topbar .brand-block {
+    flex: 1 1 180px;
+  }
+
+  .store-nav-cluster {
+    flex: 0 1 auto;
+  }
+
+  .store-nav-tabs {
+    display: none;
+  }
+
+  .store-nav-menu {
+    position: relative;
+    flex: 0 0 132px;
+    display: block;
+  }
+
+  .store-nav-menu summary {
+    min-height: 48px;
+    border-color: var(--line);
+    background: white;
+    color: var(--ink);
+  }
+
+  .store-nav-menu .hamburger-button {
+    background: #edf3f0;
+    color: #1f6f55;
+  }
+
+  .store-nav-list {
+    border-color: var(--line);
+    background: white;
+    box-shadow: var(--shadow);
+  }
+
+  .store-nav-list a {
+    color: var(--ink);
+  }
+
+  .store-nav-list a:hover {
+    background: #f4f7f5;
+  }
+
+  .store-nav-list a.is-active {
+    background: #1f6f55;
+    color: white;
+  }
+
   .store-menu-item-row {
     grid-template-columns: minmax(0, 1fr);
   }

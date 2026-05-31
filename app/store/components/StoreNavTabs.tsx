@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, Home, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, Home, Menu, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
@@ -80,6 +80,25 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
           );
         })}
       </nav>
+      <details className="mobile-nav-menu store-nav-menu">
+        <summary>
+          <span className="hamburger-button" aria-hidden="true">
+            <Menu size={18} />
+          </span>
+          <span>メニュー</span>
+        </summary>
+        <nav className="mobile-nav-list store-nav-list" aria-label="店舗ワークベンチメニュー">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href}>
+                <Icon size={17} />
+                <span>{tab.label}</span>
+              </a>
+            );
+          })}
+        </nav>
+      </details>
     </div>
   );
 }
