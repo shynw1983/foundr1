@@ -238,7 +238,7 @@ export default function TimecardPage() {
   const [isSavingShift, setIsSavingShift] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
 
-  async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId) {
+  async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean } = {}) {
     setIsLoading(true);
     const params = new URLSearchParams({ month: nextMonth });
     if (nextStoreId) params.set("storeId", nextStoreId);
@@ -248,7 +248,7 @@ export default function TimecardPage() {
       setData(body);
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
-      setShiftDraft(null);
+      if (!options.keepShiftDraft) setShiftDraft(null);
     }
     setIsLoading(false);
   }
@@ -365,7 +365,7 @@ export default function TimecardPage() {
       })
     });
     if (response.ok) {
-      await loadTimecard(month, selectedStoreId);
+      await loadTimecard(month, selectedStoreId, { keepShiftDraft: true });
       showShiftMessage("シフトを保存しました。");
     } else {
       const body = await response.json().catch(() => ({}));
@@ -389,7 +389,7 @@ export default function TimecardPage() {
       })
     });
     if (response.ok) {
-      await loadTimecard(month, selectedStoreId);
+      await loadTimecard(month, selectedStoreId, { keepShiftDraft: true });
       showShiftMessage("シフトを削除しました。");
     } else {
       const body = await response.json().catch(() => ({}));
@@ -483,12 +483,12 @@ export default function TimecardPage() {
                     <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。</p>
                   </div>
                 </div>
-                {shiftMessage ? <div className="timecard-message">{shiftMessage}</div> : null}
                 {shiftDraft ? (
                   <div className="shift-editor" aria-label="シフト編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftEmployee?.name ?? "従業員"}</strong>
                       <span>{shiftDraft.workDate}{selectedDraftBusinessDay ? ` / 営業 ${selectedDraftBusinessDay.closed ? "休業日" : `${selectedDraftBusinessDay.open}-${selectedDraftBusinessDay.close}`}` : ""}</span>
+                      <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
                     <label>
                       <span>開始</span>

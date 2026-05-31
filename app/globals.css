@@ -3604,6 +3604,18 @@ button {
   font-weight: 850;
 }
 
+.shift-editor-status {
+  min-height: 18px;
+  color: transparent;
+  font-size: 12px;
+  font-weight: 850;
+  transition: color 0.16s ease;
+}
+
+.shift-editor-status.is-visible {
+  color: var(--blue);
+}
+
 .shift-editor label {
   display: grid;
   gap: 6px;
