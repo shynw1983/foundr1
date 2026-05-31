@@ -8,6 +8,10 @@ export async function GET(request: Request) {
     return Response.json({
       baseMenu,
       generatedAt: new Date().toISOString()
+    }, {
+      headers: {
+        "Cache-Control": store ? "no-store" : "s-maxage=60, stale-while-revalidate=300"
+      }
     });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "menu not found" }, { status: 404 });
