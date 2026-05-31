@@ -182,6 +182,8 @@ export async function GET(request: Request) {
   const monthParam = url.searchParams.get("month") || getJstMonthLabel();
   const { month, startUtc, endUtc } = getJstMonthRange(monthParam);
   const { startDate, endDate } = getMonthDateRange(month);
+  const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
+  const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
   const scope = await getSessionStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
@@ -200,13 +202,14 @@ export async function GET(request: Request) {
       stores.name as "storeName",
       timecard_punches.punch_type as "punchType",
       timecard_punches.punched_at as "punchedAt",
+      timecard_punches.source,
       timecard_punches.note
     from timecard_punches
     join employees on employees.id = timecard_punches.employee_id
     join stores on stores.id = timecard_punches.store_id
     where timecard_punches.store_id::text = ${selectedStoreId}
-      and timecard_punches.punched_at >= ${startUtc.toISOString()}
-      and timecard_punches.punched_at < ${endUtc.toISOString()}
+      and timecard_punches.punched_at >= ${punchWindowStartUtc.toISOString()}
+      and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
     order by timecard_punches.punched_at desc
   ` : [];
 
@@ -220,11 +223,15 @@ export async function GET(request: Request) {
       storeName: String(row.storeName),
       punchType: isTimecardPunchType(punchType) ? punchType : "clock_in",
       punchedAt: new Date(String(row.punchedAt)).toISOString(),
+      source: row.source ? String(row.source) : null,
       note: row.note ? String(row.note) : null
     };
   }) satisfies TimecardPunch[];
 
-  const dailySummaries = summarizeTimecardDays(typedPunches);
+  const dailySummaries = summarizeTimecardDays(typedPunches, {
+    workDateStart: startDate,
+    workDateEndExclusive: endDate
+  });
   const payroll = summarizePayroll(employees, dailySummaries);
 
   const shifts = selectedStoreId ? await sql`

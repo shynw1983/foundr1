@@ -10,6 +10,7 @@ export type TimecardPunch = {
   storeName: string;
   punchType: TimecardPunchType;
   punchedAt: string;
+  source?: string | null;
   note?: string | null;
 };
 
@@ -44,6 +45,7 @@ export type TimecardDailySummary = {
   workMinutes: number;
   nightMinutes: number;
   isOpen: boolean;
+  isManualCorrection: boolean;
   alerts: string[];
 };
 
@@ -77,6 +79,7 @@ export type TimecardPayrollTotals = {
 
 const jstTimeZone = "Asia/Tokyo";
 const minuteMs = 60_000;
+const overnightWindowMs = 36 * 60 * minuteMs;
 
 export function isTimecardPunchType(value: string): value is TimecardPunchType {
   return (timecardPunchTypes as readonly string[]).includes(value);
@@ -145,13 +148,39 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-export function summarizeTimecardDays(punches: TimecardPunch[]) {
+export function summarizeTimecardDays(
+  punches: TimecardPunch[],
+  options: { workDateStart?: string; workDateEndExclusive?: string } = {}
+) {
   const groups = new Map<string, TimecardPunch[]>();
+  const punchesByEmployeeStore = new Map<string, TimecardPunch[]>();
 
   for (const punch of punches) {
-    const workDate = getJstDateLabel(punch.punchedAt);
-    const key = `${punch.employeeId}:${punch.storeId}:${workDate}`;
-    groups.set(key, [...(groups.get(key) ?? []), punch]);
+    const key = `${punch.employeeId}:${punch.storeId}`;
+    punchesByEmployeeStore.set(key, [...(punchesByEmployeeStore.get(key) ?? []), punch]);
+  }
+
+  for (const employeeStorePunches of punchesByEmployeeStore.values()) {
+    const sortedPunches = [...employeeStorePunches].sort((a, b) => new Date(a.punchedAt).getTime() - new Date(b.punchedAt).getTime());
+    let activeWorkDate: string | null = null;
+    let activeClockInAt: string | null = null;
+
+    for (const punch of sortedPunches) {
+      const punchDate = getJstDateLabel(punch.punchedAt);
+      const punchTime = new Date(punch.punchedAt).getTime();
+      const activeTime = activeClockInAt ? new Date(activeClockInAt).getTime() : null;
+      const isWithinActiveWorkday = activeTime !== null && punchTime - activeTime <= overnightWindowMs;
+
+      if (punch.punchType === "clock_in" || !activeWorkDate || !isWithinActiveWorkday) {
+        activeWorkDate = punchDate;
+      }
+      if (punch.punchType === "clock_in") {
+        activeClockInAt = punch.punchedAt;
+      }
+
+      const key = `${punch.employeeId}:${punch.storeId}:${activeWorkDate}`;
+      groups.set(key, [...(groups.get(key) ?? []), punch]);
+    }
   }
 
   const summaries: TimecardDailySummary[] = [];
@@ -165,6 +194,9 @@ export function summarizeTimecardDays(punches: TimecardPunch[]) {
     const storeName = sortedPunches[0]?.storeName ?? "";
     const [employeeId, storeId, workDate] = key.split(":");
     const alerts: string[] = [];
+
+    if (options.workDateStart && workDate < options.workDateStart) continue;
+    if (options.workDateEndExclusive && workDate >= options.workDateEndExclusive) continue;
 
     let breakMinutes = 0;
     let activeBreakStart: string | null = null;
@@ -183,6 +215,7 @@ export function summarizeTimecardDays(punches: TimecardPunch[]) {
     const grossWorkMinutes = firstClockIn && lastClockOut ? minutesBetween(firstClockIn, lastClockOut) : 0;
     const workMinutes = Math.max(0, grossWorkMinutes - breakMinutes);
     const nightMinutes = firstClockIn && lastClockOut ? getNightMinutes(firstClockIn, lastClockOut) : 0;
+    const isManualCorrection = sortedPunches.some((punch) => punch.source === "manager_correction");
 
     summaries.push({
       key,
@@ -197,6 +230,7 @@ export function summarizeTimecardDays(punches: TimecardPunch[]) {
       workMinutes,
       nightMinutes,
       isOpen: Boolean(firstClockIn && !lastClockOut),
+      isManualCorrection,
       alerts
     });
   }

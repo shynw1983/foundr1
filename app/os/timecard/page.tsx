@@ -49,6 +49,7 @@ type DailySummary = {
   breakMinutes: number;
   workMinutes: number;
   nightMinutes: number;
+  isManualCorrection: boolean;
   alerts: string[];
 };
 
@@ -482,7 +483,7 @@ export function TimecardPage({
         const actual = actualByCell.get(`${employee.id}:${day.key}`);
         const shift = shiftByCell.get(`${employee.id}:${day.key}`);
         const status = getActualStatus(actual, shift);
-        if (status.className && status.className !== " is-complete") count += 1;
+        if ((status.className && status.className !== " is-complete") || actual?.isManualCorrection) count += 1;
       }
     }
     return count;
@@ -1091,14 +1092,15 @@ export function TimecardPage({
                             return (
                               <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
                                 <button
-                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
+                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"
                                   disabled={!data?.canEditActualTime}
-                                  title={status.label || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
+                                  title={[actual?.isManualCorrection ? "手動修正あり" : "", status.label].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
                                   onClick={() => openActualEditor(employee.id, day.key)}
                                 >
                                   {actual ? (
                                     <>
+                                      {actual.isManualCorrection ? <em>修正</em> : null}
                                       <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
                                       <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}

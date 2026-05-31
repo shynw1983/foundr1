@@ -33,6 +33,7 @@ type DailySummary = {
   clockOut: string | null;
   breakMinutes: number;
   workMinutes: number;
+  isManualCorrection: boolean;
   alerts: string[];
 };
 
