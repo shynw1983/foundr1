@@ -1411,6 +1411,16 @@ button {
   text-align: left;
 }
 
+.menu-category-button[draggable="true"],
+.menu-item-button[draggable="true"] {
+  cursor: grab;
+}
+
+.menu-category-button[draggable="true"]:active,
+.menu-item-button[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .menu-category-button {
   display: flex;
   align-items: center;

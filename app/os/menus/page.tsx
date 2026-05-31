@@ -43,6 +43,14 @@ type MenuSource = {
   status: string;
 };
 
+type MenuCategory = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  name: string;
+  sortOrder: number;
+};
+
 type MenuItem = {
   id: string;
   brandId: string;
@@ -56,6 +64,7 @@ type MenuItem = {
   imageUrl: string;
   basePrice: number | null;
   variableSchema: Record<string, unknown>;
+  sortOrder: number;
   isActive: boolean;
 };
 
@@ -89,6 +98,7 @@ type MenuAdminData = {
   brands: OptionItem[];
   stores: StoreOption[];
   sources: MenuSource[];
+  categories: MenuCategory[];
   items: MenuItem[];
   groups: MenuGroup[];
   options: MenuOption[];
@@ -123,6 +133,7 @@ const emptyItem: MenuItem = {
   imageUrl: "",
   basePrice: null,
   variableSchema: {},
+  sortOrder: 100,
   isActive: true
 };
 
@@ -212,15 +223,28 @@ function buildPublicMenuUrl(brandId: string, storeId: string) {
   return `/api/public/menus${params.size ? `?${params.toString()}` : ""}`;
 }
 
-function getCategoryCounts(items: MenuItem[]) {
+function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string, storeId: string) {
   const counts = new Map<string, number>();
   for (const item of items) {
     const category = item.category || "未分類";
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
+  const sortOrders = new Map(
+    categories
+      .filter((category) => category.brandId === brandId && category.storeId === storeId)
+      .map((category) => [category.name, category.sortOrder])
+  );
   return Array.from(counts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    .map(([name, count]) => ({ name, count, sortOrder: sortOrders.get(name) ?? 9999 }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja"));
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return items;
+  const nextItems = [...items];
+  const [moved] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, moved);
+  return nextItems;
 }
 
 export default function MenuAdminPage() {
@@ -228,6 +252,7 @@ export default function MenuAdminPage() {
     brands: [],
     stores: [],
     sources: [],
+    categories: [],
     items: [],
     groups: [],
     options: []
@@ -243,6 +268,8 @@ export default function MenuAdminPage() {
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
   const [savingKind, setSavingKind] = useState<"item" | "group" | "option" | "">("");
+  const [draggingCategory, setDraggingCategory] = useState("");
+  const [draggingItemId, setDraggingItemId] = useState("");
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -276,13 +303,31 @@ export default function MenuAdminPage() {
     return data.stores.filter((store) => store.brandIds.includes(activeBrandId));
   }, [activeBrandId, data.stores]);
 
-  const filteredItems = useMemo(() => data.items.filter((item) => {
-    if (activeBrandId && item.brandId !== activeBrandId) return false;
-    if (activeStoreId && item.storeId && item.storeId !== activeStoreId) return false;
-    return true;
-  }), [activeBrandId, activeStoreId, data.items]);
+  const filteredItems = useMemo(() => {
+    const categoryOrders = new Map(
+      data.categories
+        .filter((category) => category.brandId === activeBrandId && category.storeId === activeStoreId)
+        .map((category) => [category.name, category.sortOrder])
+    );
+    return data.items
+      .filter((item) => {
+        if (activeBrandId && item.brandId !== activeBrandId) return false;
+        if (activeStoreId && item.storeId && item.storeId !== activeStoreId) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const categoryA = a.category || "未分類";
+        const categoryB = b.category || "未分類";
+        return (
+          (categoryOrders.get(categoryA) ?? 9999) - (categoryOrders.get(categoryB) ?? 9999) ||
+          categoryA.localeCompare(categoryB, "ja") ||
+          a.sortOrder - b.sortOrder ||
+          a.name.localeCompare(b.name, "ja")
+        );
+      });
+  }, [activeBrandId, activeStoreId, data.categories, data.items]);
 
-  const categoryCounts = useMemo(() => getCategoryCounts(filteredItems), [filteredItems]);
+  const categoryCounts = useMemo(() => getCategoryCounts(filteredItems, data.categories, activeBrandId, activeStoreId), [activeBrandId, activeStoreId, data.categories, filteredItems]);
   const currentCategory = activeCategory;
   const categoryItems = useMemo(() => filteredItems.filter((item) => {
     if (currentCategory === null) return true;
@@ -376,6 +421,66 @@ export default function MenuAdminPage() {
     }
     setMessage("削除しました。");
     await loadMenus("");
+  }
+
+  async function saveSortOrder(payload: Record<string, unknown>) {
+    setMessage("");
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "sortOrder", brandId: activeBrandId, storeId: activeStoreId, ...payload })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(result.error || "並び順を保存できませんでした。");
+      await loadMenus(selectedItemId);
+      return;
+    }
+    setMessage("並び順を保存しました。");
+  }
+
+  function reorderCategories(targetCategory: string) {
+    if (!draggingCategory || draggingCategory === targetCategory) return;
+    const categoryNames = moveItem(
+      categoryCounts.map((category) => category.name),
+      categoryCounts.findIndex((category) => category.name === draggingCategory),
+      categoryCounts.findIndex((category) => category.name === targetCategory)
+    );
+    setData((current) => {
+      const existing = new Map(current.categories.map((category) => [`${category.brandId}:${category.storeId}:${category.name}`, category]));
+      const nextCategories = categoryNames.map((name, index) => existing.get(`${activeBrandId}:${activeStoreId}:${name}`) ?? {
+        id: `local-${name}`,
+        brandId: activeBrandId,
+        storeId: activeStoreId,
+        name,
+        sortOrder: (index + 1) * 10
+      });
+      return {
+        ...current,
+        categories: [
+          ...current.categories.filter((category) => category.brandId !== activeBrandId || category.storeId !== activeStoreId),
+          ...nextCategories.map((category, index) => ({ ...category, sortOrder: (index + 1) * 10 }))
+        ]
+      };
+    });
+    void saveSortOrder({ categoryNames });
+  }
+
+  function reorderItems(targetItemId: string) {
+    if (!draggingItemId || draggingItemId === targetItemId) return;
+    const itemIds = moveItem(
+      categoryItems.map((item) => item.id),
+      categoryItems.findIndex((item) => item.id === draggingItemId),
+      categoryItems.findIndex((item) => item.id === targetItemId)
+    );
+    setData((current) => ({
+      ...current,
+      items: current.items.map((item) => {
+        const index = itemIds.indexOf(item.id);
+        return index === -1 ? item : { ...item, sortOrder: (index + 1) * 10 };
+      })
+    }));
+    void saveSortOrder({ itemIds, categoryName: currentCategory ?? "" });
   }
 
   async function uploadMenuPhoto(file: File) {
@@ -579,8 +684,14 @@ export default function MenuAdminPage() {
               <button
                 className={currentCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
                 type="button"
+                draggable
+                onDragStart={() => setDraggingCategory(category.name)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => reorderCategories(category.name)}
+                onDragEnd={() => setDraggingCategory("")}
                 onClick={() => setActiveCategory(category.name)}
                 key={category.name}
+                title="ドラッグして分類順を変更"
               >
                 <span>{category.name}</span>
                 <strong>{category.count}</strong>
@@ -604,8 +715,14 @@ export default function MenuAdminPage() {
                 <button
                   className={selectedItemId === item.id ? "menu-item-button is-active" : "menu-item-button"}
                   type="button"
+                  draggable
+                  onDragStart={() => setDraggingItemId(item.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => reorderItems(item.id)}
+                  onDragEnd={() => setDraggingItemId("")}
                   onClick={() => selectItem(item)}
                   key={item.id}
+                  title="ドラッグして商品順を変更"
                 >
                   <strong>{item.name}</strong>
                   <span>{item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}</span>

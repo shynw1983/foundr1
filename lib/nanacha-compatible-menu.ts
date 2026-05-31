@@ -133,19 +133,23 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   const [items, groups, options, stores] = await Promise.all([
     sql`
       select
-        id::text,
-        coalesce(external_id, '') as "externalId",
-        name,
-        coalesce(category, '') as category,
-        coalesce(description, '') as description,
-        coalesce(image_url, '') as "imageUrl",
-        base_price::float as "basePrice",
-        variable_schema as "variableSchema",
-        is_active as "isActive"
+        menu_catalog_items.id::text,
+        coalesce(menu_catalog_items.external_id, '') as "externalId",
+        menu_catalog_items.name,
+        coalesce(menu_catalog_items.category, '') as category,
+        coalesce(menu_catalog_items.description, '') as description,
+        coalesce(menu_catalog_items.image_url, '') as "imageUrl",
+        menu_catalog_items.base_price::float as "basePrice",
+        menu_catalog_items.variable_schema as "variableSchema",
+        menu_catalog_items.is_active as "isActive"
       from menu_catalog_items
-      where brand_id = ${brand.id}
-        and store_id is null
-      order by coalesce((variable_schema->>'categoryId'), category), name
+      left join menu_categories
+        on menu_categories.brand_id = menu_catalog_items.brand_id
+        and menu_categories.store_id is null
+        and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
+      where menu_catalog_items.brand_id = ${brand.id}
+        and menu_catalog_items.store_id is null
+      order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, name
     `,
     sql`
       select

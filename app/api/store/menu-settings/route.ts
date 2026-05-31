@@ -72,9 +72,13 @@ export async function GET(request: Request) {
       left join menu_store_settings
         on menu_store_settings.menu_catalog_item_id = menu_catalog_items.id
         and menu_store_settings.store_id = ${selectedStoreId}
+      left join menu_categories
+        on menu_categories.brand_id = menu_catalog_items.brand_id
+        and menu_categories.store_id is null
+        and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
       where menu_catalog_items.is_active = true
         and menu_catalog_items.store_id is null
-      order by brands.name, coalesce(menu_catalog_items.category, ''), menu_catalog_items.name
+      order by brands.name, coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
     `
   ]);
 

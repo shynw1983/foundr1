@@ -488,6 +488,17 @@ create table if not exists menu_sources (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists menu_categories (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  name text not null,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_id, store_id, name)
+);
+
 create table if not exists menu_catalog_items (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
@@ -501,6 +512,7 @@ create table if not exists menu_catalog_items (
   image_url text,
   base_price numeric(12, 2),
   variable_schema jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 100,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -683,6 +695,7 @@ alter table menu_catalog_items add column if not exists description text;
 alter table menu_catalog_items add column if not exists image_url text;
 alter table menu_catalog_items add column if not exists base_price numeric(12, 2);
 alter table menu_catalog_items add column if not exists variable_schema jsonb not null default '{}'::jsonb;
+alter table menu_catalog_items add column if not exists sort_order integer not null default 100;
 alter table menu_catalog_items add column if not exists is_active boolean not null default true;
 alter table menu_option_groups add column if not exists affects_procedure boolean not null default true;
 alter table menu_option_groups add column if not exists rule_json jsonb not null default '{}'::jsonb;
@@ -900,6 +913,7 @@ create index if not exists idx_os_notifications_recipient_read on os_notificatio
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
 create index if not exists idx_menu_sources_brand on menu_sources(brand_id, status);
+create index if not exists idx_menu_categories_brand_store on menu_categories(brand_id, store_id, sort_order);
 create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);

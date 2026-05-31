@@ -33,7 +33,7 @@ function parseJsonObject(value: unknown) {
 }
 
 async function readMenuAdminData() {
-  const [brands, stores, sources, items, groups, options, storeSettings] = await Promise.all([
+  const [brands, stores, sources, categories, items, groups, options, storeSettings] = await Promise.all([
     sql`
       select id::text, name
       from brands
@@ -68,6 +68,16 @@ async function readMenuAdminData() {
     `,
     sql`
       select
+        id::text,
+        brand_id::text as "brandId",
+        coalesce(store_id::text, '') as "storeId",
+        name,
+        sort_order as "sortOrder"
+      from menu_categories
+      order by sort_order, name
+    `,
+    sql`
+      select
         menu_catalog_items.id::text,
         menu_catalog_items.brand_id::text as "brandId",
         coalesce(menu_catalog_items.store_id::text, '') as "storeId",
@@ -80,10 +90,15 @@ async function readMenuAdminData() {
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
         menu_catalog_items.variable_schema as "variableSchema",
+        menu_catalog_items.sort_order as "sortOrder",
         menu_catalog_items.is_active as "isActive",
         menu_catalog_items.updated_at as "updatedAt"
       from menu_catalog_items
-      order by menu_catalog_items.updated_at desc, menu_catalog_items.name
+      left join menu_categories
+        on menu_categories.brand_id = menu_catalog_items.brand_id
+        and coalesce(menu_categories.store_id::text, '') = coalesce(menu_catalog_items.store_id::text, '')
+        and menu_categories.name = coalesce(nullif(menu_catalog_items.category, ''), '未分類')
+      order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
     `,
     sql`
       select
@@ -133,7 +148,7 @@ async function readMenuAdminData() {
     `
   ]);
 
-  return { brands, stores, sources, items, groups, options, storeSettings };
+  return { brands, stores, sources, categories, items, groups, options, storeSettings };
 }
 
 export async function GET() {
@@ -160,6 +175,7 @@ export async function POST(request: Request) {
     if (kind === "group") return Response.json(await upsertGroup(body));
     if (kind === "option") return Response.json(await upsertOption(body));
     if (kind === "storeSetting") return Response.json(await upsertStoreSetting(body, session.id));
+    if (kind === "sortOrder") return Response.json(await updateSortOrder(body));
     return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -240,6 +256,48 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
   return { ok: true, id: rows[0]?.id };
 }
 
+async function updateSortOrder(body: Record<string, unknown>) {
+  const brandId = cleanOptionalId(body.brandId);
+  const storeId = cleanOptionalId(body.storeId);
+  const categoryNames = Array.isArray(body.categoryNames) ? body.categoryNames.map((value) => String(value).trim()).filter(Boolean) : [];
+  const itemIds = Array.isArray(body.itemIds) ? body.itemIds.map((value) => String(value).trim()).filter(Boolean) : [];
+  const categoryName = String(body.categoryName ?? "").trim();
+  if (!brandId) throw new Error("ブランドを選択してください。");
+
+  if (categoryNames.length) {
+    await sql`
+      delete from menu_categories
+      where brand_id = ${brandId}
+        and (${storeId}::uuid is null or store_id = ${storeId})
+        and (${storeId}::uuid is not null or store_id is null)
+    `;
+    for (const [index, name] of categoryNames.entries()) {
+      await sql`
+        insert into menu_categories (brand_id, store_id, name, sort_order, updated_at)
+        values (${brandId}, ${storeId}, ${name}, ${(index + 1) * 10}, now())
+      `;
+    }
+    return { ok: true };
+  }
+
+  if (itemIds.length) {
+    for (const [index, id] of itemIds.entries()) {
+      await sql`
+        update menu_catalog_items
+        set sort_order = ${(index + 1) * 10}, updated_at = now()
+        where id = ${id}
+          and brand_id = ${brandId}
+          and (${storeId}::uuid is null or store_id = ${storeId})
+          and (${storeId}::uuid is not null or store_id is null)
+          and (${categoryName} = '' or coalesce(nullif(category, ''), '未分類') = ${categoryName})
+      `;
+    }
+    return { ok: true };
+  }
+
+  throw new Error("並び替え対象がありません。");
+}
+
 async function upsertSource(body: Record<string, unknown>) {
   const id = cleanOptionalId(body.id);
   const brandId = cleanOptionalId(body.brandId);
@@ -299,6 +357,7 @@ async function upsertItem(body: Record<string, unknown>) {
           image_url = ${String(body.imageUrl ?? "").trim()},
           base_price = ${parseOptionalNumber(body.basePrice)},
           variable_schema = ${variableSchema}::jsonb,
+          sort_order = ${Math.round(parseOptionalNumber(body.sortOrder) ?? 100)},
           is_active = ${body.isActive !== false},
           updated_at = now()
         where id = ${id}
@@ -317,6 +376,7 @@ async function upsertItem(body: Record<string, unknown>) {
           image_url,
           base_price,
           variable_schema,
+          sort_order,
           is_active,
           updated_at
         )
@@ -332,6 +392,7 @@ async function upsertItem(body: Record<string, unknown>) {
           ${String(body.imageUrl ?? "").trim()},
           ${parseOptionalNumber(body.basePrice)},
           ${variableSchema}::jsonb,
+          ${Math.round(parseOptionalNumber(body.sortOrder) ?? 100)},
           ${body.isActive !== false},
           now()
         )
