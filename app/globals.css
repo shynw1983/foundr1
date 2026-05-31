@@ -1601,6 +1601,50 @@ button {
   gap: 12px;
 }
 
+.menu-choice-editor {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.28fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.menu-choice-group-list {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-choice-group-button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  color: var(--ink);
+  background: white;
+  text-align: left;
+}
+
+.menu-choice-group-button strong {
+  font-size: 14px;
+}
+
+.menu-choice-group-button span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.menu-choice-group-button.is-active {
+  border-color: rgba(33, 116, 91, 0.34);
+  background: var(--green-soft);
+}
+
+.menu-choice-detail {
+  display: grid;
+  gap: 12px;
+}
+
 .menu-option-form {
   display: grid;
   gap: 10px;
@@ -1612,6 +1656,10 @@ button {
 
 .menu-option-form h4 {
   margin: 0;
+}
+
+.compact-heading {
+  margin-bottom: 0;
 }
 
 .menu-option-list {
@@ -1654,9 +1702,30 @@ button {
   font-weight: 800;
 }
 
+.menu-option-tag.is-active {
+  border-color: rgba(33, 116, 91, 0.34);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.menu-option-edit-tags {
+  min-height: 34px;
+}
+
+.compact-option-summary {
+  margin-top: 12px;
+}
+
 .menu-source-details {
   padding: 0;
   box-shadow: none;
+}
+
+.menu-advanced-details {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
 }
 
 .menu-source-details summary {
@@ -8309,6 +8378,7 @@ button {
   .menu-editor-layout,
   .menu-form-grid,
   .menu-option-editor,
+  .menu-choice-editor,
   .menu-option-group-row {
     grid-template-columns: 1fr;
   }

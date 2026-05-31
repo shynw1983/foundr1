@@ -216,14 +216,13 @@ function groupUsesFallbackAll(group: MenuGroup) {
   return group.ruleJson?.defaultBehavior === "all_when_missing_or_empty";
 }
 
-function buildPublicMenuUrl(brandId: string, storeId: string) {
+function buildPublicMenuUrl(brandId: string) {
   const params = new URLSearchParams();
   if (brandId) params.set("brand", brandId);
-  if (storeId) params.set("store", storeId);
   return `/api/public/menus${params.size ? `?${params.toString()}` : ""}`;
 }
 
-function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string, storeId: string) {
+function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string) {
   const counts = new Map<string, number>();
   for (const item of items) {
     const category = item.category || "未分類";
@@ -231,7 +230,7 @@ function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandI
   }
   const sortOrders = new Map(
     categories
-      .filter((category) => category.brandId === brandId && category.storeId === storeId)
+      .filter((category) => category.brandId === brandId && !category.storeId)
       .map((category) => [category.name, category.sortOrder])
   );
   return Array.from(counts.entries())
@@ -258,12 +257,12 @@ export default function MenuAdminPage() {
     options: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
-  const [activeStoreId, setActiveStoreId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemDraft, setItemDraft] = useState<MenuItem>(emptyItem);
   const [groupDraft, setGroupDraft] = useState<MenuGroup>(emptyGroup);
   const [optionDraft, setOptionDraft] = useState<MenuOption>(emptyOption);
+  const [activeOptionGroupId, setActiveOptionGroupId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
@@ -282,13 +281,13 @@ export default function MenuAdminPage() {
 
     const nextData = await response.json() as MenuAdminData;
     const nextBrandId = activeBrandId || nextData.brands[0]?.id || "";
-    const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId);
+    const brandItems = nextData.items.filter((item) => item.brandId === nextBrandId && !item.storeId);
     const nextItem = brandItems.find((item) => item.id === nextSelectedItemId) ?? brandItems[0];
 
     setData(nextData);
     setActiveBrandId(nextBrandId);
     setSelectedItemId(nextItem?.id ?? "");
-    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: activeStoreId });
+    setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId: nextBrandId, storeId: "" });
     setActiveCategory((current) => current ?? nextItem?.category ?? null);
     setLoading(false);
   }
@@ -298,21 +297,16 @@ export default function MenuAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visibleStores = useMemo(() => {
-    if (!activeBrandId) return data.stores;
-    return data.stores.filter((store) => store.brandIds.includes(activeBrandId));
-  }, [activeBrandId, data.stores]);
-
   const filteredItems = useMemo(() => {
     const categoryOrders = new Map(
       data.categories
-        .filter((category) => category.brandId === activeBrandId && category.storeId === activeStoreId)
+        .filter((category) => category.brandId === activeBrandId && !category.storeId)
         .map((category) => [category.name, category.sortOrder])
     );
     return data.items
       .filter((item) => {
         if (activeBrandId && item.brandId !== activeBrandId) return false;
-        if (activeStoreId && item.storeId && item.storeId !== activeStoreId) return false;
+        if (item.storeId) return false;
         return true;
       })
       .sort((a, b) => {
@@ -325,9 +319,9 @@ export default function MenuAdminPage() {
           a.name.localeCompare(b.name, "ja")
         );
       });
-  }, [activeBrandId, activeStoreId, data.categories, data.items]);
+  }, [activeBrandId, data.categories, data.items]);
 
-  const categoryCounts = useMemo(() => getCategoryCounts(filteredItems, data.categories, activeBrandId, activeStoreId), [activeBrandId, activeStoreId, data.categories, filteredItems]);
+  const categoryCounts = useMemo(() => getCategoryCounts(filteredItems, data.categories, activeBrandId), [activeBrandId, data.categories, filteredItems]);
   const currentCategory = activeCategory;
   const categoryItems = useMemo(() => filteredItems.filter((item) => {
     if (currentCategory === null) return true;
@@ -335,23 +329,29 @@ export default function MenuAdminPage() {
   }), [currentCategory, filteredItems]);
 
   const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
-  const publicMenuUrl = buildPublicMenuUrl(activeBrandId, activeStoreId);
+  const publicMenuUrl = buildPublicMenuUrl(activeBrandId);
 
   const visibleGroups = useMemo(() => data.groups.filter((group) => {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
     return !group.menuCatalogItemId || group.menuCatalogItemId === itemDraft.id;
   }), [activeBrandId, data.groups, itemDraft.id]);
+  const activeOptionGroup = activeOptionGroupId
+    ? visibleGroups.find((group) => group.id === activeOptionGroupId)
+    : groupDraft.id
+      ? visibleGroups.find((group) => group.id === groupDraft.id)
+      : undefined;
+  const activeGroupOptions = activeOptionGroup ? data.options.filter((option) => option.optionGroupId === activeOptionGroup.id) : [];
 
   function selectBrand(brandId: string) {
-    const brandItems = data.items.filter((item) => item.brandId === brandId);
+    const brandItems = data.items.filter((item) => item.brandId === brandId && !item.storeId);
     const nextItem = brandItems[0];
     setActiveBrandId(brandId);
-    setActiveStoreId("");
     setActiveCategory(nextItem?.category || null);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
+    setActiveOptionGroupId("");
   }
 
   function selectItem(item: MenuItem) {
@@ -360,6 +360,7 @@ export default function MenuAdminPage() {
     setItemDraft(cloneItem(item));
     setGroupDraft({ ...emptyGroup, brandId: item.brandId, menuCatalogItemId: item.id });
     setOptionDraft(emptyOption);
+    setActiveOptionGroupId("");
   }
 
   function startNewItem() {
@@ -367,7 +368,7 @@ export default function MenuAdminPage() {
     const nextItem = {
       ...emptyItem,
       brandId: activeBrandId,
-      storeId: activeStoreId,
+      storeId: "",
       category: categoryForNewItem === "未分類" ? "" : categoryForNewItem
     };
     setSelectedItemId("");
@@ -375,6 +376,7 @@ export default function MenuAdminPage() {
     setItemDraft(nextItem);
     setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
     setOptionDraft(emptyOption);
+    setActiveOptionGroupId("");
     setMessage("新しい商品を入力できます。");
   }
 
@@ -398,8 +400,11 @@ export default function MenuAdminPage() {
         await loadMenus(result.id || itemDraft.id);
         return;
       }
-      if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
-      if (kind === "option") setOptionDraft(emptyOption);
+      if (kind === "group") {
+        setActiveOptionGroupId(result.id || groupDraft.id);
+        setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
+      }
+      if (kind === "option") setOptionDraft({ ...emptyOption, optionGroupId: optionDraft.optionGroupId });
       await loadMenus(itemDraft.id);
     } catch {
       setMessage("通信エラーで保存できませんでした。");
@@ -428,7 +433,7 @@ export default function MenuAdminPage() {
     const response = await fetch("/api/menus", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "sortOrder", brandId: activeBrandId, storeId: activeStoreId, ...payload })
+      body: JSON.stringify({ kind: "sortOrder", brandId: activeBrandId, storeId: "", ...payload })
     });
     if (!response.ok) {
       const result = await response.json().catch(() => ({})) as { error?: string };
@@ -448,17 +453,17 @@ export default function MenuAdminPage() {
     );
     setData((current) => {
       const existing = new Map(current.categories.map((category) => [`${category.brandId}:${category.storeId}:${category.name}`, category]));
-      const nextCategories = categoryNames.map((name, index) => existing.get(`${activeBrandId}:${activeStoreId}:${name}`) ?? {
+      const nextCategories = categoryNames.map((name, index) => existing.get(`${activeBrandId}::${name}`) ?? {
         id: `local-${name}`,
         brandId: activeBrandId,
-        storeId: activeStoreId,
+        storeId: "",
         name,
         sortOrder: (index + 1) * 10
       });
       return {
         ...current,
         categories: [
-          ...current.categories.filter((category) => category.brandId !== activeBrandId || category.storeId !== activeStoreId),
+          ...current.categories.filter((category) => category.brandId !== activeBrandId || category.storeId),
           ...nextCategories.map((category, index) => ({ ...category, sortOrder: (index + 1) * 10 }))
         ]
       };
@@ -606,6 +611,25 @@ export default function MenuAdminPage() {
 
   function resetGroupDraftForItem() {
     setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
+    setActiveOptionGroupId("");
+    setOptionDraft(emptyOption);
+  }
+
+  function startCommonGroup() {
+    setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: "" });
+    setActiveOptionGroupId("");
+    setOptionDraft(emptyOption);
+  }
+
+  function editGroup(group: MenuGroup) {
+    setActiveOptionGroupId(group.id);
+    setGroupDraft(group);
+    setOptionDraft({ ...emptyOption, optionGroupId: group.id });
+  }
+
+  function editOption(option: MenuOption) {
+    setOptionDraft(option);
+    setActiveOptionGroupId(option.optionGroupId);
   }
 
   return (
@@ -638,8 +662,8 @@ export default function MenuAdminPage() {
         <section className="info-panel">
           <strong>編集の考え方</strong>
           <p>
-            商品を先に選び、その商品に使える選択肢だけを調整します。取込元や内部キーは補助情報に下げ、
-            日常編集では分類、商品名、価格、公開状態、選択可否だけを触れるようにしています。
+            OS ではブランドの標準メニューを管理します。店舗ごとの販売可否は店舗画面で切り替え、
+            ここでは分類、商品名、価格、公開状態、選択可否を中心に編集します。
           </p>
         </section>
 
@@ -649,13 +673,6 @@ export default function MenuAdminPage() {
             <select value={activeBrandId} onChange={(event) => selectBrand(event.target.value)}>
               <option value="">選択</option>
               {data.brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>店舗</span>
-            <select value={activeStoreId} onChange={(event) => setActiveStoreId(event.target.value)}>
-              <option value="">全店共通</option>
-              {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
             </select>
           </label>
           <code>{publicMenuUrl}</code>
@@ -744,7 +761,7 @@ export default function MenuAdminPage() {
                     <Trash2 size={15} />
                   </button>
                 ) : null}
-                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", itemDraft)}>
+                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", { ...itemDraft, storeId: "" })}>
                   <Save size={16} />
                   {savingKind === "item" ? "保存中..." : "商品を保存"}
                 </button>
@@ -762,21 +779,8 @@ export default function MenuAdminPage() {
                   <input value={itemDraft.category} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })} placeholder="例: タピオカフラッペ" />
                 </label>
                 <label>
-                  <span>商品タイプ</span>
-                  <select value={itemDraft.itemKind} onChange={(event) => setItemDraft({ ...itemDraft, itemKind: event.target.value })}>
-                    {itemKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label>
                   <span>基本価格</span>
                   <input value={itemDraft.basePrice ?? ""} onChange={(event) => setItemDraft({ ...itemDraft, basePrice: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
-                </label>
-                <label>
-                  <span>店舗</span>
-                  <select value={itemDraft.storeId} onChange={(event) => setItemDraft({ ...itemDraft, storeId: event.target.value })}>
-                    <option value="">全店共通</option>
-                    {visibleStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-                  </select>
                 </label>
                 <label className="checkbox-group menu-inline-check">
                   <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
@@ -815,6 +819,21 @@ export default function MenuAdminPage() {
                   {photoStatus ? <small>{photoStatus}</small> : null}
                 </div>
               </div>
+              <details className="menu-source-details menu-advanced-details">
+                <summary>高度な設定</summary>
+                <div className="menu-form-grid">
+                  <label>
+                    <span>商品タイプ</span>
+                    <select value={itemDraft.itemKind} onChange={(event) => setItemDraft({ ...itemDraft, itemKind: event.target.value })}>
+                      {itemKindOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>外部 ID</span>
+                    <input value={itemDraft.externalId} onChange={(event) => setItemDraft({ ...itemDraft, externalId: event.target.value })} />
+                  </label>
+                </div>
+              </details>
             </div>
 
             <section className="menu-edit-card">
@@ -823,7 +842,7 @@ export default function MenuAdminPage() {
                   <p className="eyebrow">Rules</p>
                   <h3>この商品で選べる内容</h3>
                 </div>
-                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", itemDraft)}>
+                <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", { ...itemDraft, storeId: "" })}>
                   <Save size={16} />
                   {savingKind === "item" ? "保存中..." : "選択可否を保存"}
                 </button>
@@ -839,7 +858,7 @@ export default function MenuAdminPage() {
                           <strong>{group.name}</strong>
                           <span>{getLabel(selectionTypeOptions, group.selectionType)} / {group.affectsProcedure ? "手順に影響" : "表示のみ"}</span>
                         </div>
-                        <button className="secondary-button" type="button" onClick={() => setGroupDraft(group)}>
+                        <button className="secondary-button" type="button" onClick={() => editGroup(group)}>
                           グループ編集
                         </button>
                       </div>
@@ -867,17 +886,50 @@ export default function MenuAdminPage() {
             <section className="menu-edit-card">
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">Option Editing</p>
-                  <h3>選択肢の追加・編集</h3>
+                  <p className="eyebrow">Choice Settings</p>
+                  <h3>選択グループと選択肢</h3>
                 </div>
-                <button className="secondary-button" type="button" onClick={resetGroupDraftForItem}>
-                  <Plus size={16} />
-                  商品専用グループ
-                </button>
+                <div className="row-actions">
+                  <button className="secondary-button" type="button" onClick={startCommonGroup}>
+                    <Plus size={16} />
+                    共通グループ
+                  </button>
+                  <button className="secondary-button" type="button" onClick={resetGroupDraftForItem}>
+                    <Plus size={16} />
+                    商品専用グループ
+                  </button>
+                </div>
               </div>
-              <div className="menu-option-editor">
-                <div className="menu-option-form">
-                  <h4>選択グループ</h4>
+
+              <div className="menu-choice-editor">
+                <aside className="menu-choice-group-list">
+                  {visibleGroups.map((group) => (
+                    <button
+                      className={activeOptionGroup?.id === group.id ? "menu-choice-group-button is-active" : "menu-choice-group-button"}
+                      type="button"
+                      onClick={() => editGroup(group)}
+                      key={group.id}
+                    >
+                      <strong>{group.name}</strong>
+                      <span>{group.menuCatalogItemId ? "商品専用" : "ブランド共通"} / {group.groupKey}</span>
+                    </button>
+                  ))}
+                  {!visibleGroups.length ? <p className="empty-state">選択グループがありません。共通グループまたは商品専用グループを追加してください。</p> : null}
+                </aside>
+
+                <div className="menu-choice-detail">
+                  <div className="menu-option-form">
+                    <div className="section-heading compact-heading">
+                      <div>
+                        <p className="eyebrow">Group</p>
+                        <h4>{groupDraft.id ? groupDraft.name || "選択グループ" : "新しい選択グループ"}</h4>
+                      </div>
+                      {groupDraft.id ? (
+                        <button className="danger-button" type="button" onClick={() => void deleteEntry("group", groupDraft.id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
                   <label>
                     <span>対象</span>
                     <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
@@ -916,14 +968,35 @@ export default function MenuAdminPage() {
                 </div>
 
                 <div className="menu-option-form">
-                  <h4>選択肢</h4>
-                  <label>
-                    <span>グループ</span>
-                    <select value={optionDraft.optionGroupId} onChange={(event) => setOptionDraft({ ...optionDraft, optionGroupId: event.target.value })}>
-                      <option value="">選択</option>
-                      {visibleGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-                    </select>
-                  </label>
+                  <div className="section-heading compact-heading">
+                    <div>
+                      <p className="eyebrow">Options</p>
+                      <h4>{activeOptionGroup ? `${activeOptionGroup.name} の選択肢` : "選択肢"}</h4>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={!activeOptionGroup}
+                      onClick={() => setOptionDraft({ ...emptyOption, optionGroupId: activeOptionGroup?.id ?? "" })}
+                    >
+                      <Plus size={16} />
+                      選択肢追加
+                    </button>
+                  </div>
+                  <div className="menu-option-tags menu-option-edit-tags">
+                    {activeGroupOptions.map((option) => (
+                      <button
+                        className={optionDraft.id === option.id ? "menu-option-tag is-active" : "menu-option-tag"}
+                        type="button"
+                        onClick={() => editOption(option)}
+                        key={option.id}
+                      >
+                        {option.name}
+                      </button>
+                    ))}
+                    {activeOptionGroup && !activeGroupOptions.length ? <p className="empty-state">このグループには選択肢がありません。</p> : null}
+                    {!activeOptionGroup ? <p className="empty-state">左側でグループを選ぶか、新しいグループを追加してください。</p> : null}
+                  </div>
                   <div className="menu-form-grid">
                     <label>
                       <span>表示名</span>
@@ -946,14 +1019,27 @@ export default function MenuAdminPage() {
                     <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
                     <span>手順に影響する</span>
                   </label>
-                  <button className="primary-button" type="button" disabled={savingKind === "option"} onClick={() => void save("option", optionDraft)}>
-                    <Save size={16} />
-                    {savingKind === "option" ? "保存中..." : "選択肢を保存"}
-                  </button>
+                  <div className="row-actions">
+                    {optionDraft.id ? (
+                      <button className="danger-button" type="button" onClick={() => void deleteEntry("option", optionDraft.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : null}
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={savingKind === "option" || !activeOptionGroup}
+                      onClick={() => void save("option", { ...optionDraft, optionGroupId: optionDraft.optionGroupId || activeOptionGroup?.id || "" })}
+                    >
+                      <Save size={16} />
+                      {savingKind === "option" ? "保存中..." : "選択肢を保存"}
+                    </button>
+                  </div>
+                </div>
                 </div>
               </div>
 
-              <div className="menu-option-list">
+              <div className="menu-option-list compact-option-summary">
                 {visibleGroups.map((group) => (
                   <article className="menu-option-group-row" key={group.id}>
                     <div>
@@ -962,18 +1048,10 @@ export default function MenuAdminPage() {
                     </div>
                     <div className="menu-option-tags">
                       {data.options.filter((option) => option.optionGroupId === group.id).map((option) => (
-                        <button className="menu-option-tag" type="button" onClick={() => setOptionDraft(option)} key={option.id}>
+                        <button className="menu-option-tag" type="button" onClick={() => editOption(option)} key={option.id}>
                           {option.name}
                         </button>
                       ))}
-                    </div>
-                    <div className="row-actions">
-                      <button className="secondary-button" type="button" onClick={() => setGroupDraft(group)}>
-                        編集
-                      </button>
-                      <button className="danger-button" type="button" onClick={() => void deleteEntry("group", group.id)}>
-                        <Trash2 size={15} />
-                      </button>
                     </div>
                   </article>
                 ))}
