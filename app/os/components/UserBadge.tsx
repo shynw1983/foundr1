@@ -1,7 +1,7 @@
 "use client";
 
 import { LogOut, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
@@ -26,6 +26,7 @@ export function UserBadge({
   showLanguagePicker?: boolean;
 }) {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
+  const accountMenuRef = useRef<HTMLDetailsElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,6 +43,30 @@ export function UserBadge({
     };
   }, []);
 
+  useEffect(() => {
+    const accountMenu = accountMenuRef.current;
+    if (!accountMenu) return;
+
+    function closeMenu() {
+      if (accountMenu) accountMenu.open = false;
+    }
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!accountMenu?.contains(event.target as Node)) closeMenu();
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") closeMenu();
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [employee]);
+
   if (!employee) {
     return (
       <div className="user-panel">
@@ -57,7 +82,7 @@ export function UserBadge({
 
   return (
     <div className="user-panel">
-      <details className="account-menu">
+      <details className="account-menu" ref={accountMenuRef}>
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
           <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
           <span className="user-badge-name">{employee.name}</span>
