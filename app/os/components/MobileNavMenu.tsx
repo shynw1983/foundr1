@@ -23,7 +23,9 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
           <div className="mobile-nav-user">
             <UserBadge />
           </div>
-          {permittedNavItems.map(({ label, href, icon: Icon }) => {
+          {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
+            const isHome = href === "/os";
+            const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
             const content = (
               <>
                 <Icon size={17} />
@@ -32,7 +34,7 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
             );
 
             return (
-              <Link href={href} key={label}>
+              <Link href={href} className={`${isHome ? "is-home" : ""}${followsHome ? " follows-home" : ""}`.trim()} key={label}>
                 {content}
               </Link>
             );

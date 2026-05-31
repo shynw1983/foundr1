@@ -91,7 +91,9 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
 
   return (
     <nav className="nav-list">
-      {permittedNavItems.map(({ label, href, icon: Icon }) => {
+      {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
+        const isHome = href === "/os";
+        const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
         const content = (
           <>
             <Icon size={18} />
@@ -100,7 +102,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
         );
 
         return (
-          <Link href={href} className="nav-item" key={label}>
+          <Link href={href} className={`nav-item${isHome ? " is-home" : ""}${followsHome ? " follows-home" : ""}`} key={label}>
             {content}
           </Link>
         );
