@@ -2224,6 +2224,44 @@ button {
   letter-spacing: 0;
 }
 
+.store-nav-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.store-live-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 48px;
+  min-width: 178px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.store-live-clock svg {
+  color: var(--green);
+}
+
+.store-live-clock span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.store-live-clock strong {
+  min-width: 74px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
 .store-nav-tabs {
   display: flex;
   align-items: center;
@@ -8573,6 +8611,17 @@ button {
   .store-workbench-topbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .store-nav-cluster {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .store-live-clock {
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
   }
 
   .store-workbench-grid {
