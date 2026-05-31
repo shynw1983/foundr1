@@ -3,7 +3,6 @@
 import {
   ClipboardCheck,
   Clock3,
-  LogOut,
   MenuSquare,
   PackageCheck,
   ShoppingCart,
@@ -153,10 +152,6 @@ export default function Foundr1OsHome() {
         </a>
         <div className="os-home-user">
           <UserBadge />
-          <a className="secondary-button" href="/os/logout">
-            <LogOut size={17} />
-            ログアウト
-          </a>
         </div>
       </header>
 

@@ -43,12 +43,13 @@ function getModuleNavPaths(pathname: string) {
 }
 
 function canShowInCurrentModule(pathname: string, item: OsNavItem) {
-  if (item.href === "/os" || item.href === "/os/logout") return true;
+  if (item.href === "/os/logout") return false;
+  if (item.href === "/os") return true;
   return getModuleNavPaths(pathname).has(item.href);
 }
 
 function canShowNavItem(role: string, item: OsNavItem) {
-  if (item.href === "/os/logout") return true;
+  if (item.href === "/os/logout") return false;
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
@@ -80,7 +81,7 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
 
   return useMemo(() => {
     const currentModuleItems = navItems.filter((item) => canShowInCurrentModule(pathname, item));
-    if (!role) return currentModuleItems.filter((item) => item.href === "/os/logout");
+    if (!role) return [];
     return currentModuleItems.filter((item) => canShowNavItem(role, item));
   }, [navItems, pathname, role]);
 }
@@ -98,11 +99,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
           </>
         );
 
-        return href === "/os/logout" ? (
-          <a href={href} className="nav-item" key={label}>
-            {content}
-          </a>
-        ) : (
+        return (
           <Link href={href} className="nav-item" key={label}>
             {content}
           </Link>

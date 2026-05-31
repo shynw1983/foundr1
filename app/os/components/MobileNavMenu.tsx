@@ -31,11 +31,7 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
               </>
             );
 
-            return href === "/os/logout" ? (
-              <a href={href} key={label}>
-                {content}
-              </a>
-            ) : (
+            return (
               <Link href={href} key={label}>
                 {content}
               </Link>
