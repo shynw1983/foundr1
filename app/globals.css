@@ -2359,7 +2359,7 @@ button {
   padding: 0 12px;
   background: white;
   color: var(--ink);
-  font-weight: 900;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -2375,6 +2375,7 @@ button {
 .store-live-clock strong {
   min-width: 74px;
   font-variant-numeric: tabular-nums;
+  font-weight: 800;
   letter-spacing: 0;
 }
 
@@ -2431,7 +2432,7 @@ button {
   border-radius: 7px;
   padding: 0 12px;
   color: var(--muted);
-  font-weight: 900;
+  font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -2439,6 +2440,7 @@ button {
 .store-nav-tabs a.is-active {
   background: #1f6f55;
   color: white;
+  font-weight: 800;
 }
 
 .store-workbench-grid {
