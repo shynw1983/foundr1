@@ -2,6 +2,7 @@
 
 import { BookOpen, Clock3, ClipboardList, Home, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
+import { UserBadge } from "../../os/components/UserBadge";
 
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
@@ -46,6 +47,9 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
         <Clock3 size={17} />
         <span>{clock.dateText}</span>
         <strong>{clock.timeText}</strong>
+      </div>
+      <div className="store-user-tools">
+        <UserBadge />
       </div>
       <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">
         {tabs.map((tab) => {

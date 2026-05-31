@@ -2262,6 +2262,38 @@ button {
   letter-spacing: 0;
 }
 
+.store-user-tools {
+  min-width: 0;
+}
+
+.store-user-tools .user-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+}
+
+.store-user-tools .user-badge {
+  min-height: 48px;
+}
+
+.store-user-tools .notification-menu summary {
+  width: 48px;
+  min-height: 48px;
+}
+
+.store-user-tools .os-language-picker {
+  width: 128px;
+}
+
+.store-user-tools .os-language-picker span {
+  display: none;
+}
+
+.store-user-tools .os-language-picker select {
+  min-height: 48px;
+}
+
 .store-nav-tabs {
   display: flex;
   align-items: center;
@@ -8622,6 +8654,23 @@ button {
     justify-content: center;
     width: 100%;
     min-width: 0;
+  }
+
+  .store-user-tools .user-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px minmax(112px, 0.48fr);
+    width: 100%;
+  }
+
+  .store-user-tools .user-badge {
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .store-user-tools .notification-menu summary,
+  .store-user-tools .os-language-picker,
+  .store-user-tools .os-language-picker select {
+    width: 100%;
   }
 
   .store-workbench-grid {
