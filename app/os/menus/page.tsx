@@ -176,6 +176,8 @@ const selectionTypeOptions = [
   { value: "quantity", label: "数量で選ぶ" }
 ];
 
+const choiceSettingsCategory = "__choice_settings__";
+
 const schemaRuleKeys: Record<string, string> = {
   size: "allowedSizes",
   temperature: "temperatures",
@@ -195,6 +197,10 @@ function getLabel(options: Array<{ value: string; label: string }>, value: strin
 
 function getBrandName(brands: OptionItem[], id: string) {
   return brands.find((brand) => brand.id === id)?.name ?? "";
+}
+
+function getMenuItemName(items: MenuItem[], id: string) {
+  return items.find((item) => item.id === id)?.name ?? "";
 }
 
 function getRuleKey(groupKey: string) {
@@ -323,10 +329,12 @@ export default function MenuAdminPage() {
 
   const categoryCounts = useMemo(() => getCategoryCounts(filteredItems, data.categories, activeBrandId), [activeBrandId, data.categories, filteredItems]);
   const currentCategory = activeCategory;
+  const isChoiceSettingsView = currentCategory === choiceSettingsCategory;
   const categoryItems = useMemo(() => filteredItems.filter((item) => {
+    if (isChoiceSettingsView) return false;
     if (currentCategory === null) return true;
     return (item.category || "未分類") === currentCategory;
-  }), [currentCategory, filteredItems]);
+  }), [currentCategory, filteredItems, isChoiceSettingsView]);
 
   const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
   const publicMenuUrl = buildPublicMenuUrl(activeBrandId);
@@ -335,10 +343,15 @@ export default function MenuAdminPage() {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
     return !group.menuCatalogItemId || group.menuCatalogItemId === itemDraft.id;
   }), [activeBrandId, data.groups, itemDraft.id]);
+  const brandGroups = useMemo(() => data.groups.filter((group) => {
+    if (!activeBrandId || group.brandId !== activeBrandId) return false;
+    if (!group.menuCatalogItemId) return true;
+    return filteredItems.some((item) => item.id === group.menuCatalogItemId);
+  }), [activeBrandId, data.groups, filteredItems]);
   const activeOptionGroup = activeOptionGroupId
-    ? visibleGroups.find((group) => group.id === activeOptionGroupId)
+    ? brandGroups.find((group) => group.id === activeOptionGroupId)
     : groupDraft.id
-      ? visibleGroups.find((group) => group.id === groupDraft.id)
+      ? brandGroups.find((group) => group.id === groupDraft.id)
       : undefined;
   const activeGroupOptions = activeOptionGroup ? data.options.filter((option) => option.optionGroupId === activeOptionGroup.id) : [];
 
@@ -369,7 +382,7 @@ export default function MenuAdminPage() {
       ...emptyItem,
       brandId: activeBrandId,
       storeId: "",
-      category: categoryForNewItem === "未分類" ? "" : categoryForNewItem
+      category: categoryForNewItem === "未分類" || categoryForNewItem === choiceSettingsCategory ? "" : categoryForNewItem
     };
     setSelectedItemId("");
     setActiveCategory(null);
@@ -610,7 +623,7 @@ export default function MenuAdminPage() {
   }
 
   function resetGroupDraftForItem() {
-    setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
+    setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: selectedItemId || "" });
     setActiveOptionGroupId("");
     setOptionDraft(emptyOption);
   }
@@ -630,6 +643,11 @@ export default function MenuAdminPage() {
   function editOption(option: MenuOption) {
     setOptionDraft(option);
     setActiveOptionGroupId(option.optionGroupId);
+  }
+
+  function openChoiceSettings(group?: MenuGroup) {
+    setActiveCategory(choiceSettingsCategory);
+    if (group) editGroup(group);
   }
 
   return (
@@ -697,6 +715,14 @@ export default function MenuAdminPage() {
               <span>すべて</span>
               <strong>{filteredItems.length}</strong>
             </button>
+            <button
+              className={isChoiceSettingsView ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
+              type="button"
+              onClick={() => openChoiceSettings()}
+            >
+              <span>選択肢設定</span>
+              <strong>{brandGroups.length}</strong>
+            </button>
             {categoryCounts.map((category) => (
               <button
                 className={currentCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
@@ -719,37 +745,230 @@ export default function MenuAdminPage() {
           <aside className="menu-item-panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Items</p>
-                <h3>商品</h3>
+                <p className="eyebrow">{isChoiceSettingsView ? "Choice Groups" : "Items"}</p>
+                <h3>{isChoiceSettingsView ? "選択グループ" : "商品"}</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={startNewItem}>
-                <Plus size={16} />
-                商品追加
-              </button>
+              {isChoiceSettingsView ? (
+                <button className="secondary-button" type="button" onClick={startCommonGroup}>
+                  <Plus size={16} />
+                  共通追加
+                </button>
+              ) : (
+                <button className="secondary-button" type="button" onClick={startNewItem}>
+                  <Plus size={16} />
+                  商品追加
+                </button>
+              )}
             </div>
             <div className="menu-item-list">
-              {categoryItems.map((item) => (
-                <button
-                  className={selectedItemId === item.id ? "menu-item-button is-active" : "menu-item-button"}
-                  type="button"
-                  draggable
-                  onDragStart={() => setDraggingItemId(item.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => reorderItems(item.id)}
-                  onDragEnd={() => setDraggingItemId("")}
-                  onClick={() => selectItem(item)}
-                  key={item.id}
-                  title="ドラッグして商品順を変更"
-                >
-                  <strong>{item.name}</strong>
-                  <span>{item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}</span>
-                </button>
-              ))}
-              {!categoryItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
+              {isChoiceSettingsView ? (
+                <>
+                  {brandGroups.map((group) => (
+                    <button
+                      className={activeOptionGroup?.id === group.id ? "menu-item-button is-active" : "menu-item-button"}
+                      type="button"
+                      onClick={() => editGroup(group)}
+                      key={group.id}
+                    >
+                      <strong>{group.name}</strong>
+                      <span>
+                        {group.menuCatalogItemId ? `商品専用: ${getMenuItemName(filteredItems, group.menuCatalogItemId) || "未設定"}` : "ブランド共通"}
+                        {" / "}
+                        {group.groupKey}
+                      </span>
+                    </button>
+                  ))}
+                  {!brandGroups.length ? <p className="empty-state">選択グループがありません。</p> : null}
+                </>
+              ) : (
+                <>
+                  {categoryItems.map((item) => (
+                    <button
+                      className={selectedItemId === item.id ? "menu-item-button is-active" : "menu-item-button"}
+                      type="button"
+                      draggable
+                      onDragStart={() => setDraggingItemId(item.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => reorderItems(item.id)}
+                      onDragEnd={() => setDraggingItemId("")}
+                      onClick={() => selectItem(item)}
+                      key={item.id}
+                      title="ドラッグして商品順を変更"
+                    >
+                      <strong>{item.name}</strong>
+                      <span>{item.category || "未分類"} / {item.basePrice == null ? "価格未設定" : `${item.basePrice.toLocaleString()}円`}</span>
+                    </button>
+                  ))}
+                  {!categoryItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
+                </>
+              )}
             </div>
           </aside>
 
           <section className="menu-detail-panel">
+            {isChoiceSettingsView ? (
+              <section className="menu-edit-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Choice Settings</p>
+                    <h3>選択グループと選択肢</h3>
+                  </div>
+                  <div className="row-actions">
+                    <button className="secondary-button" type="button" onClick={startCommonGroup}>
+                      <Plus size={16} />
+                      共通グループ
+                    </button>
+                    <button className="secondary-button" type="button" onClick={resetGroupDraftForItem}>
+                      <Plus size={16} />
+                      商品専用グループ
+                    </button>
+                  </div>
+                </div>
+
+                <div className="menu-choice-editor menu-choice-editor-single">
+                  <aside className="menu-choice-group-list">
+                    {brandGroups.map((group) => (
+                      <button
+                        className={activeOptionGroup?.id === group.id ? "menu-choice-group-button is-active" : "menu-choice-group-button"}
+                        type="button"
+                        onClick={() => editGroup(group)}
+                        key={group.id}
+                      >
+                        <strong>{group.name}</strong>
+                        <span>
+                          {group.menuCatalogItemId ? `商品専用: ${getMenuItemName(filteredItems, group.menuCatalogItemId) || "未設定"}` : "ブランド共通"}
+                          {" / "}
+                          {group.groupKey}
+                        </span>
+                      </button>
+                    ))}
+                    {!brandGroups.length ? <p className="empty-state">選択グループがありません。共通グループまたは商品専用グループを追加してください。</p> : null}
+                  </aside>
+
+                  <div className="menu-choice-detail">
+                    <div className="menu-option-form">
+                      <div className="section-heading compact-heading">
+                        <div>
+                          <p className="eyebrow">Group</p>
+                          <h4>{groupDraft.id ? groupDraft.name || "選択グループ" : "新しい選択グループ"}</h4>
+                        </div>
+                        {groupDraft.id ? (
+                          <button className="danger-button" type="button" onClick={() => void deleteEntry("group", groupDraft.id)}>
+                            <Trash2 size={15} />
+                          </button>
+                        ) : null}
+                      </div>
+                      <label>
+                        <span>対象</span>
+                        <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
+                          <option value="">ブランド共通</option>
+                          {filteredItems.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                        </select>
+                      </label>
+                      <div className="menu-form-grid">
+                        <label>
+                          <span>表示名</span>
+                          <input value={groupDraft.name} onChange={(event) => setGroupDraft({ ...groupDraft, name: event.target.value })} placeholder="例: サイズ" />
+                        </label>
+                        <label>
+                          <span>内部キー</span>
+                          <input value={groupDraft.groupKey} onChange={(event) => setGroupDraft({ ...groupDraft, groupKey: event.target.value })} placeholder="例: size" />
+                        </label>
+                        <label>
+                          <span>選択方式</span>
+                          <select value={groupDraft.selectionType} onChange={(event) => setGroupDraft({ ...groupDraft, selectionType: event.target.value })}>
+                            {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>並び順</span>
+                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                        </label>
+                      </div>
+                      <label className="checkbox-group menu-inline-check">
+                        <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
+                        <span>手順に影響する</span>
+                      </label>
+                      <button className="primary-button" type="button" disabled={savingKind === "group"} onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
+                        <Save size={16} />
+                        {savingKind === "group" ? "保存中..." : "グループを保存"}
+                      </button>
+                    </div>
+
+                    <div className="menu-option-form">
+                      <div className="section-heading compact-heading">
+                        <div>
+                          <p className="eyebrow">Options</p>
+                          <h4>{activeOptionGroup ? `${activeOptionGroup.name} の選択肢` : "選択肢"}</h4>
+                        </div>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={!activeOptionGroup}
+                          onClick={() => setOptionDraft({ ...emptyOption, optionGroupId: activeOptionGroup?.id ?? "" })}
+                        >
+                          <Plus size={16} />
+                          選択肢追加
+                        </button>
+                      </div>
+                      <div className="menu-option-tags menu-option-edit-tags">
+                        {activeGroupOptions.map((option) => (
+                          <button
+                            className={optionDraft.id === option.id ? "menu-option-tag is-active" : "menu-option-tag"}
+                            type="button"
+                            onClick={() => editOption(option)}
+                            key={option.id}
+                          >
+                            {option.name}
+                          </button>
+                        ))}
+                        {activeOptionGroup && !activeGroupOptions.length ? <p className="empty-state">このグループには選択肢がありません。</p> : null}
+                        {!activeOptionGroup ? <p className="empty-state">左側でグループを選ぶか、新しいグループを追加してください。</p> : null}
+                      </div>
+                      <div className="menu-form-grid">
+                        <label>
+                          <span>表示名</span>
+                          <input value={optionDraft.name} onChange={(event) => setOptionDraft({ ...optionDraft, name: event.target.value })} placeholder="例: HOT" />
+                        </label>
+                        <label>
+                          <span>内部キー</span>
+                          <input value={optionDraft.optionKey} onChange={(event) => setOptionDraft({ ...optionDraft, optionKey: event.target.value })} placeholder="例: hot" />
+                        </label>
+                        <label>
+                          <span>価格差額</span>
+                          <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
+                        </label>
+                        <label>
+                          <span>並び順</span>
+                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                        </label>
+                      </div>
+                      <label className="checkbox-group menu-inline-check">
+                        <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
+                        <span>手順に影響する</span>
+                      </label>
+                      <div className="row-actions">
+                        {optionDraft.id ? (
+                          <button className="danger-button" type="button" onClick={() => void deleteEntry("option", optionDraft.id)}>
+                            <Trash2 size={15} />
+                          </button>
+                        ) : null}
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={savingKind === "option" || !activeOptionGroup}
+                          onClick={() => void save("option", { ...optionDraft, optionGroupId: optionDraft.optionGroupId || activeOptionGroup?.id || "" })}
+                        >
+                          <Save size={16} />
+                          {savingKind === "option" ? "保存中..." : "選択肢を保存"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <>
             <div className="section-heading">
               <div>
                 <p className="eyebrow">{getBrandName(data.brands, itemDraft.brandId) || "Menu Item"}</p>
@@ -858,9 +1077,6 @@ export default function MenuAdminPage() {
                           <strong>{group.name}</strong>
                           <span>{getLabel(selectionTypeOptions, group.selectionType)} / {group.affectsProcedure ? "手順に影響" : "表示のみ"}</span>
                         </div>
-                        <button className="secondary-button" type="button" onClick={() => editGroup(group)}>
-                          グループ編集
-                        </button>
                       </div>
                       <div className="menu-choice-grid">
                         {groupOptions.map((option) => (
@@ -883,181 +1099,6 @@ export default function MenuAdminPage() {
               </div>
             </section>
 
-            <section className="menu-edit-card">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Choice Settings</p>
-                  <h3>選択グループと選択肢</h3>
-                </div>
-                <div className="row-actions">
-                  <button className="secondary-button" type="button" onClick={startCommonGroup}>
-                    <Plus size={16} />
-                    共通グループ
-                  </button>
-                  <button className="secondary-button" type="button" onClick={resetGroupDraftForItem}>
-                    <Plus size={16} />
-                    商品専用グループ
-                  </button>
-                </div>
-              </div>
-
-              <div className="menu-choice-editor">
-                <aside className="menu-choice-group-list">
-                  {visibleGroups.map((group) => (
-                    <button
-                      className={activeOptionGroup?.id === group.id ? "menu-choice-group-button is-active" : "menu-choice-group-button"}
-                      type="button"
-                      onClick={() => editGroup(group)}
-                      key={group.id}
-                    >
-                      <strong>{group.name}</strong>
-                      <span>{group.menuCatalogItemId ? "商品専用" : "ブランド共通"} / {group.groupKey}</span>
-                    </button>
-                  ))}
-                  {!visibleGroups.length ? <p className="empty-state">選択グループがありません。共通グループまたは商品専用グループを追加してください。</p> : null}
-                </aside>
-
-                <div className="menu-choice-detail">
-                  <div className="menu-option-form">
-                    <div className="section-heading compact-heading">
-                      <div>
-                        <p className="eyebrow">Group</p>
-                        <h4>{groupDraft.id ? groupDraft.name || "選択グループ" : "新しい選択グループ"}</h4>
-                      </div>
-                      {groupDraft.id ? (
-                        <button className="danger-button" type="button" onClick={() => void deleteEntry("group", groupDraft.id)}>
-                          <Trash2 size={15} />
-                        </button>
-                      ) : null}
-                    </div>
-                  <label>
-                    <span>対象</span>
-                    <select value={groupDraft.menuCatalogItemId} onChange={(event) => setGroupDraft({ ...groupDraft, menuCatalogItemId: event.target.value })}>
-                      <option value="">ブランド共通</option>
-                      {itemDraft.id ? <option value={itemDraft.id}>{itemDraft.name || "現在の商品"}</option> : null}
-                    </select>
-                  </label>
-                  <div className="menu-form-grid">
-                    <label>
-                      <span>表示名</span>
-                      <input value={groupDraft.name} onChange={(event) => setGroupDraft({ ...groupDraft, name: event.target.value })} placeholder="例: サイズ" />
-                    </label>
-                    <label>
-                      <span>内部キー</span>
-                      <input value={groupDraft.groupKey} onChange={(event) => setGroupDraft({ ...groupDraft, groupKey: event.target.value })} placeholder="例: size" />
-                    </label>
-                    <label>
-                      <span>選択方式</span>
-                      <select value={groupDraft.selectionType} onChange={(event) => setGroupDraft({ ...groupDraft, selectionType: event.target.value })}>
-                        {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label>
-                      <span>並び順</span>
-                      <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-                    </label>
-                  </div>
-                  <label className="checkbox-group menu-inline-check">
-                    <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
-                    <span>手順に影響する</span>
-                  </label>
-                  <button className="primary-button" type="button" disabled={savingKind === "group"} onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
-                    <Save size={16} />
-                    {savingKind === "group" ? "保存中..." : "グループを保存"}
-                  </button>
-                </div>
-
-                <div className="menu-option-form">
-                  <div className="section-heading compact-heading">
-                    <div>
-                      <p className="eyebrow">Options</p>
-                      <h4>{activeOptionGroup ? `${activeOptionGroup.name} の選択肢` : "選択肢"}</h4>
-                    </div>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={!activeOptionGroup}
-                      onClick={() => setOptionDraft({ ...emptyOption, optionGroupId: activeOptionGroup?.id ?? "" })}
-                    >
-                      <Plus size={16} />
-                      選択肢追加
-                    </button>
-                  </div>
-                  <div className="menu-option-tags menu-option-edit-tags">
-                    {activeGroupOptions.map((option) => (
-                      <button
-                        className={optionDraft.id === option.id ? "menu-option-tag is-active" : "menu-option-tag"}
-                        type="button"
-                        onClick={() => editOption(option)}
-                        key={option.id}
-                      >
-                        {option.name}
-                      </button>
-                    ))}
-                    {activeOptionGroup && !activeGroupOptions.length ? <p className="empty-state">このグループには選択肢がありません。</p> : null}
-                    {!activeOptionGroup ? <p className="empty-state">左側でグループを選ぶか、新しいグループを追加してください。</p> : null}
-                  </div>
-                  <div className="menu-form-grid">
-                    <label>
-                      <span>表示名</span>
-                      <input value={optionDraft.name} onChange={(event) => setOptionDraft({ ...optionDraft, name: event.target.value })} placeholder="例: HOT" />
-                    </label>
-                    <label>
-                      <span>内部キー</span>
-                      <input value={optionDraft.optionKey} onChange={(event) => setOptionDraft({ ...optionDraft, optionKey: event.target.value })} placeholder="例: hot" />
-                    </label>
-                    <label>
-                      <span>価格差額</span>
-                      <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
-                    </label>
-                    <label>
-                      <span>並び順</span>
-                      <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-                    </label>
-                  </div>
-                  <label className="checkbox-group menu-inline-check">
-                    <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
-                    <span>手順に影響する</span>
-                  </label>
-                  <div className="row-actions">
-                    {optionDraft.id ? (
-                      <button className="danger-button" type="button" onClick={() => void deleteEntry("option", optionDraft.id)}>
-                        <Trash2 size={15} />
-                      </button>
-                    ) : null}
-                    <button
-                      className="primary-button"
-                      type="button"
-                      disabled={savingKind === "option" || !activeOptionGroup}
-                      onClick={() => void save("option", { ...optionDraft, optionGroupId: optionDraft.optionGroupId || activeOptionGroup?.id || "" })}
-                    >
-                      <Save size={16} />
-                      {savingKind === "option" ? "保存中..." : "選択肢を保存"}
-                    </button>
-                  </div>
-                </div>
-                </div>
-              </div>
-
-              <div className="menu-option-list compact-option-summary">
-                {visibleGroups.map((group) => (
-                  <article className="menu-option-group-row" key={group.id}>
-                    <div>
-                      <strong>{group.name}</strong>
-                      <p>{group.menuCatalogItemId ? "商品専用" : "ブランド共通"} / {group.groupKey}</p>
-                    </div>
-                    <div className="menu-option-tags">
-                      {data.options.filter((option) => option.optionGroupId === group.id).map((option) => (
-                        <button className="menu-option-tag" type="button" onClick={() => editOption(option)} key={option.id}>
-                          {option.name}
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-
             <details className="menu-source-details">
               <summary>取込元・内部情報</summary>
               <div>
@@ -1066,6 +1107,8 @@ export default function MenuAdminPage() {
                 <p>Source URL: {selectedSource?.sourceUrl || "未設定"}</p>
               </div>
             </details>
+              </>
+            )}
           </section>
         </div>
       </section>
