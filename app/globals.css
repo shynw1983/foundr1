@@ -3357,6 +3357,23 @@ button {
   align-items: center;
 }
 
+.store-timecard-punch .panel-title {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  justify-content: start;
+  text-align: left;
+}
+
+.store-timecard-punch .panel-title > svg {
+  align-self: center;
+  justify-self: start;
+}
+
+.store-timecard-punch .panel-title h2,
+.store-timecard-punch .panel-title p {
+  text-align: left;
+}
+
 .store-timecard-punch .panel-title svg,
 .store-timecard-history .panel-title svg,
 .timecard-management-grid .panel-title svg,
