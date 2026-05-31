@@ -3,6 +3,7 @@
 import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import type { MouseEvent } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -94,6 +95,18 @@ type TimecardPayload = {
 type ShiftDraft = {
   employeeId: string;
   workDate: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  breakMinutes: string;
+  note: string;
+};
+
+type ShiftSelection = {
+  employeeId: string;
+  workDate: string;
+};
+
+type ShiftPatch = ShiftSelection & {
   scheduledStart: string;
   scheduledEnd: string;
   breakMinutes: string;
@@ -199,6 +212,10 @@ function minutesToTime(totalMinutes: number) {
 
 function getBusinessDayForDate(businessHours: StoreBusinessHours, workDate: string) {
   return businessHours[getWeekdayKeyForDate(workDate)];
+}
+
+function getShiftSelectionKey(selection: ShiftSelection) {
+  return `${selection.employeeId}:${selection.workDate}`;
 }
 
 function getShiftDefaults(businessHours: StoreBusinessHours, workDate: string) {
@@ -356,6 +373,13 @@ export function TimecardPage({
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
+  const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
+  const [bulkShiftDraft, setBulkShiftDraft] = useState({
+    scheduledStart: "",
+    scheduledEnd: "",
+    breakMinutes: "60",
+    note: ""
+  });
   const [actualDraft, setActualDraft] = useState<ActualDraft | null>(null);
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
@@ -436,6 +460,10 @@ export function TimecardPage({
     }
     return map;
   }, [data?.dailySummaries, selectedStoreId]);
+  const selectedShiftCellKeys = useMemo(
+    () => new Set(selectedShiftCells.map(getShiftSelectionKey)),
+    [selectedShiftCells]
+  );
   const coverageByDate = useMemo(() => {
     const map = new Map<string, DayCoverage>();
     for (const day of monthDays) {
@@ -475,6 +503,7 @@ export function TimecardPage({
   function openShiftEditor(employeeId: string, workDate: string) {
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
     const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
+    setSelectedShiftCells([]);
     clearShiftMessage();
     setShiftDraft({
       employeeId,
@@ -484,6 +513,38 @@ export function TimecardPage({
       breakMinutes: String(shift?.breakMinutes ?? defaults.breakMinutes),
       note: shift?.note ?? ""
     });
+  }
+
+  function toggleShiftSelection(employeeId: string, workDate: string) {
+    clearShiftMessage();
+    setShiftDraft(null);
+    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
+    if (!selectedShiftCells.length) {
+      setBulkShiftDraft({
+        scheduledStart: shift?.scheduledStart ?? defaults.scheduledStart,
+        scheduledEnd: shift?.scheduledEnd ?? defaults.scheduledEnd,
+        breakMinutes: String(shift?.breakMinutes ?? defaults.breakMinutes),
+        note: shift?.note ?? ""
+      });
+    }
+    setSelectedShiftCells((current) => {
+      const nextSelection = { employeeId, workDate };
+      const key = getShiftSelectionKey(nextSelection);
+      const exists = current.some((selection) => getShiftSelectionKey(selection) === key);
+      return exists
+        ? current.filter((selection) => getShiftSelectionKey(selection) !== key)
+        : [...current, nextSelection];
+    });
+  }
+
+  function handleShiftCellClick(event: MouseEvent<HTMLButtonElement>, employeeId: string, workDate: string) {
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      event.preventDefault();
+      toggleShiftSelection(employeeId, workDate);
+      return;
+    }
+    openShiftEditor(employeeId, workDate);
   }
 
   function clearShiftMessage() {
@@ -562,6 +623,78 @@ export function TimecardPage({
     const nextDraft = { ...shiftDraft, scheduledStart, scheduledEnd, breakMinutes };
     setShiftDraft(nextDraft);
     void saveShift(nextDraft);
+  }
+
+  async function saveBulkShifts(shifts: ShiftPatch[], successMessage = "選択したシフトを保存しました。") {
+    if (!selectedStoreId || !shifts.length) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_shifts_bulk",
+        storeId: selectedStoreId,
+        shifts
+      })
+    });
+    if (response.ok) {
+      await loadTimecard(month, selectedStoreId);
+      showShiftMessage(successMessage);
+    } else {
+      const body = await response.json().catch(() => ({}));
+      showShiftMessage(String(body.error ?? "選択したシフトを保存できませんでした。"), 4200);
+    }
+    setIsSavingShift(false);
+  }
+
+  async function saveSelectedShiftCells() {
+    const shifts = selectedShiftCells.map((selection) => ({
+      ...selection,
+      scheduledStart: bulkShiftDraft.scheduledStart,
+      scheduledEnd: bulkShiftDraft.scheduledEnd,
+      breakMinutes: bulkShiftDraft.breakMinutes,
+      note: bulkShiftDraft.note
+    }));
+    await saveBulkShifts(shifts);
+  }
+
+  async function applyBulkShiftPattern(patternLabel: string) {
+    const shifts = selectedShiftCells.flatMap((selection) => {
+      const pattern = getShiftPatterns(selectedStoreBusinessHours, selection.workDate).find((item) => item.label === patternLabel);
+      if (!pattern) return [];
+      return [{
+        ...selection,
+        scheduledStart: pattern.start,
+        scheduledEnd: pattern.end,
+        breakMinutes: pattern.breakMinutes,
+        note: bulkShiftDraft.note
+      }];
+    });
+    await saveBulkShifts(shifts, `${patternLabel}を選択した日付に反映しました。`);
+  }
+
+  async function deleteSelectedShiftCells() {
+    if (!selectedStoreId || !selectedShiftCells.length) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_shifts_bulk",
+        storeId: selectedStoreId,
+        shifts: selectedShiftCells
+      })
+    });
+    if (response.ok) {
+      await loadTimecard(month, selectedStoreId);
+      showShiftMessage("選択したシフトを削除しました。");
+    } else {
+      const body = await response.json().catch(() => ({}));
+      showShiftMessage(String(body.error ?? "選択したシフトを削除できませんでした。"), 4200);
+    }
+    setIsSavingShift(false);
   }
 
   function openActualEditor(employeeId: string, workDate: string) {
@@ -656,10 +789,12 @@ export function TimecardPage({
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
+              setSelectedShiftCells([]);
               void loadTimecard(event.target.value, selectedStoreId);
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
+              setSelectedShiftCells([]);
               void loadTimecard(month, event.target.value);
             }}>
               {data?.stores.map((store) => (
@@ -750,9 +885,46 @@ export function TimecardPage({
                   <CalendarDays />
                   <div>
                     <h3>計画排班</h3>
-                    <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。</p>
+                    <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。Shift / Command / Ctrl を押しながらクリックすると複数日を選択できます。</p>
                   </div>
                 </div>
+                {selectedShiftCells.length ? (
+                  <div className="shift-editor shift-bulk-editor" aria-label="シフト一括編集">
+                    <div className="shift-editor-title">
+                      <strong>{selectedShiftCells.length}件を選択中</strong>
+                      <span>複数の日付をまとめて編集</span>
+                      <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
+                    </div>
+                    <label>
+                      <span>開始</span>
+                      <input type="time" value={bulkShiftDraft.scheduledStart} onChange={(event) => setBulkShiftDraft({ ...bulkShiftDraft, scheduledStart: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input type="time" value={bulkShiftDraft.scheduledEnd} onChange={(event) => setBulkShiftDraft({ ...bulkShiftDraft, scheduledEnd: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩(分)</span>
+                      <input type="number" min="0" max="720" value={bulkShiftDraft.breakMinutes} onChange={(event) => setBulkShiftDraft({ ...bulkShiftDraft, breakMinutes: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>メモ</span>
+                      <input value={bulkShiftDraft.note} onChange={(event) => setBulkShiftDraft({ ...bulkShiftDraft, note: event.target.value })} placeholder="任意" />
+                    </label>
+                    <div className="shift-patterns" aria-label="一括勤務パターン">
+                      {["営業通し", "開店", "後半", "短時間"].map((label) => (
+                        <button type="button" disabled={isSavingShift} onClick={() => void applyBulkShiftPattern(label)} key={label}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="shift-editor-actions">
+                      <button className="secondary-button" type="button" onClick={() => setSelectedShiftCells([])}>選択解除</button>
+                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteSelectedShiftCells()}>一括削除</button>
+                      <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveSelectedShiftCells()}>{isSavingShift ? "保存中" : "一括保存"}</button>
+                    </div>
+                  </div>
+                ) : null}
                 {shiftDraft ? (
                   <div className="shift-editor" aria-label="シフト編集">
                     <div className="shift-editor-title">
@@ -824,16 +996,18 @@ export function TimecardPage({
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
                             const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+                            const cellKey = getShiftSelectionKey({ employeeId: employee.id, workDate: day.key });
                             const isSelected = shiftDraft?.employeeId === employee.id && shiftDraft.workDate === day.key;
+                            const isBulkSelected = selectedShiftCellKeys.has(cellKey);
                             const coverage = coverageByDate.get(day.key);
                             const isUncovered = coverage?.status === "uncovered";
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()} key={day.key}>
                                 <button
-                                  className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}`}
+                                  className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
                                   type="button"
-                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : undefined}
-                                  onClick={() => openShiftEditor(employee.id, day.key)}
+                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : "Shift / Command / Ctrl クリックで複数選択"}
+                                  onClick={(event) => handleShiftCellClick(event, employee.id, day.key)}
                                 >
                                   {shift ? (
                                     <>

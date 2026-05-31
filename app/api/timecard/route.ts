@@ -23,6 +23,14 @@ type TimecardPostBody = {
   clockIn?: string;
   clockOut?: string;
   breakMinutes?: number | string;
+  shifts?: Array<{
+    employeeId?: string;
+    workDate?: string;
+    scheduledStart?: string;
+    scheduledEnd?: string;
+    breakMinutes?: number | string;
+    note?: string;
+  }>;
 };
 
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
@@ -321,7 +329,107 @@ export async function POST(request: Request) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
   }
 
-  if (action === "save_shift" || action === "delete_shift") {
+  if (action === "save_shift" || action === "delete_shift" || action === "save_shifts_bulk" || action === "delete_shifts_bulk") {
+    if (action === "save_shifts_bulk" || action === "delete_shifts_bulk") {
+      const shifts = Array.isArray(body.shifts) ? body.shifts : [];
+      if (!shifts.length) {
+        return Response.json({ error: "対象のシフトを選択してください。" }, { status: 400 });
+      }
+      if (shifts.length > 120) {
+        return Response.json({ error: "一度に編集できるシフトは120件までです。" }, { status: 400 });
+      }
+
+      const normalizedShifts = [];
+      for (const shift of shifts) {
+        const employeeId = String(shift.employeeId ?? "");
+        const workDate = String(shift.workDate ?? "");
+        if (!employeeId || !isValidWorkDate(workDate)) {
+          return Response.json({ error: "従業員と日付を確認してください。" }, { status: 400 });
+        }
+        if (!await canPunchForEmployee(storeId, employeeId)) {
+          return Response.json({ error: "この従業員は選択した店舗のシフト対象ではありません。" }, { status: 403 });
+        }
+        normalizedShifts.push({ ...shift, employeeId, workDate });
+      }
+
+      if (action === "delete_shifts_bulk") {
+        for (const shift of normalizedShifts) {
+          await sql`
+            delete from timecard_shifts
+            where employee_id = ${shift.employeeId}
+              and store_id = ${storeId}
+              and work_date = ${shift.workDate}::date
+          `;
+        }
+
+        await writeAuditLog({
+          actorEmployeeId: session.id,
+          action: "timecard.shift.bulk_deleted",
+          targetType: "timecard_shift",
+          targetId: storeId,
+          metadata: { storeId, count: normalizedShifts.length, shifts: normalizedShifts.map((shift) => ({ employeeId: shift.employeeId, workDate: shift.workDate })) },
+          request
+        });
+
+        return Response.json({ ok: true, count: normalizedShifts.length });
+      }
+
+      const upsertedIds: string[] = [];
+      for (const shift of normalizedShifts) {
+        const scheduledStart = normalizeTimeValue(shift.scheduledStart);
+        const scheduledEnd = normalizeTimeValue(shift.scheduledEnd);
+        const breakMinutes = Math.max(0, Math.min(720, Math.round(Number(shift.breakMinutes ?? 0) || 0)));
+        if (!scheduledStart || !scheduledEnd) {
+          return Response.json({ error: "開始時刻と終了時刻を入力してください。" }, { status: 400 });
+        }
+
+        const upserted = await sql`
+          insert into timecard_shifts (
+            employee_id,
+            store_id,
+            work_date,
+            scheduled_start,
+            scheduled_end,
+            break_minutes,
+            note,
+            created_by,
+            updated_at
+          )
+          values (
+            ${shift.employeeId},
+            ${storeId},
+            ${shift.workDate}::date,
+            ${scheduledStart}::time,
+            ${scheduledEnd}::time,
+            ${breakMinutes},
+            ${String(shift.note ?? "").trim() || null},
+            ${session.id},
+            now()
+          )
+          on conflict (employee_id, store_id, work_date)
+          do update set
+            scheduled_start = excluded.scheduled_start,
+            scheduled_end = excluded.scheduled_end,
+            break_minutes = excluded.break_minutes,
+            note = excluded.note,
+            updated_at = now()
+          returning id::text
+        `;
+        upsertedIds.push(String(upserted[0]?.id ?? ""));
+      }
+
+      await writeAuditLog({
+        actorEmployeeId: session.id,
+        action: "timecard.shift.bulk_saved",
+        targetType: "timecard_shift",
+        targetId: storeId,
+        metadata: { storeId, count: normalizedShifts.length, ids: upsertedIds.filter(Boolean) },
+        request
+      });
+
+      return Response.json({ ok: true, count: normalizedShifts.length, ids: upsertedIds.filter(Boolean) });
+    }
+
     const employeeId = String(body.employeeId ?? "");
     const workDate = String(body.workDate ?? "");
     if (!employeeId || !isValidWorkDate(workDate)) {

@@ -3589,6 +3589,11 @@ button {
   background: #fbfcfe;
 }
 
+.shift-bulk-editor {
+  border-color: rgba(45, 111, 229, 0.3);
+  background: #f7faff;
+}
+
 .shift-editor-title {
   display: grid;
   gap: 4px;
@@ -3791,6 +3796,16 @@ button {
 
 .shift-cell.is-selected {
   box-shadow: inset 0 0 0 2px var(--green);
+}
+
+.shift-cell.is-bulk-selected {
+  background: #e8f0ff;
+  box-shadow: inset 0 0 0 2px var(--blue);
+  color: var(--blue);
+}
+
+.shift-cell.has-shift.is-bulk-selected {
+  background: linear-gradient(135deg, var(--green-soft) 0 50%, #e8f0ff 50% 100%);
 }
 
 .shift-cell strong,
