@@ -1563,7 +1563,7 @@ button {
 
 .staff-payroll-store-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) repeat(5, minmax(110px, 1fr));
+  grid-template-columns: minmax(180px, 1.3fr) minmax(84px, 0.6fr) repeat(4, minmax(110px, 1fr));
   gap: 10px;
   align-items: end;
   padding: 12px;
@@ -1573,8 +1573,10 @@ button {
 }
 
 .staff-payroll-store-toggle {
+  display: grid !important;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  gap: 10px;
 }
 
 .staff-payroll-store-toggle strong,
@@ -1589,6 +1591,28 @@ button {
   color: var(--muted);
   font-size: 12px;
   font-weight: 750;
+}
+
+.staff-payroll-store-toggle input[type="checkbox"],
+.staff-payroll-check input[type="checkbox"] {
+  appearance: auto;
+  min-height: 16px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.staff-payroll-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
 }
 
 .inline-alert {
