@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -37,10 +38,25 @@ export async function GET(request: Request) {
     limit 1
   `;
 
+  const operation = rows[0] as (Record<string, unknown> & {
+    businessHours?: unknown;
+    reservationsEnabled?: boolean;
+    statusNote?: string;
+  }) | undefined;
+
   return NextResponse.json({
     access,
     selectedStoreId: storeId,
-    operation: rows[0] ?? null
+    operation: operation
+      ? {
+          ...operation,
+          receptionState: getStoreReceptionState({
+            businessHours: operation.businessHours,
+            reservationsEnabled: operation.reservationsEnabled !== false,
+            statusNote: operation.statusNote
+          })
+        }
+      : null
   });
 }
 

@@ -55,6 +55,16 @@ type StoreOperation = {
   reservationNote: string;
   reservationsEnabled: boolean;
   statusNote: string;
+  receptionState?: {
+    manualStatusLabel: string;
+    statusLabel: string;
+    detailLabel: string;
+    nextOpenLabel: string;
+    isManuallyAccepting: boolean;
+    isWithinBusinessHours: boolean;
+    isAcceptingNow: boolean;
+    tone: "active" | "warning" | "off";
+  };
 };
 
 export default function StoreHomePage() {
@@ -102,6 +112,7 @@ export default function StoreHomePage() {
         })
       });
       if (!response.ok) throw new Error("save failed");
+      await loadOperation(selectedStoreId);
       setMessage("営業状態を更新しました。");
     } catch {
       setOperation(operation);
@@ -144,43 +155,52 @@ export default function StoreHomePage() {
           ) : null}
         </div>
         {operation ? (
-          <div className="store-operation-actions">
-            <button
-              className={operation.reservationsEnabled ? "store-status-button is-on" : "store-status-button"}
-              type="button"
-              disabled={saving}
-              onClick={() => void saveOperation({ reservationsEnabled: true, statusNote: "" })}
-            >
-              <CheckCircle2 size={17} />
-              通常受付
-            </button>
-            <button
-              className={!operation.reservationsEnabled && operation.statusNote !== "本日休業" ? "store-status-button is-off" : "store-status-button"}
-              type="button"
-              disabled={saving}
-              onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "一時休止" })}
-            >
-              <PauseCircle size={17} />
-              一時休止
-            </button>
-            <button
-              className={!operation.reservationsEnabled && operation.statusNote === "本日休業" ? "store-status-button is-off" : "store-status-button"}
-              type="button"
-              disabled={saving}
-              onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "本日休業" })}
-            >
-              <PauseCircle size={17} />
-              本日休業
-            </button>
-            <input
-              value={operation.statusNote}
-              onChange={(event) => setOperation({ ...operation, statusNote: event.target.value })}
-              placeholder="予約画面に出すメモ"
-            />
-            <button className="secondary-button" type="button" disabled={saving} onClick={() => void saveOperation({})}>
-              メモ保存
-            </button>
-          </div>
+          <>
+            {operation.receptionState ? (
+              <div className={`store-reception-state is-${operation.receptionState.tone}`}>
+                <span>手動設定: {operation.receptionState.manualStatusLabel}</span>
+                <strong>{operation.receptionState.statusLabel}</strong>
+                <small>{operation.receptionState.detailLabel}</small>
+              </div>
+            ) : null}
+            <div className="store-operation-actions">
+              <button
+                className={operation.reservationsEnabled ? "store-status-button is-on" : "store-status-button"}
+                type="button"
+                disabled={saving}
+                onClick={() => void saveOperation({ reservationsEnabled: true, statusNote: "" })}
+              >
+                <CheckCircle2 size={17} />
+                通常受付
+              </button>
+              <button
+                className={!operation.reservationsEnabled && operation.statusNote !== "本日休業" ? "store-status-button is-off" : "store-status-button"}
+                type="button"
+                disabled={saving}
+                onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "一時休止" })}
+              >
+                <PauseCircle size={17} />
+                一時休止
+              </button>
+              <button
+                className={!operation.reservationsEnabled && operation.statusNote === "本日休業" ? "store-status-button is-off" : "store-status-button"}
+                type="button"
+                disabled={saving}
+                onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "本日休業" })}
+              >
+                <PauseCircle size={17} />
+                本日休業
+              </button>
+              <input
+                value={operation.statusNote}
+                onChange={(event) => setOperation({ ...operation, statusNote: event.target.value })}
+                placeholder="予約画面に出すメモ"
+              />
+              <button className="secondary-button" type="button" disabled={saving} onClick={() => void saveOperation({})}>
+                メモ保存
+              </button>
+            </div>
+          </>
         ) : null}
         {message ? <div className="inline-alert">{message}</div> : null}
       </section>

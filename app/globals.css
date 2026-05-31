@@ -2824,6 +2824,40 @@ button {
   flex-wrap: wrap;
 }
 
+.store-reception-state {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(169, 101, 20, 0.28);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.store-reception-state.is-active {
+  border-color: rgba(33, 116, 91, 0.28);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.store-reception-state.is-off {
+  border-color: rgba(119, 129, 145, 0.24);
+  color: var(--muted);
+  background: #f5f7fa;
+}
+
+.store-reception-state span,
+.store-reception-state small {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-reception-state strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
 .store-operation-actions input {
   flex: 1 1 220px;
 }

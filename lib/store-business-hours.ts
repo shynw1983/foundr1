@@ -30,6 +30,53 @@ export const defaultBusinessHours: StoreBusinessHours = {
   sun: { open: "11:00", close: "20:00", closed: false }
 };
 
+function addDays(dateString: string, amount: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + amount));
+  return date.toISOString().slice(0, 10);
+}
+
+function compareDateTime(leftDate: string, leftTime: string, rightDate: string, rightTime: string) {
+  return `${leftDate}T${leftTime}`.localeCompare(`${rightDate}T${rightTime}`);
+}
+
+function getWeekdayKey(dateString: string) {
+  const date = new Date(`${dateString}T12:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return weekdayKeys[(date.getUTCDay() + 6) % 7];
+}
+
+function getPreviousWeekdayKey(key: WeekdayKey) {
+  const index = weekdayKeys.indexOf(key);
+  return weekdayKeys[(index + weekdayKeys.length - 1) % weekdayKeys.length];
+}
+
+function getTokyoDateTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    time: `${values.hour}:${values.minute}`
+  };
+}
+
+function toMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function crossesMidnight(day: StoreBusinessDay) {
+  return toMinutes(day.close) <= toMinutes(day.open);
+}
+
 function normalizeTime(value: unknown, fallback: string) {
   const text = String(value ?? "").trim();
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
@@ -88,10 +135,97 @@ export function formatBusinessHoursSummary(value: unknown) {
 export function isPickupWithinBusinessHours(value: unknown, pickupDate: string, pickupTime: string) {
   if (!value || (typeof value === "object" && Object.keys(value).length === 0)) return true;
   const hours = normalizeBusinessHours(value);
-  const date = new Date(`${pickupDate}T12:00:00+09:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  const key = weekdayKeys[(date.getUTCDay() + 6) % 7];
+  const key = getWeekdayKey(pickupDate);
+  if (!key) return false;
   const day = hours[key];
-  if (day.closed) return false;
-  return pickupTime >= day.open && pickupTime <= day.close;
+  if (!day.closed) {
+    if (!crossesMidnight(day)) {
+      return pickupTime >= day.open && pickupTime <= day.close;
+    }
+    if (pickupTime >= day.open) return true;
+  }
+
+  const previousDay = hours[getPreviousWeekdayKey(key)];
+  return !previousDay.closed && crossesMidnight(previousDay) && pickupTime <= previousDay.close;
+}
+
+export type StoreReceptionState = {
+  manualStatusLabel: string;
+  statusLabel: string;
+  detailLabel: string;
+  nextOpenLabel: string;
+  isManuallyAccepting: boolean;
+  isWithinBusinessHours: boolean;
+  isAcceptingNow: boolean;
+  tone: "active" | "warning" | "off";
+};
+
+export function getNextBusinessOpening(value: unknown, now = new Date()) {
+  if (!value || (typeof value === "object" && Object.keys(value).length === 0)) return "";
+  const hours = normalizeBusinessHours(value);
+  const current = getTokyoDateTimeParts(now);
+
+  for (let offset = 0; offset <= 14; offset += 1) {
+    const date = addDays(current.date, offset);
+    const key = getWeekdayKey(date);
+    if (!key) continue;
+    const day = hours[key];
+    if (day.closed) continue;
+    if (compareDateTime(date, day.open, current.date, current.time) > 0) {
+      return `${date} ${day.open}`;
+    }
+  }
+
+  return "";
+}
+
+export function getStoreReceptionState(input: {
+  businessHours: unknown;
+  reservationsEnabled: boolean;
+  statusNote?: string;
+  now?: Date;
+}): StoreReceptionState {
+  const statusNote = String(input.statusNote ?? "").trim();
+  const isManuallyAccepting = input.reservationsEnabled;
+  const current = getTokyoDateTimeParts(input.now);
+  const isWithinBusinessHours = isPickupWithinBusinessHours(input.businessHours, current.date, current.time);
+  const nextOpenLabel = isWithinBusinessHours ? "" : getNextBusinessOpening(input.businessHours, input.now);
+
+  if (!isManuallyAccepting) {
+    const manualStatusLabel = statusNote === "本日休業" ? "本日休業" : "一時休止";
+    return {
+      manualStatusLabel,
+      statusLabel: manualStatusLabel,
+      detailLabel: statusNote || "店舗側で予約受付を停止しています。",
+      nextOpenLabel,
+      isManuallyAccepting,
+      isWithinBusinessHours,
+      isAcceptingNow: false,
+      tone: "off"
+    };
+  }
+
+  if (!isWithinBusinessHours) {
+    return {
+      manualStatusLabel: "通常受付",
+      statusLabel: "受付時間外",
+      detailLabel: nextOpenLabel ? `現在は営業時間外です。次回受付は ${nextOpenLabel} です。` : "現在は営業時間外です。",
+      nextOpenLabel,
+      isManuallyAccepting,
+      isWithinBusinessHours,
+      isAcceptingNow: false,
+      tone: "warning"
+    };
+  }
+
+  return {
+    manualStatusLabel: "通常受付",
+    statusLabel: "受付中",
+    detailLabel: "現在の時間は予約受付できます。",
+    nextOpenLabel,
+    isManuallyAccepting,
+    isWithinBusinessHours,
+    isAcceptingNow: true,
+    tone: "active"
+  };
 }
