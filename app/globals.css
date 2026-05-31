@@ -3292,6 +3292,7 @@ button {
 }
 
 .timecard-view-tabs button,
+.timecard-view-tabs a,
 .timecard-subtabs button {
   display: inline-flex;
   align-items: center;
@@ -3303,9 +3304,11 @@ button {
   background: white;
   color: var(--ink);
   font-weight: 850;
+  text-decoration: none;
 }
 
-.timecard-view-tabs button {
+.timecard-view-tabs button,
+.timecard-view-tabs a {
   min-width: 132px;
   padding: 0 16px;
 }
@@ -3316,6 +3319,7 @@ button {
 }
 
 .timecard-view-tabs button.is-active,
+.timecard-view-tabs a.is-active,
 .timecard-subtabs button.is-active {
   border-color: rgba(33, 116, 91, 0.45);
   background: var(--green);
@@ -3716,9 +3720,28 @@ button {
   font-size: 11px;
 }
 
+.shift-grid thead th em {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--red);
+  color: white;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .shift-grid .is-weekend,
 .shift-grid thead th.is-weekend {
   background: #fff7f2;
+}
+
+.shift-grid .has-uncovered-shift,
+.shift-grid thead th.has-uncovered-shift {
+  background: var(--red-soft);
 }
 
 .shift-grid .shift-employee-head,
@@ -3758,6 +3781,14 @@ button {
   color: var(--green);
 }
 
+.has-uncovered-shift .shift-cell:not(.has-shift) {
+  background: rgba(207, 59, 59, 0.08);
+}
+
+.has-uncovered-shift .shift-cell.has-shift {
+  background: linear-gradient(135deg, var(--green-soft) 0 70%, rgba(207, 59, 59, 0.14) 70% 100%);
+}
+
 .shift-cell.is-selected {
   box-shadow: inset 0 0 0 2px var(--green);
 }
@@ -3774,6 +3805,42 @@ button {
 
 .shift-empty {
   color: #b8c1ce;
+}
+
+.actual-shift-cell {
+  cursor: default;
+}
+
+.actual-shift-cell small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.actual-shift-cell.is-complete {
+  background: var(--green-soft);
+}
+
+.actual-shift-cell.is-late {
+  background: #fff1df;
+  color: var(--amber);
+}
+
+.actual-shift-cell.is-early {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.actual-shift-cell.is-missing {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.actual-shift-cell.is-late strong,
+.actual-shift-cell.is-early strong,
+.actual-shift-cell.is-missing strong {
+  color: inherit;
 }
 
 .timecard-management-grid {
@@ -9882,6 +9949,7 @@ button {
   }
 
   .timecard-view-tabs button,
+  .timecard-view-tabs a,
   .timecard-subtabs button {
     flex: 1 1 0;
     min-width: 0;

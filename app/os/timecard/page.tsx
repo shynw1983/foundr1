@@ -40,6 +40,7 @@ type DailySummary = {
   key: string;
   employeeId: string;
   employeeName: string;
+  storeId: string;
   storeName: string;
   workDate: string;
   clockIn: string | null;
@@ -105,12 +106,24 @@ type ShiftPattern = {
   breakMinutes: string;
 };
 
+type DayCoverage = {
+  status: "closed" | "covered" | "uncovered";
+  missingLabel: string;
+};
+
+type ActualStatus = {
+  className: string;
+  label: string;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
+  { label: "排班", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "商品マスタ", href: "/os/products", icon: BriefcaseBusiness },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
   { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
@@ -220,18 +233,118 @@ function getShiftPatterns(businessHours: StoreBusinessHours, workDate: string) {
   ] satisfies ShiftPattern[];
 }
 
+function formatMinuteRange(start: number, end: number) {
+  return `${minutesToTime(start)}-${minutesToTime(end)}`;
+}
+
+function getJstTimeText(value: string | null | undefined) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(value));
+}
+
+function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | undefined) {
+  if (!actual) {
+    return shift ? { className: " is-missing", label: "未打刻" } satisfies ActualStatus : { className: "", label: "" } satisfies ActualStatus;
+  }
+
+  const labels = [...actual.alerts];
+  if (shift?.scheduledStart && shift.scheduledEnd && actual.clockIn && actual.clockOut) {
+    const scheduledStart = timeToMinutes(shift.scheduledStart);
+    const scheduledEndBase = timeToMinutes(shift.scheduledEnd);
+    const scheduledEnd = scheduledEndBase <= scheduledStart ? scheduledEndBase + 1440 : scheduledEndBase;
+    const actualStart = timeToMinutes(getJstTimeText(actual.clockIn) ?? "00:00");
+    const actualEndBase = timeToMinutes(getJstTimeText(actual.clockOut) ?? "00:00");
+    const actualEnd = actualEndBase <= actualStart ? actualEndBase + 1440 : actualEndBase;
+
+    if (actualStart > scheduledStart) labels.push("遅刻");
+    if (actualEnd < scheduledEnd) labels.push("早退");
+  }
+
+  const uniqueLabels = Array.from(new Set(labels));
+  if (uniqueLabels.includes("遅刻")) {
+    return { className: " is-late", label: uniqueLabels.join("、") } satisfies ActualStatus;
+  }
+  if (uniqueLabels.includes("早退")) {
+    return { className: " is-early", label: uniqueLabels.join("、") } satisfies ActualStatus;
+  }
+  if (uniqueLabels.length) {
+    return { className: " is-missing", label: uniqueLabels.join("、") } satisfies ActualStatus;
+  }
+  return { className: " is-complete", label: "OK" } satisfies ActualStatus;
+}
+
+function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shifts: ShiftEntry[]) {
+  const day = getBusinessDayForDate(businessHours, workDate);
+  if (day.closed) {
+    return { status: "closed", missingLabel: "" } satisfies DayCoverage;
+  }
+
+  const businessStart = timeToMinutes(day.open);
+  const businessEndBase = timeToMinutes(day.close);
+  const businessEnd = businessEndBase <= businessStart ? businessEndBase + 1440 : businessEndBase;
+  const intervals = shifts
+    .filter((shift) => shift.workDate === workDate && shift.scheduledStart && shift.scheduledEnd)
+    .map((shift) => {
+      const start = timeToMinutes(shift.scheduledStart as string);
+      const endBase = timeToMinutes(shift.scheduledEnd as string);
+      const end = endBase <= start ? endBase + 1440 : endBase;
+      return {
+        start: Math.max(start, businessStart),
+        end: Math.min(end, businessEnd)
+      };
+    })
+    .filter((interval) => interval.end > interval.start)
+    .sort((left, right) => left.start - right.start);
+
+  const missing: Array<{ start: number; end: number }> = [];
+  let coveredUntil = businessStart;
+
+  for (const interval of intervals) {
+    if (interval.start > coveredUntil) {
+      missing.push({ start: coveredUntil, end: interval.start });
+    }
+    coveredUntil = Math.max(coveredUntil, interval.end);
+  }
+
+  if (coveredUntil < businessEnd) {
+    missing.push({ start: coveredUntil, end: businessEnd });
+  }
+
+  if (!missing.length) {
+    return { status: "covered", missingLabel: "" } satisfies DayCoverage;
+  }
+
+  return {
+    status: "uncovered",
+    missingLabel: missing.map((range) => formatMinuteRange(range.start, range.end)).join("、")
+  } satisfies DayCoverage;
+}
+
 type TimecardMainView = "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
 type TimecardPayrollView = "summary" | "employee";
 
-export default function TimecardPage() {
+export function TimecardPage({
+  initialMainView = "schedule",
+  initialScheduleView = "planned",
+  initialPayrollView = "summary"
+}: {
+  initialMainView?: TimecardMainView;
+  initialScheduleView?: TimecardScheduleView;
+  initialPayrollView?: TimecardPayrollView;
+}) {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [mainView, setMainView] = useState<TimecardMainView>("schedule");
-  const [scheduleView, setScheduleView] = useState<TimecardScheduleView>("planned");
-  const [payrollView, setPayrollView] = useState<TimecardPayrollView>("summary");
+  const [mainView] = useState<TimecardMainView>(initialMainView);
+  const [scheduleView, setScheduleView] = useState<TimecardScheduleView>(initialScheduleView);
+  const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
   const [shiftMessage, setShiftMessage] = useState("");
@@ -303,6 +416,22 @@ export default function TimecardPage() {
     }
     return map;
   }, [data?.shifts]);
+  const actualByCell = useMemo(() => {
+    const map = new Map<string, DailySummary>();
+    for (const day of data?.dailySummaries ?? []) {
+      if (day.storeId === selectedStoreId) {
+        map.set(`${day.employeeId}:${day.workDate}`, day);
+      }
+    }
+    return map;
+  }, [data?.dailySummaries, selectedStoreId]);
+  const coverageByDate = useMemo(() => {
+    const map = new Map<string, DayCoverage>();
+    for (const day of monthDays) {
+      map.set(day.key, getDayCoverage(selectedStoreBusinessHours, day.key, data?.shifts ?? []));
+    }
+    return map;
+  }, [data?.shifts, monthDays, selectedStoreBusinessHours]);
   const selectedShiftEmployee = shiftDraft
     ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
     : null;
@@ -453,14 +582,14 @@ export default function TimecardPage() {
         </section>
 
         <section className="timecard-view-tabs" aria-label="タイムカードメニュー">
-          <button className={mainView === "schedule" ? "is-active" : ""} type="button" onClick={() => setMainView("schedule")}>
+          <a className={mainView === "schedule" ? "is-active" : ""} href="/os/timecard/schedule">
             <CalendarDays size={18} />
             排班
-          </button>
-          <button className={mainView === "payroll" ? "is-active" : ""} type="button" onClick={() => setMainView("payroll")}>
+          </a>
+          <a className={mainView === "payroll" ? "is-active" : ""} href="/os/timecard/payroll">
             <WalletCards size={18} />
             給与
-          </button>
+          </a>
         </section>
 
         {mainView === "schedule" ? (
@@ -531,12 +660,21 @@ export default function TimecardPage() {
                     <thead>
                       <tr>
                         <th className="shift-employee-head">従業員</th>
-                        {monthDays.map((day) => (
-                          <th className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
-                            <span>{day.day}</span>
-                            <small>{day.weekdayLabel}</small>
-                          </th>
-                        ))}
+                        {monthDays.map((day) => {
+                          const coverage = coverageByDate.get(day.key);
+                          const isUncovered = coverage?.status === "uncovered";
+                          return (
+                            <th
+                              className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()}
+                              title={isUncovered ? `未排班: ${coverage?.missingLabel}` : undefined}
+                              key={day.key}
+                            >
+                              <span>{day.day}</span>
+                              <small>{day.weekdayLabel}</small>
+                              {isUncovered ? <em>未</em> : null}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -546,9 +684,16 @@ export default function TimecardPage() {
                           {monthDays.map((day) => {
                             const shift = shiftByCell.get(`${employee.id}:${day.key}`);
                             const isSelected = shiftDraft?.employeeId === employee.id && shiftDraft.workDate === day.key;
+                            const coverage = coverageByDate.get(day.key);
+                            const isUncovered = coverage?.status === "uncovered";
                             return (
-                              <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
-                                <button className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}`} type="button" onClick={() => openShiftEditor(employee.id, day.key)}>
+                              <td className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()} key={day.key}>
+                                <button
+                                  className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}`}
+                                  type="button"
+                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : undefined}
+                                  onClick={() => openShiftEditor(employee.id, day.key)}
+                                >
                                   {shift ? (
                                     <>
                                       <strong>{shift.scheduledStart ?? "--:--"}</strong>
@@ -577,38 +722,55 @@ export default function TimecardPage() {
                   <CalendarDays />
                   <div>
                     <h3>実勤務時間</h3>
-                    <p>打刻の不足がある日は確認欄に表示されます。</p>
+                    <p>計画排班と同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。</p>
                   </div>
                 </div>
-                <div className="timecard-table-wrap">
-                  <table className="timecard-table">
+                <div className="shift-grid-wrap">
+                  <table className="shift-grid actual-shift-grid">
                     <thead>
                       <tr>
-                        <th>日付</th>
-                        <th>従業員</th>
-                        <th>出勤</th>
-                        <th>退勤</th>
-                        <th>休憩</th>
-                        <th>勤務時間</th>
-                        <th>深夜</th>
-                        <th>確認</th>
+                        <th className="shift-employee-head">従業員</th>
+                        {monthDays.map((day) => (
+                          <th className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                            <span>{day.day}</span>
+                            <small>{day.weekdayLabel}</small>
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {data?.dailySummaries.length ? data.dailySummaries.map((day) => (
-                        <tr key={day.key}>
-                          <td>{day.workDate}</td>
-                          <td><strong>{day.employeeName}</strong><span>{day.storeName}</span></td>
-                          <td>{formatJstTime(day.clockIn) ?? "--:--"}</td>
-                          <td>{formatJstTime(day.clockOut) ?? "--:--"}</td>
-                          <td>{formatDuration(day.breakMinutes)}</td>
-                          <td>{formatDuration(day.workMinutes)}</td>
-                          <td>{formatDuration(day.nightMinutes)}</td>
-                          <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => (
+                        <tr key={employee.id}>
+                          <th className="shift-employee-cell">{employee.name}</th>
+                          {monthDays.map((day) => {
+                            const actual = actualByCell.get(`${employee.id}:${day.key}`);
+                            const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+                            const status = getActualStatus(actual, shift);
+                            return (
+                              <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                                <div className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}`} title={status.label || undefined}>
+                                  {actual ? (
+                                    <>
+                                      <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
+                                      <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
+                                      {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
+                                    </>
+                                  ) : shift ? (
+                                    <>
+                                      <span className="shift-empty">未打刻</span>
+                                      <small>{shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</small>
+                                    </>
+                                  ) : (
+                                    <span className="shift-empty">-</span>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={8}>この月の打刻実績はまだありません。</td>
+                          <td colSpan={monthDays.length + 1}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
                     </tbody>
@@ -738,4 +900,8 @@ export default function TimecardPage() {
       </section>
     </main>
   );
+}
+
+export default function TimecardRoutePage() {
+  return <TimecardPage initialMainView="schedule" />;
 }
