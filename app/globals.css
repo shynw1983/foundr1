@@ -9450,7 +9450,8 @@ button {
     padding: 12px;
   }
 
-  .store-workbench-topbar {
+  .store-workbench-topbar,
+  .procedure-reader-topbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -9508,10 +9509,12 @@ button {
     display: block;
   }
 
-  .procedure-reader-topbar {
-    display: flex;
-    align-items: stretch;
-    flex-direction: column;
+  .procedure-reader-layout {
+    min-height: 0;
+  }
+
+  .procedure-reader-list {
+    min-height: 0;
   }
 
   .procedure-reader-topbar .secondary-button {
