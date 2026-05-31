@@ -1349,6 +1349,29 @@ button {
   gap: 10px;
 }
 
+.management-subsection-title {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.management-subsection-title h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.management-subsection-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .management-row {
   display: flex;
   align-items: center;

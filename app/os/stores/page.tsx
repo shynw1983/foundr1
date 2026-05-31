@@ -326,7 +326,35 @@ export default function StoresPage() {
 
         <section className="management-grid">
           <section className="panel">
-            <PanelTitle title="店舗管理" subtitle="納品先店舗と取り扱いブランドを管理。担当者は現在メモ扱いで、社員アカウント連携は次の権限設計で対応" />
+            <PanelTitle title="店舗管理" subtitle="Foundr1 OS 全体で共有する店舗情報を管理。予約、販売状態、手順書、勤怠、POS の基礎データとして利用します。" />
+            <div className="management-list">
+              {storesData.map((store) => (
+                <article className="management-row" key={store.name}>
+                  <div>
+                    <strong>{store.name}</strong>
+                    <p>{store.owner || "担当者未設定"}</p>
+                    <small>{formatStoreBrands(store.brands)}</small>
+                    <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
+                    {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
+                  </div>
+                  <div className="row-actions">
+                    <button className="text-button" type="button" onClick={() => startEditingStore(store)}>
+                      編集
+                    </button>
+                    <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
+                      削除
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {storesData.length === 0 ? (
+                <div className="empty-state">登録済みの店舗はありません</div>
+              ) : null}
+            </div>
+            <div className="management-subsection-title">
+              <h4>新しい店舗を追加</h4>
+              <p>ブランド、営業時間、予約画面メモを設定すると、Store 画面と予約受付にも反映されます。</p>
+            </div>
             <form className="management-form" onSubmit={createStore}>
               <label>
                 <span>店舗名</span>
@@ -358,30 +386,6 @@ export default function StoresPage() {
               </div>
               <button className="primary-button" type="submit">店舗を追加</button>
             </form>
-            <div className="management-list">
-              {storesData.map((store) => (
-                <article className="management-row" key={store.name}>
-                  <div>
-                    <strong>{store.name}</strong>
-                    <p>{store.owner || "担当者未設定"}</p>
-                    <small>{formatStoreBrands(store.brands)}</small>
-                    <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
-                    {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
-                  </div>
-                  <div className="row-actions">
-                    <button className="text-button" type="button" onClick={() => startEditingStore(store)}>
-                      編集
-                    </button>
-                    <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
-                      削除
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {storesData.length === 0 ? (
-                <div className="empty-state">登録済みの店舗はありません</div>
-              ) : null}
-            </div>
           </section>
 
           <section className="panel">
