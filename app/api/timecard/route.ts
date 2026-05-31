@@ -55,39 +55,35 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       employees.name,
       employees.role,
       employees.status,
-      employees.payroll_subject as "payrollSubject",
       coalesce(
         array_agg(stores.id::text order by stores.name) filter (where stores.id is not null),
         '{}'::text[]
       ) as "storeIds",
-      coalesce(latest_settings.employment_type, 'hourly') as "employmentType",
-      latest_settings.hourly_wage as "hourlyWage",
-      latest_settings.monthly_salary as "monthlySalary",
-      coalesce(latest_settings.commute_allowance_per_workday, 0) as "commuteAllowancePerWorkday",
-      coalesce(latest_settings.payroll_enabled, employees.payroll_subject = 'paid') as "payrollEnabled"
+      coalesce(
+        json_agg(
+          json_build_object(
+            'storeId', employee_work_stores.store_id::text,
+            'payrollEnabled', employee_work_stores.payroll_enabled,
+            'employmentType', employee_work_stores.employment_type,
+            'hourlyWage', employee_work_stores.hourly_wage,
+            'monthlySalary', employee_work_stores.monthly_salary,
+            'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday
+          )
+          order by stores.name
+        ) filter (where stores.id is not null),
+        '[]'::json
+      ) as "storePayrollSettings"
     from employees
     join employee_work_stores
       on employee_work_stores.employee_id = employees.id
     join stores on stores.id = employee_work_stores.store_id
-    left join lateral (
-      select
-        employment_type,
-        hourly_wage,
-        monthly_salary,
-        commute_allowance_per_workday,
-        payroll_enabled
-      from timecard_employee_settings
-      where timecard_employee_settings.employee_id = employees.id
-      order by valid_from desc, created_at desc
-      limit 1
-    ) latest_settings on true
     where employees.status = 'active'
       and employees.staff_category = 'working'
       and (
         ${allStores}
         or employee_work_stores.store_id::text = any(${scopedStoreIds})
       )
-    group by employees.id, latest_settings.employment_type, latest_settings.hourly_wage, latest_settings.monthly_salary, latest_settings.commute_allowance_per_workday, latest_settings.payroll_enabled
+    group by employees.id
     order by employees.name
   `;
 
@@ -97,11 +93,14 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
     role: String(row.role),
     status: String(row.status),
     storeIds: Array.isArray(row.storeIds) ? row.storeIds.map(String) : [],
-    employmentType: row.employmentType === "monthly" ? "monthly" : "hourly",
-    hourlyWage: toMoneyNumber(row.hourlyWage),
-    monthlySalary: toMoneyNumber(row.monthlySalary),
-    commuteAllowancePerWorkday: toMoneyNumber(row.commuteAllowancePerWorkday) ?? 0,
-    payrollEnabled: row.payrollSubject === "paid" && row.payrollEnabled !== false
+    storePayrollSettings: (Array.isArray(row.storePayrollSettings) ? row.storePayrollSettings : []).map((setting) => ({
+      storeId: String(setting.storeId),
+      payrollEnabled: setting.payrollEnabled !== false,
+      employmentType: setting.employmentType === "monthly" ? "monthly" : "hourly",
+      hourlyWage: toMoneyNumber(setting.hourlyWage),
+      monthlySalary: toMoneyNumber(setting.monthlySalary),
+      commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0
+    }))
   })) satisfies TimecardEmployee[];
 }
 

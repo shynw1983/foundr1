@@ -12,6 +12,15 @@ import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 type StoreOption = {
   id: string;
   name: string;
+  companyName?: string | null;
+};
+
+type WorkStoreOption = StoreOption & {
+  payrollEnabled?: boolean | null;
+  employmentType?: string | null;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
 };
 
 type StaffMember = {
@@ -33,7 +42,7 @@ type StaffMember = {
   payrollEnabled?: boolean | null;
   stores: StoreOption[];
   visibleStores?: StoreOption[];
-  workStores?: StoreOption[];
+  workStores?: WorkStoreOption[];
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -157,7 +166,15 @@ export default function StaffPage() {
       commuteAllowancePerWorkday: String(formData.get("commuteAllowancePerWorkday") ?? "0"),
       status: String(formData.get("status") ?? "active"),
       visibleStoreIds: formData.getAll("visibleStoreIds").map((value) => String(value)),
-      workStoreIds: formData.getAll("workStoreIds").map((value) => String(value))
+      workStoreIds: formData.getAll("workStoreIds").map((value) => String(value)),
+      workStoreSettings: stores.map((store) => ({
+        storeId: store.id,
+        payrollEnabled: formData.getAll("payrollEnabledStoreIds").map((value) => String(value)).includes(store.id),
+        employmentType: String(formData.get(`employmentType:${store.id}`) ?? "hourly"),
+        hourlyWage: String(formData.get(`hourlyWage:${store.id}`) ?? ""),
+        monthlySalary: String(formData.get(`monthlySalary:${store.id}`) ?? ""),
+        commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0")
+      }))
     };
   }
 
@@ -326,8 +343,10 @@ function getWorkStores(member: StaffMember) {
 function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMember; stores: StoreOption[]; currentUserId?: string }) {
   const selectedVisibleStoreIds = new Set(member ? getVisibleStores(member).map((store) => store.id) : []);
   const selectedWorkStoreIds = new Set(member ? getWorkStores(member).map((store) => store.id) : []);
+  const workStoreById = new Map((member ? getWorkStores(member) : []).map((store) => [store.id, store]));
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
+  const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "other">("basic");
 
   async function lookupLarkUser(event: MouseEvent<HTMLButtonElement>) {
     const form = event.currentTarget.form;
@@ -371,106 +390,136 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
 
   return (
     <>
-      <label>
-        <span>氏名</span>
-        <input name="name" defaultValue={member?.name ?? ""} placeholder="例: 山田 太郎" required />
-      </label>
-      <label>
-        <span>ログインID</span>
-        <input name="loginId" defaultValue={member?.loginId ?? ""} placeholder="例: staff01" required />
-      </label>
-      <label>
-        <span>メール</span>
-        <input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="任意" />
-      </label>
-      <label>
-        <span>Lark open_id</span>
-        <input name="larkOpenId" defaultValue={member?.larkOpenId ?? ""} placeholder="任意" />
-      </label>
-      <label>
-        <span>Lark user_id</span>
-        <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
-      </label>
-      <div className="staff-lark-lookup">
-        <button className="secondary-button" type="button" onClick={lookupLarkUser}>
-          Lark 連携を確認
-        </button>
-        {larkStatus ? <small>{larkStatus}</small> : null}
+      <div className="staff-form-tabs" role="tablist" aria-label="スタッフ情報">
+        <button className={activeTab === "basic" ? "is-active" : ""} type="button" onClick={() => setActiveTab("basic")}>基本情報</button>
+        <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>給与情報</button>
+        <button className={activeTab === "other" ? "is-active" : ""} type="button" onClick={() => setActiveTab("other")}>その他</button>
       </div>
-      <label>
-        <span>{member ? "新しいパスワード" : "初期パスワード"}</span>
-        <input name="password" type="password" placeholder={member ? "変更時のみ入力" : "必須"} required={!member} />
-      </label>
-      <label>
-        <span>権限</span>
-        <select name="role" defaultValue={member?.role ?? "staff"}>
-          <option value="staff">店舗スタッフ</option>
-          <option value="store_owner">加盟店オーナー</option>
-          <option value="buyer">購入担当</option>
-          <option value="manager">Manager</option>
-          <option value="owner">Owner</option>
-        </select>
-      </label>
-      <label>
-        <span>スタッフ区分</span>
-        <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
-          <option value="executive">経営層</option>
-          <option value="management">管理層</option>
-          <option value="working">実勤務スタッフ</option>
-        </select>
-      </label>
-      <label>
-        <span>給与対象</span>
-        <select name="payrollSubject" defaultValue={member?.payrollSubject ?? "none"}>
-          <option value="paid">給与計算あり</option>
-          <option value="unpaid">給与計算なし</option>
-          <option value="none">給与対象外</option>
-        </select>
-      </label>
-      <label>
-        <span>給与形態</span>
-        <select name="employmentType" defaultValue={member?.employmentType ?? "hourly"}>
-          <option value="hourly">時給</option>
-          <option value="monthly">月給</option>
-        </select>
-      </label>
-      <label>
-        <span>時給</span>
-        <input name="hourlyWage" type="number" min="0" step="1" defaultValue={member?.hourlyWage ?? ""} placeholder="例: 1200" />
-      </label>
-      <label>
-        <span>月給</span>
-        <input name="monthlySalary" type="number" min="0" step="1" defaultValue={member?.monthlySalary ?? ""} placeholder="月給社員のみ" />
-      </label>
-      <label>
-        <span>交通費 / 勤務日</span>
-        <input name="commuteAllowancePerWorkday" type="number" min="0" step="1" defaultValue={member?.commuteAllowancePerWorkday ?? 0} />
-      </label>
-      <label>
-        <span>状態</span>
-        <select name="status" defaultValue={member?.status ?? "active"} disabled={isSelf}>
-          <option value="active">有効</option>
-          <option value="inactive">停止中</option>
-        </select>
-      </label>
-      <fieldset className="checkbox-group staff-store-scope">
-        <span>閲覧可能店舗</span>
-        {stores.length ? stores.map((store) => (
-          <label key={store.id}>
-            <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
-            {store.name}
-          </label>
-        )) : <small>店舗データがありません。</small>}
-      </fieldset>
-      <fieldset className="checkbox-group staff-store-scope">
-        <span>勤務店舗・給与対象店舗</span>
-        {stores.length ? stores.map((store) => (
-          <label key={store.id}>
-            <input type="checkbox" name="workStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id)} />
-            {store.name}
-          </label>
-        )) : <small>店舗データがありません。</small>}
-      </fieldset>
+
+      <section className={activeTab === "basic" ? "staff-form-pane is-active" : "staff-form-pane"}>
+        <label>
+          <span>氏名</span>
+          <input name="name" defaultValue={member?.name ?? ""} placeholder="例: 山田 太郎" required />
+        </label>
+        <label>
+          <span>ログインID</span>
+          <input name="loginId" defaultValue={member?.loginId ?? ""} placeholder="例: staff01" required />
+        </label>
+        <label>
+          <span>メール</span>
+          <input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="任意" />
+        </label>
+        <label>
+          <span>{member ? "新しいパスワード" : "初期パスワード"}</span>
+          <input name="password" type="password" placeholder={member ? "変更時のみ入力" : "必須"} required={!member} />
+        </label>
+        <label>
+          <span>権限</span>
+          <select name="role" defaultValue={member?.role ?? "staff"}>
+            <option value="staff">店舗スタッフ</option>
+            <option value="store_owner">加盟店オーナー</option>
+            <option value="buyer">購入担当</option>
+            <option value="manager">Manager</option>
+            <option value="owner">Owner</option>
+          </select>
+        </label>
+        <label>
+          <span>スタッフ区分</span>
+          <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
+            <option value="executive">経営層</option>
+            <option value="management">管理層</option>
+            <option value="working">実勤務スタッフ</option>
+          </select>
+        </label>
+        <label>
+          <span>状態</span>
+          <select name="status" defaultValue={member?.status ?? "active"} disabled={isSelf}>
+            <option value="active">有効</option>
+            <option value="inactive">停止中</option>
+          </select>
+        </label>
+      </section>
+
+      <section className={activeTab === "payroll" ? "staff-form-pane is-active" : "staff-form-pane"}>
+        <label>
+          <span>給与対象</span>
+          <select name="payrollSubject" defaultValue={member?.payrollSubject ?? "none"}>
+            <option value="paid">給与計算あり</option>
+            <option value="unpaid">給与計算なし</option>
+            <option value="none">給与対象外</option>
+          </select>
+        </label>
+        <input name="employmentType" type="hidden" value={member?.employmentType ?? "hourly"} readOnly />
+        <input name="hourlyWage" type="hidden" value={String(member?.hourlyWage ?? "")} readOnly />
+        <input name="monthlySalary" type="hidden" value={String(member?.monthlySalary ?? "")} readOnly />
+        <input name="commuteAllowancePerWorkday" type="hidden" value={String(member?.commuteAllowancePerWorkday ?? 0)} readOnly />
+        <div className="staff-payroll-store-list">
+          {stores.length ? stores.map((store) => {
+            const setting = workStoreById.get(store.id);
+            const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
+            return (
+              <article className="staff-payroll-store-row" key={store.id}>
+                <label className="staff-payroll-store-toggle">
+                  <input type="checkbox" name="workStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id)} />
+                  <span>
+                    <strong>{store.name}</strong>
+                    <small>{store.companyName ?? "会社未設定"}</small>
+                  </span>
+                </label>
+                <label>
+                  <span>給与計算</span>
+                  <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={setting?.payrollEnabled !== false} />
+                </label>
+                <label>
+                  <span>給与形態</span>
+                  <select name={`employmentType:${store.id}`} defaultValue={defaultEmploymentType === "monthly" ? "monthly" : "hourly"}>
+                    <option value="hourly">時給</option>
+                    <option value="monthly">月給</option>
+                  </select>
+                </label>
+                <label>
+                  <span>時給</span>
+                  <input name={`hourlyWage:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.hourlyWage ?? member?.hourlyWage ?? ""} placeholder="例: 1200" />
+                </label>
+                <label>
+                  <span>月給</span>
+                  <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.monthlySalary ?? member?.monthlySalary ?? ""} placeholder="月給のみ" />
+                </label>
+                <label>
+                  <span>交通費 / 勤務日</span>
+                  <input name={`commuteAllowancePerWorkday:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowancePerWorkday ?? member?.commuteAllowancePerWorkday ?? 0} />
+                </label>
+              </article>
+            );
+          }) : <p className="empty-state-text">店舗データがありません。</p>}
+        </div>
+      </section>
+
+      <section className={activeTab === "other" ? "staff-form-pane is-active" : "staff-form-pane"}>
+        <fieldset className="checkbox-group staff-store-scope">
+          <span>閲覧可能店舗</span>
+          {stores.length ? stores.map((store) => (
+            <label key={store.id}>
+              <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
+              {store.name}
+            </label>
+          )) : <small>店舗データがありません。</small>}
+        </fieldset>
+        <label>
+          <span>Lark open_id</span>
+          <input name="larkOpenId" defaultValue={member?.larkOpenId ?? ""} placeholder="任意" />
+        </label>
+        <label>
+          <span>Lark user_id</span>
+          <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
+        </label>
+        <div className="staff-lark-lookup">
+          <button className="secondary-button" type="button" onClick={lookupLarkUser}>
+            Lark 連携を確認
+          </button>
+          {larkStatus ? <small>{larkStatus}</small> : null}
+        </div>
+      </section>
     </>
   );
 }

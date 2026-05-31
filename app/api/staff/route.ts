@@ -21,6 +21,16 @@ type StaffPayload = {
   storeIds?: string[];
   visibleStoreIds?: string[];
   workStoreIds?: string[];
+  workStoreSettings?: WorkStoreSettingPayload[];
+};
+
+type WorkStoreSettingPayload = {
+  storeId?: string;
+  payrollEnabled?: boolean;
+  employmentType?: string;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
 };
 
 function normalizeRole(role?: string) {
@@ -94,7 +104,18 @@ export async function GET() {
         and employee_scopes.scope_type = 'store'
     ) visible_stores on true
     left join lateral (
-      select json_agg(json_build_object('id', stores.id, 'name', stores.name) order by stores.name) as stores
+      select json_agg(
+        json_build_object(
+          'id', stores.id,
+          'name', stores.name,
+          'payrollEnabled', employee_work_stores.payroll_enabled,
+          'employmentType', employee_work_stores.employment_type,
+          'hourlyWage', employee_work_stores.hourly_wage,
+          'monthlySalary', employee_work_stores.monthly_salary,
+          'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday
+        )
+        order by stores.name
+      ) as stores
       from employee_work_stores
       join stores on stores.id = employee_work_stores.store_id
       where employee_work_stores.employee_id = employees.id
@@ -103,10 +124,11 @@ export async function GET() {
   `;
 
   const stores = await sql`
-    select id, name
+    select stores.id, stores.name, companies.name as "companyName"
     from stores
-    where status = 'active'
-    order by name
+    left join companies on companies.id = stores.company_id
+    where stores.status = 'active'
+    order by companies.name nulls last, stores.name
   `;
 
   return Response.json({
@@ -140,6 +162,7 @@ export async function POST(request: Request) {
   const status = normalizeStatus(body.status);
   const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
@@ -188,9 +211,26 @@ export async function POST(request: Request) {
   }
 
   for (const storeId of workStoreIds) {
+    const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
     await sql`
-      insert into employee_work_stores (employee_id, store_id)
-      values (${employeeId}, ${storeId})
+      insert into employee_work_stores (
+        employee_id,
+        store_id,
+        payroll_enabled,
+        employment_type,
+        hourly_wage,
+        monthly_salary,
+        commute_allowance_per_workday
+      )
+      values (
+        ${employeeId},
+        ${storeId},
+        ${storeSetting?.payrollEnabled !== false},
+        ${normalizeEmploymentType(storeSetting?.employmentType ?? employmentType)},
+        ${toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage},
+        ${toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary},
+        ${toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday}
+      )
       on conflict do nothing
     `;
   }

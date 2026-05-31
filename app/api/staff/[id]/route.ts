@@ -21,6 +21,16 @@ type StaffPayload = {
   storeIds?: string[];
   visibleStoreIds?: string[];
   workStoreIds?: string[];
+  workStoreSettings?: WorkStoreSettingPayload[];
+};
+
+type WorkStoreSettingPayload = {
+  storeId?: string;
+  payrollEnabled?: boolean;
+  employmentType?: string;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
 };
 
 function normalizeRole(role?: string) {
@@ -71,6 +81,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const status = id === session.id ? "active" : normalizeStatus(body.status);
   const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -129,9 +140,26 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   for (const storeId of workStoreIds) {
+    const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
     await sql`
-      insert into employee_work_stores (employee_id, store_id)
-      values (${id}, ${storeId})
+      insert into employee_work_stores (
+        employee_id,
+        store_id,
+        payroll_enabled,
+        employment_type,
+        hourly_wage,
+        monthly_salary,
+        commute_allowance_per_workday
+      )
+      values (
+        ${id},
+        ${storeId},
+        ${storeSetting?.payrollEnabled !== false},
+        ${normalizeEmploymentType(storeSetting?.employmentType ?? employmentType)},
+        ${toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage},
+        ${toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary},
+        ${toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday}
+      )
       on conflict do nothing
     `;
   }

@@ -19,11 +19,16 @@ export type TimecardEmployee = {
   role: string;
   status: string;
   storeIds: string[];
+  storePayrollSettings: TimecardStorePayrollSetting[];
+};
+
+export type TimecardStorePayrollSetting = {
+  storeId: string;
+  payrollEnabled: boolean;
   employmentType: "hourly" | "monthly";
   hourlyWage: number | null;
   monthlySalary: number | null;
   commuteAllowancePerWorkday: number;
-  payrollEnabled: boolean;
 };
 
 export type TimecardDailySummary = {
@@ -46,7 +51,7 @@ export type TimecardPayrollRow = {
   employeeId: string;
   employeeName: string;
   storeNames: string[];
-  employmentType: "hourly" | "monthly";
+  employmentType: "hourly" | "monthly" | "mixed";
   hourlyWage: number | null;
   monthlySalary: number | null;
   workDays: number;
@@ -202,18 +207,20 @@ export function summarizeTimecardDays(punches: TimecardPunch[]) {
 export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: TimecardDailySummary[]) {
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const rowsByEmployee = new Map<string, TimecardPayrollRow>();
+  const daysByEmployeeAndStore = new Map<string, TimecardDailySummary[]>();
 
   for (const day of dailySummaries) {
     const employee = employeeById.get(day.employeeId);
-    if (!employee || !employee.payrollEnabled) continue;
+    const storeSetting = employee?.storePayrollSettings.find((setting) => setting.storeId === day.storeId);
+    if (!employee || !storeSetting?.payrollEnabled) continue;
 
     const current = rowsByEmployee.get(day.employeeId) ?? {
       employeeId: day.employeeId,
       employeeName: day.employeeName,
       storeNames: [],
-      employmentType: employee.employmentType,
-      hourlyWage: employee.hourlyWage,
-      monthlySalary: employee.monthlySalary,
+      employmentType: storeSetting.employmentType,
+      hourlyWage: storeSetting.employmentType === "hourly" ? storeSetting.hourlyWage : null,
+      monthlySalary: storeSetting.employmentType === "monthly" ? storeSetting.monthlySalary : null,
       workDays: 0,
       punchCount: 0,
       workMinutes: 0,
@@ -226,6 +233,9 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     };
 
     current.storeNames = uniqueStrings([...current.storeNames, day.storeName]);
+    current.employmentType = current.employmentType === storeSetting.employmentType ? current.employmentType : "mixed";
+    current.hourlyWage = current.employmentType === "hourly" ? storeSetting.hourlyWage : null;
+    current.monthlySalary = current.employmentType === "monthly" ? storeSetting.monthlySalary : null;
     current.workDays += day.workMinutes > 0 ? 1 : 0;
     current.punchCount += 1;
     current.workMinutes += day.workMinutes;
@@ -233,13 +243,25 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     current.nightMinutes += day.nightMinutes;
     current.alerts = uniqueStrings([...current.alerts, ...day.alerts]);
     rowsByEmployee.set(day.employeeId, current);
+    const storeKey = `${day.employeeId}:${day.storeId}`;
+    daysByEmployeeAndStore.set(storeKey, [...(daysByEmployeeAndStore.get(storeKey) ?? []), day]);
   }
 
   const rows = Array.from(rowsByEmployee.values()).map((row) => {
     const employee = employeeById.get(row.employeeId);
-    const hourlyBasePay = Math.ceil((row.workMinutes / 60) * (employee?.hourlyWage ?? 0));
-    const basePay = employee?.employmentType === "monthly" ? Math.ceil(employee.monthlySalary ?? 0) : hourlyBasePay;
-    const commuteAllowance = Math.ceil(row.workDays * (employee?.commuteAllowancePerWorkday ?? 0));
+    let basePay = 0;
+    let commuteAllowance = 0;
+    for (const setting of employee?.storePayrollSettings ?? []) {
+      if (!setting.payrollEnabled) continue;
+      const storeDays = daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [];
+      const workDays = storeDays.filter((day) => day.workMinutes > 0).length;
+      const workMinutes = storeDays.reduce((sum, day) => sum + day.workMinutes, 0);
+      if (workDays === 0 && workMinutes === 0) continue;
+      basePay += setting.employmentType === "monthly"
+        ? Math.ceil(setting.monthlySalary ?? 0)
+        : Math.ceil((workMinutes / 60) * (setting.hourlyWage ?? 0));
+      commuteAllowance += Math.ceil(workDays * setting.commuteAllowancePerWorkday);
+    }
     return {
       ...row,
       basePay,

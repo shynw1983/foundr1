@@ -31,7 +31,7 @@ type PayrollRow = {
   employeeId: string;
   employeeName: string;
   storeNames: string[];
-  employmentType: "hourly" | "monthly";
+  employmentType: "hourly" | "monthly" | "mixed";
   hourlyWage: number | null;
   monthlySalary: number | null;
   workDays: number;
@@ -369,7 +369,7 @@ export default function TimecardPage() {
                     <div className="timecard-detail-grid">
                       <MetricCard label="勤務日数" value={`${selectedPayrollRow.workDays}日`} note={`${selectedPayrollRow.punchCount}回`} />
                       <MetricCard label="勤務時間" value={formatDuration(selectedPayrollRow.workMinutes)} note={`深夜 ${formatDuration(selectedPayrollRow.nightMinutes)}`} />
-                      <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
+                      <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>
                     <div className="timecard-table-wrap">

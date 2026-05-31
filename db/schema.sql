@@ -116,9 +116,20 @@ create table if not exists employee_work_stores (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references employees(id) on delete cascade,
   store_id uuid not null references stores(id) on delete cascade,
+  payroll_enabled boolean not null default true,
+  employment_type text not null default 'hourly',
+  hourly_wage numeric,
+  monthly_salary numeric,
+  commute_allowance_per_workday numeric not null default 0,
   created_at timestamptz not null default now(),
   unique (employee_id, store_id)
 );
+
+alter table employee_work_stores add column if not exists payroll_enabled boolean not null default true;
+alter table employee_work_stores add column if not exists employment_type text not null default 'hourly';
+alter table employee_work_stores add column if not exists hourly_wage numeric;
+alter table employee_work_stores add column if not exists monthly_salary numeric;
+alter table employee_work_stores add column if not exists commute_allowance_per_workday numeric not null default 0;
 
 insert into employee_work_stores (employee_id, store_id)
 select distinct employee_id, store_id
@@ -156,6 +167,26 @@ create table if not exists timecard_employee_settings (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+update employee_work_stores
+set
+  payroll_enabled = coalesce(latest_settings.payroll_enabled, employee_work_stores.payroll_enabled),
+  employment_type = coalesce(latest_settings.employment_type, employee_work_stores.employment_type),
+  hourly_wage = coalesce(employee_work_stores.hourly_wage, latest_settings.hourly_wage),
+  monthly_salary = coalesce(employee_work_stores.monthly_salary, latest_settings.monthly_salary),
+  commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0)
+from (
+  select distinct on (employee_id)
+    employee_id,
+    employment_type,
+    hourly_wage,
+    monthly_salary,
+    commute_allowance_per_workday,
+    payroll_enabled
+  from timecard_employee_settings
+  order by employee_id, valid_from desc, created_at desc
+) latest_settings
+where latest_settings.employee_id = employee_work_stores.employee_id;
 
 create table if not exists timecard_punches (
   id uuid primary key default gen_random_uuid(),
