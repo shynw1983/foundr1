@@ -19,6 +19,8 @@ type StaffPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   status?: string;
   storeIds?: string[];
+  visibleStoreIds?: string[];
+  workStoreIds?: string[];
 };
 
 function normalizeRole(role?: string) {
@@ -67,7 +69,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const monthlySalary = toNullableNumber(body.monthlySalary);
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const status = id === session.id ? "active" : normalizeStatus(body.status);
-  const storeIds = Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -115,11 +118,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   await sql`delete from employee_scopes where employee_id = ${id} and scope_type = 'store'`;
+  await sql`delete from employee_work_stores where employee_id = ${id}`;
 
-  for (const storeId of storeIds) {
+  for (const storeId of visibleStoreIds) {
     await sql`
       insert into employee_scopes (employee_id, scope_type, store_id)
       values (${id}, 'store', ${storeId})
+      on conflict do nothing
+    `;
+  }
+
+  for (const storeId of workStoreIds) {
+    await sql`
+      insert into employee_work_stores (employee_id, store_id)
+      values (${id}, ${storeId})
       on conflict do nothing
     `;
   }
@@ -152,7 +164,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), storeCount: storeIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

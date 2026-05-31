@@ -32,6 +32,8 @@ type StaffMember = {
   commuteAllowancePerWorkday?: number | string | null;
   payrollEnabled?: boolean | null;
   stores: StoreOption[];
+  visibleStores?: StoreOption[];
+  workStores?: StoreOption[];
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -154,7 +156,8 @@ export default function StaffPage() {
       monthlySalary: String(formData.get("monthlySalary") ?? ""),
       commuteAllowancePerWorkday: String(formData.get("commuteAllowancePerWorkday") ?? "0"),
       status: String(formData.get("status") ?? "active"),
-      storeIds: formData.getAll("storeIds").map((value) => String(value))
+      visibleStoreIds: formData.getAll("visibleStoreIds").map((value) => String(value)),
+      workStoreIds: formData.getAll("workStoreIds").map((value) => String(value))
     };
   }
 
@@ -260,7 +263,7 @@ export default function StaffPage() {
                       </div>
                       <p>{member.loginId} / {roleLabels[member.role] ?? member.role} / {staffCategoryLabels[member.staffCategory] ?? member.staffCategory}</p>
                       <small>
-                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}
+                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: {getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: {getWorkStores(member).length ? getWorkStores(member).map((store) => store.name).join("、") : "未設定"} ・ {formatLastSeen(member.lastSeenAt)}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -312,8 +315,17 @@ export default function StaffPage() {
   );
 }
 
+function getVisibleStores(member: StaffMember) {
+  return member.visibleStores ?? member.stores ?? [];
+}
+
+function getWorkStores(member: StaffMember) {
+  return member.workStores ?? [];
+}
+
 function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMember; stores: StoreOption[]; currentUserId?: string }) {
-  const selectedStoreIds = new Set(member?.stores.map((store) => store.id) ?? []);
+  const selectedVisibleStoreIds = new Set(member ? getVisibleStores(member).map((store) => store.id) : []);
+  const selectedWorkStoreIds = new Set(member ? getWorkStores(member).map((store) => store.id) : []);
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
 
@@ -442,10 +454,19 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         </select>
       </label>
       <fieldset className="checkbox-group staff-store-scope">
-        <span>担当店舗</span>
+        <span>閲覧可能店舗</span>
         {stores.length ? stores.map((store) => (
           <label key={store.id}>
-            <input type="checkbox" name="storeIds" value={store.id} defaultChecked={selectedStoreIds.has(store.id)} />
+            <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
+            {store.name}
+          </label>
+        )) : <small>店舗データがありません。</small>}
+      </fieldset>
+      <fieldset className="checkbox-group staff-store-scope">
+        <span>勤務店舗・給与対象店舗</span>
+        {stores.length ? stores.map((store) => (
+          <label key={store.id}>
+            <input type="checkbox" name="workStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id)} />
             {store.name}
           </label>
         )) : <small>店舗データがありません。</small>}

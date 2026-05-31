@@ -19,6 +19,8 @@ type StaffPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   status?: string;
   storeIds?: string[];
+  visibleStoreIds?: string[];
+  workStoreIds?: string[];
 };
 
 function normalizeRole(role?: string) {
@@ -69,18 +71,9 @@ export async function GET() {
       latest_settings.monthly_salary as "monthlySalary",
       latest_settings.commute_allowance_per_workday as "commuteAllowancePerWorkday",
       latest_settings.payroll_enabled as "payrollEnabled",
-      coalesce(
-        json_agg(
-          json_build_object('id', stores.id, 'name', stores.name)
-          order by stores.name
-        ) filter (where stores.id is not null),
-        '[]'::json
-      ) as stores
+      coalesce(visible_stores.stores, '[]'::json) as "visibleStores",
+      coalesce(work_stores.stores, '[]'::json) as "workStores"
     from employees
-    left join employee_scopes
-      on employee_scopes.employee_id = employees.id
-      and employee_scopes.scope_type = 'store'
-    left join stores on stores.id = employee_scopes.store_id
     left join lateral (
       select
         employment_type,
@@ -93,7 +86,19 @@ export async function GET() {
       order by valid_from desc, created_at desc
       limit 1
     ) latest_settings on true
-    group by employees.id, latest_settings.employment_type, latest_settings.hourly_wage, latest_settings.monthly_salary, latest_settings.commute_allowance_per_workday, latest_settings.payroll_enabled
+    left join lateral (
+      select json_agg(json_build_object('id', stores.id, 'name', stores.name) order by stores.name) as stores
+      from employee_scopes
+      join stores on stores.id = employee_scopes.store_id
+      where employee_scopes.employee_id = employees.id
+        and employee_scopes.scope_type = 'store'
+    ) visible_stores on true
+    left join lateral (
+      select json_agg(json_build_object('id', stores.id, 'name', stores.name) order by stores.name) as stores
+      from employee_work_stores
+      join stores on stores.id = employee_work_stores.store_id
+      where employee_work_stores.employee_id = employees.id
+    ) work_stores on true
     order by employees.created_at desc
   `;
 
@@ -104,7 +109,14 @@ export async function GET() {
     order by name
   `;
 
-  return Response.json({ employees, stores, currentUserId: session.id });
+  return Response.json({
+    employees: employees.map((employee) => ({
+      ...employee,
+      stores: employee.visibleStores
+    })),
+    stores,
+    currentUserId: session.id
+  });
 }
 
 export async function POST(request: Request) {
@@ -126,7 +138,8 @@ export async function POST(request: Request) {
   const monthlySalary = toNullableNumber(body.monthlySalary);
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const status = normalizeStatus(body.status);
-  const storeIds = Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
@@ -166,10 +179,18 @@ export async function POST(request: Request) {
     )
   `;
 
-  for (const storeId of storeIds) {
+  for (const storeId of visibleStoreIds) {
     await sql`
       insert into employee_scopes (employee_id, scope_type, store_id)
       values (${employeeId}, 'store', ${storeId})
+      on conflict do nothing
+    `;
+  }
+
+  for (const storeId of workStoreIds) {
+    await sql`
+      insert into employee_work_stores (employee_id, store_id)
+      values (${employeeId}, ${storeId})
       on conflict do nothing
     `;
   }
@@ -179,7 +200,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory, payrollSubject, status, storeCount: storeIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

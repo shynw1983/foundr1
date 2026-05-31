@@ -66,10 +66,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       coalesce(latest_settings.commute_allowance_per_workday, 0) as "commuteAllowancePerWorkday",
       coalesce(latest_settings.payroll_enabled, employees.payroll_subject = 'paid') as "payrollEnabled"
     from employees
-    left join employee_scopes
-      on employee_scopes.employee_id = employees.id
-      and employee_scopes.scope_type = 'store'
-    left join stores on stores.id = employee_scopes.store_id
+    join employee_work_stores
+      on employee_work_stores.employee_id = employees.id
+    join stores on stores.id = employee_work_stores.store_id
     left join lateral (
       select
         employment_type,
@@ -83,9 +82,10 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       limit 1
     ) latest_settings on true
     where employees.status = 'active'
+      and employees.staff_category = 'working'
       and (
         ${allStores}
-        or employee_scopes.store_id::text = any(${scopedStoreIds})
+        or employee_work_stores.store_id::text = any(${scopedStoreIds})
       )
     group by employees.id, latest_settings.employment_type, latest_settings.hourly_wage, latest_settings.monthly_salary, latest_settings.commute_allowance_per_workday, latest_settings.payroll_enabled
     order by employees.name
@@ -108,21 +108,17 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
 async function canPunchForEmployee(storeId: string, employeeId: string) {
   const rows = await sql`
     select
-      employees.id::text,
-      count(employee_scopes.id)::int as "scopeCount",
-      bool_or(employee_scopes.store_id::text = ${storeId}) as "storeMatch"
+      employees.id::text
     from employees
-    left join employee_scopes
-      on employee_scopes.employee_id = employees.id
-      and employee_scopes.scope_type = 'store'
+    join employee_work_stores
+      on employee_work_stores.employee_id = employees.id
     where employees.id = ${employeeId}
       and employees.status = 'active'
-    group by employees.id
+      and employees.staff_category = 'working'
+      and employee_work_stores.store_id::text = ${storeId}
     limit 1
   `;
-  const row = rows[0];
-  if (!row) return false;
-  return Number(row.scopeCount ?? 0) === 0 || row.storeMatch === true;
+  return Boolean(rows[0]);
 }
 
 export async function GET(request: Request) {

@@ -112,6 +112,21 @@ create table if not exists employee_scopes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists employee_work_stores (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (employee_id, store_id)
+);
+
+insert into employee_work_stores (employee_id, store_id)
+select distinct employee_id, store_id
+from employee_scopes
+where scope_type = 'store'
+  and store_id is not null
+on conflict do nothing;
+
 create table if not exists timecard_store_settings (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,
