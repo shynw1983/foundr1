@@ -32,7 +32,7 @@ function toMoneyNumber(value: unknown) {
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
     return sql`
-      select id::text, name
+      select id::text, name, business_hours as "businessHours"
       from stores
       where status = 'active'
       order by name
@@ -42,7 +42,7 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (storeIds.length === 0) return [];
 
   return sql`
-    select id::text, name
+    select id::text, name, business_hours as "businessHours"
     from stores
     where status = 'active'
       and id::text = any(${storeIds})

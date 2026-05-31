@@ -3641,6 +3641,12 @@ button {
   font-weight: 900;
 }
 
+.shift-patterns span {
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 850;
+}
+
 .shift-editor-actions {
   grid-column: 4 / -1;
   justify-content: flex-end;

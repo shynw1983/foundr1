@@ -7,10 +7,12 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
+import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
 
 type StoreOption = {
   id: string;
   name: string;
+  businessHours?: unknown;
 };
 
 type TimecardEmployee = {
@@ -96,6 +98,13 @@ type ShiftDraft = {
   note: string;
 };
 
+type ShiftPattern = {
+  label: string;
+  start: string;
+  end: string;
+  breakMinutes: string;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -147,6 +156,68 @@ function getMonthDays(month: string) {
       isWeekend: weekday === 0 || weekday === 6
     };
   });
+}
+
+function getWeekdayKeyForDate(dateString: string): WeekdayKey {
+  const index = new Date(`${dateString}T12:00:00+09:00`).getDay();
+  return (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[index];
+}
+
+function timeToMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function minutesToTime(totalMinutes: number) {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hour = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function getBusinessDayForDate(businessHours: StoreBusinessHours, workDate: string) {
+  return businessHours[getWeekdayKeyForDate(workDate)];
+}
+
+function getShiftDefaults(businessHours: StoreBusinessHours, workDate: string) {
+  const day = getBusinessDayForDate(businessHours, workDate);
+  if (day.closed) {
+    return {
+      scheduledStart: "",
+      scheduledEnd: "",
+      breakMinutes: "0",
+      note: "休業日"
+    };
+  }
+  const openMinutes = timeToMinutes(day.open);
+  const closeMinutes = timeToMinutes(day.close);
+  const crossesMidnight = closeMinutes <= openMinutes;
+  const workMinutes = (crossesMidnight ? closeMinutes + 1440 : closeMinutes) - openMinutes;
+  return {
+    scheduledStart: day.open,
+    scheduledEnd: day.close,
+    breakMinutes: workMinutes >= 360 ? "60" : "0",
+    note: ""
+  };
+}
+
+function getShiftPatterns(businessHours: StoreBusinessHours, workDate: string) {
+  const day = getBusinessDayForDate(businessHours, workDate);
+  if (day.closed) return [];
+
+  const openMinutes = timeToMinutes(day.open);
+  const closeMinutes = timeToMinutes(day.close);
+  const adjustedClose = closeMinutes <= openMinutes ? closeMinutes + 1440 : closeMinutes;
+  const duration = adjustedClose - openMinutes;
+  const middle = openMinutes + Math.floor(duration / 2);
+  const shortEnd = Math.min(adjustedClose, openMinutes + 360);
+
+  return [
+    { label: "営業通し", start: day.open, end: day.close, breakMinutes: duration >= 360 ? "60" : "0" },
+    { label: "開店", start: day.open, end: minutesToTime(middle), breakMinutes: duration >= 480 ? "45" : "0" },
+    { label: "後半", start: minutesToTime(middle), end: day.close, breakMinutes: duration >= 480 ? "45" : "0" },
+    { label: "短時間", start: day.open, end: minutesToTime(shortEnd), breakMinutes: "0" }
+  ] satisfies ShiftPattern[];
 }
 
 type TimecardMainView = "schedule" | "payroll";
@@ -204,6 +275,16 @@ export default function TimecardPage() {
   );
   const monthDays = useMemo(() => getMonthDays(month), [month]);
   const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  const selectedStoreBusinessHours = useMemo(
+    () => normalizeBusinessHours(selectedStore?.businessHours),
+    [selectedStore?.businessHours]
+  );
+  const selectedDraftBusinessDay = shiftDraft
+    ? getBusinessDayForDate(selectedStoreBusinessHours, shiftDraft.workDate)
+    : null;
+  const selectedDraftPatterns = shiftDraft
+    ? getShiftPatterns(selectedStoreBusinessHours, shiftDraft.workDate)
+    : [];
   const scheduleEmployees = useMemo(
     () => data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? [],
     [data, selectedStoreId]
@@ -227,13 +308,14 @@ export default function TimecardPage() {
 
   function openShiftEditor(employeeId: string, workDate: string) {
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
     setShiftMessage("");
     setShiftDraft({
       employeeId,
       workDate,
-      scheduledStart: shift?.scheduledStart ?? "11:00",
-      scheduledEnd: shift?.scheduledEnd ?? "18:00",
-      breakMinutes: String(shift?.breakMinutes ?? 0),
+      scheduledStart: shift?.scheduledStart ?? defaults.scheduledStart,
+      scheduledEnd: shift?.scheduledEnd ?? defaults.scheduledEnd,
+      breakMinutes: String(shift?.breakMinutes ?? defaults.breakMinutes),
       note: shift?.note ?? ""
     });
   }
@@ -380,7 +462,7 @@ export default function TimecardPage() {
                   <div className="shift-editor" aria-label="シフト編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftEmployee?.name ?? "従業員"}</strong>
-                      <span>{shiftDraft.workDate}</span>
+                      <span>{shiftDraft.workDate}{selectedDraftBusinessDay ? ` / 営業 ${selectedDraftBusinessDay.closed ? "休業日" : `${selectedDraftBusinessDay.open}-${selectedDraftBusinessDay.close}`}` : ""}</span>
                     </div>
                     <label>
                       <span>開始</span>
@@ -398,12 +480,19 @@ export default function TimecardPage() {
                       <span>メモ</span>
                       <input value={shiftDraft.note} onChange={(event) => setShiftDraft({ ...shiftDraft, note: event.target.value })} placeholder="任意" />
                     </label>
-                    <div className="shift-patterns" aria-label="勤務パターン">
-                      <button type="button" onClick={() => applyShiftPattern("09:00", "15:00", "60")}>朝</button>
-                      <button type="button" onClick={() => applyShiftPattern("12:00", "18:00", "60")}>昼</button>
-                      <button type="button" onClick={() => applyShiftPattern("18:00", "00:00", "60")}>夜</button>
-                      <button type="button" onClick={() => applyShiftPattern("11:00", "22:00", "60")}>通し</button>
-                    </div>
+                    {selectedDraftPatterns.length ? (
+                      <div className="shift-patterns" aria-label="勤務パターン">
+                        {selectedDraftPatterns.map((pattern) => (
+                          <button type="button" onClick={() => applyShiftPattern(pattern.start, pattern.end, pattern.breakMinutes)} key={pattern.label}>
+                            {pattern.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="shift-patterns">
+                        <span>この日は休業日のため、必要な場合のみ手動で時間を入力してください。</span>
+                      </div>
+                    )}
                     <div className="shift-editor-actions">
                       <button className="secondary-button" type="button" onClick={() => setShiftDraft(null)}>閉じる</button>
                       <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteShift()}>削除</button>
