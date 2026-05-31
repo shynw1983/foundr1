@@ -1,5 +1,6 @@
 "use client";
 
+import { LogOut, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
@@ -12,6 +13,10 @@ const roleLabels: Record<string, string> = {
   staff: "Staff",
   buyer: "購入担当"
 };
+
+function getInitial(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || "U";
+}
 
 export function UserBadge() {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
@@ -42,10 +47,26 @@ export function UserBadge() {
 
   return (
     <div className="user-panel">
-      <span className="user-badge" title={`ログインID: ${employee.loginId}`}>
-        <span className="user-badge-name">{employee.name}</span>
-        <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
-      </span>
+      <details className="account-menu">
+        <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
+          <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
+          <span className="user-badge-name">{employee.name}</span>
+          <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
+        </summary>
+        <div className="account-menu-panel">
+          <div className="account-menu-user">
+            <UserRound size={16} />
+            <div>
+              <strong>{employee.name}</strong>
+              <span>{employee.loginId}</span>
+            </div>
+          </div>
+          <a href="/os/logout">
+            <LogOut size={16} />
+            ログアウト
+          </a>
+        </div>
+      </details>
       <NotificationMenu />
       <OsLanguagePicker />
     </div>

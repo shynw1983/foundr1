@@ -643,6 +643,14 @@ button {
   max-width: 100%;
 }
 
+.sidebar-user .account-menu-panel,
+.mobile-nav-user .account-menu-panel {
+  right: 0;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
 .os-language-picker {
   display: grid;
   gap: 5px;
@@ -681,7 +689,9 @@ button {
 }
 
 .sidebar-user .notification-menu summary,
-.mobile-nav-user .notification-menu summary {
+.mobile-nav-user .notification-menu summary,
+.sidebar-user .account-menu summary,
+.mobile-nav-user .account-menu summary {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: #f7fafc;
@@ -783,6 +793,95 @@ button {
   background: white;
   color: var(--ink);
   white-space: nowrap;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.user-avatar {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 999px;
+  background: #1f6f55;
+  color: white;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  display: grid;
+  gap: 8px;
+  width: min(240px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+}
+
+.account-menu-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--ink);
+}
+
+.account-menu-user div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-menu-user strong,
+.account-menu-user span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-user strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.account-menu-user span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-menu-panel a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.account-menu-panel a:hover,
+.account-menu-panel a:focus-visible {
+  background: #fff1f2;
 }
 
 .user-badge-name,
