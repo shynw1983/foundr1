@@ -61,6 +61,8 @@ type StoreMenuCategorySummary = {
   count: number;
 };
 
+const optionCategoryKey = "__store_menu_options__";
+
 function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], brandId: string): StoreMenuCategorySummary[] {
   const counts = new Map<string, number>();
   const masters = new Map<string, StoreMenuCategory>();
@@ -142,6 +144,7 @@ export default function StoreMenuPage() {
   }, [message]);
 
   const visibleItems = useMemo(() => {
+    if (selectedCategory === optionCategoryKey) return [];
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
       if (selectedBrandId && item.brandId !== selectedBrandId) return false;
@@ -153,7 +156,16 @@ export default function StoreMenuPage() {
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
   const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
-  const visibleOptions = useMemo(() => options.filter((option) => !selectedBrandId || option.brandId === selectedBrandId), [options, selectedBrandId]);
+  const optionItems = useMemo(() => options.filter((option) => !selectedBrandId || option.brandId === selectedBrandId), [options, selectedBrandId]);
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return optionItems.filter((option) => (
+      !normalizedQuery ||
+      option.name.toLowerCase().includes(normalizedQuery) ||
+      option.groupName.toLowerCase().includes(normalizedQuery)
+    ));
+  }, [optionItems, query]);
+  const isOptionCategory = selectedCategory === optionCategoryKey;
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
     const nextItem = { ...item, ...patch };
@@ -290,19 +302,23 @@ export default function StoreMenuPage() {
                 </button>
               );
             })}
+            <button
+              className={isOptionCategory ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
+              type="button"
+              onClick={() => setSelectedCategory(optionCategoryKey)}
+            >
+              <span>オプション・トッピング</span>
+              <strong>{optionItems.length}</strong>
+            </button>
           </aside>
 
           <section className="panel store-menu-items-panel">
             <div className="store-menu-list-head">
-              <h2>{selectedCategory ?? "すべて"}</h2>
-              <span className="status-pill">{visibleItems.length}件</span>
+              <h2>{isOptionCategory ? "オプション・トッピング" : selectedCategory ?? "すべて"}</h2>
+              <span className="status-pill">{isOptionCategory ? visibleOptions.length : visibleItems.length}件</span>
             </div>
-            {visibleOptions.length ? (
-              <section className="store-menu-option-section">
-                <div className="store-menu-list-head">
-                  <h3>オプション・トッピング</h3>
-                  <span className="status-pill">{visibleOptions.length}件</span>
-                </div>
+            {isOptionCategory ? (
+              <section className="store-menu-option-section store-menu-option-section-flat">
                 <div className="store-menu-item-list">
                   {visibleOptions.map((option) => (
                     <article className="store-menu-item-row store-menu-option-row" key={option.id}>
@@ -348,9 +364,10 @@ export default function StoreMenuPage() {
                       </div>
                     </article>
                   ))}
+                  {!visibleOptions.length ? <p className="empty-state">{loading ? "読み込み中..." : "オプション・トッピングがありません。"}</p> : null}
                 </div>
               </section>
-            ) : null}
+            ) : (
             <div className="store-menu-item-list">
               {visibleItems.map((item) => (
                 <article className="store-menu-item-row" key={item.id}>
@@ -402,6 +419,7 @@ export default function StoreMenuPage() {
               ))}
               {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
             </div>
+            )}
           </section>
         </div>
       </section>
