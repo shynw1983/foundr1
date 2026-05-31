@@ -469,7 +469,7 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                 <label>
                   <span>給与計算</span>
                   <span className="staff-payroll-check">
-                    <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={setting?.payrollEnabled !== false} />
+                    <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id) && setting?.payrollEnabled !== false} />
                     対象
                   </span>
                 </label>
