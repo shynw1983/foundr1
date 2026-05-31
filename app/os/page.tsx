@@ -5,6 +5,7 @@ import {
   Clock3,
   MenuSquare,
   PackageCheck,
+  Settings,
   ShoppingCart,
   Store,
   UserCog
@@ -82,6 +83,14 @@ const systemModules: OsModule[] = [
     icon: UserCog,
     status: "active",
     roles: ["owner"]
+  },
+  {
+    title: "システム設定",
+    description: "会社、Store 表示、販売状態、モジュールごとの動作を設定",
+    href: "/os/settings",
+    icon: Settings,
+    status: "active",
+    roles: ["owner", "manager", "buyer"]
   }
 ];
 

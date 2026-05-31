@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { getStoreModuleSettings } from "../../../../lib/module-settings";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,8 @@ export async function GET(request: Request) {
     return Response.json({ access, selectedStoreId: "", brands: [], items: [] });
   }
 
-  const [brands, categories, items, options] = await Promise.all([
+  const [settings, brands, categories, items, options] = await Promise.all([
+    getStoreModuleSettings(),
     sql`
       select brands.id::text, brands.name
       from brands
@@ -147,11 +149,12 @@ export async function GET(request: Request) {
 
   return Response.json({
     access,
+    settings,
     selectedStoreId,
     brands,
     categories: categories as MenuStoreCategory[],
-    items: items as MenuStoreItem[],
-    options: options as MenuStoreOption[]
+    items: settings.availability.targets.items ? items as MenuStoreItem[] : [],
+    options: settings.availability.targets.options ? options as MenuStoreOption[] : []
   });
 }
 

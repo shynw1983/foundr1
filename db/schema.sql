@@ -70,6 +70,17 @@ create table if not exists os_audit_logs (
 create index if not exists os_audit_logs_created_at_idx on os_audit_logs (created_at desc);
 create index if not exists os_audit_logs_actor_idx on os_audit_logs (actor_employee_id, created_at desc);
 
+create table if not exists module_settings (
+  id uuid primary key default gen_random_uuid(),
+  scope_key text not null default 'global',
+  module_key text not null,
+  settings jsonb not null default '{}'::jsonb,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (scope_key, module_key)
+);
+
 create table if not exists employee_scopes (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references employees(id) on delete cascade,

@@ -3,6 +3,7 @@
 import { BookOpen, Clock3, ClipboardList, Home, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
+import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
@@ -33,6 +34,7 @@ function formatStoreClock(date: Date) {
 export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | "procedures" | "timecard" | "pos" }) {
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
+  const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
 
   useEffect(() => {
@@ -41,15 +43,31 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSettings() {
+      const response = await fetch("/api/settings?module=store", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as { settings?: StoreModuleSettings };
+      if (isMounted && body.settings) setSettings(body.settings);
+    }
+    void loadSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="store-nav-cluster">
-      <div className="store-live-clock" aria-label="現在時刻">
-        <Clock3 size={17} />
-        <span>{clock.dateText}</span>
-        <strong>{clock.timeText}</strong>
-      </div>
-      <div className="store-user-tools">
-        <UserBadge />
+      {settings.header.showClock ? (
+        <div className="store-live-clock" aria-label="現在時刻">
+          <Clock3 size={17} />
+          <span>{clock.dateText}</span>
+          <strong>{clock.timeText}</strong>
+        </div>
+      ) : null}
+      <div className={`store-user-tools is-user-${settings.header.userDisplay}`}>
+        <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} />
       </div>
       <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">
         {tabs.map((tab) => {

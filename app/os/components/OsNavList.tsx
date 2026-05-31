@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,7 @@ const orderModulePaths = new Set([
 ]);
 const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
+const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 
 function getModuleNavPaths(pathname: string) {
   if (pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")) {
@@ -45,11 +47,13 @@ function getModuleNavPaths(pathname: string) {
 function canShowInCurrentModule(pathname: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os") return true;
+  if (item.href === "/os/settings") return true;
   return getModuleNavPaths(pathname).has(item.href);
 }
 
 function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
+  if (item.href === "/os/settings") return masterRoles.has(role);
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
@@ -80,7 +84,8 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
   }, []);
 
   return useMemo(() => {
-    const currentModuleItems = navItems.filter((item) => canShowInCurrentModule(pathname, item));
+    const availableNavItems = navItems.some((item) => item.href === "/os/settings") ? navItems : [...navItems, settingsNavItem];
+    const currentModuleItems = availableNavItems.filter((item) => canShowInCurrentModule(pathname, item));
     if (!role) return [];
     return currentModuleItems.filter((item) => canShowNavItem(role, item));
   }, [navItems, pathname, role]);

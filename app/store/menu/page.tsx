@@ -14,6 +14,18 @@ type StoreMenuAccess = {
   stores: StoreOption[];
 };
 
+type StoreMenuSettings = {
+  availability: {
+    targets: {
+      items: boolean;
+      options: boolean;
+    };
+    optionDisplayMode: "separate_category" | "mixed" | "hidden";
+    allowStorePriceEdit: boolean;
+    allowChannelToggle: boolean;
+  };
+};
+
 type BrandOption = {
   id: string;
   name: string;
@@ -97,6 +109,14 @@ export default function StoreMenuPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [settings, setSettings] = useState<StoreMenuSettings>({
+    availability: {
+      targets: { items: true, options: true },
+      optionDisplayMode: "separate_category",
+      allowStorePriceEdit: false,
+      allowChannelToggle: false
+    }
+  });
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
@@ -119,6 +139,7 @@ export default function StoreMenuPage() {
     const nextCategories = body.categories as StoreMenuCategory[];
     const nextItems = body.items as StoreMenuItem[];
     const nextOptions = body.options as StoreMenuOption[];
+    if (body.settings) setSettings(body.settings as StoreMenuSettings);
     setAccess(nextAccess);
     setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
@@ -156,7 +177,10 @@ export default function StoreMenuPage() {
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
   const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
-  const optionItems = useMemo(() => options.filter((option) => !selectedBrandId || option.brandId === selectedBrandId), [options, selectedBrandId]);
+  const optionItems = useMemo(() => {
+    if (!settings.availability.targets.options) return [];
+    return options.filter((option) => !selectedBrandId || option.brandId === selectedBrandId);
+  }, [options, selectedBrandId, settings.availability.targets.options]);
   const visibleOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return optionItems.filter((option) => (
@@ -166,6 +190,14 @@ export default function StoreMenuPage() {
     ));
   }, [optionItems, query]);
   const isOptionCategory = selectedCategory === optionCategoryKey;
+  const showOptionCategory = settings.availability.targets.options && settings.availability.optionDisplayMode === "separate_category";
+  const showMixedOptions = settings.availability.targets.options && settings.availability.optionDisplayMode === "mixed";
+
+  useEffect(() => {
+    if (selectedCategory === optionCategoryKey && !showOptionCategory) {
+      setSelectedCategory(null);
+    }
+  }, [selectedCategory, showOptionCategory]);
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
     const nextItem = { ...item, ...patch };
@@ -302,14 +334,16 @@ export default function StoreMenuPage() {
                 </button>
               );
             })}
-            <button
-              className={isOptionCategory ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
-              type="button"
-              onClick={() => setSelectedCategory(optionCategoryKey)}
-            >
-              <span>オプション・トッピング</span>
-              <strong>{optionItems.length}</strong>
-            </button>
+            {showOptionCategory ? (
+              <button
+                className={isOptionCategory ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
+                type="button"
+                onClick={() => setSelectedCategory(optionCategoryKey)}
+              >
+                <span>オプション・トッピング</span>
+                <strong>{optionItems.length}</strong>
+              </button>
+            ) : null}
           </aside>
 
           <section className="panel store-menu-items-panel">
@@ -317,34 +351,76 @@ export default function StoreMenuPage() {
               <h2>{isOptionCategory ? "オプション・トッピング" : selectedCategory ?? "すべて"}</h2>
               <span className="status-pill">{isOptionCategory ? visibleOptions.length : visibleItems.length}件</span>
             </div>
-            {isOptionCategory ? (
+            {isOptionCategory && showOptionCategory ? (
               <section className="store-menu-option-section store-menu-option-section-flat">
                 <div className="store-menu-item-list">
                   {visibleOptions.map((option) => (
-                    <article className="store-menu-item-row store-menu-option-row" key={option.id}>
+                    <StoreOptionRow
+                      option={option}
+                      savingId={savingId}
+                      onSave={saveOption}
+                      onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
+                        entry.id === optionId ? { ...entry, statusNote } : entry
+                      )))}
+                      key={option.id}
+                    />
+                  ))}
+                  {!visibleOptions.length ? <p className="empty-state">{loading ? "読み込み中..." : "オプション・トッピングがありません。"}</p> : null}
+                </div>
+              </section>
+            ) : (
+              <>
+                {showMixedOptions && visibleOptions.length ? (
+                  <section className="store-menu-option-section">
+                    <div className="store-menu-list-head">
+                      <h3>オプション・トッピング</h3>
+                      <span className="status-pill">{visibleOptions.length}件</span>
+                    </div>
+                    <div className="store-menu-item-list">
+                      {visibleOptions.map((option) => (
+                        <StoreOptionRow
+                          option={option}
+                          savingId={savingId}
+                          onSave={saveOption}
+                          onStatusNoteChange={(optionId, statusNote) => setOptions((current) => current.map((entry) => (
+                            entry.id === optionId ? { ...entry, statusNote } : entry
+                          )))}
+                          key={option.id}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+                <div className="store-menu-item-list">
+                  {visibleItems.map((item) => (
+                    <article className="store-menu-item-row" key={item.id}>
                       <div className="store-menu-item-main">
-                        <div className="store-menu-image-empty">OP</div>
+                        {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="store-menu-image-empty">No image</div>}
                         <div>
-                          <strong>{option.name}</strong>
-                          <span>{option.brandName} / {option.groupName}</span>
-                          <small>{option.priceDelta ? `${option.priceDelta > 0 ? "+" : ""}${option.priceDelta}円` : "追加料金なし"}</small>
+                          <strong>{item.name}</strong>
+                          <span>{item.brandName} / {item.category || "未分類"}</span>
+                          <small>
+                            {item.priceOverride == null ? `${item.basePrice ?? 0}円` : `${item.priceOverride}円 店舗価格`}
+                            {" / "}
+                            Web {item.websiteEnabled ? "可" : "停止"} / POS {item.posEnabled ? "可" : "停止"}
+                          </small>
                         </div>
                       </div>
                       <div className="store-menu-status-actions">
                         <button
-                          className={option.isAvailable ? "store-status-button is-on" : "store-status-button"}
+                          className={item.isAvailable ? "store-status-button is-on" : "store-status-button"}
                           type="button"
-                          disabled={savingId === option.id}
-                          onClick={() => void saveOption(option, { isAvailable: true })}
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, { isAvailable: true })}
                         >
                           <CheckCircle2 size={17} />
                           販売中
                         </button>
                         <button
-                          className={!option.isAvailable ? "store-status-button is-off" : "store-status-button"}
+                          className={!item.isAvailable ? "store-status-button is-off" : "store-status-button"}
                           type="button"
-                          disabled={savingId === option.id}
-                          onClick={() => void saveOption(option, { isAvailable: false })}
+                          disabled={savingId === item.id}
+                          onClick={() => void saveItem(item, { isAvailable: false })}
                         >
                           <XCircle size={17} />
                           売切
@@ -352,77 +428,80 @@ export default function StoreMenuPage() {
                       </div>
                       <div className="store-menu-note">
                         <input
-                          value={option.statusNote}
-                          onChange={(event) => setOptions((current) => current.map((entry) => (
-                            entry.id === option.id ? { ...entry, statusNote: event.target.value } : entry
+                          value={item.statusNote}
+                          onChange={(event) => setItems((current) => current.map((entry) => (
+                            entry.id === item.id ? { ...entry, statusNote: event.target.value } : entry
                           )))}
-                          placeholder="例: 豆乳在庫切れ"
+                          placeholder="例: 15分後に再開予定"
                         />
-                        <button className="secondary-button" type="button" disabled={savingId === option.id} onClick={() => void saveOption(option, {})}>
+                        <button className="secondary-button" type="button" disabled={savingId === item.id} onClick={() => void saveItem(item, {})}>
                           メモ保存
                         </button>
                       </div>
                     </article>
                   ))}
-                  {!visibleOptions.length ? <p className="empty-state">{loading ? "読み込み中..." : "オプション・トッピングがありません。"}</p> : null}
+                  {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
                 </div>
-              </section>
-            ) : (
-            <div className="store-menu-item-list">
-              {visibleItems.map((item) => (
-                <article className="store-menu-item-row" key={item.id}>
-                  <div className="store-menu-item-main">
-                    {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="store-menu-image-empty">No image</div>}
-                    <div>
-                      <strong>{item.name}</strong>
-                      <span>{item.brandName} / {item.category || "未分類"}</span>
-                      <small>
-                        {item.priceOverride == null ? `${item.basePrice ?? 0}円` : `${item.priceOverride}円 店舗価格`}
-                        {" / "}
-                        Web {item.websiteEnabled ? "可" : "停止"} / POS {item.posEnabled ? "可" : "停止"}
-                      </small>
-                    </div>
-                  </div>
-                  <div className="store-menu-status-actions">
-                    <button
-                      className={item.isAvailable ? "store-status-button is-on" : "store-status-button"}
-                      type="button"
-                      disabled={savingId === item.id}
-                      onClick={() => void saveItem(item, { isAvailable: true })}
-                    >
-                      <CheckCircle2 size={17} />
-                      販売中
-                    </button>
-                    <button
-                      className={!item.isAvailable ? "store-status-button is-off" : "store-status-button"}
-                      type="button"
-                      disabled={savingId === item.id}
-                      onClick={() => void saveItem(item, { isAvailable: false })}
-                    >
-                      <XCircle size={17} />
-                      売切
-                    </button>
-                  </div>
-                  <div className="store-menu-note">
-                    <input
-                      value={item.statusNote}
-                      onChange={(event) => setItems((current) => current.map((entry) => (
-                        entry.id === item.id ? { ...entry, statusNote: event.target.value } : entry
-                      )))}
-                      placeholder="例: 15分後に再開予定"
-                    />
-                    <button className="secondary-button" type="button" disabled={savingId === item.id} onClick={() => void saveItem(item, {})}>
-                      メモ保存
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {!visibleItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "商品がありません。"}</p> : null}
-            </div>
+              </>
             )}
           </section>
         </div>
       </section>
     </main>
+  );
+}
+
+function StoreOptionRow({
+  option,
+  savingId,
+  onSave,
+  onStatusNoteChange
+}: {
+  option: StoreMenuOption;
+  savingId: string;
+  onSave: (option: StoreMenuOption, patch: Partial<StoreMenuOption>) => Promise<void>;
+  onStatusNoteChange: (optionId: string, statusNote: string) => void;
+}) {
+  return (
+    <article className="store-menu-item-row store-menu-option-row">
+      <div className="store-menu-item-main">
+        <div className="store-menu-image-empty">OP</div>
+        <div>
+          <strong>{option.name}</strong>
+          <span>{option.brandName} / {option.groupName}</span>
+          <small>{option.priceDelta ? `${option.priceDelta > 0 ? "+" : ""}${option.priceDelta}円` : "追加料金なし"}</small>
+        </div>
+      </div>
+      <div className="store-menu-status-actions">
+        <button
+          className={option.isAvailable ? "store-status-button is-on" : "store-status-button"}
+          type="button"
+          disabled={savingId === option.id}
+          onClick={() => void onSave(option, { isAvailable: true })}
+        >
+          <CheckCircle2 size={17} />
+          販売中
+        </button>
+        <button
+          className={!option.isAvailable ? "store-status-button is-off" : "store-status-button"}
+          type="button"
+          disabled={savingId === option.id}
+          onClick={() => void onSave(option, { isAvailable: false })}
+        >
+          <XCircle size={17} />
+          売切
+        </button>
+      </div>
+      <div className="store-menu-note">
+        <input
+          value={option.statusNote}
+          onChange={(event) => onStatusNoteChange(option.id, event.target.value)}
+          placeholder="例: 豆乳在庫切れ"
+        />
+        <button className="secondary-button" type="button" disabled={savingId === option.id} onClick={() => void onSave(option, {})}>
+          メモ保存
+        </button>
+      </div>
+    </article>
   );
 }

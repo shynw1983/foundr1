@@ -18,7 +18,13 @@ function getInitial(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "U";
 }
 
-export function UserBadge() {
+export function UserBadge({
+  showNotifications = true,
+  showLanguagePicker = true
+}: {
+  showNotifications?: boolean;
+  showLanguagePicker?: boolean;
+}) {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
 
   useEffect(() => {
@@ -43,8 +49,8 @@ export function UserBadge() {
           <span className="user-avatar" aria-hidden="true">...</span>
           <span className="user-badge-name">ログイン確認中</span>
         </span>
-        <span className="notification-placeholder" aria-hidden="true" />
-        <OsLanguagePicker />
+        {showNotifications ? <span className="notification-placeholder" aria-hidden="true" /> : null}
+        {showLanguagePicker ? <OsLanguagePicker /> : null}
       </div>
     );
   }
@@ -71,8 +77,8 @@ export function UserBadge() {
           </a>
         </div>
       </details>
-      <NotificationMenu />
-      <OsLanguagePicker />
+      {showNotifications ? <NotificationMenu /> : null}
+      {showLanguagePicker ? <OsLanguagePicker /> : null}
     </div>
   );
 }
