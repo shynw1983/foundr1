@@ -2,6 +2,7 @@ import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
+import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,7 @@ export async function PATCH(request: Request) {
     returning id::text
   `;
   if (rows[0]?.id) {
+    await syncWebReservationToSalesOrder(rows[0].id as string);
     await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
   }
 

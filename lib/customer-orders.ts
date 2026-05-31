@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { syncWebReservationToSalesOrder } from "./sales-orders";
 
 export type CustomerOrderRow = {
   id: string;
@@ -163,6 +164,7 @@ export async function createCustomerOrder(input: {
     `;
   }
 
+  await syncWebReservationToSalesOrder(orderId);
   return findCustomerOrderById(orderId);
 }
 
@@ -189,6 +191,7 @@ export async function updateCustomerOrder(orderId: string, patch: Partial<{
     where id = ${orderId}
     returning id::text
   `;
+  if (rows[0]?.id) await syncWebReservationToSalesOrder(rows[0].id as string);
   return rows[0]?.id ? findCustomerOrderById(rows[0].id as string) : null;
 }
 

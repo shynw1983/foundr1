@@ -605,6 +605,54 @@ create table if not exists store_customer_order_items (
   created_at timestamptz not null default now()
 );
 
+create table if not exists sales_orders (
+  id uuid primary key default gen_random_uuid(),
+  source_order_id uuid unique,
+  brand_id uuid references brands(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  channel text not null,
+  source_platform text not null,
+  order_no text not null,
+  pickup_code text,
+  status text not null default 'pending_payment',
+  payment_status text not null default 'pending',
+  ordered_at timestamptz not null default now(),
+  paid_at timestamptz,
+  preparing_at timestamptz,
+  ready_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz,
+  subtotal integer not null default 0,
+  discount integer not null default 0,
+  tax integer not null default 0,
+  service_fee integer not null default 0,
+  delivery_fee integer not null default 0,
+  total integer not null default 0,
+  currency text not null default 'JPY',
+  payment_provider text,
+  payment_reference text,
+  receipt_url text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists sales_order_items (
+  id uuid primary key default gen_random_uuid(),
+  sales_order_id uuid not null references sales_orders(id) on delete cascade,
+  source_item_id uuid unique,
+  menu_catalog_item_id uuid references menu_catalog_items(id) on delete set null,
+  product_name_snapshot text not null,
+  category_snapshot text,
+  quantity numeric(12, 3) not null default 1,
+  unit_price integer not null default 0,
+  option_total integer not null default 0,
+  line_total integer not null default 0,
+  modifiers_json jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 alter table menu_sources add column if not exists store_id uuid references stores(id) on delete cascade;
 alter table menu_sources add column if not exists source_url text;
 alter table menu_sources add column if not exists status text not null default 'active';
@@ -843,6 +891,10 @@ create index if not exists idx_store_customer_orders_store_status on store_custo
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
 create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
+create index if not exists idx_sales_orders_store_channel_paid on sales_orders(store_id, channel, paid_at desc);
+create index if not exists idx_sales_orders_ordered_at on sales_orders(ordered_at desc);
+create index if not exists idx_sales_orders_channel_status on sales_orders(channel, status);
+create index if not exists idx_sales_order_items_order on sales_order_items(sales_order_id, sort_order);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);
