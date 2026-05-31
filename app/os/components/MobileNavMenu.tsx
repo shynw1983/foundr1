@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import { Menu } from "lucide-react";
+import { useRef } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { UserBadge } from "./UserBadge";
 import { type OsNavItem, usePermittedNavItems } from "./OsNavList";
+import { useCloseOnOutside } from "./useCloseOnOutside";
 
 export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
   const permittedNavItems = usePermittedNavItems(navItems);
+  const mobileMenuRef = useRef<HTMLDetailsElement | null>(null);
+
+  useCloseOnOutside(mobileMenuRef, () => {
+    if (mobileMenuRef.current) mobileMenuRef.current.open = false;
+  });
 
   return (
     <div className="mobile-nav-actions">
       <NotificationMenu className="mobile-visible-notification" />
-      <details className="mobile-nav-menu">
+      <details className="mobile-nav-menu" ref={mobileMenuRef}>
         <summary>
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />

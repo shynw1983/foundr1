@@ -2,6 +2,7 @@
 
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useCloseOnOutside } from "./useCloseOnOutside";
 
 type OsNotification = {
   id: string;
@@ -33,29 +34,9 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
-    const notificationMenu = notificationMenuRef.current;
-    if (!notificationMenu) return;
-
-    function closeMenu() {
-      if (notificationMenu) notificationMenu.open = false;
-    }
-
-    function closeOnOutsidePointer(event: PointerEvent) {
-      if (!notificationMenu?.contains(event.target as Node)) closeMenu();
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") closeMenu();
-    }
-
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, []);
+  useCloseOnOutside(notificationMenuRef, () => {
+    if (notificationMenuRef.current) notificationMenuRef.current.open = false;
+  });
 
   async function markNotificationsRead() {
     await fetch("/api/notifications", { method: "PATCH" });

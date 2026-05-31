@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { useCloseOnOutside } from "../components/useCloseOnOutside";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -344,10 +345,13 @@ export default function ProductsPage() {
   const [isSavingProductSummaryFields, setIsSavingProductSummaryFields] = useState(false);
   const [isProductSummaryPickerOpen, setIsProductSummaryPickerOpen] = useState(false);
   const [isProductFilterOpen, setIsProductFilterOpen] = useState(false);
+  const productSummaryPickerRef = useRef<HTMLDetailsElement | null>(null);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const canManageProducts = productManagerRoles.has(currentRole);
+
+  useCloseOnOutside(productSummaryPickerRef, () => setIsProductSummaryPickerOpen(false), isProductSummaryPickerOpen);
 
   async function loadProductData() {
     const [response, meResponse] = await Promise.all([
@@ -827,6 +831,7 @@ export default function ProductsPage() {
                 className="product-summary-picker"
                 open={isProductSummaryPickerOpen}
                 onToggle={(event) => setIsProductSummaryPickerOpen(event.currentTarget.open)}
+                ref={productSummaryPickerRef}
               >
                 <summary>基本情報表示</summary>
                 <div>

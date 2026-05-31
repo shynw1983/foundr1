@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { NotificationMenu } from "./NotificationMenu";
 import { OsLanguagePicker } from "./OsTranslationProvider";
 import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } from "./currentEmployeeStore";
+import { useCloseOnOutside } from "./useCloseOnOutside";
 
 const roleLabels: Record<string, string> = {
   owner: "Owner",
@@ -43,29 +44,9 @@ export function UserBadge({
     };
   }, []);
 
-  useEffect(() => {
-    const accountMenu = accountMenuRef.current;
-    if (!accountMenu) return;
-
-    function closeMenu() {
-      if (accountMenu) accountMenu.open = false;
-    }
-
-    function closeOnOutsidePointer(event: PointerEvent) {
-      if (!accountMenu?.contains(event.target as Node)) closeMenu();
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") closeMenu();
-    }
-
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [employee]);
+  useCloseOnOutside(accountMenuRef, () => {
+    if (accountMenuRef.current) accountMenuRef.current.open = false;
+  }, Boolean(employee));
 
   if (!employee) {
     return (

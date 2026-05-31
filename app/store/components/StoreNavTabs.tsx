@@ -1,8 +1,9 @@
 "use client";
 
 import { BookOpen, Clock3, ClipboardList, Home, Menu, ShoppingCart, Tags } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
+import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 
 const tabs = [
@@ -35,7 +36,12 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
+  const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
+
+  useCloseOnOutside(storeMenuRef, () => {
+    if (storeMenuRef.current) storeMenuRef.current.open = false;
+  });
 
   useEffect(() => {
     setNow(new Date());
@@ -80,7 +86,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
           );
         })}
       </nav>
-      <details className="mobile-nav-menu store-nav-menu">
+      <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
         <summary>
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />
