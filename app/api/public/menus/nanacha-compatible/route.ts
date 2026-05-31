@@ -1,5 +1,8 @@
 import { getNanachaCompatibleMenu } from "../../../../../lib/nanacha-compatible-menu";
 
+const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
+const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,7 +13,7 @@ export async function GET(request: Request) {
       generatedAt: new Date().toISOString()
     }, {
       headers: {
-        "Cache-Control": store ? "no-store" : "s-maxage=60, stale-while-revalidate=300"
+        "Cache-Control": store ? storeMenuCacheHeader : brandMenuCacheHeader
       }
     });
   } catch (error) {

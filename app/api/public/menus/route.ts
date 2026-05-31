@@ -1,5 +1,8 @@
 import { sql } from "../../../../lib/db";
 
+const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
+const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
+
 type MenuOption = {
   id: string;
   optionGroupId: string;
@@ -223,5 +226,9 @@ export async function GET(request: Request) {
       };
     }),
     generatedAt: new Date().toISOString()
+  }, {
+    headers: {
+      "Cache-Control": store ? storeMenuCacheHeader : brandMenuCacheHeader
+    }
   });
 }
