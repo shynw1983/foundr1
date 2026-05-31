@@ -11,12 +11,22 @@ type StoreOption = {
 };
 
 type LatestPunch = {
+  employeeId: string;
   punchType: string;
   punchedAt: string;
 } | null;
 
+type TimecardEmployee = {
+  id: string;
+  name: string;
+  role: string;
+  storeIds: string[];
+};
+
 type DailySummary = {
   key: string;
+  employeeId: string;
+  employeeName: string;
   workDate: string;
   storeName: string;
   clockIn: string | null;
@@ -32,6 +42,8 @@ type TimecardPayload = {
   stores: StoreOption[];
   selectedStoreId: string;
   latestPunch: LatestPunch;
+  latestPunches: LatestPunch[];
+  employees: TimecardEmployee[];
   dailySummaries: DailySummary[];
 };
 
@@ -59,44 +71,60 @@ function canUsePunch(type: string, state: string) {
 export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState("");
   const [message, setMessage] = useState("");
 
   async function loadTimecard(nextStoreId = selectedStoreId) {
     setIsLoading(true);
+    setMessage("");
     const params = new URLSearchParams({ month: getJstMonthLabel() });
     if (nextStoreId) params.set("storeId", nextStoreId);
-    const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
-    if (response.ok) {
+    try {
+      const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setMessage(body.error ?? "タイムカード情報を読み込めませんでした。");
+        return;
+      }
       const body = await response.json() as TimecardPayload;
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
+      const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
+      setSelectedEmployeeId((current) => storeEmployees.some((employee) => employee.id === current) ? current : storeEmployees[0]?.id ?? "");
+    } catch {
+      setMessage("タイムカード情報を読み込めませんでした。");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   useEffect(() => {
     void loadTimecard("");
   }, []);
 
-  const currentEmployeeDays = useMemo(() => {
-    if (!data) return [];
-    return data.dailySummaries.filter((day) => day.key.startsWith(`${data.currentEmployeeId}:`)).slice(0, 8);
-  }, [data]);
+  const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
+  const selectedEmployee = employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
+  const selectedLatestPunch = data?.latestPunches.find((punch) => punch?.employeeId === selectedEmployee?.id) ?? null;
 
-  const state = getPunchState(data?.latestPunch ?? null);
+  const selectedEmployeeDays = useMemo(() => {
+    if (!data) return [];
+    return data.dailySummaries.filter((day) => day.employeeId === selectedEmployee?.id).slice(0, 8);
+  }, [data, selectedEmployee]);
+
+  const state = getPunchState(selectedLatestPunch);
   const statusLabel = state === "working" ? "勤務中" : state === "break" ? "休憩中" : "未出勤";
   const selectedStoreName = data?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択";
 
   async function punch(punchType: string) {
-    if (!selectedStoreId) return;
+    if (!selectedStoreId || !selectedEmployee) return;
     setIsPunching(punchType);
     setMessage("");
     const response = await fetch("/api/timecard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: selectedStoreId, punchType })
+      body: JSON.stringify({ storeId: selectedStoreId, employeeId: selectedEmployee.id, punchType })
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
@@ -127,7 +155,7 @@ export default function StoreTimecardPage() {
             <Clock3 />
             <div>
               <h2>タイムカード</h2>
-              <p>{selectedStoreName}・{isLoading ? "読み込み中" : statusLabel}</p>
+              <p>{selectedStoreName}・{isLoading ? "読み込み中" : selectedEmployee ? `${selectedEmployee.name} / ${statusLabel}` : "従業員を選択"}</p>
             </div>
           </div>
 
@@ -149,9 +177,36 @@ export default function StoreTimecardPage() {
             </button>
           </div>
 
+          <div className="timecard-employee-picker" aria-label="打刻する従業員">
+            {employeesForStore.length ? employeesForStore.map((employee) => {
+              const latestPunch = data?.latestPunches.find((punch) => punch?.employeeId === employee.id) ?? null;
+              const employeeState = getPunchState(latestPunch);
+              const employeeStatus = employeeState === "working" ? "勤務中" : employeeState === "break" ? "休憩中" : "未出勤";
+              return (
+                <button
+                  className={`timecard-employee-card${employee.id === selectedEmployee?.id ? " is-selected" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedEmployeeId(employee.id);
+                    setMessage("");
+                  }}
+                  key={employee.id}
+                >
+                  <span className="timecard-employee-avatar">{employee.name.slice(0, 1)}</span>
+                  <span>
+                    <strong>{employee.name}</strong>
+                    <small>{employeeStatus}{latestPunch ? `・${formatJstTime(latestPunch.punchedAt)}` : ""}</small>
+                  </span>
+                </button>
+              );
+            }) : (
+              <p className="empty-state-text">この店舗で打刻できる従業員がいません。</p>
+            )}
+          </div>
+
           <div className={`timecard-status is-${state}`}>
-            <span>{statusLabel}</span>
-            <strong>{data?.latestPunch ? `${formatJstTime(data.latestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
+            <span>{selectedEmployee?.name ?? "従業員未選択"} / {statusLabel}</span>
+            <strong>{selectedLatestPunch ? `${formatJstTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
           </div>
 
           {message ? <div className="timecard-message">{message}</div> : null}
@@ -159,7 +214,7 @@ export default function StoreTimecardPage() {
           <div className="timecard-punch-actions">
             {punchActions.map((action) => {
               const Icon = action.icon;
-              const enabled = canUsePunch(action.type, state) && !isPunching;
+              const enabled = Boolean(selectedEmployee) && canUsePunch(action.type, state) && !isPunching;
               return (
                 <button
                   className="timecard-punch-button"
@@ -181,11 +236,11 @@ export default function StoreTimecardPage() {
             <BriefcaseBusiness />
             <div>
               <h2>今月の実績</h2>
-              <p>自分の打刻から集計した勤務時間</p>
+              <p>{selectedEmployee ? `${selectedEmployee.name} の勤務時間` : "従業員を選択してください"}</p>
             </div>
           </div>
           <div className="timecard-day-list">
-            {currentEmployeeDays.length ? currentEmployeeDays.map((day) => (
+            {selectedEmployeeDays.length ? selectedEmployeeDays.map((day) => (
               <article className="timecard-day-row" key={day.key}>
                 <div>
                   <strong>{day.workDate}</strong>
@@ -198,11 +253,15 @@ export default function StoreTimecardPage() {
                 {day.alerts.length ? <small>{day.alerts.join("、")}</small> : null}
               </article>
             )) : (
-              <p className="empty-state-text">今月の打刻はまだありません。</p>
+              <p className="empty-state-text">選択中の従業員には今月の打刻がまだありません。</p>
             )}
           </div>
         </section>
       </section>
     </main>
   );
+}
+
+function getEmployeesForStore(employees: TimecardEmployee[], storeId: string) {
+  return employees.filter((employee) => employee.storeIds.length === 0 || employee.storeIds.includes(storeId));
 }

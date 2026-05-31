@@ -22,8 +22,15 @@ type StaffMember = {
   larkOpenId?: string | null;
   larkUserId?: string | null;
   role: string;
+  staffCategory: string;
+  payrollSubject: string;
   status: string;
   lastSeenAt?: string | null;
+  employmentType?: string | null;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
+  payrollEnabled?: boolean | null;
   stores: StoreOption[];
 };
 
@@ -48,6 +55,18 @@ const roleLabels: Record<string, string> = {
   store_owner: "加盟店オーナー",
   buyer: "購入担当",
   staff: "店舗スタッフ"
+};
+
+const staffCategoryLabels: Record<string, string> = {
+  executive: "経営層",
+  management: "管理層",
+  working: "実勤務スタッフ"
+};
+
+const payrollSubjectLabels: Record<string, string> = {
+  paid: "給与計算あり",
+  unpaid: "給与計算なし",
+  none: "給与対象外"
 };
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
@@ -128,6 +147,12 @@ export default function StaffPage() {
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
       role: String(formData.get("role") ?? "staff"),
+      staffCategory: String(formData.get("staffCategory") ?? "working"),
+      payrollSubject: String(formData.get("payrollSubject") ?? "none"),
+      employmentType: String(formData.get("employmentType") ?? "hourly"),
+      hourlyWage: String(formData.get("hourlyWage") ?? ""),
+      monthlySalary: String(formData.get("monthlySalary") ?? ""),
+      commuteAllowancePerWorkday: String(formData.get("commuteAllowancePerWorkday") ?? "0"),
       status: String(formData.get("status") ?? "active"),
       storeIds: formData.getAll("storeIds").map((value) => String(value))
     };
@@ -233,9 +258,9 @@ export default function StaffPage() {
                           {getPresenceState(member.lastSeenAt).label}
                         </span>
                       </div>
-                      <p>{member.loginId} / {roleLabels[member.role] ?? member.role}</p>
+                      <p>{member.loginId} / {roleLabels[member.role] ?? member.role} / {staffCategoryLabels[member.staffCategory] ?? member.staffCategory}</p>
                       <small>
-                        {member.status === "active" ? "有効" : "停止中"} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}
+                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ {member.stores.length ? member.stores.map((store) => store.name).join("、") : "全店舗または未設定"} ・ {formatLastSeen(member.lastSeenAt)}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -373,6 +398,41 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
           <option value="manager">Manager</option>
           <option value="owner">Owner</option>
         </select>
+      </label>
+      <label>
+        <span>スタッフ区分</span>
+        <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
+          <option value="executive">経営層</option>
+          <option value="management">管理層</option>
+          <option value="working">実勤務スタッフ</option>
+        </select>
+      </label>
+      <label>
+        <span>給与対象</span>
+        <select name="payrollSubject" defaultValue={member?.payrollSubject ?? "none"}>
+          <option value="paid">給与計算あり</option>
+          <option value="unpaid">給与計算なし</option>
+          <option value="none">給与対象外</option>
+        </select>
+      </label>
+      <label>
+        <span>給与形態</span>
+        <select name="employmentType" defaultValue={member?.employmentType ?? "hourly"}>
+          <option value="hourly">時給</option>
+          <option value="monthly">月給</option>
+        </select>
+      </label>
+      <label>
+        <span>時給</span>
+        <input name="hourlyWage" type="number" min="0" step="1" defaultValue={member?.hourlyWage ?? ""} placeholder="例: 1200" />
+      </label>
+      <label>
+        <span>月給</span>
+        <input name="monthlySalary" type="number" min="0" step="1" defaultValue={member?.monthlySalary ?? ""} placeholder="月給社員のみ" />
+      </label>
+      <label>
+        <span>交通費 / 勤務日</span>
+        <input name="commuteAllowancePerWorkday" type="number" min="0" step="1" defaultValue={member?.commuteAllowancePerWorkday ?? 0} />
       </label>
       <label>
         <span>状態</span>

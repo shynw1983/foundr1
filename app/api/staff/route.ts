@@ -11,6 +11,12 @@ type StaffPayload = {
   larkUserId?: string;
   password?: string;
   role?: string;
+  staffCategory?: string;
+  payrollSubject?: string;
+  employmentType?: string;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
   status?: string;
   storeIds?: string[];
 };
@@ -21,6 +27,24 @@ function normalizeRole(role?: string) {
 
 function normalizeStatus(status?: string) {
   return status === "inactive" ? "inactive" : "active";
+}
+
+function normalizeStaffCategory(category?: string) {
+  return ["executive", "management", "working"].includes(category ?? "") ? category as string : "working";
+}
+
+function normalizePayrollSubject(subject?: string) {
+  return ["paid", "unpaid", "none"].includes(subject ?? "") ? subject as string : "none";
+}
+
+function normalizeEmploymentType(type?: string) {
+  return type === "monthly" ? "monthly" : "hourly";
+}
+
+function toNullableNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 export async function GET() {
@@ -36,8 +60,15 @@ export async function GET() {
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
       employees.role,
+      employees.staff_category as "staffCategory",
+      employees.payroll_subject as "payrollSubject",
       employees.status,
       employees.last_seen_at as "lastSeenAt",
+      latest_settings.employment_type as "employmentType",
+      latest_settings.hourly_wage as "hourlyWage",
+      latest_settings.monthly_salary as "monthlySalary",
+      latest_settings.commute_allowance_per_workday as "commuteAllowancePerWorkday",
+      latest_settings.payroll_enabled as "payrollEnabled",
       coalesce(
         json_agg(
           json_build_object('id', stores.id, 'name', stores.name)
@@ -50,7 +81,19 @@ export async function GET() {
       on employee_scopes.employee_id = employees.id
       and employee_scopes.scope_type = 'store'
     left join stores on stores.id = employee_scopes.store_id
-    group by employees.id
+    left join lateral (
+      select
+        employment_type,
+        hourly_wage,
+        monthly_salary,
+        commute_allowance_per_workday,
+        payroll_enabled
+      from timecard_employee_settings
+      where timecard_employee_settings.employee_id = employees.id
+      order by valid_from desc, created_at desc
+      limit 1
+    ) latest_settings on true
+    group by employees.id, latest_settings.employment_type, latest_settings.hourly_wage, latest_settings.monthly_salary, latest_settings.commute_allowance_per_workday, latest_settings.payroll_enabled
     order by employees.created_at desc
   `;
 
@@ -76,6 +119,12 @@ export async function POST(request: Request) {
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
   const role = normalizeRole(body.role);
+  const staffCategory = normalizeStaffCategory(body.staffCategory);
+  const payrollSubject = normalizePayrollSubject(body.payrollSubject);
+  const employmentType = normalizeEmploymentType(body.employmentType);
+  const hourlyWage = toNullableNumber(body.hourlyWage);
+  const monthlySalary = toNullableNumber(body.monthlySalary);
+  const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const status = normalizeStatus(body.status);
   const storeIds = Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
 
@@ -88,11 +137,34 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into employees (name, login_id, email, lark_open_id, lark_user_id, role, status, password_hash, updated_at)
-    values (${name}, ${loginId}, ${email || null}, ${larkOpenId || null}, ${larkUserId || null}, ${role}, ${status}, ${hashPassword(password)}, now())
+    insert into employees (name, login_id, email, lark_open_id, lark_user_id, role, staff_category, payroll_subject, status, password_hash, updated_at)
+    values (${name}, ${loginId}, ${email || null}, ${larkOpenId || null}, ${larkUserId || null}, ${role}, ${staffCategory}, ${payrollSubject}, ${status}, ${hashPassword(password)}, now())
     returning id
   `;
   const employeeId = rows[0]?.id;
+
+  await sql`
+    insert into timecard_employee_settings (
+      employee_id,
+      employment_type,
+      hourly_wage,
+      monthly_salary,
+      commute_allowance_per_workday,
+      payroll_enabled,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${employeeId},
+      ${employmentType},
+      ${hourlyWage},
+      ${monthlySalary},
+      ${commuteAllowancePerWorkday},
+      ${payrollSubject === "paid"},
+      ${session.id},
+      now()
+    )
+  `;
 
   for (const storeId of storeIds) {
     await sql`
@@ -107,7 +179,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, status, storeCount: storeIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, storeCount: storeIds.length },
     request
   });
 

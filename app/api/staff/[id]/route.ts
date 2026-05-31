@@ -11,6 +11,12 @@ type StaffPayload = {
   larkUserId?: string;
   password?: string;
   role?: string;
+  staffCategory?: string;
+  payrollSubject?: string;
+  employmentType?: string;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
   status?: string;
   storeIds?: string[];
 };
@@ -21,6 +27,24 @@ function normalizeRole(role?: string) {
 
 function normalizeStatus(status?: string) {
   return status === "inactive" ? "inactive" : "active";
+}
+
+function normalizeStaffCategory(category?: string) {
+  return ["executive", "management", "working"].includes(category ?? "") ? category as string : "working";
+}
+
+function normalizePayrollSubject(subject?: string) {
+  return ["paid", "unpaid", "none"].includes(subject ?? "") ? subject as string : "none";
+}
+
+function normalizeEmploymentType(type?: string) {
+  return type === "monthly" ? "monthly" : "hourly";
+}
+
+function toNullableNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -36,6 +60,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
   const role = normalizeRole(body.role);
+  const staffCategory = normalizeStaffCategory(body.staffCategory);
+  const payrollSubject = normalizePayrollSubject(body.payrollSubject);
+  const employmentType = normalizeEmploymentType(body.employmentType);
+  const hourlyWage = toNullableNumber(body.hourlyWage);
+  const monthlySalary = toNullableNumber(body.monthlySalary);
+  const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const status = id === session.id ? "active" : normalizeStatus(body.status);
   const storeIds = Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
 
@@ -58,6 +88,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
+          staff_category = ${staffCategory},
+          payroll_subject = ${payrollSubject},
           status = ${status},
           password_hash = ${hashPassword(password)},
           session_version = session_version + 1,
@@ -73,6 +105,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
+          staff_category = ${staffCategory},
+          payroll_subject = ${payrollSubject},
           status = ${status},
           session_version = session_version + 1,
           updated_at = now()
@@ -90,12 +124,35 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     `;
   }
 
+  await sql`
+    insert into timecard_employee_settings (
+      employee_id,
+      employment_type,
+      hourly_wage,
+      monthly_salary,
+      commute_allowance_per_workday,
+      payroll_enabled,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${id},
+      ${employmentType},
+      ${hourlyWage},
+      ${monthlySalary},
+      ${commuteAllowancePerWorkday},
+      ${payrollSubject === "paid"},
+      ${session.id},
+      now()
+    )
+  `;
+
   await writeAuditLog({
     actorEmployeeId: session.id,
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, status, passwordChanged: Boolean(password), storeCount: storeIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), storeCount: storeIds.length },
     request
   });
 

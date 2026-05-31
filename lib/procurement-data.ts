@@ -112,6 +112,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         select
           stores.id::text,
           stores.name,
+          companies.name as "companyName",
           stores.owner_name as owner,
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",
@@ -119,8 +120,9 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         from stores
         left join store_brands on store_brands.store_id = stores.id
         left join brands on brands.id = store_brands.brand_id
+        left join companies on companies.id = stores.company_id
         where (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
-        group by stores.id
+        group by stores.id, companies.name
         order by stores.name
       `,
       sql`select name, brand_type as type from brands order by name`,

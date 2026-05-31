@@ -12,25 +12,11 @@ import {
 } from "../../../lib/timecard";
 
 type TimecardPostBody = {
-  action?: string;
   storeId?: string;
   punchType?: string;
   note?: string;
   employeeId?: string;
-  employmentType?: string;
-  hourlyWage?: number | string | null;
-  monthlySalary?: number | string | null;
-  commuteAllowancePerWorkday?: number | string | null;
-  payrollEnabled?: boolean;
 };
-
-const managerRoles = new Set(["owner", "manager", "store_owner"]);
-
-function toNullableNumber(value: number | string | null | undefined) {
-  if (value === null || value === undefined || value === "") return null;
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : null;
-}
 
 function toMoneyNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -69,6 +55,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       employees.name,
       employees.role,
       employees.status,
+      employees.payroll_subject as "payrollSubject",
       coalesce(
         array_agg(stores.id::text order by stores.name) filter (where stores.id is not null),
         '{}'::text[]
@@ -77,7 +64,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       latest_settings.hourly_wage as "hourlyWage",
       latest_settings.monthly_salary as "monthlySalary",
       coalesce(latest_settings.commute_allowance_per_workday, 0) as "commuteAllowancePerWorkday",
-      coalesce(latest_settings.payroll_enabled, true) as "payrollEnabled"
+      coalesce(latest_settings.payroll_enabled, employees.payroll_subject = 'paid') as "payrollEnabled"
     from employees
     left join employee_scopes
       on employee_scopes.employee_id = employees.id
@@ -114,8 +101,28 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
     hourlyWage: toMoneyNumber(row.hourlyWage),
     monthlySalary: toMoneyNumber(row.monthlySalary),
     commuteAllowancePerWorkday: toMoneyNumber(row.commuteAllowancePerWorkday) ?? 0,
-    payrollEnabled: row.payrollEnabled !== false
+    payrollEnabled: row.payrollSubject === "paid" && row.payrollEnabled !== false
   })) satisfies TimecardEmployee[];
+}
+
+async function canPunchForEmployee(storeId: string, employeeId: string) {
+  const rows = await sql`
+    select
+      employees.id::text,
+      count(employee_scopes.id)::int as "scopeCount",
+      bool_or(employee_scopes.store_id::text = ${storeId}) as "storeMatch"
+    from employees
+    left join employee_scopes
+      on employee_scopes.employee_id = employees.id
+      and employee_scopes.scope_type = 'store'
+    where employees.id = ${employeeId}
+      and employees.status = 'active'
+    group by employees.id
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return false;
+  return Number(row.scopeCount ?? 0) === 0 || row.storeMatch === true;
 }
 
 export async function GET(request: Request) {
@@ -183,27 +190,39 @@ export async function GET(request: Request) {
     from timecard_punches
     join employees on employees.id = timecard_punches.employee_id
     join stores on stores.id = timecard_punches.store_id
+    join (
+      select
+        employee_id,
+        max(punched_at) as latest_punched_at
+      from timecard_punches
+      where store_id::text = ${selectedStoreId}
+      group by employee_id
+    ) latest
+      on latest.employee_id = timecard_punches.employee_id
+      and latest.latest_punched_at = timecard_punches.punched_at
     where timecard_punches.store_id::text = ${selectedStoreId}
-      and timecard_punches.employee_id = ${session.id}
     order by timecard_punches.punched_at desc
-    limit 1
   ` : [];
-  const latestPunch = latestPunchRows[0];
+  const latestPunches = latestPunchRows.map((row) => ({
+    id: String(row.id),
+    employeeId: String(row.employeeId),
+    employeeName: String(row.employeeName),
+    storeId: String(row.storeId),
+    storeName: String(row.storeName),
+    punchType: String(row.punchType),
+    punchedAt: new Date(String(row.punchedAt)).toISOString()
+  }));
+  const latestPunch = latestPunches.find((punch) => punch.employeeId === session.id) ?? null;
 
   return Response.json({
     month,
     currentEmployeeId: session.id,
-    currentRole: session.role,
-    canManage: managerRoles.has(session.role),
     stores,
     selectedStoreId,
     employees,
     punches: typedPunches,
-    latestPunch: latestPunch ? {
-      id: String(latestPunch.id),
-      punchType: String(latestPunch.punchType),
-      punchedAt: new Date(String(latestPunch.punchedAt)).toISOString()
-    } : null,
+    latestPunch,
+    latestPunches,
     dailySummaries,
     payrollRows: payroll.rows,
     payrollTotals: payroll.totals
@@ -216,81 +235,6 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({})) as TimecardPostBody;
 
-  if (body.action === "employee_settings") {
-    if (!managerRoles.has(session.role)) {
-      return Response.json({ error: "権限がありません。" }, { status: 403 });
-    }
-
-    const employeeId = String(body.employeeId ?? "");
-    const rows = await sql`
-      select id::text
-      from employees
-      where id = ${employeeId}
-        and status = 'active'
-      limit 1
-    `;
-
-    if (!rows[0]) {
-      return Response.json({ error: "従業員が見つかりません。" }, { status: 404 });
-    }
-
-    if (session.role === "store_owner") {
-      const scope = await getSessionStoreScope(session);
-      const scopedRows = scope.storeIds.length ? await sql`
-        select employee_scopes.id::text
-        from employee_scopes
-        where employee_scopes.employee_id = ${employeeId}
-          and employee_scopes.scope_type = 'store'
-          and employee_scopes.store_id::text = any(${scope.storeIds})
-        limit 1
-      ` : [];
-      if (!scopedRows[0]) {
-        return Response.json({ error: "この従業員の給与設定を編集する権限がありません。" }, { status: 403 });
-      }
-    }
-
-    const employmentType = body.employmentType === "monthly" ? "monthly" : "hourly";
-    const hourlyWage = toNullableNumber(body.hourlyWage);
-    const monthlySalary = toNullableNumber(body.monthlySalary);
-    const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
-    const payrollEnabled = body.payrollEnabled !== false;
-
-    const inserted = await sql`
-      insert into timecard_employee_settings (
-        employee_id,
-        employment_type,
-        hourly_wage,
-        monthly_salary,
-        commute_allowance_per_workday,
-        payroll_enabled,
-        updated_by,
-        updated_at
-      )
-      values (
-        ${employeeId},
-        ${employmentType},
-        ${hourlyWage},
-        ${monthlySalary},
-        ${commuteAllowancePerWorkday},
-        ${payrollEnabled},
-        ${session.id},
-        now()
-      )
-      returning id::text
-    `;
-
-    await writeAuditLog({
-      actorEmployeeId: session.id,
-      action: "timecard.employee_settings.updated",
-      targetType: "employee",
-      targetId: employeeId,
-      metadata: { employmentType, hourlyWage, monthlySalary, commuteAllowancePerWorkday, payrollEnabled },
-      request
-    });
-
-    return Response.json({ ok: true, id: inserted[0]?.id ?? null });
-  }
-
   const storeId = String(body.storeId ?? "");
   const punchType = String(body.punchType ?? "");
   if (!storeId || !isTimecardPunchType(punchType)) {
@@ -299,6 +243,15 @@ export async function POST(request: Request) {
 
   if (!await canAccessStore(session, storeId)) {
     return Response.json({ error: "この店舗で打刻する権限がありません。" }, { status: 403 });
+  }
+
+  const employeeId = String(body.employeeId ?? "");
+  if (!employeeId) {
+    return Response.json({ error: "打刻する従業員を選択してください。" }, { status: 400 });
+  }
+
+  if (!await canPunchForEmployee(storeId, employeeId)) {
+    return Response.json({ error: "この従業員は選択した店舗で打刻できません。" }, { status: 403 });
   }
 
   const inserted = await sql`
@@ -311,10 +264,10 @@ export async function POST(request: Request) {
       created_by
     )
     values (
-      ${session.id},
+      ${employeeId},
       ${storeId},
       ${punchType},
-      'store',
+      'store_tablet',
       ${String(body.note ?? "").trim() || null},
       ${session.id}
     )
@@ -326,7 +279,7 @@ export async function POST(request: Request) {
     action: "timecard.punched",
     targetType: "timecard_punch",
     targetId: String(inserted[0]?.id ?? ""),
-    metadata: { storeId, punchType },
+    metadata: { storeId, punchType, employeeId, createdBy: session.id },
     request
   });
 

@@ -22,6 +22,7 @@ import {
 type StoreItem = {
   id?: string;
   name: string;
+  companyName?: string;
   owner: string;
   brands: string[];
   businessHours?: unknown;
@@ -83,6 +84,7 @@ export default function StoresPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const name = String(formData.get("name") ?? "");
+    const companyName = String(formData.get("companyName") ?? "");
     const owner = String(formData.get("owner") ?? "");
     const reservationNote = String(formData.get("reservationNote") ?? "");
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
@@ -103,7 +105,7 @@ export default function StoresPage() {
 
     setStoresData((items) => [
       ...items.filter((item) => item.name !== name),
-      { name, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote }
+      { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote }
     ]);
     setSelectedStoreBrands([]);
     setNewBusinessHours(defaultBusinessHours);
@@ -222,6 +224,7 @@ export default function StoresPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const nextName = String(formData.get("name") ?? "").trim();
+    const companyName = String(formData.get("companyName") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
 
@@ -243,7 +246,7 @@ export default function StoresPage() {
     }
 
     setStoresData((items) =>
-      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote } : item)
+      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, companyName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote } : item)
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
@@ -332,7 +335,7 @@ export default function StoresPage() {
                 <article className="management-row" key={store.name}>
                   <div>
                     <strong>{store.name}</strong>
-                    <p>{store.owner || "担当者未設定"}</p>
+                    <p>{store.companyName || "所属会社未設定"} / {store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
@@ -359,6 +362,10 @@ export default function StoresPage() {
               <label>
                 <span>店舗名</span>
                 <input name="name" placeholder="例: 天神店" />
+              </label>
+              <label>
+                <span>所属会社</span>
+                <input name="companyName" placeholder="例: 株式会社丸九" />
               </label>
               <label>
                 <span>担当者メモ</span>
@@ -442,6 +449,10 @@ export default function StoresPage() {
               <label>
                 <span>店舗名</span>
                 <input name="name" defaultValue={editingStore.name} />
+              </label>
+              <label>
+                <span>所属会社</span>
+                <input name="companyName" defaultValue={editingStore.companyName ?? ""} placeholder="例: 株式会社丸九" />
               </label>
               <label>
                 <span>担当者メモ</span>

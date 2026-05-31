@@ -16,6 +16,21 @@ async function normalizeStoreBrands(brandNames: string[]) {
   return Array.from(new Set(brandNames.filter((brandName) => brandName && brandName !== "共通")));
 }
 
+async function resolveCompanyId(companyName: string) {
+  const name = companyName.trim();
+  if (!name) return null;
+
+  const rows = await sql`
+    insert into companies (name, updated_at)
+    values (${name}, now())
+    on conflict (name)
+    do update set updated_at = now()
+    returning id
+  `;
+
+  return rows[0]?.id ?? null;
+}
+
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -23,19 +38,22 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const companyName = String(formData.get("companyName") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
+  const companyId = await resolveCompanyId(companyName);
 
   if (!name) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
   }
 
   const rows = await sql`
-    insert into stores (name, owner_name, business_hours, reservation_note, updated_at)
-    values (${name}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, now())
+    insert into stores (name, company_id, owner_name, business_hours, reservation_note, updated_at)
+    values (${name}, ${companyId}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, now())
     on conflict (name)
     do update set
+      company_id = excluded.company_id,
       owner_name = excluded.owner_name,
       business_hours = excluded.business_hours,
       reservation_note = excluded.reservation_note,
@@ -67,9 +85,11 @@ export async function PUT(request: Request) {
   const currentName = String(formData.get("currentName") ?? "").trim();
   const nextName = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const companyName = String(formData.get("companyName") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
+  const companyId = await resolveCompanyId(companyName);
 
   if (!currentName || !nextName) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
@@ -93,6 +113,7 @@ export async function PUT(request: Request) {
     update stores
     set
       name = ${nextName},
+      company_id = ${companyId},
       owner_name = ${owner},
       business_hours = ${businessHours}::jsonb,
       reservation_note = ${reservationNote},

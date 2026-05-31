@@ -4,6 +4,7 @@ create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   external_id text,
+  company_id uuid,
   address text,
   owner_name text,
   business_hours jsonb not null default '{}'::jsonb,
@@ -14,8 +15,26 @@ create table if not exists stores (
 );
 
 alter table stores add column if not exists external_id text;
+alter table stores add column if not exists company_id uuid;
 alter table stores add column if not exists business_hours jsonb not null default '{}'::jsonb;
 alter table stores add column if not exists reservation_note text not null default '';
+
+create table if not exists companies (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  legal_name text,
+  invoice_registration_number text,
+  address text,
+  phone text,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table stores drop constraint if exists stores_company_id_fkey;
+alter table stores
+  add constraint stores_company_id_fkey
+  foreign key (company_id) references companies(id) on delete set null;
 
 create table if not exists brands (
   id uuid primary key default gen_random_uuid(),
@@ -54,6 +73,8 @@ alter table employees add column if not exists ui_preferences jsonb not null def
 alter table employees add column if not exists lark_open_id text;
 alter table employees add column if not exists lark_user_id text;
 alter table employees add column if not exists session_version integer not null default 1;
+alter table employees add column if not exists staff_category text not null default 'working';
+alter table employees add column if not exists payroll_subject text not null default 'none';
 
 create table if not exists os_audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -1017,6 +1038,7 @@ create index if not exists idx_menu_options_group on menu_options(option_group_i
 create index if not exists idx_menu_store_settings_brand_store on menu_store_settings(brand_id, store_id);
 create index if not exists idx_menu_option_store_settings_brand_store on menu_option_store_settings(brand_id, store_id);
 create index if not exists idx_stores_external_id on stores(external_id);
+create index if not exists idx_stores_company_id on stores(company_id);
 create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);

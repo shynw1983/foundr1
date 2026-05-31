@@ -3141,6 +3141,50 @@ button {
   font-weight: 750;
 }
 
+.timecard-toolbar.is-left {
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+.timecard-view-tabs,
+.timecard-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.timecard-view-tabs button,
+.timecard-subtabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.timecard-view-tabs button {
+  min-width: 132px;
+  padding: 0 16px;
+}
+
+.timecard-subtabs button {
+  min-width: 118px;
+  padding: 0 14px;
+}
+
+.timecard-view-tabs button.is-active,
+.timecard-subtabs button.is-active {
+  border-color: rgba(33, 116, 91, 0.45);
+  background: var(--green);
+  color: white;
+}
+
 .timecard-store-select {
   justify-content: space-between;
   margin: 18px 0;
@@ -3187,7 +3231,7 @@ button {
   display: grid;
   gap: 6px;
   min-height: 118px;
-  margin-bottom: 18px;
+  margin: 18px 0;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3223,6 +3267,58 @@ button {
   background: var(--blue-soft);
   color: var(--blue);
   font-size: 13px;
+  font-weight: 800;
+}
+
+.timecard-employee-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.timecard-employee-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+
+.timecard-employee-card.is-selected {
+  border-color: rgba(33, 116, 91, 0.55);
+  background: var(--green-soft);
+  box-shadow: inset 0 0 0 1px rgba(33, 116, 91, 0.16);
+}
+
+.timecard-employee-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  background: #202a36;
+  color: white;
+  font-weight: 900;
+}
+
+.timecard-employee-card strong,
+.timecard-employee-card small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.timecard-employee-card small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -3287,6 +3383,40 @@ button {
 
 .timecard-metric {
   min-height: 120px;
+}
+
+.timecard-detail-grid,
+.timecard-feature-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.timecard-detail-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.timecard-feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.timecard-feature-grid article {
+  min-height: 118px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.timecard-feature-grid strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.timecard-feature-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .timecard-management-grid {
@@ -9230,6 +9360,21 @@ button {
 
   .timecard-punch-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .timecard-employee-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .timecard-view-tabs button,
+  .timecard-subtabs button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .timecard-detail-grid,
+  .timecard-feature-grid {
+    grid-template-columns: 1fr;
   }
 
   .timecard-punch-button {

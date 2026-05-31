@@ -1,7 +1,6 @@
 "use client";
 
 import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
-import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
@@ -12,18 +11,6 @@ import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/ti
 type StoreOption = {
   id: string;
   name: string;
-};
-
-type TimecardEmployee = {
-  id: string;
-  name: string;
-  role: string;
-  storeIds: string[];
-  employmentType: "hourly" | "monthly";
-  hourlyWage: number | null;
-  monthlySalary: number | null;
-  commuteAllowancePerWorkday: number;
-  payrollEnabled: boolean;
 };
 
 type DailySummary = {
@@ -70,11 +57,8 @@ type PayrollTotals = {
 
 type TimecardPayload = {
   month: string;
-  currentRole: string;
-  canManage: boolean;
   stores: StoreOption[];
   selectedStoreId: string;
-  employees: TimecardEmployee[];
   dailySummaries: DailySummary[];
   payrollRows: PayrollRow[];
   payrollTotals: PayrollTotals;
@@ -113,14 +97,19 @@ function MetricCard({ label, value, note }: { label: string; value: string; note
   );
 }
 
+type TimecardMainView = "schedule" | "payroll";
+type TimecardScheduleView = "planned" | "actual";
+type TimecardPayrollView = "summary" | "employee";
+
 export default function TimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
   const [selectedStoreId, setSelectedStoreId] = useState("");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [mainView, setMainView] = useState<TimecardMainView>("schedule");
+  const [scheduleView, setScheduleView] = useState<TimecardScheduleView>("actual");
+  const [payrollView, setPayrollView] = useState<TimecardPayrollView>("summary");
+  const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -132,7 +121,6 @@ export default function TimecardPage() {
       setData(body);
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
-      setSelectedEmployeeId((current) => current || body.employees[0]?.id || "");
     }
     setIsLoading(false);
   }
@@ -140,46 +128,6 @@ export default function TimecardPage() {
   useEffect(() => {
     void loadTimecard(month, "");
   }, []);
-
-  const selectedEmployee = useMemo(
-    () => data?.employees.find((employee) => employee.id === selectedEmployeeId) ?? data?.employees[0] ?? null,
-    [data, selectedEmployeeId]
-  );
-
-  useEffect(() => {
-    if (selectedEmployee && selectedEmployee.id !== selectedEmployeeId) {
-      setSelectedEmployeeId(selectedEmployee.id);
-    }
-  }, [selectedEmployee, selectedEmployeeId]);
-
-  async function saveEmployeeSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedEmployee) return;
-    const formData = new FormData(event.currentTarget);
-    setIsSaving(true);
-    setNotice("");
-    const response = await fetch("/api/timecard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "employee_settings",
-        employeeId: selectedEmployee.id,
-        employmentType: String(formData.get("employmentType") ?? "hourly"),
-        hourlyWage: String(formData.get("hourlyWage") ?? ""),
-        monthlySalary: String(formData.get("monthlySalary") ?? ""),
-        commuteAllowancePerWorkday: String(formData.get("commuteAllowancePerWorkday") ?? "0"),
-        payrollEnabled: formData.get("payrollEnabled") === "on"
-      })
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setNotice(body.error ?? "給与設定を保存できませんでした。");
-    } else {
-      setNotice("給与設定を保存しました。");
-      await loadTimecard(month, selectedStoreId);
-    }
-    setIsSaving(false);
-  }
 
   const totals = data?.payrollTotals ?? {
     workDays: 0,
@@ -190,6 +138,20 @@ export default function TimecardPage() {
     commuteAllowance: 0,
     totalPay: 0
   };
+  const selectedPayrollRow = useMemo(
+    () => data?.payrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? data?.payrollRows[0] ?? null,
+    [data, selectedPayrollEmployeeId]
+  );
+  const selectedPayrollDays = useMemo(
+    () => data?.dailySummaries.filter((day) => day.employeeId === selectedPayrollRow?.employeeId) ?? [],
+    [data, selectedPayrollRow]
+  );
+
+  useEffect(() => {
+    if (selectedPayrollRow && selectedPayrollRow.employeeId !== selectedPayrollEmployeeId) {
+      setSelectedPayrollEmployeeId(selectedPayrollRow.employeeId);
+    }
+  }, [selectedPayrollEmployeeId, selectedPayrollRow]);
 
   return (
     <main className="shell">
@@ -238,13 +200,116 @@ export default function TimecardPage() {
           <MetricCard label="差引支給額" value={formatMoney(totals.totalPay)} note="控除は次フェーズで追加" />
         </section>
 
-        <section className="management-grid timecard-management-grid">
-          <section className="panel">
+        <section className="timecard-view-tabs" aria-label="タイムカードメニュー">
+          <button className={mainView === "schedule" ? "is-active" : ""} type="button" onClick={() => setMainView("schedule")}>
+            <CalendarDays size={18} />
+            排班
+          </button>
+          <button className={mainView === "payroll" ? "is-active" : ""} type="button" onClick={() => setMainView("payroll")}>
+            <WalletCards size={18} />
+            給与
+          </button>
+        </section>
+
+        {mainView === "schedule" ? (
+          <>
+            <section className="timecard-subtabs" aria-label="排班メニュー">
+              <button className={scheduleView === "planned" ? "is-active" : ""} type="button" onClick={() => setScheduleView("planned")}>
+                計画排班
+              </button>
+              <button className={scheduleView === "actual" ? "is-active" : ""} type="button" onClick={() => setScheduleView("actual")}>
+                実勤務時間
+              </button>
+            </section>
+
+            {scheduleView === "planned" ? (
+              <section className="panel">
+                <div className="panel-title">
+                  <CalendarDays />
+                  <div>
+                    <h3>計画排班</h3>
+                    <p>月別の予定シフト、CSV取り込み、シフト作成はこの領域に追加します。</p>
+                  </div>
+                </div>
+                <div className="timecard-feature-grid">
+                  <article>
+                    <strong>月間シフト表</strong>
+                    <p>店舗ごとの予定シフトを日付 x 従業員で編集できるようにします。</p>
+                  </article>
+                  <article>
+                    <strong>CSV一括登録</strong>
+                    <p>既存シフト表からまとめて登録、更新できる導線を用意します。</p>
+                  </article>
+                  <article>
+                    <strong>勤務パターン</strong>
+                    <p>朝勤務、昼勤務、夜勤務など、店舗別の勤務パターンを選択できるようにします。</p>
+                  </article>
+                </div>
+              </section>
+            ) : (
+              <section className="panel">
+                <div className="panel-title">
+                  <CalendarDays />
+                  <div>
+                    <h3>実勤務時間</h3>
+                    <p>打刻の不足がある日は確認欄に表示されます。</p>
+                  </div>
+                </div>
+                <div className="timecard-table-wrap">
+                  <table className="timecard-table">
+                    <thead>
+                      <tr>
+                        <th>日付</th>
+                        <th>従業員</th>
+                        <th>出勤</th>
+                        <th>退勤</th>
+                        <th>休憩</th>
+                        <th>勤務時間</th>
+                        <th>深夜</th>
+                        <th>確認</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data?.dailySummaries.length ? data.dailySummaries.map((day) => (
+                        <tr key={day.key}>
+                          <td>{day.workDate}</td>
+                          <td><strong>{day.employeeName}</strong><span>{day.storeName}</span></td>
+                          <td>{formatJstTime(day.clockIn) ?? "--:--"}</td>
+                          <td>{formatJstTime(day.clockOut) ?? "--:--"}</td>
+                          <td>{formatDuration(day.breakMinutes)}</td>
+                          <td>{formatDuration(day.workMinutes)}</td>
+                          <td>{formatDuration(day.nightMinutes)}</td>
+                          <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={8}>この月の打刻実績はまだありません。</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
+        ) : (
+          <>
+            <section className="timecard-subtabs" aria-label="給与メニュー">
+              <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>
+                月別給与
+              </button>
+              <button className={payrollView === "employee" ? "is-active" : ""} type="button" onClick={() => setPayrollView("employee")}>
+                従業員別明細
+              </button>
+            </section>
+
+            {payrollView === "summary" ? (
+              <section className="panel">
             <div className="panel-title">
               <WalletCards />
               <div>
                 <h3>月別 給与</h3>
-                <p>打刻実績と給与設定から概算支給額を計算します。</p>
+                <p>スタッフ管理の人事情報と打刻実績から概算支給額を計算します。</p>
               </div>
             </div>
             <div className="timecard-table-wrap">
@@ -282,101 +347,69 @@ export default function TimecardPage() {
                 </tbody>
               </table>
             </div>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <BriefcaseBusiness />
-              <div>
-                <h3>給与設定</h3>
-                <p>時給、月給、勤務日ごとの交通費を設定します。</p>
-              </div>
-            </div>
-            {data?.canManage ? (
-              <form className="management-form timecard-settings-form" onSubmit={saveEmployeeSettings}>
-                <label>
-                  <span>従業員</span>
-                  <select value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-                    {data.employees.map((employee) => (
-                      <option value={employee.id} key={employee.id}>{employee.name}</option>
+              </section>
+            ) : (
+              <section className="panel">
+                <div className="panel-title">
+                  <WalletCards />
+                  <div>
+                    <h3>従業員別 給与明細</h3>
+                    <p>給与明細 PDF に近い内訳を従業員ごとに確認します。</p>
+                  </div>
+                </div>
+                <div className="timecard-toolbar is-left">
+                  <select value={selectedPayrollRow?.employeeId ?? ""} onChange={(event) => setSelectedPayrollEmployeeId(event.target.value)}>
+                    {data?.payrollRows.map((row) => (
+                      <option value={row.employeeId} key={row.employeeId}>{row.employeeName}</option>
                     ))}
                   </select>
-                </label>
-                <label>
-                  <span>給与形態</span>
-                  <select name="employmentType" defaultValue={selectedEmployee?.employmentType ?? "hourly"} key={`${selectedEmployee?.id}-type`}>
-                    <option value="hourly">時給</option>
-                    <option value="monthly">月給</option>
-                  </select>
-                </label>
-                <label>
-                  <span>時給</span>
-                  <input name="hourlyWage" type="number" min="0" step="1" defaultValue={selectedEmployee?.hourlyWage ?? ""} key={`${selectedEmployee?.id}-hourly`} placeholder="例: 1200" />
-                </label>
-                <label>
-                  <span>月給</span>
-                  <input name="monthlySalary" type="number" min="0" step="1" defaultValue={selectedEmployee?.monthlySalary ?? ""} key={`${selectedEmployee?.id}-monthly`} placeholder="月給社員のみ" />
-                </label>
-                <label>
-                  <span>交通費 / 勤務日</span>
-                  <input name="commuteAllowancePerWorkday" type="number" min="0" step="1" defaultValue={selectedEmployee?.commuteAllowancePerWorkday ?? 0} key={`${selectedEmployee?.id}-commute`} />
-                </label>
-                <label className="timecard-checkbox">
-                  <input name="payrollEnabled" type="checkbox" defaultChecked={selectedEmployee?.payrollEnabled ?? true} key={`${selectedEmployee?.id}-enabled`} />
-                  <span>給与計算に含める</span>
-                </label>
-                {notice ? <div className="timecard-message">{notice}</div> : null}
-                <button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? "保存中" : "設定を保存"}</button>
-              </form>
-            ) : (
-              <p className="empty-state-text">給与設定の編集権限がありません。</p>
-            )}
-          </section>
-        </section>
-
-        <section className="panel">
-          <div className="panel-title">
-            <CalendarDays />
-            <div>
-              <h3>日別 実績</h3>
-              <p>打刻の不足がある日は確認欄に表示されます。</p>
-            </div>
-          </div>
-          <div className="timecard-table-wrap">
-            <table className="timecard-table">
-              <thead>
-                <tr>
-                  <th>日付</th>
-                  <th>従業員</th>
-                  <th>出勤</th>
-                  <th>退勤</th>
-                  <th>休憩</th>
-                  <th>勤務時間</th>
-                  <th>深夜</th>
-                  <th>確認</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.dailySummaries.length ? data.dailySummaries.map((day) => (
-                  <tr key={day.key}>
-                    <td>{day.workDate}</td>
-                    <td><strong>{day.employeeName}</strong><span>{day.storeName}</span></td>
-                    <td>{formatJstTime(day.clockIn) ?? "--:--"}</td>
-                    <td>{formatJstTime(day.clockOut) ?? "--:--"}</td>
-                    <td>{formatDuration(day.breakMinutes)}</td>
-                    <td>{formatDuration(day.workMinutes)}</td>
-                    <td>{formatDuration(day.nightMinutes)}</td>
-                    <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={8}>この月の打刻実績はまだありません。</td>
-                  </tr>
+                </div>
+                {selectedPayrollRow ? (
+                  <>
+                    <div className="timecard-detail-grid">
+                      <MetricCard label="勤務日数" value={`${selectedPayrollRow.workDays}日`} note={`${selectedPayrollRow.punchCount}回`} />
+                      <MetricCard label="勤務時間" value={formatDuration(selectedPayrollRow.workMinutes)} note={`深夜 ${formatDuration(selectedPayrollRow.nightMinutes)}`} />
+                      <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
+                      <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
+                    </div>
+                    <div className="timecard-table-wrap">
+                      <table className="timecard-table">
+                        <thead>
+                          <tr>
+                            <th>日付</th>
+                            <th>店舗</th>
+                            <th>勤務時間</th>
+                            <th>休憩</th>
+                            <th>深夜</th>
+                            <th>確認</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPayrollDays.length ? selectedPayrollDays.map((day) => (
+                            <tr key={day.key}>
+                              <td>{day.workDate}</td>
+                              <td>{day.storeName}</td>
+                              <td>{formatJstTime(day.clockIn) ?? "--:--"} - {formatJstTime(day.clockOut) ?? "--:--"}<span>{formatDuration(day.workMinutes)}</span></td>
+                              <td>{formatDuration(day.breakMinutes)}</td>
+                              <td>{formatDuration(day.nightMinutes)}</td>
+                              <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                            </tr>
+                          )) : (
+                            <tr>
+                              <td colSpan={6}>この従業員の打刻実績はまだありません。</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <p className="empty-state-text">給与明細を表示できる従業員がいません。</p>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </section>
+            )}
+          </>
+        )}
       </section>
     </main>
   );
