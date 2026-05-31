@@ -742,16 +742,18 @@ export default function MenuAdminPage() {
 
   return (
     <main className="shell">
-      <aside className="sidebar">
-        <div className="brand-block">
+      <aside className="sidebar" aria-label="管理画面ナビゲーション">
+        <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
           <div className="brand-mark">F1</div>
           <div>
-            <p>Foundr1 OS</p>
-            <strong>メニュー管理</strong>
+            <p className="eyebrow">Foundr1 OS</p>
+            <h1>メニュー管理</h1>
           </div>
-        </div>
-        <UserBadge />
+        </a>
         <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
+          <UserBadge />
+        </div>
         <OsNavList navItems={navItems} />
       </aside>
 
