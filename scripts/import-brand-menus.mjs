@@ -317,6 +317,20 @@ async function importNanacha() {
   });
 
   const categoriesById = new Map(menu.categories.map((category) => [category.id, category]));
+  const isDecafMenuItem = (drink) => /カフェ|コーヒ|coffee|cafe/i.test(drink.name);
+  const getNanachaAllowedOptions = (drink) => {
+    const optionIds = drink.allowedOptions ?? menu.options.map((option) => option.id);
+    return optionIds.filter((id) => id !== "decaf" || isDecafMenuItem(drink));
+  };
+  const getNanachaAllowedToppings = (drink, category) => {
+    const toppingIds = drink.allowedToppings ?? menu.toppings.map((topping) => topping.id);
+    return toppingIds.filter((id) => {
+      if (id === "no-tapioca") return !category?.isTapiocaFree;
+      if (id === "no-whip") return Boolean(category?.hasWhipByDefault);
+      return true;
+    });
+  };
+
   for (const drink of menu.drinks) {
     const category = categoriesById.get(drink.category);
     await upsertItem({
@@ -336,7 +350,8 @@ async function importNanacha() {
         allowedSizes: drink.allowedSizes ?? menu.sizes.map((size) => size.id),
         allowedSweetness: drink.allowedSweetness ?? menu.sweetness,
         allowedIce: drink.allowedIce ?? menu.ice,
-        allowedOptions: drink.allowedOptions ?? menu.options.map((option) => option.id),
+        allowedOptions: getNanachaAllowedOptions(drink),
+        allowedToppings: getNanachaAllowedToppings(drink, category),
         isRecommended: Boolean(drink.isRecommended),
         isFeatured: Boolean(drink.isFeatured),
         isTapiocaFree: Boolean(category?.isTapiocaFree),
