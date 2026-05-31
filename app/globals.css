@@ -2415,7 +2415,20 @@ button {
 }
 
 .store-user-tools .user-badge {
+  justify-content: center;
+  width: 48px;
   min-height: 48px;
+  padding: 0;
+}
+
+.store-user-tools .user-badge-name,
+.store-user-tools .user-badge-role {
+  display: none;
+}
+
+.store-user-tools .user-avatar {
+  width: 30px;
+  height: 30px;
 }
 
 .store-user-tools .notification-menu summary {
@@ -8800,12 +8813,11 @@ button {
 
   .store-user-tools .user-panel {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 48px minmax(112px, 0.48fr);
+    grid-template-columns: 48px 48px minmax(112px, 1fr);
     width: 100%;
   }
 
   .store-user-tools .user-badge {
-    justify-content: center;
     min-width: 0;
   }
 
