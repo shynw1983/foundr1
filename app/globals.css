@@ -9524,6 +9524,12 @@ button {
     width: 100%;
   }
 
+  .store-user-tools .account-menu-panel,
+  .store-user-tools .notification-panel {
+    right: auto;
+    left: 0;
+  }
+
   .store-workbench-grid {
     grid-template-columns: 1fr;
   }
