@@ -1,7 +1,7 @@
 "use client";
 
 import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -236,6 +236,7 @@ export default function TimecardPage() {
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
+  const shiftMessageTimerRef = useRef<number | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -254,6 +255,12 @@ export default function TimecardPage() {
 
   useEffect(() => {
     void loadTimecard(month, "");
+  }, []);
+
+  useEffect(() => () => {
+    if (shiftMessageTimerRef.current) {
+      window.clearTimeout(shiftMessageTimerRef.current);
+    }
   }, []);
 
   const totals = data?.payrollTotals ?? {
@@ -309,7 +316,7 @@ export default function TimecardPage() {
   function openShiftEditor(employeeId: string, workDate: string) {
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
     const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
-    setShiftMessage("");
+    clearShiftMessage();
     setShiftDraft({
       employeeId,
       workDate,
@@ -320,10 +327,29 @@ export default function TimecardPage() {
     });
   }
 
+  function clearShiftMessage() {
+    if (shiftMessageTimerRef.current) {
+      window.clearTimeout(shiftMessageTimerRef.current);
+      shiftMessageTimerRef.current = null;
+    }
+    setShiftMessage("");
+  }
+
+  function showShiftMessage(message: string, timeoutMs = 2200) {
+    if (shiftMessageTimerRef.current) {
+      window.clearTimeout(shiftMessageTimerRef.current);
+    }
+    setShiftMessage(message);
+    shiftMessageTimerRef.current = window.setTimeout(() => {
+      setShiftMessage("");
+      shiftMessageTimerRef.current = null;
+    }, timeoutMs);
+  }
+
   async function saveShift(nextDraft = shiftDraft) {
     if (!nextDraft || !selectedStoreId) return;
     setIsSavingShift(true);
-    setShiftMessage("");
+    clearShiftMessage();
     const response = await fetch("/api/timecard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -339,11 +365,11 @@ export default function TimecardPage() {
       })
     });
     if (response.ok) {
-      setShiftMessage("シフトを保存しました。");
       await loadTimecard(month, selectedStoreId);
+      showShiftMessage("シフトを保存しました。");
     } else {
       const body = await response.json().catch(() => ({}));
-      setShiftMessage(String(body.error ?? "シフトを保存できませんでした。"));
+      showShiftMessage(String(body.error ?? "シフトを保存できませんでした。"), 4200);
     }
     setIsSavingShift(false);
   }
@@ -351,7 +377,7 @@ export default function TimecardPage() {
   async function deleteShift() {
     if (!shiftDraft || !selectedStoreId) return;
     setIsSavingShift(true);
-    setShiftMessage("");
+    clearShiftMessage();
     const response = await fetch("/api/timecard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -363,11 +389,11 @@ export default function TimecardPage() {
       })
     });
     if (response.ok) {
-      setShiftMessage("シフトを削除しました。");
       await loadTimecard(month, selectedStoreId);
+      showShiftMessage("シフトを削除しました。");
     } else {
       const body = await response.json().catch(() => ({}));
-      setShiftMessage(String(body.error ?? "シフトを削除できませんでした。"));
+      showShiftMessage(String(body.error ?? "シフトを削除できませんでした。"), 4200);
     }
     setIsSavingShift(false);
   }
