@@ -9349,7 +9349,26 @@ button {
   }
 
   .store-menu-category-panel .menu-category-button {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 76px;
     width: 100%;
+    padding: 0 16px;
+  }
+
+  .store-menu-category-panel .menu-category-button span {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.35;
+  }
+
+  .store-menu-category-panel .menu-category-button strong {
+    align-self: center;
+    line-height: 1;
   }
 
   .store-menu-head,
