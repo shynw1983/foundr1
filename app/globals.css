@@ -1069,6 +1069,38 @@ button {
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
 
+.business-hours-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.business-hours-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.business-hours-row {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.business-hours-closed {
+  display: flex !important;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink) !important;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.business-hours-closed input {
+  min-height: auto;
+  width: auto;
+}
+
 .supplier-management-form {
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   align-items: end;
@@ -2295,6 +2327,54 @@ button {
   grid-template-columns: minmax(190px, 0.26fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+.store-operation-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.store-operation-heading,
+.store-operation-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.store-operation-heading {
+  justify-content: space-between;
+}
+
+.store-operation-heading h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.store-operation-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.store-operation-heading select,
+.store-operation-actions input {
+  min-height: 40px;
+  min-width: min(240px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  font-weight: 800;
+}
+
+.store-operation-actions {
+  flex-wrap: wrap;
+}
+
+.store-operation-actions input {
+  flex: 1 1 220px;
 }
 
 .store-menu-category-panel,
@@ -8391,6 +8471,8 @@ button {
   }
 
   .store-menu-head,
+  .store-operation-heading,
+  .store-operation-actions,
   .store-menu-status-actions,
   .store-menu-note {
     align-items: stretch;
@@ -8398,8 +8480,17 @@ button {
   }
 
   .store-menu-head .secondary-button,
+  .store-operation-actions .secondary-button,
   .store-menu-note .secondary-button {
     width: 100%;
+  }
+
+  .business-hours-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .business-hours-closed {
+    grid-column: 1 / -1;
   }
 
   .menu-editor-layout,

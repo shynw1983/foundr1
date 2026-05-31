@@ -110,8 +110,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     await Promise.all([
       sql`
         select
+          stores.id::text,
           stores.name,
           stores.owner_name as owner,
+          stores.business_hours as "businessHours",
+          coalesce(stores.reservation_note, '') as "reservationNote",
           coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null and brands.name <> '共通'), '{}') as brands
         from stores
         left join store_brands on store_brands.store_id = stores.id

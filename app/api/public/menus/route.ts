@@ -190,6 +190,19 @@ export async function GET(request: Request) {
       .filter((setting) => setting.isAvailable === false)
       .map((setting) => String(setting.menuOptionId))
   );
+  const operationRows = store
+    ? await sql`
+        select
+          stores.business_hours as "businessHours",
+          coalesce(stores.reservation_note, '') as "reservationNote",
+          coalesce(store_operations.reservations_enabled, true) as "reservationsEnabled",
+          coalesce(store_operations.status_note, '') as "statusNote"
+        from stores
+        left join store_operations on store_operations.store_id = stores.id
+        where stores.id = ${store.id}
+        limit 1
+      `
+    : [];
 
   const optionsByGroup = new Map<string, MenuOption[]>();
   for (const option of (options as MenuOption[]).filter((entry) => !unavailableOptionIds.has(entry.id))) {
@@ -218,6 +231,12 @@ export async function GET(request: Request) {
   return Response.json({
     brand,
     store,
+    storeOperation: operationRows[0] ?? {
+      reservationsEnabled: true,
+      statusNote: "",
+      businessHours: {},
+      reservationNote: ""
+    },
     categories,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);

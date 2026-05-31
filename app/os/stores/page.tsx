@@ -8,10 +8,30 @@ import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { brands, stores } from "../../../lib/mock-data";
+import {
+  defaultBusinessHours,
+  formatBusinessHoursSummary,
+  normalizeBusinessHours,
+  serializeBusinessHours,
+  weekdayKeys,
+  weekdayLabels,
+  type StoreBusinessHours,
+  type WeekdayKey
+} from "../../../lib/store-business-hours";
 
-type StoreItem = typeof stores[number];
-type BrandItem = typeof brands[number];
+type StoreItem = {
+  id?: string;
+  name: string;
+  owner: string;
+  brands: string[];
+  businessHours?: unknown;
+  reservationNote?: string;
+};
+
+type BrandItem = {
+  name: string;
+  type: string;
+};
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -37,21 +57,24 @@ export default function StoresPage() {
   const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
   const [selectedStoreBrands, setSelectedStoreBrands] = useState<string[]>([]);
   const [editingStoreBrands, setEditingStoreBrands] = useState<string[]>([]);
+  const [newBusinessHours, setNewBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [editingBusinessHours, setEditingBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [editingReservationNote, setEditingReservationNote] = useState("");
+
+  async function loadData() {
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) return;
+    const data = await response.json() as {
+      stores?: StoreItem[];
+      brands?: BrandItem[];
+    };
+
+    if (data.stores) setStoresData(data.stores);
+    if (data.brands) setBrandsData(data.brands);
+    setDataSource("neon");
+  }
 
   useEffect(() => {
-    async function loadData() {
-      const response = await fetch("/api/dashboard");
-      if (!response.ok) return;
-      const data = await response.json() as {
-        stores?: StoreItem[];
-        brands?: BrandItem[];
-      };
-
-      if (data.stores) setStoresData(data.stores);
-      if (data.brands) setBrandsData(data.brands);
-      setDataSource("neon");
-    }
-
     void loadData();
   }, []);
 
@@ -61,7 +84,9 @@ export default function StoresPage() {
     const formData = new FormData(form);
     const name = String(formData.get("name") ?? "");
     const owner = String(formData.get("owner") ?? "");
+    const reservationNote = String(formData.get("reservationNote") ?? "");
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
+    formData.set("businessHours", serializeBusinessHours(newBusinessHours));
 
     if (!name.trim()) return;
 
@@ -78,10 +103,12 @@ export default function StoresPage() {
 
     setStoresData((items) => [
       ...items.filter((item) => item.name !== name),
-      { name, owner, brands: selectedBrands }
+      { name, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote }
     ]);
     setSelectedStoreBrands([]);
+    setNewBusinessHours(defaultBusinessHours);
     form.reset();
+    void loadData();
     showNotice("店舗を追加しました。");
   }
 
@@ -196,10 +223,12 @@ export default function StoresPage() {
     const formData = new FormData(form);
     const nextName = String(formData.get("name") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
+    const reservationNote = String(formData.get("reservationNote") ?? "").trim();
 
     if (!nextName) return;
 
     formData.set("currentName", editingStore.name);
+    formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
     editingStoreBrands.forEach((brandName) => formData.append("brand", brandName));
 
     const response = await fetch("/api/stores", {
@@ -214,16 +243,20 @@ export default function StoresPage() {
     }
 
     setStoresData((items) =>
-      items.map((item) => item.name === editingStore.name ? { name: nextName, owner, brands: editingStoreBrands } : item)
+      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote } : item)
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
+    setEditingReservationNote("");
+    void loadData();
     showNotice("店舗を更新しました。");
   }
 
   function startEditingStore(store: StoreItem) {
     setEditingStore(store);
     setEditingStoreBrands(store.brands);
+    setEditingBusinessHours(normalizeBusinessHours(store.businessHours));
+    setEditingReservationNote(store.reservationNote ?? "");
   }
 
   function toggleBrandSelection(
@@ -303,6 +336,11 @@ export default function StoresPage() {
                 <span>担当者メモ</span>
                 <input name="owner" placeholder="例: 店長名・担当者名" />
               </label>
+              <BusinessHoursEditor value={newBusinessHours} onChange={setNewBusinessHours} />
+              <label>
+                <span>予約画面メモ</span>
+                <input name="reservationNote" placeholder="例: ラストオーダーは閉店30分前" />
+              </label>
               <div className="checkbox-group">
                 <span>取り扱いブランド</span>
                 {brandsData.map((brand) => (
@@ -327,6 +365,8 @@ export default function StoresPage() {
                     <strong>{store.name}</strong>
                     <p>{store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
+                    <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
+                    {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
                   <div className="row-actions">
                     <button className="text-button" type="button" onClick={() => startEditingStore(store)}>
@@ -403,6 +443,16 @@ export default function StoresPage() {
                 <span>担当者メモ</span>
                 <input name="owner" defaultValue={editingStore.owner} placeholder="例: 店長名・担当者名" />
               </label>
+              <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+              <label>
+                <span>予約画面メモ</span>
+                <input
+                  name="reservationNote"
+                  value={editingReservationNote}
+                  onChange={(event) => setEditingReservationNote(event.target.value)}
+                  placeholder="例: ラストオーダーは閉店30分前"
+                />
+              </label>
               <div className="checkbox-group">
                 <span>取り扱いブランド</span>
                 {brandsData.map((brand) => (
@@ -474,6 +524,58 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
       <div>
         <h3>{title}</h3>
         <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function BusinessHoursEditor({
+  value,
+  onChange
+}: {
+  value: StoreBusinessHours;
+  onChange: (value: StoreBusinessHours) => void;
+}) {
+  function updateDay(day: WeekdayKey, patch: Partial<StoreBusinessHours[WeekdayKey]>) {
+    onChange({
+      ...value,
+      [day]: {
+        ...value[day],
+        ...patch
+      }
+    });
+  }
+
+  return (
+    <div className="business-hours-editor">
+      <span>営業時間</span>
+      <div className="business-hours-grid">
+        {weekdayKeys.map((day) => (
+          <div className="business-hours-row" key={day}>
+            <label className="business-hours-closed">
+              <input
+                type="checkbox"
+                checked={value[day].closed}
+                onChange={(event) => updateDay(day, { closed: event.target.checked })}
+              />
+              {weekdayLabels[day]} 休業
+            </label>
+            <input
+              type="time"
+              value={value[day].open}
+              disabled={value[day].closed}
+              onChange={(event) => updateDay(day, { open: event.target.value })}
+              aria-label={`${weekdayLabels[day]} 開店時間`}
+            />
+            <input
+              type="time"
+              value={value[day].close}
+              disabled={value[day].closed}
+              onChange={(event) => updateDay(day, { close: event.target.value })}
+              aria-label={`${weekdayLabels[day]} 閉店時間`}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

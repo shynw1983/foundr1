@@ -1,5 +1,6 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { serializeBusinessHours } from "../../../lib/store-business-hours";
 
 async function normalizeStoreBrands(brandNames: string[]) {
   const concreteBrands = await sql`
@@ -22,6 +23,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
+  const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
 
   if (!name) {
@@ -29,11 +32,13 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into stores (name, owner_name, updated_at)
-    values (${name}, ${owner}, now())
+    insert into stores (name, owner_name, business_hours, reservation_note, updated_at)
+    values (${name}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, now())
     on conflict (name)
     do update set
       owner_name = excluded.owner_name,
+      business_hours = excluded.business_hours,
+      reservation_note = excluded.reservation_note,
       updated_at = now()
     returning id
   `;
@@ -62,6 +67,8 @@ export async function PUT(request: Request) {
   const currentName = String(formData.get("currentName") ?? "").trim();
   const nextName = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
+  const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
 
   if (!currentName || !nextName) {
@@ -87,6 +94,8 @@ export async function PUT(request: Request) {
     set
       name = ${nextName},
       owner_name = ${owner},
+      business_hours = ${businessHours}::jsonb,
+      reservation_note = ${reservationNote},
       updated_at = now()
     where name = ${currentName}
     returning id

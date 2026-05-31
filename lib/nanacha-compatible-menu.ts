@@ -45,6 +45,12 @@ export type NanachaCompatibleMenu = {
   whippedCategories: string[];
   stores: Array<{ id: string; label: string; osStoreId: string }>;
   selectedStoreId: string;
+  storeOperation: {
+    reservationsEnabled: boolean;
+    statusNote: string;
+    businessHours: unknown;
+    reservationNote: string;
+  };
 };
 
 type MenuItemRow = {
@@ -317,6 +323,20 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       `
     : [];
   const unavailableOptionKeys = new Set(optionStoreSettings.map((setting) => String(setting.optionKey)));
+  const operationRows = selectedStore
+    ? await sql`
+        select
+          stores.business_hours as "businessHours",
+          coalesce(stores.reservation_note, '') as "reservationNote",
+          coalesce(store_operations.reservations_enabled, true) as "reservationsEnabled",
+          coalesce(store_operations.status_note, '') as "statusNote"
+        from stores
+        left join store_operations on store_operations.store_id = stores.id
+        where stores.id = ${selectedStore.osStoreId}
+        limit 1
+      `
+    : [];
+  const storeOperation = operationRows[0] as NanachaCompatibleMenu["storeOperation"] | undefined;
 
   const drinksWithStoreSettings = drinks.map((drink) => {
     const setting = settingsByItemId.get(drink.menuCatalogItemId);
@@ -343,7 +363,13 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       tapiocaFreeCategories: publicCategories.filter((category) => category.isTapiocaFree).map((category) => category.id),
       whippedCategories: publicCategories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
       stores: publicStores,
-      selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? ""
+      selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",
+      storeOperation: storeOperation ?? {
+        reservationsEnabled: true,
+        statusNote: "",
+        businessHours: {},
+        reservationNote: ""
+      }
     }
   };
 }

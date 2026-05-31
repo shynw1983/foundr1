@@ -6,12 +6,16 @@ create table if not exists stores (
   external_id text,
   address text,
   owner_name text,
+  business_hours jsonb not null default '{}'::jsonb,
+  reservation_note text not null default '',
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table stores add column if not exists external_id text;
+alter table stores add column if not exists business_hours jsonb not null default '{}'::jsonb;
+alter table stores add column if not exists reservation_note text not null default '';
 
 create table if not exists brands (
   id uuid primary key default gen_random_uuid(),

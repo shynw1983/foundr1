@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
-import { sql } from "../../../../../../lib/db";
 import { getNanachaCompatibleMenu, type NanachaPricedOption } from "../../../../../../lib/nanacha-compatible-menu";
+import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -71,16 +71,6 @@ function formatIceLabel(value: string) {
   return value ? `氷: ${value}` : "";
 }
 
-async function getStoreOperation(storeId: string) {
-  const rows = await sql`
-    select reservations_enabled as "reservationsEnabled", status_note as "statusNote"
-    from store_operations
-    where store_id = ${storeId}
-    limit 1
-  `;
-  return (rows[0] as { reservationsEnabled: boolean; statusNote: string } | undefined) ?? { reservationsEnabled: true, statusNote: "" };
-}
-
 export async function POST(request: Request) {
   const accessToken = cleanAccessToken(process.env.SQUARE_ACCESS_TOKEN);
   const locationId = cleanEnv(process.env.SQUARE_LOCATION_ID);
@@ -118,7 +108,7 @@ export async function POST(request: Request) {
   const publicStore = menu.stores.find((store) => store.id === storeId || store.label === storeId) ?? (menu.stores.length === 1 ? menu.stores[0] : null);
   if (!publicStore) return Response.json({ error: "Unknown store" }, { status: 400 });
 
-  const operation = await getStoreOperation(publicStore.osStoreId);
+  const operation = menu.storeOperation;
   if (!operation.reservationsEnabled) {
     return Response.json({ error: "Reservations are temporarily paused for this store" }, { status: 409 });
   }
@@ -182,6 +172,9 @@ export async function POST(request: Request) {
   const minimumPickup = getTokyoMinimumPickup();
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
     return Response.json({ error: "Pickup time must be at least 5 minutes from now" }, { status: 400 });
+  }
+  if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
+    return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
 
   const amount = validatedItems.reduce((sum, item) => sum + item.amount, 0);

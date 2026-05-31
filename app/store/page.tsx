@@ -1,5 +1,9 @@
-import { BookOpen, Clock3, ClipboardList, ShoppingCart, Tags } from "lucide-react";
+"use client";
+
+import { BookOpen, CheckCircle2, Clock3, ClipboardList, PauseCircle, ShoppingCart, Tags } from "lucide-react";
+import { useEffect, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
+import { formatBusinessHoursSummary } from "../../lib/store-business-hours";
 
 const storeModules = [
   {
@@ -39,7 +43,74 @@ const storeModules = [
   }
 ];
 
+type StoreOption = {
+  id: string;
+  name: string;
+};
+
+type StoreOperation = {
+  id: string;
+  name: string;
+  businessHours: unknown;
+  reservationNote: string;
+  reservationsEnabled: boolean;
+  statusNote: string;
+};
+
 export default function StoreHomePage() {
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [operation, setOperation] = useState<StoreOperation | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function loadOperation(storeId = selectedStoreId) {
+    const params = new URLSearchParams();
+    if (storeId) params.set("storeId", storeId);
+    const response = await fetch(`/api/store/operations${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    setStores(body.access?.stores ?? []);
+    setSelectedStoreId(body.selectedStoreId ?? "");
+    setOperation(body.operation ?? null);
+  }
+
+  useEffect(() => {
+    void loadOperation("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  async function saveOperation(patch: Partial<StoreOperation>) {
+    if (!operation) return;
+    const next = { ...operation, ...patch };
+    setOperation(next);
+    setSaving(true);
+    try {
+      const response = await fetch("/api/store/operations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: selectedStoreId,
+          reservationsEnabled: next.reservationsEnabled,
+          statusNote: next.statusNote
+        })
+      });
+      if (!response.ok) throw new Error("save failed");
+      setMessage("営業状態を更新しました。");
+    } catch {
+      setOperation(operation);
+      setMessage("営業状態を保存できませんでした。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -52,6 +123,67 @@ export default function StoreHomePage() {
         </a>
         <StoreNavTabs active="home" />
       </header>
+
+      <section className="panel store-operation-panel">
+        <div className="store-operation-heading">
+          <div>
+            <p className="eyebrow">Store Operation</p>
+            <h2>営業・予約受付</h2>
+            <p>
+              {operation ? `基本営業時間: ${formatBusinessHoursSummary(operation.businessHours)}` : "営業状態を読み込み中です。"}
+              {operation?.reservationNote ? ` / ${operation.reservationNote}` : ""}
+            </p>
+          </div>
+          {stores.length > 1 ? (
+            <select value={selectedStoreId} onChange={(event) => {
+              setSelectedStoreId(event.target.value);
+              void loadOperation(event.target.value);
+            }}>
+              {stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
+            </select>
+          ) : null}
+        </div>
+        {operation ? (
+          <div className="store-operation-actions">
+            <button
+              className={operation.reservationsEnabled ? "store-status-button is-on" : "store-status-button"}
+              type="button"
+              disabled={saving}
+              onClick={() => void saveOperation({ reservationsEnabled: true, statusNote: "" })}
+            >
+              <CheckCircle2 size={17} />
+              通常受付
+            </button>
+            <button
+              className={!operation.reservationsEnabled && operation.statusNote !== "本日休業" ? "store-status-button is-off" : "store-status-button"}
+              type="button"
+              disabled={saving}
+              onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "一時休止" })}
+            >
+              <PauseCircle size={17} />
+              一時休止
+            </button>
+            <button
+              className={!operation.reservationsEnabled && operation.statusNote === "本日休業" ? "store-status-button is-off" : "store-status-button"}
+              type="button"
+              disabled={saving}
+              onClick={() => void saveOperation({ reservationsEnabled: false, statusNote: "本日休業" })}
+            >
+              <PauseCircle size={17} />
+              本日休業
+            </button>
+            <input
+              value={operation.statusNote}
+              onChange={(event) => setOperation({ ...operation, statusNote: event.target.value })}
+              placeholder="予約画面に出すメモ"
+            />
+            <button className="secondary-button" type="button" disabled={saving} onClick={() => void saveOperation({})}>
+              メモ保存
+            </button>
+          </div>
+        ) : null}
+        {message ? <div className="inline-alert">{message}</div> : null}
+      </section>
 
       <section className="store-workbench-grid">
         {storeModules.map((module) => {
