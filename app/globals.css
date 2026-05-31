@@ -9342,13 +9342,14 @@ button {
   }
 
   .store-menu-category-panel {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    overflow: visible;
+    padding-bottom: 0;
   }
 
   .store-menu-category-panel .menu-category-button {
-    flex: 0 0 180px;
+    width: 100%;
   }
 
   .store-menu-head,
