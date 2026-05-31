@@ -85,19 +85,6 @@ type MenuOption = {
   isActive: boolean;
 };
 
-type MenuStoreSetting = {
-  id: string;
-  brandId: string;
-  storeId: string;
-  menuCatalogItemId: string;
-  websiteEnabled: boolean;
-  posEnabled: boolean;
-  deliveryEnabled: boolean;
-  isAvailable: boolean;
-  priceOverride: number | null;
-  statusNote: string;
-};
-
 type MenuAdminData = {
   brands: OptionItem[];
   stores: StoreOption[];
@@ -105,7 +92,6 @@ type MenuAdminData = {
   items: MenuItem[];
   groups: MenuGroup[];
   options: MenuOption[];
-  storeSettings: MenuStoreSetting[];
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -237,21 +223,6 @@ function getCategoryCounts(items: MenuItem[]) {
     .sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
-function defaultStoreSetting(brandId: string, storeId: string, itemId: string): MenuStoreSetting {
-  return {
-    id: "",
-    brandId,
-    storeId,
-    menuCatalogItemId: itemId,
-    websiteEnabled: true,
-    posEnabled: true,
-    deliveryEnabled: false,
-    isAvailable: true,
-    priceOverride: null,
-    statusNote: ""
-  };
-}
-
 export default function MenuAdminPage() {
   const [data, setData] = useState<MenuAdminData>({
     brands: [],
@@ -259,8 +230,7 @@ export default function MenuAdminPage() {
     sources: [],
     items: [],
     groups: [],
-    options: [],
-    storeSettings: []
+    options: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeStoreId, setActiveStoreId] = useState("");
@@ -272,7 +242,7 @@ export default function MenuAdminPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
-  const [savingKind, setSavingKind] = useState<"item" | "group" | "option" | "storeSetting" | "">("");
+  const [savingKind, setSavingKind] = useState<"item" | "group" | "option" | "">("");
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -363,7 +333,7 @@ export default function MenuAdminPage() {
     setMessage("新しい商品を入力できます。");
   }
 
-  async function save(kind: "item" | "group" | "option" | "storeSetting", payload: Record<string, unknown>) {
+  async function save(kind: "item" | "group" | "option", payload: Record<string, unknown>) {
     setMessage("");
     setSavingKind(kind);
     try {
@@ -383,10 +353,6 @@ export default function MenuAdminPage() {
         await loadMenus(result.id || itemDraft.id);
         return;
       }
-      if (kind === "storeSetting") {
-        await loadMenus(itemDraft.id);
-        return;
-      }
       if (kind === "group") setGroupDraft({ ...emptyGroup, brandId: activeBrandId, menuCatalogItemId: itemDraft.id });
       if (kind === "option") setOptionDraft(emptyOption);
       await loadMenus(itemDraft.id);
@@ -395,32 +361,6 @@ export default function MenuAdminPage() {
     } finally {
       setSavingKind("");
     }
-  }
-
-  function getStoreSetting(item: MenuItem) {
-    if (!activeStoreId) return defaultStoreSetting(item.brandId || activeBrandId, activeStoreId, item.id);
-    return data.storeSettings.find((setting) => (
-      setting.storeId === activeStoreId &&
-      setting.menuCatalogItemId === item.id
-    )) ?? defaultStoreSetting(item.brandId || activeBrandId, activeStoreId, item.id);
-  }
-
-  function updateLocalStoreSetting(item: MenuItem, patch: Partial<MenuStoreSetting>) {
-    const current = getStoreSetting(item);
-    const next = { ...current, ...patch };
-    setData((currentData) => {
-      const existingIndex = currentData.storeSettings.findIndex((setting) => (
-        setting.storeId === activeStoreId &&
-        setting.menuCatalogItemId === item.id
-      ));
-      if (existingIndex === -1) {
-        return { ...currentData, storeSettings: [...currentData.storeSettings, next] };
-      }
-      return {
-        ...currentData,
-        storeSettings: currentData.storeSettings.map((setting, index) => index === existingIndex ? next : setting)
-      };
-    });
   }
 
   async function deleteEntry(kind: "item" | "group" | "option", id: string) {
@@ -617,87 +557,6 @@ export default function MenuAdminPage() {
         </div>
 
         {message ? <div className="inline-alert">{message}</div> : null}
-
-        {activeStoreId ? (
-          <section className="store-menu-settings-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Store Menu</p>
-                <h3>店舗別の予約・販売設定</h3>
-                <p>ブランド共通メニューを元に、この店舗で表示する商品と販売状態を調整します。</p>
-              </div>
-              <span className="status-pill">{categoryItems.length}件</span>
-            </div>
-            <div className="store-menu-settings-list">
-              {categoryItems.map((item) => {
-                const setting = getStoreSetting(item);
-                return (
-                  <article className="store-menu-setting-row" key={item.id}>
-                    <div className="store-menu-setting-name">
-                      <strong>{item.name}</strong>
-                      <span>{item.category || "未分類"} / 通常価格 {item.basePrice == null ? "未設定" : `${item.basePrice.toLocaleString()}円`}</span>
-                    </div>
-                    <label className="menu-setting-toggle">
-                      <input
-                        type="checkbox"
-                        checked={setting.websiteEnabled}
-                        onChange={(event) => updateLocalStoreSetting(item, { websiteEnabled: event.target.checked })}
-                      />
-                      <span>Web予約</span>
-                    </label>
-                    <label className="menu-setting-toggle">
-                      <input
-                        type="checkbox"
-                        checked={setting.posEnabled}
-                        onChange={(event) => updateLocalStoreSetting(item, { posEnabled: event.target.checked })}
-                      />
-                      <span>POS</span>
-                    </label>
-                    <label className="menu-setting-toggle">
-                      <input
-                        type="checkbox"
-                        checked={setting.deliveryEnabled}
-                        onChange={(event) => updateLocalStoreSetting(item, { deliveryEnabled: event.target.checked })}
-                      />
-                      <span>デリバリー</span>
-                    </label>
-                    <label className="menu-setting-toggle">
-                      <input
-                        type="checkbox"
-                        checked={setting.isAvailable}
-                        onChange={(event) => updateLocalStoreSetting(item, { isAvailable: event.target.checked })}
-                      />
-                      <span>販売可</span>
-                    </label>
-                    <input
-                      className="store-menu-price-input"
-                      value={setting.priceOverride ?? ""}
-                      onChange={(event) => updateLocalStoreSetting(item, { priceOverride: event.target.value ? Number(event.target.value) : null })}
-                      inputMode="decimal"
-                      placeholder="店舗価格"
-                    />
-                    <input
-                      className="store-menu-note-input"
-                      value={setting.statusNote}
-                      onChange={(event) => updateLocalStoreSetting(item, { statusNote: event.target.value })}
-                      placeholder="メモ"
-                    />
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={savingKind === "storeSetting"}
-                      onClick={() => void save("storeSetting", setting)}
-                    >
-                      <Save size={15} />
-                      保存
-                    </button>
-                  </article>
-                );
-              })}
-              {!categoryItems.length ? <p className="empty-state">{loading ? "読み込み中..." : "設定できる商品がありません。"}</p> : null}
-            </div>
-          </section>
-        ) : null}
 
         <div className="menu-editor-layout">
           <aside className="menu-category-panel">
