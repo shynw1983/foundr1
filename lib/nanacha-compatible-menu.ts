@@ -59,6 +59,13 @@ type MenuItemRow = {
   isActive: boolean;
 };
 
+type StoreSettingRow = {
+  menuCatalogItemId: string;
+  websiteEnabled: boolean;
+  isAvailable: boolean;
+  priceOverride: number | null;
+};
+
 type MenuGroupRow = {
   id: string;
   groupKey: string;
@@ -115,7 +122,11 @@ export async function getNanachaBrand() {
   return brands[0] as { id: string } | undefined;
 }
 
-export async function getNanachaCompatibleMenu(requestUrl: string): Promise<{ brandId: string; baseMenu: NanachaCompatibleMenu }> {
+function normalizeStoreQuery(value = "") {
+  return String(value).trim().toLowerCase();
+}
+
+export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = ""): Promise<{ brandId: string; baseMenu: NanachaCompatibleMenu }> {
   const brand = await getNanachaBrand();
   if (!brand) throw new Error("nanacha brand not found");
 
@@ -241,12 +252,45 @@ export async function getNanachaCompatibleMenu(requestUrl: string): Promise<{ br
     label: store.name,
     osStoreId: store.id
   }));
+  const normalizedStoreQuery = normalizeStoreQuery(storeQuery);
+  const selectedStore = normalizedStoreQuery
+    ? publicStores.find((store) => (
+        normalizeStoreQuery(store.id) === normalizedStoreQuery ||
+        normalizeStoreQuery(store.label) === normalizedStoreQuery ||
+        normalizeStoreQuery(store.osStoreId) === normalizedStoreQuery
+      ))
+    : publicStores[0];
+
+  const storeSettings = selectedStore
+    ? (await sql`
+        select
+          menu_catalog_item_id::text as "menuCatalogItemId",
+          website_enabled as "websiteEnabled",
+          is_available as "isAvailable",
+          price_override::float as "priceOverride"
+        from menu_store_settings
+        where brand_id = ${brand.id}
+          and store_id = ${selectedStore.osStoreId}
+      `) as StoreSettingRow[]
+    : [];
+  const settingsByItemId = new Map(storeSettings.map((setting) => [setting.menuCatalogItemId, setting]));
+
+  const drinksWithStoreSettings = drinks.map((drink) => {
+    const setting = settingsByItemId.get(drink.menuCatalogItemId);
+    if (!setting) return drink;
+    return {
+      ...drink,
+      price: setting.priceOverride ?? drink.price,
+      isAvailable: setting.isAvailable,
+      websiteEnabled: setting.websiteEnabled
+    };
+  });
 
   return {
     brandId: brand.id,
     baseMenu: {
       categories,
-      drinks,
+      drinks: drinksWithStoreSettings,
       sizes,
       sweetness,
       ice,
@@ -256,7 +300,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string): Promise<{ br
       tapiocaFreeCategories: categories.filter((category) => category.isTapiocaFree).map((category) => category.id),
       whippedCategories: categories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
       stores: publicStores,
-      selectedStoreId: publicStores[0]?.id ?? ""
+      selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? ""
     }
   };
 }

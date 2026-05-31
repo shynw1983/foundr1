@@ -98,6 +98,22 @@ export async function GET(request: Request) {
   `;
 
   const itemIds = new Set(items.map((item) => item.id));
+  const storeSettings = store
+    ? await sql`
+        select
+          menu_catalog_item_id::text as "menuCatalogItemId",
+          website_enabled as "websiteEnabled",
+          pos_enabled as "posEnabled",
+          delivery_enabled as "deliveryEnabled",
+          is_available as "isAvailable",
+          price_override::float as "priceOverride",
+          status_note as "statusNote"
+        from menu_store_settings
+        where brand_id = ${brand.id}
+          and store_id = ${store.id}
+      `
+    : [];
+  const settingsByItemId = new Map(storeSettings.map((setting) => [String(setting.menuCatalogItemId), setting]));
   const groups = (await sql`
     select
       id::text,
@@ -160,11 +176,28 @@ export async function GET(request: Request) {
   return Response.json({
     brand,
     store,
-    items: items.map((item) => ({
-      ...item,
-      imageUrl: publicUrl(item.imageUrl, request.url),
-      optionGroups: [...globalGroups, ...(groupsByItem.get(item.id) ?? [])]
-    })),
+    items: items.map((item) => {
+      const setting = settingsByItemId.get(item.id);
+      return {
+        ...item,
+        basePrice: setting?.priceOverride ?? item.basePrice,
+        imageUrl: publicUrl(item.imageUrl, request.url),
+        storeSetting: setting ? {
+          websiteEnabled: setting.websiteEnabled,
+          posEnabled: setting.posEnabled,
+          deliveryEnabled: setting.deliveryEnabled,
+          isAvailable: setting.isAvailable,
+          statusNote: setting.statusNote
+        } : {
+          websiteEnabled: true,
+          posEnabled: true,
+          deliveryEnabled: false,
+          isAvailable: true,
+          statusNote: ""
+        },
+        optionGroups: [...globalGroups, ...(groupsByItem.get(item.id) ?? [])]
+      };
+    }),
     generatedAt: new Date().toISOString()
   });
 }

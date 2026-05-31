@@ -114,7 +114,7 @@ export async function POST(request: Request) {
           }
         ];
 
-  const { brandId, baseMenu: menu } = await getNanachaCompatibleMenu(request.url);
+  const { brandId, baseMenu: menu } = await getNanachaCompatibleMenu(request.url, storeId);
   const publicStore = menu.stores.find((store) => store.id === storeId || store.label === storeId) ?? (menu.stores.length === 1 ? menu.stores[0] : null);
   if (!publicStore) return Response.json({ error: "Unknown store" }, { status: 400 });
 
@@ -138,7 +138,11 @@ export async function POST(request: Request) {
       option: String(rawItem.option || ""),
       toppings: Array.isArray(rawItem.toppings) ? rawItem.toppings.map(String) : []
     };
-    const menuDrink = menu.drinks.find((drinkItem) => drinkItem.name === item.drink && drinkItem.websiteEnabled !== false);
+    const menuDrink = menu.drinks.find((drinkItem) => (
+      drinkItem.name === item.drink &&
+      drinkItem.websiteEnabled !== false &&
+      drinkItem.isAvailable !== false
+    ));
     if (!menuDrink) return Response.json({ error: "Unknown drink" }, { status: 400 });
 
     const availableSizes = filterAllowedIds(menu.sizes, menuDrink, "allowedSizes");

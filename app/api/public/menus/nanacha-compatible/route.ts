@@ -2,7 +2,9 @@ import { getNanachaCompatibleMenu } from "../../../../../lib/nanacha-compatible-
 
 export async function GET(request: Request) {
   try {
-    const { baseMenu } = await getNanachaCompatibleMenu(request.url);
+    const { searchParams } = new URL(request.url);
+    const store = searchParams.get("store") || searchParams.get("storeId") || "";
+    const { baseMenu } = await getNanachaCompatibleMenu(request.url, store);
     return Response.json({
       baseMenu,
       generatedAt: new Date().toISOString()

@@ -33,7 +33,7 @@ function parseJsonObject(value: unknown) {
 }
 
 async function readMenuAdminData() {
-  const [brands, stores, sources, items, groups, options] = await Promise.all([
+  const [brands, stores, sources, items, groups, options, storeSettings] = await Promise.all([
     sql`
       select id::text, name
       from brands
@@ -114,10 +114,26 @@ async function readMenuAdminData() {
         is_active as "isActive"
       from menu_options
       order by sort_order, name
+    `,
+    sql`
+      select
+        id::text,
+        brand_id::text as "brandId",
+        store_id::text as "storeId",
+        menu_catalog_item_id::text as "menuCatalogItemId",
+        website_enabled as "websiteEnabled",
+        pos_enabled as "posEnabled",
+        delivery_enabled as "deliveryEnabled",
+        is_available as "isAvailable",
+        price_override::float as "priceOverride",
+        status_note as "statusNote",
+        updated_at as "updatedAt"
+      from menu_store_settings
+      order by updated_at desc
     `
   ]);
 
-  return { brands, stores, sources, items, groups, options };
+  return { brands, stores, sources, items, groups, options, storeSettings };
 }
 
 export async function GET() {
@@ -143,6 +159,7 @@ export async function POST(request: Request) {
     if (kind === "item") return Response.json(await upsertItem(body));
     if (kind === "group") return Response.json(await upsertGroup(body));
     if (kind === "option") return Response.json(await upsertOption(body));
+    if (kind === "storeSetting") return Response.json(await upsertStoreSetting(body, session.id));
     return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -163,9 +180,64 @@ export async function DELETE(request: Request) {
   else if (body.kind === "item") await sql`delete from menu_catalog_items where id = ${id}`;
   else if (body.kind === "group") await sql`delete from menu_option_groups where id = ${id}`;
   else if (body.kind === "option") await sql`delete from menu_options where id = ${id}`;
+  else if (body.kind === "storeSetting") await sql`delete from menu_store_settings where id = ${id}`;
   else return Response.json({ error: "削除対象が不正です。" }, { status: 400 });
 
   return Response.json({ ok: true });
+}
+
+async function upsertStoreSetting(body: Record<string, unknown>, employeeId: string) {
+  const brandId = cleanOptionalId(body.brandId);
+  const storeId = cleanOptionalId(body.storeId);
+  const menuCatalogItemId = cleanOptionalId(body.menuCatalogItemId);
+  if (!brandId || !storeId || !menuCatalogItemId) {
+    throw new Error("ブランド、店舗、商品を選択してください。");
+  }
+
+  const priceOverride = parseOptionalNumber(body.priceOverride);
+  const statusNote = String(body.statusNote ?? "").trim();
+  const rows = await sql`
+    insert into menu_store_settings (
+      brand_id,
+      store_id,
+      menu_catalog_item_id,
+      website_enabled,
+      pos_enabled,
+      delivery_enabled,
+      is_available,
+      price_override,
+      status_note,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${brandId},
+      ${storeId},
+      ${menuCatalogItemId},
+      ${body.websiteEnabled !== false},
+      ${body.posEnabled !== false},
+      ${body.deliveryEnabled === true},
+      ${body.isAvailable !== false},
+      ${priceOverride},
+      ${statusNote},
+      ${employeeId},
+      now()
+    )
+    on conflict (store_id, menu_catalog_item_id)
+    do update set
+      brand_id = excluded.brand_id,
+      website_enabled = excluded.website_enabled,
+      pos_enabled = excluded.pos_enabled,
+      delivery_enabled = excluded.delivery_enabled,
+      is_available = excluded.is_available,
+      price_override = excluded.price_override,
+      status_note = excluded.status_note,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+    returning id::text
+  `;
+
+  return { ok: true, id: rows[0]?.id };
 }
 
 async function upsertSource(body: Record<string, unknown>) {

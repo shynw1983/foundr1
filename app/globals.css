@@ -1361,6 +1361,89 @@ button {
   min-width: 0;
 }
 
+.store-menu-settings-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.store-menu-settings-panel .section-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.store-menu-settings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.store-menu-setting-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, auto) minmax(92px, 0.34fr) minmax(120px, 0.5fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbff;
+}
+
+.store-menu-setting-name {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-menu-setting-name strong,
+.store-menu-setting-name span {
+  overflow-wrap: anywhere;
+}
+
+.store-menu-setting-name span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.menu-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.menu-setting-toggle input {
+  width: 14px;
+  min-height: 14px;
+}
+
+.store-menu-price-input,
+.store-menu-note-input {
+  min-height: 36px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+}
+
 .menu-editor-layout {
   display: grid;
   grid-template-columns: minmax(180px, 0.28fr) minmax(260px, 0.42fr) minmax(0, 1fr);
@@ -8020,6 +8103,16 @@ button {
 }
 
 @media (max-width: 1100px) {
+  .store-menu-setting-row {
+    grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  }
+
+  .store-menu-price-input,
+  .store-menu-note-input,
+  .store-menu-setting-row .secondary-button {
+    grid-column: 1 / -1;
+  }
+
   .menu-editor-layout {
     grid-template-columns: minmax(170px, 0.34fr) minmax(0, 1fr);
   }
@@ -8050,6 +8143,21 @@ button {
 }
 
 @media (max-width: 760px) {
+  .store-menu-setting-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .store-menu-setting-name,
+  .store-menu-price-input,
+  .store-menu-note-input,
+  .store-menu-setting-row .secondary-button {
+    grid-column: 1 / -1;
+  }
+
+  .menu-setting-toggle {
+    justify-content: flex-start;
+  }
+
   .menu-editor-layout,
   .menu-form-grid,
   .menu-option-editor,
