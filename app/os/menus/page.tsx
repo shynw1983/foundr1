@@ -715,14 +715,6 @@ export default function MenuAdminPage() {
               <span>すべて</span>
               <strong>{filteredItems.length}</strong>
             </button>
-            <button
-              className={isChoiceSettingsView ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
-              type="button"
-              onClick={() => openChoiceSettings()}
-            >
-              <span>選択肢設定</span>
-              <strong>{brandGroups.length}</strong>
-            </button>
             {categoryCounts.map((category) => (
               <button
                 className={currentCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
@@ -740,6 +732,14 @@ export default function MenuAdminPage() {
                 <strong>{category.count}</strong>
               </button>
             ))}
+            <button
+              className={isChoiceSettingsView ? "menu-category-button is-active is-settings" : "menu-category-button is-settings"}
+              type="button"
+              onClick={() => openChoiceSettings()}
+            >
+              <span>選択肢設定</span>
+              <strong>{brandGroups.length}</strong>
+            </button>
           </aside>
 
           <aside className="menu-item-panel">
