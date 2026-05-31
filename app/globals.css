@@ -3573,6 +3573,191 @@ button {
   line-height: 1.55;
 }
 
+.shift-editor {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(120px, 0.75fr)) minmax(180px, 1fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.shift-editor-title {
+  display: grid;
+  gap: 4px;
+  align-self: center;
+}
+
+.shift-editor-title strong,
+.shift-editor-title span,
+.shift-editor label span {
+  display: block;
+}
+
+.shift-editor-title span,
+.shift-editor label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.shift-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.shift-editor input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.shift-patterns,
+.shift-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.shift-patterns {
+  grid-column: 1 / span 3;
+}
+
+.shift-patterns button {
+  min-height: 34px;
+  border: 1px solid rgba(33, 116, 91, 0.25);
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 900;
+}
+
+.shift-editor-actions {
+  grid-column: 4 / -1;
+  justify-content: flex-end;
+}
+
+.shift-editor-actions .is-danger {
+  color: var(--danger);
+}
+
+.shift-grid-wrap {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.shift-grid {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.shift-grid th,
+.shift-grid td {
+  min-width: 66px;
+  height: 58px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: white;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.shift-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 48px;
+  background: #f4f6f9;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.shift-grid thead th span,
+.shift-grid thead th small {
+  display: block;
+}
+
+.shift-grid thead th small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shift-grid .is-weekend,
+.shift-grid thead th.is-weekend {
+  background: #fff7f2;
+}
+
+.shift-grid .shift-employee-head,
+.shift-grid .shift-employee-cell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 150px;
+  width: 150px;
+  border-right: 2px solid var(--line);
+  text-align: left;
+}
+
+.shift-grid .shift-employee-cell {
+  background: #f8fbf4;
+  padding: 0 10px;
+  color: var(--green);
+  font-weight: 900;
+}
+
+.shift-cell {
+  display: grid;
+  width: 100%;
+  height: 58px;
+  place-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.shift-cell.has-shift {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.shift-cell.is-selected {
+  box-shadow: inset 0 0 0 2px var(--green);
+}
+
+.shift-cell strong,
+.shift-cell span {
+  display: block;
+}
+
+.shift-cell strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.shift-empty {
+  color: #b8c1ce;
+}
+
 .timecard-management-grid {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
 }
@@ -8161,6 +8346,58 @@ button {
     white-space: nowrap;
   }
 
+  .mobile-nav-user {
+    display: block;
+  }
+
+  .mobile-nav-user .user-panel {
+    display: grid;
+    grid-template-columns: 48px 48px minmax(112px, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .mobile-nav-user .user-badge {
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 0;
+  }
+
+  .mobile-nav-user .user-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .mobile-nav-user .user-badge-name,
+  .mobile-nav-user .user-badge-role {
+    display: none;
+  }
+
+  .mobile-nav-user .notification-menu summary,
+  .mobile-nav-user .notification-placeholder,
+  .mobile-nav-user .os-language-picker,
+  .mobile-nav-user .os-language-picker select {
+    width: 100%;
+  }
+
+  .mobile-nav-user .notification-menu summary,
+  .mobile-nav-user .notification-placeholder,
+  .mobile-nav-user .os-language-picker select {
+    min-height: 48px;
+  }
+
+  .mobile-nav-user .os-language-picker span {
+    display: none;
+  }
+
+  .mobile-nav-user .account-menu-panel,
+  .mobile-nav-user .notification-panel {
+    right: auto;
+    left: 0;
+  }
+
   .brand-block h1 {
     font-size: 18px;
     line-height: 1.1;
@@ -9635,6 +9872,28 @@ button {
   .timecard-detail-grid,
   .timecard-feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .shift-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .shift-patterns,
+  .shift-editor-actions {
+    grid-column: auto;
+  }
+
+  .shift-editor-actions {
+    justify-content: stretch;
+  }
+
+  .shift-editor-actions button,
+  .shift-patterns button {
+    flex: 1 1 0;
+  }
+
+  .shift-grid {
+    min-width: 980px;
   }
 
   .timecard-punch-button {

@@ -13,6 +13,27 @@ type StoreOption = {
   name: string;
 };
 
+type TimecardEmployee = {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  storeIds: string[];
+};
+
+type ShiftEntry = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  storeId: string;
+  storeName: string;
+  workDate: string;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  breakMinutes: number;
+  note: string | null;
+};
+
 type DailySummary = {
   key: string;
   employeeId: string;
@@ -59,9 +80,20 @@ type TimecardPayload = {
   month: string;
   stores: StoreOption[];
   selectedStoreId: string;
+  employees: TimecardEmployee[];
+  shifts: ShiftEntry[];
   dailySummaries: DailySummary[];
   payrollRows: PayrollRow[];
   payrollTotals: PayrollTotals;
+};
+
+type ShiftDraft = {
+  employeeId: string;
+  workDate: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  breakMinutes: string;
+  note: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -97,6 +129,26 @@ function MetricCard({ label, value, note }: { label: string; value: string; note
   );
 }
 
+function getMonthDays(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return [];
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const dayCount = new Date(year, monthIndex + 1, 0).getDate();
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  return Array.from({ length: dayCount }, (_, index) => {
+    const day = index + 1;
+    const key = `${match[1]}-${match[2]}-${String(day).padStart(2, "0")}`;
+    const weekday = new Date(`${key}T00:00:00+09:00`).getDay();
+    return {
+      key,
+      day,
+      weekdayLabel: weekdays[weekday],
+      isWeekend: weekday === 0 || weekday === 6
+    };
+  });
+}
+
 type TimecardMainView = "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
 type TimecardPayrollView = "summary" | "employee";
@@ -107,9 +159,12 @@ export default function TimecardPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [mainView, setMainView] = useState<TimecardMainView>("schedule");
-  const [scheduleView, setScheduleView] = useState<TimecardScheduleView>("actual");
+  const [scheduleView, setScheduleView] = useState<TimecardScheduleView>("planned");
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>("summary");
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
+  const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
+  const [shiftMessage, setShiftMessage] = useState("");
+  const [isSavingShift, setIsSavingShift] = useState(false);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -121,6 +176,7 @@ export default function TimecardPage() {
       setData(body);
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
+      setShiftDraft(null);
     }
     setIsLoading(false);
   }
@@ -146,12 +202,100 @@ export default function TimecardPage() {
     () => data?.dailySummaries.filter((day) => day.employeeId === selectedPayrollRow?.employeeId) ?? [],
     [data, selectedPayrollRow]
   );
+  const monthDays = useMemo(() => getMonthDays(month), [month]);
+  const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  const scheduleEmployees = useMemo(
+    () => data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? [],
+    [data, selectedStoreId]
+  );
+  const shiftByCell = useMemo(() => {
+    const map = new Map<string, ShiftEntry>();
+    for (const shift of data?.shifts ?? []) {
+      map.set(`${shift.employeeId}:${shift.workDate}`, shift);
+    }
+    return map;
+  }, [data?.shifts]);
+  const selectedShiftEmployee = shiftDraft
+    ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
+    : null;
 
   useEffect(() => {
     if (selectedPayrollRow && selectedPayrollRow.employeeId !== selectedPayrollEmployeeId) {
       setSelectedPayrollEmployeeId(selectedPayrollRow.employeeId);
     }
   }, [selectedPayrollEmployeeId, selectedPayrollRow]);
+
+  function openShiftEditor(employeeId: string, workDate: string) {
+    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    setShiftMessage("");
+    setShiftDraft({
+      employeeId,
+      workDate,
+      scheduledStart: shift?.scheduledStart ?? "11:00",
+      scheduledEnd: shift?.scheduledEnd ?? "18:00",
+      breakMinutes: String(shift?.breakMinutes ?? 0),
+      note: shift?.note ?? ""
+    });
+  }
+
+  async function saveShift(nextDraft = shiftDraft) {
+    if (!nextDraft || !selectedStoreId) return;
+    setIsSavingShift(true);
+    setShiftMessage("");
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_shift",
+        storeId: selectedStoreId,
+        employeeId: nextDraft.employeeId,
+        workDate: nextDraft.workDate,
+        scheduledStart: nextDraft.scheduledStart,
+        scheduledEnd: nextDraft.scheduledEnd,
+        breakMinutes: nextDraft.breakMinutes,
+        note: nextDraft.note
+      })
+    });
+    if (response.ok) {
+      setShiftMessage("シフトを保存しました。");
+      await loadTimecard(month, selectedStoreId);
+    } else {
+      const body = await response.json().catch(() => ({}));
+      setShiftMessage(String(body.error ?? "シフトを保存できませんでした。"));
+    }
+    setIsSavingShift(false);
+  }
+
+  async function deleteShift() {
+    if (!shiftDraft || !selectedStoreId) return;
+    setIsSavingShift(true);
+    setShiftMessage("");
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_shift",
+        storeId: selectedStoreId,
+        employeeId: shiftDraft.employeeId,
+        workDate: shiftDraft.workDate
+      })
+    });
+    if (response.ok) {
+      setShiftMessage("シフトを削除しました。");
+      await loadTimecard(month, selectedStoreId);
+    } else {
+      const body = await response.json().catch(() => ({}));
+      setShiftMessage(String(body.error ?? "シフトを削除できませんでした。"));
+    }
+    setIsSavingShift(false);
+  }
+
+  function applyShiftPattern(scheduledStart: string, scheduledEnd: string, breakMinutes = "60") {
+    if (!shiftDraft) return;
+    const nextDraft = { ...shiftDraft, scheduledStart, scheduledEnd, breakMinutes };
+    setShiftDraft(nextDraft);
+    void saveShift(nextDraft);
+  }
 
   return (
     <main className="shell">
@@ -228,22 +372,88 @@ export default function TimecardPage() {
                   <CalendarDays />
                   <div>
                     <h3>計画排班</h3>
-                    <p>月別の予定シフト、CSV取り込み、シフト作成はこの領域に追加します。</p>
+                    <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。</p>
                   </div>
                 </div>
-                <div className="timecard-feature-grid">
-                  <article>
-                    <strong>月間シフト表</strong>
-                    <p>店舗ごとの予定シフトを日付 x 従業員で編集できるようにします。</p>
-                  </article>
-                  <article>
-                    <strong>CSV一括登録</strong>
-                    <p>既存シフト表からまとめて登録、更新できる導線を用意します。</p>
-                  </article>
-                  <article>
-                    <strong>勤務パターン</strong>
-                    <p>朝勤務、昼勤務、夜勤務など、店舗別の勤務パターンを選択できるようにします。</p>
-                  </article>
+                {shiftMessage ? <div className="timecard-message">{shiftMessage}</div> : null}
+                {shiftDraft ? (
+                  <div className="shift-editor" aria-label="シフト編集">
+                    <div className="shift-editor-title">
+                      <strong>{selectedShiftEmployee?.name ?? "従業員"}</strong>
+                      <span>{shiftDraft.workDate}</span>
+                    </div>
+                    <label>
+                      <span>開始</span>
+                      <input type="time" value={shiftDraft.scheduledStart} onChange={(event) => setShiftDraft({ ...shiftDraft, scheduledStart: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input type="time" value={shiftDraft.scheduledEnd} onChange={(event) => setShiftDraft({ ...shiftDraft, scheduledEnd: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩(分)</span>
+                      <input type="number" min="0" max="720" value={shiftDraft.breakMinutes} onChange={(event) => setShiftDraft({ ...shiftDraft, breakMinutes: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>メモ</span>
+                      <input value={shiftDraft.note} onChange={(event) => setShiftDraft({ ...shiftDraft, note: event.target.value })} placeholder="任意" />
+                    </label>
+                    <div className="shift-patterns" aria-label="勤務パターン">
+                      <button type="button" onClick={() => applyShiftPattern("09:00", "15:00", "60")}>朝</button>
+                      <button type="button" onClick={() => applyShiftPattern("12:00", "18:00", "60")}>昼</button>
+                      <button type="button" onClick={() => applyShiftPattern("18:00", "00:00", "60")}>夜</button>
+                      <button type="button" onClick={() => applyShiftPattern("11:00", "22:00", "60")}>通し</button>
+                    </div>
+                    <div className="shift-editor-actions">
+                      <button className="secondary-button" type="button" onClick={() => setShiftDraft(null)}>閉じる</button>
+                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteShift()}>削除</button>
+                      <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveShift()}>{isSavingShift ? "保存中" : "保存"}</button>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="shift-grid-wrap">
+                  <table className="shift-grid">
+                    <thead>
+                      <tr>
+                        <th className="shift-employee-head">従業員</th>
+                        {monthDays.map((day) => (
+                          <th className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                            <span>{day.day}</span>
+                            <small>{day.weekdayLabel}</small>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => (
+                        <tr key={employee.id}>
+                          <th className="shift-employee-cell">{employee.name}</th>
+                          {monthDays.map((day) => {
+                            const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+                            const isSelected = shiftDraft?.employeeId === employee.id && shiftDraft.workDate === day.key;
+                            return (
+                              <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                                <button className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}`} type="button" onClick={() => openShiftEditor(employee.id, day.key)}>
+                                  {shift ? (
+                                    <>
+                                      <strong>{shift.scheduledStart ?? "--:--"}</strong>
+                                      <span>{shift.scheduledEnd ?? "--:--"}</span>
+                                    </>
+                                  ) : (
+                                    <span className="shift-empty">-</span>
+                                  )}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={monthDays.length + 1}>この店舗で勤務する従業員がまだ設定されていません。</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             ) : (
