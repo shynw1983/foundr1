@@ -71,7 +71,11 @@ async function readMenuAdminData() {
         id::text,
         brand_id::text as "brandId",
         coalesce(store_id::text, '') as "storeId",
+        coalesce(external_id, '') as "externalId",
         name,
+        coalesce(note, '') as note,
+        is_tapioca_free as "isTapiocaFree",
+        has_whip_by_default as "hasWhipByDefault",
         sort_order as "sortOrder"
       from menu_categories
       order by sort_order, name
@@ -171,6 +175,7 @@ export async function POST(request: Request) {
 
   try {
     if (kind === "source") return Response.json(await upsertSource(body));
+    if (kind === "category") return Response.json(await upsertCategory(body));
     if (kind === "item") return Response.json(await upsertItem(body));
     if (kind === "group") return Response.json(await upsertGroup(body));
     if (kind === "option") return Response.json(await upsertOption(body));
@@ -193,6 +198,7 @@ export async function DELETE(request: Request) {
   if (!id) return Response.json({ error: "IDが必要です。" }, { status: 400 });
 
   if (body.kind === "source") await sql`delete from menu_sources where id = ${id}`;
+  else if (body.kind === "category") await deleteCategory(id);
   else if (body.kind === "item") await sql`delete from menu_catalog_items where id = ${id}`;
   else if (body.kind === "group") await sql`delete from menu_option_groups where id = ${id}`;
   else if (body.kind === "option") await sql`delete from menu_options where id = ${id}`;
@@ -265,17 +271,29 @@ async function updateSortOrder(body: Record<string, unknown>) {
   if (!brandId) throw new Error("ブランドを選択してください。");
 
   if (categoryNames.length) {
-    await sql`
-      delete from menu_categories
-      where brand_id = ${brandId}
-        and (${storeId}::uuid is null or store_id = ${storeId})
-        and (${storeId}::uuid is not null or store_id is null)
-    `;
     for (const [index, name] of categoryNames.entries()) {
-      await sql`
-        insert into menu_categories (brand_id, store_id, name, sort_order, updated_at)
-        values (${brandId}, ${storeId}, ${name}, ${(index + 1) * 10}, now())
+      const existing = await sql`
+        select id::text
+        from menu_categories
+        where brand_id = ${brandId}
+          and (${storeId}::uuid is null or store_id = ${storeId})
+          and (${storeId}::uuid is not null or store_id is null)
+          and name = ${name}
+        limit 1
       `;
+      if (existing[0]) {
+        await sql`
+          update menu_categories
+          set sort_order = ${(index + 1) * 10},
+              updated_at = now()
+          where id = ${existing[0].id}
+        `;
+      } else {
+        await sql`
+          insert into menu_categories (brand_id, store_id, name, sort_order, updated_at)
+          values (${brandId}, ${storeId}, ${name}, ${(index + 1) * 10}, now())
+        `;
+      }
     }
     return { ok: true };
   }
@@ -296,6 +314,112 @@ async function updateSortOrder(body: Record<string, unknown>) {
   }
 
   throw new Error("並び替え対象がありません。");
+}
+
+async function upsertCategory(body: Record<string, unknown>) {
+  const id = cleanOptionalId(body.id);
+  const brandId = cleanOptionalId(body.brandId);
+  const storeId = cleanOptionalId(body.storeId);
+  const name = String(body.name ?? "").trim();
+  if (!brandId || !name) throw new Error("ブランドと分類名を入力してください。");
+
+  const sortOrder = Math.round(parseOptionalNumber(body.sortOrder) ?? 100);
+  const currentRows = id
+    ? await sql`
+        select id::text, name
+        from menu_categories
+        where id = ${id}
+        limit 1
+      `
+    : await sql`
+        select id::text, name
+        from menu_categories
+        where brand_id = ${brandId}
+          and (${storeId}::uuid is null or store_id = ${storeId})
+          and (${storeId}::uuid is not null or store_id is null)
+          and name = ${name}
+        limit 1
+      `;
+  const targetId = id || currentRows[0]?.id;
+  const previousName = String(currentRows[0]?.name ?? "");
+
+  const rows = targetId
+    ? await sql`
+        update menu_categories
+        set
+          brand_id = ${brandId},
+          store_id = ${storeId},
+          external_id = ${String(body.externalId ?? "").trim()},
+          name = ${name},
+          note = ${String(body.note ?? "").trim()},
+          is_tapioca_free = ${body.isTapiocaFree === true},
+          has_whip_by_default = ${body.hasWhipByDefault === true},
+          sort_order = ${sortOrder},
+          updated_at = now()
+        where id = ${targetId}
+        returning id::text
+      `
+    : await sql`
+        insert into menu_categories (
+          brand_id,
+          store_id,
+          external_id,
+          name,
+          note,
+          is_tapioca_free,
+          has_whip_by_default,
+          sort_order,
+          updated_at
+        )
+        values (
+          ${brandId},
+          ${storeId},
+          ${String(body.externalId ?? "").trim()},
+          ${name},
+          ${String(body.note ?? "").trim()},
+          ${body.isTapiocaFree === true},
+          ${body.hasWhipByDefault === true},
+          ${sortOrder},
+          now()
+        )
+        returning id::text
+      `;
+
+  if (targetId && previousName && previousName !== name) {
+    await sql`
+      update menu_catalog_items
+      set category = ${name},
+          updated_at = now()
+      where brand_id = ${brandId}
+        and (${storeId}::uuid is null or store_id = ${storeId})
+        and (${storeId}::uuid is not null or store_id is null)
+        and coalesce(nullif(category, ''), '未分類') = ${previousName}
+    `;
+  }
+
+  return { ok: true, id: rows[0]?.id };
+}
+
+async function deleteCategory(id: string) {
+  const rows = await sql`
+    select brand_id::text as "brandId", coalesce(store_id::text, '') as "storeId", name
+    from menu_categories
+    where id = ${id}
+    limit 1
+  `;
+  const category = rows[0];
+  if (!category) return;
+
+  await sql`
+    update menu_catalog_items
+    set category = '',
+        updated_at = now()
+    where brand_id = ${category.brandId}
+      and (${category.storeId || null}::uuid is null or store_id = ${category.storeId || null})
+      and (${category.storeId || null}::uuid is not null or store_id is null)
+      and coalesce(nullif(category, ''), '未分類') = ${category.name}
+  `;
+  await sql`delete from menu_categories where id = ${id}`;
 }
 
 async function upsertSource(body: Record<string, unknown>) {

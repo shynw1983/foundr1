@@ -73,6 +73,16 @@ type MenuGroupRow = {
   ruleJson: Record<string, unknown>;
 };
 
+type MenuCategoryRow = {
+  id: string;
+  externalId: string;
+  name: string;
+  note: string;
+  isTapiocaFree: boolean;
+  hasWhipByDefault: boolean;
+  sortOrder: number;
+};
+
 type MenuOptionRow = {
   optionGroupId: string;
   optionKey: string;
@@ -130,7 +140,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   const brand = await getNanachaBrand();
   if (!brand) throw new Error("nanacha brand not found");
 
-  const [items, groups, options, stores] = await Promise.all([
+  const [items, categories, groups, options, stores] = await Promise.all([
     sql`
       select
         menu_catalog_items.id::text,
@@ -150,6 +160,20 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       where menu_catalog_items.brand_id = ${brand.id}
         and menu_catalog_items.store_id is null
       order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, name
+    `,
+    sql`
+      select
+        id::text,
+        coalesce(external_id, '') as "externalId",
+        name,
+        coalesce(note, '') as note,
+        is_tapioca_free as "isTapiocaFree",
+        has_whip_by_default as "hasWhipByDefault",
+        sort_order as "sortOrder"
+      from menu_categories
+      where brand_id = ${brand.id}
+        and store_id is null
+      order by sort_order, name
     `,
     sql`
       select
@@ -189,7 +213,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         and stores.status = 'active'
       order by stores.name
     `
-  ]) as [MenuItemRow[], MenuGroupRow[], MenuOptionRow[], Array<{ id: string; name: string; externalId: string }>];
+  ]) as [MenuItemRow[], MenuCategoryRow[], MenuGroupRow[], MenuOptionRow[], Array<{ id: string; name: string; externalId: string }>];
 
   const optionsByGroup = new Map<string, MenuOptionRow[]>();
   for (const option of options) {
@@ -213,18 +237,22 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   const toppingIds = toppings.map((item) => item.id);
 
   const categoryMap = new Map<string, NanachaCompatibleMenu["categories"][number]>();
+  const categoriesByName = new Map(categories.map((category) => [category.name, category]));
+  const categoriesByExternalId = new Map(categories.filter((category) => category.externalId).map((category) => [category.externalId, category]));
   const drinks = items
     .filter((item) => item.isActive)
     .map((item) => {
       const schema = item.variableSchema ?? {};
       const categoryId = String(schema.categoryId || item.category || "menu");
+      const categoryMaster = categoriesByExternalId.get(categoryId) ?? categoriesByName.get(item.category);
+      const publicCategoryId = categoryMaster?.externalId || categoryId;
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, {
-          id: categoryId,
-          label: item.category || categoryId,
-          note: "",
-          isTapiocaFree: asBoolean(schema.isTapiocaFree),
-          hasWhipByDefault: asBoolean(schema.hasWhipByDefault)
+          id: publicCategoryId,
+          label: categoryMaster?.name || item.category || categoryId,
+          note: categoryMaster?.note || "",
+          isTapiocaFree: categoryMaster?.isTapiocaFree ?? asBoolean(schema.isTapiocaFree),
+          hasWhipByDefault: categoryMaster?.hasWhipByDefault ?? asBoolean(schema.hasWhipByDefault)
         });
       }
 
@@ -232,7 +260,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         id: item.externalId || item.id,
         menuCatalogItemId: item.id,
         name: item.name,
-        category: categoryId,
+        category: publicCategoryId,
         price: item.basePrice ?? 0,
         description: item.description,
         imageUrl: publicUrl(item.imageUrl, requestUrl),
@@ -250,7 +278,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       return Object.fromEntries(Object.entries(drink).filter(([, value]) => value !== undefined)) as NanachaDrink;
     });
 
-  const categories = Array.from(categoryMap.values());
+  const publicCategories = Array.from(categoryMap.values());
   const publicStores = stores.map((store) => ({
     id: store.externalId || store.name,
     label: store.name,
@@ -293,7 +321,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
   return {
     brandId: brand.id,
     baseMenu: {
-      categories,
+      categories: publicCategories,
       drinks: drinksWithStoreSettings,
       sizes,
       sweetness,
@@ -301,8 +329,8 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       hotIce,
       options: menuOptions,
       toppings,
-      tapiocaFreeCategories: categories.filter((category) => category.isTapiocaFree).map((category) => category.id),
-      whippedCategories: categories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
+      tapiocaFreeCategories: publicCategories.filter((category) => category.isTapiocaFree).map((category) => category.id),
+      whippedCategories: publicCategories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? ""
     }

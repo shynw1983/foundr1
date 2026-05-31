@@ -102,6 +102,24 @@ export async function GET(request: Request) {
     order by coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
   `;
 
+  const categories = await sql`
+    select
+      id::text,
+      coalesce(external_id, '') as "externalId",
+      name,
+      coalesce(note, '') as note,
+      is_tapioca_free as "isTapiocaFree",
+      has_whip_by_default as "hasWhipByDefault",
+      sort_order as "sortOrder"
+    from menu_categories
+    where brand_id = ${brand.id}
+      and (
+        store_id is null
+        or (${store?.id ?? null}::uuid is not null and store_id = ${store?.id ?? null})
+      )
+    order by sort_order, name
+  `;
+
   const itemIds = new Set(items.map((item) => item.id));
   const storeSettings = store
     ? await sql`
@@ -181,6 +199,7 @@ export async function GET(request: Request) {
   return Response.json({
     brand,
     store,
+    categories,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
       return {

@@ -47,8 +47,16 @@ type MenuCategory = {
   id: string;
   brandId: string;
   storeId: string;
+  externalId: string;
   name: string;
+  note: string;
+  isTapiocaFree: boolean;
+  hasWhipByDefault: boolean;
   sortOrder: number;
+};
+
+type MenuCategorySummary = MenuCategory & {
+  count: number;
 };
 
 type MenuItem = {
@@ -135,6 +143,18 @@ const emptyItem: MenuItem = {
   variableSchema: {},
   sortOrder: 100,
   isActive: true
+};
+
+const emptyCategory: MenuCategory = {
+  id: "",
+  brandId: "",
+  storeId: "",
+  externalId: "",
+  name: "",
+  note: "",
+  isTapiocaFree: false,
+  hasWhipByDefault: false,
+  sortOrder: 100
 };
 
 const emptyGroup: MenuGroup = {
@@ -228,19 +248,31 @@ function buildPublicMenuUrl(brandId: string) {
   return `/api/public/menus${params.size ? `?${params.toString()}` : ""}`;
 }
 
-function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string) {
+function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string): MenuCategorySummary[] {
   const counts = new Map<string, number>();
+  const categoryMasters = new Map<string, MenuCategory>();
   for (const item of items) {
     const category = item.category || "未分類";
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
-  const sortOrders = new Map(
-    categories
-      .filter((category) => category.brandId === brandId && !category.storeId)
-      .map((category) => [category.name, category.sortOrder])
-  );
+  for (const category of categories) {
+    if (category.brandId !== brandId || category.storeId) continue;
+    categoryMasters.set(category.name, category);
+    if (!counts.has(category.name)) counts.set(category.name, 0);
+  }
   return Array.from(counts.entries())
-    .map(([name, count]) => ({ name, count, sortOrder: sortOrders.get(name) ?? 9999 }))
+    .map(([name, count]) => {
+      const master = categoryMasters.get(name);
+      return {
+        ...(master ?? {
+          ...emptyCategory,
+          brandId,
+          name,
+          sortOrder: 9999
+        }),
+        count
+      };
+    })
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja"));
 }
 
@@ -266,13 +298,14 @@ export default function MenuAdminPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemDraft, setItemDraft] = useState<MenuItem>(emptyItem);
+  const [categoryDraft, setCategoryDraft] = useState<MenuCategory>(emptyCategory);
   const [groupDraft, setGroupDraft] = useState<MenuGroup>(emptyGroup);
   const [optionDraft, setOptionDraft] = useState<MenuOption>(emptyOption);
   const [activeOptionGroupId, setActiveOptionGroupId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
-  const [savingKind, setSavingKind] = useState<"item" | "group" | "option" | "">("");
+  const [savingKind, setSavingKind] = useState<"item" | "category" | "group" | "option" | "">("");
   const [draggingCategory, setDraggingCategory] = useState("");
   const [draggingItemId, setDraggingItemId] = useState("");
 
@@ -362,6 +395,7 @@ export default function MenuAdminPage() {
     setActiveCategory(nextItem?.category || null);
     setSelectedItemId(nextItem?.id ?? "");
     setItemDraft(nextItem ? cloneItem(nextItem) : { ...emptyItem, brandId });
+    setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
@@ -371,6 +405,7 @@ export default function MenuAdminPage() {
     setSelectedItemId(item.id);
     setActiveCategory(item.category || "未分類");
     setItemDraft(cloneItem(item));
+    setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId: item.brandId, menuCatalogItemId: item.id });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
@@ -387,13 +422,44 @@ export default function MenuAdminPage() {
     setSelectedItemId("");
     setActiveCategory(null);
     setItemDraft(nextItem);
+    setCategoryDraft(emptyCategory);
     setGroupDraft({ ...emptyGroup, brandId: activeBrandId });
     setOptionDraft(emptyOption);
     setActiveOptionGroupId("");
     setMessage("新しい商品を入力できます。");
   }
 
-  async function save(kind: "item" | "group" | "option", payload: Record<string, unknown>) {
+  function selectCategory(category: MenuCategorySummary) {
+    const firstItem = filteredItems.find((item) => (item.category || "未分類") === category.name);
+    setActiveCategory(category.name);
+    setSelectedItemId(firstItem?.id ?? "");
+    setItemDraft(firstItem ? cloneItem(firstItem) : { ...emptyItem, brandId: activeBrandId, storeId: "", category: category.name === "未分類" ? "" : category.name });
+    setCategoryDraft({
+      id: category.id,
+      brandId: category.brandId || activeBrandId,
+      storeId: category.storeId || "",
+      externalId: category.externalId || "",
+      name: category.name,
+      note: category.note || "",
+      isTapiocaFree: category.isTapiocaFree === true,
+      hasWhipByDefault: category.hasWhipByDefault === true,
+      sortOrder: category.sortOrder === 9999 ? (categoryCounts.length + 1) * 10 : category.sortOrder
+    });
+  }
+
+  function startNewCategory() {
+    setActiveCategory(null);
+    setSelectedItemId("");
+    setItemDraft({ ...emptyItem, brandId: activeBrandId, storeId: "" });
+    setCategoryDraft({
+      ...emptyCategory,
+      brandId: activeBrandId,
+      sortOrder: (categoryCounts.length + 1) * 10
+    });
+    setMessage("新しい分類を入力できます。");
+  }
+
+  async function save(kind: "item" | "category" | "group" | "option", payload: Record<string, unknown>) {
     setMessage("");
     setSavingKind(kind);
     try {
@@ -409,6 +475,13 @@ export default function MenuAdminPage() {
       }
 
       setMessage("保存しました。");
+      if (kind === "category") {
+        const nextName = String(payload.name ?? "").trim();
+        setCategoryDraft((current) => ({ ...current, id: result.id || current.id, name: nextName }));
+        setActiveCategory(nextName || null);
+        await loadMenus(itemDraft.id);
+        return;
+      }
       if (kind === "item") {
         await loadMenus(result.id || itemDraft.id);
         return;
@@ -426,7 +499,7 @@ export default function MenuAdminPage() {
     }
   }
 
-  async function deleteEntry(kind: "item" | "group" | "option", id: string) {
+  async function deleteEntry(kind: "item" | "category" | "group" | "option", id: string) {
     if (!confirm("削除しますか。")) return;
     const response = await fetch("/api/menus", {
       method: "DELETE",
@@ -438,6 +511,10 @@ export default function MenuAdminPage() {
       return;
     }
     setMessage("削除しました。");
+    if (kind === "category") {
+      setActiveCategory(null);
+      setCategoryDraft(emptyCategory);
+    }
     await loadMenus("");
   }
 
@@ -470,7 +547,11 @@ export default function MenuAdminPage() {
         id: `local-${name}`,
         brandId: activeBrandId,
         storeId: "",
+        externalId: "",
         name,
+        note: "",
+        isTapiocaFree: false,
+        hasWhipByDefault: false,
         sortOrder: (index + 1) * 10
       });
       return {
@@ -647,6 +728,7 @@ export default function MenuAdminPage() {
 
   function openChoiceSettings(group?: MenuGroup) {
     setActiveCategory(choiceSettingsCategory);
+    setCategoryDraft(emptyCategory);
     if (group) editGroup(group);
   }
 
@@ -705,12 +787,18 @@ export default function MenuAdminPage() {
                 <p className="eyebrow">Categories</p>
                 <h3>分類</h3>
               </div>
-              <span className="status-pill">{filteredItems.length}件</span>
+              <button className="secondary-button compact-button" type="button" onClick={startNewCategory}>
+                <Plus size={15} />
+                追加
+              </button>
             </div>
             <button
               className={currentCategory === null ? "menu-category-button is-active" : "menu-category-button"}
               type="button"
-              onClick={() => setActiveCategory(null)}
+              onClick={() => {
+                setActiveCategory(null);
+                setCategoryDraft(emptyCategory);
+              }}
             >
               <span>すべて</span>
               <strong>{filteredItems.length}</strong>
@@ -724,11 +812,14 @@ export default function MenuAdminPage() {
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => reorderCategories(category.name)}
                 onDragEnd={() => setDraggingCategory("")}
-                onClick={() => setActiveCategory(category.name)}
+                onClick={() => selectCategory(category)}
                 key={category.name}
                 title="ドラッグして分類順を変更"
               >
-                <span>{category.name}</span>
+                <span>
+                  {category.name}
+                  {category.note ? <small>説明あり</small> : null}
+                </span>
                 <strong>{category.count}</strong>
               </button>
             ))}
@@ -969,6 +1060,64 @@ export default function MenuAdminPage() {
               </section>
             ) : (
               <>
+            {(categoryDraft.id || categoryDraft.name) ? (
+              <section className="menu-edit-card category-edit-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Category</p>
+                    <h3>{categoryDraft.id ? "分類編集" : "新規分類"}</h3>
+                  </div>
+                  <div className="row-actions">
+                    {categoryDraft.id ? (
+                      <button className="danger-button" type="button" onClick={() => void deleteEntry("category", categoryDraft.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : null}
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={savingKind === "category"}
+                      onClick={() => void save("category", { ...categoryDraft, brandId: categoryDraft.brandId || activeBrandId, storeId: "" })}
+                    >
+                      <Save size={16} />
+                      {savingKind === "category" ? "保存中..." : "分類を保存"}
+                    </button>
+                  </div>
+                </div>
+                <div className="menu-form-grid">
+                  <label>
+                    <span>分類名</span>
+                    <input value={categoryDraft.name} onChange={(event) => setCategoryDraft({ ...categoryDraft, name: event.target.value })} placeholder="例: タピオカドリンク" />
+                  </label>
+                  <label>
+                    <span>公開 ID</span>
+                    <input value={categoryDraft.externalId} onChange={(event) => setCategoryDraft({ ...categoryDraft, externalId: event.target.value })} placeholder="例: tapioca" />
+                  </label>
+                  <label>
+                    <span>並び順</span>
+                    <input value={categoryDraft.sortOrder} onChange={(event) => setCategoryDraft({ ...categoryDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                  </label>
+                  <div className="menu-category-flags">
+                    <label className="checkbox-group menu-inline-check">
+                      <input type="checkbox" checked={categoryDraft.isTapiocaFree} onChange={(event) => setCategoryDraft({ ...categoryDraft, isTapiocaFree: event.target.checked })} />
+                      <span>タピオカなし分類</span>
+                    </label>
+                    <label className="checkbox-group menu-inline-check">
+                      <input type="checkbox" checked={categoryDraft.hasWhipByDefault} onChange={(event) => setCategoryDraft({ ...categoryDraft, hasWhipByDefault: event.target.checked })} />
+                      <span>ホイップ標準分類</span>
+                    </label>
+                  </div>
+                </div>
+                <label className="menu-full-field">
+                  <span>分類紹介文</span>
+                  <textarea value={categoryDraft.note} onChange={(event) => setCategoryDraft({ ...categoryDraft, note: event.target.value })} rows={3} placeholder="ブランドサイトで分類見出しの下に表示する説明文" />
+                </label>
+                <p className="category-edit-note">
+                  分類名を変更すると、この分類に入っている商品も新しい分類名へ移動します。削除した場合、商品は未分類に戻ります。
+                </p>
+              </section>
+            ) : null}
+
             <div className="section-heading">
               <div>
                 <p className="eyebrow">{getBrandName(data.brands, itemDraft.brandId) || "Menu Item"}</p>

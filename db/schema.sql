@@ -492,7 +492,11 @@ create table if not exists menu_categories (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
   store_id uuid references stores(id) on delete cascade,
+  external_id text,
   name text not null,
+  note text not null default '',
+  is_tapioca_free boolean not null default false,
+  has_whip_by_default boolean not null default false,
   sort_order integer not null default 100,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -686,6 +690,10 @@ alter table menu_sources add column if not exists store_id uuid references store
 alter table menu_sources add column if not exists source_url text;
 alter table menu_sources add column if not exists status text not null default 'active';
 alter table menu_sources add column if not exists last_synced_at timestamptz;
+alter table menu_categories add column if not exists external_id text;
+alter table menu_categories add column if not exists note text not null default '';
+alter table menu_categories add column if not exists is_tapioca_free boolean not null default false;
+alter table menu_categories add column if not exists has_whip_by_default boolean not null default false;
 alter table menu_catalog_items add column if not exists store_id uuid references stores(id) on delete cascade;
 alter table menu_catalog_items add column if not exists menu_source_id uuid references menu_sources(id) on delete set null;
 alter table menu_catalog_items add column if not exists external_id text;

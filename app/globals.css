@@ -1437,6 +1437,17 @@ button {
   font-weight: 700;
 }
 
+.menu-category-button span {
+  display: grid;
+  gap: 2px;
+}
+
+.menu-category-button small {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .menu-category-button strong {
   color: var(--blue);
 }
@@ -1469,6 +1480,11 @@ button {
   gap: 12px;
   padding: 14px;
   box-shadow: none;
+}
+
+.category-edit-card {
+  border-color: rgba(30, 107, 186, 0.2);
+  background: #fbfdff;
 }
 
 .menu-form-grid {
@@ -1526,6 +1542,17 @@ button {
 .menu-inline-check input {
   width: 16px;
   min-height: 16px;
+}
+
+.menu-category-flags {
+  display: grid;
+  gap: 8px;
+}
+
+.category-edit-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .menu-rule-list {

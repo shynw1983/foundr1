@@ -68,6 +68,76 @@ async function upsertSource({ brandId, name, sourceType, sourceUrl }) {
   return rows[0].id;
 }
 
+async function upsertCategory({
+  brandId,
+  externalId,
+  name,
+  note = "",
+  isTapiocaFree = false,
+  hasWhipByDefault = false,
+  sortOrder = 100
+}) {
+  const existing = externalId
+    ? await sql`
+        select id::text
+        from menu_categories
+        where brand_id = ${brandId}
+          and store_id is null
+          and external_id = ${externalId}
+        limit 1
+      `
+    : await sql`
+        select id::text
+        from menu_categories
+        where brand_id = ${brandId}
+          and store_id is null
+          and name = ${name}
+        limit 1
+      `;
+
+  if (existing[0]) {
+    const rows = await sql`
+      update menu_categories
+      set
+        external_id = ${externalId},
+        name = ${name},
+        note = ${note},
+        is_tapioca_free = ${isTapiocaFree},
+        has_whip_by_default = ${hasWhipByDefault},
+        sort_order = ${sortOrder},
+        updated_at = now()
+      where id = ${existing[0].id}
+      returning id::text
+    `;
+    return rows[0].id;
+  }
+
+  const rows = await sql`
+    insert into menu_categories (
+      brand_id,
+      external_id,
+      name,
+      note,
+      is_tapioca_free,
+      has_whip_by_default,
+      sort_order,
+      updated_at
+    )
+    values (
+      ${brandId},
+      ${externalId},
+      ${name},
+      ${note},
+      ${isTapiocaFree},
+      ${hasWhipByDefault},
+      ${sortOrder},
+      now()
+    )
+    returning id::text
+  `;
+  return rows[0].id;
+}
+
 async function upsertItem({
   brandId,
   sourceId,
@@ -317,6 +387,18 @@ async function importNanacha() {
   });
 
   const categoriesById = new Map(menu.categories.map((category) => [category.id, category]));
+  for (const [index, category] of menu.categories.entries()) {
+    await upsertCategory({
+      brandId: brand.id,
+      externalId: category.id,
+      name: category.label,
+      note: category.note ?? "",
+      isTapiocaFree: Boolean(category.isTapiocaFree),
+      hasWhipByDefault: Boolean(category.hasWhipByDefault),
+      sortOrder: (index + 1) * 10
+    });
+  }
+
   const isDecafMenuItem = (drink) => /カフェ|コーヒ|coffee|cafe/i.test(drink.name);
   const getNanachaAllowedOptions = (drink) => {
     const optionIds = drink.allowedOptions ?? menu.options.map((option) => option.id);
