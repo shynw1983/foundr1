@@ -1101,6 +1101,28 @@ button {
   width: auto;
 }
 
+.management-form .business-hours-closed,
+.edit-fields .business-hours-closed {
+  display: inline-flex;
+  grid-auto-flow: unset;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 24px;
+}
+
+.management-form .business-hours-closed input[type="checkbox"],
+.edit-fields .business-hours-closed input[type="checkbox"] {
+  appearance: auto;
+  min-height: 16px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+}
+
 .supplier-management-form {
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   align-items: end;
