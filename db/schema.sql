@@ -581,6 +581,19 @@ create table if not exists menu_store_settings (
   unique (store_id, menu_catalog_item_id)
 );
 
+create table if not exists menu_option_store_settings (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  menu_option_id uuid not null references menu_options(id) on delete cascade,
+  is_available boolean not null default true,
+  status_note text not null default '',
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, menu_option_id)
+);
+
 create table if not exists store_customer_orders (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid references brands(id) on delete set null,
@@ -926,6 +939,7 @@ create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_it
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);
 create index if not exists idx_menu_store_settings_brand_store on menu_store_settings(brand_id, store_id);
+create index if not exists idx_menu_option_store_settings_brand_store on menu_option_store_settings(brand_id, store_id);
 create index if not exists idx_stores_external_id on stores(external_id);
 create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);

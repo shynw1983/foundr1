@@ -27,6 +27,19 @@ type MenuStoreCategory = {
   sortOrder: number;
 };
 
+type MenuStoreOption = {
+  id: string;
+  brandId: string;
+  brandName: string;
+  groupId: string;
+  groupName: string;
+  groupKey: string;
+  name: string;
+  priceDelta: number | null;
+  isAvailable: boolean;
+  statusNote: string;
+};
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -47,7 +60,7 @@ export async function GET(request: Request) {
     return Response.json({ access, selectedStoreId: "", brands: [], items: [] });
   }
 
-  const [brands, categories, items] = await Promise.all([
+  const [brands, categories, items, options] = await Promise.all([
     sql`
       select brands.id::text, brands.name
       from brands
@@ -101,6 +114,34 @@ export async function GET(request: Request) {
       where menu_catalog_items.is_active = true
         and menu_catalog_items.store_id is null
       order by brands.name, coalesce(menu_categories.sort_order, 9999), menu_catalog_items.sort_order, menu_catalog_items.name
+    `,
+    sql`
+      select
+        menu_options.id::text,
+        menu_option_groups.brand_id::text as "brandId",
+        brands.name as "brandName",
+        menu_option_groups.id::text as "groupId",
+        menu_option_groups.name as "groupName",
+        menu_option_groups.group_key as "groupKey",
+        menu_options.name,
+        menu_options.price_delta::float as "priceDelta",
+        coalesce(menu_option_store_settings.is_available, true) as "isAvailable",
+        coalesce(menu_option_store_settings.status_note, '') as "statusNote"
+      from menu_options
+      join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+      join brands on brands.id = menu_option_groups.brand_id
+      join store_brands
+        on store_brands.brand_id = menu_option_groups.brand_id
+        and store_brands.store_id = ${selectedStoreId}
+      left join menu_option_store_settings
+        on menu_option_store_settings.menu_option_id = menu_options.id
+        and menu_option_store_settings.store_id = ${selectedStoreId}
+      where menu_options.is_active = true
+        and menu_option_groups.is_active = true
+        and menu_option_groups.menu_catalog_item_id is null
+        and menu_option_groups.group_key in ('option', 'topping')
+        and menu_options.option_key <> 'none'
+      order by brands.name, menu_option_groups.sort_order, menu_options.sort_order, menu_options.name
     `
   ]);
 
@@ -109,7 +150,8 @@ export async function GET(request: Request) {
     selectedStoreId,
     brands,
     categories: categories as MenuStoreCategory[],
-    items: items as MenuStoreItem[]
+    items: items as MenuStoreItem[],
+    options: options as MenuStoreOption[]
   });
 }
 
@@ -119,15 +161,68 @@ export async function PATCH(request: Request) {
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const storeId = normalizeText(body.storeId);
+  const kind = normalizeText(body.kind);
   const itemId = normalizeText(body.menuCatalogItemId);
-  if (!storeId || !itemId) {
-    return Response.json({ error: "店舗と商品を選択してください。" }, { status: 400 });
+  const optionId = normalizeText(body.menuOptionId);
+  if (!storeId || (kind === "option" ? !optionId : !itemId)) {
+    return Response.json({ error: "店舗と対象を選択してください。" }, { status: 400 });
   }
 
   const access = await getStoreOrderAccess(session);
   const storeFilter = getScopedStoreFilter(access, storeId);
   if (storeFilter === "__forbidden__" || !storeFilter) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  if (kind === "option") {
+    const options = await sql`
+      select menu_options.id::text, menu_option_groups.brand_id::text as "brandId"
+      from menu_options
+      join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+      join store_brands
+        on store_brands.brand_id = menu_option_groups.brand_id
+        and store_brands.store_id = ${storeId}
+      where menu_options.id = ${optionId}
+        and menu_options.is_active = true
+        and menu_option_groups.is_active = true
+      limit 1
+    `;
+    const option = options[0] as { id: string; brandId: string } | undefined;
+    if (!option) return Response.json({ error: "選択肢が見つかりません。" }, { status: 404 });
+
+    const rows = await sql`
+      insert into menu_option_store_settings (
+        brand_id,
+        store_id,
+        menu_option_id,
+        is_available,
+        status_note,
+        updated_by,
+        updated_at
+      )
+      values (
+        ${option.brandId},
+        ${storeId},
+        ${optionId},
+        ${body.isAvailable !== false},
+        ${normalizeText(body.statusNote)},
+        ${session.id},
+        now()
+      )
+      on conflict (store_id, menu_option_id)
+      do update set
+        is_available = excluded.is_available,
+        status_note = excluded.status_note,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+      returning
+        id::text,
+        menu_option_id::text as "menuOptionId",
+        is_available as "isAvailable",
+        status_note as "statusNote"
+    `;
+
+    return Response.json({ ok: true, setting: rows[0] });
   }
 
   const items = await sql`

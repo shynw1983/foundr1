@@ -306,6 +306,17 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       `) as StoreSettingRow[]
     : [];
   const settingsByItemId = new Map(storeSettings.map((setting) => [setting.menuCatalogItemId, setting]));
+  const optionStoreSettings = selectedStore
+    ? await sql`
+        select menu_options.option_key as "optionKey"
+        from menu_option_store_settings
+        join menu_options on menu_options.id = menu_option_store_settings.menu_option_id
+        where menu_option_store_settings.brand_id = ${brand.id}
+          and menu_option_store_settings.store_id = ${selectedStore.osStoreId}
+          and menu_option_store_settings.is_available = false
+      `
+    : [];
+  const unavailableOptionKeys = new Set(optionStoreSettings.map((setting) => String(setting.optionKey)));
 
   const drinksWithStoreSettings = drinks.map((drink) => {
     const setting = settingsByItemId.get(drink.menuCatalogItemId);
@@ -327,8 +338,8 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       sweetness,
       ice,
       hotIce,
-      options: menuOptions,
-      toppings,
+      options: menuOptions.filter((option) => !unavailableOptionKeys.has(option.id)),
+      toppings: toppings.filter((option) => !unavailableOptionKeys.has(option.id)),
       tapiocaFreeCategories: publicCategories.filter((category) => category.isTapiocaFree).map((category) => category.id),
       whippedCategories: publicCategories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
       stores: publicStores,

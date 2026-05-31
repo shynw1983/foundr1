@@ -42,6 +42,19 @@ type StoreMenuItem = {
   statusNote: string;
 };
 
+type StoreMenuOption = {
+  id: string;
+  brandId: string;
+  brandName: string;
+  groupId: string;
+  groupName: string;
+  groupKey: string;
+  name: string;
+  priceDelta: number | null;
+  isAvailable: boolean;
+  statusNote: string;
+};
+
 type StoreMenuCategorySummary = {
   name: string;
   sortOrder: number;
@@ -78,6 +91,7 @@ export default function StoreMenuPage() {
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
+  const [options, setOptions] = useState<StoreMenuOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -102,11 +116,13 @@ export default function StoreMenuPage() {
     const nextBrands = body.brands as BrandOption[];
     const nextCategories = body.categories as StoreMenuCategory[];
     const nextItems = body.items as StoreMenuItem[];
+    const nextOptions = body.options as StoreMenuOption[];
     setAccess(nextAccess);
     setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
     setCategories(nextCategories ?? []);
     setItems(nextItems ?? []);
+    setOptions(nextOptions ?? []);
     setSelectedStoreId(body.selectedStoreId || nextAccess.stores?.[0]?.id || "");
     setSelectedBrandId((current) => resetFilters ? (nextBrands?.[0]?.id || "") : (current || nextBrands?.[0]?.id || ""));
     setSelectedCategory((current) => resetFilters ? (nextItems?.[0]?.category || "未分類") : (current ?? (nextItems?.[0]?.category || "未分類")));
@@ -137,6 +153,7 @@ export default function StoreMenuPage() {
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
   const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
+  const visibleOptions = useMemo(() => options.filter((option) => !selectedBrandId || option.brandId === selectedBrandId), [options, selectedBrandId]);
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
     const nextItem = { ...item, ...patch };
@@ -158,6 +175,33 @@ export default function StoreMenuPage() {
       setMessage("更新しました。");
     } catch {
       setItems((current) => current.map((entry) => entry.id === item.id ? item : entry));
+      setMessage("保存できませんでした。");
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function saveOption(option: StoreMenuOption, patch: Partial<StoreMenuOption>) {
+    const nextOption = { ...option, ...patch };
+    setOptions((current) => current.map((entry) => entry.id === option.id ? nextOption : entry));
+    setSavingId(option.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/store/menu-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "option",
+          storeId: selectedStoreId,
+          menuOptionId: option.id,
+          isAvailable: nextOption.isAvailable,
+          statusNote: nextOption.statusNote
+        })
+      });
+      if (!response.ok) throw new Error("save failed");
+      setMessage("更新しました。");
+    } catch {
+      setOptions((current) => current.map((entry) => entry.id === option.id ? option : entry));
       setMessage("保存できませんでした。");
     } finally {
       setSavingId("");
@@ -253,6 +297,60 @@ export default function StoreMenuPage() {
               <h2>{selectedCategory ?? "すべて"}</h2>
               <span className="status-pill">{visibleItems.length}件</span>
             </div>
+            {visibleOptions.length ? (
+              <section className="store-menu-option-section">
+                <div className="store-menu-list-head">
+                  <h3>オプション・トッピング</h3>
+                  <span className="status-pill">{visibleOptions.length}件</span>
+                </div>
+                <div className="store-menu-item-list">
+                  {visibleOptions.map((option) => (
+                    <article className="store-menu-item-row store-menu-option-row" key={option.id}>
+                      <div className="store-menu-item-main">
+                        <div className="store-menu-image-empty">OP</div>
+                        <div>
+                          <strong>{option.name}</strong>
+                          <span>{option.brandName} / {option.groupName}</span>
+                          <small>{option.priceDelta ? `${option.priceDelta > 0 ? "+" : ""}${option.priceDelta}円` : "追加料金なし"}</small>
+                        </div>
+                      </div>
+                      <div className="store-menu-status-actions">
+                        <button
+                          className={option.isAvailable ? "store-status-button is-on" : "store-status-button"}
+                          type="button"
+                          disabled={savingId === option.id}
+                          onClick={() => void saveOption(option, { isAvailable: true })}
+                        >
+                          <CheckCircle2 size={17} />
+                          販売中
+                        </button>
+                        <button
+                          className={!option.isAvailable ? "store-status-button is-off" : "store-status-button"}
+                          type="button"
+                          disabled={savingId === option.id}
+                          onClick={() => void saveOption(option, { isAvailable: false })}
+                        >
+                          <XCircle size={17} />
+                          売切
+                        </button>
+                      </div>
+                      <div className="store-menu-note">
+                        <input
+                          value={option.statusNote}
+                          onChange={(event) => setOptions((current) => current.map((entry) => (
+                            entry.id === option.id ? { ...entry, statusNote: event.target.value } : entry
+                          )))}
+                          placeholder="例: 豆乳在庫切れ"
+                        />
+                        <button className="secondary-button" type="button" disabled={savingId === option.id} onClick={() => void saveOption(option, {})}>
+                          メモ保存
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
             <div className="store-menu-item-list">
               {visibleItems.map((item) => (
                 <article className="store-menu-item-row" key={item.id}>

@@ -174,9 +174,25 @@ export async function GET(request: Request) {
       and menu_option_groups.brand_id = ${brand.id}
     order by menu_options.sort_order, menu_options.name
   `;
+  const optionSettings = store
+    ? await sql`
+        select
+          menu_option_id::text as "menuOptionId",
+          is_available as "isAvailable",
+          status_note as "statusNote"
+        from menu_option_store_settings
+        where brand_id = ${brand.id}
+          and store_id = ${store.id}
+      `
+    : [];
+  const unavailableOptionIds = new Set(
+    optionSettings
+      .filter((setting) => setting.isAvailable === false)
+      .map((setting) => String(setting.menuOptionId))
+  );
 
   const optionsByGroup = new Map<string, MenuOption[]>();
-  for (const option of options as MenuOption[]) {
+  for (const option of (options as MenuOption[]).filter((entry) => !unavailableOptionIds.has(entry.id))) {
     const groupOptions = optionsByGroup.get(option.optionGroupId) ?? [];
     groupOptions.push(option);
     optionsByGroup.set(option.optionGroupId, groupOptions);
