@@ -1,5 +1,6 @@
-import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
+import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const days = clampDays(params.get("days"));
-  const scope = await getSessionStoreScope(session);
+  const access = await getStoreOrderAccess(session);
+  if (!access.canViewSalesStats) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const storeFilter = getScopedStoreFilter(access, params.get("storeId"));
+  if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const [summaryRows, statusRows, productRows, storeRows] = await Promise.all([
     sql`
@@ -27,13 +31,15 @@ export async function GET(request: Request) {
         coalesce(sum(amount) filter (where payment_status = 'paid'), 0)::int as "grossSales",
         coalesce(round(avg(extract(epoch from (completed_at - paid_at)) / 60) filter (where completed_at is not null and paid_at is not null))::int, 0) as "averageCompletionMinutes"
       from store_customer_orders
-      where (${scope.allStores} or store_id::text = any(${scope.storeIds}))
+      where (${access.allStores} or store_id::text = any(${access.storeIds}))
+        and (${storeFilter}::text is null or store_id::text = ${storeFilter})
         and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date >= ((now() at time zone 'Asia/Tokyo')::date - (${days}::int - 1))
     `,
     sql`
       select status, count(*)::int as count
       from store_customer_orders
-      where (${scope.allStores} or store_id::text = any(${scope.storeIds}))
+      where (${access.allStores} or store_id::text = any(${access.storeIds}))
+        and (${storeFilter}::text is null or store_id::text = ${storeFilter})
         and (coalesce(paid_at, created_at) at time zone 'Asia/Tokyo')::date >= ((now() at time zone 'Asia/Tokyo')::date - (${days}::int - 1))
       group by status
       order by count desc
@@ -45,7 +51,8 @@ export async function GET(request: Request) {
         coalesce(sum(store_customer_order_items.amount), 0)::int as sales
       from store_customer_order_items
       join store_customer_orders on store_customer_orders.id = store_customer_order_items.order_id
-      where (${scope.allStores} or store_customer_orders.store_id::text = any(${scope.storeIds}))
+      where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
+        and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
         and store_customer_orders.payment_status = 'paid'
         and (coalesce(store_customer_orders.paid_at, store_customer_orders.created_at) at time zone 'Asia/Tokyo')::date >= ((now() at time zone 'Asia/Tokyo')::date - (${days}::int - 1))
       group by store_customer_order_items.item_name
@@ -59,7 +66,8 @@ export async function GET(request: Request) {
         coalesce(sum(store_customer_orders.amount) filter (where store_customer_orders.payment_status = 'paid'), 0)::int as sales
       from store_customer_orders
       left join stores on stores.id = store_customer_orders.store_id
-      where (${scope.allStores} or store_customer_orders.store_id::text = any(${scope.storeIds}))
+      where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
+        and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
         and (coalesce(store_customer_orders.paid_at, store_customer_orders.created_at) at time zone 'Asia/Tokyo')::date >= ((now() at time zone 'Asia/Tokyo')::date - (${days}::int - 1))
       group by stores.name
       order by sales desc, "paidOrders" desc, name

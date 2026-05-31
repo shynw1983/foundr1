@@ -5,6 +5,7 @@ import { StoreNavTabs } from "../components/StoreNavTabs";
 
 type StoreOrder = {
   id: string;
+  storeId: string;
   storeName: string;
   pickupCode: string;
   status: string;
@@ -22,6 +23,16 @@ type StoreOrder = {
   toppings: string;
   createdAt: string;
   squareReceiptUrl: string;
+};
+
+type StoreOrderAccess = {
+  role: string;
+  allStores: boolean;
+  canViewSalesStats: boolean;
+  canCancelOrders: boolean;
+  canUseAllStoreView: boolean;
+  stores: Array<{ id: string; name: string }>;
+  storeIds: string[];
 };
 
 type StoreOrderStats = {
@@ -74,6 +85,8 @@ function splitLines(value = "") {
 
 export default function StoreOrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
+  const [access, setAccess] = useState<StoreOrderAccess | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
   const [statsDays, setStatsDays] = useState(1);
   const [query, setQuery] = useState("");
@@ -130,20 +143,31 @@ export default function StoreOrdersPage() {
 
   const refresh = async () => {
     setIsRefreshing(true);
-    const [response, statsResponse] = await Promise.all([
-      fetch("/api/store/orders", { cache: "no-store" }),
-      fetch(`/api/store/order-stats?days=${statsDays}`, { cache: "no-store" })
-    ]);
+    const params = new URLSearchParams();
+    if (selectedStoreId) params.set("storeId", selectedStoreId);
+    const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
       setError("注文を読み込めませんでした。");
       setLoading(false);
       setIsRefreshing(false);
       return;
     }
-    if (statsResponse.ok) {
-      setStats(await statsResponse.json());
-    }
     const body = await response.json();
+    const nextAccess = body.access as StoreOrderAccess | undefined;
+    if (nextAccess) {
+      setAccess(nextAccess);
+      if (!selectedStoreId && !nextAccess.canUseAllStoreView && nextAccess.stores.length >= 1) {
+        setSelectedStoreId(nextAccess.stores[0].id);
+      }
+    }
+    if (nextAccess?.canViewSalesStats) {
+      const statsParams = new URLSearchParams({ days: String(statsDays) });
+      if (selectedStoreId) statsParams.set("storeId", selectedStoreId);
+      const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, { cache: "no-store" });
+      if (statsResponse.ok) setStats(await statsResponse.json());
+    } else {
+      setStats(null);
+    }
     const nextOrders = body.orders ?? [];
     setOrders((current) => {
       const currentById = new Map(current.map((order) => [order.id, order]));
@@ -186,7 +210,7 @@ export default function StoreOrdersPage() {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.clearInterval(timer);
     };
-  }, [realtimeStatus, statsDays]);
+  }, [realtimeStatus, statsDays, selectedStoreId]);
 
   useEffect(() => {
     let pusher: any;
@@ -194,6 +218,7 @@ export default function StoreOrdersPage() {
     let active = true;
     const upsertOrder = ({ order }: { order: StoreOrder }) => {
       setOrders((current) => {
+        if (selectedStoreId && order.storeId !== selectedStoreId) return current;
         const previousOrder = current.find((item) => item.id === order.id);
         const exists = Boolean(previousOrder);
         const next = exists
@@ -271,7 +296,7 @@ export default function StoreOrdersPage() {
       });
       pusher?.disconnect();
     };
-  }, [soundEnabled]);
+  }, [soundEnabled, selectedStoreId]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matchesQuery = `${order.pickupCode} ${order.drink}`.toLowerCase().includes(query.toLowerCase());
@@ -315,41 +340,56 @@ export default function StoreOrdersPage() {
       <section className="store-orders-layout">
         <aside className="panel store-orders-list">
           <div className="store-stats-heading">
-            <h2>実績</h2>
-            <select value={statsDays} onChange={(event) => setStatsDays(Number(event.target.value))} aria-label="集計期間">
-              <option value={1}>今日</option>
-              <option value={7}>7日</option>
-              <option value={31}>31日</option>
-            </select>
+            <h2>{selectedStoreId ? access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗" : "すべての店舗"}</h2>
+            {access && access.stores.length > 1 ? (
+              <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} aria-label="店舗">
+                {access.canUseAllStoreView ? <option value="">すべて</option> : null}
+                {access.stores.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            ) : null}
           </div>
-          <section className="store-order-performance" aria-label="注文実績">
-            <article>
-              <span>売上</span>
-              <strong>¥{Number(summary?.grossSales ?? 0).toLocaleString("ja-JP")}</strong>
-            </article>
-            <article>
-              <span>支払済み</span>
-              <strong>{summary?.paidOrders ?? 0}</strong>
-            </article>
-            <article>
-              <span>完了</span>
-              <strong>{summary?.completedOrders ?? 0}</strong>
-            </article>
-            <article>
-              <span>平均完了</span>
-              <strong>{summary?.averageCompletionMinutes ? `${summary.averageCompletionMinutes}分` : "—"}</strong>
-            </article>
-          </section>
-          {stats?.productRanking?.length ? (
-            <section className="store-product-ranking" aria-label="商品ランキング">
-              <h3>商品ランキング</h3>
-              {stats.productRanking.slice(0, 4).map((item) => (
-                <div key={item.name}>
-                  <span>{item.name}</span>
-                  <strong>{item.count}件</strong>
-                </div>
-              ))}
-            </section>
+          {access?.canViewSalesStats ? (
+            <>
+              <div className="store-stats-heading">
+                <h2>実績</h2>
+                <select value={statsDays} onChange={(event) => setStatsDays(Number(event.target.value))} aria-label="集計期間">
+                  <option value={1}>今日</option>
+                  <option value={7}>7日</option>
+                  <option value={31}>31日</option>
+                </select>
+              </div>
+              <section className="store-order-performance" aria-label="注文実績">
+                <article>
+                  <span>売上</span>
+                  <strong>¥{Number(summary?.grossSales ?? 0).toLocaleString("ja-JP")}</strong>
+                </article>
+                <article>
+                  <span>支払済み</span>
+                  <strong>{summary?.paidOrders ?? 0}</strong>
+                </article>
+                <article>
+                  <span>完了</span>
+                  <strong>{summary?.completedOrders ?? 0}</strong>
+                </article>
+                <article>
+                  <span>平均完了</span>
+                  <strong>{summary?.averageCompletionMinutes ? `${summary.averageCompletionMinutes}分` : "—"}</strong>
+                </article>
+              </section>
+              {stats?.productRanking?.length ? (
+                <section className="store-product-ranking" aria-label="商品ランキング">
+                  <h3>商品ランキング</h3>
+                  {stats.productRanking.slice(0, 4).map((item) => (
+                    <div key={item.name}>
+                      <span>{item.name}</span>
+                      <strong>{item.count}件</strong>
+                    </div>
+                  ))}
+                </section>
+              ) : null}
+            </>
           ) : null}
           <section className="store-order-stats" aria-label="注文数">
             <article>
@@ -467,7 +507,7 @@ export default function StoreOrdersPage() {
                     {action.label}
                   </button>
                 ))}
-                {selectedOrder.status !== "completed" && selectedOrder.status !== "cancelled" ? (
+                {access?.canCancelOrders && selectedOrder.status !== "completed" && selectedOrder.status !== "cancelled" ? (
                   <button type="button" className="secondary-button" onClick={() => updateStatus(selectedOrder.id, "cancelled")}>キャンセル</button>
                 ) : null}
               </div>

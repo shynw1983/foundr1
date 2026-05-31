@@ -1,20 +1,24 @@
-import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
+import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
+import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
-const editableStatuses = new Set(["preparing", "ready", "completed", "cancelled"]);
-
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const scope = await getSessionStoreScope(session);
+  const params = new URL(request.url).searchParams;
+  const access = await getStoreOrderAccess(session);
+  const storeFilter = getScopedStoreFilter(access, params.get("storeId"));
+  if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
+
   const orders = await sql`
     select
       store_customer_orders.id::text,
+      coalesce(store_customer_orders.store_id::text, '') as "storeId",
       coalesce(stores.name, '') as "storeName",
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.status,
@@ -34,12 +38,13 @@ export async function GET() {
       coalesce(store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
     from store_customer_orders
     left join stores on stores.id = store_customer_orders.store_id
-    where (${scope.allStores} or store_customer_orders.store_id::text = any(${scope.storeIds}))
+    where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))
+      and (${storeFilter}::text is null or store_customer_orders.store_id::text = ${storeFilter})
       and store_customer_orders.created_at > now() - interval '14 days'
     order by store_customer_orders.pickup_date desc, store_customer_orders.pickup_time desc, store_customer_orders.created_at desc
   `;
 
-  return Response.json({ orders }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ orders, access }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {
@@ -49,7 +54,8 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => ({})) as { orderId?: string; status?: string };
   const orderId = String(body.orderId ?? "").trim();
   const status = String(body.status ?? "").trim();
-  if (!orderId || !editableStatuses.has(status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
+  const access = await getStoreOrderAccess(session);
+  if (!orderId || !canChangeOrderStatus(access, status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
   const targetRows = await sql`
     select store_id::text as "storeId"
