@@ -20,6 +20,13 @@ type MenuStoreItem = {
   statusNote: string;
 };
 
+type MenuStoreCategory = {
+  id: string;
+  brandId: string;
+  name: string;
+  sortOrder: number;
+};
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -40,7 +47,7 @@ export async function GET(request: Request) {
     return Response.json({ access, selectedStoreId: "", brands: [], items: [] });
   }
 
-  const [brands, items] = await Promise.all([
+  const [brands, categories, items] = await Promise.all([
     sql`
       select brands.id::text, brands.name
       from brands
@@ -48,6 +55,21 @@ export async function GET(request: Request) {
       where store_brands.store_id = ${selectedStoreId}
         and brands.status = 'active'
       order by brands.name
+    `,
+    sql`
+      select
+        menu_categories.id::text,
+        menu_categories.brand_id::text as "brandId",
+        menu_categories.name,
+        menu_categories.sort_order as "sortOrder"
+      from menu_categories
+      join store_brands
+        on store_brands.brand_id = menu_categories.brand_id
+        and store_brands.store_id = ${selectedStoreId}
+      join brands on brands.id = menu_categories.brand_id
+      where menu_categories.store_id is null
+        and brands.status = 'active'
+      order by brands.name, menu_categories.sort_order, menu_categories.name
     `,
     sql`
       select
@@ -86,6 +108,7 @@ export async function GET(request: Request) {
     access,
     selectedStoreId,
     brands,
+    categories: categories as MenuStoreCategory[],
     items: items as MenuStoreItem[]
   });
 }

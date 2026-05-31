@@ -19,6 +19,13 @@ type BrandOption = {
   name: string;
 };
 
+type StoreMenuCategory = {
+  id: string;
+  brandId: string;
+  name: string;
+  sortOrder: number;
+};
+
 type StoreMenuItem = {
   id: string;
   brandId: string;
@@ -35,14 +42,41 @@ type StoreMenuItem = {
   statusNote: string;
 };
 
-function getCategory(items: StoreMenuItem[]) {
-  return Array.from(new Set(items.map((item) => item.category || "未分類"))).sort((a, b) => a.localeCompare(b, "ja"));
+type StoreMenuCategorySummary = {
+  name: string;
+  sortOrder: number;
+  count: number;
+};
+
+function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], brandId: string): StoreMenuCategorySummary[] {
+  const counts = new Map<string, number>();
+  const masters = new Map<string, StoreMenuCategory>();
+
+  for (const item of items) {
+    const name = item.category || "未分類";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  for (const category of categories) {
+    if (brandId && category.brandId !== brandId) continue;
+    masters.set(category.name, category);
+    if (!counts.has(category.name)) counts.set(category.name, 0);
+  }
+
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({
+      name,
+      count,
+      sortOrder: masters.get(name)?.sortOrder ?? 9999
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja"));
 }
 
 export default function StoreMenuPage() {
   const [access, setAccess] = useState<StoreMenuAccess | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
+  const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
@@ -66,10 +100,12 @@ export default function StoreMenuPage() {
     const body = await response.json();
     const nextAccess = body.access as StoreMenuAccess;
     const nextBrands = body.brands as BrandOption[];
+    const nextCategories = body.categories as StoreMenuCategory[];
     const nextItems = body.items as StoreMenuItem[];
     setAccess(nextAccess);
     setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
+    setCategories(nextCategories ?? []);
     setItems(nextItems ?? []);
     setSelectedStoreId(body.selectedStoreId || nextAccess.stores?.[0]?.id || "");
     setSelectedBrandId((current) => resetFilters ? (nextBrands?.[0]?.id || "") : (current || nextBrands?.[0]?.id || ""));
@@ -94,7 +130,7 @@ export default function StoreMenuPage() {
   }, [items, query, selectedBrandId, selectedCategory]);
 
   const categoryItems = useMemo(() => items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId), [items, selectedBrandId]);
-  const categories = useMemo(() => getCategory(categoryItems), [categoryItems]);
+  const categorySummaries = useMemo(() => getCategories(categoryItems, categories, selectedBrandId), [categories, categoryItems, selectedBrandId]);
 
   async function saveItem(item: StoreMenuItem, patch: Partial<StoreMenuItem>) {
     const nextItem = { ...item, ...patch };
@@ -191,17 +227,16 @@ export default function StoreMenuPage() {
               <span>すべて</span>
               <strong>{categoryItems.length}</strong>
             </button>
-            {categories.map((category) => {
-              const count = categoryItems.filter((item) => (item.category || "未分類") === category).length;
+            {categorySummaries.map((category) => {
               return (
                 <button
-                  className={selectedCategory === category ? "menu-category-button is-active" : "menu-category-button"}
+                  className={selectedCategory === category.name ? "menu-category-button is-active" : "menu-category-button"}
                   type="button"
-                  onClick={() => setSelectedCategory(category)}
-                  key={category}
+                  onClick={() => setSelectedCategory(category.name)}
+                  key={category.name}
                 >
-                  <span>{category}</span>
-                  <strong>{count}</strong>
+                  <span>{category.name}</span>
+                  <strong>{category.count}</strong>
                 </button>
               );
             })}
