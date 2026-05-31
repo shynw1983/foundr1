@@ -39,7 +39,11 @@ export function UserBadge() {
   if (!employee) {
     return (
       <div className="user-panel">
-        <span className="user-badge user-badge-muted">ログイン確認中</span>
+        <span className="user-badge user-badge-muted">
+          <span className="user-avatar" aria-hidden="true">...</span>
+          <span className="user-badge-name">ログイン確認中</span>
+        </span>
+        <span className="notification-placeholder" aria-hidden="true" />
         <OsLanguagePicker />
       </div>
     );

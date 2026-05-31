@@ -559,6 +559,15 @@ button {
   position: relative;
 }
 
+.notification-placeholder {
+  display: inline-flex;
+  min-height: 36px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
 .notification-menu summary {
   display: inline-flex;
   align-items: center;
@@ -707,6 +716,8 @@ button {
 
 .sidebar-user .notification-menu summary,
 .mobile-nav-user .notification-menu summary,
+.sidebar-user .notification-placeholder,
+.mobile-nav-user .notification-placeholder,
 .sidebar-user .account-menu summary,
 .mobile-nav-user .account-menu summary {
   border-color: rgba(255, 255, 255, 0.12);
@@ -2455,6 +2466,11 @@ button {
 }
 
 .store-user-tools .notification-menu summary {
+  width: 48px;
+  min-height: 48px;
+}
+
+.store-user-tools .notification-placeholder {
   width: 48px;
   min-height: 48px;
 }
@@ -8845,6 +8861,7 @@ button {
   }
 
   .store-user-tools .notification-menu summary,
+  .store-user-tools .notification-placeholder,
   .store-user-tools .os-language-picker,
   .store-user-tools .os-language-picker select {
     width: 100%;
