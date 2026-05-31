@@ -20,8 +20,12 @@ type TimecardPostBody = {
   workDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
+  clockIn?: string;
+  clockOut?: string;
   breakMinutes?: number | string;
 };
+
+const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
 
 function toMoneyNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -147,6 +151,21 @@ function normalizeTimeValue(value: unknown) {
   return /^\d{2}:\d{2}$/.test(text) ? text : null;
 }
 
+function getJstWorkDateRange(workDate: string) {
+  const start = new Date(`${workDate}T00:00:00+09:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const overnightEnd = new Date(start.getTime() + 36 * 60 * 60 * 1000);
+  return { start, end, overnightEnd };
+}
+
+function toPunchDateTime(workDate: string, time: string, baseTime?: string | null) {
+  const date = new Date(`${workDate}T${time}:00+09:00`);
+  if (baseTime && time <= baseTime) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date.toISOString();
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -261,6 +280,7 @@ export async function GET(request: Request) {
   return Response.json({
     month,
     currentEmployeeId: session.id,
+    canEditActualTime: timecardActualEditRoles.has(session.role),
     stores,
     selectedStoreId,
     employees,
@@ -382,6 +402,122 @@ export async function POST(request: Request) {
     });
 
     return Response.json({ ok: true, id: upserted[0]?.id ?? null });
+  }
+
+  if (action === "save_actual_time" || action === "delete_actual_time") {
+    if (!timecardActualEditRoles.has(session.role)) {
+      return Response.json({ error: "実勤務時間を修正する権限がありません。" }, { status: 403 });
+    }
+
+    const employeeId = String(body.employeeId ?? "");
+    const workDate = String(body.workDate ?? "");
+    if (!employeeId || !isValidWorkDate(workDate)) {
+      return Response.json({ error: "従業員と日付を確認してください。" }, { status: 400 });
+    }
+
+    if (!await canPunchForEmployee(storeId, employeeId)) {
+      return Response.json({ error: "この従業員は選択した店舗の実勤務対象ではありません。" }, { status: 403 });
+    }
+
+    const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
+    await sql`
+      delete from timecard_punches
+      where employee_id = ${employeeId}
+        and store_id = ${storeId}
+        and (
+          (
+            punch_type = 'clock_in'
+            and punched_at >= ${start.toISOString()}
+            and punched_at < ${end.toISOString()}
+          )
+          or (
+            punch_type = 'clock_out'
+            and punched_at >= ${start.toISOString()}
+            and punched_at < ${overnightEnd.toISOString()}
+          )
+        )
+    `;
+
+    if (action === "delete_actual_time") {
+      await writeAuditLog({
+        actorEmployeeId: session.id,
+        action: "timecard.actual_time.deleted",
+        targetType: "timecard_punch",
+        targetId: `${employeeId}:${storeId}:${workDate}`,
+        metadata: { storeId, employeeId, workDate },
+        request
+      });
+
+      return Response.json({ ok: true });
+    }
+
+    const clockIn = normalizeTimeValue(body.clockIn);
+    const clockOut = normalizeTimeValue(body.clockOut);
+    if (!clockIn && !clockOut) {
+      return Response.json({ error: "出勤または退勤時刻を入力してください。" }, { status: 400 });
+    }
+
+    const insertedIds: string[] = [];
+    if (clockIn) {
+      const rows = await sql`
+        insert into timecard_punches (
+          employee_id,
+          store_id,
+          punch_type,
+          punched_at,
+          source,
+          note,
+          created_by
+        )
+        values (
+          ${employeeId},
+          ${storeId},
+          'clock_in',
+          ${toPunchDateTime(workDate, clockIn)},
+          'manager_correction',
+          ${String(body.note ?? "").trim() || null},
+          ${session.id}
+        )
+        returning id::text
+      `;
+      insertedIds.push(String(rows[0]?.id ?? ""));
+    }
+
+    if (clockOut) {
+      const rows = await sql`
+        insert into timecard_punches (
+          employee_id,
+          store_id,
+          punch_type,
+          punched_at,
+          source,
+          note,
+          created_by
+        )
+        values (
+          ${employeeId},
+          ${storeId},
+          'clock_out',
+          ${toPunchDateTime(workDate, clockOut, clockIn)},
+          'manager_correction',
+          ${String(body.note ?? "").trim() || null},
+          ${session.id}
+        )
+        returning id::text
+      `;
+      insertedIds.push(String(rows[0]?.id ?? ""));
+    }
+
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.actual_time.saved",
+      targetType: "timecard_punch",
+      targetId: insertedIds.filter(Boolean).join(","),
+      metadata: { storeId, employeeId, workDate, clockIn, clockOut },
+      request
+    });
+
+    return Response.json({ ok: true, ids: insertedIds.filter(Boolean) });
   }
 
   const punchType = String(body.punchType ?? "");

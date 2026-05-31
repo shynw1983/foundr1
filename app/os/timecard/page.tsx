@@ -81,6 +81,7 @@ type PayrollTotals = {
 
 type TimecardPayload = {
   month: string;
+  canEditActualTime: boolean;
   stores: StoreOption[];
   selectedStoreId: string;
   employees: TimecardEmployee[];
@@ -96,6 +97,14 @@ type ShiftDraft = {
   scheduledStart: string;
   scheduledEnd: string;
   breakMinutes: string;
+  note: string;
+};
+
+type ActualDraft = {
+  employeeId: string;
+  workDate: string;
+  clockIn: string;
+  clockOut: string;
   note: string;
 };
 
@@ -325,12 +334,12 @@ function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shi
   } satisfies DayCoverage;
 }
 
-type TimecardMainView = "schedule" | "payroll";
+type TimecardMainView = "overview" | "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
 type TimecardPayrollView = "summary" | "employee";
 
 export function TimecardPage({
-  initialMainView = "schedule",
+  initialMainView = "overview",
   initialScheduleView = "planned",
   initialPayrollView = "summary"
 }: {
@@ -347,11 +356,12 @@ export function TimecardPage({
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
+  const [actualDraft, setActualDraft] = useState<ActualDraft | null>(null);
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
 
-  async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean } = {}) {
+  async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
     setIsLoading(true);
     const params = new URLSearchParams({ month: nextMonth });
     if (nextStoreId) params.set("storeId", nextStoreId);
@@ -362,6 +372,7 @@ export function TimecardPage({
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
       if (!options.keepShiftDraft) setShiftDraft(null);
+      if (!options.keepActualDraft) setActualDraft(null);
     }
     setIsLoading(false);
   }
@@ -432,8 +443,27 @@ export function TimecardPage({
     }
     return map;
   }, [data?.shifts, monthDays, selectedStoreBusinessHours]);
+  const uncoveredDays = useMemo(
+    () => Array.from(coverageByDate.entries()).filter(([, coverage]) => coverage.status === "uncovered"),
+    [coverageByDate]
+  );
+  const actualIssueCount = useMemo(() => {
+    let count = 0;
+    for (const employee of scheduleEmployees) {
+      for (const day of monthDays) {
+        const actual = actualByCell.get(`${employee.id}:${day.key}`);
+        const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+        const status = getActualStatus(actual, shift);
+        if (status.className && status.className !== " is-complete") count += 1;
+      }
+    }
+    return count;
+  }, [actualByCell, monthDays, scheduleEmployees, shiftByCell]);
   const selectedShiftEmployee = shiftDraft
     ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
+    : null;
+  const selectedActualEmployee = actualDraft
+    ? scheduleEmployees.find((employee) => employee.id === actualDraft.employeeId) ?? null
     : null;
 
   useEffect(() => {
@@ -534,6 +564,71 @@ export function TimecardPage({
     void saveShift(nextDraft);
   }
 
+  function openActualEditor(employeeId: string, workDate: string) {
+    if (!data?.canEditActualTime) return;
+    const actual = actualByCell.get(`${employeeId}:${workDate}`);
+    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    clearShiftMessage();
+    setActualDraft({
+      employeeId,
+      workDate,
+      clockIn: getJstTimeText(actual?.clockIn) ?? shift?.scheduledStart ?? "",
+      clockOut: getJstTimeText(actual?.clockOut) ?? shift?.scheduledEnd ?? "",
+      note: ""
+    });
+  }
+
+  async function saveActualTime() {
+    if (!actualDraft || !selectedStoreId) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_actual_time",
+        storeId: selectedStoreId,
+        employeeId: actualDraft.employeeId,
+        workDate: actualDraft.workDate,
+        clockIn: actualDraft.clockIn,
+        clockOut: actualDraft.clockOut,
+        note: actualDraft.note
+      })
+    });
+    if (response.ok) {
+      await loadTimecard(month, selectedStoreId, { keepActualDraft: true });
+      showShiftMessage("実勤務時間を保存しました。");
+    } else {
+      const body = await response.json().catch(() => ({}));
+      showShiftMessage(String(body.error ?? "実勤務時間を保存できませんでした。"), 4200);
+    }
+    setIsSavingShift(false);
+  }
+
+  async function deleteActualTime() {
+    if (!actualDraft || !selectedStoreId) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete_actual_time",
+        storeId: selectedStoreId,
+        employeeId: actualDraft.employeeId,
+        workDate: actualDraft.workDate
+      })
+    });
+    if (response.ok) {
+      await loadTimecard(month, selectedStoreId, { keepActualDraft: true });
+      showShiftMessage("実勤務時間を削除しました。");
+    } else {
+      const body = await response.json().catch(() => ({}));
+      showShiftMessage(String(body.error ?? "実勤務時間を削除できませんでした。"), 4200);
+    }
+    setIsSavingShift(false);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -581,18 +676,64 @@ export function TimecardPage({
           <MetricCard label="差引支給額" value={formatMoney(totals.totalPay)} note="控除は次フェーズで追加" />
         </section>
 
-        <section className="timecard-view-tabs" aria-label="タイムカードメニュー">
-          <a className={mainView === "schedule" ? "is-active" : ""} href="/os/timecard/schedule">
-            <CalendarDays size={18} />
-            排班
-          </a>
-          <a className={mainView === "payroll" ? "is-active" : ""} href="/os/timecard/payroll">
-            <WalletCards size={18} />
-            給与
-          </a>
-        </section>
-
-        {mainView === "schedule" ? (
+        {mainView === "overview" ? (
+          <section className="panel">
+            <div className="panel-title">
+              <Clock3 />
+              <div>
+                <h3>タイムカード概要</h3>
+                <p>{selectedStore?.name ?? "店舗"} の勤務実績、概算人件費、確認が必要な項目をまとめて表示します。</p>
+              </div>
+            </div>
+            <div className="timecard-feature-grid">
+              <article>
+                <strong>対象スタッフ</strong>
+                <p>{scheduleEmployees.length}人</p>
+              </article>
+              <article>
+                <strong>未排班の営業時間</strong>
+                <p>{uncoveredDays.length ? `${uncoveredDays.length}日 要確認` : "問題なし"}</p>
+              </article>
+              <article>
+                <strong>打刻確認</strong>
+                <p>{actualIssueCount ? `${actualIssueCount}件 要確認` : "問題なし"}</p>
+              </article>
+            </div>
+            <div className="timecard-table-wrap">
+              <table className="timecard-table">
+                <thead>
+                  <tr>
+                    <th>従業員</th>
+                    <th>勤務日数</th>
+                    <th>勤務時間</th>
+                    <th>人件費</th>
+                    <th>交通費</th>
+                    <th>確認</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data?.payrollRows.length ? data.payrollRows.slice(0, 8).map((row) => (
+                    <tr key={row.employeeId}>
+                      <td>
+                        <strong>{row.employeeName}</strong>
+                        <span>{row.storeNames.join("、") || "店舗未設定"}</span>
+                      </td>
+                      <td>{row.workDays}日</td>
+                      <td>{formatDuration(row.workMinutes)}</td>
+                      <td>{formatMoney(row.basePay)}</td>
+                      <td>{formatMoney(row.commuteAllowance)}</td>
+                      <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={6}>この月の勤務実績はまだありません。</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : mainView === "schedule" ? (
           <>
             <section className="timecard-subtabs" aria-label="排班メニュー">
               <button className={scheduleView === "planned" ? "is-active" : ""} type="button" onClick={() => setScheduleView("planned")}>
@@ -722,9 +863,35 @@ export function TimecardPage({
                   <CalendarDays />
                   <div>
                     <h3>実勤務時間</h3>
-                    <p>計画排班と同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。</p>
+                    <p>計画排班と同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。{data?.canEditActualTime ? "権限があるユーザーは格子をクリックして修正できます。" : ""}</p>
                   </div>
                 </div>
+                {actualDraft ? (
+                  <div className="shift-editor actual-editor" aria-label="実勤務時間編集">
+                    <div className="shift-editor-title">
+                      <strong>{selectedActualEmployee?.name ?? "従業員"}</strong>
+                      <span>{actualDraft.workDate}</span>
+                      <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
+                    </div>
+                    <label>
+                      <span>出勤</span>
+                      <input type="time" value={actualDraft.clockIn} onChange={(event) => setActualDraft({ ...actualDraft, clockIn: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>退勤</span>
+                      <input type="time" value={actualDraft.clockOut} onChange={(event) => setActualDraft({ ...actualDraft, clockOut: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>メモ</span>
+                      <input value={actualDraft.note} onChange={(event) => setActualDraft({ ...actualDraft, note: event.target.value })} placeholder="修正理由など" />
+                    </label>
+                    <div className="shift-editor-actions">
+                      <button className="secondary-button" type="button" onClick={() => setActualDraft(null)}>閉じる</button>
+                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteActualTime()}>削除</button>
+                      <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveActualTime()}>{isSavingShift ? "保存中" : "保存"}</button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="shift-grid-wrap">
                   <table className="shift-grid actual-shift-grid">
                     <thead>
@@ -746,9 +913,16 @@ export function TimecardPage({
                             const actual = actualByCell.get(`${employee.id}:${day.key}`);
                             const shift = shiftByCell.get(`${employee.id}:${day.key}`);
                             const status = getActualStatus(actual, shift);
+                            const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             return (
                               <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
-                                <div className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}`} title={status.label || undefined}>
+                                <button
+                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
+                                  type="button"
+                                  disabled={!data?.canEditActualTime}
+                                  title={status.label || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
+                                  onClick={() => openActualEditor(employee.id, day.key)}
+                                >
                                   {actual ? (
                                     <>
                                       <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
@@ -763,7 +937,7 @@ export function TimecardPage({
                                   ) : (
                                     <span className="shift-empty">-</span>
                                   )}
-                                </div>
+                                </button>
                               </td>
                             );
                           })}
@@ -903,5 +1077,5 @@ export function TimecardPage({
 }
 
 export default function TimecardRoutePage() {
-  return <TimecardPage initialMainView="schedule" />;
+  return <TimecardPage initialMainView="overview" />;
 }
