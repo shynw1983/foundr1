@@ -158,7 +158,10 @@ export default function StoreHomePage() {
           <>
             {operation.receptionState ? (
               <div className={`store-reception-state is-${operation.receptionState.tone}`}>
-                <span>手動設定: {operation.receptionState.manualStatusLabel}</span>
+                <span>
+                  受付モード: {operation.receptionState.manualStatusLabel}
+                  {operation.receptionState.isManuallyAccepting ? "（営業時間に従う）" : ""}
+                </span>
                 <strong>{operation.receptionState.statusLabel}</strong>
                 <small>{operation.receptionState.detailLabel}</small>
               </div>
