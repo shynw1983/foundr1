@@ -119,6 +119,12 @@ export default function StoreMenuPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
@@ -291,7 +297,7 @@ export default function StoreMenuPage() {
                       placeholder="例: 15分後に再開予定"
                     />
                     <button className="secondary-button" type="button" disabled={savingId === item.id} onClick={() => void saveItem(item, {})}>
-                      保存
+                      メモ保存
                     </button>
                   </div>
                 </article>
