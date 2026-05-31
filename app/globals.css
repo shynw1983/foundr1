@@ -9431,19 +9431,25 @@ button {
   }
 
   .store-workbench-topbar {
-    align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
   }
 
   .store-nav-cluster {
-    align-items: stretch;
-    flex-direction: column;
+    display: contents;
   }
 
   .store-live-clock {
+    grid-column: 1 / -1;
     justify-content: center;
     width: 100%;
     min-width: 0;
+  }
+
+  .store-user-tools {
+    grid-column: 1 / -1;
   }
 
   .store-user-tools .user-panel {
@@ -9472,12 +9478,14 @@ button {
   }
 
   .store-nav-tabs {
-    width: 100%;
-    overflow-x: auto;
+    display: none;
   }
 
-  .store-nav-tabs a {
-    flex: 0 0 auto;
+  .store-nav-menu {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    display: block;
   }
 
   .procedure-reader-topbar {
