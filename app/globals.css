@@ -516,6 +516,7 @@ button {
 
 .nav-shell {
   position: relative;
+  z-index: 2;
   min-height: 0;
 }
 
@@ -831,7 +832,16 @@ button {
 
   .sidebar {
     z-index: 130;
+    width: 78px;
     padding: 14px 8px;
+    overflow: visible;
+    transition: width 0.16s ease, padding 0.16s ease;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) {
+    width: 160px;
+    padding-right: 10px;
+    box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
 
   .brand-block {
@@ -847,6 +857,11 @@ button {
   .sidebar-user .user-badge-role,
   .sidebar-user .os-language-picker {
     display: none;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-name,
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-role {
+    display: inline-flex;
   }
 
   .brand-mark {
@@ -879,6 +894,13 @@ button {
     padding: 0;
   }
 
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge {
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 8px;
+  }
+
   .sidebar-user .account-menu-panel,
   .sidebar-user .notification-panel {
     left: 0;
@@ -889,7 +911,14 @@ button {
 
   .nav-list {
     gap: 3px;
+    width: 100%;
     padding-right: 0;
+    overflow: visible;
+  }
+
+  .nav-module {
+    display: grid;
+    gap: 1px;
   }
 
   .nav-item {
@@ -904,57 +933,49 @@ button {
     text-align: center;
   }
 
+  .nav-shell.is-expanded .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 9px;
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .nav-shell.is-expanded .nav-item::after {
+    content: "›";
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 18px;
+    line-height: 1;
+  }
+
   .nav-item.is-open {
     background: rgba(255, 255, 255, 0.14);
   }
 
-  .nav-flyout {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 78px;
-    z-index: 140;
+  .nav-sub-list {
     display: grid;
-    align-content: start;
-    gap: 12px;
-    width: 248px;
-    padding: 22px 14px;
-    color: #f7fafc;
-    background: #202a36;
-    box-shadow: 20px 0 45px rgba(15, 23, 42, 0.22);
+    gap: 1px;
+    padding: 2px 0 4px 30px;
   }
 
-  .nav-flyout-heading {
+  .nav-sub-list a {
     display: flex;
     align-items: center;
-    gap: 9px;
-    min-height: 42px;
-    padding: 0 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    font-size: 17px;
-    font-weight: 900;
-  }
-
-  .nav-flyout-list {
-    display: grid;
-    gap: 5px;
-  }
-
-  .nav-flyout-list a {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 42px;
-    padding: 0 11px;
-    border-radius: 8px;
+    gap: 7px;
+    min-height: 28px;
+    padding: 0 8px;
+    border-radius: 7px;
     color: #dce5ee;
     text-decoration: none;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 800;
   }
 
-  .nav-flyout-list a:hover,
-  .nav-flyout-list a.is-active {
+  .nav-sub-list a:hover,
+  .nav-sub-list a.is-active {
     color: white;
     background: rgba(255, 255, 255, 0.1);
   }
@@ -964,7 +985,7 @@ button {
     top: 0;
     right: 0;
     bottom: 0;
-    left: 78px;
+    left: 160px;
     z-index: 120;
     border: 0;
     background: transparent;

@@ -46,7 +46,6 @@ const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
-const systemNavItems = new Set(["/os", "/os/settings"]);
 const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -206,10 +205,8 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     setOpenModuleId((current) => current === module.id ? null : module.id);
   }
 
-  const groupedChildren = openModule?.children.filter((item) => !systemNavItems.has(item.href)) ?? [];
-
   return (
-    <div className="nav-shell">
+    <div className={`nav-shell${openModule ? " is-expanded" : ""}`}>
       <nav className="nav-list" aria-label="OS モジュール">
         {visibleModules.map((module) => {
           const Icon = module.icon;
@@ -232,31 +229,27 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
           }
 
           return (
-            <button className={className} type="button" onClick={() => handleModuleClick(module)} aria-expanded={isOpen} key={module.id}>
-              {content}
-            </button>
+            <div className={`nav-module${isOpen ? " is-open" : ""}`} key={module.id}>
+              <button className={className} type="button" onClick={() => handleModuleClick(module)} aria-expanded={isOpen}>
+                {content}
+              </button>
+              {isOpen ? (
+                <nav className="nav-sub-list" aria-label={`${module.label}サブメニュー`}>
+                  {module.children.map(({ label, href, icon: ChildIcon }) => {
+                    const isChildActive = pathname === href || pathname.startsWith(`${href}/`);
+                    return (
+                      <Link href={href} className={isChildActive ? "is-active" : ""} key={href}>
+                        <ChildIcon size={14} />
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+              ) : null}
+            </div>
           );
         })}
       </nav>
-      {openModule && groupedChildren.length > 0 ? (
-        <div className="nav-flyout" role="dialog" aria-label={`${openModule.label}メニュー`}>
-          <div className="nav-flyout-heading">
-            <openModule.icon size={18} />
-            <strong>{openModule.label}</strong>
-          </div>
-          <nav className="nav-flyout-list" aria-label={`${openModule.label}サブメニュー`}>
-            {groupedChildren.map(({ label, href, icon: Icon }) => {
-              const isActive = pathname === href || pathname.startsWith(`${href}/`);
-              return (
-                <Link href={href} className={isActive ? "is-active" : ""} key={href}>
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      ) : null}
       {openModule ? <button className="nav-flyout-backdrop" type="button" aria-label="メニューを閉じる" onClick={() => setOpenModuleId(null)} /> : null}
     </div>
   );
