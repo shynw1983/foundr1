@@ -3979,6 +3979,72 @@ button {
   color: inherit;
 }
 
+@media (min-width: 761px) {
+  .shift-grid-wrap {
+    overflow-x: hidden;
+  }
+
+  .shift-grid {
+    min-width: 0;
+    table-layout: fixed;
+    font-size: 10px;
+  }
+
+  .shift-grid th,
+  .shift-grid td {
+    min-width: 0;
+    height: 42px;
+  }
+
+  .shift-grid thead th {
+    height: 40px;
+    padding: 2px 1px;
+  }
+
+  .shift-grid thead th small {
+    font-size: 9px;
+  }
+
+  .shift-grid thead th em {
+    min-width: 14px;
+    height: 14px;
+    font-size: 8px;
+  }
+
+  .shift-grid .shift-employee-head,
+  .shift-grid .shift-employee-cell {
+    width: 112px;
+    min-width: 112px;
+  }
+
+  .shift-grid .shift-employee-cell {
+    padding: 0 4px;
+    font-size: 11px;
+  }
+
+  .shift-cell {
+    height: 42px;
+    gap: 1px;
+    font-size: 9px;
+  }
+
+  .shift-cell strong {
+    font-size: 10px;
+  }
+
+  .actual-shift-cell em {
+    top: 2px;
+    right: 2px;
+    min-width: 22px;
+    height: 13px;
+    font-size: 8px;
+  }
+
+  .actual-shift-cell small {
+    font-size: 8px;
+  }
+}
+
 .timecard-management-grid {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
 }
