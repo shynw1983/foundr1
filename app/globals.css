@@ -514,6 +514,10 @@ button {
   background: rgba(255, 255, 255, 0.22);
 }
 
+.sidebar-toggle-button {
+  display: none;
+}
+
 .sidebar-user {
   margin: 0 0 14px;
   padding: 0 6px 14px;
@@ -742,6 +746,14 @@ button {
   text-decoration: none;
 }
 
+.nav-item span,
+.brand-block h1,
+.brand-block .eyebrow,
+.sidebar-user .user-badge-name,
+.sidebar-user .user-badge-role {
+  transition: opacity 0.16s ease;
+}
+
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.09);
 }
@@ -801,6 +813,172 @@ button {
 
 .mobile-nav-list a:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+
+@media (min-width: 1121px) {
+  .shell {
+    grid-template-columns: 82px minmax(0, 1fr);
+    transition: grid-template-columns 0.18s ease;
+  }
+
+  html[data-os-sidebar="expanded"] .shell {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding: 18px 12px;
+    transition: padding 0.18s ease;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar {
+    padding: 24px 18px;
+  }
+
+  .brand-block {
+    width: 100%;
+    justify-content: center;
+    gap: 0;
+    padding: 6px 0;
+  }
+
+  html[data-os-sidebar="expanded"] .brand-block {
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 8px 6px;
+  }
+
+  .brand-block > div:last-child,
+  .nav-item span,
+  .sidebar-user .user-badge-name,
+  .sidebar-user .user-badge-role,
+  .sidebar-user .os-language-picker {
+    display: none;
+  }
+
+  html[data-os-sidebar="expanded"] .brand-block > div:last-child,
+  html[data-os-sidebar="expanded"] .nav-item span,
+  html[data-os-sidebar="expanded"] .sidebar-user .user-badge-name,
+  html[data-os-sidebar="expanded"] .sidebar-user .user-badge-role {
+    display: revert;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user .os-language-picker {
+    display: grid;
+  }
+
+  .sidebar-user {
+    display: grid;
+    justify-items: center;
+    margin-bottom: 12px;
+    padding: 0 0 12px;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user {
+    display: block;
+    margin: 0 0 14px;
+    padding: 0 6px 14px;
+  }
+
+  .sidebar-user .user-panel {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user .user-panel {
+    justify-items: stretch;
+  }
+
+  .sidebar-user .user-badge,
+  .sidebar-user .notification-menu,
+  .sidebar-user .notification-placeholder {
+    width: 48px;
+  }
+
+  .sidebar-user .user-badge {
+    justify-content: center;
+    min-height: 48px;
+    padding: 0;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user .user-badge {
+    justify-content: space-between;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 12px;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user .notification-menu,
+  html[data-os-sidebar="expanded"] .sidebar-user .notification-placeholder {
+    width: 100%;
+  }
+
+  .sidebar-user .account-menu-panel,
+  .sidebar-user .notification-panel {
+    left: 0;
+    right: auto;
+    width: min(240px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-user .account-menu-panel,
+  html[data-os-sidebar="expanded"] .sidebar-user .notification-panel {
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .nav-list {
+    padding-right: 0;
+  }
+
+  html[data-os-sidebar="expanded"] .nav-list {
+    padding-right: 4px;
+  }
+
+  .sidebar-toggle-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #f7fafc;
+    font-weight: 900;
+  }
+
+  .sidebar-toggle-button span {
+    display: none;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-toggle-button {
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+
+  html[data-os-sidebar="expanded"] .sidebar-toggle-button span {
+    display: inline;
+  }
+
+  .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+
+  html[data-os-sidebar="expanded"] .nav-item {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .nav-item.follows-home {
+    margin-top: 10px;
+  }
 }
 
 .workspace {
