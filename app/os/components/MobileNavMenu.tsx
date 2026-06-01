@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Menu } from "lucide-react";
 import { useRef } from "react";
 import { NotificationMenu } from "./NotificationMenu";
-import { UserBadge } from "./UserBadge";
 import { type OsNavItem, usePermittedNavItems } from "./OsNavList";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
@@ -27,9 +26,6 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
           <span>メニュー</span>
         </summary>
         <nav className="mobile-nav-list" aria-label="モバイルナビゲーション">
-          <div className="mobile-nav-user">
-            <UserBadge />
-          </div>
           {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
             const isHome = href === "/os";
             const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
