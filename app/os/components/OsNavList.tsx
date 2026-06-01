@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -98,38 +98,9 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
 
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const permittedNavItems = usePermittedNavItems(navItems);
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  useEffect(() => {
-    const savedState = window.localStorage.getItem("foundr1.os.sidebar");
-    const nextExpanded = savedState === "expanded";
-    setIsExpanded(nextExpanded);
-    document.documentElement.dataset.osSidebar = nextExpanded ? "expanded" : "collapsed";
-
-    return () => {
-      delete document.documentElement.dataset.osSidebar;
-    };
-  }, []);
-
-  function toggleSidebar() {
-    const nextExpanded = !isExpanded;
-    setIsExpanded(nextExpanded);
-    window.localStorage.setItem("foundr1.os.sidebar", nextExpanded ? "expanded" : "collapsed");
-    document.documentElement.dataset.osSidebar = nextExpanded ? "expanded" : "collapsed";
-  }
 
   return (
     <nav className="nav-list">
-      <button
-        className="sidebar-toggle-button"
-        type="button"
-        onClick={toggleSidebar}
-        aria-label={isExpanded ? "ナビゲーションを折りたたむ" : "ナビゲーションを展開"}
-        title={isExpanded ? "折りたたむ" : "展開"}
-      >
-        {isExpanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-        <span>{isExpanded ? "折りたたむ" : "展開"}</span>
-      </button>
       {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
         const isHome = href === "/os";
         const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
