@@ -266,6 +266,14 @@ export default function StaffPage() {
 
   function readForm(form: HTMLFormElement) {
     const formData = new FormData(form);
+    const workStoreIds = formData.getAll("workStoreIds").map((value) => String(value));
+    const payrollEnabledStoreIds = new Set(formData.getAll("payrollEnabledStoreIds").map((value) => String(value)));
+    const payrollSubject = workStoreIds.length === 0
+      ? "none"
+      : workStoreIds.some((storeId) => payrollEnabledStoreIds.has(storeId))
+        ? "paid"
+        : "unpaid";
+
     return {
       name: String(formData.get("name") ?? ""),
       loginId: String(formData.get("loginId") ?? ""),
@@ -286,7 +294,7 @@ export default function StaffPage() {
       password: String(formData.get("password") ?? ""),
       role: String(formData.get("role") ?? "staff"),
       staffCategory: String(formData.get("staffCategory") ?? "working"),
-      payrollSubject: String(formData.get("payrollSubject") ?? "none"),
+      payrollSubject,
       employmentType: String(formData.get("employmentType") ?? "hourly"),
       hourlyWage: String(formData.get("hourlyWage") ?? ""),
       monthlySalary: String(formData.get("monthlySalary") ?? ""),
@@ -294,10 +302,10 @@ export default function StaffPage() {
       commuteAllowanceMonthlyCap: String(formData.get("commuteAllowanceMonthlyCap") ?? ""),
       status: String(formData.get("status") ?? "active"),
       visibleStoreIds: formData.getAll("visibleStoreIds").map((value) => String(value)),
-      workStoreIds: formData.getAll("workStoreIds").map((value) => String(value)),
+      workStoreIds,
       workStoreSettings: stores.map((store) => ({
         storeId: store.id,
-        payrollEnabled: formData.getAll("payrollEnabledStoreIds").map((value) => String(value)).includes(store.id),
+        payrollEnabled: payrollEnabledStoreIds.has(store.id),
         employmentType: String(formData.get(`employmentType:${store.id}`) ?? "hourly"),
         hourlyWage: String(formData.get(`hourlyWage:${store.id}`) ?? ""),
         monthlySalary: String(formData.get(`monthlySalary:${store.id}`) ?? ""),
@@ -571,11 +579,25 @@ function StaffFormFields({
   onError?: (message: string) => void;
 }) {
   const selectedVisibleStoreIds = new Set(member ? getVisibleStores(member).map((store) => store.id) : []);
-  const selectedWorkStoreIds = new Set(member ? getWorkStores(member).map((store) => store.id) : []);
   const workStoreById = new Map((member ? getWorkStores(member) : []).map((store) => [store.id, store]));
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
   const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "other">("basic");
+  const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
+    member ? getWorkStores(member).map((store) => store.id) : []
+  ));
+  const selectedWorkStoreIds = useMemo(() => new Set(selectedWorkStoreIdList), [selectedWorkStoreIdList]);
+
+  useEffect(() => {
+    setSelectedWorkStoreIdList(member ? getWorkStores(member).map((store) => store.id) : []);
+  }, [member]);
+
+  function toggleWorkStore(storeId: string, checked: boolean) {
+    setSelectedWorkStoreIdList((current) => {
+      if (checked) return current.includes(storeId) ? current : [...current, storeId];
+      return current.filter((id) => id !== storeId);
+    });
+  }
 
   async function lookupLarkUser(event: MouseEvent<HTMLButtonElement>) {
     const form = event.currentTarget.form;
@@ -773,14 +795,10 @@ function StaffFormFields({
       </section>
 
       <section className={activeTab === "payroll" ? "staff-form-pane is-active" : "staff-form-pane"}>
-        <label>
-          <span>給与対象</span>
-          <select name="payrollSubject" defaultValue={member?.payrollSubject ?? "none"}>
-            <option value="paid">給与計算あり</option>
-            <option value="unpaid">給与計算なし</option>
-            <option value="none">給与対象外</option>
-          </select>
-        </label>
+        <div className="staff-payroll-guide">
+          <strong>勤務店舗ごとに給与を設定</strong>
+          <p>まず実際に勤務する店舗を選びます。選択した店舗だけ、給与計算・賃金・交通費・控除設定を管理できます。閲覧権限は「その他」タブで別に設定します。</p>
+        </div>
         <input name="employmentType" type="hidden" value={member?.employmentType ?? "hourly"} readOnly />
         <input name="hourlyWage" type="hidden" value={String(member?.hourlyWage ?? "")} readOnly />
         <input name="monthlySalary" type="hidden" value={String(member?.monthlySalary ?? "")} readOnly />
@@ -791,20 +809,34 @@ function StaffFormFields({
             const setting = workStoreById.get(store.id);
             const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
             const history = (setting?.payrollHistory ?? []).slice(0, 4);
+            const isWorkStore = selectedWorkStoreIds.has(store.id);
             return (
-              <article className="staff-payroll-store-row" key={store.id}>
+              <article className={isWorkStore ? "staff-payroll-store-row" : "staff-payroll-store-row is-inactive"} key={store.id}>
                 <label className="staff-payroll-store-toggle">
-                  <input type="checkbox" name="workStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id)} />
+                  <input
+                    type="checkbox"
+                    name="workStoreIds"
+                    value={store.id}
+                    checked={isWorkStore}
+                    onChange={(event) => toggleWorkStore(store.id, event.currentTarget.checked)}
+                  />
                   <span>
                     <strong>{store.name}</strong>
                     <small>{store.companyName ?? "会社未設定"}</small>
                   </span>
                 </label>
+                {!isWorkStore ? (
+                  <div className="staff-payroll-store-placeholder">
+                    <strong>勤務店舗ではありません</strong>
+                    <small>チェックすると、この店舗の給与設定を入力できます。</small>
+                  </div>
+                ) : (
+                  <>
                 <label>
-                  <span>給与計算</span>
+                  <span>給与計算に含める</span>
                   <span className="staff-payroll-check">
                     <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id) && setting?.payrollEnabled !== false} />
-                    対象
+                    計算する
                   </span>
                 </label>
                 <label>
@@ -881,6 +913,8 @@ function StaffFormFields({
                     <small>まだ履歴がありません。保存するとこの設定が履歴に残ります。</small>
                   )}
                 </div>
+                  </>
+                )}
               </article>
             );
           }) : <p className="empty-state-text">店舗データがありません。</p>}
@@ -889,7 +923,8 @@ function StaffFormFields({
 
       <section className={activeTab === "other" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <fieldset className="checkbox-group staff-store-scope">
-          <span>閲覧可能店舗</span>
+          <span>閲覧可能店舗（権限）</span>
+          <small>ここは閲覧・管理できる店舗の範囲です。実際に勤務して給与計算する店舗は「給与情報」タブで設定します。</small>
           {stores.length ? stores.map((store) => (
             <label key={store.id}>
               <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />

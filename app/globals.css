@@ -1881,6 +1881,30 @@ button {
   gap: 9px;
 }
 
+.staff-store-scope > small,
+.staff-payroll-guide p,
+.staff-payroll-store-placeholder small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.staff-payroll-guide {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.staff-payroll-guide strong,
+.staff-payroll-store-placeholder strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+
 .staff-payroll-store-list {
   display: grid;
   gap: 12px;
@@ -1895,6 +1919,22 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
+}
+
+.staff-payroll-store-row.is-inactive {
+  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 2fr);
+  align-items: center;
+  background: #f8fafc;
+}
+
+.staff-payroll-store-row.is-inactive .staff-payroll-store-toggle {
+  margin-bottom: 0;
+}
+
+.staff-payroll-store-placeholder {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .staff-payroll-deductions,
