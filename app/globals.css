@@ -839,7 +839,7 @@ button {
   }
 
   .sidebar:has(.nav-shell.is-expanded) {
-    width: 176px;
+    width: 196px;
     padding-right: 10px;
     box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
@@ -936,10 +936,10 @@ button {
   .nav-shell.is-expanded .nav-item {
     flex-direction: row;
     justify-content: flex-start;
-    gap: 9px;
-    min-height: 40px;
-    padding: 0 10px;
-    font-size: 13px;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 15px;
     text-align: left;
   }
 
@@ -947,7 +947,7 @@ button {
     content: "›";
     margin-left: auto;
     color: rgba(255, 255, 255, 0.68);
-    font-size: 18px;
+    font-size: 20px;
     line-height: 1;
   }
 
@@ -958,19 +958,19 @@ button {
   .nav-sub-list {
     display: grid;
     gap: 3px;
-    padding: 4px 0 8px 31px;
+    padding: 5px 0 9px 36px;
   }
 
   .nav-sub-list a {
     display: flex;
     align-items: center;
-    gap: 7px;
-    min-height: 32px;
-    padding: 0 9px;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 10px;
     border-radius: 7px;
     color: #dce5ee;
     text-decoration: none;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
   }
 
@@ -985,7 +985,7 @@ button {
     top: 0;
     right: 0;
     bottom: 0;
-    left: 176px;
+    left: 196px;
     z-index: 120;
     border: 0;
     background: transparent;
