@@ -264,15 +264,14 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
   for (const day of dailySummaries) {
     const employee = employeeById.get(day.employeeId);
     const storeSetting = getEffectivePayrollSetting(employee, day.storeId, day.workDate);
-    if (!employee || !storeSetting?.payrollEnabled) continue;
 
     const current = rowsByEmployee.get(day.employeeId) ?? {
       employeeId: day.employeeId,
       employeeName: day.employeeName,
       storeNames: [],
-      employmentType: storeSetting.employmentType,
-      hourlyWage: storeSetting.employmentType === "hourly" ? storeSetting.hourlyWage : null,
-      monthlySalary: storeSetting.employmentType === "monthly" ? storeSetting.monthlySalary : null,
+      employmentType: storeSetting?.employmentType ?? "hourly",
+      hourlyWage: storeSetting?.employmentType === "hourly" ? storeSetting.hourlyWage : null,
+      monthlySalary: storeSetting?.employmentType === "monthly" ? storeSetting.monthlySalary : null,
       workDays: 0,
       punchCount: 0,
       workMinutes: 0,
@@ -285,18 +284,29 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     };
 
     current.storeNames = uniqueStrings([...current.storeNames, day.storeName]);
-    current.employmentType = current.employmentType === storeSetting.employmentType ? current.employmentType : "mixed";
-    current.hourlyWage = current.employmentType === "hourly" ? storeSetting.hourlyWage : null;
-    current.monthlySalary = current.employmentType === "monthly" ? storeSetting.monthlySalary : null;
+    if (storeSetting?.payrollEnabled) {
+      current.employmentType = current.employmentType === storeSetting.employmentType ? current.employmentType : "mixed";
+      current.hourlyWage = current.employmentType === "hourly" ? storeSetting.hourlyWage : null;
+      current.monthlySalary = current.employmentType === "monthly" ? storeSetting.monthlySalary : null;
+    }
     current.workDays += day.workMinutes > 0 ? 1 : 0;
     current.punchCount += 1;
     current.workMinutes += day.workMinutes;
     current.breakMinutes += day.breakMinutes;
     current.nightMinutes += day.nightMinutes;
-    current.alerts = uniqueStrings([...current.alerts, ...day.alerts]);
+    const payrollAlerts = !employee
+      ? ["従業員設定なし"]
+      : !storeSetting
+        ? ["給与設定なし"]
+        : !storeSetting.payrollEnabled
+          ? ["給与計算対象外"]
+          : [];
+    current.alerts = uniqueStrings([...current.alerts, ...day.alerts, ...payrollAlerts]);
     rowsByEmployee.set(day.employeeId, current);
-    const storeKey = `${day.employeeId}:${day.storeId}`;
-    daysByEmployeeAndStore.set(storeKey, [...(daysByEmployeeAndStore.get(storeKey) ?? []), day]);
+    if (employee && storeSetting?.payrollEnabled) {
+      const storeKey = `${day.employeeId}:${day.storeId}`;
+      daysByEmployeeAndStore.set(storeKey, [...(daysByEmployeeAndStore.get(storeKey) ?? []), day]);
+    }
   }
 
   const rows = Array.from(rowsByEmployee.values()).map((row) => {
