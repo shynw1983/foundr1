@@ -101,21 +101,47 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       coalesce(
         json_agg(
           json_build_object(
-            'storeId', employee_work_stores.store_id::text,
-            'payrollEnabled', employee_work_stores.payroll_enabled,
-            'employmentType', employee_work_stores.employment_type,
-            'hourlyWage', employee_work_stores.hourly_wage,
-            'monthlySalary', employee_work_stores.monthly_salary,
-            'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday
+            'storeId', payroll_settings.store_id::text,
+            'payrollEnabled', payroll_settings.payroll_enabled,
+            'employmentType', payroll_settings.employment_type,
+            'hourlyWage', payroll_settings.hourly_wage,
+            'monthlySalary', payroll_settings.monthly_salary,
+            'commuteAllowancePerWorkday', payroll_settings.commute_allowance_per_workday,
+            'commuteAllowanceMonthlyCap', payroll_settings.commute_allowance_monthly_cap,
+            'validFrom', payroll_settings.valid_from
           )
-          order by stores.name
-        ) filter (where stores.id is not null),
+          order by stores.name, payroll_settings.valid_from desc
+        ) filter (where stores.id is not null and payroll_settings.store_id is not null),
         '[]'::json
       ) as "storePayrollSettings"
     from employees
     join employee_work_stores
       on employee_work_stores.employee_id = employees.id
     join stores on stores.id = employee_work_stores.store_id
+    left join lateral (
+      select
+        employee_work_stores.store_id,
+        employee_work_stores.payroll_enabled,
+        employee_work_stores.employment_type,
+        employee_work_stores.hourly_wage,
+        employee_work_stores.monthly_salary,
+        employee_work_stores.commute_allowance_per_workday,
+        employee_work_stores.commute_allowance_monthly_cap,
+        '1970-01-01'::date as valid_from
+      union all
+      select
+        employee_work_store_payroll_history.store_id,
+        employee_work_store_payroll_history.payroll_enabled,
+        employee_work_store_payroll_history.employment_type,
+        employee_work_store_payroll_history.hourly_wage,
+        employee_work_store_payroll_history.monthly_salary,
+        employee_work_store_payroll_history.commute_allowance_per_workday,
+        employee_work_store_payroll_history.commute_allowance_monthly_cap,
+        employee_work_store_payroll_history.valid_from
+      from employee_work_store_payroll_history
+      where employee_work_store_payroll_history.employee_id = employee_work_stores.employee_id
+        and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
+    ) payroll_settings on true
     where employees.status = 'active'
       and employees.staff_category = 'working'
       and (
@@ -138,7 +164,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       employmentType: setting.employmentType === "monthly" ? "monthly" : "hourly",
       hourlyWage: toMoneyNumber(setting.hourlyWage),
       monthlySalary: toMoneyNumber(setting.monthlySalary),
-      commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0
+      commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0,
+      commuteAllowanceMonthlyCap: toMoneyNumber(setting.commuteAllowanceMonthlyCap),
+      validFrom: String(setting.validFrom ?? "1970-01-01").slice(0, 10)
     }))
   })) satisfies TimecardEmployee[];
 }

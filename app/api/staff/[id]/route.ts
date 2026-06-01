@@ -28,6 +28,7 @@ type StaffPayload = {
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
+  commuteAllowanceMonthlyCap?: number | string | null;
   status?: string;
   storeIds?: string[];
   visibleStoreIds?: string[];
@@ -42,6 +43,12 @@ type WorkStoreSettingPayload = {
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
+  commuteAllowanceMonthlyCap?: number | string | null;
+  applySocialInsurance?: boolean;
+  applyLaborInsurance?: boolean;
+  applyIncomeTax?: boolean;
+  applyResidentTax?: boolean;
+  validFrom?: string;
 };
 
 function normalizeRole(role?: string) {
@@ -88,6 +95,15 @@ function toNullableNumber(value: number | string | null | undefined) {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
+function getJstDateLabel(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await requireOwnerOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -118,6 +134,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const hourlyWage = toNullableNumber(body.hourlyWage);
   const monthlySalary = toNullableNumber(body.monthlySalary);
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
+  const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = id === session.id ? "active" : normalizeStatus(body.status);
   const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
@@ -191,6 +208,23 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   await sql`delete from employee_scopes where employee_id = ${id} and scope_type = 'store'`;
+  const existingWorkStores = await sql`
+    select
+      store_id::text as "storeId",
+      payroll_enabled as "payrollEnabled",
+      employment_type as "employmentType",
+      hourly_wage as "hourlyWage",
+      monthly_salary as "monthlySalary",
+      commute_allowance_per_workday as "commuteAllowancePerWorkday",
+      commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
+      apply_social_insurance as "applySocialInsurance",
+      apply_labor_insurance as "applyLaborInsurance",
+      apply_income_tax as "applyIncomeTax",
+      apply_resident_tax as "applyResidentTax"
+    from employee_work_stores
+    where employee_id = ${id}
+  `;
+  const existingWorkStoreById = new Map(existingWorkStores.map((store) => [String(store.storeId), store]));
   await sql`delete from employee_work_stores where employee_id = ${id}`;
 
   for (const storeId of visibleStoreIds) {
@@ -203,6 +237,25 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   for (const storeId of workStoreIds) {
     const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
+    const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
+    const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
+    const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
+    const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
+    const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
+    const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
+    const storeValidFrom = toNullableDate(storeSetting?.validFrom) ?? getJstDateLabel();
+    const existingStore = existingWorkStoreById.get(storeId);
+    const shouldKeepCurrentUntilFutureDate = Boolean(existingStore && storeValidFrom > getJstDateLabel());
+    const currentPayrollEnabled = shouldKeepCurrentUntilFutureDate ? existingStore?.payrollEnabled !== false : storePayrollEnabled;
+    const currentEmploymentType = shouldKeepCurrentUntilFutureDate ? normalizeEmploymentType(String(existingStore?.employmentType ?? "")) : storeEmploymentType;
+    const currentHourlyWage = shouldKeepCurrentUntilFutureDate ? toNullableNumber(existingStore?.hourlyWage) : storeHourlyWage;
+    const currentMonthlySalary = shouldKeepCurrentUntilFutureDate ? toNullableNumber(existingStore?.monthlySalary) : storeMonthlySalary;
+    const currentCommuteAllowancePerWorkday = shouldKeepCurrentUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowancePerWorkday) ?? 0 : storeCommuteAllowancePerWorkday;
+    const currentCommuteAllowanceMonthlyCap = shouldKeepCurrentUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowanceMonthlyCap) : storeCommuteAllowanceMonthlyCap;
+    const currentApplySocialInsurance = shouldKeepCurrentUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
+    const currentApplyLaborInsurance = shouldKeepCurrentUntilFutureDate ? Boolean(existingStore?.applyLaborInsurance) : Boolean(storeSetting?.applyLaborInsurance);
+    const currentApplyIncomeTax = shouldKeepCurrentUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : Boolean(storeSetting?.applyIncomeTax);
+    const currentApplyResidentTax = shouldKeepCurrentUntilFutureDate ? Boolean(existingStore?.applyResidentTax) : Boolean(storeSetting?.applyResidentTax);
     await sql`
       insert into employee_work_stores (
         employee_id,
@@ -211,18 +264,77 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         employment_type,
         hourly_wage,
         monthly_salary,
-        commute_allowance_per_workday
+        commute_allowance_per_workday,
+        commute_allowance_monthly_cap,
+        apply_social_insurance,
+        apply_labor_insurance,
+        apply_income_tax,
+        apply_resident_tax
       )
       values (
         ${id},
         ${storeId},
-        ${storeSetting?.payrollEnabled !== false},
-        ${normalizeEmploymentType(storeSetting?.employmentType ?? employmentType)},
-        ${toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage},
-        ${toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary},
-        ${toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday}
+        ${currentPayrollEnabled},
+        ${currentEmploymentType},
+        ${currentHourlyWage},
+        ${currentMonthlySalary},
+        ${currentCommuteAllowancePerWorkday},
+        ${currentCommuteAllowanceMonthlyCap},
+        ${currentApplySocialInsurance},
+        ${currentApplyLaborInsurance},
+        ${currentApplyIncomeTax},
+        ${currentApplyResidentTax}
       )
       on conflict do nothing
+    `;
+    await sql`
+      insert into employee_work_store_payroll_history (
+        employee_id,
+        store_id,
+        payroll_enabled,
+        employment_type,
+        hourly_wage,
+        monthly_salary,
+        commute_allowance_per_workday,
+        commute_allowance_monthly_cap,
+        apply_social_insurance,
+        apply_labor_insurance,
+        apply_income_tax,
+        apply_resident_tax,
+        valid_from,
+        updated_by,
+        updated_at
+      )
+      values (
+        ${id},
+        ${storeId},
+        ${storePayrollEnabled},
+        ${storeEmploymentType},
+        ${storeHourlyWage},
+        ${storeMonthlySalary},
+        ${storeCommuteAllowancePerWorkday},
+        ${storeCommuteAllowanceMonthlyCap},
+        ${Boolean(storeSetting?.applySocialInsurance)},
+        ${Boolean(storeSetting?.applyLaborInsurance)},
+        ${Boolean(storeSetting?.applyIncomeTax)},
+        ${Boolean(storeSetting?.applyResidentTax)},
+        ${storeValidFrom},
+        ${session.id},
+        now()
+      )
+      on conflict (employee_id, store_id, valid_from) do update set
+        payroll_enabled = excluded.payroll_enabled,
+        employment_type = excluded.employment_type,
+        hourly_wage = excluded.hourly_wage,
+        monthly_salary = excluded.monthly_salary,
+        commute_allowance_per_workday = excluded.commute_allowance_per_workday,
+        commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
+        apply_social_insurance = excluded.apply_social_insurance,
+        apply_labor_insurance = excluded.apply_labor_insurance,
+        apply_income_tax = excluded.apply_income_tax,
+        apply_resident_tax = excluded.apply_resident_tax,
+        updated_by = excluded.updated_by,
+        updated_at = now()
     `;
   }
 
@@ -233,6 +345,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       hourly_wage,
       monthly_salary,
       commute_allowance_per_workday,
+      commute_allowance_monthly_cap,
       payroll_enabled,
       updated_by,
       updated_at
@@ -243,6 +356,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       ${hourlyWage},
       ${monthlySalary},
       ${commuteAllowancePerWorkday},
+      ${commuteAllowanceMonthlyCap},
       ${payrollSubject === "paid"},
       ${session.id},
       now()

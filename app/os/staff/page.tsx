@@ -21,6 +21,26 @@ type WorkStoreOption = StoreOption & {
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
+  commuteAllowanceMonthlyCap?: number | string | null;
+  applySocialInsurance?: boolean | null;
+  applyLaborInsurance?: boolean | null;
+  applyIncomeTax?: boolean | null;
+  applyResidentTax?: boolean | null;
+  payrollHistory?: PayrollHistoryEntry[];
+};
+
+type PayrollHistoryEntry = {
+  validFrom?: string | null;
+  payrollEnabled?: boolean | null;
+  employmentType?: string | null;
+  hourlyWage?: number | string | null;
+  monthlySalary?: number | string | null;
+  commuteAllowancePerWorkday?: number | string | null;
+  commuteAllowanceMonthlyCap?: number | string | null;
+  applySocialInsurance?: boolean | null;
+  applyLaborInsurance?: boolean | null;
+  applyIncomeTax?: boolean | null;
+  applyResidentTax?: boolean | null;
 };
 
 type StaffMember = {
@@ -50,6 +70,7 @@ type StaffMember = {
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
+  commuteAllowanceMonthlyCap?: number | string | null;
   payrollEnabled?: boolean | null;
   stores: StoreOption[];
   visibleStores?: StoreOption[];
@@ -141,6 +162,13 @@ function formatLastSeen(lastSeenAt?: string | null) {
 
 function toDateInputValue(value?: string | null) {
   return value ? String(value).slice(0, 10) : "";
+}
+
+function formatPayrollAmount(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") return "-";
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return "-";
+  return `${numberValue.toLocaleString("ja-JP")}円`;
 }
 
 export default function StaffPage() {
@@ -235,6 +263,7 @@ export default function StaffPage() {
       hourlyWage: String(formData.get("hourlyWage") ?? ""),
       monthlySalary: String(formData.get("monthlySalary") ?? ""),
       commuteAllowancePerWorkday: String(formData.get("commuteAllowancePerWorkday") ?? "0"),
+      commuteAllowanceMonthlyCap: String(formData.get("commuteAllowanceMonthlyCap") ?? ""),
       status: String(formData.get("status") ?? "active"),
       visibleStoreIds: formData.getAll("visibleStoreIds").map((value) => String(value)),
       workStoreIds: formData.getAll("workStoreIds").map((value) => String(value)),
@@ -244,7 +273,13 @@ export default function StaffPage() {
         employmentType: String(formData.get(`employmentType:${store.id}`) ?? "hourly"),
         hourlyWage: String(formData.get(`hourlyWage:${store.id}`) ?? ""),
         monthlySalary: String(formData.get(`monthlySalary:${store.id}`) ?? ""),
-        commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0")
+        commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0"),
+        commuteAllowanceMonthlyCap: String(formData.get(`commuteAllowanceMonthlyCap:${store.id}`) ?? ""),
+        applySocialInsurance: formData.getAll("applySocialInsuranceStoreIds").map((value) => String(value)).includes(store.id),
+        applyLaborInsurance: formData.getAll("applyLaborInsuranceStoreIds").map((value) => String(value)).includes(store.id),
+        applyIncomeTax: formData.getAll("applyIncomeTaxStoreIds").map((value) => String(value)).includes(store.id),
+        applyResidentTax: formData.getAll("applyResidentTaxStoreIds").map((value) => String(value)).includes(store.id),
+        validFrom: String(formData.get(`payrollValidFrom:${store.id}`) ?? "")
       }))
     };
   }
@@ -643,10 +678,12 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         <input name="hourlyWage" type="hidden" value={String(member?.hourlyWage ?? "")} readOnly />
         <input name="monthlySalary" type="hidden" value={String(member?.monthlySalary ?? "")} readOnly />
         <input name="commuteAllowancePerWorkday" type="hidden" value={String(member?.commuteAllowancePerWorkday ?? 0)} readOnly />
+        <input name="commuteAllowanceMonthlyCap" type="hidden" value={String(member?.commuteAllowanceMonthlyCap ?? "")} readOnly />
         <div className="staff-payroll-store-list">
           {stores.length ? stores.map((store) => {
             const setting = workStoreById.get(store.id);
             const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
+            const history = (setting?.payrollHistory ?? []).slice(0, 4);
             return (
               <article className="staff-payroll-store-row" key={store.id}>
                 <label className="staff-payroll-store-toggle">
@@ -682,6 +719,43 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                   <span>交通費 / 勤務日</span>
                   <input name={`commuteAllowancePerWorkday:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowancePerWorkday ?? member?.commuteAllowancePerWorkday ?? 0} />
                 </label>
+                <label>
+                  <span>交通費月上限</span>
+                  <input name={`commuteAllowanceMonthlyCap:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowanceMonthlyCap ?? member?.commuteAllowanceMonthlyCap ?? ""} placeholder="任意" />
+                </label>
+                <label>
+                  <span>適用開始日</span>
+                  <input name={`payrollValidFrom:${store.id}`} type="date" defaultValue={toDateInputValue(history[0]?.validFrom) || toDateInputValue(new Date().toISOString())} />
+                </label>
+                <fieldset className="staff-payroll-deductions">
+                  <span>控除・徴収の適用</span>
+                  <label>
+                    <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
+                    社会保険
+                  </label>
+                  <label>
+                    <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
+                    労働保険
+                  </label>
+                  <label>
+                    <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
+                    源泉所得税
+                  </label>
+                  <label>
+                    <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
+                    住民税
+                  </label>
+                </fieldset>
+                <div className="staff-payroll-history">
+                  <span>給与変更履歴</span>
+                  {history.length ? history.map((record, index) => (
+                    <small key={`${store.id}-${record.validFrom ?? index}`}>
+                      {toDateInputValue(record.validFrom) || "未設定"} / {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
+                    </small>
+                  )) : (
+                    <small>まだ履歴がありません。保存するとこの設定が履歴に残ります。</small>
+                  )}
+                </div>
               </article>
             );
           }) : <p className="empty-state-text">店舗データがありません。</p>}

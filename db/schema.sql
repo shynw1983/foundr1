@@ -149,6 +149,11 @@ create table if not exists employee_work_stores (
   hourly_wage numeric,
   monthly_salary numeric,
   commute_allowance_per_workday numeric not null default 0,
+  commute_allowance_monthly_cap numeric,
+  apply_social_insurance boolean not null default false,
+  apply_labor_insurance boolean not null default false,
+  apply_income_tax boolean not null default false,
+  apply_resident_tax boolean not null default false,
   created_at timestamptz not null default now(),
   unique (employee_id, store_id)
 );
@@ -158,6 +163,11 @@ alter table employee_work_stores add column if not exists employment_type text n
 alter table employee_work_stores add column if not exists hourly_wage numeric;
 alter table employee_work_stores add column if not exists monthly_salary numeric;
 alter table employee_work_stores add column if not exists commute_allowance_per_workday numeric not null default 0;
+alter table employee_work_stores add column if not exists commute_allowance_monthly_cap numeric;
+alter table employee_work_stores add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_stores add column if not exists apply_labor_insurance boolean not null default false;
+alter table employee_work_stores add column if not exists apply_income_tax boolean not null default false;
+alter table employee_work_stores add column if not exists apply_resident_tax boolean not null default false;
 
 insert into employee_work_stores (employee_id, store_id)
 select distinct employee_id, store_id
@@ -188,6 +198,11 @@ create table if not exists timecard_employee_settings (
   hourly_wage numeric(12, 2),
   monthly_salary numeric(12, 2),
   commute_allowance_per_workday numeric(12, 2) not null default 0,
+  commute_allowance_monthly_cap numeric(12, 2),
+  apply_social_insurance boolean not null default false,
+  apply_labor_insurance boolean not null default false,
+  apply_income_tax boolean not null default false,
+  apply_resident_tax boolean not null default false,
   payroll_enabled boolean not null default true,
   valid_from date not null default '1970-01-01',
   valid_to date,
@@ -196,13 +211,53 @@ create table if not exists timecard_employee_settings (
   updated_at timestamptz not null default now()
 );
 
+alter table timecard_employee_settings add column if not exists commute_allowance_monthly_cap numeric(12, 2);
+alter table timecard_employee_settings add column if not exists apply_social_insurance boolean not null default false;
+alter table timecard_employee_settings add column if not exists apply_labor_insurance boolean not null default false;
+alter table timecard_employee_settings add column if not exists apply_income_tax boolean not null default false;
+alter table timecard_employee_settings add column if not exists apply_resident_tax boolean not null default false;
+
+create table if not exists employee_work_store_payroll_history (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  payroll_enabled boolean not null default true,
+  employment_type text not null default 'hourly',
+  hourly_wage numeric(12, 2),
+  monthly_salary numeric(12, 2),
+  commute_allowance_per_workday numeric(12, 2) not null default 0,
+  commute_allowance_monthly_cap numeric(12, 2),
+  apply_social_insurance boolean not null default false,
+  apply_labor_insurance boolean not null default false,
+  apply_income_tax boolean not null default false,
+  apply_resident_tax boolean not null default false,
+  valid_from date not null default current_date,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (employee_id, store_id, valid_from)
+);
+
+alter table employee_work_store_payroll_history add column if not exists commute_allowance_monthly_cap numeric(12, 2);
+alter table employee_work_store_payroll_history add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists apply_labor_insurance boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists apply_income_tax boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists apply_resident_tax boolean not null default false;
+create index if not exists idx_employee_work_store_payroll_history_lookup
+  on employee_work_store_payroll_history(employee_id, store_id, valid_from desc);
+
 update employee_work_stores
 set
   payroll_enabled = coalesce(latest_settings.payroll_enabled, employee_work_stores.payroll_enabled),
   employment_type = coalesce(latest_settings.employment_type, employee_work_stores.employment_type),
   hourly_wage = coalesce(employee_work_stores.hourly_wage, latest_settings.hourly_wage),
   monthly_salary = coalesce(employee_work_stores.monthly_salary, latest_settings.monthly_salary),
-  commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0)
+  commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0),
+  commute_allowance_monthly_cap = coalesce(employee_work_stores.commute_allowance_monthly_cap, latest_settings.commute_allowance_monthly_cap),
+  apply_social_insurance = coalesce(latest_settings.apply_social_insurance, employee_work_stores.apply_social_insurance),
+  apply_labor_insurance = coalesce(latest_settings.apply_labor_insurance, employee_work_stores.apply_labor_insurance),
+  apply_income_tax = coalesce(latest_settings.apply_income_tax, employee_work_stores.apply_income_tax),
+  apply_resident_tax = coalesce(latest_settings.apply_resident_tax, employee_work_stores.apply_resident_tax)
 from (
   select distinct on (employee_id)
     employee_id,
@@ -210,6 +265,11 @@ from (
     hourly_wage,
     monthly_salary,
     commute_allowance_per_workday,
+    commute_allowance_monthly_cap,
+    apply_social_insurance,
+    apply_labor_insurance,
+    apply_income_tax,
+    apply_resident_tax,
     payroll_enabled
   from timecard_employee_settings
   order by employee_id, valid_from desc, created_at desc
