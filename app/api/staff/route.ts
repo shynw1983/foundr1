@@ -49,6 +49,14 @@ type WorkStoreSettingPayload = {
   applyIncomeTax?: boolean;
   applyResidentTax?: boolean;
   validFrom?: string;
+  validFromMonth?: string;
+  wageValidFromMonth?: string;
+  commuteValidFromMonth?: string;
+};
+
+type StorePayrollConfig = {
+  payrollCycleType?: unknown;
+  payrollClosingDay?: unknown;
 };
 
 function normalizeRole(role?: string) {
@@ -89,6 +97,11 @@ function toNullableDate(value: string | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+function normalizePayrollMonth(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}$/.test(text) ? text : getJstMonthLabel();
+}
+
 function toNullableNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const numberValue = Number(value);
@@ -102,6 +115,30 @@ function getJstDateLabel(date = new Date()) {
     month: "2-digit",
     day: "2-digit"
   }).format(date);
+}
+
+function getJstMonthLabel(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit"
+  }).format(date);
+}
+
+function formatDateKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getPayrollMonthStartDate(month: string, store?: StorePayrollConfig) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month) ?? /^(\d{4})-(\d{2})$/.exec(getJstMonthLabel())!;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const cycleType = store?.payrollCycleType === "specified_day" ? "specified_day" : "month_end";
+  const closingDay = Math.max(1, Math.min(30, Math.round(Number(store?.payrollClosingDay ?? 31) || 31)));
+  if (cycleType === "specified_day") {
+    return formatDateKey(new Date(Date.UTC(year, monthIndex - 1, closingDay + 1)));
+  }
+  return `${match[1]}-${match[2]}-01`;
 }
 
 export async function GET() {
@@ -193,9 +230,11 @@ export async function GET() {
             'commuteAllowancePerWorkday', employee_work_store_payroll_history.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', employee_work_store_payroll_history.commute_allowance_monthly_cap,
             'applySocialInsurance', employee_work_store_payroll_history.apply_social_insurance,
-            'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
-            'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
-            'applyResidentTax', employee_work_store_payroll_history.apply_resident_tax
+          'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
+          'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
+            'applyResidentTax', employee_work_store_payroll_history.apply_resident_tax,
+            'wageValidFrom', employee_work_store_payroll_history.wage_valid_from,
+            'commuteValidFrom', employee_work_store_payroll_history.commute_valid_from
           )
           order by employee_work_store_payroll_history.valid_from desc, employee_work_store_payroll_history.created_at desc
         ) as records
@@ -209,7 +248,12 @@ export async function GET() {
   `;
 
   const stores = await sql`
-    select stores.id, stores.name, companies.name as "companyName"
+    select
+      stores.id,
+      stores.name,
+      companies.name as "companyName",
+      coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
+      coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay"
     from stores
     left join companies on companies.id = stores.company_id
     where stores.status = 'active'
@@ -355,15 +399,28 @@ export async function POST(request: Request) {
     `;
   }
 
+  const payrollStoreRows = await sql`
+    select
+      id::text,
+      coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
+      coalesce(payroll_closing_day, 31)::int as "payrollClosingDay"
+    from stores
+    where id::text = any(${workStoreIds.length ? workStoreIds : ["__none__"]})
+  `;
+  const payrollStoreById = new Map(payrollStoreRows.map((store) => [String(store.id), store]));
+
   for (const storeId of workStoreIds) {
     const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
+    const payrollStore = payrollStoreById.get(storeId);
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
     const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
     const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
-    const storeValidFrom = toNullableDate(storeSetting?.validFrom) ?? getJstDateLabel();
+    const storeWageValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
+    const storeCommuteValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.commuteValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
+    const storeValidFrom = storeWageValidFrom < storeCommuteValidFrom ? storeWageValidFrom : storeCommuteValidFrom;
     await sql`
       insert into employee_work_stores (
         employee_id,
@@ -409,6 +466,8 @@ export async function POST(request: Request) {
         apply_labor_insurance,
         apply_income_tax,
         apply_resident_tax,
+        wage_valid_from,
+        commute_valid_from,
         valid_from,
         updated_by,
         updated_at
@@ -426,11 +485,13 @@ export async function POST(request: Request) {
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${Boolean(storeSetting?.applyIncomeTax)},
         ${Boolean(storeSetting?.applyResidentTax)},
+        ${storeWageValidFrom},
+        ${storeCommuteValidFrom},
         ${storeValidFrom},
         ${session.id},
         now()
       )
-      on conflict (employee_id, store_id, valid_from) do update set
+      on conflict (employee_id, store_id, wage_valid_from, commute_valid_from) do update set
         payroll_enabled = excluded.payroll_enabled,
         employment_type = excluded.employment_type,
         hourly_wage = excluded.hourly_wage,
@@ -441,6 +502,7 @@ export async function POST(request: Request) {
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
         apply_resident_tax = excluded.apply_resident_tax,
+        valid_from = excluded.valid_from,
         updated_by = excluded.updated_by,
         updated_at = now()
     `;

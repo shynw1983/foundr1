@@ -13,6 +13,8 @@ type StoreOption = {
   id: string;
   name: string;
   companyName?: string | null;
+  payrollCycleType?: string | null;
+  payrollClosingDay?: number | null;
 };
 
 type WorkStoreOption = StoreOption & {
@@ -41,6 +43,8 @@ type PayrollHistoryEntry = {
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
   applyResidentTax?: boolean | null;
+  wageValidFrom?: string | null;
+  commuteValidFrom?: string | null;
 };
 
 type StaffMember = {
@@ -171,6 +175,26 @@ function formatPayrollAmount(value?: number | string | null) {
   return `${numberValue.toLocaleString("ja-JP")}円`;
 }
 
+function formatPayrollMonth(value?: string | null, store?: StoreOption) {
+  if (!value) return "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return "";
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const closingDay = Math.max(1, Math.min(30, Math.round(Number(store?.payrollClosingDay ?? 31) || 31)));
+  const date = new Date(Date.UTC(year, monthIndex, 1));
+  if (store?.payrollCycleType === "specified_day" && day > closingDay) {
+    date.setUTCMonth(date.getUTCMonth() + 1);
+  }
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatPayrollMonthLabel(value?: string | null, store?: StoreOption) {
+  const month = formatPayrollMonth(value, store);
+  return month ? `${month.replace("-", "/")} 月度〜` : "未設定";
+}
+
 export default function StaffPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -279,7 +303,8 @@ export default function StaffPage() {
         applyLaborInsurance: formData.getAll("applyLaborInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyIncomeTax: formData.getAll("applyIncomeTaxStoreIds").map((value) => String(value)).includes(store.id),
         applyResidentTax: formData.getAll("applyResidentTaxStoreIds").map((value) => String(value)).includes(store.id),
-        validFrom: String(formData.get(`payrollValidFrom:${store.id}`) ?? "")
+        wageValidFromMonth: String(formData.get(`wageValidFromMonth:${store.id}`) ?? ""),
+        commuteValidFromMonth: String(formData.get(`commuteValidFromMonth:${store.id}`) ?? "")
       }))
     };
   }
@@ -724,8 +749,12 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                   <input name={`commuteAllowanceMonthlyCap:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowanceMonthlyCap ?? member?.commuteAllowanceMonthlyCap ?? ""} placeholder="任意" />
                 </label>
                 <label>
-                  <span>適用開始日</span>
-                  <input name={`payrollValidFrom:${store.id}`} type="date" defaultValue={toDateInputValue(history[0]?.validFrom) || toDateInputValue(new Date().toISOString())} />
+                  <span>賃金適用月度</span>
+                  <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.wageValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
+                </label>
+                <label>
+                  <span>交通費適用月度</span>
+                  <input name={`commuteValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.commuteValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
                 </label>
                 <fieldset className="staff-payroll-deductions">
                   <span>控除・徴収の適用</span>
@@ -750,7 +779,7 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                   <span>給与変更履歴</span>
                   {history.length ? history.map((record, index) => (
                     <small key={`${store.id}-${record.validFrom ?? index}`}>
-                      {toDateInputValue(record.validFrom) || "未設定"} / {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
+                      賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
                     </small>
                   )) : (
                     <small>まだ履歴がありません。保存するとこの設定が履歴に残ります。</small>

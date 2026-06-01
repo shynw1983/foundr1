@@ -108,7 +108,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
             'monthlySalary', payroll_settings.monthly_salary,
             'commuteAllowancePerWorkday', payroll_settings.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', payroll_settings.commute_allowance_monthly_cap,
-            'validFrom', payroll_settings.valid_from
+            'validFrom', payroll_settings.valid_from,
+            'wageValidFrom', payroll_settings.wage_valid_from,
+            'commuteValidFrom', payroll_settings.commute_valid_from
           )
           order by stores.name, payroll_settings.valid_from desc
         ) filter (where stores.id is not null and payroll_settings.store_id is not null),
@@ -127,7 +129,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_stores.monthly_salary,
         employee_work_stores.commute_allowance_per_workday,
         employee_work_stores.commute_allowance_monthly_cap,
-        '1970-01-01'::date as valid_from
+        '1970-01-01'::date as valid_from,
+        '1970-01-01'::date as wage_valid_from,
+        '1970-01-01'::date as commute_valid_from
       union all
       select
         employee_work_store_payroll_history.store_id,
@@ -137,7 +141,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_store_payroll_history.monthly_salary,
         employee_work_store_payroll_history.commute_allowance_per_workday,
         employee_work_store_payroll_history.commute_allowance_monthly_cap,
-        employee_work_store_payroll_history.valid_from
+        employee_work_store_payroll_history.valid_from,
+        employee_work_store_payroll_history.wage_valid_from,
+        employee_work_store_payroll_history.commute_valid_from
       from employee_work_store_payroll_history
       where employee_work_store_payroll_history.employee_id = employee_work_stores.employee_id
         and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
@@ -166,7 +172,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       monthlySalary: toMoneyNumber(setting.monthlySalary),
       commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0,
       commuteAllowanceMonthlyCap: toMoneyNumber(setting.commuteAllowanceMonthlyCap),
-      validFrom: String(setting.validFrom ?? "1970-01-01").slice(0, 10)
+      validFrom: String(setting.validFrom ?? "1970-01-01").slice(0, 10),
+      wageValidFrom: String(setting.wageValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10),
+      commuteValidFrom: String(setting.commuteValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10)
     }))
   })) satisfies TimecardEmployee[];
 }

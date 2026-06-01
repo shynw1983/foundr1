@@ -32,6 +32,8 @@ export type TimecardStorePayrollSetting = {
   commuteAllowancePerWorkday: number;
   commuteAllowanceMonthlyCap: number | null;
   validFrom: string;
+  wageValidFrom: string;
+  commuteValidFrom: string;
 };
 
 export type TimecardDailySummary = {
@@ -152,8 +154,15 @@ function uniqueStrings(values: string[]) {
 
 function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
   const settings = (employee?.storePayrollSettings ?? [])
-    .filter((setting) => setting.storeId === storeId && setting.validFrom <= workDate)
-    .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+    .filter((setting) => setting.storeId === storeId && setting.wageValidFrom <= workDate)
+    .sort((a, b) => b.wageValidFrom.localeCompare(a.wageValidFrom));
+  return settings[0] ?? employee?.storePayrollSettings.find((setting) => setting.storeId === storeId);
+}
+
+function getEffectiveCommuteSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
+  const settings = (employee?.storePayrollSettings ?? [])
+    .filter((setting) => setting.storeId === storeId && setting.commuteValidFrom <= workDate)
+    .sort((a, b) => b.commuteValidFrom.localeCompare(a.commuteValidFrom));
   return settings[0] ?? employee?.storePayrollSettings.find((setting) => setting.storeId === storeId);
 }
 
@@ -298,13 +307,18 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
       if (!setting.payrollEnabled) continue;
       const storeDays = (daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [])
         .filter((day) => getEffectivePayrollSetting(employee, day.storeId, day.workDate) === setting);
+      const commuteDays = (daysByEmployeeAndStore.get(`${row.employeeId}:${setting.storeId}`) ?? [])
+        .filter((day) => getEffectiveCommuteSetting(employee, day.storeId, day.workDate) === setting);
       const workDays = storeDays.filter((day) => day.workMinutes > 0).length;
       const workMinutes = storeDays.reduce((sum, day) => sum + day.workMinutes, 0);
-      if (workDays === 0 && workMinutes === 0) continue;
-      basePay += setting.employmentType === "monthly"
-        ? Math.ceil(setting.monthlySalary ?? 0)
-        : Math.ceil((workMinutes / 60) * (setting.hourlyWage ?? 0));
-      const uncappedCommuteAllowance = Math.ceil(workDays * setting.commuteAllowancePerWorkday);
+      const commuteWorkDays = commuteDays.filter((day) => day.workMinutes > 0).length;
+      if (workDays > 0 || workMinutes > 0) {
+        basePay += setting.employmentType === "monthly"
+          ? Math.ceil(setting.monthlySalary ?? 0)
+          : Math.ceil((workMinutes / 60) * (setting.hourlyWage ?? 0));
+      }
+      if (commuteWorkDays === 0) continue;
+      const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
       commuteAllowance += setting.commuteAllowanceMonthlyCap === null
         ? uncappedCommuteAllowance
         : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));

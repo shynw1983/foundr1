@@ -231,11 +231,12 @@ create table if not exists employee_work_store_payroll_history (
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
+  wage_valid_from date not null default '1970-01-01',
+  commute_valid_from date not null default '1970-01-01',
   valid_from date not null default current_date,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (employee_id, store_id, valid_from)
+  updated_at timestamptz not null default now()
 );
 
 alter table employee_work_store_payroll_history add column if not exists commute_allowance_monthly_cap numeric(12, 2);
@@ -243,8 +244,25 @@ alter table employee_work_store_payroll_history add column if not exists apply_s
 alter table employee_work_store_payroll_history add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_income_tax boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_resident_tax boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists wage_valid_from date not null default '1970-01-01';
+alter table employee_work_store_payroll_history add column if not exists commute_valid_from date not null default '1970-01-01';
+update employee_work_store_payroll_history
+set
+  wage_valid_from = valid_from,
+  commute_valid_from = valid_from
+where wage_valid_from = '1970-01-01'
+  and commute_valid_from = '1970-01-01'
+  and valid_from <> '1970-01-01';
 create index if not exists idx_employee_work_store_payroll_history_lookup
   on employee_work_store_payroll_history(employee_id, store_id, valid_from desc);
+create index if not exists idx_employee_work_store_payroll_history_wage_lookup
+  on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from desc);
+create index if not exists idx_employee_work_store_payroll_history_commute_lookup
+  on employee_work_store_payroll_history(employee_id, store_id, commute_valid_from desc);
+alter table employee_work_store_payroll_history
+  drop constraint if exists employee_work_store_payroll_history_employee_id_store_id_valid_from_key;
+create unique index if not exists employee_work_store_payroll_history_effective_idx
+  on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from, commute_valid_from);
 
 update employee_work_stores
 set
