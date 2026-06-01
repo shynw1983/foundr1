@@ -25,6 +25,20 @@ type TimecardEmployee = {
   role: string;
   status: string;
   storeIds: string[];
+  storePayrollSettings?: TimecardStorePayrollSetting[];
+};
+
+type TimecardStorePayrollSetting = {
+  storeId: string;
+  payrollEnabled: boolean;
+  employmentType: "hourly" | "monthly";
+  hourlyWage: number | null;
+  monthlySalary: number | null;
+  commuteAllowancePerWorkday: number;
+  commuteAllowanceMonthlyCap: number | null;
+  validFrom: string;
+  wageValidFrom: string;
+  commuteValidFrom: string;
 };
 
 type ShiftEntry = {
@@ -84,6 +98,18 @@ type PayrollTotals = {
   totalPay: number;
 };
 
+type PayrollConfirmation = {
+  id: string;
+  storeId: string;
+  payrollMonth: string;
+  periodStart: string;
+  periodEnd: string;
+  confirmedAt: string;
+  confirmedByName: string | null;
+  payrollRows: PayrollRow[];
+  payrollTotals: PayrollTotals;
+};
+
 type TimecardPayload = {
   month: string;
   canViewPayroll: boolean;
@@ -97,6 +123,7 @@ type TimecardPayload = {
   employees: TimecardEmployee[];
   shifts: ShiftEntry[];
   dailySummaries: DailySummary[];
+  payrollConfirmation: PayrollConfirmation | null;
   payrollRows: PayrollRow[];
   payrollTotals: PayrollTotals;
 };
@@ -168,6 +195,17 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function MetricCard({ label, value, note }: { label: string; value: string; note: string }) {
@@ -349,6 +387,36 @@ function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | u
   return { className: " is-complete", label: "OK" } satisfies ActualStatus;
 }
 
+function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
+  const settings = (employee?.storePayrollSettings ?? [])
+    .filter((setting) => setting.storeId === storeId && setting.wageValidFrom <= workDate)
+    .sort((a, b) => b.wageValidFrom.localeCompare(a.wageValidFrom));
+  return settings[0] ?? employee?.storePayrollSettings?.find((setting) => setting.storeId === storeId);
+}
+
+function getShiftWorkMinutes(shift: ShiftEntry | undefined) {
+  if (!shift?.scheduledStart || !shift.scheduledEnd) return 0;
+  const start = timeToMinutes(shift.scheduledStart);
+  const endBase = timeToMinutes(shift.scheduledEnd);
+  const end = endBase <= start ? endBase + 1440 : endBase;
+  return Math.max(0, end - start - shift.breakMinutes);
+}
+
+function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]) {
+  let hourlyCost = 0;
+  let monthlyCost = 0;
+  for (const shift of shifts) {
+    const setting = getEffectivePayrollSetting(employee, storeId, shift.workDate);
+    if (!setting?.payrollEnabled) continue;
+    if (setting.employmentType === "monthly") {
+      monthlyCost = Math.max(monthlyCost, Math.ceil(setting.monthlySalary ?? 0));
+      continue;
+    }
+    hourlyCost += Math.ceil((getShiftWorkMinutes(shift) / 60) * (setting.hourlyWage ?? 0));
+  }
+  return hourlyCost + monthlyCost;
+}
+
 function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shifts: ShiftEntry[]) {
   const day = getBusinessDayForDate(businessHours, workDate);
   if (day.closed) {
@@ -429,6 +497,7 @@ export function TimecardPage({
   const [actualDraft, setActualDraft] = useState<ActualDraft | null>(null);
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
+  const [isConfirmingPayroll, setIsConfirmingPayroll] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
@@ -485,9 +554,12 @@ export function TimecardPage({
     () => canViewPayroll ? navItems : navItems.filter((item) => item.href !== "/os/timecard/payroll"),
     [canViewPayroll]
   );
+  const payrollConfirmation = data?.payrollConfirmation ?? null;
+  const displayedPayrollRows = payrollConfirmation?.payrollRows ?? data?.payrollRows ?? [];
+  const displayedPayrollTotals = payrollConfirmation?.payrollTotals ?? totals;
   const selectedPayrollRow = useMemo(
-    () => canViewPayroll ? data?.payrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? data?.payrollRows[0] ?? null : null,
-    [canViewPayroll, data, selectedPayrollEmployeeId]
+    () => canViewPayroll ? displayedPayrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? displayedPayrollRows[0] ?? null : null,
+    [canViewPayroll, displayedPayrollRows, selectedPayrollEmployeeId]
   );
   const selectedPayrollDays = useMemo(
     () => data?.dailySummaries.filter((day) => day.employeeId === selectedPayrollRow?.employeeId) ?? [],
@@ -520,6 +592,18 @@ export function TimecardPage({
     }
     return map;
   }, [data?.shifts]);
+  const scheduledLaborCostByEmployee = useMemo(() => {
+    const map = new Map<string, number>();
+    const employeesById = new Map((data?.employees ?? []).map((employee) => [employee.id, employee]));
+    for (const employee of scheduleEmployees) {
+      const employeeShifts = (data?.shifts ?? []).filter((shift) => shift.employeeId === employee.id && shift.storeId === selectedStoreId);
+      map.set(employee.id, estimateScheduledLaborCost(employeesById.get(employee.id) ?? employee, selectedStoreId, employeeShifts));
+    }
+    return map;
+  }, [data?.employees, data?.shifts, scheduleEmployees, selectedStoreId]);
+  const actualLaborCostByEmployee = useMemo(() => {
+    return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, row.basePay]));
+  }, [data?.payrollRows]);
   const actualByCell = useMemo(() => {
     const map = new Map<string, DailySummary>();
     for (const day of data?.dailySummaries ?? []) {
@@ -832,6 +916,28 @@ export function TimecardPage({
     setIsSavingShift(false);
   }
 
+  async function confirmPayroll() {
+    if (!selectedStoreId || !window.confirm("この月の給与を確定しますか？確定時点の給与計算結果を保存します。")) return;
+
+    setIsConfirmingPayroll(true);
+    const response = await fetch("/api/timecard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "confirm_payroll",
+        storeId: selectedStoreId,
+        month
+      })
+    });
+    if (response.ok) {
+      await loadTimecard(month, selectedStoreId);
+    } else {
+      const body = await response.json().catch(() => ({}));
+      window.alert(body.error ?? "給与を確定できませんでした。");
+    }
+    setIsConfirmingPayroll(false);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -877,12 +983,12 @@ export function TimecardPage({
         </header>
 
         <section className="metric-grid">
-          <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
-          <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
-          {canViewPayroll ? (
-            <>
-              <MetricCard label="人件費" value={formatMoney(totals.laborCost)} note={`交通費 ${formatMoney(totals.commuteAllowance)}`} />
-              <MetricCard label="差引支給額" value={formatMoney(totals.totalPay)} note="控除は次フェーズで追加" />
+              <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
+              <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
+              {canViewPayroll ? (
+                <>
+              <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost)} note={`交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
+              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={payrollConfirmation ? "確定済み" : "未確定の概算"} />
             </>
           ) : null}
         </section>
@@ -924,7 +1030,7 @@ export function TimecardPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {data?.payrollRows.length ? data.payrollRows.slice(0, 8).map((row) => (
+                  {displayedPayrollRows.length ? displayedPayrollRows.slice(0, 8).map((row) => (
                     <tr key={row.employeeId}>
                       <td>
                         <strong>{row.employeeName}</strong>
@@ -1081,6 +1187,7 @@ export function TimecardPage({
                             </th>
                           );
                         })}
+                        <th className="shift-cost-head">概算人件費</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1114,10 +1221,11 @@ export function TimecardPage({
                               </td>
                             );
                           })}
+                          <td className="shift-cost-cell">{formatMoney(scheduledLaborCostByEmployee.get(employee.id) ?? 0)}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={monthDays.length + 1}>この店舗で勤務する従業員がまだ設定されていません。</td>
+                          <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
                     </tbody>
@@ -1170,6 +1278,7 @@ export function TimecardPage({
                             <small>{day.weekdayLabel}</small>
                           </th>
                         ))}
+                        <th className="shift-cost-head">概算人件費</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1209,10 +1318,11 @@ export function TimecardPage({
                               </td>
                             );
                           })}
+                          <td className="shift-cost-cell">{formatMoney(actualLaborCostByEmployee.get(employee.id) ?? 0)}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={monthDays.length + 1}>この店舗で勤務する従業員がまだ設定されていません。</td>
+                          <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
                     </tbody>
@@ -1223,6 +1333,19 @@ export function TimecardPage({
           </>
         ) : canViewPayroll ? (
           <>
+            <section className={`payroll-confirmation-banner${payrollConfirmation ? " is-confirmed" : ""}`}>
+              <div>
+                <strong>{payrollConfirmation ? "本月給与は確定済みです" : "本月給与はまだ確定していません"}</strong>
+                <span>
+                  {payrollConfirmation
+                    ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
+                    : "排班と実勤務時間を確認・修正したあと、給与を確定してください。"}
+                </span>
+              </div>
+              <button className="primary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
+                {isConfirmingPayroll ? "確定中" : payrollConfirmation ? "再確定" : "給与を確定"}
+              </button>
+            </section>
             <section className="timecard-subtabs" aria-label="給与メニュー">
               <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>
                 月別給与
@@ -1255,7 +1378,7 @@ export function TimecardPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {data?.payrollRows.length ? data.payrollRows.map((row) => (
+                  {displayedPayrollRows.length ? displayedPayrollRows.map((row) => (
                     <tr key={row.employeeId}>
                       <td>
                         <strong>{row.employeeName}</strong>
@@ -1288,7 +1411,7 @@ export function TimecardPage({
                 </div>
                 <div className="timecard-toolbar is-left">
                   <select value={selectedPayrollRow?.employeeId ?? ""} onChange={(event) => setSelectedPayrollEmployeeId(event.target.value)}>
-                    {data?.payrollRows.map((row) => (
+                    {displayedPayrollRows.map((row) => (
                       <option value={row.employeeId} key={row.employeeId}>{row.employeeName}</option>
                     ))}
                   </select>

@@ -13,6 +13,7 @@ import {
 type TimecardPostBody = {
   action?: string;
   storeId?: string;
+  month?: string;
   punchType?: string;
   note?: string;
   employeeId?: string;
@@ -30,6 +31,18 @@ type TimecardPostBody = {
     breakMinutes?: number | string;
     note?: string;
   }>;
+};
+
+type PayrollConfirmationRow = {
+  id: string;
+  storeId: string;
+  payrollMonth: string;
+  periodStart: string;
+  periodEnd: string;
+  confirmedAt: string;
+  confirmedByName: string | null;
+  payrollRows: unknown;
+  payrollTotals: unknown;
 };
 
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
@@ -232,6 +245,39 @@ function getPayrollDateRange(month: string, store?: { payrollCycleType?: unknown
   };
 }
 
+async function getPayrollConfirmation(storeId: string, month: string) {
+  const rows = await sql`
+    select
+      timecard_payroll_confirmations.id::text,
+      timecard_payroll_confirmations.store_id::text as "storeId",
+      timecard_payroll_confirmations.payroll_month as "payrollMonth",
+      to_char(timecard_payroll_confirmations.period_start, 'YYYY-MM-DD') as "periodStart",
+      to_char(timecard_payroll_confirmations.period_end, 'YYYY-MM-DD') as "periodEnd",
+      timecard_payroll_confirmations.confirmed_at as "confirmedAt",
+      employees.name as "confirmedByName",
+      timecard_payroll_confirmations.payroll_rows as "payrollRows",
+      timecard_payroll_confirmations.payroll_totals as "payrollTotals"
+    from timecard_payroll_confirmations
+    left join employees on employees.id = timecard_payroll_confirmations.confirmed_by
+    where timecard_payroll_confirmations.store_id::text = ${storeId}
+      and timecard_payroll_confirmations.payroll_month = ${month}
+    limit 1
+  `;
+  const row = rows[0] as PayrollConfirmationRow | undefined;
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    storeId: String(row.storeId),
+    payrollMonth: String(row.payrollMonth),
+    periodStart: String(row.periodStart),
+    periodEnd: String(row.periodEnd),
+    confirmedAt: new Date(String(row.confirmedAt)).toISOString(),
+    confirmedByName: row.confirmedByName ? String(row.confirmedByName) : null,
+    payrollRows: Array.isArray(row.payrollRows) ? row.payrollRows : [],
+    payrollTotals: row.payrollTotals && typeof row.payrollTotals === "object" ? row.payrollTotals : emptyPayrollTotals
+  };
+}
+
 function isValidWorkDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -318,6 +364,9 @@ export async function GET(request: Request) {
     workDateEndExclusive: endDate
   });
   const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries) : { rows: [], totals: emptyPayrollTotals };
+  const payrollConfirmation = canViewPayroll && selectedStoreId
+    ? await getPayrollConfirmation(selectedStoreId, month)
+    : null;
   const responseEmployees = canViewPayroll
     ? employees
     : employees.map((employee) => ({
@@ -412,6 +461,7 @@ export async function GET(request: Request) {
     latestPunch,
     latestPunches,
     dailySummaries,
+    payrollConfirmation,
     payrollRows: payroll.rows,
     payrollTotals: payroll.totals
   });
@@ -431,6 +481,118 @@ export async function POST(request: Request) {
 
   if (!await canAccessStore(session, storeId)) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
+  }
+
+  if (action === "confirm_payroll") {
+    if (!timecardPayrollViewRoles.has(session.role)) {
+      return Response.json({ error: "給与を確定する権限がありません。" }, { status: 403 });
+    }
+
+    const monthParam = String(body.month ?? getJstMonthLabel());
+    const month = /^(\d{4})-(\d{2})$/.test(monthParam) ? monthParam : getJstMonthLabel();
+    const storeRows = await sql`
+      select
+        id::text,
+        coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
+        coalesce(payroll_closing_day, 31)::int as "payrollClosingDay"
+      from stores
+      where id::text = ${storeId}
+      limit 1
+    `;
+    const store = storeRows[0] ?? null;
+    if (!store) {
+      return Response.json({ error: "店舗が見つかりません。" }, { status: 404 });
+    }
+
+    const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, store);
+    const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
+    const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
+    const scope = await getSessionStoreScope(session);
+    const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+    const punches = await sql`
+      select
+        timecard_punches.id::text,
+        timecard_punches.employee_id::text as "employeeId",
+        employees.name as "employeeName",
+        timecard_punches.store_id::text as "storeId",
+        stores.name as "storeName",
+        timecard_punches.punch_type as "punchType",
+        timecard_punches.punched_at as "punchedAt",
+        timecard_punches.source,
+        timecard_punches.note
+      from timecard_punches
+      join employees on employees.id = timecard_punches.employee_id
+      join stores on stores.id = timecard_punches.store_id
+      where timecard_punches.store_id::text = ${storeId}
+        and timecard_punches.punched_at >= ${punchWindowStartUtc.toISOString()}
+        and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
+      order by timecard_punches.punched_at desc
+    `;
+    const typedPunches = punches.map((row) => {
+      const punchType = String(row.punchType);
+      return {
+        id: String(row.id),
+        employeeId: String(row.employeeId),
+        employeeName: String(row.employeeName),
+        storeId: String(row.storeId),
+        storeName: String(row.storeName),
+        punchType: isTimecardPunchType(punchType) ? punchType : "clock_in",
+        punchedAt: new Date(String(row.punchedAt)).toISOString(),
+        source: row.source ? String(row.source) : null,
+        note: row.note ? String(row.note) : null
+      };
+    }) satisfies TimecardPunch[];
+    const dailySummaries = summarizeTimecardDays(typedPunches, {
+      workDateStart: startDate,
+      workDateEndExclusive: endDate
+    });
+    const payroll = summarizePayroll(employees, dailySummaries);
+
+    const upserted = await sql`
+      insert into timecard_payroll_confirmations (
+        store_id,
+        payroll_month,
+        period_start,
+        period_end,
+        payroll_rows,
+        payroll_totals,
+        confirmed_by,
+        confirmed_at,
+        updated_at
+      )
+      values (
+        ${storeId},
+        ${month},
+        ${startDate}::date,
+        ${endDate}::date,
+        ${JSON.stringify(payroll.rows)}::jsonb,
+        ${JSON.stringify(payroll.totals)}::jsonb,
+        ${session.id},
+        now(),
+        now()
+      )
+      on conflict (store_id, payroll_month)
+      do update set
+        period_start = excluded.period_start,
+        period_end = excluded.period_end,
+        payroll_rows = excluded.payroll_rows,
+        payroll_totals = excluded.payroll_totals,
+        confirmed_by = excluded.confirmed_by,
+        confirmed_at = now(),
+        updated_at = now()
+      returning id::text
+    `;
+
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.payroll.confirmed",
+      targetType: "timecard_payroll_confirmation",
+      targetId: String(upserted[0]?.id ?? ""),
+      metadata: { storeId, month, rowCount: payroll.rows.length, totals: payroll.totals },
+      request
+    });
+
+    return Response.json({ ok: true, id: upserted[0]?.id ?? null });
   }
 
   if (action === "save_shift" || action === "delete_shift" || action === "save_shifts_bulk" || action === "delete_shifts_bulk") {

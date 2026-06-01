@@ -329,6 +329,23 @@ create table if not exists timecard_shifts (
   unique (employee_id, store_id, work_date)
 );
 
+create table if not exists timecard_payroll_confirmations (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  payroll_month text not null,
+  period_start date not null,
+  period_end date not null,
+  payroll_rows jsonb not null default '[]'::jsonb,
+  payroll_totals jsonb not null default '{}'::jsonb,
+  confirmed_by uuid references employees(id) on delete set null,
+  confirmed_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, payroll_month)
+);
+
+create index if not exists idx_timecard_payroll_confirmations_store_month
+  on timecard_payroll_confirmations(store_id, payroll_month);
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
