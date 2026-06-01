@@ -33,6 +33,7 @@ type WorkStoreOption = StoreOption & {
 };
 
 type PayrollHistoryEntry = {
+  id?: string | null;
   validFrom?: string | null;
   payrollEnabled?: boolean | null;
   employmentType?: string | null;
@@ -243,9 +244,9 @@ export default function StaffPage() {
     const response = await fetch("/api/staff");
     if (response.status === 403) {
       setDataSource("forbidden");
-      return;
+      return [];
     }
-    if (!response.ok) return;
+    if (!response.ok) return [];
 
     const body = await response.json() as {
       employees?: StaffMember[];
@@ -256,6 +257,7 @@ export default function StaffPage() {
     setStores(body.stores ?? []);
     setCurrentUserId(body.currentUserId ?? "");
     setDataSource("neon");
+    return body.employees ?? [];
   }
 
   useEffect(() => {
@@ -366,6 +368,14 @@ export default function StaffPage() {
 
     await loadStaff();
     showNotice("スタッフを削除しました。");
+  }
+
+  async function reloadStaffKeepingEdit(employeeId: string) {
+    const employees = await loadStaff();
+    setEditingStaff((current) => {
+      if (!current || current.id !== employeeId) return current;
+      return employees.find((member) => member.id === employeeId) ?? current;
+    });
   }
 
   return (
@@ -491,7 +501,7 @@ export default function StaffPage() {
               <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、店舗権限を設定" />
               {error ? <div className="login-error">{error}</div> : null}
               <form className="management-form staff-form" onSubmit={createStaff}>
-                <StaffFormFields stores={stores} />
+                <StaffFormFields stores={stores} onNotice={showNotice} onError={setError} />
                 <button className="primary-button" type="submit">追加</button>
               </form>
             </section>
@@ -511,7 +521,14 @@ export default function StaffPage() {
             </div>
             {error ? <div className="login-error">{error}</div> : null}
             <form className="management-form staff-form" onSubmit={updateStaff}>
-              <StaffFormFields member={editingStaff} stores={stores} currentUserId={currentUserId} />
+              <StaffFormFields
+                member={editingStaff}
+                stores={stores}
+                currentUserId={currentUserId}
+                onHistoryChanged={reloadStaffKeepingEdit}
+                onNotice={showNotice}
+                onError={setError}
+              />
               <button className="primary-button" type="submit">保存</button>
             </form>
           </section>
@@ -538,7 +555,21 @@ function getMemberStores(member: StaffMember) {
   return Array.from(storeMap.values());
 }
 
-function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMember; stores: StoreOption[]; currentUserId?: string }) {
+function StaffFormFields({
+  member,
+  stores,
+  currentUserId,
+  onHistoryChanged,
+  onNotice,
+  onError
+}: {
+  member?: StaffMember;
+  stores: StoreOption[];
+  currentUserId?: string;
+  onHistoryChanged?: (employeeId: string) => Promise<void> | void;
+  onNotice?: (message: string) => void;
+  onError?: (message: string) => void;
+}) {
   const selectedVisibleStoreIds = new Set(member ? getVisibleStores(member).map((store) => store.id) : []);
   const selectedWorkStoreIds = new Set(member ? getWorkStores(member).map((store) => store.id) : []);
   const workStoreById = new Map((member ? getWorkStores(member) : []).map((store) => [store.id, store]));
@@ -584,6 +615,54 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
     if (openIdInput) openIdInput.value = body.openId;
     if (userIdInput) userIdInput.value = body.userId ?? "";
     setLarkStatus(body.testDelivered ? "Lark 連携を確認しました。" : `open_id を取得しました。${body.testError ? ` テスト送信: ${body.testError}` : ""}`);
+  }
+
+  function setNamedInputValue(form: HTMLFormElement, name: string, value: number | string | null | undefined) {
+    const input = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
+    if (input) input.value = value === null || value === undefined ? "" : String(value);
+  }
+
+  function setCheckedValue(form: HTMLFormElement, name: string, value: string, checked: boolean) {
+    const inputs = Array.from(form.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`));
+    const input = inputs.find((candidate) => candidate.value === value);
+    if (input) input.checked = checked;
+  }
+
+  function applyPayrollHistory(event: MouseEvent<HTMLButtonElement>, store: StoreOption, record: PayrollHistoryEntry) {
+    const form = event.currentTarget.form;
+    if (!form) return;
+
+    setCheckedValue(form, "workStoreIds", store.id, true);
+    setCheckedValue(form, "payrollEnabledStoreIds", store.id, record.payrollEnabled !== false);
+    setNamedInputValue(form, `employmentType:${store.id}`, record.employmentType === "monthly" ? "monthly" : "hourly");
+    setNamedInputValue(form, `hourlyWage:${store.id}`, record.hourlyWage ?? "");
+    setNamedInputValue(form, `monthlySalary:${store.id}`, record.monthlySalary ?? "");
+    setNamedInputValue(form, `commuteAllowancePerWorkday:${store.id}`, record.commuteAllowancePerWorkday ?? 0);
+    setNamedInputValue(form, `commuteAllowanceMonthlyCap:${store.id}`, record.commuteAllowanceMonthlyCap ?? "");
+    setNamedInputValue(form, `wageValidFromMonth:${store.id}`, formatPayrollMonth(record.wageValidFrom ?? record.validFrom, store));
+    setNamedInputValue(form, `commuteValidFromMonth:${store.id}`, formatPayrollMonth(record.commuteValidFrom ?? record.validFrom, store));
+    setCheckedValue(form, "applySocialInsuranceStoreIds", store.id, Boolean(record.applySocialInsurance));
+    setCheckedValue(form, "applyEmploymentInsuranceStoreIds", store.id, Boolean(record.applyEmploymentInsurance));
+    setCheckedValue(form, "applyLaborInsuranceStoreIds", store.id, Boolean(record.applyLaborInsurance));
+    setCheckedValue(form, "applyIncomeTaxStoreIds", store.id, Boolean(record.applyIncomeTax));
+    setCheckedValue(form, "applyResidentTaxStoreIds", store.id, Boolean(record.applyResidentTax));
+    onNotice?.("給与変更履歴を入力欄に読み込みました。保存すると反映されます。");
+  }
+
+  async function deletePayrollHistory(record: PayrollHistoryEntry) {
+    if (!member || !record.id) return;
+    if (!window.confirm("この給与変更履歴を削除しますか？")) return;
+
+    onError?.("");
+    const response = await fetch(`/api/staff/${member.id}/payroll-history/${record.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      onError?.(body.error ?? "給与変更履歴を削除できませんでした。");
+      return;
+    }
+
+    await onHistoryChanged?.(member.id);
+    onNotice?.("給与変更履歴を削除しました。");
   }
 
   return (
@@ -785,9 +864,19 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                 <div className="staff-payroll-history">
                   <span>給与変更履歴</span>
                   {history.length ? history.map((record, index) => (
-                    <small key={`${store.id}-${record.validFrom ?? index}`}>
-                      賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
-                    </small>
+                    <div className="staff-payroll-history-row" key={`${store.id}-${record.id ?? record.validFrom ?? index}`}>
+                      <small>
+                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
+                      </small>
+                      <span className="staff-payroll-history-actions">
+                        <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>
+                          編集
+                        </button>
+                        <button className="danger-button" type="button" disabled={!record.id} onClick={() => void deletePayrollHistory(record)}>
+                          削除
+                        </button>
+                      </span>
+                    </div>
                   )) : (
                     <small>まだ履歴がありません。保存するとこの設定が履歴に残ります。</small>
                   )}

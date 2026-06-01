@@ -224,6 +224,7 @@ export async function GET() {
       left join lateral (
         select json_agg(
           json_build_object(
+            'id', employee_work_store_payroll_history.id::text,
             'validFrom', employee_work_store_payroll_history.valid_from,
             'payrollEnabled', employee_work_store_payroll_history.payroll_enabled,
             'employmentType', employee_work_store_payroll_history.employment_type,
@@ -233,8 +234,8 @@ export async function GET() {
             'commuteAllowanceMonthlyCap', employee_work_store_payroll_history.commute_allowance_monthly_cap,
             'applySocialInsurance', employee_work_store_payroll_history.apply_social_insurance,
             'applyEmploymentInsurance', employee_work_store_payroll_history.apply_employment_insurance,
-          'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
-          'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
+            'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
+            'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
             'applyResidentTax', employee_work_store_payroll_history.apply_resident_tax,
             'wageValidFrom', employee_work_store_payroll_history.wage_valid_from,
             'commuteValidFrom', employee_work_store_payroll_history.commute_valid_from

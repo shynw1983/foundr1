@@ -1934,6 +1934,31 @@ button {
   font-weight: 750;
 }
 
+.staff-payroll-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.staff-payroll-history-row small {
+  flex: 1 1 260px;
+}
+
+.staff-payroll-history-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.staff-payroll-history-actions .secondary-button,
+.staff-payroll-history-actions .danger-button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .staff-payroll-store-toggle {
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr);
