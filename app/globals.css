@@ -3594,6 +3594,16 @@ button {
   background: #f7faff;
 }
 
+.shift-multi-select-toggle {
+  margin-left: auto;
+}
+
+.shift-multi-select-toggle.is-active {
+  border-color: rgba(45, 111, 229, 0.4);
+  background: var(--blue);
+  color: white;
+}
+
 .shift-editor-title {
   display: grid;
   gap: 4px;

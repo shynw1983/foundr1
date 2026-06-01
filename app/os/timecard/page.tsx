@@ -374,6 +374,7 @@ export function TimecardPage({
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
+  const [isShiftMultiSelectMode, setIsShiftMultiSelectMode] = useState(false);
   const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
   const [bulkShiftDraft, setBulkShiftDraft] = useState({
     scheduledStart: "",
@@ -504,6 +505,7 @@ export function TimecardPage({
   function openShiftEditor(employeeId: string, workDate: string) {
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
     const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
+    setIsShiftMultiSelectMode(false);
     setSelectedShiftCells([]);
     clearShiftMessage();
     setShiftDraft({
@@ -540,7 +542,7 @@ export function TimecardPage({
   }
 
   function handleShiftCellClick(event: MouseEvent<HTMLButtonElement>, employeeId: string, workDate: string) {
-    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+    if (isShiftMultiSelectMode || event.shiftKey || event.metaKey || event.ctrlKey) {
       event.preventDefault();
       toggleShiftSelection(employeeId, workDate);
       return;
@@ -790,11 +792,13 @@ export function TimecardPage({
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
+              setIsShiftMultiSelectMode(false);
               setSelectedShiftCells([]);
               void loadTimecard(event.target.value, selectedStoreId);
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
+              setIsShiftMultiSelectMode(false);
               setSelectedShiftCells([]);
               void loadTimecard(month, event.target.value);
             }}>
@@ -886,14 +890,25 @@ export function TimecardPage({
                   <CalendarDays />
                   <div>
                     <h3>計画排班</h3>
-                    <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。Shift / Command / Ctrl を押しながらクリックすると複数日を選択できます。</p>
+                    <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。複数選択モード、または Shift / Command / Ctrl クリックでまとめて編集できます。</p>
                   </div>
+                  <button
+                    className={`secondary-button shift-multi-select-toggle${isShiftMultiSelectMode ? " is-active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      clearShiftMessage();
+                      setShiftDraft(null);
+                      setIsShiftMultiSelectMode((current) => !current);
+                    }}
+                  >
+                    {isShiftMultiSelectMode ? "複数選択中" : "複数選択"}
+                  </button>
                 </div>
-                {selectedShiftCells.length ? (
+                {isShiftMultiSelectMode || selectedShiftCells.length ? (
                   <div className="shift-editor shift-bulk-editor" aria-label="シフト一括編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftCells.length}件を選択中</strong>
-                      <span>複数の日付をまとめて編集</span>
+                      <span>{selectedShiftCells.length ? "複数の日付をまとめて編集" : "編集したい格子をクリックして選択"}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
                     <label>
@@ -914,15 +929,19 @@ export function TimecardPage({
                     </label>
                     <div className="shift-patterns" aria-label="一括勤務パターン">
                       {["営業通し", "開店", "後半", "短時間"].map((label) => (
-                        <button type="button" disabled={isSavingShift} onClick={() => void applyBulkShiftPattern(label)} key={label}>
+                        <button type="button" disabled={isSavingShift || !selectedShiftCells.length} onClick={() => void applyBulkShiftPattern(label)} key={label}>
                           {label}
                         </button>
                       ))}
                     </div>
                     <div className="shift-editor-actions">
                       <button className="secondary-button" type="button" onClick={() => setSelectedShiftCells([])}>選択解除</button>
-                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteSelectedShiftCells()}>一括削除</button>
-                      <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveSelectedShiftCells()}>{isSavingShift ? "保存中" : "一括保存"}</button>
+                      <button className="secondary-button" type="button" onClick={() => {
+                        setIsShiftMultiSelectMode(false);
+                        setSelectedShiftCells([]);
+                      }}>終了</button>
+                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift || !selectedShiftCells.length} onClick={() => void deleteSelectedShiftCells()}>一括削除</button>
+                      <button className="primary-button" type="button" disabled={isSavingShift || !selectedShiftCells.length} onClick={() => void saveSelectedShiftCells()}>{isSavingShift ? "保存中" : "一括保存"}</button>
                     </div>
                   </div>
                 ) : null}
@@ -1007,7 +1026,7 @@ export function TimecardPage({
                                 <button
                                   className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
                                   type="button"
-                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : "Shift / Command / Ctrl クリックで複数選択"}
+                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : isShiftMultiSelectMode ? "クリックで複数選択" : "クリックで編集 / Shift・Command・Ctrl クリックで複数選択"}
                                   onClick={(event) => handleShiftCellClick(event, employee.id, day.key)}
                                 >
                                   {shift ? (
