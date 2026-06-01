@@ -905,7 +905,7 @@ export default function ProcedureAdminPage() {
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel procedure-editor-panel">
             <div className="panel-title">
               <div>
                 <p>{editingBook.id ? "既存手順書を編集" : "新しい手順書を作成"}</p>
