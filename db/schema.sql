@@ -62,6 +62,17 @@ create table if not exists employees (
   name text not null,
   login_id text unique,
   email text unique,
+  gender text not null default 'unspecified',
+  name_kana text,
+  address text,
+  birth_date date,
+  employee_number text,
+  hire_date date,
+  resignation_date date,
+  resignation_reason text,
+  business_type text,
+  is_foreign_national boolean not null default false,
+  employee_type text not null default 'part_time',
   lark_open_id text,
   lark_user_id text,
   password_hash text,
@@ -81,6 +92,17 @@ alter table employees add column if not exists lark_user_id text;
 alter table employees add column if not exists session_version integer not null default 1;
 alter table employees add column if not exists staff_category text not null default 'working';
 alter table employees add column if not exists payroll_subject text not null default 'none';
+alter table employees add column if not exists gender text not null default 'unspecified';
+alter table employees add column if not exists name_kana text;
+alter table employees add column if not exists address text;
+alter table employees add column if not exists birth_date date;
+alter table employees add column if not exists employee_number text;
+alter table employees add column if not exists hire_date date;
+alter table employees add column if not exists resignation_date date;
+alter table employees add column if not exists resignation_reason text;
+alter table employees add column if not exists business_type text;
+alter table employees add column if not exists is_foreign_national boolean not null default false;
+alter table employees add column if not exists employee_type text not null default 'part_time';
 
 create table if not exists os_audit_logs (
   id uuid primary key default gen_random_uuid(),

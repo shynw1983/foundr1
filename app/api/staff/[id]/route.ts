@@ -7,6 +7,17 @@ type StaffPayload = {
   name?: string;
   loginId?: string;
   email?: string;
+  gender?: string;
+  nameKana?: string;
+  address?: string;
+  birthDate?: string;
+  employeeNumber?: string;
+  hireDate?: string;
+  resignationDate?: string;
+  resignationReason?: string;
+  businessType?: string;
+  isForeignNational?: boolean;
+  employeeType?: string;
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
@@ -49,8 +60,26 @@ function normalizePayrollSubject(subject?: string) {
   return ["paid", "unpaid", "none"].includes(subject ?? "") ? subject as string : "none";
 }
 
+function normalizeGender(gender?: string) {
+  return ["male", "female", "other", "unspecified"].includes(gender ?? "") ? gender as string : "unspecified";
+}
+
+function normalizeEmployeeType(type?: string) {
+  return type === "full_time" ? "full_time" : "part_time";
+}
+
 function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
+}
+
+function toNullableText(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function toNullableDate(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 function toNullableNumber(value: number | string | null | undefined) {
@@ -68,6 +97,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const name = String(body.name ?? "").trim();
   const loginId = String(body.loginId ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const gender = normalizeGender(body.gender);
+  const nameKana = toNullableText(body.nameKana);
+  const address = toNullableText(body.address);
+  const birthDate = toNullableDate(body.birthDate);
+  const employeeNumber = toNullableText(body.employeeNumber);
+  const hireDate = toNullableDate(body.hireDate);
+  const resignationDate = toNullableDate(body.resignationDate);
+  const resignationReason = toNullableText(body.resignationReason);
+  const businessType = toNullableText(body.businessType);
+  const isForeignNational = Boolean(body.isForeignNational);
+  const employeeType = normalizeEmployeeType(body.employeeType);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -99,6 +139,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       set name = ${name},
           login_id = ${loginId},
           email = ${email || null},
+          gender = ${gender},
+          name_kana = ${nameKana},
+          address = ${address},
+          birth_date = ${birthDate},
+          employee_number = ${employeeNumber},
+          hire_date = ${hireDate},
+          resignation_date = ${resignationDate},
+          resignation_reason = ${resignationReason},
+          business_type = ${businessType},
+          is_foreign_national = ${isForeignNational},
+          employee_type = ${employeeType},
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
@@ -116,6 +167,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       set name = ${name},
           login_id = ${loginId},
           email = ${email || null},
+          gender = ${gender},
+          name_kana = ${nameKana},
+          address = ${address},
+          birth_date = ${birthDate},
+          employee_number = ${employeeNumber},
+          hire_date = ${hireDate},
+          resignation_date = ${resignationDate},
+          resignation_reason = ${resignationReason},
+          business_type = ${businessType},
+          is_foreign_national = ${isForeignNational},
+          employee_type = ${employeeType},
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
@@ -192,7 +254,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, employeeType, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

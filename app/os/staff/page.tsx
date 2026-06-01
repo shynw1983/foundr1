@@ -28,6 +28,17 @@ type StaffMember = {
   name: string;
   loginId: string;
   email: string | null;
+  gender?: string | null;
+  nameKana?: string | null;
+  address?: string | null;
+  birthDate?: string | null;
+  employeeNumber?: string | null;
+  hireDate?: string | null;
+  resignationDate?: string | null;
+  resignationReason?: string | null;
+  businessType?: string | null;
+  isForeignNational?: boolean | null;
+  employeeType?: string | null;
   larkOpenId?: string | null;
   larkUserId?: string | null;
   role: string;
@@ -80,6 +91,18 @@ const payrollSubjectLabels: Record<string, string> = {
   none: "給与対象外"
 };
 
+const genderLabels: Record<string, string> = {
+  unspecified: "未設定",
+  male: "男性",
+  female: "女性",
+  other: "その他"
+};
+
+const employeeTypeLabels: Record<string, string> = {
+  full_time: "正社員",
+  part_time: "アルバイト"
+};
+
 const ALL_FILTER = "__all__";
 const UNKNOWN_COMPANY = "会社未設定";
 
@@ -114,6 +137,10 @@ function formatLastSeen(lastSeenAt?: string | null) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(lastSeenAt))}`;
+}
+
+function toDateInputValue(value?: string | null) {
+  return value ? String(value).slice(0, 10) : "";
 }
 
 export default function StaffPage() {
@@ -187,6 +214,17 @@ export default function StaffPage() {
       name: String(formData.get("name") ?? ""),
       loginId: String(formData.get("loginId") ?? ""),
       email: String(formData.get("email") ?? ""),
+      gender: String(formData.get("gender") ?? "unspecified"),
+      nameKana: String(formData.get("nameKana") ?? ""),
+      address: String(formData.get("address") ?? ""),
+      birthDate: String(formData.get("birthDate") ?? ""),
+      employeeNumber: String(formData.get("employeeNumber") ?? ""),
+      hireDate: String(formData.get("hireDate") ?? ""),
+      resignationDate: String(formData.get("resignationDate") ?? ""),
+      resignationReason: String(formData.get("resignationReason") ?? ""),
+      businessType: String(formData.get("businessType") ?? ""),
+      isForeignNational: formData.get("isForeignNational") === "true",
+      employeeType: String(formData.get("employeeType") ?? "part_time"),
       larkOpenId: String(formData.get("larkOpenId") ?? ""),
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
@@ -358,7 +396,14 @@ export default function StaffPage() {
                           {getPresenceState(member.lastSeenAt).label}
                         </span>
                       </div>
-                      <p>{member.loginId} / {roleLabels[member.role] ?? member.role} / {staffCategoryLabels[member.staffCategory] ?? member.staffCategory}</p>
+                      <p>
+                        {[
+                          member.employeeNumber ? `社員番号 ${member.employeeNumber}` : `ID ${member.loginId}`,
+                          roleLabels[member.role] ?? member.role,
+                          staffCategoryLabels[member.staffCategory] ?? member.staffCategory,
+                          employeeTypeLabels[member.employeeType ?? ""] ?? "雇用区分未設定"
+                        ].join(" / ")}
+                      </p>
                       <small>
                         {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: {getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: {getWorkStores(member).length ? getWorkStores(member).map((store) => store.name).join("、") : "未設定"} ・ {formatLastSeen(member.lastSeenAt)}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
@@ -490,6 +535,61 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
         <label>
           <span>氏名</span>
           <input name="name" defaultValue={member?.name ?? ""} placeholder="例: 山田 太郎" required />
+        </label>
+        <label>
+          <span>フリガナ</span>
+          <input name="nameKana" defaultValue={member?.nameKana ?? ""} placeholder="例: ヤマダ タロウ" />
+        </label>
+        <label>
+          <span>性別</span>
+          <select name="gender" defaultValue={member?.gender ?? "unspecified"}>
+            <option value="unspecified">未設定</option>
+            <option value="male">男性</option>
+            <option value="female">女性</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <label>
+          <span>生年月日</span>
+          <input name="birthDate" type="date" defaultValue={toDateInputValue(member?.birthDate)} />
+        </label>
+        <label>
+          <span>社員番号</span>
+          <input name="employeeNumber" defaultValue={member?.employeeNumber ?? ""} placeholder="例: B202605001" />
+        </label>
+        <label>
+          <span>入社日</span>
+          <input name="hireDate" type="date" defaultValue={toDateInputValue(member?.hireDate)} />
+        </label>
+        <label>
+          <span>退職日</span>
+          <input name="resignationDate" type="date" defaultValue={toDateInputValue(member?.resignationDate)} />
+        </label>
+        <label>
+          <span>退職理由</span>
+          <textarea name="resignationReason" defaultValue={member?.resignationReason ?? ""} placeholder="退職時のみ入力" />
+        </label>
+        <label>
+          <span>住所</span>
+          <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />
+        </label>
+        <label>
+          <span>従事する業務の種類</span>
+          <input name="businessType" defaultValue={member?.businessType ?? ""} placeholder="例: 接客、調理、店舗管理" />
+        </label>
+        <label>
+          <span>外国人</span>
+          <select name="isForeignNational" defaultValue={member?.isForeignNational ? "true" : "false"}>
+            <option value="false">該当しない</option>
+            <option value="true">該当する</option>
+          </select>
+        </label>
+        <label>
+          <span>雇用区分</span>
+          <select name="employeeType" defaultValue={member?.employeeType ?? "part_time"}>
+            <option value="part_time">アルバイト</option>
+            <option value="full_time">正社員</option>
+          </select>
         </label>
         <label>
           <span>ログインID</span>

@@ -7,6 +7,17 @@ type StaffPayload = {
   name?: string;
   loginId?: string;
   email?: string;
+  gender?: string;
+  nameKana?: string;
+  address?: string;
+  birthDate?: string;
+  employeeNumber?: string;
+  hireDate?: string;
+  resignationDate?: string;
+  resignationReason?: string;
+  businessType?: string;
+  isForeignNational?: boolean;
+  employeeType?: string;
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
@@ -49,8 +60,26 @@ function normalizePayrollSubject(subject?: string) {
   return ["paid", "unpaid", "none"].includes(subject ?? "") ? subject as string : "none";
 }
 
+function normalizeGender(gender?: string) {
+  return ["male", "female", "other", "unspecified"].includes(gender ?? "") ? gender as string : "unspecified";
+}
+
+function normalizeEmployeeType(type?: string) {
+  return type === "full_time" ? "full_time" : "part_time";
+}
+
 function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
+}
+
+function toNullableText(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function toNullableDate(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 function toNullableNumber(value: number | string | null | undefined) {
@@ -69,6 +98,17 @@ export async function GET() {
       employees.name,
       employees.login_id as "loginId",
       employees.email,
+      employees.gender,
+      employees.name_kana as "nameKana",
+      employees.address,
+      employees.birth_date as "birthDate",
+      employees.employee_number as "employeeNumber",
+      employees.hire_date as "hireDate",
+      employees.resignation_date as "resignationDate",
+      employees.resignation_reason as "resignationReason",
+      employees.business_type as "businessType",
+      employees.is_foreign_national as "isForeignNational",
+      employees.employee_type as "employeeType",
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
       employees.role,
@@ -149,6 +189,17 @@ export async function POST(request: Request) {
   const name = String(body.name ?? "").trim();
   const loginId = String(body.loginId ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const gender = normalizeGender(body.gender);
+  const nameKana = toNullableText(body.nameKana);
+  const address = toNullableText(body.address);
+  const birthDate = toNullableDate(body.birthDate);
+  const employeeNumber = toNullableText(body.employeeNumber);
+  const hireDate = toNullableDate(body.hireDate);
+  const resignationDate = toNullableDate(body.resignationDate);
+  const resignationReason = toNullableText(body.resignationReason);
+  const businessType = toNullableText(body.businessType);
+  const isForeignNational = Boolean(body.isForeignNational);
+  const employeeType = normalizeEmployeeType(body.employeeType);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -173,8 +224,54 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into employees (name, login_id, email, lark_open_id, lark_user_id, role, staff_category, payroll_subject, status, password_hash, updated_at)
-    values (${name}, ${loginId}, ${email || null}, ${larkOpenId || null}, ${larkUserId || null}, ${role}, ${staffCategory}, ${payrollSubject}, ${status}, ${hashPassword(password)}, now())
+    insert into employees (
+      name,
+      login_id,
+      email,
+      gender,
+      name_kana,
+      address,
+      birth_date,
+      employee_number,
+      hire_date,
+      resignation_date,
+      resignation_reason,
+      business_type,
+      is_foreign_national,
+      employee_type,
+      lark_open_id,
+      lark_user_id,
+      role,
+      staff_category,
+      payroll_subject,
+      status,
+      password_hash,
+      updated_at
+    )
+    values (
+      ${name},
+      ${loginId},
+      ${email || null},
+      ${gender},
+      ${nameKana},
+      ${address},
+      ${birthDate},
+      ${employeeNumber},
+      ${hireDate},
+      ${resignationDate},
+      ${resignationReason},
+      ${businessType},
+      ${isForeignNational},
+      ${employeeType},
+      ${larkOpenId || null},
+      ${larkUserId || null},
+      ${role},
+      ${staffCategory},
+      ${payrollSubject},
+      ${status},
+      ${hashPassword(password)},
+      now()
+    )
     returning id
   `;
   const employeeId = rows[0]?.id;
@@ -240,7 +337,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory, payrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, employeeType, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 
