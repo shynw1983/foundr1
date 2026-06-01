@@ -806,7 +806,7 @@ button {
 
 .mobile-nav-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .mobile-nav-list a {
@@ -821,8 +821,31 @@ button {
   font-weight: 800;
 }
 
-.mobile-nav-list a:hover {
+.mobile-nav-list a:hover,
+.mobile-nav-list a.is-active,
+.mobile-nav-module-link.is-active {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.mobile-nav-section {
+  display: grid;
+  gap: 5px;
+}
+
+.mobile-nav-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  color: #9fb1c7;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mobile-nav-section-links {
+  display: grid;
+  gap: 4px;
 }
 
 @media (min-width: 1121px) {

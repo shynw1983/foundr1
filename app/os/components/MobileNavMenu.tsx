@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { useRef } from "react";
+import { usePathname } from "next/navigation";
 import { NotificationMenu } from "./NotificationMenu";
-import { type OsNavItem, usePermittedNavItems } from "./OsNavList";
+import { type OsNavItem, usePermittedNavModules } from "./OsNavList";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
-  const permittedNavItems = usePermittedNavItems(navItems);
+  const pathname = usePathname();
+  const permittedNavModules = usePermittedNavModules(navItems);
   const mobileMenuRef = useRef<HTMLDetailsElement | null>(null);
 
   useCloseOnOutside(mobileMenuRef, () => {
@@ -26,20 +28,37 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
           <span>メニュー</span>
         </summary>
         <nav className="mobile-nav-list" aria-label="モバイルナビゲーション">
-          {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
-            const isHome = href === "/os";
-            const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
-            const content = (
-              <>
-                <Icon size={17} />
-                <span>{label}</span>
-              </>
-            );
+          {permittedNavModules.map((module) => {
+            const ModuleIcon = module.icon;
+
+            if (module.href && module.children.length <= 1) {
+              const isActive = pathname === module.href;
+              return (
+                <Link href={module.href} className={`mobile-nav-module-link${isActive ? " is-active" : ""}`.trim()} key={module.id}>
+                  <ModuleIcon size={17} />
+                  <span>{module.label}</span>
+                </Link>
+              );
+            }
 
             return (
-              <Link href={href} className={`${isHome ? "is-home" : ""}${followsHome ? " follows-home" : ""}`.trim()} key={label}>
-                {content}
-              </Link>
+              <section className="mobile-nav-section" key={module.id}>
+                <div className="mobile-nav-section-heading">
+                  <ModuleIcon size={16} />
+                  <span>{module.label}</span>
+                </div>
+                <div className="mobile-nav-section-links">
+                  {module.children.map(({ label, href, icon: Icon }) => {
+                    const isActive = pathname === href || pathname.startsWith(`${href}/`);
+                    return (
+                      <Link href={href} className={isActive ? "is-active" : ""} key={href}>
+                        <Icon size={16} />
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
         </nav>

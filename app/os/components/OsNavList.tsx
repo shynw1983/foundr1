@@ -74,6 +74,10 @@ type OsNavModule = {
   paths: string[];
 };
 
+export type OsNavModuleWithChildren = OsNavModule & {
+  children: OsNavItem[];
+};
+
 const navModules: OsNavModule[] = [
   { id: "home", label: "OS", icon: ClipboardList, href: "/os", paths: ["/os"] },
   { id: "orders", label: "発注", icon: PackageCheck, paths: ["/os/orders", "/os/procurement", "/os/history", "/os/field-notes", "/os/reports", "/os/suppliers"] },
@@ -131,6 +135,21 @@ function filterPermittedNavItems(_navItems: OsNavItem[], role: string) {
   return availableNavItems.filter((item) => canShowNavItem(role, item));
 }
 
+function buildPermittedNavModules(navItems: OsNavItem[], role: string) {
+  const permittedNavItems = filterPermittedNavItems(navItems, role);
+  const navItemByHref = new Map(permittedNavItems.map((item) => [item.href, item]));
+
+  return navModules
+    .map((module) => ({
+      ...module,
+      children: module.paths.map((path) => navItemByHref.get(path)).filter((item): item is OsNavItem => Boolean(item))
+    }))
+    .filter((module) => {
+      if (module.href) return navItemByHref.has(module.href);
+      return module.children.length > 0;
+    });
+}
+
 export function usePermittedNavItems(navItems: OsNavItem[]) {
   const pathname = usePathname();
   const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
@@ -156,6 +175,27 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
   }, [navItems, pathname, role]);
 }
 
+export function usePermittedNavModules(navItems: OsNavItem[]) {
+  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentRole() {
+      const employee = await loadCurrentEmployee();
+      if (isMounted) setRole(employee?.role ?? "");
+    }
+
+    void loadCurrentRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return useMemo(() => buildPermittedNavModules(navItems, role), [navItems, role]);
+}
+
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const pathname = usePathname();
   const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
@@ -176,19 +216,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     };
   }, []);
 
-  const permittedNavItems = useMemo(() => filterPermittedNavItems(navItems, role), [navItems, role]);
-  const navItemByHref = useMemo(() => new Map(permittedNavItems.map((item) => [item.href, item])), [permittedNavItems]);
-  const visibleModules = useMemo(() => {
-    return navModules
-      .map((module) => ({
-        ...module,
-        children: module.paths.map((path) => navItemByHref.get(path)).filter((item): item is OsNavItem => Boolean(item))
-      }))
-      .filter((module) => {
-        if (module.href) return navItemByHref.has(module.href);
-        return module.children.length > 0;
-      });
-  }, [navItemByHref]);
+  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role), [navItems, role]);
   const activeModule = visibleModules.find((module) => module.paths.some((path) => pathname === path || (path !== "/os" && pathname.startsWith(`${path}/`))));
   const openModule = visibleModules.find((module) => module.id === openModuleId);
 
@@ -196,7 +224,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     setOpenModuleId(null);
   }, [pathname]);
 
-  function handleModuleClick(module: OsNavModule & { children: OsNavItem[] }) {
+  function handleModuleClick(module: OsNavModuleWithChildren) {
     if (module.href && module.children.length <= 1) {
       setOpenModuleId(null);
       return;
