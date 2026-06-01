@@ -14,6 +14,9 @@ type StoreOption = {
   id: string;
   name: string;
   businessHours?: unknown;
+  payrollCycleType?: "month_end" | "specified_day";
+  payrollClosingDay?: number;
+  socialInsurancePrefecture?: string;
 };
 
 type TimecardEmployee = {
@@ -86,6 +89,10 @@ type TimecardPayload = {
   canEditActualTime: boolean;
   stores: StoreOption[];
   selectedStoreId: string;
+  payrollPeriod?: {
+    startDate: string;
+    endDate: string;
+  };
   employees: TimecardEmployee[];
   shifts: ShiftEntry[];
   dailySummaries: DailySummary[];
@@ -174,19 +181,55 @@ function MetricCard({ label, value, note }: { label: string; value: string; note
   );
 }
 
-function getMonthDays(month: string) {
+function formatDateKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getPayrollPeriod(month: string, store: StoreOption | null) {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
-  if (!match) return [];
+  if (!match) return null;
   const year = Number(match[1]);
   const monthIndex = Number(match[2]) - 1;
-  const dayCount = new Date(year, monthIndex + 1, 0).getDate();
+  const cycleType = store?.payrollCycleType === "specified_day" ? "specified_day" : "month_end";
+  const closingDay = Math.max(1, Math.min(30, Math.round(Number(store?.payrollClosingDay ?? 31) || 31)));
+
+  if (cycleType === "specified_day") {
+    const startValue = new Date(Date.UTC(year, monthIndex - 1, closingDay + 1));
+    const endValue = new Date(Date.UTC(year, monthIndex, closingDay + 1));
+    return {
+      startDate: formatDateKey(startValue),
+      endDate: formatDateKey(endValue),
+      label: `前月${closingDay + 1}日〜当月${closingDay}日`
+    };
+  }
+
+  const startDate = `${match[1]}-${match[2]}-01`;
+  const endValue = new Date(Date.UTC(year, monthIndex + 1, 1));
+  return {
+    startDate,
+    endDate: formatDateKey(endValue),
+    label: "1日〜月末"
+  };
+}
+
+function getPeriodDays(month: string, store: StoreOption | null) {
+  const period = getPayrollPeriod(month, store);
+  if (!period) return [];
+  const [startYear, startMonth, startDay] = period.startDate.split("-").map(Number);
+  const start = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+  const [endYear, endMonth, endDay] = period.endDate.split("-").map(Number);
+  const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+  const dayCount = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   return Array.from({ length: dayCount }, (_, index) => {
-    const day = index + 1;
-    const key = `${match[1]}-${match[2]}-${String(day).padStart(2, "0")}`;
+    const value = new Date(Date.UTC(startYear, startMonth - 1, startDay + index));
+    const key = formatDateKey(value);
+    const monthNumber = value.getUTCMonth() + 1;
+    const day = value.getUTCDate();
     const weekday = new Date(`${key}T00:00:00+09:00`).getDay();
     return {
       key,
+      label: `${monthNumber}/${day}`,
       day,
       weekdayLabel: weekdays[weekday],
       isWeekend: weekday === 0 || weekday === 6
@@ -430,8 +473,12 @@ export function TimecardPage({
     () => data?.dailySummaries.filter((day) => day.employeeId === selectedPayrollRow?.employeeId) ?? [],
     [data, selectedPayrollRow]
   );
-  const monthDays = useMemo(() => getMonthDays(month), [month]);
   const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  const payrollPeriod = useMemo(
+    () => getPayrollPeriod(month, selectedStore),
+    [month, selectedStore]
+  );
+  const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
   const selectedStoreBusinessHours = useMemo(
     () => normalizeBusinessHours(selectedStore?.businessHours),
     [selectedStore?.businessHours]
@@ -787,7 +834,7 @@ export function TimecardPage({
           <div>
             <p className="eyebrow">出退勤、実績、給与計算</p>
             <h2>タイムカード</h2>
-            <span className="source-indicator">{isLoading ? "読み込み中" : "月度集計済み"}</span>
+            <span className="source-indicator">{isLoading ? "読み込み中" : `給与期間 ${payrollPeriod?.label ?? "月度"} 集計済み`}</span>
           </div>
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
@@ -1002,7 +1049,7 @@ export function TimecardPage({
                               title={isUncovered ? `未排班: ${coverage?.missingLabel}` : undefined}
                               key={day.key}
                             >
-                              <span>{day.day}</span>
+                              <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
                               {isUncovered ? <em>未</em> : null}
                             </th>
@@ -1093,7 +1140,7 @@ export function TimecardPage({
                         <th className="shift-employee-head">従業員</th>
                         {monthDays.map((day) => (
                           <th className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
-                            <span>{day.day}</span>
+                            <span>{day.label}</span>
                             <small>{day.weekdayLabel}</small>
                           </th>
                         ))}

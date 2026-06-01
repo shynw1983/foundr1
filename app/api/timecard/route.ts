@@ -3,7 +3,6 @@ import { writeAuditLog } from "../../../lib/audit-log";
 import { sql } from "../../../lib/db";
 import {
   getJstMonthLabel,
-  getJstMonthRange,
   isTimecardPunchType,
   summarizePayroll,
   summarizeTimecardDays,
@@ -44,7 +43,13 @@ function toMoneyNumber(value: unknown) {
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
     return sql`
-      select id::text, name, business_hours as "businessHours"
+      select
+        id::text,
+        name,
+        business_hours as "businessHours",
+        coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
+        coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
+        coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture"
       from stores
       where status = 'active'
       order by name
@@ -54,7 +59,13 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (storeIds.length === 0) return [];
 
   return sql`
-    select id::text, name, business_hours as "businessHours"
+    select
+      id::text,
+      name,
+      business_hours as "businessHours",
+      coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
+      coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
+      coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture"
     from stores
     where status = 'active'
       and id::text = any(${storeIds})
@@ -137,16 +148,41 @@ async function canPunchForEmployee(storeId: string, employeeId: string) {
   return Boolean(rows[0]);
 }
 
-function getMonthDateRange(month: string) {
+function formatDateKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getPayrollDateRange(month: string, store?: { payrollCycleType?: unknown; payrollClosingDay?: unknown } | null) {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
   const fallback = /^(\d{4})-(\d{2})$/.exec(getJstMonthLabel())!;
   const [, yearText, monthText] = match ?? fallback;
   const year = Number(yearText);
   const monthIndex = Number(monthText) - 1;
+  const cycleType = store?.payrollCycleType === "specified_day" ? "specified_day" : "month_end";
+  const closingDay = Math.max(1, Math.min(30, Math.round(Number(store?.payrollClosingDay ?? 31) || 31)));
+
+  if (cycleType === "specified_day") {
+    const startValue = new Date(Date.UTC(year, monthIndex - 1, closingDay + 1));
+    const endValue = new Date(Date.UTC(year, monthIndex, closingDay + 1));
+    const startDate = formatDateKey(startValue);
+    const endDate = formatDateKey(endValue);
+    return {
+      startDate,
+      endDate,
+      startUtc: new Date(`${startDate}T00:00:00+09:00`),
+      endUtc: new Date(`${endDate}T00:00:00+09:00`)
+    };
+  }
+
   const startDate = `${yearText}-${monthText}-01`;
-  const endDateValue = new Date(Date.UTC(year, monthIndex + 1, 1));
-  const endDate = `${endDateValue.getUTCFullYear()}-${String(endDateValue.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  return { startDate, endDate };
+  const endValue = new Date(Date.UTC(year, monthIndex + 1, 1));
+  const endDate = formatDateKey(endValue);
+  return {
+    startDate,
+    endDate,
+    startUtc: new Date(`${startDate}T00:00:00+09:00`),
+    endUtc: new Date(`${endDate}T00:00:00+09:00`)
+  };
 }
 
 function isValidWorkDate(value: string) {
@@ -180,10 +216,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const monthParam = url.searchParams.get("month") || getJstMonthLabel();
-  const { month, startUtc, endUtc } = getJstMonthRange(monthParam);
-  const { startDate, endDate } = getMonthDateRange(month);
-  const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
-  const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
+  const month = /^(\d{4})-(\d{2})$/.test(monthParam) ? monthParam : getJstMonthLabel();
   const scope = await getSessionStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
@@ -191,6 +224,10 @@ export async function GET(request: Request) {
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
+  const selectedStore = stores.find((store) => String(store.id) === selectedStoreId) ?? null;
+  const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, selectedStore);
+  const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
+  const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
   const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
 
   const punches = selectedStoreId ? await sql`
@@ -298,6 +335,7 @@ export async function GET(request: Request) {
     canEditActualTime: timecardActualEditRoles.has(session.role),
     stores,
     selectedStoreId,
+    payrollPeriod: { startDate, endDate },
     employees,
     punches: typedPunches,
     shifts: shifts.map((row) => ({
