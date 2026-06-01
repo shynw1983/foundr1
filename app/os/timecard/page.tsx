@@ -86,6 +86,7 @@ type PayrollTotals = {
 
 type TimecardPayload = {
   month: string;
+  canViewPayroll: boolean;
   canEditActualTime: boolean;
   stores: StoreOption[];
   selectedStoreId: string;
@@ -465,9 +466,28 @@ export function TimecardPage({
     commuteAllowance: 0,
     totalPay: 0
   };
+  const attendanceTotals = useMemo(() => {
+    const dailySummaries = data?.dailySummaries ?? [];
+    return dailySummaries.reduce((acc, day) => ({
+      workDays: acc.workDays + (day.workMinutes > 0 ? 1 : 0),
+      punchCount: acc.punchCount + 1,
+      workMinutes: acc.workMinutes + day.workMinutes,
+      nightMinutes: acc.nightMinutes + day.nightMinutes
+    }), {
+      workDays: 0,
+      punchCount: 0,
+      workMinutes: 0,
+      nightMinutes: 0
+    });
+  }, [data?.dailySummaries]);
+  const canViewPayroll = Boolean(data?.canViewPayroll);
+  const visibleNavItems = useMemo(
+    () => canViewPayroll ? navItems : navItems.filter((item) => item.href !== "/os/timecard/payroll"),
+    [canViewPayroll]
+  );
   const selectedPayrollRow = useMemo(
-    () => data?.payrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? data?.payrollRows[0] ?? null,
-    [data, selectedPayrollEmployeeId]
+    () => canViewPayroll ? data?.payrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? data?.payrollRows[0] ?? null : null,
+    [canViewPayroll, data, selectedPayrollEmployeeId]
   );
   const selectedPayrollDays = useMemo(
     () => data?.dailySummaries.filter((day) => day.employeeId === selectedPayrollRow?.employeeId) ?? [],
@@ -822,11 +842,11 @@ export function TimecardPage({
             <h1>Foundr1 OS</h1>
           </div>
         </a>
-        <MobileNavMenu navItems={navItems} />
+        <MobileNavMenu navItems={visibleNavItems} />
         <div className="sidebar-user">
           <UserBadge />
         </div>
-        <OsNavList navItems={navItems} />
+        <OsNavList navItems={visibleNavItems} />
       </aside>
 
       <section className="workspace timecard-workspace">
@@ -857,10 +877,14 @@ export function TimecardPage({
         </header>
 
         <section className="metric-grid">
-          <MetricCard label="勤務日数" value={`${totals.workDays}日`} note={`${totals.punchCount}件の実績`} />
-          <MetricCard label="勤務時間" value={formatDuration(totals.workMinutes)} note={`深夜 ${formatDuration(totals.nightMinutes)}`} />
-          <MetricCard label="人件費" value={formatMoney(totals.laborCost)} note={`交通費 ${formatMoney(totals.commuteAllowance)}`} />
-          <MetricCard label="差引支給額" value={formatMoney(totals.totalPay)} note="控除は次フェーズで追加" />
+          <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
+          <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
+          {canViewPayroll ? (
+            <>
+              <MetricCard label="人件費" value={formatMoney(totals.laborCost)} note={`交通費 ${formatMoney(totals.commuteAllowance)}`} />
+              <MetricCard label="差引支給額" value={formatMoney(totals.totalPay)} note="控除は次フェーズで追加" />
+            </>
+          ) : null}
         </section>
 
         {mainView === "overview" ? (
@@ -886,6 +910,7 @@ export function TimecardPage({
                 <p>{actualIssueCount ? `${actualIssueCount}件 要確認` : "問題なし"}</p>
               </article>
             </div>
+            {canViewPayroll ? (
             <div className="timecard-table-wrap">
               <table className="timecard-table">
                 <thead>
@@ -919,6 +944,7 @@ export function TimecardPage({
                 </tbody>
               </table>
             </div>
+            ) : null}
           </section>
         ) : mainView === "schedule" ? (
           <>
@@ -1195,7 +1221,7 @@ export function TimecardPage({
               </section>
             )}
           </>
-        ) : (
+        ) : canViewPayroll ? (
           <>
             <section className="timecard-subtabs" aria-label="給与メニュー">
               <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>
@@ -1312,6 +1338,17 @@ export function TimecardPage({
               </section>
             )}
           </>
+        ) : (
+          <section className="panel">
+            <div className="panel-title">
+              <WalletCards />
+              <div>
+                <h3>給与は表示できません</h3>
+                <p>給与情報は Owner、Manager、店舗責任者のみ確認できます。</p>
+              </div>
+            </div>
+            <p className="empty-state-text">必要な場合は管理者アカウントでログインしてください。</p>
+          </section>
         )}
       </section>
     </main>

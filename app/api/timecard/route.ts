@@ -33,6 +33,17 @@ type TimecardPostBody = {
 };
 
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
+const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner"]);
+
+const emptyPayrollTotals = {
+  workDays: 0,
+  punchCount: 0,
+  workMinutes: 0,
+  nightMinutes: 0,
+  laborCost: 0,
+  commuteAllowance: 0,
+  totalPay: 0
+};
 
 function toMoneyNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -228,6 +239,7 @@ export async function GET(request: Request) {
   const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, selectedStore);
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
+  const canViewPayroll = timecardPayrollViewRoles.has(session.role);
   const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
 
   const punches = selectedStoreId ? await sql`
@@ -269,7 +281,17 @@ export async function GET(request: Request) {
     workDateStart: startDate,
     workDateEndExclusive: endDate
   });
-  const payroll = summarizePayroll(employees, dailySummaries);
+  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries) : { rows: [], totals: emptyPayrollTotals };
+  const responseEmployees = canViewPayroll
+    ? employees
+    : employees.map((employee) => ({
+      id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      status: employee.status,
+      storeIds: employee.storeIds,
+      storePayrollSettings: []
+    }));
 
   const shifts = selectedStoreId ? await sql`
     select
@@ -333,10 +355,11 @@ export async function GET(request: Request) {
     month,
     currentEmployeeId: session.id,
     canEditActualTime: timecardActualEditRoles.has(session.role),
+    canViewPayroll,
     stores,
     selectedStoreId,
     payrollPeriod: { startDate, endDate },
-    employees,
+    employees: responseEmployees,
     punches: typedPunches,
     shifts: shifts.map((row) => ({
       id: String(row.id),
