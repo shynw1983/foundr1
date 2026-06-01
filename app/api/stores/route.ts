@@ -31,6 +31,16 @@ async function resolveCompanyId(companyName: string) {
   return rows[0]?.id ?? null;
 }
 
+function normalizePayrollCycleType(value: string) {
+  return value === "specified_day" ? "specified_day" : "month_end";
+}
+
+function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
+  if (payrollCycleType === "month_end") return 31;
+  const day = Math.round(Number(value));
+  return Number.isFinite(day) ? Math.max(1, Math.min(30, day)) : 25;
+}
+
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -41,6 +51,9 @@ export async function POST(request: Request) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
+  const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
+  const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
+  const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId(companyName);
 
@@ -49,14 +62,17 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into stores (name, company_id, owner_name, business_hours, reservation_note, updated_at)
-    values (${name}, ${companyId}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, now())
+    insert into stores (name, company_id, owner_name, business_hours, reservation_note, payroll_cycle_type, payroll_closing_day, social_insurance_prefecture, updated_at)
+    values (${name}, ${companyId}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, ${payrollCycleType}, ${payrollClosingDay}, ${socialInsurancePrefecture}, now())
     on conflict (name)
     do update set
       company_id = excluded.company_id,
       owner_name = excluded.owner_name,
       business_hours = excluded.business_hours,
       reservation_note = excluded.reservation_note,
+      payroll_cycle_type = excluded.payroll_cycle_type,
+      payroll_closing_day = excluded.payroll_closing_day,
+      social_insurance_prefecture = excluded.social_insurance_prefecture,
       updated_at = now()
     returning id
   `;
@@ -88,6 +104,9 @@ export async function PUT(request: Request) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
+  const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
+  const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
+  const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId(companyName);
 
@@ -117,6 +136,9 @@ export async function PUT(request: Request) {
       owner_name = ${owner},
       business_hours = ${businessHours}::jsonb,
       reservation_note = ${reservationNote},
+      payroll_cycle_type = ${payrollCycleType},
+      payroll_closing_day = ${payrollClosingDay},
+      social_insurance_prefecture = ${socialInsurancePrefecture},
       updated_at = now()
     where name = ${currentName}
     returning id

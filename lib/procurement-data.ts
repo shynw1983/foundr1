@@ -116,6 +116,9 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           stores.owner_name as owner,
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",
+          coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
+          coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay",
+          coalesce(stores.social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
           coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null and brands.name <> '共通'), '{}') as brands
         from stores
         left join store_brands on store_brands.store_id = stores.id

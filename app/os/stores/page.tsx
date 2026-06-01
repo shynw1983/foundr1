@@ -27,12 +27,28 @@ type StoreItem = {
   brands: string[];
   businessHours?: unknown;
   reservationNote?: string;
+  payrollCycleType?: "month_end" | "specified_day";
+  payrollClosingDay?: number;
+  socialInsurancePrefecture?: string;
 };
 
 type BrandItem = {
   name: string;
   type: string;
 };
+
+type StoreEditTab = "basic" | "hours" | "payroll";
+
+const prefectureOptions = [
+  "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+  "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
+  "岐阜県", "静岡県", "愛知県", "三重県",
+  "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+  "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+  "徳島県", "香川県", "愛媛県", "高知県",
+  "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+];
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -60,7 +76,14 @@ export default function StoresPage() {
   const [editingStoreBrands, setEditingStoreBrands] = useState<string[]>([]);
   const [newBusinessHours, setNewBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
   const [editingBusinessHours, setEditingBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [editingStoreName, setEditingStoreName] = useState("");
+  const [editingCompanyName, setEditingCompanyName] = useState("");
+  const [editingOwner, setEditingOwner] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
+  const [editingStoreTab, setEditingStoreTab] = useState<StoreEditTab>("basic");
+  const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
+  const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
+  const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
 
   async function loadData() {
     const response = await fetch("/api/dashboard");
@@ -89,6 +112,9 @@ export default function StoresPage() {
     const reservationNote = String(formData.get("reservationNote") ?? "");
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
     formData.set("businessHours", serializeBusinessHours(newBusinessHours));
+    formData.set("payrollCycleType", "month_end");
+    formData.set("payrollClosingDay", "31");
+    formData.set("socialInsurancePrefecture", "福岡県");
 
     if (!name.trim()) return;
 
@@ -105,7 +131,7 @@ export default function StoresPage() {
 
     setStoresData((items) => [
       ...items.filter((item) => item.name !== name),
-      { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote }
+      { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote, payrollCycleType: "month_end", payrollClosingDay: 31, socialInsurancePrefecture: "福岡県" }
     ]);
     setSelectedStoreBrands([]);
     setNewBusinessHours(defaultBusinessHours);
@@ -227,6 +253,9 @@ export default function StoresPage() {
     const companyName = String(formData.get("companyName") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
+    const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
+    const payrollClosingDay = payrollCycleType === "month_end" ? 31 : Math.max(1, Math.min(30, Math.round(Number(formData.get("payrollClosingDay") ?? editingPayrollClosingDay) || editingPayrollClosingDay)));
+    const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
 
     if (!nextName) return;
 
@@ -246,11 +275,12 @@ export default function StoresPage() {
     }
 
     setStoresData((items) =>
-      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, companyName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote } : item)
+      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, companyName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote, payrollCycleType, payrollClosingDay, socialInsurancePrefecture } : item)
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
     setEditingReservationNote("");
+    setEditingStoreTab("basic");
     void loadData();
     showNotice("店舗を更新しました。");
   }
@@ -259,7 +289,14 @@ export default function StoresPage() {
     setEditingStore(store);
     setEditingStoreBrands(store.brands);
     setEditingBusinessHours(normalizeBusinessHours(store.businessHours));
+    setEditingStoreName(store.name);
+    setEditingCompanyName(store.companyName ?? "");
+    setEditingOwner(store.owner);
     setEditingReservationNote(store.reservationNote ?? "");
+    setEditingStoreTab("basic");
+    setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
+    setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
+    setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
   }
 
   function toggleBrandSelection(
@@ -338,6 +375,7 @@ export default function StoresPage() {
                     <p>{store.companyName || "所属会社未設定"} / {store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
+                    <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
                   <div className="row-actions">
@@ -445,43 +483,110 @@ export default function StoresPage() {
                 閉じる
               </button>
             </div>
+            <div className="store-settings-tabs" aria-label="店舗設定メニュー">
+              <button className={editingStoreTab === "basic" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("basic")}>基本情報</button>
+              <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
+              <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
+            </div>
             <div className="edit-fields">
-              <label>
-                <span>店舗名</span>
-                <input name="name" defaultValue={editingStore.name} />
-              </label>
-              <label>
-                <span>所属会社</span>
-                <input name="companyName" defaultValue={editingStore.companyName ?? ""} placeholder="例: 株式会社丸九" />
-              </label>
-              <label>
-                <span>担当者メモ</span>
-                <input name="owner" defaultValue={editingStore.owner} placeholder="例: 店長名・担当者名" />
-              </label>
-              <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
-              <label>
-                <span>予約画面メモ</span>
-                <input
-                  name="reservationNote"
-                  value={editingReservationNote}
-                  onChange={(event) => setEditingReservationNote(event.target.value)}
-                  placeholder="例: ラストオーダーは閉店30分前"
-                />
-              </label>
-              <div className="checkbox-group">
-                <span>取り扱いブランド</span>
-                {brandsData.map((brand) => (
-                  <label key={brand.name}>
-                    <input
-                      type="checkbox"
-                      value={brand.name}
-                      checked={editingStoreBrands.includes(brand.name)}
-                      onChange={(event) => toggleEditingStoreBrand(brand.name, event.target.checked)}
-                    />
-                    {brand.name === "共通" ? "共通（全ブランド）" : brand.name}
+              {editingStoreTab === "basic" ? (
+                <>
+                  <label>
+                    <span>店舗名</span>
+                    <input name="name" value={editingStoreName} onChange={(event) => setEditingStoreName(event.target.value)} />
                   </label>
-                ))}
-              </div>
+                  <label>
+                    <span>所属会社</span>
+                    <input name="companyName" value={editingCompanyName} onChange={(event) => setEditingCompanyName(event.target.value)} placeholder="例: 株式会社丸九" />
+                  </label>
+                  <label>
+                    <span>担当者メモ</span>
+                    <input name="owner" value={editingOwner} onChange={(event) => setEditingOwner(event.target.value)} placeholder="例: 店長名・担当者名" />
+                  </label>
+                  <label>
+                    <span>予約画面メモ</span>
+                    <input
+                      name="reservationNote"
+                      value={editingReservationNote}
+                      onChange={(event) => setEditingReservationNote(event.target.value)}
+                      placeholder="例: ラストオーダーは閉店30分前"
+                    />
+                  </label>
+                  <div className="checkbox-group">
+                    <span>取り扱いブランド</span>
+                    {brandsData.map((brand) => (
+                      <label key={brand.name}>
+                        <input
+                          type="checkbox"
+                          value={brand.name}
+                          checked={editingStoreBrands.includes(brand.name)}
+                          onChange={(event) => toggleEditingStoreBrand(brand.name, event.target.checked)}
+                        />
+                        {brand.name === "共通" ? "共通（全ブランド）" : brand.name}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input type="hidden" name="name" value={editingStoreName} />
+                  <input type="hidden" name="companyName" value={editingCompanyName} />
+                  <input type="hidden" name="owner" value={editingOwner} />
+                  <input type="hidden" name="reservationNote" value={editingReservationNote} />
+                </>
+              )}
+              {editingStoreTab === "hours" ? (
+                <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+              ) : null}
+              {editingStoreTab === "payroll" ? (
+                <div className="store-payroll-settings">
+                  <div className="store-payroll-summary">
+                    <strong>給与計算期間</strong>
+                    <p>{editingPayrollCycleType === "specified_day" ? `前月${editingPayrollClosingDay + 1}日から当月${editingPayrollClosingDay}日までを集計します。` : "毎月1日から月末までを集計します。"}</p>
+                  </div>
+                  <label>
+                    <span>給与計算周期</span>
+                    <select
+                      name="payrollCycleType"
+                      value={editingPayrollCycleType}
+                      onChange={(event) => setEditingPayrollCycleType(event.target.value === "specified_day" ? "specified_day" : "month_end")}
+                    >
+                      <option value="month_end">月末締め</option>
+                      <option value="specified_day">指定日締め</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>締め日</span>
+                    <input
+                      name="payrollClosingDay"
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={editingPayrollClosingDay}
+                      onChange={(event) => setEditingPayrollClosingDay(Math.max(1, Math.min(30, Math.round(Number(event.target.value) || 25))))}
+                      disabled={editingPayrollCycleType === "month_end"}
+                    />
+                  </label>
+                  <label>
+                    <span>社保地区</span>
+                    <select name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} onChange={(event) => setEditingSocialInsurancePrefecture(event.target.value)}>
+                      {prefectureOptions.map((prefecture) => (
+                        <option value={prefecture} key={prefecture}>{prefecture}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="store-payroll-summary">
+                    <strong>社会保険料率</strong>
+                    <p>健康保険・厚生年金などの料率を地区別に参照するための基準地域です。料率表との連携は給与計算の次フェーズで反映します。</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <input type="hidden" name="payrollCycleType" value={editingPayrollCycleType} />
+                  <input type="hidden" name="payrollClosingDay" value={editingPayrollClosingDay} />
+                  <input type="hidden" name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} />
+                </>
+              )}
             </div>
             <div className="modal-actions">
               <button type="button" className="text-button" onClick={() => setEditingStore(null)}>

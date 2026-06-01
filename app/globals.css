@@ -1252,6 +1252,56 @@ button {
   width: auto;
 }
 
+.store-settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f4f6f9;
+}
+
+.store-settings-tabs button {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.store-settings-tabs button.is-active {
+  border-color: rgba(74, 163, 48, 0.24);
+  background: white;
+  color: var(--green);
+  box-shadow: 0 6px 16px rgba(18, 28, 43, 0.08);
+}
+
+.store-payroll-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.store-payroll-summary {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.store-payroll-summary strong,
+.store-payroll-summary p {
+  display: block;
+}
+
+.store-payroll-summary p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .management-form .business-hours-closed,
 .edit-fields .business-hours-closed {
   display: inline-flex;

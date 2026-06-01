@@ -9,6 +9,9 @@ create table if not exists stores (
   owner_name text,
   business_hours jsonb not null default '{}'::jsonb,
   reservation_note text not null default '',
+  payroll_cycle_type text not null default 'month_end',
+  payroll_closing_day integer not null default 31,
+  social_insurance_prefecture text not null default '福岡県',
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -18,6 +21,9 @@ alter table stores add column if not exists external_id text;
 alter table stores add column if not exists company_id uuid;
 alter table stores add column if not exists business_hours jsonb not null default '{}'::jsonb;
 alter table stores add column if not exists reservation_note text not null default '';
+alter table stores add column if not exists payroll_cycle_type text not null default 'month_end';
+alter table stores add column if not exists payroll_closing_day integer not null default 31;
+alter table stores add column if not exists social_insurance_prefecture text not null default '福岡県';
 
 create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
