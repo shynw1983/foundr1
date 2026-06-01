@@ -80,6 +80,9 @@ const payrollSubjectLabels: Record<string, string> = {
   none: "給与対象外"
 };
 
+const ALL_FILTER = "__all__";
+const UNKNOWN_COMPANY = "会社未設定";
+
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="panel-title">
@@ -121,9 +124,39 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [dataSource, setDataSource] = useState<"loading" | "neon" | "forbidden">("loading");
   const [error, setError] = useState("");
+  const [companyFilter, setCompanyFilter] = useState(ALL_FILTER);
+  const [storeFilter, setStoreFilter] = useState(ALL_FILTER);
+  const [positionFilter, setPositionFilter] = useState(ALL_FILTER);
 
   const activeCount = useMemo(() => staff.filter((member) => member.status === "active").length, [staff]);
   const onlineCount = useMemo(() => staff.filter((member) => getPresenceState(member.lastSeenAt).label === "オンライン").length, [staff]);
+  const companyOptions = useMemo(() => {
+    return Array.from(new Set(stores.map((store) => store.companyName?.trim() || UNKNOWN_COMPANY))).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [stores]);
+  const storeOptions = useMemo(() => {
+    if (companyFilter === ALL_FILTER) return stores;
+    return stores.filter((store) => (store.companyName?.trim() || UNKNOWN_COMPANY) === companyFilter);
+  }, [companyFilter, stores]);
+  const filteredStaff = useMemo(() => {
+    return staff.filter((member) => {
+      const memberStores = getMemberStores(member);
+      const hasCompany = companyFilter === ALL_FILTER || memberStores.some((store) => (store.companyName?.trim() || UNKNOWN_COMPANY) === companyFilter);
+      const hasStore = storeFilter === ALL_FILTER || memberStores.some((store) => store.id === storeFilter);
+      const hasPosition = positionFilter === ALL_FILTER
+        || (positionFilter.startsWith("category:") && member.staffCategory === positionFilter.replace("category:", ""))
+        || (positionFilter.startsWith("role:") && member.role === positionFilter.replace("role:", ""));
+
+      return hasCompany && hasStore && hasPosition;
+    });
+  }, [companyFilter, positionFilter, staff, storeFilter]);
+  const filteredActiveCount = useMemo(() => filteredStaff.filter((member) => member.status === "active").length, [filteredStaff]);
+  const filteredOnlineCount = useMemo(() => filteredStaff.filter((member) => getPresenceState(member.lastSeenAt).label === "オンライン").length, [filteredStaff]);
+
+  useEffect(() => {
+    if (storeFilter !== ALL_FILTER && !storeOptions.some((store) => store.id === storeFilter)) {
+      setStoreFilter(ALL_FILTER);
+    }
+  }, [storeFilter, storeOptions]);
 
   async function loadStaff() {
     const response = await fetch("/api/staff");
@@ -267,9 +300,56 @@ export default function StaffPage() {
         ) : (
           <section className="management-grid staff-management-grid">
             <section className="panel">
-              <PanelTitle title="スタッフ一覧" subtitle={`登録 ${staff.length} 名・有効 ${activeCount} 名・オンライン ${onlineCount} 名`} />
+              <PanelTitle title="スタッフ一覧" subtitle={`表示 ${filteredStaff.length} 名 / 登録 ${staff.length} 名・有効 ${filteredActiveCount}/${activeCount} 名・オンライン ${filteredOnlineCount}/${onlineCount} 名`} />
+              <div className="staff-filter-bar" aria-label="スタッフ絞り込み">
+                <label>
+                  <span>所属会社</span>
+                  <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+                    <option value={ALL_FILTER}>すべての会社</option>
+                    {companyOptions.map((company) => (
+                      <option key={company} value={company}>{company}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>店舗</span>
+                  <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+                    <option value={ALL_FILTER}>すべての店舗</option>
+                    {storeOptions.map((store) => (
+                      <option key={store.id} value={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>役職・区分</span>
+                  <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
+                    <option value={ALL_FILTER}>すべての役職・区分</option>
+                    <optgroup label="スタッフ区分">
+                      {Object.entries(staffCategoryLabels).map(([value, label]) => (
+                        <option key={value} value={`category:${value}`}>{label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="権限">
+                      {Object.entries(roleLabels).map(([value, label]) => (
+                        <option key={value} value={`role:${value}`}>{label}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setCompanyFilter(ALL_FILTER);
+                    setStoreFilter(ALL_FILTER);
+                    setPositionFilter(ALL_FILTER);
+                  }}
+                >
+                  条件をクリア
+                </button>
+              </div>
               <div className="management-list">
-                {staff.map((member) => (
+                {filteredStaff.length ? filteredStaff.map((member) => (
                   <article className="management-row staff-row" key={member.id}>
                     <div>
                       <div className="staff-row-heading">
@@ -293,7 +373,9 @@ export default function StaffPage() {
                       </button>
                     </div>
                   </article>
-                ))}
+                )) : (
+                  <p className="empty-state-text">条件に一致するスタッフがいません。</p>
+                )}
               </div>
             </section>
 
@@ -338,6 +420,14 @@ function getVisibleStores(member: StaffMember) {
 
 function getWorkStores(member: StaffMember) {
   return member.workStores ?? [];
+}
+
+function getMemberStores(member: StaffMember) {
+  const storeMap = new Map<string, StoreOption>();
+  for (const store of [...getVisibleStores(member), ...getWorkStores(member)]) {
+    storeMap.set(store.id, store);
+  }
+  return Array.from(storeMap.values());
 }
 
 function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMember; stores: StoreOption[]; currentUserId?: string }) {

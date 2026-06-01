@@ -1548,6 +1548,46 @@ button {
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.7fr);
 }
 
+.staff-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.staff-filter-bar label {
+  display: grid;
+  gap: 6px;
+}
+
+.staff-filter-bar span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.staff-filter-bar select {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+}
+
+.staff-filter-bar .secondary-button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
 .staff-row .row-actions {
   flex: 0 0 auto;
 }
@@ -8313,6 +8353,10 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .staff-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-report-grid {
     grid-template-columns: 1fr;
   }
@@ -8754,6 +8798,15 @@ button {
   .access-grid,
   .workflow-band {
     grid-template-columns: 1fr;
+  }
+
+  .staff-filter-bar {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .staff-filter-bar .secondary-button {
+    width: 100%;
   }
 
   .nav-list {
