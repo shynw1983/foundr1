@@ -514,6 +514,11 @@ button {
   background: rgba(255, 255, 255, 0.22);
 }
 
+.nav-shell {
+  position: relative;
+  min-height: 0;
+}
+
 .sidebar-toggle-button {
   display: none;
 }
@@ -740,14 +745,26 @@ button {
   align-items: center;
   gap: 10px;
   min-height: 42px;
+  width: 100%;
   padding: 0 12px;
+  border: 0;
   border-radius: 8px;
   color: #dce5ee;
+  background: transparent;
+  font: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
-.nav-item:hover {
+.nav-item:hover,
+.nav-item.is-active,
+.nav-item.is-open {
   background: rgba(255, 255, 255, 0.09);
+}
+
+.nav-item.is-active,
+.nav-item.is-open {
+  color: white;
 }
 
 .nav-item.is-home,
@@ -813,6 +830,7 @@ button {
   }
 
   .sidebar {
+    z-index: 130;
     padding: 14px 8px;
   }
 
@@ -884,6 +902,73 @@ button {
     font-weight: 800;
     line-height: 1.15;
     text-align: center;
+  }
+
+  .nav-item.is-open {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .nav-flyout {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 78px;
+    z-index: 140;
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    width: 248px;
+    padding: 22px 14px;
+    color: #f7fafc;
+    background: #202a36;
+    box-shadow: 20px 0 45px rgba(15, 23, 42, 0.22);
+  }
+
+  .nav-flyout-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 0 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 17px;
+    font-weight: 900;
+  }
+
+  .nav-flyout-list {
+    display: grid;
+    gap: 5px;
+  }
+
+  .nav-flyout-list a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 0 11px;
+    border-radius: 8px;
+    color: #dce5ee;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .nav-flyout-list a:hover,
+  .nav-flyout-list a.is-active {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .nav-flyout-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 78px;
+    z-index: 120;
+    border: 0;
+    background: transparent;
+    cursor: default;
   }
 
   .nav-item.follows-home {

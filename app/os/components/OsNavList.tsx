@@ -1,7 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import {
+  Boxes,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  Clock3,
+  FileText,
+  Lightbulb,
+  MenuSquare,
+  MessageSquareWarning,
+  PackageCheck,
+  Search,
+  Settings,
+  Store,
+  Truck,
+  UserCog,
+  UsersRound,
+  WalletCards
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -28,6 +46,44 @@ const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
+const systemNavItems = new Set(["/os", "/os/settings"]);
+const canonicalNavItems: OsNavItem[] = [
+  { label: "OS ホーム", href: "/os", icon: ClipboardList },
+  { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
+  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/os/history", icon: FileText },
+  { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
+  { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
+  { label: "発注先管理", href: "/os/suppliers", icon: Truck },
+  { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
+  { label: "排班", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
+  { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
+  { label: "商品マスタ", href: "/os/products", icon: Boxes },
+  { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
+  { label: "商品比較", href: "/os/product-comparisons", icon: Search },
+  { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
+  { label: "店舗・ブランド", href: "/os/stores", icon: Store },
+  settingsNavItem
+];
+
+type OsNavModule = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  href?: string;
+  paths: string[];
+};
+
+const navModules: OsNavModule[] = [
+  { id: "home", label: "OS", icon: ClipboardList, href: "/os", paths: ["/os"] },
+  { id: "orders", label: "発注", icon: PackageCheck, paths: ["/os/orders", "/os/procurement", "/os/history", "/os/field-notes", "/os/reports", "/os/suppliers"] },
+  { id: "people", label: "人事", icon: UsersRound, paths: ["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff"] },
+  { id: "catalog", label: "商品", icon: Boxes, paths: ["/os/products", "/os/menus", "/os/product-comparisons"] },
+  { id: "operations", label: "運営", icon: ClipboardCheck, paths: ["/os/procedures"] },
+  { id: "stores", label: "店舗", icon: Store, paths: ["/os/stores"] },
+  { id: "settings", label: "設定", icon: Settings, href: "/os/settings", paths: ["/os/settings"] }
+];
 
 function getModuleNavPaths(pathname: string) {
   if (pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")) {
@@ -60,6 +116,7 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
   if (item.href === "/os/staff") return role === "owner";
+  if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner"].includes(role);
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
   if (item.href === "/os/menus") return ["owner", "manager"].includes(role);
@@ -67,6 +124,12 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);
 
   return true;
+}
+
+function filterPermittedNavItems(_navItems: OsNavItem[], role: string) {
+  const availableNavItems = canonicalNavItems;
+  if (!role) return [];
+  return availableNavItems.filter((item) => canShowNavItem(role, item));
 }
 
 export function usePermittedNavItems(navItems: OsNavItem[]) {
@@ -89,34 +152,112 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
   }, []);
 
   return useMemo(() => {
-    const availableNavItems = navItems.some((item) => item.href === "/os/settings") ? navItems : [...navItems, settingsNavItem];
-    const currentModuleItems = availableNavItems.filter((item) => canShowInCurrentModule(pathname, item));
-    if (!role) return [];
-    return currentModuleItems.filter((item) => canShowNavItem(role, item));
+    const permittedItems = filterPermittedNavItems(navItems, role);
+    return permittedItems.filter((item) => canShowInCurrentModule(pathname, item));
   }, [navItems, pathname, role]);
 }
 
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
-  const permittedNavItems = usePermittedNavItems(navItems);
+  const pathname = usePathname();
+  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentRole() {
+      const employee = await loadCurrentEmployee();
+      if (isMounted) setRole(employee?.role ?? "");
+    }
+
+    void loadCurrentRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const permittedNavItems = useMemo(() => filterPermittedNavItems(navItems, role), [navItems, role]);
+  const navItemByHref = useMemo(() => new Map(permittedNavItems.map((item) => [item.href, item])), [permittedNavItems]);
+  const visibleModules = useMemo(() => {
+    return navModules
+      .map((module) => ({
+        ...module,
+        children: module.paths.map((path) => navItemByHref.get(path)).filter((item): item is OsNavItem => Boolean(item))
+      }))
+      .filter((module) => {
+        if (module.href) return navItemByHref.has(module.href);
+        return module.children.length > 0;
+      });
+  }, [navItemByHref]);
+  const activeModule = visibleModules.find((module) => module.paths.some((path) => pathname === path || (path !== "/os" && pathname.startsWith(`${path}/`))));
+  const openModule = visibleModules.find((module) => module.id === openModuleId);
+
+  useEffect(() => {
+    setOpenModuleId(null);
+  }, [pathname]);
+
+  function handleModuleClick(module: OsNavModule & { children: OsNavItem[] }) {
+    if (module.href && module.children.length <= 1) {
+      setOpenModuleId(null);
+      return;
+    }
+
+    setOpenModuleId((current) => current === module.id ? null : module.id);
+  }
+
+  const groupedChildren = openModule?.children.filter((item) => !systemNavItems.has(item.href)) ?? [];
 
   return (
-    <nav className="nav-list">
-      {permittedNavItems.map(({ label, href, icon: Icon }, index) => {
-        const isHome = href === "/os";
-        const followsHome = index > 0 && permittedNavItems[index - 1]?.href === "/os";
-        const content = (
-          <>
-            <Icon size={18} />
-            <span>{label}</span>
-          </>
-        );
+    <div className="nav-shell">
+      <nav className="nav-list" aria-label="OS モジュール">
+        {visibleModules.map((module) => {
+          const Icon = module.icon;
+          const isActive = activeModule?.id === module.id;
+          const isOpen = openModule?.id === module.id;
+          const className = `nav-item${isActive ? " is-active" : ""}${isOpen ? " is-open" : ""}`;
+          const content = (
+            <>
+              <Icon size={19} />
+              <span>{module.label}</span>
+            </>
+          );
 
-        return (
-          <Link href={href} className={`nav-item${isHome ? " is-home" : ""}${followsHome ? " follows-home" : ""}`} key={label}>
-            {content}
-          </Link>
-        );
-      })}
-    </nav>
+          if (module.href && module.children.length <= 1) {
+            return (
+              <Link href={module.href} className={className} key={module.id}>
+                {content}
+              </Link>
+            );
+          }
+
+          return (
+            <button className={className} type="button" onClick={() => handleModuleClick(module)} aria-expanded={isOpen} key={module.id}>
+              {content}
+            </button>
+          );
+        })}
+      </nav>
+      {openModule && groupedChildren.length > 0 ? (
+        <div className="nav-flyout" role="dialog" aria-label={`${openModule.label}メニュー`}>
+          <div className="nav-flyout-heading">
+            <openModule.icon size={18} />
+            <strong>{openModule.label}</strong>
+          </div>
+          <nav className="nav-flyout-list" aria-label={`${openModule.label}サブメニュー`}>
+            {groupedChildren.map(({ label, href, icon: Icon }) => {
+              const isActive = pathname === href || pathname.startsWith(`${href}/`);
+              return (
+                <Link href={href} className={isActive ? "is-active" : ""} key={href}>
+                  <Icon size={17} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      ) : null}
+      {openModule ? <button className="nav-flyout-backdrop" type="button" aria-label="メニューを閉じる" onClick={() => setOpenModuleId(null)} /> : null}
+    </div>
   );
 }
