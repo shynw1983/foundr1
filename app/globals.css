@@ -839,7 +839,7 @@ button {
   }
 
   .sidebar:has(.nav-shell.is-expanded) {
-    width: 160px;
+    width: 176px;
     padding-right: 10px;
     box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
@@ -910,7 +910,7 @@ button {
   }
 
   .nav-list {
-    gap: 3px;
+    gap: 4px;
     width: 100%;
     padding-right: 0;
     overflow: visible;
@@ -918,7 +918,7 @@ button {
 
   .nav-module {
     display: grid;
-    gap: 1px;
+    gap: 3px;
   }
 
   .nav-item {
@@ -936,10 +936,10 @@ button {
   .nav-shell.is-expanded .nav-item {
     flex-direction: row;
     justify-content: flex-start;
-    gap: 8px;
-    min-height: 38px;
-    padding: 0 9px;
-    font-size: 12px;
+    gap: 9px;
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 13px;
     text-align: left;
   }
 
@@ -957,20 +957,20 @@ button {
 
   .nav-sub-list {
     display: grid;
-    gap: 1px;
-    padding: 2px 0 4px 30px;
+    gap: 3px;
+    padding: 4px 0 8px 31px;
   }
 
   .nav-sub-list a {
     display: flex;
     align-items: center;
     gap: 7px;
-    min-height: 28px;
-    padding: 0 8px;
+    min-height: 32px;
+    padding: 0 9px;
     border-radius: 7px;
     color: #dce5ee;
     text-decoration: none;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 800;
   }
 
@@ -985,7 +985,7 @@ button {
     top: 0;
     right: 0;
     bottom: 0;
-    left: 160px;
+    left: 176px;
     z-index: 120;
     border: 0;
     background: transparent;
