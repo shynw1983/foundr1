@@ -882,6 +882,24 @@ button {
     display: none;
   }
 
+  .sidebar:has(.nav-shell.is-expanded) .brand-block {
+    justify-content: flex-start;
+    gap: 10px;
+    padding-left: 4px;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .brand-block > div:last-child {
+    display: block;
+    min-width: 0;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .brand-block h1,
+  .sidebar:has(.nav-shell.is-expanded) .brand-block .eyebrow {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-name,
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-role {
     display: inline-flex;
