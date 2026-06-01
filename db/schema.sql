@@ -151,6 +151,7 @@ create table if not exists employee_work_stores (
   commute_allowance_per_workday numeric not null default 0,
   commute_allowance_monthly_cap numeric,
   apply_social_insurance boolean not null default false,
+  apply_employment_insurance boolean not null default false,
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
@@ -165,6 +166,7 @@ alter table employee_work_stores add column if not exists monthly_salary numeric
 alter table employee_work_stores add column if not exists commute_allowance_per_workday numeric not null default 0;
 alter table employee_work_stores add column if not exists commute_allowance_monthly_cap numeric;
 alter table employee_work_stores add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_stores add column if not exists apply_employment_insurance boolean not null default false;
 alter table employee_work_stores add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_stores add column if not exists apply_income_tax boolean not null default false;
 alter table employee_work_stores add column if not exists apply_resident_tax boolean not null default false;
@@ -200,6 +202,7 @@ create table if not exists timecard_employee_settings (
   commute_allowance_per_workday numeric(12, 2) not null default 0,
   commute_allowance_monthly_cap numeric(12, 2),
   apply_social_insurance boolean not null default false,
+  apply_employment_insurance boolean not null default false,
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
@@ -213,6 +216,7 @@ create table if not exists timecard_employee_settings (
 
 alter table timecard_employee_settings add column if not exists commute_allowance_monthly_cap numeric(12, 2);
 alter table timecard_employee_settings add column if not exists apply_social_insurance boolean not null default false;
+alter table timecard_employee_settings add column if not exists apply_employment_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_labor_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_income_tax boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_resident_tax boolean not null default false;
@@ -228,6 +232,7 @@ create table if not exists employee_work_store_payroll_history (
   commute_allowance_per_workday numeric(12, 2) not null default 0,
   commute_allowance_monthly_cap numeric(12, 2),
   apply_social_insurance boolean not null default false,
+  apply_employment_insurance boolean not null default false,
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
@@ -241,6 +246,7 @@ create table if not exists employee_work_store_payroll_history (
 
 alter table employee_work_store_payroll_history add column if not exists commute_allowance_monthly_cap numeric(12, 2);
 alter table employee_work_store_payroll_history add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists apply_employment_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_income_tax boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_resident_tax boolean not null default false;
@@ -273,6 +279,7 @@ set
   commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0),
   commute_allowance_monthly_cap = coalesce(employee_work_stores.commute_allowance_monthly_cap, latest_settings.commute_allowance_monthly_cap),
   apply_social_insurance = coalesce(latest_settings.apply_social_insurance, employee_work_stores.apply_social_insurance),
+  apply_employment_insurance = coalesce(latest_settings.apply_employment_insurance, employee_work_stores.apply_employment_insurance),
   apply_labor_insurance = coalesce(latest_settings.apply_labor_insurance, employee_work_stores.apply_labor_insurance),
   apply_income_tax = coalesce(latest_settings.apply_income_tax, employee_work_stores.apply_income_tax),
   apply_resident_tax = coalesce(latest_settings.apply_resident_tax, employee_work_stores.apply_resident_tax)
@@ -285,6 +292,7 @@ from (
     commute_allowance_per_workday,
     commute_allowance_monthly_cap,
     apply_social_insurance,
+    apply_employment_insurance,
     apply_labor_insurance,
     apply_income_tax,
     apply_resident_tax,

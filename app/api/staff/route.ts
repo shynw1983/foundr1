@@ -45,6 +45,7 @@ type WorkStoreSettingPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean;
+  applyEmploymentInsurance?: boolean;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
   applyResidentTax?: boolean;
@@ -210,6 +211,7 @@ export async function GET() {
           'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday,
           'commuteAllowanceMonthlyCap', employee_work_stores.commute_allowance_monthly_cap,
           'applySocialInsurance', employee_work_stores.apply_social_insurance,
+          'applyEmploymentInsurance', employee_work_stores.apply_employment_insurance,
           'applyLaborInsurance', employee_work_stores.apply_labor_insurance,
           'applyIncomeTax', employee_work_stores.apply_income_tax,
           'applyResidentTax', employee_work_stores.apply_resident_tax,
@@ -230,6 +232,7 @@ export async function GET() {
             'commuteAllowancePerWorkday', employee_work_store_payroll_history.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', employee_work_store_payroll_history.commute_allowance_monthly_cap,
             'applySocialInsurance', employee_work_store_payroll_history.apply_social_insurance,
+            'applyEmploymentInsurance', employee_work_store_payroll_history.apply_employment_insurance,
           'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
           'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
             'applyResidentTax', employee_work_store_payroll_history.apply_resident_tax,
@@ -432,6 +435,7 @@ export async function POST(request: Request) {
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
         apply_resident_tax
@@ -446,6 +450,7 @@ export async function POST(request: Request) {
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
         ${Boolean(storeSetting?.applySocialInsurance)},
+        ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${Boolean(storeSetting?.applyIncomeTax)},
         ${Boolean(storeSetting?.applyResidentTax)}
@@ -463,6 +468,7 @@ export async function POST(request: Request) {
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
         apply_resident_tax,
@@ -482,6 +488,7 @@ export async function POST(request: Request) {
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
         ${Boolean(storeSetting?.applySocialInsurance)},
+        ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${Boolean(storeSetting?.applyIncomeTax)},
         ${Boolean(storeSetting?.applyResidentTax)},
@@ -499,6 +506,7 @@ export async function POST(request: Request) {
         commute_allowance_per_workday = excluded.commute_allowance_per_workday,
         commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
         apply_social_insurance = excluded.apply_social_insurance,
+        apply_employment_insurance = excluded.apply_employment_insurance,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
         apply_resident_tax = excluded.apply_resident_tax,

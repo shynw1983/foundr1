@@ -45,6 +45,7 @@ type WorkStoreSettingPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean;
+  applyEmploymentInsurance?: boolean;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
   applyResidentTax?: boolean;
@@ -255,6 +256,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       commute_allowance_per_workday as "commuteAllowancePerWorkday",
       commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
       apply_social_insurance as "applySocialInsurance",
+      apply_employment_insurance as "applyEmploymentInsurance",
       apply_labor_insurance as "applyLaborInsurance",
       apply_income_tax as "applyIncomeTax",
       apply_resident_tax as "applyResidentTax"
@@ -304,6 +306,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const currentCommuteAllowancePerWorkday = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowancePerWorkday) ?? 0 : storeCommuteAllowancePerWorkday;
     const currentCommuteAllowanceMonthlyCap = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowanceMonthlyCap) : storeCommuteAllowanceMonthlyCap;
     const currentApplySocialInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
+    const currentApplyEmploymentInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyEmploymentInsurance) : Boolean(storeSetting?.applyEmploymentInsurance);
     const currentApplyLaborInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyLaborInsurance) : Boolean(storeSetting?.applyLaborInsurance);
     const currentApplyIncomeTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : Boolean(storeSetting?.applyIncomeTax);
     const currentApplyResidentTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyResidentTax) : Boolean(storeSetting?.applyResidentTax);
@@ -318,6 +321,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
         apply_resident_tax
@@ -332,6 +336,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${currentCommuteAllowancePerWorkday},
         ${currentCommuteAllowanceMonthlyCap},
         ${currentApplySocialInsurance},
+        ${currentApplyEmploymentInsurance},
         ${currentApplyLaborInsurance},
         ${currentApplyIncomeTax},
         ${currentApplyResidentTax}
@@ -349,6 +354,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
         apply_resident_tax,
@@ -368,6 +374,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
         ${Boolean(storeSetting?.applySocialInsurance)},
+        ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${Boolean(storeSetting?.applyIncomeTax)},
         ${Boolean(storeSetting?.applyResidentTax)},
@@ -385,6 +392,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday = excluded.commute_allowance_per_workday,
         commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
         apply_social_insurance = excluded.apply_social_insurance,
+        apply_employment_insurance = excluded.apply_employment_insurance,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
         apply_resident_tax = excluded.apply_resident_tax,

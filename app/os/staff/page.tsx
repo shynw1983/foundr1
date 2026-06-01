@@ -25,6 +25,7 @@ type WorkStoreOption = StoreOption & {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
+  applyEmploymentInsurance?: boolean | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
   applyResidentTax?: boolean | null;
@@ -40,6 +41,7 @@ type PayrollHistoryEntry = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
+  applyEmploymentInsurance?: boolean | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
   applyResidentTax?: boolean | null;
@@ -300,6 +302,7 @@ export default function StaffPage() {
         commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0"),
         commuteAllowanceMonthlyCap: String(formData.get(`commuteAllowanceMonthlyCap:${store.id}`) ?? ""),
         applySocialInsurance: formData.getAll("applySocialInsuranceStoreIds").map((value) => String(value)).includes(store.id),
+        applyEmploymentInsurance: formData.getAll("applyEmploymentInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyLaborInsurance: formData.getAll("applyLaborInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyIncomeTax: formData.getAll("applyIncomeTaxStoreIds").map((value) => String(value)).includes(store.id),
         applyResidentTax: formData.getAll("applyResidentTaxStoreIds").map((value) => String(value)).includes(store.id),
@@ -761,6 +764,10 @@ function StaffFormFields({ member, stores, currentUserId }: { member?: StaffMemb
                   <label>
                     <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
                     社会保険
+                  </label>
+                  <label>
+                    <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
+                    雇用保険
                   </label>
                   <label>
                     <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
