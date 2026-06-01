@@ -867,7 +867,7 @@ button {
     box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
 
-  .brand-block {
+  .sidebar .brand-block {
     width: 100%;
     justify-content: center;
     gap: 0;
@@ -875,7 +875,7 @@ button {
     padding: 5px 0;
   }
 
-  .brand-block > div:last-child,
+  .sidebar .brand-block > div:last-child,
   .sidebar-user .user-badge-name,
   .sidebar-user .user-badge-role,
   .sidebar-user .os-language-picker {
@@ -905,7 +905,7 @@ button {
     display: inline-flex;
   }
 
-  .brand-mark {
+  .sidebar .brand-mark {
     width: 48px;
     height: 48px;
   }
