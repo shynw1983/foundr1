@@ -224,6 +224,15 @@ function formatDateKey(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
+function getTodayJstDateKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
 function getPayrollPeriod(month: string, store: StoreOption | null) {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
   if (!match) return null;
@@ -570,6 +579,7 @@ export function TimecardPage({
     () => getPayrollPeriod(month, selectedStore),
     [month, selectedStore]
   );
+  const canConfirmPayrollPeriod = Boolean(payrollPeriod && getTodayJstDateKey() >= payrollPeriod.endDate);
   const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
   const selectedStoreBusinessHours = useMemo(
     () => normalizeBusinessHours(selectedStore?.businessHours),
@@ -917,6 +927,10 @@ export function TimecardPage({
   }
 
   async function confirmPayroll() {
+    if (!canConfirmPayrollPeriod) {
+      window.alert("この月度はまだ締め日前のため、給与を確定できません。");
+      return;
+    }
     if (!selectedStoreId || !window.confirm("この月の給与を確定しますか？確定時点の給与計算結果を保存します。")) return;
 
     setIsConfirmingPayroll(true);
@@ -1333,18 +1347,22 @@ export function TimecardPage({
           </>
         ) : canViewPayroll ? (
           <>
-            <section className={`payroll-confirmation-banner${payrollConfirmation ? " is-confirmed" : ""}`}>
+            <section className={`payroll-confirmation-banner${payrollConfirmation ? " is-confirmed" : canConfirmPayrollPeriod ? "" : " is-pending"}`}>
               <div>
-                <strong>{payrollConfirmation ? "本月給与は確定済みです" : "本月給与はまだ確定していません"}</strong>
+                <strong>{payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
                 <span>
                   {payrollConfirmation
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
-                    : "排班と実勤務時間を確認・修正したあと、給与を確定してください。"}
+                    : canConfirmPayrollPeriod
+                      ? "排班と実勤務時間を確認・修正したあと、給与を確定してください。"
+                      : `給与期間が終了する ${payrollPeriod?.endDate ?? "締め日"} 以降に確定できます。`}
                 </span>
               </div>
-              <button className="primary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
-                {isConfirmingPayroll ? "確定中" : payrollConfirmation ? "再確定" : "給与を確定"}
-              </button>
+              {canConfirmPayrollPeriod ? (
+                <button className="primary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
+                  {isConfirmingPayroll ? "確定中" : payrollConfirmation ? "再確定" : "給与を確定"}
+                </button>
+              ) : null}
             </section>
             <section className="timecard-subtabs" aria-label="給与メニュー">
               <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>

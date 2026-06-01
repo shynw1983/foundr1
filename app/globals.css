@@ -4393,6 +4393,11 @@ button {
   background: #f4fbf6;
 }
 
+.payroll-confirmation-banner.is-pending {
+  border-color: var(--line);
+  background: #f8fafc;
+}
+
 .payroll-confirmation-banner div {
   display: grid;
   gap: 4px;

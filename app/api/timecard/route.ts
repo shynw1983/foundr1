@@ -2,6 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../..
 import { writeAuditLog } from "../../../lib/audit-log";
 import { sql } from "../../../lib/db";
 import {
+  getJstDateLabel,
   getJstMonthLabel,
   isTimecardPunchType,
   summarizePayroll,
@@ -505,6 +506,9 @@ export async function POST(request: Request) {
     }
 
     const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, store);
+    if (getJstDateLabel(new Date()) < endDate) {
+      return Response.json({ error: "この月度はまだ締め日前のため、給与を確定できません。" }, { status: 409 });
+    }
     const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
     const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
     const scope = await getSessionStoreScope(session);
