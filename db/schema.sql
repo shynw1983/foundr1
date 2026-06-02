@@ -368,6 +368,16 @@ create table if not exists timecard_payroll_confirmations (
 create index if not exists idx_timecard_payroll_confirmations_store_month
   on timecard_payroll_confirmations(store_id, payroll_month);
 
+create table if not exists timecard_workload_settings (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  include_management boolean not null default true,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id)
+);
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -1258,6 +1268,7 @@ create index if not exists idx_timecard_punches_employee_punched on timecard_pun
 create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);
 create index if not exists idx_timecard_shifts_store_date on timecard_shifts(store_id, work_date);
 create index if not exists idx_timecard_employee_settings_employee on timecard_employee_settings(employee_id, valid_from desc);
+create index if not exists idx_timecard_workload_settings_store on timecard_workload_settings(store_id);
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
 create index if not exists idx_menu_sources_brand on menu_sources(brand_id, status);

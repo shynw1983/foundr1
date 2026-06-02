@@ -8,6 +8,9 @@ import {
   type TimecardPunch
 } from "../../../../lib/timecard";
 
+const workloadSettingsRoles = new Set(["owner", "manager", "store_owner"]);
+const managementRoles = new Set(["owner", "manager", "store_owner"]);
+
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
     return sql`
@@ -59,6 +62,18 @@ function getIdleBlockMinutes(orderedTimes: number[], shiftStart: number, shiftEn
   return { idleBlockCount, idleMinutes };
 }
 
+async function getWorkloadSettings(storeId: string) {
+  const rows = await sql`
+    select coalesce(include_management, true) as "includeManagement"
+    from timecard_workload_settings
+    where store_id::text = ${storeId}
+    limit 1
+  `;
+  return {
+    includeManagement: rows[0]?.includeManagement !== false
+  };
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -73,6 +88,7 @@ export async function GET(request: Request) {
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
+  const settings = selectedStoreId ? await getWorkloadSettings(selectedStoreId) : { includeManagement: true };
 
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
@@ -84,6 +100,7 @@ export async function GET(request: Request) {
       employees.name as "employeeName",
       timecard_punches.store_id::text as "storeId",
       stores.name as "storeName",
+      employees.role as "employeeRole",
       timecard_punches.punch_type as "punchType",
       timecard_punches.punched_at as "punchedAt",
       timecard_punches.source,
@@ -97,6 +114,7 @@ export async function GET(request: Request) {
     order by timecard_punches.punched_at asc
   ` : [];
 
+  const employeeRoleById = new Map(punches.map((row) => [String(row.employeeId), String(row.employeeRole)]));
   const typedPunches = punches.map((row) => {
     const punchType = String(row.punchType);
     return {
@@ -112,7 +130,7 @@ export async function GET(request: Request) {
     };
   }) satisfies TimecardPunch[];
 
-  const dailySummaries = summarizeTimecardDays(typedPunches, {
+  const allDailySummaries = summarizeTimecardDays(typedPunches, {
     workDateStart: month + "-01",
     workDateEndExclusive: new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Tokyo",
@@ -121,6 +139,12 @@ export async function GET(request: Request) {
       day: "2-digit"
     }).format(endUtc)
   }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
+  const excludedManagementShiftCount = settings.includeManagement
+    ? 0
+    : allDailySummaries.filter((summary) => managementRoles.has(employeeRoleById.get(summary.employeeId) ?? "")).length;
+  const dailySummaries = settings.includeManagement
+    ? allDailySummaries
+    : allDailySummaries.filter((summary) => !managementRoles.has(employeeRoleById.get(summary.employeeId) ?? ""));
 
   const orders = selectedStoreId ? await sql`
     select
@@ -223,6 +247,9 @@ export async function GET(request: Request) {
     month,
     stores,
     selectedStoreId,
+    canEditSettings: workloadSettingsRoles.has(session.role),
+    settings,
+    excludedManagementShiftCount,
     totals: {
       workMinutes: employees.reduce((sum, entry) => sum + entry.workMinutes, 0),
       orderCount: employees.reduce((sum, entry) => sum + entry.orderCount, 0),
@@ -239,5 +266,48 @@ export async function GET(request: Request) {
       || b.idleMinutes - a.idleMinutes
     )).slice(0, 5),
     busiestShifts: busyShifts.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount).slice(0, 8)
+  });
+}
+
+export async function POST(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  if (!workloadSettingsRoles.has(session.role)) {
+    return Response.json({ error: "負荷分析設定を変更する権限がありません。" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as { storeId?: string; includeManagement?: unknown };
+  const storeId = String(body.storeId ?? "");
+  if (!storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
+
+  const scope = await getSessionStoreScope(session);
+  if (!scope.allStores && !scope.storeIds.includes(storeId)) {
+    return Response.json({ error: "この店舗の設定を変更する権限がありません。" }, { status: 403 });
+  }
+
+  const includeManagement = body.includeManagement !== false;
+  await sql`
+    insert into timecard_workload_settings (
+      store_id,
+      include_management,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${storeId},
+      ${includeManagement},
+      ${session.id},
+      now()
+    )
+    on conflict (store_id)
+    do update set
+      include_management = excluded.include_management,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+  `;
+
+  return Response.json({
+    ok: true,
+    settings: { includeManagement }
   });
 }

@@ -57,6 +57,11 @@ type WorkloadSummary = {
   month: string;
   stores: StoreOption[];
   selectedStoreId: string;
+  canEditSettings: boolean;
+  settings: {
+    includeManagement: boolean;
+  };
+  excludedManagementShiftCount: number;
   totals: {
     workMinutes: number;
     orderCount: number;
@@ -132,6 +137,7 @@ export default function TimecardWorkloadPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [data, setData] = useState<WorkloadSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   async function loadWorkload(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -153,6 +159,20 @@ export default function TimecardWorkloadPage() {
 
   const busiest = data?.busiestEmployees[0] ?? null;
   const lightest = data?.lightestEmployees[0] ?? null;
+
+  async function saveIncludeManagement(includeManagement: boolean) {
+    if (!selectedStoreId) return;
+    setIsSavingSettings(true);
+    const response = await fetch("/api/timecard/workload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: selectedStoreId, includeManagement })
+    });
+    if (response.ok) {
+      await loadWorkload(month, selectedStoreId);
+    }
+    setIsSavingSettings(false);
+  }
 
   return (
     <main className="shell">
@@ -208,13 +228,32 @@ export default function TimecardWorkloadPage() {
           <article className="metric-card">
             <span>負荷最大</span>
             <strong>{busiest?.employeeName ?? "-"}</strong>
-            <small>{busiest ? `${rate(busiest.ordersPerHour)} 件/時` : "データなし"}</small>
+            <small>{busiest ? `ワンオペ高負荷 ${formatDuration(busiest.onePersonHighLoadMinutes)}` : "データなし"}</small>
           </article>
           <article className="metric-card">
             <span>負荷最少</span>
             <strong>{lightest?.employeeName ?? "-"}</strong>
             <small>{lightest ? `${rate(lightest.ordersPerHour)} 件/時` : "データなし"}</small>
           </article>
+        </section>
+
+        <section className="panel workload-settings-panel">
+          <label className="settings-toggle-row workload-toggle-row">
+            <input
+              type="checkbox"
+              checked={data?.settings.includeManagement ?? true}
+              disabled={!data?.canEditSettings || isSavingSettings}
+              onChange={(event) => void saveIncludeManagement(event.target.checked)}
+            />
+            <div>
+              <strong>管理職を負荷計算に含める</strong>
+              <span>
+                {data?.settings.includeManagement
+                  ? "店長・管理者の勤務もスタッフ負荷に含めています。"
+                  : `店長・管理者の勤務を除外しています${data?.excludedManagementShiftCount ? `（除外 ${data.excludedManagementShiftCount} 勤務）` : ""}。`}
+              </span>
+            </div>
+          </label>
         </section>
 
         <section className="panel workload-table-panel">
@@ -260,7 +299,7 @@ export default function TimecardWorkloadPage() {
 
         <section className="sales-grid">
           <article className="panel">
-            <h3>負荷が高い勤務</h3>
+            <h3>高負荷だった勤務（シフト別）</h3>
             <div className="sales-rank-list">
               {(data?.busiestShifts ?? []).map((shift) => (
                 <div className="sales-rank-row" key={`${shift.employeeId}-${shift.workDate}-${shift.clockIn}`}>
@@ -272,13 +311,13 @@ export default function TimecardWorkloadPage() {
             </div>
           </article>
           <article className="panel">
-            <h3>負荷最大ランキング</h3>
+            <h3>スタッフ総合負荷ランキング</h3>
             <div className="sales-rank-list">
               {(data?.busiestEmployees ?? []).map((employee) => (
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
-                  <strong>{rate(employee.ordersPerHour)}件/時</strong>
-                  <small>ピーク {employee.peakHourOrderCount}件/時</small>
+                  <strong>{formatDuration(employee.onePersonHighLoadMinutes)}</strong>
+                  <small>{rate(employee.ordersPerHour)}件/時 / ピーク {employee.peakHourOrderCount}件/時</small>
                 </div>
               ))}
             </div>
