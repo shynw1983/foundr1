@@ -518,7 +518,7 @@ export default function StaffPage() {
 
       {editingStaff ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="staff-edit-title">
-          <section className="edit-modal">
+          <section className="edit-modal staff-edit-modal">
             <div className="modal-heading">
               <div>
                 <p className="eyebrow">Staff</p>
