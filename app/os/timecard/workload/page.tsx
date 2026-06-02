@@ -144,6 +144,10 @@ function percent(value: number) {
   return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}%`;
 }
 
+function idleRate(employee: WorkloadEmployee) {
+  return employee.workMinutes > 0 ? (employee.idleMinutes / employee.workMinutes) * 100 : 0;
+}
+
 function chartWidth(value: number, maxValue: number) {
   if (!Number.isFinite(value) || value <= 0 || maxValue <= 0) return "0%";
   return `${Math.max(4, Math.min(100, (value / maxValue) * 100))}%`;
@@ -511,8 +515,8 @@ export default function TimecardWorkloadPage() {
               {(data?.lightestEmployees ?? []).map((employee) => (
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
-                  <strong>{rate(employee.ordersPerHour)}件/時</strong>
-                  <small>空き {formatDuration(employee.idleMinutes)}</small>
+                  <strong>{percent(idleRate(employee))}</strong>
+                  <small>空き {formatDuration(employee.idleMinutes)} / 勤務 {formatDuration(employee.workMinutes)} / {rate(employee.ordersPerHour)}件/時</small>
                 </div>
               ))}
             </div>

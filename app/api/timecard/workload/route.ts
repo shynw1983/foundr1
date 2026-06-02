@@ -360,10 +360,15 @@ export async function GET(request: Request) {
       || b.peakHourOrderCount - a.peakHourOrderCount
     )).slice(0, 5),
     lightestEmployees: [...employees].filter((entry) => entry.workMinutes > 0).sort((a, b) => (
-      a.ordersPerHour - b.ordersPerHour
+      (b.idleMinutes / b.workMinutes) - (a.idleMinutes / a.workMinutes)
+      || a.ordersPerHour - b.ordersPerHour
       || b.idleMinutes - a.idleMinutes
     )).slice(0, 5),
-    busiestShifts: busyShifts.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount).slice(0, 8)
+    busiestShifts: busyShifts.sort((a, b) => (
+      b.peakHourLoadScore - a.peakHourLoadScore
+      || b.peakHourOrderCount - a.peakHourOrderCount
+      || b.ordersPerHour - a.ordersPerHour
+    )).slice(0, 8)
   });
 }
 
