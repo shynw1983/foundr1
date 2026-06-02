@@ -58,14 +58,19 @@ function getDatesBetween(startDate: string, endDate: string) {
 
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const managementRoles = new Set(["owner", "manager", "store_owner"]);
+const hourMs = 60 * 60 * 1000;
 const workloadLevels = [
-  { key: "veryIdle", label: "かなり空き" },
-  { key: "normal", label: "通常" },
-  { key: "busy", label: "忙しい" },
-  { key: "high", label: "高負荷" },
-  { key: "extreme", label: "超負荷" }
+  { key: "veryIdle", label: "かなり空き", scoreKey: "scoreVeryIdle" },
+  { key: "normal", label: "通常", scoreKey: "scoreNormal" },
+  { key: "busy", label: "忙しい", scoreKey: "scoreBusy" },
+  { key: "high", label: "高負荷", scoreKey: "scoreHigh" },
+  { key: "extreme", label: "超負荷", scoreKey: "scoreExtreme" }
 ] as const;
 const defaultWorkloadSettings = {
+  includeManagement: true,
+  minOrderLoadScore: 1,
+  amountScoreMultiplier: 1,
   orderVeryIdleMax: 4,
   orderNormalMax: 8,
   orderBusyMax: 12,
@@ -73,7 +78,12 @@ const defaultWorkloadSettings = {
   salesVeryIdleMax: 4999,
   salesNormalMax: 9999,
   salesBusyMax: 14999,
-  salesHighMax: 19999
+  salesHighMax: 19999,
+  scoreVeryIdle: 20,
+  scoreNormal: 60,
+  scoreBusy: 90,
+  scoreHigh: 120,
+  scoreExtreme: 150
 };
 const defaultWeatherLocation = {
   name: "福岡市",
@@ -91,6 +101,12 @@ type WeatherDay = {
   precipitation: number | null;
 };
 
+type WorkloadOrder = {
+  orderedAtMs: number;
+  total: number;
+  loadScore: number;
+};
+
 function getRevenueGroup(channel: string, sourcePlatform: string) {
   if (channel === "delivery" || ["uber_eats", "rocket_now", "demae_can"].includes(sourcePlatform)) {
     return { key: "delivery", label: "デリバリー", feeRate: deliveryFeeRate };
@@ -106,6 +122,9 @@ function numberFrom(value: unknown, fallback: number) {
 
 function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
   return {
+    includeManagement: settings.includeManagement !== false,
+    minOrderLoadScore: numberFrom(settings.minOrderLoadScore, defaultWorkloadSettings.minOrderLoadScore),
+    amountScoreMultiplier: numberFrom(settings.amountScoreMultiplier, defaultWorkloadSettings.amountScoreMultiplier),
     orderVeryIdleMax: numberFrom(settings.orderVeryIdleMax, defaultWorkloadSettings.orderVeryIdleMax),
     orderNormalMax: numberFrom(settings.orderNormalMax, defaultWorkloadSettings.orderNormalMax),
     orderBusyMax: numberFrom(settings.orderBusyMax, defaultWorkloadSettings.orderBusyMax),
@@ -113,7 +132,12 @@ function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): Workloa
     salesVeryIdleMax: numberFrom(settings.salesVeryIdleMax, defaultWorkloadSettings.salesVeryIdleMax),
     salesNormalMax: numberFrom(settings.salesNormalMax, defaultWorkloadSettings.salesNormalMax),
     salesBusyMax: numberFrom(settings.salesBusyMax, defaultWorkloadSettings.salesBusyMax),
-    salesHighMax: numberFrom(settings.salesHighMax, defaultWorkloadSettings.salesHighMax)
+    salesHighMax: numberFrom(settings.salesHighMax, defaultWorkloadSettings.salesHighMax),
+    scoreVeryIdle: numberFrom(settings.scoreVeryIdle, defaultWorkloadSettings.scoreVeryIdle),
+    scoreNormal: numberFrom(settings.scoreNormal, defaultWorkloadSettings.scoreNormal),
+    scoreBusy: numberFrom(settings.scoreBusy, defaultWorkloadSettings.scoreBusy),
+    scoreHigh: numberFrom(settings.scoreHigh, defaultWorkloadSettings.scoreHigh),
+    scoreExtreme: numberFrom(settings.scoreExtreme, defaultWorkloadSettings.scoreExtreme)
   };
 }
 
@@ -124,15 +148,43 @@ async function getWorkloadSettings(storeId: string) {
       coalesce(order_normal_max, 8) as "orderNormalMax",
       coalesce(order_busy_max, 12) as "orderBusyMax",
       coalesce(order_high_max, 15) as "orderHighMax",
+      coalesce(include_management, true) as "includeManagement",
+      coalesce(min_order_load_score, 1) as "minOrderLoadScore",
+      coalesce(amount_score_multiplier, 1) as "amountScoreMultiplier",
       coalesce(sales_very_idle_max, 4999) as "salesVeryIdleMax",
       coalesce(sales_normal_max, 9999) as "salesNormalMax",
       coalesce(sales_busy_max, 14999) as "salesBusyMax",
-      coalesce(sales_high_max, 19999) as "salesHighMax"
+      coalesce(sales_high_max, 19999) as "salesHighMax",
+      coalesce(score_very_idle, 20) as "scoreVeryIdle",
+      coalesce(score_normal, 60) as "scoreNormal",
+      coalesce(score_busy, 90) as "scoreBusy",
+      coalesce(score_high, 120) as "scoreHigh",
+      coalesce(score_extreme, 150) as "scoreExtreme"
     from timecard_workload_settings
     where store_id::text = ${storeId}
     limit 1
   `;
   return normalizeWorkloadSettings(rows[0] ?? defaultWorkloadSettings);
+}
+
+function getPeakHourMetrics(orders: WorkloadOrder[]) {
+  const sorted = [...orders].sort((a, b) => a.orderedAtMs - b.orderedAtMs);
+  let peakOrderCount = 0;
+  let peakSales = 0;
+  let peakLoadScore = 0;
+  let end = 0;
+  for (let start = 0; start < sorted.length; start += 1) {
+    while (end < sorted.length && sorted[end].orderedAtMs - sorted[start].orderedAtMs <= hourMs) end += 1;
+    const windowOrders = sorted.slice(start, end);
+    peakOrderCount = Math.max(peakOrderCount, windowOrders.length);
+    peakSales = Math.max(peakSales, windowOrders.reduce((sum, order) => sum + order.total, 0));
+    peakLoadScore = Math.max(peakLoadScore, windowOrders.reduce((sum, order) => sum + order.loadScore, 0));
+  }
+  return {
+    peakOrderCount,
+    peakSales,
+    peakLoadScore
+  };
 }
 
 function getLoadLevelIndex(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
@@ -161,7 +213,8 @@ function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number, settin
   const level = workloadLevels[getLoadLevelIndex(ordersPerHour, salesPerHour, settings)];
   return {
     loadLevel: level.key,
-    loadLevelLabel: level.label
+    loadLevelLabel: level.label,
+    loadLevelScore: settings[level.scoreKey]
   };
 }
 
@@ -295,6 +348,7 @@ export async function GET(request: Request) {
       employees.name as "employeeName",
       timecard_punches.store_id::text as "storeId",
       stores.name as "storeName",
+      employees.role as "employeeRole",
       timecard_punches.punch_type as "punchType",
       timecard_punches.punched_at as "punchedAt",
       timecard_punches.source,
@@ -307,6 +361,7 @@ export async function GET(request: Request) {
       and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
     order by timecard_punches.punched_at asc
   ` : [];
+  const employeeRoleById = new Map(punches.map((row) => [String(row.employeeId), String(row.employeeRole)]));
   const typedPunches = punches.map((row) => {
     const punchType = String(row.punchType);
     return {
@@ -325,7 +380,12 @@ export async function GET(request: Request) {
   const dailySummaries = summarizeTimecardDays(typedPunches, {
     workDateStart: startDate,
     workDateEndExclusive
-  }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
+  }).filter((summary) => (
+    summary.clockIn
+    && summary.clockOut
+    && summary.workMinutes > 0
+    && (workloadSettings.includeManagement || !managementRoles.has(employeeRoleById.get(summary.employeeId) ?? ""))
+  ));
   const shiftIntervals = dailySummaries.map((summary) => ({
     workDate: summary.workDate,
     startMs: new Date(summary.clockIn as string).getTime(),
@@ -335,6 +395,40 @@ export async function GET(request: Request) {
   const dailyWorkMinutes = new Map<string, number>();
   for (const summary of dailySummaries) {
     dailyWorkMinutes.set(summary.workDate, (dailyWorkMinutes.get(summary.workDate) ?? 0) + summary.workMinutes);
+  }
+  const averageOrderTotal = orders.length > 0
+    ? orders.reduce((sum, order) => sum + Number(order.total ?? 0), 0) / orders.length
+    : 0;
+  const dailyPeakMetrics = new Map<string, {
+    peakHourOrderCount: number;
+    peakHourSales: number;
+    peakHourLoadScore: number;
+  }>();
+  for (const shift of shiftIntervals) {
+    const shiftOrders = orders.filter((order) => {
+      const orderedAt = new Date(String(order.orderedAt)).getTime();
+      return orderedAt >= shift.startMs && orderedAt <= shift.endMs;
+    });
+    const workloadOrders = shiftOrders.map((order) => {
+      const total = Number(order.total ?? 0);
+      return {
+        orderedAtMs: new Date(String(order.orderedAt)).getTime(),
+        total,
+        loadScore: averageOrderTotal > 0
+          ? Math.max(workloadSettings.minOrderLoadScore, (total / averageOrderTotal) * workloadSettings.amountScoreMultiplier)
+          : workloadSettings.minOrderLoadScore
+      };
+    });
+    const peakMetrics = getPeakHourMetrics(workloadOrders);
+    const entry = dailyPeakMetrics.get(shift.workDate) ?? {
+      peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0
+    };
+    entry.peakHourOrderCount = Math.max(entry.peakHourOrderCount, peakMetrics.peakOrderCount);
+    entry.peakHourSales = Math.max(entry.peakHourSales, peakMetrics.peakSales);
+    entry.peakHourLoadScore = Math.max(entry.peakHourLoadScore, peakMetrics.peakLoadScore);
+    dailyPeakMetrics.set(shift.workDate, entry);
   }
 
   const dayMap = new Map<string, {
@@ -347,6 +441,10 @@ export async function GET(request: Request) {
     workMinutes: number;
     ordersPerHour: number;
     salesPerHour: number;
+    peakHourOrderCount: number;
+    peakHourSales: number;
+    peakHourLoadScore: number;
+    peakLoadLevelScore: number;
   }>();
   const hourMap = new Map<number, { hour: number; orderCount: number; sales: number }>();
   const platformMap = new Map<string, { sourcePlatform: string; orderCount: number; sales: number }>();
@@ -390,7 +488,11 @@ export async function GET(request: Request) {
       deliveryEstimatedDeposit: 0,
       workMinutes: 0,
       ordersPerHour: 0,
-      salesPerHour: 0
+      salesPerHour: 0,
+      peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0,
+      peakLoadLevelScore: 0
     });
   }
   for (let hour = 0; hour < 24; hour += 1) {
@@ -430,7 +532,11 @@ export async function GET(request: Request) {
       deliveryEstimatedDeposit: 0,
       workMinutes: 0,
       ordersPerHour: 0,
-      salesPerHour: 0
+      salesPerHour: 0,
+      peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0,
+      peakLoadLevelScore: 0
     };
     dayEntry.orderCount += 1;
     dayEntry.sales += sales;
@@ -470,7 +576,13 @@ export async function GET(request: Request) {
     const workHours = workMinutes / 60;
     const ordersPerHour = workHours > 0 ? day.orderCount / workHours : 0;
     const salesPerHour = workHours > 0 ? Math.round(day.sales / workHours) : 0;
-    const loadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour, workloadSettings);
+    const peakMetrics = dailyPeakMetrics.get(day.date) ?? {
+      peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0
+    };
+    const averageLoadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour, workloadSettings);
+    const peakLoadLevel = getLoadLevelMetrics(peakMetrics.peakHourOrderCount, peakMetrics.peakHourSales, workloadSettings);
     const weather = weatherByDate.get(day.date) ?? {
       date: day.date,
       weatherCode: null,
@@ -484,8 +596,16 @@ export async function GET(request: Request) {
       workloadAvailable: workHours > 0,
       ordersPerHour,
       salesPerHour,
-      loadLevel: loadLevel.loadLevel,
-      loadLevelLabel: loadLevel.loadLevelLabel,
+      loadLevel: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevel : averageLoadLevel.loadLevel,
+      loadLevelLabel: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevelLabel : averageLoadLevel.loadLevelLabel,
+      averageLoadLevel: averageLoadLevel.loadLevel,
+      averageLoadLevelLabel: averageLoadLevel.loadLevelLabel,
+      peakLoadLevel: peakLoadLevel.loadLevel,
+      peakLoadLevelLabel: peakLoadLevel.loadLevelLabel,
+      peakLoadLevelScore: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevelScore : averageLoadLevel.loadLevelScore,
+      peakHourOrderCount: peakMetrics.peakHourOrderCount,
+      peakHourSales: peakMetrics.peakHourSales,
+      peakHourLoadScore: peakMetrics.peakHourLoadScore,
       weatherCode: weather.weatherCode,
       weatherLabel: weather.weatherLabel,
       temperatureMean: weather.temperatureMean,
@@ -536,7 +656,12 @@ export async function GET(request: Request) {
   const estimatedDepositTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedDeposit, 0);
   const deliverySales = revenueGroups.find((group) => group.key === "delivery")?.sales ?? 0;
   const activeDays = daily.filter((day) => day.workMinutes > 0);
-  const busiestDays = [...activeDays].sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount).slice(0, 5);
+  const busiestDays = [...activeDays].sort((a, b) => (
+    b.peakLoadLevelScore - a.peakLoadLevelScore
+    || b.peakHourLoadScore - a.peakHourLoadScore
+    || b.peakHourOrderCount - a.peakHourOrderCount
+    || b.ordersPerHour - a.ordersPerHour
+  )).slice(0, 5);
   const quietestDays = [...activeDays].sort((a, b) => a.ordersPerHour - b.ordersPerHour || a.salesPerHour - b.salesPerHour || a.orderCount - b.orderCount).slice(0, 5);
   const activeWeekdays = weekdays.filter((weekday) => weekday.dayCount > 0);
   const busiestWeekdays = [...activeWeekdays].sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount).slice(0, 3);

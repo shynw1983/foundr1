@@ -36,6 +36,14 @@ type SalesDay = {
   salesPerHour: number;
   loadLevel: string;
   loadLevelLabel: string;
+  averageLoadLevel: string;
+  averageLoadLevelLabel: string;
+  peakLoadLevel: string;
+  peakLoadLevelLabel: string;
+  peakLoadLevelScore: number;
+  peakHourOrderCount: number;
+  peakHourSales: number;
+  peakHourLoadScore: number;
   weatherCode: number | null;
   weatherLabel: string;
   temperatureMean: number | null;
@@ -248,6 +256,14 @@ function getCalendarDays(startDate: string, endDate: string, days: SalesDay[]) {
       salesPerHour: 0,
       loadLevel: "veryIdle",
       loadLevelLabel: "かなり空き",
+      averageLoadLevel: "veryIdle",
+      averageLoadLevelLabel: "かなり空き",
+      peakLoadLevel: "veryIdle",
+      peakLoadLevelLabel: "かなり空き",
+      peakLoadLevelScore: 0,
+      peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0,
       weatherCode: null,
       weatherLabel: "",
       temperatureMean: null,
@@ -824,7 +840,7 @@ export default function SalesPage() {
                       <span><em>デリバリー入金目安</em><b>{formatMoney(day.deliveryEstimatedDeposit)}</b></span>
                     </div>
                     {day.workloadAvailable ? (
-                      <small>{day.loadLevelLabel} / {formatRate(day.ordersPerHour)}件/時間</small>
+                      <small>{day.loadLevelLabel} / ピーク {day.peakHourOrderCount}件/時間</small>
                     ) : day.orderCount > 0 ? (
                       <small>勤怠未登録 / {day.orderCount}件</small>
                     ) : (
@@ -850,7 +866,7 @@ export default function SalesPage() {
                   </div>
                   <div>
                     <strong>{day.loadLevelLabel}</strong>
-                    <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
+                    <small>ピーク {day.peakHourOrderCount}件/時間 / 平均 {formatRate(day.ordersPerHour)}件/時間</small>
                   </div>
                 </div>
               ))}
@@ -866,8 +882,8 @@ export default function SalesPage() {
                     <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
                   </div>
                   <div>
-                    <strong>{day.loadLevelLabel}</strong>
-                    <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
+                    <strong>{day.averageLoadLevelLabel}</strong>
+                    <small>平均 {formatRate(day.ordersPerHour)}件/時間 / ピーク {day.peakHourOrderCount}件/時間</small>
                   </div>
                 </div>
               ))}
