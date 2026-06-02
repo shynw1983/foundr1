@@ -412,9 +412,12 @@ create table if not exists social_insurance_tables (
   child_support_effective_from date,
   is_active boolean not null default true,
   uploaded_by uuid references employees(id) on delete set null,
-  created_at timestamptz not null default now(),
-  unique (fiscal_year)
+  created_at timestamptz not null default now()
 );
+
+alter table employment_insurance_rate_tables drop constraint if exists employment_insurance_rate_tables_fiscal_year_key;
+create index if not exists employment_insurance_rate_tables_year_idx
+  on employment_insurance_rate_tables(fiscal_year, created_at desc);
 
 create table if not exists social_insurance_table_rows (
   id uuid primary key default gen_random_uuid(),
@@ -530,6 +533,23 @@ alter table timecard_workload_settings add column if not exists min_order_load_s
 alter table timecard_workload_settings add column if not exists amount_score_multiplier numeric(8, 2) not null default 1;
 alter table timecard_workload_settings add column if not exists high_load_order_threshold integer not null default 8;
 alter table timecard_workload_settings add column if not exists high_load_score_threshold numeric(8, 2) not null default 8;
+alter table timecard_workload_settings add column if not exists order_very_idle_max integer not null default 4;
+alter table timecard_workload_settings add column if not exists order_normal_max integer not null default 8;
+alter table timecard_workload_settings add column if not exists order_busy_max integer not null default 12;
+alter table timecard_workload_settings add column if not exists order_high_max integer not null default 15;
+alter table timecard_workload_settings add column if not exists sales_very_idle_max integer not null default 4999;
+alter table timecard_workload_settings add column if not exists sales_normal_max integer not null default 9999;
+alter table timecard_workload_settings add column if not exists sales_busy_max integer not null default 14999;
+alter table timecard_workload_settings add column if not exists sales_high_max integer not null default 19999;
+alter table timecard_workload_settings add column if not exists score_very_idle numeric(8, 2) not null default 20;
+alter table timecard_workload_settings add column if not exists score_normal numeric(8, 2) not null default 60;
+alter table timecard_workload_settings add column if not exists score_busy numeric(8, 2) not null default 90;
+alter table timecard_workload_settings add column if not exists score_high numeric(8, 2) not null default 120;
+alter table timecard_workload_settings add column if not exists score_extreme numeric(8, 2) not null default 150;
+alter table timecard_workload_settings add column if not exists peak_weight numeric(8, 2) not null default 60;
+alter table timecard_workload_settings add column if not exists average_weight numeric(8, 2) not null default 30;
+alter table timecard_workload_settings add column if not exists one_person_weight numeric(8, 2) not null default 10;
+alter table timecard_workload_settings add column if not exists one_person_rate_score_cap numeric(8, 2) not null default 30;
 
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),

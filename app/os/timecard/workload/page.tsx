@@ -74,7 +74,25 @@ type WorkloadSettings = {
   amountScoreMultiplier: number;
   highLoadOrderThreshold: number;
   highLoadScoreThreshold: number;
+  orderVeryIdleMax: number;
+  orderNormalMax: number;
+  orderBusyMax: number;
+  orderHighMax: number;
+  salesVeryIdleMax: number;
+  salesNormalMax: number;
+  salesBusyMax: number;
+  salesHighMax: number;
+  scoreVeryIdle: number;
+  scoreNormal: number;
+  scoreBusy: number;
+  scoreHigh: number;
+  scoreExtreme: number;
+  peakWeight: number;
+  averageWeight: number;
+  onePersonWeight: number;
+  onePersonRateScoreCap: number;
 };
+type NumberWorkloadSettingKey = Exclude<keyof WorkloadSettings, "includeManagement">;
 type WorkloadSummary = {
   month: string;
   stores: StoreOption[];
@@ -176,7 +194,24 @@ const defaultWorkloadSettings: WorkloadSettings = {
   minOrderLoadScore: 1,
   amountScoreMultiplier: 1,
   highLoadOrderThreshold: 8,
-  highLoadScoreThreshold: 8
+  highLoadScoreThreshold: 8,
+  orderVeryIdleMax: 4,
+  orderNormalMax: 8,
+  orderBusyMax: 12,
+  orderHighMax: 15,
+  salesVeryIdleMax: 4999,
+  salesNormalMax: 9999,
+  salesBusyMax: 14999,
+  salesHighMax: 19999,
+  scoreVeryIdle: 20,
+  scoreNormal: 60,
+  scoreBusy: 90,
+  scoreHigh: 120,
+  scoreExtreme: 150,
+  peakWeight: 60,
+  averageWeight: 30,
+  onePersonWeight: 10,
+  onePersonRateScoreCap: 30
 };
 
 function getStoredTimecardMonth() {
@@ -195,6 +230,20 @@ function storeTimecardSelection(nextMonth: string, nextStoreId: string) {
   window.localStorage.setItem(timecardMonthStorageKey, nextMonth);
   if (nextStoreId) window.localStorage.setItem(timecardStoreStorageKey, nextStoreId);
 }
+
+const workloadScoreRows: Array<{ label: string; key: NumberWorkloadSettingKey }> = [
+  { label: "かなり空き", key: "scoreVeryIdle" },
+  { label: "通常", key: "scoreNormal" },
+  { label: "忙しい", key: "scoreBusy" },
+  { label: "高負荷", key: "scoreHigh" },
+  { label: "超負荷", key: "scoreExtreme" }
+];
+
+const workloadWeightRows: Array<{ label: string; key: NumberWorkloadSettingKey; note: string }> = [
+  { label: "ピーク負荷", key: "peakWeight", note: "その人が一番忙しかった1時間を重く見る比率です。" },
+  { label: "平均負荷", key: "averageWeight", note: "月全体の平均的な忙しさを見る比率です。" },
+  { label: "ワンオペ高負荷", key: "onePersonWeight", note: "一人勤務で高負荷だった時間を評価に入れる比率です。" }
+];
 
 export default function TimecardWorkloadPage() {
   const [month, setMonth] = useState(getStoredTimecardMonth);
@@ -260,6 +309,31 @@ export default function TimecardWorkloadPage() {
       await loadWorkload(month, selectedStoreId);
     }
     setIsSavingSettings(false);
+  }
+
+  function renderNumberSetting(
+    label: string,
+    key: NumberWorkloadSettingKey,
+    options: { min: number; max: number; step: number; suffix?: string; note?: string }
+  ) {
+    return (
+      <label>
+        <span>{label}</span>
+        <div className="workload-setting-input-row">
+          <input
+            type="number"
+            min={options.min}
+            max={options.max}
+            step={options.step}
+            value={String(currentSettings[key])}
+            disabled={settingsDisabled}
+            onChange={(event) => updateSettingsDraft(key, Number(event.target.value))}
+          />
+          {options.suffix ? <em>{options.suffix}</em> : null}
+        </div>
+        {options.note ? <small>{options.note}</small> : null}
+      </label>
+    );
   }
 
   return (
@@ -352,60 +426,86 @@ export default function TimecardWorkloadPage() {
                 </span>
               </div>
             </label>
-            <div className="workload-settings-grid">
-              <label>
-                <span>最低負荷点数</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  max="10"
-                  step="0.1"
-                  value={currentSettings.minOrderLoadScore}
-                  disabled={settingsDisabled}
-                  onChange={(event) => updateSettingsDraft("minOrderLoadScore", Number(event.target.value))}
-                />
-                <small>低単価の注文でも最低この点数で扱います。</small>
-              </label>
-              <label>
-                <span>金額倍率</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  max="5"
-                  step="0.1"
-                  value={currentSettings.amountScoreMultiplier}
-                  disabled={settingsDisabled}
-                  onChange={(event) => updateSettingsDraft("amountScoreMultiplier", Number(event.target.value))}
-                />
-                <small>単価による複雑さを強める、または弱めます。</small>
-              </label>
-              <label>
-                <span>高負荷注文数</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  step="1"
-                  value={currentSettings.highLoadOrderThreshold}
-                  disabled={settingsDisabled}
-                  onChange={(event) => updateSettingsDraft("highLoadOrderThreshold", Number(event.target.value))}
-                />
-                <small>1時間内の注文数がこの件数以上なら高負荷です。</small>
-              </label>
-              <label>
-                <span>高負荷点数</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  step="0.5"
-                  value={currentSettings.highLoadScoreThreshold}
-                  disabled={settingsDisabled}
-                  onChange={(event) => updateSettingsDraft("highLoadScoreThreshold", Number(event.target.value))}
-                />
-                <small>1時間内の負荷点数がこの点数以上なら高負荷です。</small>
-              </label>
+            <div className="workload-settings-section">
+              <h4>負荷レベルの判定</h4>
+              <p>注文数と売上/時間をそれぞれ判定し、高い方のレベルを採用します。</p>
+              <div className="workload-level-settings-grid">
+                {renderNumberSetting("かなり空き 注文", "orderVeryIdleMax", { min: 0, max: 100, step: 1, suffix: "件/時間まで" })}
+                {renderNumberSetting("通常 注文", "orderNormalMax", { min: 1, max: 120, step: 1, suffix: "件/時間まで" })}
+                {renderNumberSetting("忙しい 注文", "orderBusyMax", { min: 2, max: 150, step: 1, suffix: "件/時間まで" })}
+                {renderNumberSetting("高負荷 注文", "orderHighMax", { min: 3, max: 200, step: 1, suffix: "件/時間まで" })}
+                {renderNumberSetting("かなり空き 売上", "salesVeryIdleMax", { min: 0, max: 1000000, step: 100, suffix: "円/時間まで" })}
+                {renderNumberSetting("通常 売上", "salesNormalMax", { min: 1, max: 1500000, step: 100, suffix: "円/時間まで" })}
+                {renderNumberSetting("忙しい 売上", "salesBusyMax", { min: 2, max: 2000000, step: 100, suffix: "円/時間まで" })}
+                {renderNumberSetting("高負荷 売上", "salesHighMax", { min: 3, max: 3000000, step: 100, suffix: "円/時間まで" })}
+              </div>
+              <small>上限を超えた場合は「超負荷」として扱います。保存時に数字の大小関係は自動補正します。</small>
             </div>
+
+            <div className="workload-settings-section">
+              <h4>レベル別点数</h4>
+              <div className="workload-score-settings-grid">
+                {workloadScoreRows.map((row) => renderNumberSetting(row.label, row.key, {
+                  min: 0,
+                  max: 500,
+                  step: 1,
+                  suffix: "pt"
+                }))}
+              </div>
+            </div>
+
+            <div className="workload-settings-section">
+              <h4>総合評価点の配分</h4>
+              <div className="workload-score-settings-grid">
+                {workloadWeightRows.map((row) => renderNumberSetting(row.label, row.key, {
+                  min: 0,
+                  max: 100,
+                  step: 1,
+                  suffix: "%",
+                  note: row.note
+                }))}
+                {renderNumberSetting("ワンオペ比率の上限", "onePersonRateScoreCap", {
+                  min: 0,
+                  max: 100,
+                  step: 1,
+                  suffix: "%",
+                  note: "ワンオペ比率だけで評価点が過度に膨らまないようにする上限です。"
+                })}
+              </div>
+            </div>
+
+            <details className="workload-advanced-settings">
+              <summary>単価による複雑さの補正</summary>
+              <div className="workload-settings-grid">
+                {renderNumberSetting("最低負荷点数", "minOrderLoadScore", {
+                  min: 0.1,
+                  max: 10,
+                  step: 0.1,
+                  suffix: "pt",
+                  note: "低単価の注文でも最低この点数で扱います。"
+                })}
+                {renderNumberSetting("金額倍率", "amountScoreMultiplier", {
+                  min: 0.1,
+                  max: 5,
+                  step: 0.1,
+                  note: "単価による複雑さを強める、または弱めます。"
+                })}
+                {renderNumberSetting("ワンオペ高負荷 注文数", "highLoadOrderThreshold", {
+                  min: 1,
+                  max: 50,
+                  step: 1,
+                  suffix: "件/時間",
+                  note: "ワンオペ高負荷時間を数えるための補助基準です。"
+                })}
+                {renderNumberSetting("ワンオペ高負荷 点数", "highLoadScoreThreshold", {
+                  min: 1,
+                  max: 100,
+                  step: 0.5,
+                  suffix: "pt",
+                  note: "単価補正後の負荷点数がこの点数以上なら高負荷です。"
+                })}
+              </div>
+            </details>
             <div className="workload-settings-actions">
               <button className="secondary-button" type="button" disabled={settingsDisabled} onClick={() => void saveWorkloadSettings()}>
                 {isSavingSettings ? "保存中" : "設定を保存"}
@@ -435,11 +535,11 @@ export default function TimecardWorkloadPage() {
             </article>
             <article>
               <h3>負荷レベル</h3>
-              <p>1時間あたり注文数と売上/時間をそれぞれ判定し、高い方のレベルを採用します。注文は0-4件=かなり空き、5-8件=通常、9-12件=忙しい、13-15件=高負荷、16件以上=超負荷。売上は5,000円未満=かなり空き、10,000円未満=通常、15,000円未満=忙しい、20,000円未満=高負荷、20,000円以上=超負荷です。</p>
+              <p>1時間あたり注文数と売上/時間をそれぞれ判定し、高い方のレベルを採用します。注文は{currentSettings.orderVeryIdleMax}件まで=かなり空き、{currentSettings.orderNormalMax}件まで=通常、{currentSettings.orderBusyMax}件まで=忙しい、{currentSettings.orderHighMax}件まで=高負荷、それ以上=超負荷。売上は{formatMoney(currentSettings.salesVeryIdleMax)}まで=かなり空き、{formatMoney(currentSettings.salesNormalMax)}まで=通常、{formatMoney(currentSettings.salesBusyMax)}まで=忙しい、{formatMoney(currentSettings.salesHighMax)}まで=高負荷、それ以上=超負荷です。</p>
             </article>
             <article>
               <h3>評価点</h3>
-              <p>ピーク負荷レベルを60%、平均負荷レベルを30%、ワンオペ高負荷の比率を10%として点数化します。賞与や考課に使う場合、今後この点数を店舗別に調整できます。</p>
+              <p>ピーク負荷レベルを{currentSettings.peakWeight}%、平均負荷レベルを{currentSettings.averageWeight}%、ワンオペ高負荷の比率を{currentSettings.onePersonWeight}%として点数化します。ワンオペ比率は最大{currentSettings.onePersonRateScoreCap}%まで反映します。</p>
             </article>
             <article>
               <h3>売上貢献度</h3>

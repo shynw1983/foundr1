@@ -58,7 +58,18 @@ type EmploymentInsuranceTable = {
   sourceFileName: string | null;
   effectiveFrom: string;
   effectiveTo: string;
+  isActive: boolean;
+  createdAt: string;
   rowCount: number;
+  rows?: Array<{
+    businessType: string;
+    label: string;
+    employeeRate: number;
+    employerRate: number | null;
+    benefitRate: number | null;
+    twoProjectsRate: number | null;
+    totalRate: number | null;
+  }>;
 };
 
 type PayrollStatutoryAlert = {
@@ -83,6 +94,9 @@ export default function OsSettingsPage() {
   const [taxYear, setTaxYear] = useState(String(new Date().getFullYear()));
   const [socialInsuranceYear, setSocialInsuranceYear] = useState(String(new Date().getFullYear()));
   const [employmentInsuranceYear, setEmploymentInsuranceYear] = useState(String(new Date().getFullYear()));
+  const [employmentInsuranceEffectiveFrom, setEmploymentInsuranceEffectiveFrom] = useState(`${new Date().getFullYear()}-04-01`);
+  const [employmentInsuranceEffectiveTo, setEmploymentInsuranceEffectiveTo] = useState(`${new Date().getFullYear() + 1}-03-31`);
+  const [employmentInsuranceBusinessType, setEmploymentInsuranceBusinessType] = useState("general");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
@@ -148,6 +162,20 @@ export default function OsSettingsPage() {
       chunks.push(String.fromCharCode(...bytes.subarray(index, index + chunkSize)));
     }
     return window.btoa(chunks.join(""));
+  }
+
+  function updateEmploymentInsuranceYear(nextYear: string) {
+    setEmploymentInsuranceYear(nextYear);
+    const year = Number(nextYear);
+    if (Number.isFinite(year) && year >= 2020 && year <= 2100) {
+      setEmploymentInsuranceEffectiveFrom(`${Math.round(year)}-04-01`);
+      setEmploymentInsuranceEffectiveTo(`${Math.round(year) + 1}-03-31`);
+    }
+  }
+
+  function ratePermille(value: number | null | undefined) {
+    if (value === null || value === undefined || !Number.isFinite(value)) return "-";
+    return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 2 }).format(value * 1000);
   }
 
   async function uploadWithholdingTaxTable() {
@@ -241,7 +269,8 @@ export default function OsSettingsPage() {
 
   async function saveManualEmploymentInsuranceTable() {
     setUploadingEmploymentInsurance(true);
-    const manualRows = employmentInsuranceManualRows.map((row) => ({
+    const selectedRows = employmentInsuranceManualRows.filter((row) => row.businessType === employmentInsuranceBusinessType);
+    const manualRows = selectedRows.map((row) => ({
       businessType: row.businessType,
       employeeRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualEmployeeRate:${row.businessType}"]`)?.value ?? ""),
       employerRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualEmployerRate:${row.businessType}"]`)?.value ?? ""),
@@ -252,7 +281,13 @@ export default function OsSettingsPage() {
     const response = await fetch("/api/settings/employment-insurance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: "manual", fiscalYear: employmentInsuranceYear, manualRows })
+      body: JSON.stringify({
+        fileName: "manual",
+        fiscalYear: employmentInsuranceYear,
+        effectiveFrom: employmentInsuranceEffectiveFrom,
+        effectiveTo: employmentInsuranceEffectiveTo,
+        manualRows
+      })
     });
     setUploadingEmploymentInsurance(false);
     const body = await response.json().catch(() => ({}));
@@ -361,7 +396,7 @@ export default function OsSettingsPage() {
             <div className="settings-tax-import">
               <label className="settings-field">
                 <span>対象年度</span>
-                <input value={employmentInsuranceYear} inputMode="numeric" onChange={(event) => setEmploymentInsuranceYear(event.target.value)} placeholder="例: 2026" />
+                <input value={employmentInsuranceYear} inputMode="numeric" onChange={(event) => updateEmploymentInsuranceYear(event.target.value)} placeholder="例: 2026" />
               </label>
               <label className="settings-field">
                 <span>雇用保険料率 PDF</span>
@@ -378,28 +413,67 @@ export default function OsSettingsPage() {
               </button>
             </div>
             <div className="settings-manual-rate-panel">
-              <div>
-                <strong>雇用保険料率を手動入力</strong>
-                <span>数値は「/1000」で入力します。例: 5/1000 の場合は 5。</span>
+              <div className="settings-manual-rate-heading">
+                <div>
+                  <strong>雇用保険料率を手動入力</strong>
+                  <span>PDF が読み取れない場合は、公式資料の数値を「/1000」で入力します。例: 5/1000 の場合は 5。</span>
+                </div>
+                <div className="settings-manual-period">
+                  <b>{employmentInsuranceYear}年度</b>
+                  <span>{employmentInsuranceEffectiveFrom}〜{employmentInsuranceEffectiveTo}</span>
+                </div>
               </div>
-              <div className="settings-manual-rate-grid">
-                <span>事業の種類</span>
-                <span>労働者負担</span>
-                <span>事業主負担</span>
-                <span>給付分</span>
-                <span>二事業分</span>
-                <span>合計</span>
-                {employmentInsuranceManualRows.map((row) => (
-                  <div className="settings-manual-rate-row" key={row.businessType}>
+              <div className="settings-manual-rate-controls">
+                <label className="settings-field">
+                  <span>入力する事業</span>
+                  <select value={employmentInsuranceBusinessType} onChange={(event) => setEmploymentInsuranceBusinessType(event.target.value)}>
+                    {employmentInsuranceManualRows.map((row) => (
+                      <option value={row.businessType} key={row.businessType}>{row.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>適用開始日</span>
+                  <input type="date" value={employmentInsuranceEffectiveFrom} onChange={(event) => setEmploymentInsuranceEffectiveFrom(event.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>適用終了日</span>
+                  <input type="date" value={employmentInsuranceEffectiveTo} onChange={(event) => setEmploymentInsuranceEffectiveTo(event.target.value)} />
+                </label>
+              </div>
+              {employmentInsuranceManualRows.filter((row) => row.businessType === employmentInsuranceBusinessType).map((row) => (
+                <div className="settings-manual-rate-card" key={row.businessType}>
+                  <div>
+                    <span>事業の種類</span>
                     <strong>{row.label}</strong>
-                    <input name={`employmentManualEmployeeRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employeeRate} placeholder="労働者負担" aria-label={`${row.label} 労働者負担`} />
-                    <input name={`employmentManualEmployerRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employerRate} placeholder="事業主負担" aria-label={`${row.label} 事業主負担`} />
-                    <input name={`employmentManualBenefitRate:${row.businessType}`} inputMode="decimal" defaultValue={row.benefitRate} placeholder="給付分" aria-label={`${row.label} 給付分`} />
-                    <input name={`employmentManualTwoProjectsRate:${row.businessType}`} inputMode="decimal" defaultValue={row.twoProjectsRate} placeholder="二事業分" aria-label={`${row.label} 二事業分`} />
-                    <input name={`employmentManualTotalRate:${row.businessType}`} inputMode="decimal" defaultValue={row.totalRate} placeholder="合計" aria-label={`${row.label} 合計`} />
                   </div>
-                ))}
-              </div>
+                  <label>
+                    <span>労働者負担</span>
+                    <input name={`employmentManualEmployeeRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employeeRate} placeholder="例: 5" aria-label={`${row.label} 労働者負担`} />
+                    <small>/1000</small>
+                  </label>
+                  <label>
+                    <span>事業主負担</span>
+                    <input name={`employmentManualEmployerRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employerRate} placeholder="例: 8.5" aria-label={`${row.label} 事業主負担`} />
+                    <small>/1000</small>
+                  </label>
+                  <label>
+                    <span>給付分</span>
+                    <input name={`employmentManualBenefitRate:${row.businessType}`} inputMode="decimal" defaultValue={row.benefitRate} placeholder="例: 5" aria-label={`${row.label} 給付分`} />
+                    <small>/1000</small>
+                  </label>
+                  <label>
+                    <span>二事業分</span>
+                    <input name={`employmentManualTwoProjectsRate:${row.businessType}`} inputMode="decimal" defaultValue={row.twoProjectsRate} placeholder="例: 3.5" aria-label={`${row.label} 二事業分`} />
+                    <small>/1000</small>
+                  </label>
+                  <label>
+                    <span>合計</span>
+                    <input name={`employmentManualTotalRate:${row.businessType}`} inputMode="decimal" defaultValue={row.totalRate} placeholder="例: 13.5" aria-label={`${row.label} 合計`} />
+                    <small>/1000</small>
+                  </label>
+                </div>
+              ))}
               <button className="secondary-button" type="button" disabled={uploadingEmploymentInsurance} onClick={() => void saveManualEmploymentInsuranceTable()}>
                 <Save size={16} />
                 {uploadingEmploymentInsurance ? "保存中" : "手動入力した料率を保存"}
@@ -422,8 +496,17 @@ export default function OsSettingsPage() {
               ))}
               {employmentInsuranceTables.map((table) => (
                 <article key={table.id}>
-                  <strong>{table.fiscalYear}年度 / {table.title}</strong>
+                  <strong>{table.fiscalYear}年度 / {table.title} / {table.isActive ? "有効" : "履歴"}</strong>
                   <span>雇用保険 {table.rowCount}行 / {table.sourceFileName ?? "ファイル名なし"} / {String(table.effectiveFrom).slice(0, 10)}〜{String(table.effectiveTo).slice(0, 10)}</span>
+                  {table.rows?.length ? (
+                    <div className="settings-employment-history-rows">
+                      {table.rows.map((row) => (
+                        <small key={row.businessType}>
+                          {row.label}: 労働者 {ratePermille(row.employeeRate)}/1000・事業主 {ratePermille(row.employerRate)}/1000・合計 {ratePermille(row.totalRate)}/1000
+                        </small>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

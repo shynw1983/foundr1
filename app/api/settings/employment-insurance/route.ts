@@ -187,6 +187,11 @@ function parseManualRows(rows: UploadPayload["manualRows"]) {
   return parsedRows;
 }
 
+function normalizeEffectiveDate(value: unknown, fallback: string) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : fallback;
+}
+
 async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: unknown) {
   let text = "";
   let parser: PDFParse | null = null;
@@ -234,8 +239,45 @@ export async function GET() {
     group by employment_insurance_rate_tables.id
     order by employment_insurance_rate_tables.fiscal_year desc, employment_insurance_rate_tables.created_at desc
   `;
+  const tableIds = tables.map((table) => String(table.id));
+  const rows = tableIds.length ? await sql`
+    select
+      table_id::text as "tableId",
+      business_type as "businessType",
+      employee_rate as "employeeRate",
+      employer_rate as "employerRate",
+      benefit_rate as "benefitRate",
+      two_projects_rate as "twoProjectsRate",
+      total_rate as "totalRate",
+      sort_order as "sortOrder"
+    from employment_insurance_rate_rows
+    where table_id::text = any(${tableIds})
+    order by table_id, sort_order asc
+  ` : [];
+  const rowsByTableId = new Map<string, typeof rows>();
+  rows.forEach((row) => {
+    const tableId = String(row.tableId);
+    rowsByTableId.set(tableId, [...(rowsByTableId.get(tableId) ?? []), row]);
+  });
 
-  return Response.json({ tables });
+  return Response.json({
+    tables: tables.map((table) => ({
+      ...table,
+      rows: (rowsByTableId.get(String(table.id)) ?? []).map((row) => {
+        const businessType = businessTypes.find((item) => item.key === String(row.businessType));
+        return {
+          businessType: String(row.businessType),
+          label: businessType?.label ?? String(row.businessType),
+          employeeRate: Number(row.employeeRate ?? 0),
+          employerRate: row.employerRate === null ? null : Number(row.employerRate),
+          benefitRate: row.benefitRate === null ? null : Number(row.benefitRate),
+          twoProjectsRate: row.twoProjectsRate === null ? null : Number(row.twoProjectsRate),
+          totalRate: row.totalRate === null ? null : Number(row.totalRate),
+          sortOrder: Number(row.sortOrder ?? 0)
+        };
+      })
+    }))
+  });
 }
 
 export async function POST(request: Request) {
@@ -246,15 +288,16 @@ export async function POST(request: Request) {
   const fileBase64 = String(body.fileBase64 ?? "");
   const knownFiscalYear = normalizeFiscalYear(body.fiscalYear);
   const manualRows = parseManualRows(body.manualRows);
+  const fallbackEffectiveFrom = `${knownFiscalYear}-04-01`;
+  const fallbackEffectiveTo = `${knownFiscalYear + 1}-03-31`;
 
   let parsed: Awaited<ReturnType<typeof parseEmploymentInsurancePdf>>;
   if (manualRows.length) {
-    if (manualRows.length !== businessTypes.length) return Response.json({ error: "雇用保険料率を3種類すべて入力してください。" }, { status: 400 });
     parsed = {
       title: `令和${knownFiscalYear - 2018}年度 雇用保険料率`,
       fiscalYear: knownFiscalYear,
-      effectiveFrom: `${knownFiscalYear}-04-01`,
-      effectiveTo: `${knownFiscalYear + 1}-03-31`,
+      effectiveFrom: normalizeEffectiveDate((body as { effectiveFrom?: unknown }).effectiveFrom, fallbackEffectiveFrom),
+      effectiveTo: normalizeEffectiveDate((body as { effectiveTo?: unknown }).effectiveTo, fallbackEffectiveTo),
       rows: manualRows
     };
   } else if (fileBase64) {
@@ -277,53 +320,28 @@ export async function POST(request: Request) {
 
   let tableId = "";
   try {
-    const existingTables = await sql`
-      select id::text
-      from employment_insurance_rate_tables
-      where fiscal_year = ${parsed.fiscalYear}
-      order by created_at desc
-      limit 1
+    const inserted = await sql`
+      insert into employment_insurance_rate_tables (
+        fiscal_year,
+        title,
+        source_file_name,
+        effective_from,
+        effective_to,
+        is_active,
+        uploaded_by
+      )
+      values (
+        ${parsed.fiscalYear},
+        ${parsed.title},
+        ${body.fileName ?? null},
+        ${parsed.effectiveFrom}::date,
+        ${parsed.effectiveTo}::date,
+        true,
+        ${session.id}
+      )
+      returning id::text
     `;
-
-    if (existingTables[0]?.id) {
-      const updated = await sql`
-        update employment_insurance_rate_tables
-        set
-          title = ${parsed.title},
-          source_file_name = ${body.fileName ?? null},
-          effective_from = ${parsed.effectiveFrom}::date,
-          effective_to = ${parsed.effectiveTo}::date,
-          is_active = true,
-          uploaded_by = ${session.id},
-          created_at = now()
-        where id = ${existingTables[0].id}
-        returning id::text
-      `;
-      tableId = String(updated[0]?.id ?? existingTables[0].id);
-    } else {
-      const inserted = await sql`
-        insert into employment_insurance_rate_tables (
-          fiscal_year,
-          title,
-          source_file_name,
-          effective_from,
-          effective_to,
-          is_active,
-          uploaded_by
-        )
-        values (
-          ${parsed.fiscalYear},
-          ${parsed.title},
-          ${body.fileName ?? null},
-          ${parsed.effectiveFrom}::date,
-          ${parsed.effectiveTo}::date,
-          true,
-          ${session.id}
-        )
-        returning id::text
-      `;
-      tableId = String(inserted[0]?.id ?? "");
-    }
+    tableId = String(inserted[0]?.id ?? "");
     if (!tableId) throw new Error("employment_insurance_rate_tables id was not returned.");
 
     await sql`

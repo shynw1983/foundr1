@@ -13,18 +13,35 @@ const managementRoles = new Set(["owner", "manager", "store_owner"]);
 const hourMs = 60 * 60 * 1000;
 const workloadSliceMinutes = 15;
 const workloadLevels = [
-  { key: "very_idle", label: "かなり空き", score: 20 },
-  { key: "normal", label: "通常", score: 60 },
-  { key: "busy", label: "忙しい", score: 90 },
-  { key: "high", label: "高負荷", score: 120 },
-  { key: "extreme", label: "超負荷", score: 150 }
+  { key: "veryIdle", label: "かなり空き", scoreKey: "scoreVeryIdle" },
+  { key: "normal", label: "通常", scoreKey: "scoreNormal" },
+  { key: "busy", label: "忙しい", scoreKey: "scoreBusy" },
+  { key: "high", label: "高負荷", scoreKey: "scoreHigh" },
+  { key: "extreme", label: "超負荷", scoreKey: "scoreExtreme" }
 ] as const;
 const defaultWorkloadSettings = {
   includeManagement: true,
   minOrderLoadScore: 1,
   amountScoreMultiplier: 1,
   highLoadOrderThreshold: 8,
-  highLoadScoreThreshold: 8
+  highLoadScoreThreshold: 8,
+  orderVeryIdleMax: 4,
+  orderNormalMax: 8,
+  orderBusyMax: 12,
+  orderHighMax: 15,
+  salesVeryIdleMax: 4999,
+  salesNormalMax: 9999,
+  salesBusyMax: 14999,
+  salesHighMax: 19999,
+  scoreVeryIdle: 20,
+  scoreNormal: 60,
+  scoreBusy: 90,
+  scoreHigh: 120,
+  scoreExtreme: 150,
+  peakWeight: 60,
+  averageWeight: 30,
+  onePersonWeight: 10,
+  onePersonRateScoreCap: 30
 };
 
 type WorkloadSettings = typeof defaultWorkloadSettings;
@@ -45,6 +62,14 @@ function clampNumber(value: unknown, fallback: number, min: number, max: number)
 }
 
 function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
+  const orderVeryIdleMax = Math.round(clampNumber(settings.orderVeryIdleMax, defaultWorkloadSettings.orderVeryIdleMax, 0, 100));
+  const orderNormalMax = Math.max(orderVeryIdleMax + 1, Math.round(clampNumber(settings.orderNormalMax, defaultWorkloadSettings.orderNormalMax, 1, 120)));
+  const orderBusyMax = Math.max(orderNormalMax + 1, Math.round(clampNumber(settings.orderBusyMax, defaultWorkloadSettings.orderBusyMax, 2, 150)));
+  const orderHighMax = Math.max(orderBusyMax + 1, Math.round(clampNumber(settings.orderHighMax, defaultWorkloadSettings.orderHighMax, 3, 200)));
+  const salesVeryIdleMax = Math.round(clampNumber(settings.salesVeryIdleMax, defaultWorkloadSettings.salesVeryIdleMax, 0, 1_000_000));
+  const salesNormalMax = Math.max(salesVeryIdleMax + 1, Math.round(clampNumber(settings.salesNormalMax, defaultWorkloadSettings.salesNormalMax, 1, 1_500_000)));
+  const salesBusyMax = Math.max(salesNormalMax + 1, Math.round(clampNumber(settings.salesBusyMax, defaultWorkloadSettings.salesBusyMax, 2, 2_000_000)));
+  const salesHighMax = Math.max(salesBusyMax + 1, Math.round(clampNumber(settings.salesHighMax, defaultWorkloadSettings.salesHighMax, 3, 3_000_000)));
   return {
     includeManagement: settings.includeManagement !== false,
     minOrderLoadScore: clampNumber(settings.minOrderLoadScore, defaultWorkloadSettings.minOrderLoadScore, 0.1, 10),
@@ -60,7 +85,24 @@ function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): Workloa
       defaultWorkloadSettings.highLoadScoreThreshold,
       1,
       100
-    )
+    ),
+    orderVeryIdleMax,
+    orderNormalMax,
+    orderBusyMax,
+    orderHighMax,
+    salesVeryIdleMax,
+    salesNormalMax,
+    salesBusyMax,
+    salesHighMax,
+    scoreVeryIdle: clampNumber(settings.scoreVeryIdle, defaultWorkloadSettings.scoreVeryIdle, 0, 500),
+    scoreNormal: clampNumber(settings.scoreNormal, defaultWorkloadSettings.scoreNormal, 0, 500),
+    scoreBusy: clampNumber(settings.scoreBusy, defaultWorkloadSettings.scoreBusy, 0, 500),
+    scoreHigh: clampNumber(settings.scoreHigh, defaultWorkloadSettings.scoreHigh, 0, 500),
+    scoreExtreme: clampNumber(settings.scoreExtreme, defaultWorkloadSettings.scoreExtreme, 0, 500),
+    peakWeight: clampNumber(settings.peakWeight, defaultWorkloadSettings.peakWeight, 0, 100),
+    averageWeight: clampNumber(settings.averageWeight, defaultWorkloadSettings.averageWeight, 0, 100),
+    onePersonWeight: clampNumber(settings.onePersonWeight, defaultWorkloadSettings.onePersonWeight, 0, 100),
+    onePersonRateScoreCap: clampNumber(settings.onePersonRateScoreCap, defaultWorkloadSettings.onePersonRateScoreCap, 0, 100)
   };
 }
 
@@ -107,29 +149,32 @@ function getPeakHourMetrics(orders: WorkloadOrder[]) {
   };
 }
 
-function getOrderLoadLevelIndex(ordersPerHour: number) {
-  if (ordersPerHour <= 4) return 0;
-  if (ordersPerHour <= 8) return 1;
-  if (ordersPerHour <= 12) return 2;
-  if (ordersPerHour <= 15) return 3;
+function getOrderLoadLevelIndex(ordersPerHour: number, settings: WorkloadSettings) {
+  if (ordersPerHour <= settings.orderVeryIdleMax) return 0;
+  if (ordersPerHour <= settings.orderNormalMax) return 1;
+  if (ordersPerHour <= settings.orderBusyMax) return 2;
+  if (ordersPerHour <= settings.orderHighMax) return 3;
   return 4;
 }
 
-function getSalesLoadLevelIndex(salesPerHour: number) {
-  if (salesPerHour < 5000) return 0;
-  if (salesPerHour < 10000) return 1;
-  if (salesPerHour < 15000) return 2;
-  if (salesPerHour < 20000) return 3;
+function getSalesLoadLevelIndex(salesPerHour: number, settings: WorkloadSettings) {
+  if (salesPerHour <= settings.salesVeryIdleMax) return 0;
+  if (salesPerHour <= settings.salesNormalMax) return 1;
+  if (salesPerHour <= settings.salesBusyMax) return 2;
+  if (salesPerHour <= settings.salesHighMax) return 3;
   return 4;
 }
 
-function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number) {
-  const levelIndex = Math.max(getOrderLoadLevelIndex(ordersPerHour), getSalesLoadLevelIndex(salesPerHour));
+function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
+  const levelIndex = Math.max(
+    getOrderLoadLevelIndex(ordersPerHour, settings),
+    getSalesLoadLevelIndex(salesPerHour, settings)
+  );
   const level = workloadLevels[levelIndex];
   return {
     loadLevel: level.key,
     loadLevelLabel: level.label,
-    loadLevelScore: level.score
+    loadLevelScore: settings[level.scoreKey]
   };
 }
 
@@ -221,7 +266,24 @@ async function getWorkloadSettings(storeId: string) {
       coalesce(min_order_load_score, 1) as "minOrderLoadScore",
       coalesce(amount_score_multiplier, 1) as "amountScoreMultiplier",
       coalesce(high_load_order_threshold, 8) as "highLoadOrderThreshold",
-      coalesce(high_load_score_threshold, 8) as "highLoadScoreThreshold"
+      coalesce(high_load_score_threshold, 8) as "highLoadScoreThreshold",
+      coalesce(order_very_idle_max, 4) as "orderVeryIdleMax",
+      coalesce(order_normal_max, 8) as "orderNormalMax",
+      coalesce(order_busy_max, 12) as "orderBusyMax",
+      coalesce(order_high_max, 15) as "orderHighMax",
+      coalesce(sales_very_idle_max, 4999) as "salesVeryIdleMax",
+      coalesce(sales_normal_max, 9999) as "salesNormalMax",
+      coalesce(sales_busy_max, 14999) as "salesBusyMax",
+      coalesce(sales_high_max, 19999) as "salesHighMax",
+      coalesce(score_very_idle, 20) as "scoreVeryIdle",
+      coalesce(score_normal, 60) as "scoreNormal",
+      coalesce(score_busy, 90) as "scoreBusy",
+      coalesce(score_high, 120) as "scoreHigh",
+      coalesce(score_extreme, 150) as "scoreExtreme",
+      coalesce(peak_weight, 60) as "peakWeight",
+      coalesce(average_weight, 30) as "averageWeight",
+      coalesce(one_person_weight, 10) as "onePersonWeight",
+      coalesce(one_person_rate_score_cap, 30) as "onePersonRateScoreCap"
     from timecard_workload_settings
     where store_id::text = ${storeId}
     limit 1
@@ -399,7 +461,7 @@ export async function GET(request: Request) {
 
     const shiftOrdersPerHour = shift.workMinutes > 0 ? shiftOrders.length / (shift.workMinutes / 60) : 0;
     const shiftSalesPerHour = shift.workMinutes > 0 ? Math.round(shiftSales / (shift.workMinutes / 60)) : 0;
-    const shiftPeakLoadLevel = getLoadLevelMetrics(peakMetrics.peakOrderCount, peakMetrics.peakSales);
+    const shiftPeakLoadLevel = getLoadLevelMetrics(peakMetrics.peakOrderCount, peakMetrics.peakSales, settings);
     busyShifts.push({
       employeeId: shift.employeeId,
       employeeName: shift.employeeName,
@@ -425,14 +487,15 @@ export async function GET(request: Request) {
   const employees = Array.from(employeeMap.values()).map((entry) => {
     const ordersPerHour = entry.workMinutes > 0 ? entry.orderCount / (entry.workMinutes / 60) : 0;
     const salesPerHour = entry.workMinutes > 0 ? Math.round(entry.sales / (entry.workMinutes / 60)) : 0;
-    const averageLoadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour);
-    const peakLoadLevel = getLoadLevelMetrics(entry.peakHourOrderCount, entry.peakHourSales);
+    const averageLoadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour, settings);
+    const peakLoadLevel = getLoadLevelMetrics(entry.peakHourOrderCount, entry.peakHourSales, settings);
     const onePersonHighLoadRate = entry.workMinutes > 0 ? entry.onePersonHighLoadMinutes / entry.workMinutes : 0;
-    const evaluationScore = Math.round((
-      peakLoadLevel.loadLevelScore * 0.6
-      + averageLoadLevel.loadLevelScore * 0.3
-      + Math.min(30, onePersonHighLoadRate * 100) * 0.1
-    ) * 10) / 10;
+    const totalWeight = settings.peakWeight + settings.averageWeight + settings.onePersonWeight;
+    const evaluationScore = totalWeight > 0 ? Math.round((
+      peakLoadLevel.loadLevelScore * (settings.peakWeight / totalWeight)
+      + averageLoadLevel.loadLevelScore * (settings.averageWeight / totalWeight)
+      + Math.min(settings.onePersonRateScoreCap, onePersonHighLoadRate * 100) * (settings.onePersonWeight / totalWeight)
+    ) * 10) / 10 : 0;
     return {
       ...entry,
       ordersPerHour,
@@ -502,7 +565,24 @@ export async function POST(request: Request) {
     minOrderLoadScore: body.minOrderLoadScore,
     amountScoreMultiplier: body.amountScoreMultiplier,
     highLoadOrderThreshold: body.highLoadOrderThreshold,
-    highLoadScoreThreshold: body.highLoadScoreThreshold
+    highLoadScoreThreshold: body.highLoadScoreThreshold,
+    orderVeryIdleMax: body.orderVeryIdleMax,
+    orderNormalMax: body.orderNormalMax,
+    orderBusyMax: body.orderBusyMax,
+    orderHighMax: body.orderHighMax,
+    salesVeryIdleMax: body.salesVeryIdleMax,
+    salesNormalMax: body.salesNormalMax,
+    salesBusyMax: body.salesBusyMax,
+    salesHighMax: body.salesHighMax,
+    scoreVeryIdle: body.scoreVeryIdle,
+    scoreNormal: body.scoreNormal,
+    scoreBusy: body.scoreBusy,
+    scoreHigh: body.scoreHigh,
+    scoreExtreme: body.scoreExtreme,
+    peakWeight: body.peakWeight,
+    averageWeight: body.averageWeight,
+    onePersonWeight: body.onePersonWeight,
+    onePersonRateScoreCap: body.onePersonRateScoreCap
   });
   await sql`
     insert into timecard_workload_settings (
@@ -512,6 +592,23 @@ export async function POST(request: Request) {
       amount_score_multiplier,
       high_load_order_threshold,
       high_load_score_threshold,
+      order_very_idle_max,
+      order_normal_max,
+      order_busy_max,
+      order_high_max,
+      sales_very_idle_max,
+      sales_normal_max,
+      sales_busy_max,
+      sales_high_max,
+      score_very_idle,
+      score_normal,
+      score_busy,
+      score_high,
+      score_extreme,
+      peak_weight,
+      average_weight,
+      one_person_weight,
+      one_person_rate_score_cap,
       updated_by,
       updated_at
     )
@@ -522,6 +619,23 @@ export async function POST(request: Request) {
       ${settings.amountScoreMultiplier},
       ${settings.highLoadOrderThreshold},
       ${settings.highLoadScoreThreshold},
+      ${settings.orderVeryIdleMax},
+      ${settings.orderNormalMax},
+      ${settings.orderBusyMax},
+      ${settings.orderHighMax},
+      ${settings.salesVeryIdleMax},
+      ${settings.salesNormalMax},
+      ${settings.salesBusyMax},
+      ${settings.salesHighMax},
+      ${settings.scoreVeryIdle},
+      ${settings.scoreNormal},
+      ${settings.scoreBusy},
+      ${settings.scoreHigh},
+      ${settings.scoreExtreme},
+      ${settings.peakWeight},
+      ${settings.averageWeight},
+      ${settings.onePersonWeight},
+      ${settings.onePersonRateScoreCap},
       ${session.id},
       now()
     )
@@ -532,6 +646,23 @@ export async function POST(request: Request) {
       amount_score_multiplier = excluded.amount_score_multiplier,
       high_load_order_threshold = excluded.high_load_order_threshold,
       high_load_score_threshold = excluded.high_load_score_threshold,
+      order_very_idle_max = excluded.order_very_idle_max,
+      order_normal_max = excluded.order_normal_max,
+      order_busy_max = excluded.order_busy_max,
+      order_high_max = excluded.order_high_max,
+      sales_very_idle_max = excluded.sales_very_idle_max,
+      sales_normal_max = excluded.sales_normal_max,
+      sales_busy_max = excluded.sales_busy_max,
+      sales_high_max = excluded.sales_high_max,
+      score_very_idle = excluded.score_very_idle,
+      score_normal = excluded.score_normal,
+      score_busy = excluded.score_busy,
+      score_high = excluded.score_high,
+      score_extreme = excluded.score_extreme,
+      peak_weight = excluded.peak_weight,
+      average_weight = excluded.average_weight,
+      one_person_weight = excluded.one_person_weight,
+      one_person_rate_score_cap = excluded.one_person_rate_score_cap,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
