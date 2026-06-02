@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock3,
+  ExternalLink,
   FileText,
   Lightbulb,
   MenuSquare,
@@ -14,10 +15,10 @@ import {
   PackageCheck,
   Search,
   Settings,
+  ShoppingCart,
   Store,
   Truck,
   UserCog,
-  UsersRound,
   WalletCards
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -42,8 +43,9 @@ const orderModulePaths = new Set([
   "/os/product-comparisons",
   "/os/reports"
 ]);
-const procedureModulePaths = new Set(["/os/procedures", "/os/menus"]);
+const procedureModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
+const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const canonicalNavItems: OsNavItem[] = [
@@ -62,30 +64,93 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
+  { label: "POS", href: "/os/pos", icon: ShoppingCart },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
   settingsNavItem
 ];
+
+type OsNavModulePath = {
+  href: string;
+  isShortcut?: boolean;
+};
 
 type OsNavModule = {
   id: string;
   label: string;
   icon: LucideIcon;
   href?: string;
-  paths: string[];
+  paths: OsNavModulePath[];
+};
+
+export type OsNavChildItem = OsNavItem & {
+  isShortcut?: boolean;
 };
 
 export type OsNavModuleWithChildren = OsNavModule & {
-  children: OsNavItem[];
+  children: OsNavChildItem[];
 };
 
 const navModules: OsNavModule[] = [
-  { id: "home", label: "OS", icon: ClipboardList, href: "/os", paths: ["/os"] },
-  { id: "orders", label: "発注", icon: PackageCheck, paths: ["/os/orders", "/os/procurement", "/os/history", "/os/field-notes", "/os/reports", "/os/suppliers"] },
-  { id: "people", label: "人事", icon: UsersRound, paths: ["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff"] },
-  { id: "catalog", label: "商品", icon: Boxes, paths: ["/os/products", "/os/menus", "/os/product-comparisons"] },
-  { id: "operations", label: "運営", icon: ClipboardCheck, paths: ["/os/procedures"] },
-  { id: "stores", label: "店舗", icon: Store, paths: ["/os/stores"] },
-  { id: "settings", label: "設定", icon: Settings, href: "/os/settings", paths: ["/os/settings"] }
+  { id: "home", label: "OS ホーム", icon: ClipboardList, href: "/os", paths: [{ href: "/os" }] },
+  {
+    id: "orders",
+    label: "発注管理",
+    icon: PackageCheck,
+    paths: [
+      { href: "/os/orders" },
+      { href: "/os/procurement" },
+      { href: "/os/history" },
+      { href: "/os/field-notes" },
+      { href: "/os/reports" },
+      { href: "/os/suppliers" },
+      { href: "/os/product-comparisons", isShortcut: true }
+    ]
+  },
+  {
+    id: "procedures",
+    label: "電子手順書",
+    icon: ClipboardCheck,
+    paths: [
+      { href: "/os/procedures" },
+      { href: "/os/menus", isShortcut: true },
+      { href: "/os/products", isShortcut: true }
+    ]
+  },
+  {
+    id: "timecard",
+    label: "タイムカード",
+    icon: Clock3,
+    paths: [
+      { href: "/os/timecard" },
+      { href: "/os/timecard/schedule" },
+      { href: "/os/timecard/payroll" },
+      { href: "/os/staff", isShortcut: true },
+      { href: "/os/stores", isShortcut: true }
+    ]
+  },
+  {
+    id: "pos",
+    label: "POS",
+    icon: ShoppingCart,
+    paths: [
+      { href: "/os/pos" },
+      { href: "/os/menus", isShortcut: true },
+      { href: "/os/products", isShortcut: true },
+      { href: "/os/stores", isShortcut: true }
+    ]
+  },
+  {
+    id: "shared-data",
+    label: "共有データ",
+    icon: Boxes,
+    paths: [
+      { href: "/os/products" },
+      { href: "/os/menus" },
+      { href: "/os/stores" },
+      { href: "/os/staff" },
+      { href: "/os/settings" }
+    ]
+  }
 ];
 
 function getModuleNavPaths(pathname: string) {
@@ -101,6 +166,10 @@ function getModuleNavPaths(pathname: string) {
     return timecardModulePaths;
   }
 
+  if (pathname === "/os/pos" || pathname.startsWith("/os/pos/")) {
+    return posModulePaths;
+  }
+
   if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff") {
     return sharedDataPaths;
   }
@@ -111,7 +180,6 @@ function getModuleNavPaths(pathname: string) {
 function canShowInCurrentModule(pathname: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os") return true;
-  if (item.href === "/os/settings") return true;
   return getModuleNavPaths(pathname).has(item.href);
 }
 
@@ -123,6 +191,7 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
   if (item.href === "/os/menus") return ["owner", "manager"].includes(role);
+  if (item.href === "/os/pos") return ["owner", "manager"].includes(role);
   if (item.href === "/os/products") return productViewerRoles.has(role);
   if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);
 
@@ -135,14 +204,19 @@ function filterPermittedNavItems(_navItems: OsNavItem[], role: string) {
   return availableNavItems.filter((item) => canShowNavItem(role, item));
 }
 
-function buildPermittedNavModules(navItems: OsNavItem[], role: string) {
+function buildPermittedNavModules(navItems: OsNavItem[], role: string): OsNavModuleWithChildren[] {
   const permittedNavItems = filterPermittedNavItems(navItems, role);
   const navItemByHref = new Map(permittedNavItems.map((item) => [item.href, item]));
 
   return navModules
     .map((module) => ({
       ...module,
-      children: module.paths.map((path) => navItemByHref.get(path)).filter((item): item is OsNavItem => Boolean(item))
+      children: module.paths
+        .flatMap((path): OsNavChildItem[] => {
+          const item = navItemByHref.get(path.href);
+          if (!item) return [];
+          return [{ ...item, ...(path.isShortcut ? { isShortcut: true } : {}) }];
+        })
     }))
     .filter((module) => {
       if (module.href) return navItemByHref.has(module.href);
@@ -217,7 +291,8 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   }, []);
 
   const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role), [navItems, role]);
-  const activeModule = visibleModules.find((module) => module.paths.some((path) => pathname === path || (path !== "/os" && pathname.startsWith(`${path}/`))));
+  const activeModule = visibleModules.find((module) => module.paths.some((path) => !path.isShortcut && (pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`)))))
+    ?? visibleModules.find((module) => module.paths.some((path) => pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`))));
   const openModule = visibleModules.find((module) => module.id === openModuleId);
 
   useEffect(() => {
@@ -263,12 +338,13 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
               </button>
               {isOpen ? (
                 <nav className="nav-sub-list" aria-label={`${module.label}サブメニュー`}>
-                  {module.children.map(({ label, href, icon: ChildIcon }) => {
+                  {module.children.map(({ label, href, icon: ChildIcon, isShortcut }) => {
                     const isChildActive = pathname === href || pathname.startsWith(`${href}/`);
                     return (
-                      <Link href={href} className={isChildActive ? "is-active" : ""} key={href}>
+                      <Link href={href} className={`${isChildActive ? "is-active" : ""}${isShortcut ? " is-shortcut" : ""}`.trim()} key={href}>
                         <ChildIcon size={14} />
                         <span>{label}</span>
+                        {isShortcut ? <ExternalLink className="nav-shortcut-icon" size={12} aria-label="快捷リンク" /> : null}
                       </Link>
                     );
                   })}

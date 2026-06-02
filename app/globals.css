@@ -821,6 +821,22 @@ button {
   font-weight: 800;
 }
 
+.mobile-nav-list a span,
+.nav-sub-list a span {
+  min-width: 0;
+}
+
+.mobile-nav-list a.is-shortcut span,
+.nav-sub-list a.is-shortcut span {
+  flex: 1;
+}
+
+.nav-shortcut-icon {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: rgba(220, 229, 238, 0.68);
+}
+
 .mobile-nav-list a:hover,
 .mobile-nav-list a.is-active,
 .mobile-nav-module-link.is-active {

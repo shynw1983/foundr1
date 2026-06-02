@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { ExternalLink, Menu } from "lucide-react";
 import { useRef } from "react";
 import { usePathname } from "next/navigation";
 import { NotificationMenu } from "./NotificationMenu";
@@ -48,12 +48,13 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
                   <span>{module.label}</span>
                 </div>
                 <div className="mobile-nav-section-links">
-                  {module.children.map(({ label, href, icon: Icon }) => {
+                  {module.children.map(({ label, href, icon: Icon, isShortcut }) => {
                     const isActive = pathname === href || pathname.startsWith(`${href}/`);
                     return (
-                      <Link href={href} className={isActive ? "is-active" : ""} key={href}>
+                      <Link href={href} className={`${isActive ? "is-active" : ""}${isShortcut ? " is-shortcut" : ""}`.trim()} key={href}>
                         <Icon size={16} />
                         <span>{label}</span>
+                        {isShortcut ? <ExternalLink className="nav-shortcut-icon" size={12} aria-label="快捷リンク" /> : null}
                       </Link>
                     );
                   })}
