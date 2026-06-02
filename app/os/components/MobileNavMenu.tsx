@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { usePathname } from "next/navigation";
 import { NotificationMenu } from "./NotificationMenu";
 import { type OsNavItem, usePermittedNavModules } from "./OsNavList";
+import { UserBadge } from "./UserBadge";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
@@ -62,6 +63,9 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
               </section>
             );
           })}
+          <div className="mobile-nav-user">
+            <UserBadge showNotifications={false} />
+          </div>
         </nav>
       </details>
     </div>

@@ -845,23 +845,36 @@ button {
 
 .mobile-nav-section {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
 .mobile-nav-section-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 8px;
-  color: #9fb1c7;
-  font-size: 12px;
+  gap: 9px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-left: 4px solid rgba(79, 190, 155, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #f7fafc;
+  font-size: 14px;
   font-weight: 900;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.mobile-nav-section-heading svg {
+  color: #9fe0c8;
 }
 
 .mobile-nav-section-links {
   display: grid;
   gap: 4px;
+  padding-left: 8px;
 }
 
 @media (min-width: 1121px) {
@@ -9389,18 +9402,32 @@ button {
 
   .mobile-nav-user {
     display: block;
-    padding: 4px 4px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 10px;
+    padding: 12px 4px 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .mobile-nav-user .user-panel {
+    grid-template-columns: 1fr;
   }
 
   .mobile-nav-user .user-badge {
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     min-height: 48px;
-    padding: 0;
+    padding: 0 10px;
     border-color: rgba(255, 255, 255, 0.12);
     color: #f7fafc;
     background: rgba(255, 255, 255, 0.07);
+  }
+
+  .mobile-nav-user .user-badge-name,
+  .mobile-nav-user .user-badge-role {
+    display: inline-flex;
+  }
+
+  .mobile-nav-user .user-badge-name {
+    max-width: none;
   }
 
   .mobile-nav-user .user-badge-role {
@@ -9410,6 +9437,16 @@ button {
 
   .mobile-nav-user .notification-menu {
     display: none;
+  }
+
+  .mobile-nav-user .os-language-picker span {
+    display: block;
+  }
+
+  .mobile-nav-user .account-menu-panel {
+    position: static;
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.98);
   }
 
   .mobile-visible-notification .notification-panel {
