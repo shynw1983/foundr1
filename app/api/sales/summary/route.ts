@@ -58,7 +58,6 @@ function getDatesBetween(startDate: string, endDate: string) {
 
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
-const managementRoles = new Set(["owner", "manager", "store_owner"]);
 const hourMs = 60 * 60 * 1000;
 const workloadLevels = [
   { key: "veryIdle", label: "かなり空き", scoreKey: "scoreVeryIdle" },
@@ -68,7 +67,6 @@ const workloadLevels = [
   { key: "extreme", label: "超負荷", scoreKey: "scoreExtreme" }
 ] as const;
 const defaultWorkloadSettings = {
-  includeManagement: true,
   minOrderLoadScore: 1,
   amountScoreMultiplier: 1,
   orderVeryIdleMax: 4,
@@ -122,7 +120,6 @@ function numberFrom(value: unknown, fallback: number) {
 
 function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
   return {
-    includeManagement: settings.includeManagement !== false,
     minOrderLoadScore: numberFrom(settings.minOrderLoadScore, defaultWorkloadSettings.minOrderLoadScore),
     amountScoreMultiplier: numberFrom(settings.amountScoreMultiplier, defaultWorkloadSettings.amountScoreMultiplier),
     orderVeryIdleMax: numberFrom(settings.orderVeryIdleMax, defaultWorkloadSettings.orderVeryIdleMax),
@@ -148,7 +145,6 @@ async function getWorkloadSettings(storeId: string) {
       coalesce(order_normal_max, 8) as "orderNormalMax",
       coalesce(order_busy_max, 12) as "orderBusyMax",
       coalesce(order_high_max, 15) as "orderHighMax",
-      coalesce(include_management, true) as "includeManagement",
       coalesce(min_order_load_score, 1) as "minOrderLoadScore",
       coalesce(amount_score_multiplier, 1) as "amountScoreMultiplier",
       coalesce(sales_very_idle_max, 4999) as "salesVeryIdleMax",
@@ -348,7 +344,6 @@ export async function GET(request: Request) {
       employees.name as "employeeName",
       timecard_punches.store_id::text as "storeId",
       stores.name as "storeName",
-      employees.role as "employeeRole",
       timecard_punches.punch_type as "punchType",
       timecard_punches.punched_at as "punchedAt",
       timecard_punches.source,
@@ -361,7 +356,6 @@ export async function GET(request: Request) {
       and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
     order by timecard_punches.punched_at asc
   ` : [];
-  const employeeRoleById = new Map(punches.map((row) => [String(row.employeeId), String(row.employeeRole)]));
   const typedPunches = punches.map((row) => {
     const punchType = String(row.punchType);
     return {
@@ -380,12 +374,7 @@ export async function GET(request: Request) {
   const dailySummaries = summarizeTimecardDays(typedPunches, {
     workDateStart: startDate,
     workDateEndExclusive
-  }).filter((summary) => (
-    summary.clockIn
-    && summary.clockOut
-    && summary.workMinutes > 0
-    && (workloadSettings.includeManagement || !managementRoles.has(employeeRoleById.get(summary.employeeId) ?? ""))
-  ));
+  }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
   const shiftIntervals = dailySummaries.map((summary) => ({
     workDate: summary.workDate,
     startMs: new Date(summary.clockIn as string).getTime(),
