@@ -820,7 +820,7 @@ export default function SalesPage() {
               <CalendarDays size={18} />
               <div>
                 <h3>月視図カレンダー</h3>
-                <p>日ごとの売上と天気を一覧します。負荷判定は負荷分析の注文/時間・売上/時間設定を使います。</p>
+                <p>日ごとの売上と天気を一覧します。負荷判定は実際に誰かが在店していた時間を使います。</p>
               </div>
             </div>
             <div className="sales-calendar">
@@ -862,7 +862,7 @@ export default function SalesPage() {
                 <div className={`sales-analysis-row ${getDensityLevelClass(day.loadLevel)}`} key={day.date}>
                   <div>
                     <span>{formatDate(day.date)}</span>
-                    <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
+                    <small>{day.orderCount}件 / 在店 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
                   </div>
                   <div>
                     <strong>{day.loadLevelLabel}</strong>
@@ -879,7 +879,7 @@ export default function SalesPage() {
                 <div className={`sales-analysis-row ${getDensityLevelClass(day.loadLevel)}`} key={day.date}>
                   <div>
                     <span>{formatDate(day.date)}</span>
-                    <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
+                    <small>{day.orderCount}件 / 在店 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
                   </div>
                   <div>
                     <strong>{day.averageLoadLevelLabel}</strong>
@@ -897,7 +897,7 @@ export default function SalesPage() {
                   <span>{index + 1}</span>
                   <div>
                     <strong>{weekday.label}曜日</strong>
-                    <small>{weekday.dayCount}日 / {weekday.orderCount}件 / 勤務 {formatDuration(weekday.workMinutes)}</small>
+                    <small>{weekday.dayCount}日 / {weekday.orderCount}件 / 在店 {formatDuration(weekday.workMinutes)}</small>
                   </div>
                   <div className="sales-weekday-meter">
                     <i style={{ width: `${Math.max(8, (weekday.ordersPerHour / Math.max(1, sortedWeekdays[0]?.ordersPerHour ?? 1)) * 100)}%` }} />

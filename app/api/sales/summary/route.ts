@@ -183,6 +183,34 @@ function getPeakHourMetrics(orders: WorkloadOrder[]) {
   };
 }
 
+function getCoverageMinutes(intervals: Array<{ startMs: number; endMs: number }>) {
+  const sorted = intervals
+    .filter((interval) => interval.endMs > interval.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+  let total = 0;
+  let currentStart = 0;
+  let currentEnd = 0;
+
+  for (const interval of sorted) {
+    if (currentEnd === 0) {
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+      continue;
+    }
+
+    if (interval.startMs <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.endMs);
+    } else {
+      total += currentEnd - currentStart;
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+    }
+  }
+
+  if (currentEnd > currentStart) total += currentEnd - currentStart;
+  return Math.round(total / 60_000);
+}
+
 function getLoadLevelIndex(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
   const orderLevel = ordersPerHour <= settings.orderVeryIdleMax
     ? 0
@@ -382,8 +410,14 @@ export async function GET(request: Request) {
     workMinutes: summary.workMinutes
   }));
   const dailyWorkMinutes = new Map<string, number>();
-  for (const summary of dailySummaries) {
-    dailyWorkMinutes.set(summary.workDate, (dailyWorkMinutes.get(summary.workDate) ?? 0) + summary.workMinutes);
+  const shiftIntervalsByDate = new Map<string, Array<{ startMs: number; endMs: number }>>();
+  for (const shift of shiftIntervals) {
+    const intervals = shiftIntervalsByDate.get(shift.workDate) ?? [];
+    intervals.push({ startMs: shift.startMs, endMs: shift.endMs });
+    shiftIntervalsByDate.set(shift.workDate, intervals);
+  }
+  for (const [workDate, intervals] of shiftIntervalsByDate.entries()) {
+    dailyWorkMinutes.set(workDate, getCoverageMinutes(intervals));
   }
   const averageOrderTotal = orders.length > 0
     ? orders.reduce((sum, order) => sum + Number(order.total ?? 0), 0) / orders.length
