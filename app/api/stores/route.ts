@@ -46,12 +46,11 @@ function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
 
   return salesSourceDefinitions.flatMap((definition, index) => {
-    const enabled = formData.get(`salesSource:${definition.platform}:enabled`) === "on";
-    if (!enabled) return [];
-    const sourceBrands = definition.sourceType === "delivery" ? concreteBrandNames : [""];
-    const labels = sourceBrands.length > 0 ? sourceBrands : [""];
+    const sourceBrands = definition.sourceType === "delivery"
+      ? concreteBrandNames.filter((brandName) => formData.get(`salesSource:${definition.platform}:brand:${brandName}:enabled`) === "on")
+      : (formData.get(`salesSource:${definition.platform}:enabled`) === "on" ? [""] : []);
 
-    return labels.map((brandName, brandIndex) => ({
+    return sourceBrands.map((brandName, brandIndex) => ({
       platform: definition.platform,
       label: definition.label,
       sourceType: definition.sourceType,

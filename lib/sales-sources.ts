@@ -8,7 +8,7 @@ export type SalesSourceDefinition = {
 };
 
 export const salesSourceDefinitions: SalesSourceDefinition[] = [
-  { platform: "smaregi", label: "Smaregi", sourceType: "pos", importSupported: false },
+  { platform: "smaregi", label: "Smaregi", sourceType: "pos", importSupported: true },
   { platform: "foundr1_pos", label: "Foundr1 POS", sourceType: "pos", importSupported: false },
   { platform: "web_reservation", label: "Web予約", sourceType: "web", importSupported: false },
   { platform: "uber_eats", label: "Uber Eats", sourceType: "delivery", importSupported: true },

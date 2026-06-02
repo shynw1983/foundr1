@@ -49,6 +49,16 @@ type BrandItem = {
 
 type StoreEditTab = "basic" | "hours" | "sales" | "payroll";
 
+function salesSourceKey(platform: string, brandName = "") {
+  return `${platform}::${brandName}`;
+}
+
+function salesSourceFormField(platform: string, brandName = "") {
+  return brandName
+    ? `salesSource:${platform}:brand:${brandName}:enabled`
+    : `salesSource:${platform}:enabled`;
+}
+
 const prefectureOptions = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
   "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
@@ -94,8 +104,8 @@ export default function StoresPage() {
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
-  const [selectedSalesSourcePlatforms, setSelectedSalesSourcePlatforms] = useState<string[]>(["smaregi", "uber_eats"]);
-  const [editingSalesSourcePlatforms, setEditingSalesSourcePlatforms] = useState<string[]>([]);
+  const [selectedSalesSourceKeys, setSelectedSalesSourceKeys] = useState<string[]>([salesSourceKey("smaregi")]);
+  const [editingSalesSourceKeys, setEditingSalesSourceKeys] = useState<string[]>([]);
 
   async function loadData() {
     const response = await fetch("/api/dashboard");
@@ -127,7 +137,10 @@ export default function StoresPage() {
     formData.set("payrollCycleType", "month_end");
     formData.set("payrollClosingDay", "31");
     formData.set("socialInsurancePrefecture", "福岡県");
-    selectedSalesSourcePlatforms.forEach((platform) => formData.set(`salesSource:${platform}:enabled`, "on"));
+    selectedSalesSourceKeys.forEach((key) => {
+      const [platform, brandName = ""] = key.split("::");
+      formData.set(salesSourceFormField(platform, brandName), "on");
+    });
 
     if (!name.trim()) return;
 
@@ -147,7 +160,7 @@ export default function StoresPage() {
       { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote, payrollCycleType: "month_end", payrollClosingDay: 31, socialInsurancePrefecture: "福岡県" }
     ]);
     setSelectedStoreBrands([]);
-    setSelectedSalesSourcePlatforms(["smaregi", "uber_eats"]);
+    setSelectedSalesSourceKeys([salesSourceKey("smaregi")]);
     setNewBusinessHours(defaultBusinessHours);
     form.reset();
     void loadData();
@@ -276,7 +289,10 @@ export default function StoresPage() {
     formData.set("currentName", editingStore.name);
     formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
     editingStoreBrands.forEach((brandName) => formData.append("brand", brandName));
-    editingSalesSourcePlatforms.forEach((platform) => formData.set(`salesSource:${platform}:enabled`, "on"));
+    editingSalesSourceKeys.forEach((key) => {
+      const [platform, brandName = ""] = key.split("::");
+      formData.set(salesSourceFormField(platform, brandName), "on");
+    });
 
     const response = await fetch("/api/stores", {
       method: "PUT",
@@ -294,7 +310,7 @@ export default function StoresPage() {
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
-    setEditingSalesSourcePlatforms([]);
+    setEditingSalesSourceKeys([]);
     setEditingReservationNote("");
     setEditingStoreTab("basic");
     void loadData();
@@ -313,7 +329,7 @@ export default function StoresPage() {
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
-    setEditingSalesSourcePlatforms(Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => source.platform))));
+    setEditingSalesSourceKeys(Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => salesSourceKey(source.platform, source.brandName)))));
   }
 
   function toggleBrandSelection(
@@ -344,16 +360,18 @@ export default function StoresPage() {
     setEditingStoreBrands((current) => toggleBrandSelection(current, brandName, checked));
   }
 
-  function toggleSalesSourcePlatform(current: string[], platform: string, checked: boolean) {
+  function toggleSalesSourceKey(current: string[], key: string, checked: boolean) {
     return checked
-      ? Array.from(new Set([...current, platform]))
-      : current.filter((item) => item !== platform);
+      ? Array.from(new Set([...current, key]))
+      : current.filter((item) => item !== key);
   }
 
   function formatStoreSalesSources(store: StoreItem) {
-    const platforms = Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => source.platform)));
-    if (platforms.length === 0) return "売上源未設定";
-    return platforms.map((platform) => salesSourceDefinitions.find((source) => source.platform === platform)?.label ?? platform).join(" / ");
+    const sources = (store.salesSources ?? []).filter((source) => source.isEnabled);
+    if (sources.length === 0) return "売上源未設定";
+    return sources.map((source) => (
+      source.brandName ? `${source.label} / ${source.brandName}` : source.label
+    )).join(" / ");
   }
 
   function formatStoreBrands(brandNames: string[]) {
@@ -460,9 +478,9 @@ export default function StoresPage() {
                 ))}
               </div>
               <SalesSourceSelector
-                selectedPlatforms={selectedSalesSourcePlatforms}
-                onToggle={(platform, checked) => setSelectedSalesSourcePlatforms((current) => toggleSalesSourcePlatform(current, platform, checked))}
-                selectedBrandCount={selectedStoreBrands.length}
+                selectedKeys={selectedSalesSourceKeys}
+                brandNames={selectedStoreBrands}
+                onToggle={(key, checked) => setSelectedSalesSourceKeys((current) => toggleSalesSourceKey(current, key, checked))}
               />
               <button className="primary-button" type="submit">店舗を追加</button>
             </form>
@@ -576,9 +594,9 @@ export default function StoresPage() {
               ) : null}
               {editingStoreTab === "sales" ? (
                 <SalesSourceSelector
-                  selectedPlatforms={editingSalesSourcePlatforms}
-                  onToggle={(platform, checked) => setEditingSalesSourcePlatforms((current) => toggleSalesSourcePlatform(current, platform, checked))}
-                  selectedBrandCount={editingStoreBrands.length}
+                  selectedKeys={editingSalesSourceKeys}
+                  brandNames={editingStoreBrands}
+                  onToggle={(key, checked) => setEditingSalesSourceKeys((current) => toggleSalesSourceKey(current, key, checked))}
                 />
               ) : null}
               {editingStoreTab === "payroll" ? (
@@ -693,34 +711,56 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 function SalesSourceSelector({
-  selectedPlatforms,
+  selectedKeys,
+  brandNames,
   onToggle,
-  selectedBrandCount
 }: {
-  selectedPlatforms: string[];
-  onToggle: (platform: string, checked: boolean) => void;
-  selectedBrandCount?: number;
+  selectedKeys: string[];
+  brandNames: string[];
+  onToggle: (key: string, checked: boolean) => void;
 }) {
+  const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
+  const directSources = salesSourceDefinitions.filter((source) => source.sourceType !== "delivery");
+  const deliverySources = salesSourceDefinitions.filter((source) => source.sourceType === "delivery");
+
   return (
     <div className="checkbox-group sales-source-settings">
       <span>売上源</span>
-      {salesSourceDefinitions.map((source) => {
-        const generatedCount = source.sourceType === "delivery" ? Math.max(1, selectedBrandCount ?? 1) : 1;
+      {directSources.map((source) => {
+        const key = salesSourceKey(source.platform);
         return (
-          <label key={source.platform}>
+          <label key={key}>
             <input
               type="checkbox"
-              name={`salesSource:${source.platform}:enabled`}
-              checked={selectedPlatforms.includes(source.platform)}
-              onChange={(event) => onToggle(source.platform, event.target.checked)}
+              name={salesSourceFormField(source.platform)}
+              checked={selectedKeys.includes(key)}
+              onChange={(event) => onToggle(key, event.target.checked)}
             />
-            <span>
-              {source.label}
-              {source.sourceType === "delivery" ? ` / ブランド別 ${generatedCount}件` : ""}
-            </span>
+            <span>{source.label}</span>
           </label>
         );
       })}
+      <div className="sales-source-brand-grid">
+        {deliverySources.map((source) => (
+          <div className="sales-source-brand-group" key={source.platform}>
+            <strong>{source.label}</strong>
+            {concreteBrandNames.length > 0 ? concreteBrandNames.map((brandName) => {
+              const key = salesSourceKey(source.platform, brandName);
+              return (
+                <label key={key}>
+                  <input
+                    type="checkbox"
+                    name={salesSourceFormField(source.platform, brandName)}
+                    checked={selectedKeys.includes(key)}
+                    onChange={(event) => onToggle(key, event.target.checked)}
+                  />
+                  <span>{brandName}</span>
+                </label>
+              );
+            }) : <small>先に取り扱いブランドを選択してください。</small>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

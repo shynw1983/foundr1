@@ -1651,6 +1651,39 @@ button {
   box-shadow: inset 0 0 0 3px white;
 }
 
+.sales-source-brand-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 100%;
+}
+
+.sales-source-brand-group {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbff;
+}
+
+.sales-source-brand-group strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.sales-source-brand-group small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sales-source-brand-group label {
+  width: 100%;
+  background: white;
+}
+
 .edit-fields .checkbox-group {
   display: flex;
   flex-wrap: wrap;

@@ -1,10 +1,22 @@
 import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
-import { parseUberSalesCsv } from "../../../../lib/sales-imports";
+import { parseSmaregiSalesCsv, parseUberSalesCsv, SalesCsvParserUpdateRequiredError } from "../../../../lib/sales-imports";
 import { getSalesSourceDefinition } from "../../../../lib/sales-sources";
 
 const salesImportRoles = new Set(["owner", "manager"]);
+
+function decodeSalesCsv(bytes: Uint8Array, sourcePlatform: string) {
+  if (sourcePlatform === "smaregi") {
+    const utf8Text = new TextDecoder("utf-8").decode(bytes);
+    if (utf8Text.includes("取引ID") && utf8Text.includes("取引日時") && utf8Text.includes("合計")) {
+      return utf8Text;
+    }
+    return new TextDecoder("shift-jis").decode(bytes);
+  }
+
+  return new TextDecoder("utf-8").decode(bytes);
+}
 
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
@@ -162,6 +174,7 @@ export async function POST(request: Request) {
       id::text,
       source_platform as "sourcePlatform",
       source_label as "sourceLabel",
+      source_type as "sourceType",
       brand_name as "brandName"
     from store_sales_sources
     where id::text = ${salesSourceId}
@@ -177,10 +190,30 @@ export async function POST(request: Request) {
     return Response.json({ error: "この売上源のCSV取込はまだ対応していません。" }, { status: 400 });
   }
 
-  const text = await file.text();
-  const parsed = parseUberSalesCsv(text);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const text = decodeSalesCsv(bytes, sourcePlatform);
+  const parsed = (() => {
+    try {
+      if (sourcePlatform === "smaregi") return parseSmaregiSalesCsv(text);
+      return parseUberSalesCsv(text);
+    } catch (error) {
+      if (error instanceof SalesCsvParserUpdateRequiredError) {
+        return { error };
+      }
+      throw error;
+    }
+  })();
+  if ("error" in parsed) {
+    return Response.json({
+      error: parsed.error.message,
+      parserUpdateRequired: true
+    }, { status: 422 });
+  }
   if (parsed.orders.length === 0) {
-    return Response.json({ error: "取り込める注文がありませんでした。" }, { status: 400 });
+    return Response.json({
+      error: "取り込める注文がありませんでした。CSV形式が変わっている可能性があるため、解析器の更新が必要です。",
+      parserUpdateRequired: true
+    }, { status: 422 });
   }
 
   const importMonth = String(formData.get("month") || parsed.detectedMonth || "");
@@ -281,7 +314,7 @@ export async function POST(request: Request) {
         ${order.sourceExternalId},
         ${brandId},
         ${storeId},
-        'delivery',
+        ${String(source.sourceType || sourceDefinition?.sourceType || "delivery")},
         ${sourcePlatform},
         ${order.orderNo},
         'completed',
