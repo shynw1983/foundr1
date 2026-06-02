@@ -337,7 +337,7 @@ export default function TimecardWorkloadPage() {
               <p>スタッフが勤務中にカバーした売上を集計します。現在はカバー口径のため、複数名勤務では同じ注文が複数スタッフに含まれます。賞与連動では、後続で分担売上の口径も追加できます。</p>
             </article>
             <article>
-              <h3>売上/時</h3>
+              <h3>売上/時間</h3>
               <p>カバー売上を実勤務時間で割った単位時間あたりの売上貢献です。長時間勤務による総額の差を補正して比較するための指標です。</p>
             </article>
           </div>
@@ -391,7 +391,7 @@ export default function TimecardWorkloadPage() {
                     <i className="is-sales" style={{ width: chartWidth(employee.sales, maxSales) }} />
                   </div>
                   <div className="workload-chart-subbar">
-                    <span>売上/時 {formatMoney(employee.salesPerHour)}</span>
+                    <span>売上/時間 {formatMoney(employee.salesPerHour)}</span>
                     <div><i style={{ width: chartWidth(employee.salesPerHour, maxSalesPerHour) }} /></div>
                   </div>
                 </div>
@@ -417,7 +417,7 @@ export default function TimecardWorkloadPage() {
                   <th>勤務</th>
                   <th>注文</th>
                   <th>注文/時</th>
-                  <th>売上/時</th>
+                  <th>売上/時間</th>
                   <th>負荷ピーク</th>
                   <th>ワンオペ高負荷</th>
                   <th>空き時間</th>
@@ -461,7 +461,7 @@ export default function TimecardWorkloadPage() {
                   <th>勤務</th>
                   <th>カバー売上</th>
                   <th>貢献率</th>
-                  <th>売上/時</th>
+                  <th>売上/時間</th>
                   <th>カバー注文</th>
                   <th>注文/時</th>
                 </tr>
