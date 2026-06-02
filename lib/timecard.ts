@@ -31,9 +31,20 @@ export type TimecardStorePayrollSetting = {
   monthlySalary: number | null;
   commuteAllowancePerWorkday: number;
   commuteAllowanceMonthlyCap: number | null;
+  applyIncomeTax?: boolean;
+  incomeTaxCategory?: "none" | "kou" | "otsu";
+  dependentCount?: number;
   validFrom: string;
   wageValidFrom: string;
   commuteValidFrom: string;
+};
+
+export type WithholdingTaxRow = {
+  salaryMin: number;
+  salaryMax: number | null;
+  kouTaxes: number[];
+  otsuTax: number | null;
+  otsuRate: number | null;
 };
 
 export type TimecardDailySummary = {
@@ -71,6 +82,7 @@ export type TimecardPayrollRow = {
   overtimePay: number;
   nightPremiumPay: number;
   basePay: number;
+  incomeTax: number;
   commuteAllowance: number;
   totalPay: number;
   alerts: string[];
@@ -85,6 +97,7 @@ export type TimecardPayrollTotals = {
   laborCost: number;
   overtimePay: number;
   nightPremiumPay: number;
+  incomeTax: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -175,6 +188,19 @@ function getEffectiveCommuteSetting(employee: TimecardEmployee | undefined, stor
     .filter((setting) => setting.storeId === storeId && setting.commuteValidFrom <= workDate)
     .sort((a, b) => b.commuteValidFrom.localeCompare(a.commuteValidFrom));
   return settings[0] ?? employee?.storePayrollSettings.find((setting) => setting.storeId === storeId);
+}
+
+function getWithholdingTax(amount: number, setting: TimecardStorePayrollSetting, taxRows: WithholdingTaxRow[]) {
+  if (!setting.applyIncomeTax || setting.incomeTaxCategory === "none") return 0;
+  const row = taxRows.find((taxRow) => amount >= taxRow.salaryMin && (taxRow.salaryMax === null || amount < taxRow.salaryMax));
+  if (!row) return 0;
+  if (setting.incomeTaxCategory === "otsu") {
+    if (row.otsuTax !== null) return Math.max(0, Math.round(row.otsuTax));
+    if (row.otsuRate !== null) return Math.max(0, Math.floor(amount * row.otsuRate));
+    return 0;
+  }
+  const dependentCount = Math.max(0, Math.min(7, Math.round(Number(setting.dependentCount ?? 0) || 0)));
+  return Math.max(0, Math.round(row.kouTaxes[dependentCount] ?? 0));
 }
 
 export function summarizeTimecardDays(
@@ -271,7 +297,12 @@ export function summarizeTimecardDays(
   return summaries.sort((a, b) => `${b.workDate}${b.employeeName}`.localeCompare(`${a.workDate}${a.employeeName}`));
 }
 
-export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: TimecardDailySummary[]) {
+export function summarizePayroll(
+  employees: TimecardEmployee[],
+  dailySummaries: TimecardDailySummary[],
+  options: { withholdingTaxRows?: WithholdingTaxRow[] } = {}
+) {
+  const withholdingTaxRows = options.withholdingTaxRows ?? [];
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const rowsByEmployee = new Map<string, TimecardPayrollRow>();
   const daysByEmployeeAndStore = new Map<string, TimecardDailySummary[]>();
@@ -298,6 +329,7 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
       overtimePay: 0,
       nightPremiumPay: 0,
       basePay: 0,
+      incomeTax: 0,
       commuteAllowance: 0,
       totalPay: 0,
       alerts: []
@@ -336,6 +368,7 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     let regularPay = 0;
     let overtimePay = 0;
     let nightPremiumPay = 0;
+    let incomeTax = 0;
     let commuteAllowance = 0;
     for (const setting of employee?.storePayrollSettings ?? []) {
       if (!setting.payrollEnabled) continue;
@@ -349,18 +382,26 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
       const storeOvertimeMinutes = storeDays.reduce((sum, day) => sum + Math.max(0, day.workMinutes - dailyLegalWorkMinutes), 0);
       const storeNightMinutes = storeDays.reduce((sum, day) => sum + day.nightMinutes, 0);
       const commuteWorkDays = commuteDays.filter((day) => day.workMinutes > 0).length;
+      let storeTaxablePay = 0;
       if (workDays > 0 || workMinutes > 0) {
         if (setting.employmentType === "monthly") {
           regularWorkMinutes += workMinutes;
-          regularPay += Math.ceil(setting.monthlySalary ?? 0);
+          const storeMonthlyPay = Math.ceil(setting.monthlySalary ?? 0);
+          regularPay += storeMonthlyPay;
+          storeTaxablePay = storeMonthlyPay;
         } else {
+          const storeRegularPay = (storeRegularMinutes / 60) * (setting.hourlyWage ?? 0);
+          const storeOvertimePay = (storeOvertimeMinutes / 60) * (setting.hourlyWage ?? 0) * overtimePremiumRate;
+          const storeNightPremiumPay = (storeNightMinutes / 60) * (setting.hourlyWage ?? 0) * nightPremiumRate;
           regularWorkMinutes += storeRegularMinutes;
           overtimeMinutes += storeOvertimeMinutes;
-          regularPay += (storeRegularMinutes / 60) * (setting.hourlyWage ?? 0);
-          overtimePay += (storeOvertimeMinutes / 60) * (setting.hourlyWage ?? 0) * overtimePremiumRate;
-          nightPremiumPay += (storeNightMinutes / 60) * (setting.hourlyWage ?? 0) * nightPremiumRate;
+          regularPay += storeRegularPay;
+          overtimePay += storeOvertimePay;
+          nightPremiumPay += storeNightPremiumPay;
+          storeTaxablePay = Math.ceil(storeRegularPay + storeOvertimePay + storeNightPremiumPay);
         }
       }
+      incomeTax += getWithholdingTax(storeTaxablePay, setting, withholdingTaxRows);
       if (commuteWorkDays === 0) continue;
       const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
       commuteAllowance += setting.commuteAllowanceMonthlyCap === null
@@ -376,8 +417,9 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
       overtimePay,
       nightPremiumPay,
       basePay,
+      incomeTax,
       commuteAllowance,
-      totalPay: basePay + commuteAllowance
+      totalPay: basePay + commuteAllowance - incomeTax
     };
   }).sort((a, b) => a.employeeName.localeCompare(b.employeeName, "ja"));
 
@@ -390,6 +432,7 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     laborCost: acc.laborCost + row.basePay,
     overtimePay: acc.overtimePay + row.overtimePay,
     nightPremiumPay: acc.nightPremiumPay + row.nightPremiumPay,
+    incomeTax: acc.incomeTax + row.incomeTax,
     commuteAllowance: acc.commuteAllowance + row.commuteAllowance,
     totalPay: acc.totalPay + row.totalPay
   }), {
@@ -401,6 +444,7 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     laborCost: 0,
     overtimePay: 0,
     nightPremiumPay: 0,
+    incomeTax: 0,
     commuteAllowance: 0,
     totalPay: 0
   });

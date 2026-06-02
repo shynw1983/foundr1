@@ -8,13 +8,16 @@ import {
   summarizePayroll,
   summarizeTimecardDays,
   type TimecardEmployee,
-  type TimecardPunch
+  type TimecardPunch,
+  type WithholdingTaxRow
 } from "../../../lib/timecard";
 
 type TimecardPostBody = {
   action?: string;
   storeId?: string;
   month?: string;
+  csvFileName?: string;
+  csvBase64?: string;
   punchType?: string;
   note?: string;
   employeeId?: string;
@@ -58,6 +61,7 @@ const emptyPayrollTotals = {
   laborCost: 0,
   overtimePay: 0,
   nightPremiumPay: 0,
+  incomeTax: 0,
   commuteAllowance: 0,
   totalPay: 0
 };
@@ -125,6 +129,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
             'monthlySalary', payroll_settings.monthly_salary,
             'commuteAllowancePerWorkday', payroll_settings.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', payroll_settings.commute_allowance_monthly_cap,
+            'applyIncomeTax', payroll_settings.apply_income_tax,
+            'incomeTaxCategory', payroll_settings.income_tax_category,
+            'dependentCount', payroll_settings.dependent_count,
             'validFrom', payroll_settings.valid_from,
             'wageValidFrom', payroll_settings.wage_valid_from,
             'commuteValidFrom', payroll_settings.commute_valid_from
@@ -146,6 +153,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_stores.monthly_salary,
         employee_work_stores.commute_allowance_per_workday,
         employee_work_stores.commute_allowance_monthly_cap,
+        employee_work_stores.apply_income_tax,
+        employee_work_stores.income_tax_category,
+        employee_work_stores.dependent_count,
         '1970-01-01'::date as valid_from,
         '1970-01-01'::date as wage_valid_from,
         '1970-01-01'::date as commute_valid_from
@@ -158,6 +168,9 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_store_payroll_history.monthly_salary,
         employee_work_store_payroll_history.commute_allowance_per_workday,
         employee_work_store_payroll_history.commute_allowance_monthly_cap,
+        employee_work_store_payroll_history.apply_income_tax,
+        employee_work_store_payroll_history.income_tax_category,
+        employee_work_store_payroll_history.dependent_count,
         employee_work_store_payroll_history.valid_from,
         employee_work_store_payroll_history.wage_valid_from,
         employee_work_store_payroll_history.commute_valid_from
@@ -189,11 +202,51 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       monthlySalary: toMoneyNumber(setting.monthlySalary),
       commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0,
       commuteAllowanceMonthlyCap: toMoneyNumber(setting.commuteAllowanceMonthlyCap),
+      applyIncomeTax: setting.applyIncomeTax === true,
+      incomeTaxCategory: setting.incomeTaxCategory === "kou" || setting.incomeTaxCategory === "otsu" ? setting.incomeTaxCategory : "none",
+      dependentCount: Math.max(0, Math.min(7, Math.round(Number(setting.dependentCount ?? 0) || 0))),
       validFrom: String(setting.validFrom ?? "1970-01-01").slice(0, 10),
       wageValidFrom: String(setting.wageValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10),
       commuteValidFrom: String(setting.commuteValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10)
     }))
   })) satisfies TimecardEmployee[];
+}
+
+async function getWithholdingTaxRowsForMonth(month: string) {
+  const year = Number(month.slice(0, 4));
+  if (!Number.isFinite(year)) return [] satisfies WithholdingTaxRow[];
+  const rows = await sql`
+    select
+      withholding_tax_table_rows.salary_min as "salaryMin",
+      withholding_tax_table_rows.salary_max as "salaryMax",
+      withholding_tax_table_rows.kou_tax_0 as "kouTax0",
+      withholding_tax_table_rows.kou_tax_1 as "kouTax1",
+      withholding_tax_table_rows.kou_tax_2 as "kouTax2",
+      withholding_tax_table_rows.kou_tax_3 as "kouTax3",
+      withholding_tax_table_rows.kou_tax_4 as "kouTax4",
+      withholding_tax_table_rows.kou_tax_5 as "kouTax5",
+      withholding_tax_table_rows.kou_tax_6 as "kouTax6",
+      withholding_tax_table_rows.kou_tax_7 as "kouTax7",
+      withholding_tax_table_rows.otsu_tax as "otsuTax",
+      withholding_tax_table_rows.otsu_rate as "otsuRate"
+    from withholding_tax_tables
+    join withholding_tax_table_rows
+      on withholding_tax_table_rows.table_id = withholding_tax_tables.id
+    where withholding_tax_tables.tax_year = ${year}
+      and withholding_tax_tables.table_type = 'monthly'
+      and withholding_tax_tables.is_active = true
+    order by withholding_tax_table_rows.salary_min asc, withholding_tax_table_rows.sort_order asc
+  `;
+  return rows.map((row) => ({
+    salaryMin: Number(row.salaryMin ?? 0),
+    salaryMax: row.salaryMax === null ? null : Number(row.salaryMax),
+    kouTaxes: [
+      row.kouTax0, row.kouTax1, row.kouTax2, row.kouTax3,
+      row.kouTax4, row.kouTax5, row.kouTax6, row.kouTax7
+    ].map((value) => Number(value ?? 0)),
+    otsuTax: row.otsuTax === null ? null : Number(row.otsuTax),
+    otsuRate: row.otsuRate === null ? null : Number(row.otsuRate)
+  })) satisfies WithholdingTaxRow[];
 }
 
 async function canPunchForEmployee(storeId: string, employeeId: string) {
@@ -299,6 +352,146 @@ function getJstWorkDateRange(workDate: string) {
   return { start, end, overnightEnd };
 }
 
+function normalizeAttendanceName(value: string) {
+  return value.trim().replaceAll("關", "関");
+}
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === "\"") {
+      if (inQuotes && nextChar === "\"") {
+        field += "\"";
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") index += 1;
+      row.push(field);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+
+    field += char;
+  }
+
+  row.push(field);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+
+function decodeAttendanceCsv(base64: string) {
+  const bytes = Buffer.from(base64, "base64");
+  const encodings = ["utf-8", "shift_jis"] as const;
+  for (const encoding of encodings) {
+    try {
+      const decoded = new TextDecoder(encoding, { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
+      if (decoded.includes("勤務日") && decoded.includes("従業員名")) return decoded;
+    } catch {
+      // Try the next supported encoding.
+    }
+  }
+  return new TextDecoder("shift_jis").decode(bytes).replace(/^\uFEFF/, "");
+}
+
+function normalizeCsvDate(value: string) {
+  const match = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(value.trim());
+  if (!match) return null;
+  return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+}
+
+function parseCsvDateTime(value: string) {
+  const match = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const date = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const time = `${match[4].padStart(2, "0")}:${match[5]}:${match[6] ?? "00"}`;
+  const parsed = new Date(`${date}T${time}+09:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function parseAttendanceCsv(base64: string) {
+  const text = decodeAttendanceCsv(base64);
+  const [headerRow, ...dataRows] = parseCsvRows(text);
+  if (!headerRow?.length) {
+    throw new Error("CSVのヘッダーを読み取れませんでした。");
+  }
+  const headerIndex = new Map(headerRow.map((header, index) => [header.trim(), index]));
+  const requiredHeaders = ["勤務日", "従業員名", "事業所名", "出勤時刻", "退勤時刻"];
+  const missingHeaders = requiredHeaders.filter((header) => !headerIndex.has(header));
+  if (missingHeaders.length) {
+    throw new Error(`CSVの列が不足しています: ${missingHeaders.join("、")}`);
+  }
+
+  const getValue = (row: string[], header: string) => row[headerIndex.get(header) ?? -1]?.trim() ?? "";
+  const punchFields = [
+    ["clock_in", "出勤時刻"],
+    ["break_start", "休憩1開始時刻"],
+    ["break_end", "休憩1復帰時刻"],
+    ["break_start", "休憩2開始時刻"],
+    ["break_end", "休憩2復帰時刻"],
+    ["clock_out", "退勤時刻"]
+  ] as const;
+
+  const punches: Array<{
+    employeeName: string;
+    storeName: string;
+    punchType: typeof punchFields[number][0];
+    punchedAt: string;
+    workDate: string;
+    note: string;
+  }> = [];
+  const skippedRows: string[] = [];
+
+  for (const [index, row] of dataRows.entries()) {
+    const workDate = normalizeCsvDate(getValue(row, "勤務日"));
+    const employeeName = normalizeAttendanceName(getValue(row, "従業員名"));
+    const storeName = getValue(row, "事業所名");
+    if (!workDate || !employeeName || !storeName) {
+      skippedRows.push(`${index + 2}行目`);
+      continue;
+    }
+
+    for (const [punchType, field] of punchFields) {
+      const rawTime = getValue(row, field);
+      if (!rawTime) continue;
+      const punchedAt = parseCsvDateTime(rawTime);
+      if (!punchedAt) {
+        skippedRows.push(`${index + 2}行目 ${field}`);
+        continue;
+      }
+      punches.push({
+        employeeName,
+        storeName,
+        punchType,
+        punchedAt,
+        workDate,
+        note: `CSV取込: ${workDate}`
+      });
+    }
+  }
+
+  return { punches, rowCount: dataRows.length, skippedRows };
+}
+
 function toPunchDateTime(workDate: string, time: string, baseTime?: string | null) {
   const date = new Date(`${workDate}T${time}:00+09:00`);
   if (baseTime && time <= baseTime) {
@@ -327,6 +520,7 @@ export async function GET(request: Request) {
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
   const canViewPayroll = timecardPayrollViewRoles.has(session.role);
   const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+  const withholdingTaxRows = canViewPayroll ? await getWithholdingTaxRowsForMonth(month) : [];
 
   const punches = selectedStoreId ? await sql`
     select
@@ -367,7 +561,7 @@ export async function GET(request: Request) {
     workDateStart: startDate,
     workDateEndExclusive: endDate
   });
-  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries) : { rows: [], totals: emptyPayrollTotals };
+  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, { withholdingTaxRows }) : { rows: [], totals: emptyPayrollTotals };
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
     : null;
@@ -487,6 +681,129 @@ export async function POST(request: Request) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
   }
 
+  if (action === "import_attendance_csv") {
+    if (!timecardActualEditRoles.has(session.role)) {
+      return Response.json({ error: "勤怠CSVを取り込む権限がありません。" }, { status: 403 });
+    }
+
+    const monthParam = String(body.month ?? getJstMonthLabel());
+    const month = /^(\d{4})-(\d{2})$/.test(monthParam) ? monthParam : getJstMonthLabel();
+    const csvBase64 = String(body.csvBase64 ?? "");
+    if (!csvBase64) {
+      return Response.json({ error: "CSVファイルを選択してください。" }, { status: 400 });
+    }
+
+    const storeRows = await sql`
+      select
+        id::text,
+        name,
+        coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
+        coalesce(payroll_closing_day, 31)::int as "payrollClosingDay"
+      from stores
+      where id::text = ${storeId}
+      limit 1
+    `;
+    const store = storeRows[0] ?? null;
+    if (!store) {
+      return Response.json({ error: "店舗が見つかりません。" }, { status: 404 });
+    }
+
+    let parsedCsv: ReturnType<typeof parseAttendanceCsv>;
+    try {
+      parsedCsv = parseAttendanceCsv(csvBase64);
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "CSVを読み取れませんでした。" }, { status: 400 });
+    }
+
+    const { startDate, endDate } = getPayrollDateRange(month, store);
+    const punchesInPeriod = parsedCsv.punches.filter((punch) => punch.workDate >= startDate && punch.workDate < endDate);
+    if (!punchesInPeriod.length) {
+      return Response.json({ error: "選択した月度に該当する打刻がCSV内にありません。" }, { status: 400 });
+    }
+
+    const csvStoreNames = Array.from(new Set(punchesInPeriod.map((punch) => punch.storeName).filter(Boolean)));
+    const selectedStoreName = String(store.name);
+    const otherStoreNames = csvStoreNames.filter((name) => name !== selectedStoreName);
+    if (otherStoreNames.length) {
+      return Response.json({ error: `選択店舗とCSVの事業所名が一致しません: ${otherStoreNames.join("、")}` }, { status: 400 });
+    }
+
+    const employeeRows = await sql`
+      select employees.id::text, employees.name
+      from employees
+      join employee_work_stores
+        on employee_work_stores.employee_id = employees.id
+      where employee_work_stores.store_id::text = ${storeId}
+        and employees.status = 'active'
+    `;
+    const employeeByName = new Map(employeeRows.map((employee) => [normalizeAttendanceName(String(employee.name)), String(employee.id)]));
+    const missingEmployeeNames = Array.from(new Set(
+      punchesInPeriod.map((punch) => punch.employeeName).filter((name) => !employeeByName.has(normalizeAttendanceName(name)))
+    ));
+    if (missingEmployeeNames.length) {
+      return Response.json({ error: `スタッフ設定に存在しない従業員があります: ${missingEmployeeNames.join("、")}` }, { status: 400 });
+    }
+
+    const deleteNoteStart = `CSV取込: ${startDate}`;
+    const deleteNoteEnd = `CSV取込: ${endDate}`;
+    const transactionResults = await sql.transaction([
+      sql`
+        delete from timecard_punches
+        where store_id::text = ${storeId}
+          and source = 'csv_import'
+          and note >= ${deleteNoteStart}
+          and note < ${deleteNoteEnd}
+        returning id::text
+      `,
+      ...punchesInPeriod.map((punch) => sql`
+          insert into timecard_punches (
+            employee_id,
+            store_id,
+            punch_type,
+            punched_at,
+            source,
+            note,
+            created_by
+          )
+          values (
+            ${employeeByName.get(normalizeAttendanceName(punch.employeeName))},
+            ${storeId},
+            ${punch.punchType},
+            ${punch.punchedAt},
+            'csv_import',
+            ${punch.note},
+            ${session.id}
+          )
+        `)
+    ]);
+    const deletedCount = Array.isArray(transactionResults[0]) ? transactionResults[0].length : 0;
+
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.attendance_csv.imported",
+      targetType: "timecard_punch",
+      targetId: storeId,
+      metadata: {
+        storeId,
+        month,
+        fileName: body.csvFileName ?? null,
+        sourceRows: parsedCsv.rowCount,
+        skippedRows: parsedCsv.skippedRows,
+        deletedCount,
+        insertedCount: punchesInPeriod.length
+      },
+      request
+    });
+
+    return Response.json({
+      ok: true,
+      sourceRows: parsedCsv.rowCount,
+      skippedRows: parsedCsv.skippedRows,
+      deletedCount,
+      insertedCount: punchesInPeriod.length
+    });
+  }
+
   if (action === "confirm_payroll") {
     if (!timecardPayrollViewRoles.has(session.role)) {
       return Response.json({ error: "給与を確定する権限がありません。" }, { status: 403 });
@@ -516,6 +833,7 @@ export async function POST(request: Request) {
     const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
     const scope = await getSessionStoreScope(session);
     const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+    const withholdingTaxRows = await getWithholdingTaxRowsForMonth(month);
     const punches = await sql`
       select
         timecard_punches.id::text,
@@ -553,7 +871,7 @@ export async function POST(request: Request) {
       workDateStart: startDate,
       workDateEndExclusive: endDate
     });
-    const payroll = summarizePayroll(employees, dailySummaries);
+    const payroll = summarizePayroll(employees, dailySummaries, { withholdingTaxRows });
 
     const upserted = await sql`
       insert into timecard_payroll_confirmations (

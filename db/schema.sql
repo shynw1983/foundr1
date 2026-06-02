@@ -181,6 +181,8 @@ alter table employee_work_stores add column if not exists apply_social_insurance
 alter table employee_work_stores add column if not exists apply_employment_insurance boolean not null default false;
 alter table employee_work_stores add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_stores add column if not exists apply_income_tax boolean not null default false;
+alter table employee_work_stores add column if not exists income_tax_category text not null default 'none';
+alter table employee_work_stores add column if not exists dependent_count integer not null default 0;
 alter table employee_work_stores add column if not exists apply_resident_tax boolean not null default false;
 
 insert into employee_work_stores (employee_id, store_id)
@@ -241,6 +243,8 @@ alter table timecard_employee_settings add column if not exists apply_social_ins
 alter table timecard_employee_settings add column if not exists apply_employment_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_labor_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_income_tax boolean not null default false;
+alter table timecard_employee_settings add column if not exists income_tax_category text not null default 'none';
+alter table timecard_employee_settings add column if not exists dependent_count integer not null default 0;
 alter table timecard_employee_settings add column if not exists apply_resident_tax boolean not null default false;
 
 create table if not exists employee_work_store_payroll_history (
@@ -271,6 +275,8 @@ alter table employee_work_store_payroll_history add column if not exists apply_s
 alter table employee_work_store_payroll_history add column if not exists apply_employment_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_income_tax boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists income_tax_category text not null default 'none';
+alter table employee_work_store_payroll_history add column if not exists dependent_count integer not null default 0;
 alter table employee_work_store_payroll_history add column if not exists apply_resident_tax boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists wage_valid_from date not null default '1970-01-01';
 alter table employee_work_store_payroll_history add column if not exists commute_valid_from date not null default '1970-01-01';
@@ -304,6 +310,8 @@ set
   apply_employment_insurance = coalesce(latest_settings.apply_employment_insurance, employee_work_stores.apply_employment_insurance),
   apply_labor_insurance = coalesce(latest_settings.apply_labor_insurance, employee_work_stores.apply_labor_insurance),
   apply_income_tax = coalesce(latest_settings.apply_income_tax, employee_work_stores.apply_income_tax),
+  income_tax_category = coalesce(latest_settings.income_tax_category, employee_work_stores.income_tax_category),
+  dependent_count = coalesce(latest_settings.dependent_count, employee_work_stores.dependent_count),
   apply_resident_tax = coalesce(latest_settings.apply_resident_tax, employee_work_stores.apply_resident_tax)
 from (
   select distinct on (employee_id)
@@ -317,12 +325,50 @@ from (
     apply_employment_insurance,
     apply_labor_insurance,
     apply_income_tax,
+    income_tax_category,
+    dependent_count,
     apply_resident_tax,
     payroll_enabled
   from timecard_employee_settings
   order by employee_id, valid_from desc, created_at desc
 ) latest_settings
 where latest_settings.employee_id = employee_work_stores.employee_id;
+
+create table if not exists withholding_tax_tables (
+  id uuid primary key default gen_random_uuid(),
+  tax_year integer not null,
+  table_type text not null default 'monthly',
+  title text not null,
+  source_file_name text,
+  effective_from date not null,
+  is_active boolean not null default true,
+  uploaded_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (tax_year, table_type)
+);
+
+create table if not exists withholding_tax_table_rows (
+  id uuid primary key default gen_random_uuid(),
+  table_id uuid not null references withholding_tax_tables(id) on delete cascade,
+  salary_min integer not null,
+  salary_max integer,
+  kou_tax_0 integer,
+  kou_tax_1 integer,
+  kou_tax_2 integer,
+  kou_tax_3 integer,
+  kou_tax_4 integer,
+  kou_tax_5 integer,
+  kou_tax_6 integer,
+  kou_tax_7 integer,
+  otsu_tax integer,
+  otsu_rate numeric(8, 5),
+  formula_note text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists withholding_tax_table_rows_lookup_idx
+  on withholding_tax_table_rows(table_id, salary_min, salary_max);
 
 create table if not exists timecard_punches (
   id uuid primary key default gen_random_uuid(),

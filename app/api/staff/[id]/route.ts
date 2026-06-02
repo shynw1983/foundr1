@@ -54,6 +54,8 @@ type WorkStoreSettingPayload = {
   applyEmploymentInsurance?: boolean;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
+  incomeTaxCategory?: string;
+  dependentCount?: number | string | null;
   applyResidentTax?: boolean;
   validFrom?: string;
   validFromMonth?: string;
@@ -94,6 +96,10 @@ function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
 }
 
+function normalizeIncomeTaxCategory(category?: string) {
+  return category === "kou" || category === "otsu" ? category : "none";
+}
+
 function toNullableText(value: string | undefined) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -113,6 +119,10 @@ function toNullableNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeDependentCount(value: number | string | null | undefined) {
+  return Math.max(0, Math.min(7, Math.round(Number(value ?? 0) || 0)));
 }
 
 function getJstDateLabel(date = new Date()) {
@@ -253,6 +263,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       apply_employment_insurance as "applyEmploymentInsurance",
       apply_labor_insurance as "applyLaborInsurance",
       apply_income_tax as "applyIncomeTax",
+      income_tax_category as "incomeTaxCategory",
+      dependent_count as "dependentCount",
       apply_resident_tax as "applyResidentTax"
     from employee_work_stores
     where employee_id = ${id}
@@ -293,6 +305,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
+    const storeApplyIncomeTax = Boolean(storeSetting?.applyIncomeTax);
+    const storeIncomeTaxCategory = storeApplyIncomeTax ? normalizeIncomeTaxCategory(storeSetting?.incomeTaxCategory) : "none";
+    const storeDependentCount = normalizeDependentCount(storeSetting?.dependentCount);
     const storeWageValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeCommuteValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.commuteValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeValidFrom = storeWageValidFrom < storeCommuteValidFrom ? storeWageValidFrom : storeCommuteValidFrom;
@@ -308,7 +323,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const currentApplySocialInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
     const currentApplyEmploymentInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyEmploymentInsurance) : Boolean(storeSetting?.applyEmploymentInsurance);
     const currentApplyLaborInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyLaborInsurance) : Boolean(storeSetting?.applyLaborInsurance);
-    const currentApplyIncomeTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : Boolean(storeSetting?.applyIncomeTax);
+    const currentApplyIncomeTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : storeApplyIncomeTax;
+    const currentIncomeTaxCategory = shouldKeepCurrentWageUntilFutureDate ? normalizeIncomeTaxCategory(String(existingStore?.incomeTaxCategory ?? "")) : storeIncomeTaxCategory;
+    const currentDependentCount = shouldKeepCurrentWageUntilFutureDate ? normalizeDependentCount(existingStore?.dependentCount as number | string | null | undefined) : storeDependentCount;
     const currentApplyResidentTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyResidentTax) : Boolean(storeSetting?.applyResidentTax);
     await sql`
       insert into employee_work_stores (
@@ -330,6 +347,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
+        income_tax_category,
+        dependent_count,
         apply_resident_tax
       )
       values (
@@ -351,6 +370,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${currentApplyEmploymentInsurance},
         ${currentApplyLaborInsurance},
         ${currentApplyIncomeTax},
+        ${currentIncomeTaxCategory},
+        ${currentDependentCount},
         ${currentApplyResidentTax}
       )
       on conflict do nothing
@@ -369,6 +390,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
+        income_tax_category,
+        dependent_count,
         apply_resident_tax,
         wage_valid_from,
         commute_valid_from,
@@ -388,7 +411,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${Boolean(storeSetting?.applySocialInsurance)},
         ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
-        ${Boolean(storeSetting?.applyIncomeTax)},
+        ${storeApplyIncomeTax},
+        ${storeIncomeTaxCategory},
+        ${storeDependentCount},
         ${Boolean(storeSetting?.applyResidentTax)},
         ${storeWageValidFrom},
         ${storeCommuteValidFrom},
@@ -407,6 +432,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         apply_employment_insurance = excluded.apply_employment_insurance,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
+        income_tax_category = excluded.income_tax_category,
+        dependent_count = excluded.dependent_count,
         apply_resident_tax = excluded.apply_resident_tax,
         valid_from = excluded.valid_from,
         updated_by = excluded.updated_by,

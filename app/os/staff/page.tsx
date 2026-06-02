@@ -34,6 +34,8 @@ type WorkStoreOption = StoreOption & {
   applyEmploymentInsurance?: boolean | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
+  incomeTaxCategory?: string | null;
+  dependentCount?: number | string | null;
   applyResidentTax?: boolean | null;
   payrollHistory?: PayrollHistoryEntry[];
 };
@@ -51,6 +53,8 @@ type PayrollHistoryEntry = {
   applyEmploymentInsurance?: boolean | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
+  incomeTaxCategory?: string | null;
+  dependentCount?: number | string | null;
   applyResidentTax?: boolean | null;
   wageValidFrom?: string | null;
   commuteValidFrom?: string | null;
@@ -315,6 +319,8 @@ export default function StaffPage() {
         applyEmploymentInsurance: formData.getAll("applyEmploymentInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyLaborInsurance: formData.getAll("applyLaborInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyIncomeTax: formData.getAll("applyIncomeTaxStoreIds").map((value) => String(value)).includes(store.id),
+        incomeTaxCategory: String(formData.get(`incomeTaxCategory:${store.id}`) ?? "none"),
+        dependentCount: String(formData.get(`dependentCount:${store.id}`) ?? "0"),
         applyResidentTax: formData.getAll("applyResidentTaxStoreIds").map((value) => String(value)).includes(store.id),
         wageValidFromMonth: String(formData.get(`wageValidFromMonth:${store.id}`) ?? ""),
         commuteValidFromMonth: String(formData.get(`commuteValidFromMonth:${store.id}`) ?? "")
@@ -847,44 +853,47 @@ function StaffFormFields({
                     </div>
                   </details>
                 </fieldset>
-                <label>
-                  <span>給与計算に含める</span>
-                  <span className="staff-payroll-check">
-                    <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id) && setting?.payrollEnabled !== false} />
-                    計算する
-                  </span>
-                </label>
-                <label>
-                  <span>給与形態</span>
-                  <select name={`employmentType:${store.id}`} defaultValue={defaultEmploymentType === "monthly" ? "monthly" : "hourly"}>
-                    <option value="hourly">時給</option>
-                    <option value="monthly">月給</option>
-                  </select>
-                </label>
-                <label>
-                  <span>時給</span>
-                  <input name={`hourlyWage:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.hourlyWage ?? member?.hourlyWage ?? ""} placeholder="例: 1200" />
-                </label>
-                <label>
-                  <span>月給</span>
-                  <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.monthlySalary ?? member?.monthlySalary ?? ""} placeholder="月給のみ" />
-                </label>
-                <label>
-                  <span>交通費 / 勤務日</span>
-                  <input name={`commuteAllowancePerWorkday:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowancePerWorkday ?? member?.commuteAllowancePerWorkday ?? 0} />
-                </label>
-                <label>
-                  <span>交通費月上限</span>
-                  <input name={`commuteAllowanceMonthlyCap:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowanceMonthlyCap ?? member?.commuteAllowanceMonthlyCap ?? ""} placeholder="任意" />
-                </label>
-                <label>
-                  <span>賃金適用月度</span>
-                  <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.wageValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
-                </label>
-                <label>
-                  <span>交通費適用月度</span>
-                  <input name={`commuteValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.commuteValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
-                </label>
+                <fieldset className="staff-payroll-wage-fields">
+                  <span>給与情報</span>
+                  <label>
+                    <span>給与計算に含める</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="payrollEnabledStoreIds" value={store.id} defaultChecked={selectedWorkStoreIds.has(store.id) && setting?.payrollEnabled !== false} />
+                      計算する
+                    </span>
+                  </label>
+                  <label>
+                    <span>給与形態</span>
+                    <select name={`employmentType:${store.id}`} defaultValue={defaultEmploymentType === "monthly" ? "monthly" : "hourly"}>
+                      <option value="hourly">時給</option>
+                      <option value="monthly">月給</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>時給</span>
+                    <input name={`hourlyWage:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.hourlyWage ?? member?.hourlyWage ?? ""} placeholder="例: 1200" />
+                  </label>
+                  <label>
+                    <span>月給</span>
+                    <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.monthlySalary ?? member?.monthlySalary ?? ""} placeholder="月給のみ" />
+                  </label>
+                  <label>
+                    <span>交通費 / 勤務日</span>
+                    <input name={`commuteAllowancePerWorkday:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowancePerWorkday ?? member?.commuteAllowancePerWorkday ?? 0} />
+                  </label>
+                  <label>
+                    <span>交通費月上限</span>
+                    <input name={`commuteAllowanceMonthlyCap:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowanceMonthlyCap ?? member?.commuteAllowanceMonthlyCap ?? ""} placeholder="任意" />
+                  </label>
+                  <label>
+                    <span>賃金適用月度</span>
+                    <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.wageValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
+                  </label>
+                  <label>
+                    <span>交通費適用月度</span>
+                    <input name={`commuteValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.commuteValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
+                  </label>
+                </fieldset>
                 <fieldset className="staff-payroll-deductions">
                   <span>控除・徴収の適用</span>
                   <label>
@@ -903,6 +912,22 @@ function StaffFormFields({
                     <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
                     源泉所得税
                   </label>
+                  <label className="staff-tax-select">
+                    <span>源泉税区分</span>
+                    <select name={`incomeTaxCategory:${store.id}`} defaultValue={setting?.incomeTaxCategory ?? "none"}>
+                      <option value="none">未設定</option>
+                      <option value="kou">甲</option>
+                      <option value="otsu">乙</option>
+                    </select>
+                  </label>
+                  <label className="staff-tax-select">
+                    <span>扶養人数</span>
+                    <select name={`dependentCount:${store.id}`} defaultValue={String(setting?.dependentCount ?? 0)}>
+                      {Array.from({ length: 8 }, (_, index) => (
+                        <option value={index} key={index}>{index}人</option>
+                      ))}
+                    </select>
+                  </label>
                   <label>
                     <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
                     住民税
@@ -913,7 +938,7 @@ function StaffFormFields({
                   {history.length ? history.map((record, index) => (
                     <div className="staff-payroll-history-row" key={`${store.id}-${record.id ?? record.validFrom ?? index}`}>
                       <small>
-                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 月上限 {formatPayrollAmount(record.commuteAllowanceMonthlyCap)}
+                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"}
                       </small>
                       <span className="staff-payroll-history-actions">
                         <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>

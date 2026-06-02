@@ -166,6 +166,85 @@ button {
   line-height: 1.65;
 }
 
+.statutory-alert-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding: 16px;
+  border: 2px solid #dc2626;
+  border-radius: 8px;
+  background: #fff1f2;
+  box-shadow: 0 14px 32px rgba(220, 38, 38, 0.12);
+}
+
+.statutory-alert-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.statutory-alert-heading strong {
+  color: #991b1b;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.statutory-alert-list {
+  display: grid;
+  gap: 10px;
+}
+
+.statutory-alert-list.is-settings {
+  margin-bottom: 16px;
+}
+
+.statutory-alert-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  background: white;
+}
+
+.statutory-alert-card.is-critical {
+  border-color: #dc2626;
+}
+
+.statutory-alert-card span {
+  display: inline-flex;
+  margin-bottom: 5px;
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.statutory-alert-card h3,
+.statutory-alert-card h4 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.statutory-alert-card p {
+  margin: 5px 0 0;
+  color: #5f6e85;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.statutory-alert-card > strong {
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
 .os-module-section {
   display: grid;
   gap: 14px;
@@ -1811,6 +1890,82 @@ button {
   font: inherit;
 }
 
+.settings-field input {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.settings-tax-import {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.settings-tax-import input[type="file"] {
+  padding: 8px 10px;
+}
+
+.settings-tax-table-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.settings-tax-table-list article {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.settings-tax-table-list strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.settings-tax-table-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.statutory-schedule-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.statutory-schedule-list article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.statutory-schedule-list strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.statutory-schedule-list span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .management-row div {
   display: grid;
   gap: 4px;
@@ -1997,9 +2152,9 @@ button {
 
 .staff-payroll-store-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) minmax(84px, 0.6fr) repeat(4, minmax(110px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
-  align-items: end;
+  align-items: stretch;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2023,14 +2178,16 @@ button {
 }
 
 .staff-employment-store-fields,
+.staff-payroll-wage-fields,
 .staff-payroll-deductions,
 .staff-payroll-history {
   grid-column: 1 / -1;
 }
 
-.staff-employment-store-fields {
+.staff-employment-store-fields,
+.staff-payroll-wage-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -2038,14 +2195,16 @@ button {
   background: white;
 }
 
-.staff-employment-store-fields > span {
+.staff-employment-store-fields > span,
+.staff-payroll-wage-fields > span {
   grid-column: 1 / -1;
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
 }
 
-.staff-employment-store-fields label {
+.staff-employment-store-fields label,
+.staff-payroll-wage-fields label {
   min-width: 0;
 }
 
@@ -2123,6 +2282,29 @@ button {
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
+}
+
+.staff-payroll-deductions .staff-tax-select {
+  display: grid;
+  gap: 5px;
+  min-width: 130px;
+}
+
+.staff-payroll-deductions .staff-tax-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.staff-payroll-deductions .staff-tax-select select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
 }
 
 .staff-payroll-deductions input[type="checkbox"] {
@@ -4588,6 +4770,60 @@ button {
   width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
+}
+
+.timecard-import-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.timecard-import-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(180px, 0.8fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.timecard-import-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.timecard-import-controls span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.timecard-import-controls input[type="file"] {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+}
+
+.timecard-import-controls small,
+.timecard-import-message {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.timecard-import-message {
+  margin: 0;
+  color: var(--green);
 }
 
 .payroll-confirmation-banner {
@@ -8862,11 +9098,8 @@ button {
     display: none;
   }
 
-  .staff-payroll-store-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .staff-employment-store-fields {
+  .staff-employment-store-fields,
+  .staff-payroll-wage-fields {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -9212,6 +9445,20 @@ button {
     font-size: 30px;
   }
 
+  .statutory-alert-heading,
+  .statutory-alert-card {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .statutory-alert-heading {
+    flex-direction: column;
+  }
+
+  .statutory-alert-heading .secondary-button {
+    width: 100%;
+  }
+
   .os-module-grid,
   .os-module-grid.is-compact {
     grid-template-columns: 1fr;
@@ -9225,7 +9472,8 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .staff-employment-store-fields {
+  .staff-employment-store-fields,
+  .staff-payroll-wage-fields {
     grid-template-columns: 1fr;
   }
 
@@ -9235,6 +9483,18 @@ button {
 
   .staff-employment-wide {
     grid-column: 1;
+  }
+
+  .timecard-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-tax-import {
+    grid-template-columns: 1fr;
+  }
+
+  .statutory-schedule-list {
+    grid-template-columns: 1fr;
   }
 
   .sidebar {
@@ -11705,6 +11965,7 @@ html:lang(ja) :where(
   .staff-form-tabs button,
   .staff-payroll-deductions > span,
   .staff-employment-store-fields > span,
+  .staff-payroll-wage-fields > span,
   .staff-employment-more summary,
   .staff-payroll-history > span
 ) {

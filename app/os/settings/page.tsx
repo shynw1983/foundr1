@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, UserCog } from "lucide-react";
+import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, Upload, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
@@ -24,18 +24,56 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "システム設定", href: "/os/settings", icon: Settings }
 ];
 
+type WithholdingTaxTable = {
+  id: string;
+  taxYear: number;
+  tableType: string;
+  title: string;
+  sourceFileName: string | null;
+  effectiveFrom: string;
+  isActive: boolean;
+  createdAt: string;
+  rowCount: number;
+};
+
+type PayrollStatutoryAlert = {
+  key: string;
+  level: "critical" | "warning";
+  title: string;
+  message: string;
+  actionLabel: string;
+  dueLabel: string;
+};
+
 export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
+  const [taxTables, setTaxTables] = useState<WithholdingTaxTable[]>([]);
+  const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
+  const [taxFile, setTaxFile] = useState<File | null>(null);
+  const [taxYear, setTaxYear] = useState(String(new Date().getFullYear()));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
-      const response = await fetch("/api/settings?module=store", { cache: "no-store" });
-      if (response.ok) {
-        const body = await response.json() as { settings?: StoreModuleSettings };
+      const [settingsResponse, taxResponse, alertResponse] = await Promise.all([
+        fetch("/api/settings?module=store", { cache: "no-store" }),
+        fetch("/api/settings/withholding-tax", { cache: "no-store" }),
+        fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" })
+      ]);
+      if (settingsResponse.ok) {
+        const body = await settingsResponse.json() as { settings?: StoreModuleSettings };
         if (body.settings) setSettings(body.settings);
+      }
+      if (taxResponse.ok) {
+        const body = await taxResponse.json() as { tables?: WithholdingTaxTable[] };
+        setTaxTables(body.tables ?? []);
+      }
+      if (alertResponse.ok) {
+        const body = await alertResponse.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
+        if (body.canView) setPayrollAlerts(body.alerts ?? []);
       }
       setLoading(false);
     }
@@ -57,6 +95,43 @@ export default function OsSettingsPage() {
     const body = await response.json() as { settings?: StoreModuleSettings };
     if (body.settings) setSettings(body.settings);
     showNotice("設定を保存しました。");
+  }
+
+  async function fileToBase64(file: File) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const chunks: string[] = [];
+    const chunkSize = 8192;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      chunks.push(String.fromCharCode(...bytes.subarray(index, index + chunkSize)));
+    }
+    return window.btoa(chunks.join(""));
+  }
+
+  async function uploadWithholdingTaxTable() {
+    if (!taxFile) {
+      showNotice("源泉税表ファイルを選択してください。", "info");
+      return;
+    }
+    setUploadingTaxTable(true);
+    const fileBase64 = await fileToBase64(taxFile);
+    const response = await fetch("/api/settings/withholding-tax", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: taxFile.name, fileBase64, taxYear })
+    });
+    setUploadingTaxTable(false);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice(String(body.error ?? "源泉税表を取り込めませんでした。"), "info");
+      return;
+    }
+    setTaxFile(null);
+    const taxResponse = await fetch("/api/settings/withholding-tax", { cache: "no-store" });
+    if (taxResponse.ok) {
+      const taxBody = await taxResponse.json() as { tables?: WithholdingTaxTable[] };
+      setTaxTables(taxBody.tables ?? []);
+    }
+    showNotice(`源泉税表を取り込みました。${body.rowCount ?? 0}行`);
   }
 
   return (
@@ -90,6 +165,80 @@ export default function OsSettingsPage() {
         </header>
 
         <section className="settings-grid">
+          <section className="panel">
+            <div className="panel-title">
+              <div>
+                <h3>給与・税設定</h3>
+                <p>源泉徴収税額表をアップロードします。給与計算では従業員ごとの甲乙区分と扶養人数に基づいて源泉所得税を控除します。</p>
+              </div>
+            </div>
+            {payrollAlerts.length ? (
+              <div className="statutory-alert-list is-settings">
+                {payrollAlerts.map((alert) => (
+                  <article className={`statutory-alert-card is-${alert.level}`} key={alert.key}>
+                    <div>
+                      <span>{alert.dueLabel}</span>
+                      <h4>{alert.title}</h4>
+                      <p>{alert.message}</p>
+                    </div>
+                    <strong>{alert.actionLabel}</strong>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            <div className="settings-tax-import">
+              <label className="settings-field">
+                <span>対象年</span>
+                <input value={taxYear} inputMode="numeric" onChange={(event) => setTaxYear(event.target.value)} placeholder="例: 2026" />
+              </label>
+              <label className="settings-field">
+                <span>源泉税表ファイル</span>
+                <input
+                  key={taxFile ? "tax-file-selected" : "tax-file-empty"}
+                  type="file"
+                  accept=".xls,.xlsx"
+                  onChange={(event) => setTaxFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button className="secondary-button" type="button" disabled={!taxFile || uploadingTaxTable} onClick={() => void uploadWithholdingTaxTable()}>
+                <Upload size={16} />
+                {uploadingTaxTable ? "取り込み中" : "源泉税表を取り込む"}
+              </button>
+            </div>
+            <div className="settings-tax-table-list">
+              {taxTables.length ? taxTables.map((table) => (
+                <article key={table.id}>
+                  <strong>{table.taxYear}年 / {table.title}</strong>
+                  <span>{table.rowCount}行 / {table.sourceFileName ?? "ファイル名なし"} / {table.isActive ? "有効" : "無効"}</span>
+                </article>
+              )) : (
+                <p className="empty-state-text">源泉税表はまだ登録されていません。</p>
+              )}
+            </div>
+            <div className="statutory-schedule-list" aria-label="給与法定データ更新時期">
+              <article>
+                <strong>源泉所得税</strong>
+                <span>毎年1月支給分から新しい税額表を使用。10月以降に翌年分の確認を開始します。</span>
+              </article>
+              <article>
+                <strong>健康保険・介護保険</strong>
+                <span>協会けんぽは例年3月分（4月納付分）から料率改定。2月から確認を開始します。</span>
+              </article>
+              <article>
+                <strong>雇用保険</strong>
+                <span>年度単位で4月1日から料率切替。3月から確認を開始します。</span>
+              </article>
+              <article>
+                <strong>住民税</strong>
+                <span>6月から翌年5月まで控除。5月から通知書に基づく手入力を促します。</span>
+              </article>
+              <article>
+                <strong>標準報酬月額</strong>
+                <span>定時決定後、原則9月から翌年8月まで使用。7月から確認を開始します。</span>
+              </article>
+            </div>
+          </section>
+
           <section className="panel">
             <div className="panel-title">
               <div>

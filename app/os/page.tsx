@@ -24,6 +24,15 @@ type OsModule = {
   roles: string[];
 };
 
+type PayrollStatutoryAlert = {
+  key: string;
+  level: "critical" | "warning";
+  title: string;
+  message: string;
+  actionLabel: string;
+  dueLabel: string;
+};
+
 const osModules: OsModule[] = [
   {
     title: "発注・購入管理",
@@ -130,6 +139,7 @@ function ModuleCard({ module }: { module: OsModule }) {
 
 export default function Foundr1OsHome() {
   const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,6 +150,23 @@ export default function Foundr1OsHome() {
     }
 
     void loadRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPayrollAlerts() {
+      const response = await fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
+      if (isMounted && body.canView) setPayrollAlerts(body.alerts ?? []);
+    }
+
+    void loadPayrollAlerts();
 
     return () => {
       isMounted = false;
@@ -171,6 +198,27 @@ export default function Foundr1OsHome() {
           <p>商品マスタ、スタッフ、店舗、ブランド、権限を共有しながら、必要な業務アプリへ入ります。</p>
         </div>
       </section>
+
+      {payrollAlerts.length ? (
+        <section className="statutory-alert-panel" aria-label="給与法定データ更新アラート">
+          <div className="statutory-alert-heading">
+            <strong>給与計算データの更新が必要です</strong>
+            <a className="secondary-button" href="/os/settings">システム設定へ</a>
+          </div>
+          <div className="statutory-alert-list">
+            {payrollAlerts.map((alert) => (
+              <article className={`statutory-alert-card is-${alert.level}`} key={alert.key}>
+                <div>
+                  <span>{alert.dueLabel}</span>
+                  <h3>{alert.title}</h3>
+                  <p>{alert.message}</p>
+                </div>
+                <strong>{alert.actionLabel}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="os-module-section" aria-label="業務アプリ">
         <div className="section-heading">

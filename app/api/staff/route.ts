@@ -54,6 +54,8 @@ type WorkStoreSettingPayload = {
   applyEmploymentInsurance?: boolean;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
+  incomeTaxCategory?: string;
+  dependentCount?: number | string | null;
   applyResidentTax?: boolean;
   validFrom?: string;
   validFromMonth?: string;
@@ -94,6 +96,10 @@ function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
 }
 
+function normalizeIncomeTaxCategory(category?: string) {
+  return category === "kou" || category === "otsu" ? category : "none";
+}
+
 function toNullableText(value: string | undefined) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -113,6 +119,10 @@ function toNullableNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeDependentCount(value: number | string | null | undefined) {
+  return Math.max(0, Math.min(7, Math.round(Number(value ?? 0) || 0)));
 }
 
 function getJstDateLabel(date = new Date()) {
@@ -226,6 +236,8 @@ export async function GET() {
           'applyEmploymentInsurance', employee_work_stores.apply_employment_insurance,
           'applyLaborInsurance', employee_work_stores.apply_labor_insurance,
           'applyIncomeTax', employee_work_stores.apply_income_tax,
+          'incomeTaxCategory', employee_work_stores.income_tax_category,
+          'dependentCount', employee_work_stores.dependent_count,
           'applyResidentTax', employee_work_stores.apply_resident_tax,
           'payrollHistory', coalesce(payroll_history.records, '[]'::json)
         )
@@ -249,6 +261,8 @@ export async function GET() {
             'applyEmploymentInsurance', employee_work_store_payroll_history.apply_employment_insurance,
             'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
             'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
+            'incomeTaxCategory', employee_work_store_payroll_history.income_tax_category,
+            'dependentCount', employee_work_store_payroll_history.dependent_count,
             'applyResidentTax', employee_work_store_payroll_history.apply_resident_tax,
             'wageValidFrom', employee_work_store_payroll_history.wage_valid_from,
             'commuteValidFrom', employee_work_store_payroll_history.commute_valid_from
@@ -423,6 +437,9 @@ export async function POST(request: Request) {
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
+    const storeApplyIncomeTax = Boolean(storeSetting?.applyIncomeTax);
+    const storeIncomeTaxCategory = storeApplyIncomeTax ? normalizeIncomeTaxCategory(storeSetting?.incomeTaxCategory) : "none";
+    const storeDependentCount = normalizeDependentCount(storeSetting?.dependentCount);
     const storeWageValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeCommuteValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.commuteValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeValidFrom = storeWageValidFrom < storeCommuteValidFrom ? storeWageValidFrom : storeCommuteValidFrom;
@@ -446,6 +463,8 @@ export async function POST(request: Request) {
         apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
+        income_tax_category,
+        dependent_count,
         apply_resident_tax
       )
       values (
@@ -466,7 +485,9 @@ export async function POST(request: Request) {
         ${Boolean(storeSetting?.applySocialInsurance)},
         ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
-        ${Boolean(storeSetting?.applyIncomeTax)},
+        ${storeApplyIncomeTax},
+        ${storeIncomeTaxCategory},
+        ${storeDependentCount},
         ${Boolean(storeSetting?.applyResidentTax)}
       )
       on conflict do nothing
@@ -485,6 +506,8 @@ export async function POST(request: Request) {
         apply_employment_insurance,
         apply_labor_insurance,
         apply_income_tax,
+        income_tax_category,
+        dependent_count,
         apply_resident_tax,
         wage_valid_from,
         commute_valid_from,
@@ -504,7 +527,9 @@ export async function POST(request: Request) {
         ${Boolean(storeSetting?.applySocialInsurance)},
         ${Boolean(storeSetting?.applyEmploymentInsurance)},
         ${Boolean(storeSetting?.applyLaborInsurance)},
-        ${Boolean(storeSetting?.applyIncomeTax)},
+        ${storeApplyIncomeTax},
+        ${storeIncomeTaxCategory},
+        ${storeDependentCount},
         ${Boolean(storeSetting?.applyResidentTax)},
         ${storeWageValidFrom},
         ${storeCommuteValidFrom},
@@ -523,6 +548,8 @@ export async function POST(request: Request) {
         apply_employment_insurance = excluded.apply_employment_insurance,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
+        income_tax_category = excluded.income_tax_category,
+        dependent_count = excluded.dependent_count,
         apply_resident_tax = excluded.apply_resident_tax,
         valid_from = excluded.valid_from,
         updated_by = excluded.updated_by,
