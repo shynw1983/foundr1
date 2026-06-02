@@ -1,6 +1,113 @@
 import { canAccessStore, requireOwnerOsSession, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
+const additionalPurchaseNotePrefix = "追加購入";
+
+export async function POST(request: Request) {
+  const session = await requireWritableOsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
+  const body = await request.json() as {
+    orderId?: string;
+    productId?: string;
+    requestedQuantity?: number;
+    note?: string;
+  };
+  const orderId = String(body.orderId ?? "").trim();
+  const productId = String(body.productId ?? "").trim();
+  const requestedQuantity = Number(body.requestedQuantity ?? 0);
+  const note = String(body.note ?? "").trim();
+
+  if (!orderId || !productId || !Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+    return Response.json({ error: "依頼、商品、数量を指定してください。" }, { status: 400 });
+  }
+
+  const orderRows = await sql`
+    select
+      id,
+      store_id::text as "storeId",
+      brand_id as "brandId"
+    from purchase_orders
+    where order_no = ${orderId}
+    limit 1
+  `;
+  const order = orderRows[0];
+
+  if (!order) {
+    return Response.json({ error: "依頼が見つかりません。" }, { status: 404 });
+  }
+
+  if (!await canAccessStore(session, order.storeId)) {
+    return Response.json({ error: "この依頼に追加購入を登録する権限がありません。" }, { status: 403 });
+  }
+
+  const productRows = await sql`
+    select
+      id,
+      unit,
+      (
+        select product_supplier_options.supplier_id
+        from product_supplier_options
+        where product_supplier_options.product_id = products.id
+          and product_supplier_options.role = 'メイン'
+          and product_supplier_options.is_active = true
+        limit 1
+      ) as "mainSupplierId"
+    from products
+    where id = ${productId}
+    limit 1
+  `;
+  const product = productRows[0];
+
+  if (!product) {
+    return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
+  }
+
+  const procurementNote = note
+    ? `${additionalPurchaseNotePrefix}: ${note}`
+    : additionalPurchaseNotePrefix;
+
+  const insertedRows = await sql`
+    insert into purchase_order_items (
+      purchase_order_id,
+      product_id,
+      brand_id,
+      requested_quantity,
+      requested_unit,
+      note,
+      procurement_note,
+      selected_supplier_id,
+      status
+    )
+    values (
+      ${order.id},
+      ${product.id},
+      ${order.brandId},
+      ${requestedQuantity},
+      ${product.unit},
+      ${additionalPurchaseNotePrefix},
+      ${procurementNote},
+      ${product.mainSupplierId},
+      'requested'
+    )
+    returning id::text
+  `;
+
+  await sql`
+    update purchase_orders
+    set
+      requested_item_count = (
+        select count(*)::int
+        from purchase_order_items
+        where purchase_order_id = ${order.id}
+      ),
+      updated_at = now()
+    where id = ${order.id}
+  `;
+
+  return Response.json({ ok: true, itemId: insertedRows[0]?.id ?? "" });
+}
+
 export async function PATCH(request: Request) {
   const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -49,6 +156,7 @@ export async function PATCH(request: Request) {
       products.reference_price::float as "referencePrice",
       purchase_order_items.status as "currentStatus",
       coalesce(purchase_order_items.procurement_note, '') as "currentNote",
+      coalesce(purchase_order_items.procurement_note, '') like ${`${additionalPurchaseNotePrefix}%`} as "isAdditionalPurchase",
       purchase_order_items.store_feedback_confirmed_at is not null as "storeFeedbackConfirmed",
       purchase_order_items.requested_quantity::float as "requestedQuantity",
       purchase_order_items.requested_unit as "requestedUnit",
@@ -300,6 +408,7 @@ export async function PATCH(request: Request) {
   if (
     deliveryStatus === "delivered" &&
     itemDetail &&
+    !itemDetail.isAdditionalPurchase &&
     !["delivered", "received"].includes(String(itemDetail.currentStatus ?? ""))
   ) {
     await sql`

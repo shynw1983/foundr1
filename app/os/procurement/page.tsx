@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -19,6 +19,7 @@ type Product = typeof initialProducts[number] & {
   subcategory?: string;
   packageSpec?: string;
   productBrandName?: string;
+  usageType?: string;
 };
 type ProductSupplierGroup = Omit<typeof initialProductSupplierOptions[number], "options"> & {
   options: Array<typeof initialProductSupplierOptions[number]["options"][number] & { purchaseUrl?: string }>;
@@ -100,6 +101,11 @@ type ProductLookup = {
   byId: Map<string, Product>;
   byName: Map<string, Product>;
 };
+type AdditionalPurchaseDraft = {
+  productId: string;
+  quantity: number;
+  note: string;
+};
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -130,6 +136,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 const procurementStatusFilters: ProcurementStatusFilter[] = ["未完了", "購入待ち", "一部購入済み", "到着日入力待ち", "到着待ち", "配送待ち", "配送中", "一部納品済み", "確認待ち", "完了", "すべて"];
 const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
+const purchaseQuantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 const procurementOrderRenderBatchSize = 20;
 const maxReceiptUploadBytes = 4 * 1024 * 1024;
 const receiptCompressionTargetBytes = 2 * 1024 * 1024;
@@ -306,6 +313,10 @@ function getTemporarySupplierNote(note: string) {
     .find((line) => line.startsWith("臨時購入先:"))
     ?.replace(/^臨時購入先:/, "")
     .trim() ?? "";
+}
+
+function isAdditionalPurchaseNote(note: string) {
+  return note.startsWith("追加購入");
 }
 
 function setTemporarySupplierNote(note: string, temporarySupplier: string) {
@@ -666,6 +677,8 @@ export default function ProcurementPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
+  const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>({});
+  const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
     byId: new Map(products.flatMap((product) => product.id ? [[product.id, product] as const] : [])),
     byName: new Map(products.map((product) => [product.name, product]))
@@ -704,36 +717,36 @@ export default function ProcurementPage() {
     return fulfillmentMap;
   }, [supplierFulfillments]);
 
-  useEffect(() => {
-    async function loadDashboardData() {
-      const response = await fetch("/api/dashboard");
-      if (!response.ok) return;
+  async function loadDashboardData() {
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) return;
 
-      const data = await response.json() as {
-        products?: Product[];
-        productSupplierOptions?: ProductSupplierGroup[];
-        suppliers?: Supplier[];
-        orders?: PurchaseOrder[];
-        purchaseOrderItems?: DashboardOrderItem[];
-        supplierFulfillments?: SupplierFulfillment[];
-        deliveryBatches?: DeliveryBatch[];
-      };
+    const data = await response.json() as {
+      products?: Product[];
+      productSupplierOptions?: ProductSupplierGroup[];
+      suppliers?: Supplier[];
+      orders?: PurchaseOrder[];
+      purchaseOrderItems?: DashboardOrderItem[];
+      supplierFulfillments?: SupplierFulfillment[];
+      deliveryBatches?: DeliveryBatch[];
+    };
 
-      if (data.products) setProducts(data.products);
-      if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
-      if (data.suppliers) setSuppliers(data.suppliers);
-      if (data.orders && data.purchaseOrderItems) {
-        const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
-        setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
-      } else if (data.orders) {
-        setPurchaseOrders(data.orders);
-      }
-      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
-      if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
-      if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
-      setDataSource("neon");
+    if (data.products) setProducts(data.products);
+    if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+    if (data.suppliers) setSuppliers(data.suppliers);
+    if (data.orders && data.purchaseOrderItems) {
+      const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
+      setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
+    } else if (data.orders) {
+      setPurchaseOrders(data.orders);
     }
+    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
+    if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
+    setDataSource("neon");
+  }
 
+  useEffect(() => {
     void loadDashboardData();
   }, []);
 
@@ -991,6 +1004,75 @@ export default function ProcurementPage() {
     showNotice(status === "received" ? "店舗確認済みにしました。" : "納品済みにしました。");
   }
 
+  function updateAdditionalPurchaseDraft(orderId: string, next: Partial<AdditionalPurchaseDraft>) {
+    setAdditionalPurchaseDrafts((drafts) => {
+      const current = drafts[orderId] ?? {
+        productId: getDefaultAdditionalPurchaseProductId(products),
+        quantity: 1,
+        note: ""
+      };
+
+      return {
+        ...drafts,
+        [orderId]: {
+          ...current,
+          ...next
+        }
+      };
+    });
+  }
+
+  async function createAdditionalPurchaseItem(orderId: string) {
+    if (submittingAdditionalPurchaseOrderId) return;
+
+    const draft = additionalPurchaseDrafts[orderId] ?? {
+      productId: getDefaultAdditionalPurchaseProductId(products),
+      quantity: 1,
+      note: ""
+    };
+    const product = products.find((item) => item.id === draft.productId);
+
+    if (!product?.id) {
+      window.alert("追加購入する商品を選択してください。");
+      return;
+    }
+
+    setSubmittingAdditionalPurchaseOrderId(orderId);
+
+    try {
+      const response = await fetch("/api/procurement/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          productId: product.id,
+          requestedQuantity: draft.quantity,
+          note: draft.note
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "追加購入を登録できませんでした。");
+      }
+
+      setAdditionalPurchaseDrafts((drafts) => ({
+        ...drafts,
+        [orderId]: {
+          productId: getDefaultAdditionalPurchaseProductId(products),
+          quantity: 1,
+          note: ""
+        }
+      }));
+      await loadDashboardData();
+      showNotice("追加購入を登録しました。");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "追加購入を登録できませんでした。");
+    } finally {
+      setSubmittingAdditionalPurchaseOrderId("");
+    }
+  }
+
   const activeExceptionItem = procurementTaskItems.find((item) => item.id === activeExceptionItemId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const itemsByOrderId = useMemo(() => {
@@ -1179,6 +1261,18 @@ export default function ProcurementPage() {
                       <a href={`/os/orders#order-${order.id}`}>店舗確認へ</a>
                     </div>
                   ) : null}
+                  <AdditionalPurchasePanel
+                    orderId={order.id}
+                    products={products}
+                    draft={additionalPurchaseDrafts[order.id] ?? {
+                      productId: getDefaultAdditionalPurchaseProductId(products),
+                      quantity: 1,
+                      note: ""
+                    }}
+                    isSubmitting={submittingAdditionalPurchaseOrderId === order.id}
+                    onChange={(next) => updateAdditionalPurchaseDraft(order.id, next)}
+                    onSubmit={() => void createAdditionalPurchaseItem(order.id)}
+                  />
                   <OrderFulfillmentPanel
                     hasOnlineOrderItems={hasOnlineOrderItems}
                     hasStoreDeliveryItems={hasStoreDeliveryItems}
@@ -1254,6 +1348,7 @@ export default function ProcurementPage() {
                               const referencePrice = Number(product?.referencePrice ?? 0);
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
                               const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
+                              const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
 
                               return (
                                 <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1287,10 +1382,11 @@ export default function ProcurementPage() {
                                       {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
                                       {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
                                       {item.unavailable ? <span>購入不可</span> : null}
+                                      {isAdditionalPurchase ? <span>追加購入</span> : null}
                                       {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
                                     </div>
                                     {productSpec ? <small>{productSpec}</small> : null}
-                                    <small>依頼 {item.requestedQuantity} {item.unit}</small>
+                                    <small>{isAdditionalPurchase ? "追加" : "依頼"} {item.requestedQuantity} {item.unit}</small>
                                     <small>
                                       参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
                                     </small>
@@ -1374,6 +1470,106 @@ export default function ProcurementPage() {
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
+}
+
+function AdditionalPurchasePanel({
+  orderId,
+  products,
+  draft,
+  isSubmitting,
+  onChange,
+  onSubmit
+}: {
+  orderId: string;
+  products: Product[];
+  draft: AdditionalPurchaseDraft;
+  isSubmitting: boolean;
+  onChange: (next: Partial<AdditionalPurchaseDraft>) => void;
+  onSubmit: () => void;
+}) {
+  const productOptions = getAdditionalPurchaseProductOptions(products);
+
+  return (
+    <form
+      className="additional-purchase-panel"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <div>
+        <strong>追加購入</strong>
+        <span>依頼外のテスト品・臨時購入品をこの購入管理に記録</span>
+      </div>
+      <label>
+        <span>商品</span>
+        <select
+          value={draft.productId || getDefaultAdditionalPurchaseProductId(products)}
+          onChange={(event) => onChange({ productId: event.target.value })}
+        >
+          {productOptions.map((product) => (
+            <option value={product.id ?? ""} key={product.id ?? product.name}>
+              {product.name} / {getProductUsageTypeLabel(product.usageType)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>数量</span>
+        <select value={draft.quantity} onChange={(event) => onChange({ quantity: Number(event.target.value) })}>
+          {purchaseQuantityOptions.map((quantity) => (
+            <option value={quantity} key={`${orderId}-additional-${quantity}`}>{quantity}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>メモ</span>
+        <input
+          value={draft.note}
+          placeholder="例: 新メニュー試作用、代替候補の検証"
+          onChange={(event) => onChange({ note: event.target.value })}
+        />
+      </label>
+      <button type="submit" className="secondary-button" disabled={isSubmitting || productOptions.length === 0}>
+        <Plus size={16} />
+        {isSubmitting ? "登録中" : "追加"}
+      </button>
+      {productOptions.length === 0 ? (
+        <small>先に商品マスタでテスト品または臨時購入品を追加してください。</small>
+      ) : null}
+    </form>
+  );
+}
+
+function getAdditionalPurchaseProductOptions(products: Product[]) {
+  return [...products]
+    .filter((product) => product.id)
+    .sort((left, right) => {
+      const leftPriority = getAdditionalPurchaseProductPriority(left);
+      const rightPriority = getAdditionalPurchaseProductPriority(right);
+
+      return leftPriority - rightPriority || left.name.localeCompare(right.name, "ja", { numeric: true, sensitivity: "base" });
+    });
+}
+
+function getDefaultAdditionalPurchaseProductId(products: Product[]) {
+  return getAdditionalPurchaseProductOptions(products)[0]?.id ?? "";
+}
+
+function getAdditionalPurchaseProductPriority(product: Product) {
+  if (product.usageType === "test_product") return 0;
+  if (product.usageType === "temporary_purchase") return 1;
+  return 2;
+}
+
+function getProductUsageTypeLabel(value?: string) {
+  if (value === "test_product") return "テスト品";
+  if (value === "temporary_purchase") return "臨時購入品";
+  if (value === "packaging") return "包材・消耗品";
+  if (value === "durable_supply") return "備品・消耗工具";
+  if (value === "equipment") return "設備";
+  if (value === "other") return "その他";
+  return "原材料";
 }
 
 function OrderFulfillmentPanel({

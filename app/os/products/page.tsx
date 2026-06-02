@@ -46,6 +46,8 @@ const productUsageTypeOptions = [
   { value: "packaging", label: "包材・消耗品" },
   { value: "durable_supply", label: "備品・消耗工具" },
   { value: "equipment", label: "設備" },
+  { value: "test_product", label: "テスト品" },
+  { value: "temporary_purchase", label: "臨時購入品" },
   { value: "other", label: "その他" }
 ];
 const productPageSizeOptions = [20, 50, 100];

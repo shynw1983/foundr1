@@ -1,6 +1,8 @@
 import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
+const additionalPurchaseNotePrefix = "追加購入";
+
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -188,13 +190,16 @@ export async function PATCH(request: Request) {
       cross join lateral (
         select count(*)::int as item_count
         from delivery_batch_items
+        join purchase_order_items on purchase_order_items.id = delivery_batch_items.purchase_order_item_id
         where delivery_batch_items.delivery_batch_id = ${body.batchId}
+          and coalesce(purchase_order_items.procurement_note, '') not like ${`${additionalPurchaseNotePrefix}%`}
       ) item_counts
       join employees on employees.status = 'active'
       left join employee_scopes
         on employee_scopes.employee_id = employees.id
         and employee_scopes.scope_type = 'store'
       where purchase_orders.id = ${deliveredRows[0].purchaseOrderId}
+        and item_counts.item_count > 0
         and (
           employees.role in ('owner', 'manager')
           or employee_scopes.store_id = purchase_orders.store_id

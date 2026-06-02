@@ -6593,6 +6593,62 @@ button {
   white-space: nowrap;
 }
 
+.additional-purchase-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.4fr) minmax(88px, 0.5fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(43, 142, 106, 0.16);
+  border-radius: 8px;
+  background: var(--green-soft);
+}
+
+.additional-purchase-panel > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.additional-purchase-panel strong {
+  font-size: 13px;
+}
+
+.additional-purchase-panel span,
+.additional-purchase-panel small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.additional-purchase-panel label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.additional-purchase-panel select,
+.additional-purchase-panel input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+}
+
+.additional-purchase-panel .secondary-button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.additional-purchase-panel small {
+  grid-column: 1 / -1;
+}
+
 .procurement-order-summary {
   display: flex;
   flex-wrap: wrap;
@@ -9670,6 +9726,17 @@ button {
     gap: 12px;
     padding: 12px;
     background: white;
+  }
+
+  .additional-purchase-panel {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .additional-purchase-panel .secondary-button {
+    justify-content: center;
+    width: 100%;
   }
 
   .procurement-supplier-list,
