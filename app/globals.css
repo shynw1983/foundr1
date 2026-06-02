@@ -878,7 +878,7 @@ button {
   }
 
   .sidebar:has(.nav-shell.is-expanded) {
-    width: 196px;
+    width: 232px;
     padding-right: 10px;
     box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
@@ -1000,6 +1000,13 @@ button {
     text-align: left;
   }
 
+  .nav-shell.is-expanded .nav-item span,
+  .nav-sub-list a span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .nav-shell.is-expanded .nav-item::after {
     content: "›";
     margin-left: auto;
@@ -1042,7 +1049,7 @@ button {
     top: 0;
     right: 0;
     bottom: 0;
-    left: 196px;
+    left: 232px;
     z-index: 120;
     border: 0;
     background: transparent;

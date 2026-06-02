@@ -34,8 +34,8 @@ const osModules: OsModule[] = [
     roles: ["owner", "manager", "buyer", "store_owner", "staff"]
   },
   {
-    title: "電子手順書",
-    description: "ブランド・店舗ごとの標準作業、商品、設備、容器、提供形式を管理",
+    title: "店舗運営",
+    description: "電子手順書、チェックリスト、清掃・点検、トレーニングを管理",
     href: "/os/procedures",
     icon: ClipboardCheck,
     status: "active",

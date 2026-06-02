@@ -74,15 +74,15 @@ Rules:
 
 ## Future Operations Modules
 
-Electronic procedures are a sibling Foundr1 OS module, not a procurement subpage:
+Store operations is a top-level Foundr1 OS module. Electronic procedures are its current core feature, not a separate top-level module and not a procurement subpage:
 
 - Store-facing reader: `/store/procedures`, tablet landscape first, with mobile and desktop support.
-- Admin/editor area: `/os/procedures`.
+- Admin/editor area: `/os/procedures`, grouped under `店舗運営` in OS navigation.
 - Store operation surfaces live under `/store` as a sibling workbench. Timecard and POS staff operation screens can live under `/store/timecard` and `/store/pos`, while detailed settings, reports, permissions, and management remain under `/os/timecard` and `/os/pos`.
 - Menu management lives at `/os/menus`. It is the OS-side source of truth for customer-facing menu items and options used by brand websites, POS, and procedure variants.
 - Procedure steps should link to product master data instead of copying product names where possible.
 - Procedure books can link to menu catalog data. Fixed products such as nanacha drinks and buildable products such as maaamaa malatang must both support variant conditions through JSON, for example size/temperature for drinks and heat/numb/toppings for malatang.
-- Keep procedures, checklists, training, inventory, audits, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
+- Keep procedures, checklists, training, audits, and store execution records under `店舗運営`; keep inventory, recipes/BOM, franchise operations, and analytics aligned with `docs/operations-platform-roadmap.md`.
 
 ## Receipts
 

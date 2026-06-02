@@ -43,7 +43,7 @@ const orderModulePaths = new Set([
   "/os/product-comparisons",
   "/os/reports"
 ]);
-const procedureModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
+const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
@@ -107,8 +107,8 @@ const navModules: OsNavModule[] = [
     ]
   },
   {
-    id: "procedures",
-    label: "電子手順書",
+    id: "store-operations",
+    label: "店舗運営",
     icon: ClipboardCheck,
     paths: [
       { href: "/os/procedures" },
@@ -155,7 +155,7 @@ const navModules: OsNavModule[] = [
 
 function getModuleNavPaths(pathname: string) {
   if (pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")) {
-    return procedureModulePaths;
+    return storeOperationsModulePaths;
   }
 
   if (pathname === "/os/menus" || pathname.startsWith("/os/menus/")) {
