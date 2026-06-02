@@ -902,9 +902,12 @@ function StaffFormFields({
                 </fieldset>
                 <fieldset className="staff-payroll-deductions">
                   <span>控除・徴収の適用</span>
-                  <label>
-                    <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
-                    社会保険
+                  <label className="staff-deduction-check">
+                    <span>社会保険</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
+                      適用する
+                    </span>
                   </label>
                   <label className="staff-tax-select">
                     <span>標準報酬月額</span>
@@ -914,21 +917,30 @@ function StaffFormFields({
                     <span>社保控除開始月</span>
                     <input name={`socialInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.socialInsuranceDeductionFrom ?? "").slice(0, 7)} />
                   </label>
-                  <label>
-                    <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
-                    雇用保険
+                  <label className="staff-deduction-check">
+                    <span>雇用保険</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
+                      適用する
+                    </span>
                   </label>
                   <label className="staff-tax-select">
                     <span>雇保控除開始月</span>
                     <input name={`employmentInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.employmentInsuranceDeductionFrom ?? "").slice(0, 7)} />
                   </label>
-                  <label>
-                    <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
-                    労働保険
+                  <label className="staff-deduction-check">
+                    <span>労働保険</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
+                      適用する
+                    </span>
                   </label>
-                  <label>
-                    <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
-                    源泉所得税
+                  <label className="staff-deduction-check">
+                    <span>源泉所得税</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
+                      適用する
+                    </span>
                   </label>
                   <label className="staff-tax-select">
                     <span>源泉税区分</span>
@@ -946,9 +958,12 @@ function StaffFormFields({
                       ))}
                     </select>
                   </label>
-                  <label>
-                    <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
-                    住民税
+                  <label className="staff-deduction-check">
+                    <span>住民税</span>
+                    <span className="staff-payroll-check">
+                      <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
+                      適用する
+                    </span>
                   </label>
                 </fieldset>
                 <div className="staff-payroll-history">

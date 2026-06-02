@@ -2312,10 +2312,10 @@ body :where(
 }
 
 .staff-payroll-deductions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  align-items: start;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2324,35 +2324,38 @@ body :where(
 
 .staff-payroll-deductions > span,
 .staff-payroll-history > span {
-  flex: 0 0 100%;
+  grid-column: 1 / -1;
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
 }
 
 .staff-payroll-deductions label {
-  display: inline-flex;
-  align-items: center;
+  display: grid;
   gap: 6px;
+  align-content: start;
+  min-width: 0;
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
 }
 
-.staff-payroll-deductions .staff-tax-select {
-  display: grid;
-  gap: 5px;
-  min-width: 130px;
-}
-
+.staff-payroll-deductions .staff-deduction-check > span:first-child,
 .staff-payroll-deductions .staff-tax-select span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
 }
 
+.staff-payroll-deductions .staff-payroll-check {
+  min-height: 40px;
+  justify-content: flex-start;
+}
+
+.staff-payroll-deductions .staff-tax-select input,
 .staff-payroll-deductions .staff-tax-select select {
-  min-height: 36px;
+  min-height: 40px;
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 10px;
@@ -2365,6 +2368,7 @@ body :where(
 .staff-payroll-deductions input[type="checkbox"] {
   appearance: auto;
   min-height: 16px;
+  flex: 0 0 16px;
   width: 16px;
   height: 16px;
 }
@@ -4921,6 +4925,11 @@ body :where(
 .payroll-confirmation-banner.is-pending {
   border-color: var(--line);
   background: #f8fafc;
+}
+
+.payroll-confirmation-banner.is-stale {
+  border-color: var(--red);
+  background: var(--red-soft);
 }
 
 .payroll-confirmation-banner div {

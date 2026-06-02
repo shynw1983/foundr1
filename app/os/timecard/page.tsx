@@ -622,6 +622,20 @@ export function TimecardPage({
   const payrollConfirmation = data?.payrollConfirmation ?? null;
   const displayedPayrollRows = payrollConfirmation?.payrollRows ?? data?.payrollRows ?? [];
   const displayedPayrollTotals = payrollConfirmation?.payrollTotals ?? totals;
+  const payrollConfirmationNeedsRefresh = useMemo(() => {
+    if (!payrollConfirmation || !data?.payrollRows) return false;
+    const confirmedRows = payrollConfirmation.payrollRows ?? [];
+    const currentRows = data.payrollRows ?? [];
+    if (confirmedRows.length !== currentRows.length) return true;
+    const currentByEmployee = new Map(currentRows.map((row) => [row.employeeId, row]));
+    return confirmedRows.some((confirmedRow) => {
+      const currentRow = currentByEmployee.get(confirmedRow.employeeId);
+      if (!currentRow) return true;
+      return Math.round(currentRow.basePay) !== Math.round(confirmedRow.basePay)
+        || Math.round(currentRow.totalPay) !== Math.round(confirmedRow.totalPay)
+        || (currentRow.alerts ?? []).join("|") !== (confirmedRow.alerts ?? []).join("|");
+    });
+  }, [data?.payrollRows, payrollConfirmation]);
   const selectedPayrollRow = useMemo(
     () => canViewPayroll ? displayedPayrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? displayedPayrollRows[0] ?? null : null,
     [canViewPayroll, displayedPayrollRows, selectedPayrollEmployeeId]
@@ -1479,11 +1493,13 @@ export function TimecardPage({
           </>
         ) : canViewPayroll ? (
           <>
-            <section className={`payroll-confirmation-banner${payrollConfirmation ? " is-confirmed" : canConfirmPayrollPeriod ? "" : " is-pending"}`}>
+            <section className={`payroll-confirmation-banner${payrollConfirmationNeedsRefresh ? " is-stale" : payrollConfirmation ? " is-confirmed" : canConfirmPayrollPeriod ? "" : " is-pending"}`}>
               <div>
-                <strong>{payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
+                <strong>{payrollConfirmationNeedsRefresh ? "従業員設定の変更があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
                 <span>
-                  {payrollConfirmation
+                  {payrollConfirmationNeedsRefresh
+                    ? "現在表示している金額は確定時点の保存結果です。最新の従業員設定で反映するには再確定してください。"
+                    : payrollConfirmation
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
                     : canConfirmPayrollPeriod
                       ? "シフトと実勤務時間を確認・修正したあと、給与を確定してください。"
@@ -1492,7 +1508,7 @@ export function TimecardPage({
               </div>
               {canConfirmPayrollPeriod ? (
                 <button className="primary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
-                  {isConfirmingPayroll ? "確定中" : payrollConfirmation ? "再確定" : "給与を確定"}
+                  {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "最新設定で再確定" : payrollConfirmation ? "再確定" : "給与を確定"}
                 </button>
               ) : null}
             </section>
