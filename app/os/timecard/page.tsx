@@ -86,6 +86,7 @@ type PayrollRow = {
   overtimeMinutes?: number;
   regularPay?: number;
   overtimePay?: number;
+  nightPremiumPay?: number;
   basePay: number;
   commuteAllowance: number;
   totalPay: number;
@@ -100,6 +101,7 @@ type PayrollTotals = {
   overtimeMinutes?: number;
   laborCost: number;
   overtimePay?: number;
+  nightPremiumPay?: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -201,6 +203,16 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
+}
+
+function formatPayrollDetailMoney(amount: number) {
+  const hasFraction = Math.abs(amount - Math.round(amount)) > 0.001;
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: hasFraction ? 2 : 0
+  }).format(amount);
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -571,6 +583,7 @@ export function TimecardPage({
     overtimeMinutes: 0,
     laborCost: 0,
     overtimePay: 0,
+    nightPremiumPay: 0,
     commuteAllowance: 0,
     totalPay: 0
   };
@@ -1423,6 +1436,7 @@ export function TimecardPage({
                     <th>勤務時間</th>
                     <th>基本給</th>
                     <th>時間外</th>
+                    <th>深夜割増</th>
                     <th>交通費</th>
                     <th>差引支給額</th>
                     <th>確認</th>
@@ -1438,14 +1452,15 @@ export function TimecardPage({
                       <td>{row.workDays}日 / {row.punchCount}回</td>
                       <td>{formatDuration(row.workMinutes)}</td>
                       <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
-                      <td>{formatMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
+                      <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
+                      <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
                       <td>{formatMoney(row.commuteAllowance)}</td>
                       <td><strong>{formatMoney(row.totalPay)}</strong></td>
                       <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={8}>この月の打刻実績はまだありません。</td>
+                      <td colSpan={9}>この月の打刻実績はまだありません。</td>
                     </tr>
                   )}
                 </tbody>
@@ -1474,7 +1489,8 @@ export function TimecardPage({
                       <MetricCard label="勤務日数" value={`${selectedPayrollRow.workDays}日`} note={`${selectedPayrollRow.punchCount}回`} />
                       <MetricCard label="勤務時間" value={formatDuration(selectedPayrollRow.workMinutes)} note={`時間外 ${formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)} / 深夜 ${formatDuration(selectedPayrollRow.nightMinutes)}`} />
                       <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
-                      <MetricCard label="時間外労働賃金" value={formatMoney(selectedPayrollRow.overtimePay ?? 0)} note="1日8時間超過を1.25倍で計算" />
+                      <MetricCard label="時間外労働賃金" value={formatPayrollDetailMoney(selectedPayrollRow.overtimePay ?? 0)} note="1日8時間超過を1.25倍で計算" />
+                      <MetricCard label="深夜割増" value={formatPayrollDetailMoney(selectedPayrollRow.nightPremiumPay ?? 0)} note="22:00-05:00を0.25倍で計算" />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>
                     <div className="timecard-table-wrap">

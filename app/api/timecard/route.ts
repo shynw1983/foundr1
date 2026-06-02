@@ -57,6 +57,7 @@ const emptyPayrollTotals = {
   overtimeMinutes: 0,
   laborCost: 0,
   overtimePay: 0,
+  nightPremiumPay: 0,
   commuteAllowance: 0,
   totalPay: 0
 };
