@@ -620,8 +620,6 @@ export function TimecardPage({
     [canViewPayroll]
   );
   const payrollConfirmation = data?.payrollConfirmation ?? null;
-  const displayedPayrollRows = payrollConfirmation?.payrollRows ?? data?.payrollRows ?? [];
-  const displayedPayrollTotals = payrollConfirmation?.payrollTotals ?? totals;
   const payrollConfirmationNeedsRefresh = useMemo(() => {
     if (!payrollConfirmation || !data?.payrollRows) return false;
     const confirmedRows = payrollConfirmation.payrollRows ?? [];
@@ -636,6 +634,12 @@ export function TimecardPage({
         || (currentRow.alerts ?? []).join("|") !== (confirmedRow.alerts ?? []).join("|");
     });
   }, [data?.payrollRows, payrollConfirmation]);
+  const displayedPayrollRows = payrollConfirmation && !payrollConfirmationNeedsRefresh
+    ? payrollConfirmation.payrollRows
+    : data?.payrollRows ?? [];
+  const displayedPayrollTotals = payrollConfirmation && !payrollConfirmationNeedsRefresh
+    ? payrollConfirmation.payrollTotals
+    : totals;
   const selectedPayrollRow = useMemo(
     () => canViewPayroll ? displayedPayrollRows.find((row) => row.employeeId === selectedPayrollEmployeeId) ?? displayedPayrollRows[0] ?? null : null,
     [canViewPayroll, displayedPayrollRows, selectedPayrollEmployeeId]

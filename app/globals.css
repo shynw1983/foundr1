@@ -2313,8 +2313,7 @@ body :where(
 
 .staff-payroll-deductions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+  gap: 10px;
   align-items: start;
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -2338,6 +2337,29 @@ body :where(
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
+}
+
+.staff-deduction-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.staff-deduction-section strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.staff-deduction-section > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: start;
 }
 
 .staff-payroll-deductions .staff-deduction-check > span:first-child,

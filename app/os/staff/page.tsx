@@ -902,69 +902,94 @@ function StaffFormFields({
                 </fieldset>
                 <fieldset className="staff-payroll-deductions">
                   <span>控除・徴収の適用</span>
-                  <label className="staff-deduction-check">
-                    <span>社会保険</span>
-                    <span className="staff-payroll-check">
-                      <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
-                      適用する
-                    </span>
-                  </label>
-                  <label className="staff-tax-select">
-                    <span>標準報酬月額</span>
-                    <input name={`socialInsuranceStandardMonthlyAmount:${store.id}`} type="number" min="0" step="1000" defaultValue={setting?.socialInsuranceStandardMonthlyAmount ?? ""} placeholder="例: 220000" />
-                  </label>
-                  <label className="staff-tax-select">
-                    <span>社保控除開始月</span>
-                    <input name={`socialInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.socialInsuranceDeductionFrom ?? "").slice(0, 7)} />
-                  </label>
-                  <label className="staff-deduction-check">
-                    <span>雇用保険</span>
-                    <span className="staff-payroll-check">
-                      <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
-                      適用する
-                    </span>
-                  </label>
-                  <label className="staff-tax-select">
-                    <span>雇保控除開始月</span>
-                    <input name={`employmentInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.employmentInsuranceDeductionFrom ?? "").slice(0, 7)} />
-                  </label>
-                  <label className="staff-deduction-check">
-                    <span>労働保険</span>
-                    <span className="staff-payroll-check">
-                      <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
-                      適用する
-                    </span>
-                  </label>
-                  <label className="staff-deduction-check">
-                    <span>源泉所得税</span>
-                    <span className="staff-payroll-check">
-                      <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
-                      適用する
-                    </span>
-                  </label>
-                  <label className="staff-tax-select">
-                    <span>源泉税区分</span>
-                    <select name={`incomeTaxCategory:${store.id}`} defaultValue={setting?.incomeTaxCategory ?? "none"}>
-                      <option value="none">未設定</option>
-                      <option value="kou">甲</option>
-                      <option value="otsu">乙</option>
-                    </select>
-                  </label>
-                  <label className="staff-tax-select">
-                    <span>扶養人数</span>
-                    <select name={`dependentCount:${store.id}`} defaultValue={String(setting?.dependentCount ?? 0)}>
-                      {Array.from({ length: 8 }, (_, index) => (
-                        <option value={index} key={index}>{index}人</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="staff-deduction-check">
-                    <span>住民税</span>
-                    <span className="staff-payroll-check">
-                      <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
-                      適用する
-                    </span>
-                  </label>
+                  <section className="staff-deduction-section">
+                    <strong>社会保険</strong>
+                    <div>
+                      <label className="staff-deduction-check">
+                        <span>適用</span>
+                        <span className="staff-payroll-check">
+                          <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
+                          適用する
+                        </span>
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>標準報酬月額</span>
+                        <input name={`socialInsuranceStandardMonthlyAmount:${store.id}`} type="number" min="0" step="1000" defaultValue={setting?.socialInsuranceStandardMonthlyAmount ?? ""} placeholder="例: 220000" />
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>控除開始月</span>
+                        <input name={`socialInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.socialInsuranceDeductionFrom ?? "").slice(0, 7)} />
+                      </label>
+                    </div>
+                  </section>
+                  <section className="staff-deduction-section">
+                    <strong>雇用保険</strong>
+                    <div>
+                      <label className="staff-deduction-check">
+                        <span>適用</span>
+                        <span className="staff-payroll-check">
+                          <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
+                          適用する
+                        </span>
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>控除開始月</span>
+                        <input name={`employmentInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.employmentInsuranceDeductionFrom ?? "").slice(0, 7)} />
+                      </label>
+                    </div>
+                  </section>
+                  <section className="staff-deduction-section">
+                    <strong>労働保険</strong>
+                    <div>
+                      <label className="staff-deduction-check">
+                        <span>適用</span>
+                        <span className="staff-payroll-check">
+                          <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />
+                          適用する
+                        </span>
+                      </label>
+                    </div>
+                  </section>
+                  <section className="staff-deduction-section">
+                    <strong>源泉所得税</strong>
+                    <div>
+                      <label className="staff-deduction-check">
+                        <span>適用</span>
+                        <span className="staff-payroll-check">
+                          <input type="checkbox" name="applyIncomeTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyIncomeTax)} />
+                          適用する
+                        </span>
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>源泉税区分</span>
+                        <select name={`incomeTaxCategory:${store.id}`} defaultValue={setting?.incomeTaxCategory ?? "none"}>
+                          <option value="none">未設定</option>
+                          <option value="kou">甲</option>
+                          <option value="otsu">乙</option>
+                        </select>
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>扶養人数</span>
+                        <select name={`dependentCount:${store.id}`} defaultValue={String(setting?.dependentCount ?? 0)}>
+                          {Array.from({ length: 8 }, (_, index) => (
+                            <option value={index} key={index}>{index}人</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+                  <section className="staff-deduction-section">
+                    <strong>住民税</strong>
+                    <div>
+                      <label className="staff-deduction-check">
+                        <span>適用</span>
+                        <span className="staff-payroll-check">
+                          <input type="checkbox" name="applyResidentTaxStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyResidentTax)} />
+                          適用する
+                        </span>
+                      </label>
+                    </div>
+                  </section>
                 </fieldset>
                 <div className="staff-payroll-history">
                   <span>給与変更履歴</span>
