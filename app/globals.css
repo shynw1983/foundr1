@@ -11895,6 +11895,128 @@ body :where(
   gap: 16px;
 }
 
+.sales-period-panel {
+  display: grid;
+  gap: var(--sales-inner-gap);
+}
+
+.sales-period-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sales-period-heading h3,
+.sales-period-heading p {
+  margin: 0;
+}
+
+.sales-period-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.sales-period-heading > span {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.sales-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.sales-period-controls .secondary-button.is-active {
+  color: white;
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.sales-period-controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.sales-period-controls label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sales-period-controls input[type="date"] {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.sales-ai-panel {
+  display: grid;
+  gap: var(--sales-inner-gap);
+}
+
+.sales-ai-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.sales-ai-heading h3,
+.sales-ai-heading p {
+  margin: 0;
+}
+
+.sales-ai-heading h3 {
+  font-size: 20px;
+}
+
+.sales-ai-heading p:not(.eyebrow) {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.sales-ai-output {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d7e6dd;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fffb;
+}
+
+.sales-ai-output pre {
+  margin: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.sales-ai-output small,
+.sales-ai-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .sales-grid > .panel:first-child:nth-last-child(2),
 .sales-grid > .panel:first-child:nth-last-child(2) ~ .panel {
   grid-column: auto;
@@ -12033,6 +12155,18 @@ body :where(
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.sales-import-guidance {
+  margin: 0 0 var(--sales-inner-gap);
+  padding: 10px 12px;
+  border: 1px solid #e3d4a6;
+  border-radius: 8px;
+  color: #765416;
+  background: #fffaf0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.55;
 }
 
 .sales-revenue-list {
@@ -12194,17 +12328,37 @@ body :where(
   font-size: 15px;
 }
 
-.sales-calendar-cell b {
-  color: var(--text);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
 .sales-calendar-cell small {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.sales-calendar-amounts {
+  display: grid;
+  gap: 4px;
+}
+
+.sales-calendar-amounts span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sales-calendar-amounts em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.sales-calendar-amounts b {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .sales-calendar-cell.is-quiet {
@@ -12723,6 +12877,14 @@ body :where(
     display: none;
   }
 
+  .sales-period-heading {
+    display: grid;
+  }
+
+  .sales-ai-heading {
+    display: grid;
+  }
+
   .workload-guide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -12808,6 +12970,19 @@ body :where(
 
   .sales-calendar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-period-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sales-period-controls label {
+    min-width: 0;
+  }
+
+  .sales-ai-heading .primary-button {
+    width: 100%;
   }
 
   .sales-calendar-cell {

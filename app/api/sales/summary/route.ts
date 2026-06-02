@@ -32,13 +32,56 @@ function getDaysInMonth(month: string) {
   return new Date(Date.UTC(year, monthText, 0)).getUTCDate();
 }
 
+function isDateString(value: string | null) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function addDays(dateString: string, amount: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
+}
+
+function getJstDateRange(startDate: string, endDate: string) {
+  const startUtc = new Date(`${startDate}T00:00:00+09:00`);
+  const endUtc = new Date(`${addDays(endDate, 1)}T00:00:00+09:00`);
+  return { startUtc, endUtc };
+}
+
+function getDatesBetween(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) {
+    dates.push(date);
+    if (dates.length > 400) break;
+  }
+  return dates;
+}
+
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const workloadLevels = [
+  { key: "veryIdle", label: "かなり空き" },
+  { key: "normal", label: "通常" },
+  { key: "busy", label: "忙しい" },
+  { key: "high", label: "高負荷" },
+  { key: "extreme", label: "超負荷" }
+] as const;
+const defaultWorkloadSettings = {
+  orderVeryIdleMax: 4,
+  orderNormalMax: 8,
+  orderBusyMax: 12,
+  orderHighMax: 15,
+  salesVeryIdleMax: 4999,
+  salesNormalMax: 9999,
+  salesBusyMax: 14999,
+  salesHighMax: 19999
+};
 const defaultWeatherLocation = {
   name: "福岡市",
   latitude: 33.5902,
   longitude: 130.4017
 };
+
+type WorkloadSettings = typeof defaultWorkloadSettings;
 
 type WeatherDay = {
   date: string;
@@ -54,6 +97,72 @@ function getRevenueGroup(channel: string, sourcePlatform: string) {
   }
 
   return { key: "in_store", label: "店内・予約", feeRate: 0 };
+}
+
+function numberFrom(value: unknown, fallback: number) {
+  const nextValue = Number(value);
+  return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
+  return {
+    orderVeryIdleMax: numberFrom(settings.orderVeryIdleMax, defaultWorkloadSettings.orderVeryIdleMax),
+    orderNormalMax: numberFrom(settings.orderNormalMax, defaultWorkloadSettings.orderNormalMax),
+    orderBusyMax: numberFrom(settings.orderBusyMax, defaultWorkloadSettings.orderBusyMax),
+    orderHighMax: numberFrom(settings.orderHighMax, defaultWorkloadSettings.orderHighMax),
+    salesVeryIdleMax: numberFrom(settings.salesVeryIdleMax, defaultWorkloadSettings.salesVeryIdleMax),
+    salesNormalMax: numberFrom(settings.salesNormalMax, defaultWorkloadSettings.salesNormalMax),
+    salesBusyMax: numberFrom(settings.salesBusyMax, defaultWorkloadSettings.salesBusyMax),
+    salesHighMax: numberFrom(settings.salesHighMax, defaultWorkloadSettings.salesHighMax)
+  };
+}
+
+async function getWorkloadSettings(storeId: string) {
+  const rows = await sql`
+    select
+      coalesce(order_very_idle_max, 4) as "orderVeryIdleMax",
+      coalesce(order_normal_max, 8) as "orderNormalMax",
+      coalesce(order_busy_max, 12) as "orderBusyMax",
+      coalesce(order_high_max, 15) as "orderHighMax",
+      coalesce(sales_very_idle_max, 4999) as "salesVeryIdleMax",
+      coalesce(sales_normal_max, 9999) as "salesNormalMax",
+      coalesce(sales_busy_max, 14999) as "salesBusyMax",
+      coalesce(sales_high_max, 19999) as "salesHighMax"
+    from timecard_workload_settings
+    where store_id::text = ${storeId}
+    limit 1
+  `;
+  return normalizeWorkloadSettings(rows[0] ?? defaultWorkloadSettings);
+}
+
+function getLoadLevelIndex(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
+  const orderLevel = ordersPerHour <= settings.orderVeryIdleMax
+    ? 0
+    : ordersPerHour <= settings.orderNormalMax
+      ? 1
+      : ordersPerHour <= settings.orderBusyMax
+        ? 2
+        : ordersPerHour <= settings.orderHighMax
+          ? 3
+          : 4;
+  const salesLevel = salesPerHour <= settings.salesVeryIdleMax
+    ? 0
+    : salesPerHour <= settings.salesNormalMax
+      ? 1
+      : salesPerHour <= settings.salesBusyMax
+        ? 2
+        : salesPerHour <= settings.salesHighMax
+          ? 3
+          : 4;
+  return Math.max(orderLevel, salesLevel);
+}
+
+function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
+  const level = workloadLevels[getLoadLevelIndex(ordersPerHour, salesPerHour, settings)];
+  return {
+    loadLevel: level.key,
+    loadLevelLabel: level.label
+  };
 }
 
 function getWeatherLabel(code: number | null) {
@@ -122,7 +231,14 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const monthParam = url.searchParams.get("month") || getJstMonthLabel();
-  const { month, startUtc, endUtc } = getJstMonthRange(monthParam);
+  const monthRange = getJstMonthRange(monthParam);
+  const requestedStartDate = url.searchParams.get("startDate");
+  const requestedEndDate = url.searchParams.get("endDate");
+  const hasCustomRange = isDateString(requestedStartDate) && isDateString(requestedEndDate) && String(requestedStartDate) <= String(requestedEndDate);
+  const startDate = hasCustomRange ? String(requestedStartDate) : `${monthRange.month}-01`;
+  const endDate = hasCustomRange ? String(requestedEndDate) : `${monthRange.month}-${String(getDaysInMonth(monthRange.month)).padStart(2, "0")}`;
+  const { startUtc, endUtc } = hasCustomRange ? getJstDateRange(startDate, endDate) : monthRange;
+  const month = monthRange.month;
   const scope = await getSessionStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
@@ -130,6 +246,7 @@ export async function GET(request: Request) {
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
+  const workloadSettings = selectedStoreId ? await getWorkloadSettings(selectedStoreId) : defaultWorkloadSettings;
   const storeWeatherRows = selectedStoreId ? await sql`
     select
       coalesce(weather_location_name, '') as "weatherLocationName",
@@ -204,14 +321,9 @@ export async function GET(request: Request) {
       note: row.note ? String(row.note) : null
     };
   }) satisfies TimecardPunch[];
-  const workDateEndExclusive = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(endUtc);
+  const workDateEndExclusive = addDays(endDate, 1);
   const dailySummaries = summarizeTimecardDays(typedPunches, {
-    workDateStart: month + "-01",
+    workDateStart: startDate,
     workDateEndExclusive
   }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
   const shiftIntervals = dailySummaries.map((summary) => ({
@@ -225,7 +337,17 @@ export async function GET(request: Request) {
     dailyWorkMinutes.set(summary.workDate, (dailyWorkMinutes.get(summary.workDate) ?? 0) + summary.workMinutes);
   }
 
-  const dayMap = new Map<string, { date: string; orderCount: number; sales: number; workMinutes: number; ordersPerHour: number; salesPerHour: number }>();
+  const dayMap = new Map<string, {
+    date: string;
+    orderCount: number;
+    sales: number;
+    inStoreSales: number;
+    deliverySales: number;
+    deliveryEstimatedDeposit: number;
+    workMinutes: number;
+    ordersPerHour: number;
+    salesPerHour: number;
+  }>();
   const hourMap = new Map<number, { hour: number; orderCount: number; sales: number }>();
   const platformMap = new Map<string, { sourcePlatform: string; orderCount: number; sales: number }>();
   const revenueGroupMap = new Map<string, { key: string; label: string; orderCount: number; sales: number; feeRate: number }>();
@@ -254,14 +376,22 @@ export async function GET(request: Request) {
     hour: "2-digit",
     hour12: false
   });
-  const endDateInclusive = `${month}-${String(getDaysInMonth(month)).padStart(2, "0")}`;
   const weatherByDate = selectedStoreId
-    ? await getHistoricalWeather(weatherLatitude, weatherLongitude, `${month}-01`, endDateInclusive)
+    ? await getHistoricalWeather(weatherLatitude, weatherLongitude, startDate, endDate)
     : new Map<string, WeatherDay>();
 
-  for (let day = 1; day <= getDaysInMonth(month); day += 1) {
-    const date = `${month}-${String(day).padStart(2, "0")}`;
-    dayMap.set(date, { date, orderCount: 0, sales: 0, workMinutes: 0, ordersPerHour: 0, salesPerHour: 0 });
+  for (const date of getDatesBetween(startDate, endDate)) {
+    dayMap.set(date, {
+      date,
+      orderCount: 0,
+      sales: 0,
+      inStoreSales: 0,
+      deliverySales: 0,
+      deliveryEstimatedDeposit: 0,
+      workMinutes: 0,
+      ordersPerHour: 0,
+      salesPerHour: 0
+    });
   }
   for (let hour = 0; hour < 24; hour += 1) {
     hourMap.set(hour, { hour, orderCount: 0, sales: 0 });
@@ -290,9 +420,26 @@ export async function GET(request: Request) {
     const date = matchedShift?.workDate ?? formatter.format(orderedAt);
     const hour = Number(hourFormatter.format(orderedAt));
     const sales = Number(order.total ?? 0);
-    const dayEntry = dayMap.get(date) ?? { date, orderCount: 0, sales: 0, workMinutes: 0, ordersPerHour: 0, salesPerHour: 0 };
+    const group = getRevenueGroup(String(order.channel), String(order.sourcePlatform));
+    const dayEntry = dayMap.get(date) ?? {
+      date,
+      orderCount: 0,
+      sales: 0,
+      inStoreSales: 0,
+      deliverySales: 0,
+      deliveryEstimatedDeposit: 0,
+      workMinutes: 0,
+      ordersPerHour: 0,
+      salesPerHour: 0
+    };
     dayEntry.orderCount += 1;
     dayEntry.sales += sales;
+    if (group.key === "delivery") {
+      dayEntry.deliverySales += sales;
+      dayEntry.deliveryEstimatedDeposit += Math.round(sales * (1 - group.feeRate));
+    } else {
+      dayEntry.inStoreSales += sales;
+    }
     dayMap.set(date, dayEntry);
 
     const hourEntry = hourMap.get(hour) ?? { hour, orderCount: 0, sales: 0 };
@@ -306,7 +453,6 @@ export async function GET(request: Request) {
     platformEntry.sales += sales;
     platformMap.set(sourcePlatform, platformEntry);
 
-    const group = getRevenueGroup(String(order.channel), sourcePlatform);
     const groupEntry = revenueGroupMap.get(group.key) ?? {
       key: group.key,
       label: group.label,
@@ -322,6 +468,9 @@ export async function GET(request: Request) {
   const daily = Array.from(dayMap.values()).map((day) => {
     const workMinutes = dailyWorkMinutes.get(day.date) ?? 0;
     const workHours = workMinutes / 60;
+    const ordersPerHour = workHours > 0 ? day.orderCount / workHours : 0;
+    const salesPerHour = workHours > 0 ? Math.round(day.sales / workHours) : 0;
+    const loadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour, workloadSettings);
     const weather = weatherByDate.get(day.date) ?? {
       date: day.date,
       weatherCode: null,
@@ -333,8 +482,10 @@ export async function GET(request: Request) {
       ...day,
       workMinutes,
       workloadAvailable: workHours > 0,
-      ordersPerHour: workHours > 0 ? day.orderCount / workHours : 0,
-      salesPerHour: workHours > 0 ? Math.round(day.sales / workHours) : 0,
+      ordersPerHour,
+      salesPerHour,
+      loadLevel: loadLevel.loadLevel,
+      loadLevelLabel: loadLevel.loadLevelLabel,
       weatherCode: weather.weatherCode,
       weatherLabel: weather.weatherLabel,
       temperatureMean: weather.temperatureMean,
@@ -411,6 +562,8 @@ export async function GET(request: Request) {
 
   return Response.json({
     month,
+    startDate,
+    endDate,
     stores,
     selectedStoreId,
     totals: {

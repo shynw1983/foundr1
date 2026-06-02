@@ -27,10 +27,15 @@ type SalesDay = {
   date: string;
   orderCount: number;
   sales: number;
+  inStoreSales: number;
+  deliverySales: number;
+  deliveryEstimatedDeposit: number;
   workMinutes: number;
   workloadAvailable: boolean;
   ordersPerHour: number;
   salesPerHour: number;
+  loadLevel: string;
+  loadLevelLabel: string;
   weatherCode: number | null;
   weatherLabel: string;
   temperatureMean: number | null;
@@ -82,6 +87,8 @@ type SalesSourceOption = {
 };
 type SalesSummary = {
   month: string;
+  startDate: string;
+  endDate: string;
   stores: StoreOption[];
   selectedStoreId: string;
   totals: {
@@ -114,6 +121,11 @@ type ImportState = {
   stores: StoreOption[];
   selectedStoreId: string;
   salesSources: SalesSourceOption[];
+};
+type AiAnalysisState = {
+  text: string;
+  model: string;
+  error: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -188,43 +200,129 @@ function getWeatherIcon(code: number | null) {
   return "☁";
 }
 
-function getDensityLevel(value: number) {
-  if (value >= 16) return { label: "非常に高い", className: "is-critical" };
-  if (value >= 13) return { label: "高負荷", className: "is-high" };
-  if (value >= 9) return { label: "忙しい", className: "is-busy" };
-  if (value >= 5) return { label: "通常", className: "is-normal" };
-  return { label: "空き", className: "is-quiet" };
+function getDensityLevelClass(loadLevel: string) {
+  if (loadLevel === "extreme") return "is-critical";
+  if (loadLevel === "high") return "is-high";
+  if (loadLevel === "busy") return "is-busy";
+  if (loadLevel === "normal") return "is-normal";
+  return "is-quiet";
 }
 
-function getMonthCalendarDays(month: string, days: SalesDay[]) {
+function addDays(dateString: string, amount: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
+}
+
+function getRecentRange(days: number) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  return { startDate: addDays(today, -(days - 1)), endDate: today };
+}
+
+function getMonthRange(month: string) {
   const [year, monthIndex] = month.split("-").map(Number);
-  if (!year || !monthIndex) return [];
+  const endDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  return { startDate: `${month}-01`, endDate: `${month}-${String(endDay).padStart(2, "0")}` };
+}
+
+function getCalendarDays(startDate: string, endDate: string, days: SalesDay[]) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return [];
   const dayMap = new Map(days.map((day) => [day.date, day]));
-  const firstWeekday = (new Date(Date.UTC(year, monthIndex - 1, 1)).getUTCDay() + 6) % 7;
-  const dayCount = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  const firstWeekday = (new Date(`${startDate}T12:00:00+09:00`).getUTCDay() + 6) % 7;
   const cells: Array<SalesDay | null> = Array.from({ length: firstWeekday }, () => null);
-  for (let day = 1; day <= dayCount; day += 1) {
-    const date = `${year}-${String(monthIndex).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) {
     cells.push(dayMap.get(date) ?? {
       date,
       orderCount: 0,
       sales: 0,
+      inStoreSales: 0,
+      deliverySales: 0,
+      deliveryEstimatedDeposit: 0,
       workMinutes: 0,
       workloadAvailable: false,
       ordersPerHour: 0,
       salesPerHour: 0,
+      loadLevel: "veryIdle",
+      loadLevelLabel: "かなり空き",
       weatherCode: null,
       weatherLabel: "",
       temperatureMean: null,
       precipitation: null
     });
+    if (cells.length > 410) break;
   }
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
 }
 
+function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
+  const untrackedDays = summary.daily
+    .filter((day) => day.orderCount > 0 && !day.workloadAvailable)
+    .map((day) => ({
+      date: day.date,
+      orderCount: day.orderCount,
+      sales: day.sales
+    }));
+  return {
+    storeName,
+    period: { startDate: summary.startDate, endDate: summary.endDate },
+    totals: summary.totals,
+    revenueGroups: summary.revenueGroups,
+    busiestDays: summary.busiestDays.map((day) => ({
+      date: day.date,
+      orderCount: day.orderCount,
+      sales: day.sales,
+      workMinutes: day.workMinutes,
+      ordersPerHour: Math.round(day.ordersPerHour * 10) / 10,
+      salesPerHour: day.salesPerHour,
+      loadLevelLabel: day.loadLevelLabel
+    })),
+    quietestDays: summary.quietestDays.map((day) => ({
+      date: day.date,
+      orderCount: day.orderCount,
+      sales: day.sales,
+      workMinutes: day.workMinutes,
+      ordersPerHour: Math.round(day.ordersPerHour * 10) / 10,
+      salesPerHour: day.salesPerHour,
+      loadLevelLabel: day.loadLevelLabel
+    })),
+    weekdays: summary.weekdays
+      .filter((weekday) => weekday.dayCount > 0)
+      .map((weekday) => ({
+        label: `${weekday.label}曜日`,
+        dayCount: weekday.dayCount,
+        orderCount: weekday.orderCount,
+        sales: weekday.sales,
+        workMinutes: weekday.workMinutes,
+        ordersPerHour: Math.round(weekday.ordersPerHour * 10) / 10,
+        salesPerHour: weekday.salesPerHour
+      })),
+    peakHours: summary.peakHours,
+    weather: {
+      location: summary.weatherLocation.name,
+      rainyDays: summary.daily.filter((day) => (day.precipitation ?? 0) > 0).length,
+      highSalesRainyDays: summary.busiestDays.filter((day) => (day.precipitation ?? 0) > 0).map((day) => day.date)
+    },
+    untrackedDays
+  };
+}
+
+const salesRangeStorageKey = "foundr1:sales:selected-range";
 const salesMonthStorageKey = "foundr1:sales:selected-month";
 const salesStoreStorageKey = "foundr1:sales:selected-store-id";
+const rangePresetOptions = [
+  { key: "7d", label: "近7日", days: 7 },
+  { key: "15d", label: "近半月", days: 15 },
+  { key: "1m", label: "近1か月", days: 30 },
+  { key: "3m", label: "近3か月", days: 90 },
+  { key: "6m", label: "近半年", days: 180 },
+  { key: "1y", label: "近1年", days: 365 }
+] as const;
+type RangePresetKey = typeof rangePresetOptions[number]["key"] | "month" | "custom";
 
 function getStoredSalesMonth() {
   if (typeof window === "undefined") return getCurrentMonth();
@@ -237,14 +335,40 @@ function getStoredSalesStoreId() {
   return window.localStorage.getItem(salesStoreStorageKey) ?? "";
 }
 
+function getStoredSalesRange() {
+  const monthRange = getMonthRange(getStoredSalesMonth());
+  if (typeof window === "undefined") return { preset: "month" as RangePresetKey, ...monthRange };
+  const stored = window.localStorage.getItem(salesRangeStorageKey);
+  if (!stored) return { preset: "month" as RangePresetKey, ...monthRange };
+  try {
+    const parsed = JSON.parse(stored) as { preset?: string; startDate?: string; endDate?: string };
+    if (parsed.startDate && parsed.endDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate) && /^\d{4}-\d{2}-\d{2}$/.test(parsed.endDate)) {
+      return {
+        preset: (parsed.preset as RangePresetKey) || "custom",
+        startDate: parsed.startDate,
+        endDate: parsed.endDate
+      };
+    }
+  } catch {
+    return { preset: "month" as RangePresetKey, ...monthRange };
+  }
+  return { preset: "month" as RangePresetKey, ...monthRange };
+}
+
 function storeSalesSelection(nextMonth: string, nextStoreId: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(salesMonthStorageKey, nextMonth);
   if (nextStoreId) window.localStorage.setItem(salesStoreStorageKey, nextStoreId);
 }
 
+function storeSalesRange(preset: RangePresetKey, startDate: string, endDate: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(salesRangeStorageKey, JSON.stringify({ preset, startDate, endDate }));
+}
+
 export default function SalesPage() {
   const [month, setMonth] = useState(getStoredSalesMonth);
+  const [range, setRange] = useState(getStoredSalesRange);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [importState, setImportState] = useState<ImportState>({ canImport: false, stores: [], selectedStoreId: "", salesSources: [] });
@@ -252,10 +376,16 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [uploadingSourceId, setUploadingSourceId] = useState("");
   const [message, setMessage] = useState("");
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisState>({ text: "", model: "", error: "" });
+  const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false);
 
-  async function loadSales(nextMonth = month, nextStoreId = selectedStoreId) {
+  async function loadSales(nextMonth = month, nextStoreId = selectedStoreId, nextRange = range) {
     setIsLoading(true);
-    const params = new URLSearchParams({ month: nextMonth });
+    const params = new URLSearchParams({
+      month: nextMonth,
+      startDate: nextRange.startDate,
+      endDate: nextRange.endDate
+    });
     if (nextStoreId) params.set("storeId", nextStoreId);
     const importParams = new URLSearchParams({ month: nextMonth });
     if (nextStoreId) importParams.set("storeId", nextStoreId);
@@ -290,11 +420,11 @@ export default function SalesPage() {
   }
 
   useEffect(() => {
-    void loadSales(getStoredSalesMonth(), getStoredSalesStoreId());
+    void loadSales(getStoredSalesMonth(), getStoredSalesStoreId(), getStoredSalesRange());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const calendarDays = useMemo(() => getMonthCalendarDays(month, summary?.daily ?? []), [month, summary?.daily]);
+  const calendarDays = useMemo(() => getCalendarDays(range.startDate, range.endDate, summary?.daily ?? []), [range.endDate, range.startDate, summary?.daily]);
   const sortedWeekdays = useMemo(() => (
     [...(summary?.weekdays ?? [])]
       .filter((weekday) => weekday.dayCount > 0)
@@ -342,6 +472,28 @@ export default function SalesPage() {
     await loadSales(month, selectedStoreId);
   }
 
+  async function generateAiAnalysis() {
+    if (!summary) return;
+    setIsGeneratingAnalysis(true);
+    setAiAnalysis({ text: "", model: "", error: "" });
+    const response = await fetch("/api/sales/ai-analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeName: selectedStoreName,
+        period: { startDate: range.startDate, endDate: range.endDate },
+        facts: buildSalesAnalysisFacts(summary, selectedStoreName)
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { analysis?: string; model?: string; error?: string };
+    setIsGeneratingAnalysis(false);
+    if (!response.ok) {
+      setAiAnalysis({ text: "", model: "", error: body.error ?? "AI分析を作成できませんでした。" });
+      return;
+    }
+    setAiAnalysis({ text: body.analysis ?? "", model: body.model ?? "", error: "" });
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -364,19 +516,23 @@ export default function SalesPage() {
           <div>
             <p className="eyebrow">POS・Web予約・デリバリーの統合分析</p>
             <h2>売上分析</h2>
-            <span className="source-indicator">{isLoading ? "読み込み中" : `${selectedStoreName || "店舗"} / ${month}`}</span>
+            <span className="source-indicator">{isLoading ? "読み込み中" : `${selectedStoreName || "店舗"} / ${range.startDate} - ${range.endDate}`}</span>
           </div>
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
-              setMonth(event.target.value);
-              storeSalesSelection(event.target.value, selectedStoreId);
-              void loadSales(event.target.value, selectedStoreId);
+              const nextMonth = event.target.value;
+              const nextRange = getMonthRange(nextMonth);
+              setMonth(nextMonth);
+              setRange({ preset: "month", ...nextRange });
+              storeSalesSelection(nextMonth, selectedStoreId);
+              storeSalesRange("month", nextRange.startDate, nextRange.endDate);
+              void loadSales(nextMonth, selectedStoreId, { preset: "month", ...nextRange });
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
               setFilesBySource({});
               storeSalesSelection(month, event.target.value);
-              void loadSales(month, event.target.value);
+              void loadSales(month, event.target.value, range);
             }}>
               {(summary?.stores.length ? summary.stores : importState.stores).map((store) => (
                 <option value={store.id} key={store.id}>{store.name}</option>
@@ -384,6 +540,50 @@ export default function SalesPage() {
             </select>
           </div>
         </header>
+
+        <section className="panel sales-period-panel">
+          <div className="sales-period-heading">
+            <div>
+              <h3>分析期間</h3>
+              <p>売上・曜日・忙しさの集計期間です。ファイル取込の対象月とは別に指定できます。</p>
+            </div>
+            <span>{range.startDate} - {range.endDate}</span>
+          </div>
+          <div className="sales-period-controls">
+            <button className={range.preset === "month" ? "secondary-button is-active" : "secondary-button"} type="button" onClick={() => {
+              const nextRange = getMonthRange(month);
+              setRange({ preset: "month", ...nextRange });
+              storeSalesRange("month", nextRange.startDate, nextRange.endDate);
+              void loadSales(month, selectedStoreId, { preset: "month", ...nextRange });
+            }}>選択月</button>
+            {rangePresetOptions.map((option) => (
+              <button className={range.preset === option.key ? "secondary-button is-active" : "secondary-button"} type="button" key={option.key} onClick={() => {
+                const nextRange = getRecentRange(option.days);
+                setRange({ preset: option.key, ...nextRange });
+                storeSalesRange(option.key, nextRange.startDate, nextRange.endDate);
+                void loadSales(month, selectedStoreId, { preset: option.key, ...nextRange });
+              }}>{option.label}</button>
+            ))}
+            <label>
+              <span>開始日</span>
+              <input type="date" value={range.startDate} onChange={(event) => {
+                const nextRange = { preset: "custom" as RangePresetKey, startDate: event.target.value, endDate: range.endDate };
+                setRange(nextRange);
+                storeSalesRange("custom", nextRange.startDate, nextRange.endDate);
+                if (nextRange.startDate <= nextRange.endDate) void loadSales(month, selectedStoreId, nextRange);
+              }} />
+            </label>
+            <label>
+              <span>終了日</span>
+              <input type="date" value={range.endDate} onChange={(event) => {
+                const nextRange = { preset: "custom" as RangePresetKey, startDate: range.startDate, endDate: event.target.value };
+                setRange(nextRange);
+                storeSalesRange("custom", nextRange.startDate, nextRange.endDate);
+                if (nextRange.startDate <= nextRange.endDate) void loadSales(month, selectedStoreId, nextRange);
+              }} />
+            </label>
+          </div>
+        </section>
 
         <section className="metric-grid">
           <article className="metric-card">
@@ -406,6 +606,28 @@ export default function SalesPage() {
             <strong>{formatPercent(summary?.totals.deliveryShare ?? 0)}</strong>
             <small>平均客単価 {formatMoney(summary?.totals.averageOrderValue ?? 0)}</small>
           </article>
+        </section>
+
+        <section className="panel sales-ai-panel">
+          <div className="sales-ai-heading">
+            <div>
+              <p className="eyebrow">AI Review</p>
+              <h3>AI月次分析</h3>
+              <p>現在の分析期間の売上構成、忙しさ、外卖手数料、勤怠未覆盖の注意点を要約します。</p>
+            </div>
+            <button className="primary-button" type="button" disabled={!summary || isGeneratingAnalysis} onClick={() => void generateAiAnalysis()}>
+              {isGeneratingAnalysis ? "作成中" : "AI分析を作成"}
+            </button>
+          </div>
+          {aiAnalysis.error ? <div className="inline-alert is-warning">{aiAnalysis.error}</div> : null}
+          {aiAnalysis.text ? (
+            <div className="sales-ai-output">
+              <pre>{aiAnalysis.text}</pre>
+              {aiAnalysis.model ? <small>Model: {aiAnalysis.model}</small> : null}
+            </div>
+          ) : (
+            <p className="sales-ai-empty">ボタンを押すと、集計済みデータだけを使ってAIコメントを作成します。</p>
+          )}
         </section>
 
         <section className="sales-grid">
@@ -446,6 +668,9 @@ export default function SalesPage() {
                 <p>店舗設定の売上源に合わせて、月初に手動ダウンロードしたCSV・Excelを取り込みます。</p>
               </div>
             </div>
+            <p className="sales-import-guidance">
+              営業日をまたぐ深夜営業を正しく分析するため、対象月の前日から翌日までの範囲で売上レポートを取得してください。
+            </p>
             <div className="sales-source-upload-list" aria-label="売上源別の取込状況">
               {importState.salesSources.map((source) => {
                 const imported = importedSourceMap.get(source.id) ?? null;
@@ -510,7 +735,7 @@ export default function SalesPage() {
               <CalendarDays size={18} />
               <div>
                 <h3>月視図カレンダー</h3>
-                <p>日ごとの売上と天気を一覧します。負荷は勤務時間が登録された日のみ判定します。</p>
+                <p>日ごとの売上と天気を一覧します。負荷判定は負荷分析の注文/時間・売上/時間設定を使います。</p>
               </div>
             </div>
             <div className="sales-calendar">
@@ -519,16 +744,18 @@ export default function SalesPage() {
               ))}
               {calendarDays.map((day, index) => {
                 if (!day) return <span className="sales-calendar-cell is-empty" key={`empty-${index}`} />;
-                const level = getDensityLevel(day.ordersPerHour);
                 return (
-                  <div className={`sales-calendar-cell ${day.workloadAvailable ? level.className : "is-untracked"}`} key={day.date}>
+                  <div className={`sales-calendar-cell ${day.workloadAvailable ? getDensityLevelClass(day.loadLevel) : "is-untracked"}`} key={day.date}>
                     <div className="sales-calendar-cell-head">
                       <strong>{Number(day.date.slice(8))}</strong>
                       <span title={day.weatherLabel || "天気未取得"}>{getWeatherIcon(day.weatherCode)}</span>
                     </div>
-                    <b>{day.sales > 0 ? formatMoney(day.sales) : "売上なし"}</b>
+                    <div className="sales-calendar-amounts">
+                      <span><em>店内・予約</em><b>{formatMoney(day.inStoreSales)}</b></span>
+                      <span><em>デリバリー入金目安</em><b>{formatMoney(day.deliveryEstimatedDeposit)}</b></span>
+                    </div>
                     {day.workloadAvailable ? (
-                      <small>{level.label} / {formatRate(day.ordersPerHour)}件/時間</small>
+                      <small>{day.loadLevelLabel} / {formatRate(day.ordersPerHour)}件/時間</small>
                     ) : day.orderCount > 0 ? (
                       <small>勤怠未登録 / {day.orderCount}件</small>
                     ) : (
@@ -547,13 +774,13 @@ export default function SalesPage() {
             <h3>忙しい日</h3>
             <div className="sales-rank-list">
               {(summary?.busiestDays ?? []).map((day) => (
-                <div className={`sales-analysis-row ${getDensityLevel(day.ordersPerHour).className}`} key={day.date}>
+                <div className={`sales-analysis-row ${getDensityLevelClass(day.loadLevel)}`} key={day.date}>
                   <div>
                     <span>{formatDate(day.date)}</span>
                     <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
                   </div>
                   <div>
-                    <strong>{getDensityLevel(day.ordersPerHour).label}</strong>
+                    <strong>{day.loadLevelLabel}</strong>
                     <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
                   </div>
                 </div>
@@ -564,13 +791,13 @@ export default function SalesPage() {
             <h3>空きやすい日</h3>
             <div className="sales-rank-list">
               {(summary?.quietestDays ?? []).map((day) => (
-                <div className={`sales-analysis-row ${getDensityLevel(day.ordersPerHour).className}`} key={day.date}>
+                <div className={`sales-analysis-row ${getDensityLevelClass(day.loadLevel)}`} key={day.date}>
                   <div>
                     <span>{formatDate(day.date)}</span>
                     <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
                   </div>
                   <div>
-                    <strong>{getDensityLevel(day.ordersPerHour).label}</strong>
+                    <strong>{day.loadLevelLabel}</strong>
                     <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
                   </div>
                 </div>
