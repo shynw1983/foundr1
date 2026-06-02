@@ -698,7 +698,7 @@ export default function SalesPage() {
             <div>
               <p className="eyebrow">AI Review</p>
               <h3>AI月次分析</h3>
-              <p>現在の分析期間から、売上口径、忙しさ、人員配置、勤怠未覆盖の注意点と次月の具体策を整理します。</p>
+              <p>現在の分析期間から、売上の集計基準、忙しさ、人員配置、勤怠未反映の注意点と次月の具体策を整理します。</p>
             </div>
             <button className="primary-button" type="button" disabled={!summary || isGeneratingAnalysis} onClick={() => void generateAiAnalysis()}>
               {isGeneratingAnalysis ? "作成中" : "AI分析を作成"}
@@ -720,7 +720,7 @@ export default function SalesPage() {
             <div className="panel-title">
               <ChartColumn size={18} />
               <div>
-                <h3>売上口径</h3>
+                <h3>売上の集計基準</h3>
                 <p>店内・予約とデリバリーを分けて、入金額の目安を確認します。</p>
               </div>
             </div>

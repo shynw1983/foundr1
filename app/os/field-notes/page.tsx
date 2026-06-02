@@ -334,7 +334,7 @@ export default function FieldNotesPage() {
             <div className="panel-title">
               <div>
                 <h3>現場記録一覧</h3>
-                <p>後で商品比較や仕入れ先検討につなげるための記録</p>
+                <p>後で商品比較や発注先候補の検討につなげるための記録</p>
               </div>
             </div>
             <div className="recommendation-list">
