@@ -4591,6 +4591,7 @@ button {
   gap: 14px;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 14px;
   padding: 14px 16px;
   border: 1px solid #f4c7c7;
   border-radius: 8px;
@@ -4615,12 +4616,14 @@ button {
 .payroll-confirmation-banner strong {
   color: var(--ink);
   font-size: 15px;
+  line-height: 1.35;
 }
 
 .payroll-confirmation-banner span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 750;
+  line-height: 1.45;
 }
 
 .timecard-table {
