@@ -15,7 +15,7 @@
   --violet: #6850a8;
   --violet-soft: #eeeafd;
   --shadow: 0 18px 45px rgba(34, 45, 62, 0.08);
-  --font-cjk-ja: -apple-system, BlinkMacSystemFont, "Noto Sans JP", "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", "YuGothic", "Meiryo", sans-serif;
+  --font-cjk-ja: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Noto Sans JP", "Noto Sans CJK JP", "Meiryo", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-cjk-sc: -apple-system, BlinkMacSystemFont, "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
@@ -10737,4 +10737,88 @@ button {
   .timecard-day-row div:last-child {
     justify-items: start;
   }
+}
+
+html:lang(ja) body {
+  font-synthesis-weight: none;
+}
+
+html:lang(ja) :where(
+  .brand-mark,
+  .source-indicator,
+  .status-pill,
+  .presence-pill,
+  .notification-menu summary span,
+  .notification-heading button,
+  .os-language-picker span,
+  .os-language-picker select,
+  .account-menu-user strong,
+  .account-menu-panel a,
+  .user-avatar,
+  .user-badge-name,
+  .user-badge-role,
+  .user-badge-muted,
+  .mobile-nav-section-heading,
+  .staff-filter-bar span,
+  .staff-filter-bar select,
+  .staff-form-tabs button,
+  .staff-payroll-deductions > span,
+  .staff-payroll-history > span
+) {
+  font-weight: 600;
+}
+
+html:lang(ja) :where(
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .danger-button,
+  .nav-item,
+  .nav-sub-list a,
+  .mobile-nav-list a,
+  .staff-row-heading strong,
+  .staff-payroll-guide strong,
+  .staff-payroll-store-toggle strong,
+  .staff-payroll-store-placeholder strong,
+  .staff-payroll-history-actions .secondary-button,
+  .staff-payroll-history-actions .danger-button
+) {
+  font-weight: 650;
+}
+
+html:lang(ja) :where(
+  .topbar h2,
+  .panel-title h3,
+  .metric-card strong,
+  .product-title-block strong,
+  .row-heading strong,
+  .management-row strong,
+  .module-card strong,
+  .supplier-admin-row strong,
+  .feedback-topline strong,
+  .trend-row strong,
+  .procurement-order-heading strong,
+  .task-product strong,
+  .delivery-batch-row strong
+) {
+  font-weight: 700;
+}
+
+html:lang(ja) :where(
+  .staff-row p,
+  .staff-row small,
+  .staff-lark-lookup small,
+  .staff-store-scope > small,
+  .staff-payroll-guide p,
+  .staff-payroll-store-placeholder small,
+  .staff-payroll-store-toggle small,
+  .staff-payroll-history small,
+  .account-menu-user span,
+  .notification-item span,
+  .notification-empty,
+  .metric-card span,
+  .muted-label,
+  .panel-title p
+) {
+  font-weight: 400;
 }
