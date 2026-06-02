@@ -168,7 +168,7 @@ const emptySettingDraft = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
@@ -725,7 +725,7 @@ export default function ProcedureAdminPage() {
           <details className="procedure-reference-disclosure">
             <summary>
               <Info size={17} />
-              商品総表と手順書素材の関係
+              商品マスタと手順書素材の関係
             </summary>
             <div className="panel procedure-reference-panel">
               <div className="procedure-reference-grid">
@@ -1093,7 +1093,7 @@ export default function ProcedureAdminPage() {
                       <div className="procedure-step-editor-head">
                         <div>
                           <strong>構造化アクション</strong>
-                          <p>位置・商品/素材・数量・設備を指令として保存します。</p>
+                          <p>位置・商品/素材・数量・設備を作業として保存します。</p>
                         </div>
                         <button
                           className="text-button"
@@ -1114,7 +1114,7 @@ export default function ProcedureAdminPage() {
                           <div className="procedure-action-card" key={actionIndex}>
                             <div className="procedure-action-card-head">
                               <div>
-                                <strong>指令 {actionIndex + 1}</strong>
+                                <strong>作業 {actionIndex + 1}</strong>
                                 <p>{actionSentence || "動作を選ぶと、現場向けの一文がここに表示されます。"}</p>
                               </div>
                               <button
@@ -1128,7 +1128,7 @@ export default function ProcedureAdminPage() {
                               </button>
                             </div>
 
-                            <div className="procedure-action-summary" aria-label="指令の内容">
+                            <div className="procedure-action-summary" aria-label="作業の内容">
                               <span>{editingBook.variants.find((variant) => variant.variantType === action.variantType)?.name ?? "共通"}</span>
                               <span>{actionTypes.find((item) => item.id === action.actionTypeId)?.label || "動作未選択"}</span>
                               {getItemName(locations, action.locationId) ? <span>{getItemName(locations, action.locationId)}</span> : null}
@@ -1288,7 +1288,7 @@ export default function ProcedureAdminPage() {
                       })}
                       {!step.actions.length ? (
                         <div className="procedure-action-empty">
-                          <strong>まだ指令がありません</strong>
+                          <strong>まだ作業がありません</strong>
                           <p>「アクションを追加」から、現場で行う動作を一つずつ登録します。</p>
                         </div>
                       ) : null}

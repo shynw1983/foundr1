@@ -12,7 +12,7 @@ import { UserBadge } from "../components/UserBadge";
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -85,7 +85,7 @@ export default function OsSettingsPage() {
           </div>
           <button className="primary-button" type="button" disabled={saving} onClick={() => void saveSettings()}>
             <Save size={16} />
-            {saving ? "保存中..." : "設定を保存"}
+            {saving ? "保存中" : "設定を保存"}
           </button>
         </header>
 

@@ -31,11 +31,11 @@ export async function PATCH(request: Request) {
   `;
 
   if (!itemRows[0]) {
-    return Response.json({ error: "発注項目が見つかりません。" }, { status: 404 });
+    return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
   }
 
   if (!await canAccessStore(session, itemRows[0].storeId)) {
-    return Response.json({ error: "この発注項目を操作する権限がありません。" }, { status: 403 });
+    return Response.json({ error: "この発注明細を操作する権限がありません。" }, { status: 403 });
   }
 
   const detailRows = await sql`

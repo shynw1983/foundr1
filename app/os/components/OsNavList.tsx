@@ -51,13 +51,13 @@ const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/set
 const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
-  { label: "排班", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
   { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
@@ -94,7 +94,7 @@ const navModules: OsNavModule[] = [
   { id: "home", label: "OS ホーム", icon: ClipboardList, href: "/os", paths: [{ href: "/os" }] },
   {
     id: "orders",
-    label: "発注管理",
+    label: "発注・購入管理",
     icon: PackageCheck,
     paths: [
       { href: "/os/orders" },

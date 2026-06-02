@@ -59,7 +59,7 @@ type ProductComparison = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -420,7 +420,7 @@ export default function ProductComparisonsPage() {
             <div className="panel-title">
               <div>
                 <h3>{editingComparisonId ? "比較を編集" : "比較を追加"}</h3>
-                <p>価格 ÷ 規格数量で単位コストを比較。輸入品は運賃・税費も加算</p>
+                <p>価格 ÷ 規格数量で単位コストを比較。輸入品は運賃・税金も加算</p>
               </div>
               {editingComparisonId ? <button type="button" className="secondary-button" onClick={resetComparisonForm}>新規に戻す</button> : null}
             </div>
@@ -489,7 +489,7 @@ export default function ProductComparisonsPage() {
                 <input type="checkbox" name="isImported" checked={isImported} onChange={(event) => setIsImported(event.target.checked)} />
                 <span>海外輸入品として計算</span>
               </label>
-              {isImported ? <small className="form-hint">海外費用は選択した通貨で入力し、システムが円換算して比較します。税費とその他費用は円で入力してください。</small> : null}
+              {isImported ? <small className="form-hint">海外費用は選択した通貨で入力し、システムが円換算して比較します。税金とその他費用は円で入力してください。</small> : null}
               <div className="comparison-inline-fields">
                 <label>
                   <span>{isImported ? "候補金額" : "候補価格"}</span>
@@ -568,7 +568,7 @@ export default function ProductComparisonsPage() {
                   </label>
                 ) : null}
                 <label>
-                  <span>税費（円）</span>
+                  <span>税金（円）</span>
                   <input value={taxCost} inputMode="decimal" onChange={(event) => setTaxCost(event.target.value)} placeholder="0" />
                 </label>
                 <label>
@@ -729,7 +729,7 @@ function ComparisonCard({
             <dl>
               <dt>輸入費用</dt>
               <dd>運賃 {formatCurrency(effectiveFreightCost)}</dd>
-              <dt>税費</dt>
+              <dt>税金</dt>
               <dd>{formatCurrency(comparison.taxCost)}</dd>
               <dt>その他</dt>
               <dd>{formatCurrency(comparison.otherCost)}</dd>

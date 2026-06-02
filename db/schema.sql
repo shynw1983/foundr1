@@ -1147,10 +1147,10 @@ do update set
 
 insert into procedure_action_types (action_key, label, sentence_template, sort_order)
 values
-  ('take', '取出', '{location}から{product}{quantity}{unit}を取り出す', 10),
+  ('take', '取り出す', '{location}から{product}{quantity}{unit}を取り出す', 10),
   ('measure', '計量', '{product}を{quantity}{unit}計量する', 20),
-  ('add', '加入', '{container}に{product}{quantity}{unit}を入れる', 30),
-  ('mix', '混合', '{equipment}で{target}まで混合する', 40),
+  ('add', '入れる', '{container}に{product}{quantity}{unit}を入れる', 30),
+  ('mix', '混ぜる', '{equipment}で{target}まで混ぜる', 40),
   ('heat', '加熱', '{equipment}で{target}まで加熱する', 50),
   ('check', '確認', '{standard}を確認する', 60),
   ('wash', '洗浄', '{equipment}を洗浄する', 70),
@@ -1178,20 +1178,20 @@ values
   ('電子秤', '計量', 10),
   ('計量カップ', '計量', 20),
   ('鍋', '加熱', 30),
-  ('煮篮', '加熱', 40),
+  ('ゆでざる', '加熱', 40),
   ('シェーカー', 'ドリンク', 50),
-  ('封口機', '包装', 60),
+  ('シーラー', '包装', 60),
   ('レードル', '調理', 70)
 on conflict (name) do nothing;
 
 insert into procedure_containers (name, category, sort_order)
 values
-  ('内用碗', '堂食', 10),
-  ('外卖碗', '外卖', 20),
+  ('店内用ボウル', '店内', 10),
+  ('テイクアウト容器', 'テイクアウト', 20),
   ('Mカップ', 'ドリンク', 30),
   ('Lカップ', 'ドリンク', 40),
   ('シェーカー', 'ドリンク', 50),
-  ('外卖袋', '外卖', 60)
+  ('テイクアウト袋', 'テイクアウト', 60)
 on conflict (name) do nothing;
 
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);

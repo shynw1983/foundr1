@@ -115,7 +115,7 @@ type MenuAdminData = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
@@ -995,7 +995,7 @@ export default function MenuAdminPage() {
                       </label>
                       <button className="primary-button" type="button" disabled={savingKind === "group"} onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
                         <Save size={16} />
-                        {savingKind === "group" ? "保存中..." : "グループを保存"}
+                        {savingKind === "group" ? "保存中" : "グループを保存"}
                       </button>
                     </div>
 
@@ -1064,7 +1064,7 @@ export default function MenuAdminPage() {
                           onClick={() => void save("option", { ...optionDraft, optionGroupId: optionDraft.optionGroupId || activeOptionGroup?.id || "" })}
                         >
                           <Save size={16} />
-                          {savingKind === "option" ? "保存中..." : "選択肢を保存"}
+                          {savingKind === "option" ? "保存中" : "選択肢を保存"}
                         </button>
                       </div>
                     </div>
@@ -1093,7 +1093,7 @@ export default function MenuAdminPage() {
                       onClick={() => void save("category", { ...categoryDraft, brandId: categoryDraft.brandId || activeBrandId, storeId: "" })}
                     >
                       <Save size={16} />
-                      {savingKind === "category" ? "保存中..." : "分類を保存"}
+                      {savingKind === "category" ? "保存中" : "分類を保存"}
                     </button>
                   </div>
                 </div>
@@ -1146,7 +1146,7 @@ export default function MenuAdminPage() {
                 ) : null}
                 <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", { ...itemDraft, storeId: "" })}>
                   <Save size={16} />
-                  {savingKind === "item" ? "保存中..." : "商品を保存"}
+                  {savingKind === "item" ? "保存中" : "商品を保存"}
                 </button>
               </div>
             </div>
@@ -1227,7 +1227,7 @@ export default function MenuAdminPage() {
                 </div>
                 <button className="primary-button" type="button" disabled={savingKind === "item"} onClick={() => void save("item", { ...itemDraft, storeId: "" })}>
                   <Save size={16} />
-                  {savingKind === "item" ? "保存中..." : "選択可否を保存"}
+                  {savingKind === "item" ? "保存中" : "選択可否を保存"}
                 </button>
               </div>
               <div className="menu-rule-list">

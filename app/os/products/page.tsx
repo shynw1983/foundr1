@@ -306,7 +306,7 @@ function productMatchesMissingInfo(product: ProductWithCategory, missingInfoFilt
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -569,7 +569,7 @@ export default function ProductsPage() {
 
   async function saveProductSummaryFields() {
     setIsSavingProductSummaryFields(true);
-    setProductSummarySaveStatus("保存中...");
+    setProductSummarySaveStatus("保存中");
 
     try {
       const response = await fetch("/api/me/preferences", {
@@ -852,7 +852,7 @@ export default function ProductsPage() {
                       disabled={isSavingProductSummaryFields}
                       onClick={() => void saveProductSummaryFields()}
                     >
-                      {isSavingProductSummaryFields ? "保存中..." : "保存"}
+                      {isSavingProductSummaryFields ? "保存中" : "保存"}
                     </button>
                     {productSummarySaveStatus ? <small>{productSummarySaveStatus}</small> : null}
                   </div>
@@ -1418,7 +1418,7 @@ function ProductEditDialog({
     }
 
     setIsSavingSupplier(true);
-    setSupplierSaveStatus("保存中...");
+    setSupplierSaveStatus("保存中");
 
     try {
       const response = await fetch("/api/suppliers", {
@@ -1547,7 +1547,7 @@ function ProductEditDialog({
                   {isCustomUnitMode ? (
                     <input
                       value={currentUnit}
-                      placeholder="例：ケース、パック、束"
+                      placeholder="例: ケース、パック、束"
                       onChange={(event) => setProductValue("unit", event.target.value)}
                     />
                   ) : null}
@@ -1767,7 +1767,7 @@ function ProductEditDialog({
                 キャンセル
               </button>
               <button type="submit" className="primary-button" disabled={isSavingSupplier}>
-                {isSavingSupplier ? "保存中..." : "保存して選択"}
+                {isSavingSupplier ? "保存中" : "保存して選択"}
               </button>
             </div>
           </form>

@@ -126,7 +126,7 @@ const statusTone: Record<string, string> = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -679,7 +679,7 @@ export default function ProcurementHistoryPage() {
   }
 
   async function deleteHistoryOrder(orderId: string) {
-    if (!window.confirm(`${orderId} の注文履歴を削除しますか？関連する明細・異常報告も削除されます。`)) return;
+    if (!window.confirm(`${orderId} の発注履歴を削除しますか？関連する明細・異常報告も削除されます。`)) return;
 
     const response = await fetch("/api/orders", {
       method: "DELETE",
@@ -689,7 +689,7 @@ export default function ProcurementHistoryPage() {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: string };
-      window.alert(body.error ?? "注文履歴を削除できませんでした。");
+      window.alert(body.error ?? "発注履歴を削除できませんでした。");
       return;
     }
 
@@ -698,7 +698,7 @@ export default function ProcurementHistoryPage() {
   }
 
   async function deleteHistoryItem(itemId: string) {
-    if (!window.confirm("この注文明細を削除しますか？関連する異常報告も削除されます。")) return;
+    if (!window.confirm("この発注明細を削除しますか？関連する異常報告も削除されます。")) return;
 
     const response = await fetch("/api/procurement/items", {
       method: "DELETE",
@@ -708,7 +708,7 @@ export default function ProcurementHistoryPage() {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: string };
-      window.alert(body.error ?? "注文明細を削除できませんでした。");
+      window.alert(body.error ?? "発注明細を削除できませんでした。");
       return;
     }
 

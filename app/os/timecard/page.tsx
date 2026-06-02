@@ -177,10 +177,10 @@ type ActualStatus = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
-  { label: "排班", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
   { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "商品マスタ", href: "/os/products", icon: BriefcaseBusiness },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -1022,7 +1022,7 @@ export function TimecardPage({
                 <p>{scheduleEmployees.length}人</p>
               </article>
               <article>
-                <strong>未排班の営業時間</strong>
+                <strong>未シフトの営業時間</strong>
                 <p>{uncoveredDays.length ? `${uncoveredDays.length}日 要確認` : "問題なし"}</p>
               </article>
               <article>
@@ -1068,9 +1068,9 @@ export function TimecardPage({
           </section>
         ) : mainView === "schedule" ? (
           <>
-            <section className="timecard-subtabs" aria-label="排班メニュー">
+            <section className="timecard-subtabs" aria-label="シフトメニュー">
               <button className={scheduleView === "planned" ? "is-active" : ""} type="button" onClick={() => setScheduleView("planned")}>
-                計画排班
+                計画シフト
               </button>
               <button className={scheduleView === "actual" ? "is-active" : ""} type="button" onClick={() => setScheduleView("actual")}>
                 実勤務時間
@@ -1082,7 +1082,7 @@ export function TimecardPage({
                 <div className="panel-title">
                   <CalendarDays />
                   <div>
-                    <h3>計画排班</h3>
+                    <h3>計画シフト</h3>
                     <p>{selectedStore?.name ?? "店舗"} の月間シフトを日付 x 従業員で編集します。複数選択モード、または Shift / Command / Ctrl クリックでまとめて編集できます。</p>
                   </div>
                   <button
@@ -1101,7 +1101,7 @@ export function TimecardPage({
                   <div className="shift-editor shift-bulk-editor" aria-label="シフト一括編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftCells.length}件を選択中</strong>
-                      <span>{selectedShiftCells.length ? "複数の日付をまとめて編集" : "編集したい格子をクリックして選択"}</span>
+                      <span>{selectedShiftCells.length ? "複数の日付をまとめて編集" : "編集したいセルをクリックして選択"}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
                     <label>
@@ -1192,7 +1192,7 @@ export function TimecardPage({
                           return (
                             <th
                               className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()}
-                              title={isUncovered ? `未排班: ${coverage?.missingLabel}` : undefined}
+                              title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : undefined}
                               key={day.key}
                             >
                               <span>{day.label}</span>
@@ -1220,7 +1220,7 @@ export function TimecardPage({
                                 <button
                                   className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
                                   type="button"
-                                  title={isUncovered ? `未排班: ${coverage?.missingLabel}` : isShiftMultiSelectMode ? "クリックで複数選択" : "クリックで編集 / Shift・Command・Ctrl クリックで複数選択"}
+                                  title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : isShiftMultiSelectMode ? "クリックで複数選択" : "クリックで編集 / Shift・Command・Ctrl クリックで複数選択"}
                                   onClick={(event) => handleShiftCellClick(event, employee.id, day.key)}
                                 >
                                   {shift ? (
@@ -1252,7 +1252,7 @@ export function TimecardPage({
                   <CalendarDays />
                   <div>
                     <h3>実勤務時間</h3>
-                    <p>計画排班と同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。{data?.canEditActualTime ? "権限があるユーザーは格子をクリックして修正できます。" : ""}</p>
+                    <p>計画シフトと同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。{data?.canEditActualTime ? "権限があるユーザーはセルをクリックして修正できます。" : ""}</p>
                   </div>
                 </div>
                 {actualDraft ? (
@@ -1354,7 +1354,7 @@ export function TimecardPage({
                   {payrollConfirmation
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
                     : canConfirmPayrollPeriod
-                      ? "排班と実勤務時間を確認・修正したあと、給与を確定してください。"
+                      ? "シフトと実勤務時間を確認・修正したあと、給与を確定してください。"
                       : `給与期間が終了する ${payrollPeriod?.endDate ?? "締め日"} 以降に確定できます。`}
                 </span>
               </div>

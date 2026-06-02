@@ -26,7 +26,7 @@ type OsModule = {
 
 const osModules: OsModule[] = [
   {
-    title: "発注管理",
+    title: "発注・購入管理",
     description: "店舗発注、購入、納品、レシート、発注先を管理",
     href: "/os/orders",
     icon: PackageCheck,

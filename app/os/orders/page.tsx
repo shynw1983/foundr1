@@ -139,7 +139,7 @@ function getCurrentDateTimeLabel() {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -1175,7 +1175,7 @@ export default function OrdersPage() {
                       <a
                         className="icon-button"
                         href={`/os/procurement?order=${encodeURIComponent(order.id)}`}
-                        aria-label={`${order.id} の発注管理`}
+                        aria-label={`${order.id} の購入管理`}
                       >
                         <PackageCheck size={18} />
                       </a>

@@ -117,7 +117,7 @@ const statusTone: Record<string, string> = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -1069,7 +1069,7 @@ export default function ProcurementPage() {
         <header className="topbar">
           <div>
             <p className="eyebrow">現場の発注実行</p>
-            <h2>発注管理</h2>
+            <h2>購入管理</h2>
             <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
@@ -1089,7 +1089,7 @@ export default function ProcurementPage() {
 
         <section className="panel procurement-panel">
           <PanelTitle
-            title={focusedOrderId ? `${focusedOrderId} の発注管理` : "発注管理"}
+            title={focusedOrderId ? `${focusedOrderId} の購入管理` : "購入管理"}
             subtitle={focusedOrderId ? "選択した依頼だけを表示" : "発注先ごとに購入済み、数量差異、備考、価格異常を記録"}
           />
           {focusedOrderId ? (
@@ -1099,7 +1099,7 @@ export default function ProcurementPage() {
             </div>
           ) : null}
           {!focusedOrderId ? (
-            <div className="queue-filter-bar" aria-label="発注管理ステータスフィルター">
+            <div className="queue-filter-bar" aria-label="購入管理ステータスフィルター">
               {procurementStatusFilters.map((filter) => (
                 <button
                   type="button"

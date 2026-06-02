@@ -87,7 +87,7 @@ type StaffMember = {
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "発注管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
@@ -109,7 +109,7 @@ const roleLabels: Record<string, string> = {
 
 const staffCategoryLabels: Record<string, string> = {
   executive: "経営層",
-  management: "管理層",
+  management: "管理職",
   working: "実勤務スタッフ"
 };
 
@@ -781,7 +781,7 @@ function StaffFormFields({
           <span>スタッフ区分</span>
           <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
             <option value="executive">経営層</option>
-            <option value="management">管理層</option>
+            <option value="management">管理職</option>
             <option value="working">実勤務スタッフ</option>
           </select>
         </label>
