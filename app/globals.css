@@ -11151,6 +11151,81 @@ button {
   line-height: 1.35;
 }
 
+.workload-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workload-chart-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.workload-chart-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workload-chart-heading,
+.workload-chart-subbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.workload-chart-heading strong,
+.workload-chart-heading span,
+.workload-chart-subbar span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workload-chart-heading span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.workload-chart-bar,
+.workload-chart-subbar div {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.workload-chart-subbar div {
+  height: 6px;
+  min-width: 120px;
+}
+
+.workload-chart-bar i,
+.workload-chart-subbar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.workload-chart-bar i.is-load {
+  background: linear-gradient(90deg, #222, #7c6757);
+}
+
+.workload-chart-bar i.is-sales {
+  background: linear-gradient(90deg, #222, #5b8a72);
+}
+
+.workload-chart-subbar i {
+  background: color-mix(in srgb, var(--text) 42%, var(--muted));
+}
+
+.workload-chart-subbar span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1180px) {
   .sales-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -11167,6 +11242,10 @@ button {
 
 @media (max-width: 760px) {
   .sales-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workload-chart-grid {
     grid-template-columns: 1fr;
   }
 

@@ -144,6 +144,11 @@ function percent(value: number) {
   return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}%`;
 }
 
+function chartWidth(value: number, maxValue: number) {
+  if (!Number.isFinite(value) || value <= 0 || maxValue <= 0) return "0%";
+  return `${Math.max(4, Math.min(100, (value / maxValue) * 100))}%`;
+}
+
 const timecardMonthStorageKey = "foundr1:timecard:selected-month";
 const timecardStoreStorageKey = "foundr1:timecard:selected-store-id";
 
@@ -197,6 +202,14 @@ export default function TimecardWorkloadPage() {
     b.sales - a.sales
     || b.salesPerHour - a.salesPerHour
   ));
+  const workloadChartEmployees = [...(data?.employees ?? [])].sort((a, b) => (
+    b.peakHourLoadScore - a.peakHourLoadScore
+    || b.ordersPerHour - a.ordersPerHour
+  ));
+  const maxPeakLoadScore = Math.max(0, ...workloadChartEmployees.map((employee) => employee.peakHourLoadScore));
+  const maxOrdersPerHour = Math.max(0, ...workloadChartEmployees.map((employee) => employee.ordersPerHour));
+  const maxSales = Math.max(0, ...salesContributionEmployees.map((employee) => employee.sales));
+  const maxSalesPerHour = Math.max(0, ...salesContributionEmployees.map((employee) => employee.salesPerHour));
 
   async function saveIncludeManagement(includeManagement: boolean) {
     if (!selectedStoreId) return;
@@ -294,6 +307,64 @@ export default function TimecardWorkloadPage() {
               </span>
             </div>
           </label>
+        </section>
+
+        <section className="workload-chart-grid">
+          <article className="panel workload-chart-panel">
+            <div className="panel-title">
+              <ChartColumn size={18} />
+              <div>
+                <h3>負荷チャート</h3>
+                <p>ピーク負荷点数と平均注文密度をスタッフ別に比較します。</p>
+              </div>
+            </div>
+            <div className="workload-chart-list">
+              {workloadChartEmployees.map((employee) => (
+                <div className="workload-chart-row" key={employee.employeeId}>
+                  <div className="workload-chart-heading">
+                    <strong>{employee.employeeName}</strong>
+                    <span>{score(employee.peakHourLoadScore)}/時</span>
+                  </div>
+                  <div className="workload-chart-bar" aria-label={`${employee.employeeName} 負荷ピーク ${score(employee.peakHourLoadScore)}`}>
+                    <i className="is-load" style={{ width: chartWidth(employee.peakHourLoadScore, maxPeakLoadScore) }} />
+                  </div>
+                  <div className="workload-chart-subbar">
+                    <span>平均注文 {rate(employee.ordersPerHour)}件/時</span>
+                    <div><i style={{ width: chartWidth(employee.ordersPerHour, maxOrdersPerHour) }} /></div>
+                  </div>
+                </div>
+              ))}
+              {data && workloadChartEmployees.length === 0 ? <div className="empty-state">負荷データはありません</div> : null}
+            </div>
+          </article>
+
+          <article className="panel workload-chart-panel">
+            <div className="panel-title">
+              <ChartColumn size={18} />
+              <div>
+                <h3>売上貢献チャート</h3>
+                <p>カバー売上と1時間あたりの売上貢献を比較します。</p>
+              </div>
+            </div>
+            <div className="workload-chart-list">
+              {salesContributionEmployees.map((employee) => (
+                <div className="workload-chart-row" key={employee.employeeId}>
+                  <div className="workload-chart-heading">
+                    <strong>{employee.employeeName}</strong>
+                    <span>{formatMoney(employee.sales)}</span>
+                  </div>
+                  <div className="workload-chart-bar" aria-label={`${employee.employeeName} 売上貢献 ${formatMoney(employee.sales)}`}>
+                    <i className="is-sales" style={{ width: chartWidth(employee.sales, maxSales) }} />
+                  </div>
+                  <div className="workload-chart-subbar">
+                    <span>売上/時 {formatMoney(employee.salesPerHour)}</span>
+                    <div><i style={{ width: chartWidth(employee.salesPerHour, maxSalesPerHour) }} /></div>
+                  </div>
+                </div>
+              ))}
+              {data && salesContributionEmployees.length === 0 ? <div className="empty-state">売上貢献データはありません</div> : null}
+            </div>
+          </article>
         </section>
 
         <section className="panel workload-table-panel">
