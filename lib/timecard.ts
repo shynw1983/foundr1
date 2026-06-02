@@ -19,6 +19,7 @@ export type TimecardEmployee = {
   name: string;
   role: string;
   status: string;
+  birthDate?: string | null;
   storeIds: string[];
   storePayrollSettings: TimecardStorePayrollSetting[];
 };
@@ -31,6 +32,12 @@ export type TimecardStorePayrollSetting = {
   monthlySalary: number | null;
   commuteAllowancePerWorkday: number;
   commuteAllowanceMonthlyCap: number | null;
+  socialInsurancePrefecture?: string | null;
+  applySocialInsurance?: boolean;
+  socialInsuranceStandardMonthlyAmount?: number | null;
+  socialInsuranceDeductionFrom?: string | null;
+  applyEmploymentInsurance?: boolean;
+  employmentInsuranceDeductionFrom?: string | null;
   applyIncomeTax?: boolean;
   incomeTaxCategory?: "none" | "kou" | "otsu";
   dependentCount?: number;
@@ -45,6 +52,20 @@ export type WithholdingTaxRow = {
   kouTaxes: number[];
   otsuTax: number | null;
   otsuRate: number | null;
+};
+
+export type SocialInsuranceRow = {
+  prefecture: string;
+  standardMonthlyAmount: number;
+  healthHalfWithoutCare: number | null;
+  healthHalfWithCare: number | null;
+  childSupportHalf: number | null;
+  pensionHalf: number | null;
+};
+
+export type EmploymentInsuranceRateRow = {
+  businessType: string;
+  employeeRate: number;
 };
 
 export type TimecardDailySummary = {
@@ -82,6 +103,8 @@ export type TimecardPayrollRow = {
   overtimePay: number;
   nightPremiumPay: number;
   basePay: number;
+  socialInsurance: number;
+  employmentInsurance: number;
   incomeTax: number;
   commuteAllowance: number;
   totalPay: number;
@@ -97,6 +120,8 @@ export type TimecardPayrollTotals = {
   laborCost: number;
   overtimePay: number;
   nightPremiumPay: number;
+  socialInsurance: number;
+  employmentInsurance: number;
   incomeTax: number;
   commuteAllowance: number;
   totalPay: number;
@@ -108,6 +133,7 @@ const overnightWindowMs = 36 * 60 * minuteMs;
 const dailyLegalWorkMinutes = 8 * 60;
 const overtimePremiumRate = 1.25;
 const nightPremiumRate = 0.25;
+const defaultEmploymentInsuranceBusinessType = "general";
 
 export function isTimecardPunchType(value: string): value is TimecardPunchType {
   return (timecardPunchTypes as readonly string[]).includes(value);
@@ -201,6 +227,55 @@ function getWithholdingTax(amount: number, setting: TimecardStorePayrollSetting,
   }
   const dependentCount = Math.max(0, Math.min(7, Math.round(Number(setting.dependentCount ?? 0) || 0)));
   return Math.max(0, Math.round(row.kouTaxes[dependentCount] ?? 0));
+}
+
+function isSameOrAfterMonth(month: string, date: string | null | undefined) {
+  if (!date) return true;
+  return month >= date.slice(0, 7);
+}
+
+function addYearsMinusOneDay(date: string, years: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year + years, month - 1, day));
+  target.setUTCDate(target.getUTCDate() - 1);
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
+}
+
+function isCareInsuranceAge(month: string, birthDate?: string | null) {
+  if (!birthDate) return false;
+  const careStartMonth = addYearsMinusOneDay(birthDate, 40).slice(0, 7);
+  const careEndMonth = addYearsMinusOneDay(birthDate, 65).slice(0, 7);
+  return month >= careStartMonth && month < careEndMonth;
+}
+
+function getSocialInsuranceDeduction(
+  employee: TimecardEmployee | undefined,
+  setting: TimecardStorePayrollSetting,
+  month: string,
+  socialInsuranceRows: SocialInsuranceRow[]
+) {
+  if (!setting.applySocialInsurance || !isSameOrAfterMonth(month, setting.socialInsuranceDeductionFrom)) return { amount: 0, alerts: [] as string[] };
+  const alerts: string[] = [];
+  const standardMonthlyAmount = Math.round(Number(setting.socialInsuranceStandardMonthlyAmount ?? 0) || 0);
+  const prefecture = String(setting.socialInsurancePrefecture ?? "").trim();
+  if (!prefecture) alerts.push("社会保険所在地未設定");
+  if (!standardMonthlyAmount) alerts.push("標準報酬月額未設定");
+  if (!employee?.birthDate) alerts.push("生年月日未設定");
+  if (!prefecture || !standardMonthlyAmount) return { amount: 0, alerts };
+  const row = socialInsuranceRows.find((item) => item.prefecture === prefecture && item.standardMonthlyAmount === standardMonthlyAmount);
+  if (!row) {
+    alerts.push("社会保険料表未設定");
+    return { amount: 0, alerts };
+  }
+  const healthHalf = isCareInsuranceAge(month, employee?.birthDate) ? row.healthHalfWithCare : row.healthHalfWithoutCare;
+  const amount = Math.ceil((healthHalf ?? 0) + (row.pensionHalf ?? 0) + (row.childSupportHalf ?? 0));
+  return { amount, alerts };
+}
+
+function getEmploymentInsuranceDeduction(setting: TimecardStorePayrollSetting, month: string, wageAmount: number, rateRows: EmploymentInsuranceRateRow[]) {
+  if (!setting.applyEmploymentInsurance || !isSameOrAfterMonth(month, setting.employmentInsuranceDeductionFrom)) return 0;
+  const rate = rateRows.find((row) => row.businessType === defaultEmploymentInsuranceBusinessType)?.employeeRate ?? 0;
+  return Math.floor(Math.max(0, wageAmount) * rate);
 }
 
 export function summarizeTimecardDays(
@@ -300,9 +375,17 @@ export function summarizeTimecardDays(
 export function summarizePayroll(
   employees: TimecardEmployee[],
   dailySummaries: TimecardDailySummary[],
-  options: { withholdingTaxRows?: WithholdingTaxRow[] } = {}
+  options: {
+    month?: string;
+    withholdingTaxRows?: WithholdingTaxRow[];
+    socialInsuranceRows?: SocialInsuranceRow[];
+    employmentInsuranceRateRows?: EmploymentInsuranceRateRow[];
+  } = {}
 ) {
+  const payrollMonth = options.month ?? getJstMonthLabel();
   const withholdingTaxRows = options.withholdingTaxRows ?? [];
+  const socialInsuranceRows = options.socialInsuranceRows ?? [];
+  const employmentInsuranceRateRows = options.employmentInsuranceRateRows ?? [];
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const rowsByEmployee = new Map<string, TimecardPayrollRow>();
   const daysByEmployeeAndStore = new Map<string, TimecardDailySummary[]>();
@@ -329,6 +412,8 @@ export function summarizePayroll(
       overtimePay: 0,
       nightPremiumPay: 0,
       basePay: 0,
+      socialInsurance: 0,
+      employmentInsurance: 0,
       incomeTax: 0,
       commuteAllowance: 0,
       totalPay: 0,
@@ -368,6 +453,8 @@ export function summarizePayroll(
     let regularPay = 0;
     let overtimePay = 0;
     let nightPremiumPay = 0;
+    let socialInsurance = 0;
+    let employmentInsurance = 0;
     let incomeTax = 0;
     let commuteAllowance = 0;
     for (const setting of employee?.storePayrollSettings ?? []) {
@@ -401,12 +488,18 @@ export function summarizePayroll(
           storeTaxablePay = Math.ceil(storeRegularPay + storeOvertimePay + storeNightPremiumPay);
         }
       }
-      incomeTax += getWithholdingTax(storeTaxablePay, setting, withholdingTaxRows);
       if (commuteWorkDays === 0) continue;
       const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
-      commuteAllowance += setting.commuteAllowanceMonthlyCap === null
+      const storeCommuteAllowance = setting.commuteAllowanceMonthlyCap === null
         ? uncappedCommuteAllowance
         : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
+      commuteAllowance += storeCommuteAllowance;
+      const socialResult = getSocialInsuranceDeduction(employee, setting, payrollMonth, socialInsuranceRows);
+      socialInsurance += socialResult.amount;
+      row.alerts = uniqueStrings([...row.alerts, ...socialResult.alerts]);
+      const employmentDeduction = getEmploymentInsuranceDeduction(setting, payrollMonth, storeTaxablePay + storeCommuteAllowance, employmentInsuranceRateRows);
+      employmentInsurance += employmentDeduction;
+      incomeTax += getWithholdingTax(Math.max(0, storeTaxablePay - socialResult.amount - employmentDeduction), setting, withholdingTaxRows);
     }
     const basePay = Math.ceil(regularPay + overtimePay + nightPremiumPay);
     return {
@@ -417,9 +510,11 @@ export function summarizePayroll(
       overtimePay,
       nightPremiumPay,
       basePay,
+      socialInsurance,
+      employmentInsurance,
       incomeTax,
       commuteAllowance,
-      totalPay: basePay + commuteAllowance - incomeTax
+      totalPay: basePay + commuteAllowance - socialInsurance - employmentInsurance - incomeTax
     };
   }).sort((a, b) => a.employeeName.localeCompare(b.employeeName, "ja"));
 
@@ -432,6 +527,8 @@ export function summarizePayroll(
     laborCost: acc.laborCost + row.basePay,
     overtimePay: acc.overtimePay + row.overtimePay,
     nightPremiumPay: acc.nightPremiumPay + row.nightPremiumPay,
+    socialInsurance: acc.socialInsurance + row.socialInsurance,
+    employmentInsurance: acc.employmentInsurance + row.employmentInsurance,
     incomeTax: acc.incomeTax + row.incomeTax,
     commuteAllowance: acc.commuteAllowance + row.commuteAllowance,
     totalPay: acc.totalPay + row.totalPay
@@ -444,6 +541,8 @@ export function summarizePayroll(
     laborCost: 0,
     overtimePay: 0,
     nightPremiumPay: 0,
+    socialInsurance: 0,
+    employmentInsurance: 0,
     incomeTax: 0,
     commuteAllowance: 0,
     totalPay: 0

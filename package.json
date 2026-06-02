@@ -17,6 +17,7 @@
     "@vercel/blob": "^2.4.0",
     "lucide-react": "0.511.0",
     "next": "^16.2.6",
+    "pdf-parse": "^2.4.5",
     "pusher": "^5.3.3",
     "pusher-js": "^8.5.0",
     "react": "19.0.0",

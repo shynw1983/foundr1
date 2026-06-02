@@ -51,7 +51,10 @@ type WorkStoreSettingPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean;
+  socialInsuranceStandardMonthlyAmount?: number | string | null;
+  socialInsuranceDeductionFromMonth?: string;
   applyEmploymentInsurance?: boolean;
+  employmentInsuranceDeductionFromMonth?: string;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
   incomeTaxCategory?: string;
@@ -260,7 +263,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       commute_allowance_per_workday as "commuteAllowancePerWorkday",
       commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
       apply_social_insurance as "applySocialInsurance",
+      social_insurance_standard_monthly_amount as "socialInsuranceStandardMonthlyAmount",
+      social_insurance_deduction_from as "socialInsuranceDeductionFrom",
       apply_employment_insurance as "applyEmploymentInsurance",
+      employment_insurance_deduction_from as "employmentInsuranceDeductionFrom",
       apply_labor_insurance as "applyLaborInsurance",
       apply_income_tax as "applyIncomeTax",
       income_tax_category as "incomeTaxCategory",
@@ -305,6 +311,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
+    const storeApplySocialInsurance = Boolean(storeSetting?.applySocialInsurance);
+    const storeSocialInsuranceStandardMonthlyAmount = toNullableNumber(storeSetting?.socialInsuranceStandardMonthlyAmount);
+    const storeSocialInsuranceDeductionFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.socialInsuranceDeductionFromMonth ?? storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
+    const storeApplyEmploymentInsurance = Boolean(storeSetting?.applyEmploymentInsurance);
+    const storeEmploymentInsuranceDeductionFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.employmentInsuranceDeductionFromMonth ?? storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeApplyIncomeTax = Boolean(storeSetting?.applyIncomeTax);
     const storeIncomeTaxCategory = storeApplyIncomeTax ? normalizeIncomeTaxCategory(storeSetting?.incomeTaxCategory) : "none";
     const storeDependentCount = normalizeDependentCount(storeSetting?.dependentCount);
@@ -321,7 +332,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const currentCommuteAllowancePerWorkday = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowancePerWorkday) ?? 0 : storeCommuteAllowancePerWorkday;
     const currentCommuteAllowanceMonthlyCap = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowanceMonthlyCap) : storeCommuteAllowanceMonthlyCap;
     const currentApplySocialInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
-    const currentApplyEmploymentInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyEmploymentInsurance) : Boolean(storeSetting?.applyEmploymentInsurance);
+    const currentSocialInsuranceStandardMonthlyAmount = shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.socialInsuranceStandardMonthlyAmount as number | string | null | undefined) : storeSocialInsuranceStandardMonthlyAmount;
+    const currentSocialInsuranceDeductionFrom = shouldKeepCurrentWageUntilFutureDate ? toNullableDate(String(existingStore?.socialInsuranceDeductionFrom ?? "").slice(0, 10)) : (storeApplySocialInsurance ? storeSocialInsuranceDeductionFrom : null);
+    const currentApplyEmploymentInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyEmploymentInsurance) : storeApplyEmploymentInsurance;
+    const currentEmploymentInsuranceDeductionFrom = shouldKeepCurrentWageUntilFutureDate ? toNullableDate(String(existingStore?.employmentInsuranceDeductionFrom ?? "").slice(0, 10)) : (storeApplyEmploymentInsurance ? storeEmploymentInsuranceDeductionFrom : null);
     const currentApplyLaborInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyLaborInsurance) : Boolean(storeSetting?.applyLaborInsurance);
     const currentApplyIncomeTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : storeApplyIncomeTax;
     const currentIncomeTaxCategory = shouldKeepCurrentWageUntilFutureDate ? normalizeIncomeTaxCategory(String(existingStore?.incomeTaxCategory ?? "")) : storeIncomeTaxCategory;
@@ -344,7 +358,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from,
         apply_employment_insurance,
+        employment_insurance_deduction_from,
         apply_labor_insurance,
         apply_income_tax,
         income_tax_category,
@@ -367,7 +384,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${currentCommuteAllowancePerWorkday},
         ${currentCommuteAllowanceMonthlyCap},
         ${currentApplySocialInsurance},
+        ${currentSocialInsuranceStandardMonthlyAmount},
+        ${currentSocialInsuranceDeductionFrom},
         ${currentApplyEmploymentInsurance},
+        ${currentEmploymentInsuranceDeductionFrom},
         ${currentApplyLaborInsurance},
         ${currentApplyIncomeTax},
         ${currentIncomeTaxCategory},
@@ -387,7 +407,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from,
         apply_employment_insurance,
+        employment_insurance_deduction_from,
         apply_labor_insurance,
         apply_income_tax,
         income_tax_category,
@@ -408,8 +431,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${storeMonthlySalary},
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
-        ${Boolean(storeSetting?.applySocialInsurance)},
-        ${Boolean(storeSetting?.applyEmploymentInsurance)},
+        ${storeApplySocialInsurance},
+        ${storeSocialInsuranceStandardMonthlyAmount},
+        ${storeApplySocialInsurance ? storeSocialInsuranceDeductionFrom : null},
+        ${storeApplyEmploymentInsurance},
+        ${storeApplyEmploymentInsurance ? storeEmploymentInsuranceDeductionFrom : null},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${storeApplyIncomeTax},
         ${storeIncomeTaxCategory},
@@ -429,7 +455,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         commute_allowance_per_workday = excluded.commute_allowance_per_workday,
         commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
         apply_social_insurance = excluded.apply_social_insurance,
+        social_insurance_standard_monthly_amount = excluded.social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from = excluded.social_insurance_deduction_from,
         apply_employment_insurance = excluded.apply_employment_insurance,
+        employment_insurance_deduction_from = excluded.employment_insurance_deduction_from,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
         income_tax_category = excluded.income_tax_category,

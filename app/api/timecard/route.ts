@@ -7,6 +7,8 @@ import {
   isTimecardPunchType,
   summarizePayroll,
   summarizeTimecardDays,
+  type EmploymentInsuranceRateRow,
+  type SocialInsuranceRow,
   type TimecardEmployee,
   type TimecardPunch,
   type WithholdingTaxRow
@@ -61,6 +63,8 @@ const emptyPayrollTotals = {
   laborCost: 0,
   overtimePay: 0,
   nightPremiumPay: 0,
+  socialInsurance: 0,
+  employmentInsurance: 0,
   incomeTax: 0,
   commuteAllowance: 0,
   totalPay: 0
@@ -115,6 +119,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       employees.name,
       employees.role,
       employees.status,
+      employees.birth_date as "birthDate",
       coalesce(
         array_agg(stores.id::text order by stores.name) filter (where stores.id is not null),
         '{}'::text[]
@@ -129,6 +134,12 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
             'monthlySalary', payroll_settings.monthly_salary,
             'commuteAllowancePerWorkday', payroll_settings.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', payroll_settings.commute_allowance_monthly_cap,
+            'socialInsurancePrefecture', stores.social_insurance_prefecture,
+            'applySocialInsurance', payroll_settings.apply_social_insurance,
+            'socialInsuranceStandardMonthlyAmount', payroll_settings.social_insurance_standard_monthly_amount,
+            'socialInsuranceDeductionFrom', payroll_settings.social_insurance_deduction_from,
+            'applyEmploymentInsurance', payroll_settings.apply_employment_insurance,
+            'employmentInsuranceDeductionFrom', payroll_settings.employment_insurance_deduction_from,
             'applyIncomeTax', payroll_settings.apply_income_tax,
             'incomeTaxCategory', payroll_settings.income_tax_category,
             'dependentCount', payroll_settings.dependent_count,
@@ -153,6 +164,11 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_stores.monthly_salary,
         employee_work_stores.commute_allowance_per_workday,
         employee_work_stores.commute_allowance_monthly_cap,
+        employee_work_stores.apply_social_insurance,
+        employee_work_stores.social_insurance_standard_monthly_amount,
+        employee_work_stores.social_insurance_deduction_from,
+        employee_work_stores.apply_employment_insurance,
+        employee_work_stores.employment_insurance_deduction_from,
         employee_work_stores.apply_income_tax,
         employee_work_stores.income_tax_category,
         employee_work_stores.dependent_count,
@@ -168,6 +184,11 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_store_payroll_history.monthly_salary,
         employee_work_store_payroll_history.commute_allowance_per_workday,
         employee_work_store_payroll_history.commute_allowance_monthly_cap,
+        employee_work_store_payroll_history.apply_social_insurance,
+        employee_work_store_payroll_history.social_insurance_standard_monthly_amount,
+        employee_work_store_payroll_history.social_insurance_deduction_from,
+        employee_work_store_payroll_history.apply_employment_insurance,
+        employee_work_store_payroll_history.employment_insurance_deduction_from,
         employee_work_store_payroll_history.apply_income_tax,
         employee_work_store_payroll_history.income_tax_category,
         employee_work_store_payroll_history.dependent_count,
@@ -193,6 +214,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
     name: String(row.name),
     role: String(row.role),
     status: String(row.status),
+    birthDate: row.birthDate ? String(row.birthDate).slice(0, 10) : null,
     storeIds: Array.isArray(row.storeIds) ? row.storeIds.map(String) : [],
     storePayrollSettings: (Array.isArray(row.storePayrollSettings) ? row.storePayrollSettings : []).map((setting) => ({
       storeId: String(setting.storeId),
@@ -202,6 +224,12 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       monthlySalary: toMoneyNumber(setting.monthlySalary),
       commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0,
       commuteAllowanceMonthlyCap: toMoneyNumber(setting.commuteAllowanceMonthlyCap),
+      socialInsurancePrefecture: String(setting.socialInsurancePrefecture ?? "福岡県"),
+      applySocialInsurance: setting.applySocialInsurance === true,
+      socialInsuranceStandardMonthlyAmount: toMoneyNumber(setting.socialInsuranceStandardMonthlyAmount),
+      socialInsuranceDeductionFrom: setting.socialInsuranceDeductionFrom ? String(setting.socialInsuranceDeductionFrom).slice(0, 10) : null,
+      applyEmploymentInsurance: setting.applyEmploymentInsurance === true,
+      employmentInsuranceDeductionFrom: setting.employmentInsuranceDeductionFrom ? String(setting.employmentInsuranceDeductionFrom).slice(0, 10) : null,
       applyIncomeTax: setting.applyIncomeTax === true,
       incomeTaxCategory: setting.incomeTaxCategory === "kou" || setting.incomeTaxCategory === "otsu" ? setting.incomeTaxCategory : "none",
       dependentCount: Math.max(0, Math.min(7, Math.round(Number(setting.dependentCount ?? 0) || 0))),
@@ -247,6 +275,55 @@ async function getWithholdingTaxRowsForMonth(month: string) {
     otsuTax: row.otsuTax === null ? null : Number(row.otsuTax),
     otsuRate: row.otsuRate === null ? null : Number(row.otsuRate)
   })) satisfies WithholdingTaxRow[];
+}
+
+async function getSocialInsuranceRowsForMonth(month: string) {
+  const rows = await sql`
+    select
+      social_insurance_table_rows.prefecture,
+      social_insurance_table_rows.standard_monthly_amount as "standardMonthlyAmount",
+      social_insurance_table_rows.health_half_without_care as "healthHalfWithoutCare",
+      social_insurance_table_rows.health_half_with_care as "healthHalfWithCare",
+      case
+        when social_insurance_tables.child_support_effective_from <= ${`${month}-01`}::date
+        then social_insurance_table_rows.child_support_half
+        else null
+      end as "childSupportHalf",
+      social_insurance_table_rows.pension_half as "pensionHalf"
+    from social_insurance_tables
+    join social_insurance_table_rows
+      on social_insurance_table_rows.table_id = social_insurance_tables.id
+    where social_insurance_tables.effective_from <= ${`${month}-01`}::date
+      and social_insurance_tables.is_active = true
+    order by social_insurance_tables.effective_from desc, social_insurance_table_rows.sort_order asc
+  `;
+  return rows.map((row) => ({
+    prefecture: String(row.prefecture),
+    standardMonthlyAmount: Number(row.standardMonthlyAmount ?? 0),
+    healthHalfWithoutCare: row.healthHalfWithoutCare === null ? null : Number(row.healthHalfWithoutCare),
+    healthHalfWithCare: row.healthHalfWithCare === null ? null : Number(row.healthHalfWithCare),
+    childSupportHalf: row.childSupportHalf === null ? null : Number(row.childSupportHalf),
+    pensionHalf: row.pensionHalf === null ? null : Number(row.pensionHalf)
+  })) satisfies SocialInsuranceRow[];
+}
+
+async function getEmploymentInsuranceRateRowsForMonth(month: string) {
+  const rows = await sql`
+    select
+      employment_insurance_rate_rows.business_type as "businessType",
+      employment_insurance_rate_rows.employee_rate as "employeeRate"
+    from employment_insurance_rate_tables
+    join employment_insurance_rate_rows
+      on employment_insurance_rate_rows.table_id = employment_insurance_rate_tables.id
+    where employment_insurance_rate_tables.effective_from <= ${`${month}-01`}::date
+      and employment_insurance_rate_tables.effective_to >= ${`${month}-01`}::date
+      and employment_insurance_rate_tables.is_active = true
+    order by employment_insurance_rate_tables.effective_from desc, employment_insurance_rate_rows.sort_order asc
+  `;
+  return rows.map((row) => ({
+    businessType: String(row.businessType),
+    employeeRate: Number(row.employeeRate ?? 0)
+  })) satisfies EmploymentInsuranceRateRow[];
 }
 
 async function canPunchForEmployee(storeId: string, employeeId: string) {
@@ -521,6 +598,8 @@ export async function GET(request: Request) {
   const canViewPayroll = timecardPayrollViewRoles.has(session.role);
   const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
   const withholdingTaxRows = canViewPayroll ? await getWithholdingTaxRowsForMonth(month) : [];
+  const socialInsuranceRows = canViewPayroll ? await getSocialInsuranceRowsForMonth(month) : [];
+  const employmentInsuranceRateRows = canViewPayroll ? await getEmploymentInsuranceRateRowsForMonth(month) : [];
 
   const punches = selectedStoreId ? await sql`
     select
@@ -561,7 +640,12 @@ export async function GET(request: Request) {
     workDateStart: startDate,
     workDateEndExclusive: endDate
   });
-  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, { withholdingTaxRows }) : { rows: [], totals: emptyPayrollTotals };
+  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, {
+    month,
+    withholdingTaxRows,
+    socialInsuranceRows,
+    employmentInsuranceRateRows
+  }) : { rows: [], totals: emptyPayrollTotals };
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
     : null;
@@ -834,6 +918,8 @@ export async function POST(request: Request) {
     const scope = await getSessionStoreScope(session);
     const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
     const withholdingTaxRows = await getWithholdingTaxRowsForMonth(month);
+    const socialInsuranceRows = await getSocialInsuranceRowsForMonth(month);
+    const employmentInsuranceRateRows = await getEmploymentInsuranceRateRowsForMonth(month);
     const punches = await sql`
       select
         timecard_punches.id::text,
@@ -871,7 +957,12 @@ export async function POST(request: Request) {
       workDateStart: startDate,
       workDateEndExclusive: endDate
     });
-    const payroll = summarizePayroll(employees, dailySummaries, { withholdingTaxRows });
+    const payroll = summarizePayroll(employees, dailySummaries, {
+      month,
+      withholdingTaxRows,
+      socialInsuranceRows,
+      employmentInsuranceRateRows
+    });
 
     const upserted = await sql`
       insert into timecard_payroll_confirmations (

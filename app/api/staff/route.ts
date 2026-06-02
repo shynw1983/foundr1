@@ -51,7 +51,10 @@ type WorkStoreSettingPayload = {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean;
+  socialInsuranceStandardMonthlyAmount?: number | string | null;
+  socialInsuranceDeductionFromMonth?: string;
   applyEmploymentInsurance?: boolean;
+  employmentInsuranceDeductionFromMonth?: string;
   applyLaborInsurance?: boolean;
   applyIncomeTax?: boolean;
   incomeTaxCategory?: string;
@@ -233,7 +236,10 @@ export async function GET() {
           'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday,
           'commuteAllowanceMonthlyCap', employee_work_stores.commute_allowance_monthly_cap,
           'applySocialInsurance', employee_work_stores.apply_social_insurance,
+          'socialInsuranceStandardMonthlyAmount', employee_work_stores.social_insurance_standard_monthly_amount,
+          'socialInsuranceDeductionFrom', employee_work_stores.social_insurance_deduction_from,
           'applyEmploymentInsurance', employee_work_stores.apply_employment_insurance,
+          'employmentInsuranceDeductionFrom', employee_work_stores.employment_insurance_deduction_from,
           'applyLaborInsurance', employee_work_stores.apply_labor_insurance,
           'applyIncomeTax', employee_work_stores.apply_income_tax,
           'incomeTaxCategory', employee_work_stores.income_tax_category,
@@ -258,7 +264,10 @@ export async function GET() {
             'commuteAllowancePerWorkday', employee_work_store_payroll_history.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', employee_work_store_payroll_history.commute_allowance_monthly_cap,
             'applySocialInsurance', employee_work_store_payroll_history.apply_social_insurance,
+            'socialInsuranceStandardMonthlyAmount', employee_work_store_payroll_history.social_insurance_standard_monthly_amount,
+            'socialInsuranceDeductionFrom', employee_work_store_payroll_history.social_insurance_deduction_from,
             'applyEmploymentInsurance', employee_work_store_payroll_history.apply_employment_insurance,
+            'employmentInsuranceDeductionFrom', employee_work_store_payroll_history.employment_insurance_deduction_from,
             'applyLaborInsurance', employee_work_store_payroll_history.apply_labor_insurance,
             'applyIncomeTax', employee_work_store_payroll_history.apply_income_tax,
             'incomeTaxCategory', employee_work_store_payroll_history.income_tax_category,
@@ -437,6 +446,11 @@ export async function POST(request: Request) {
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
+    const storeApplySocialInsurance = Boolean(storeSetting?.applySocialInsurance);
+    const storeSocialInsuranceStandardMonthlyAmount = toNullableNumber(storeSetting?.socialInsuranceStandardMonthlyAmount);
+    const storeSocialInsuranceDeductionFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.socialInsuranceDeductionFromMonth ?? storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
+    const storeApplyEmploymentInsurance = Boolean(storeSetting?.applyEmploymentInsurance);
+    const storeEmploymentInsuranceDeductionFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.employmentInsuranceDeductionFromMonth ?? storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeApplyIncomeTax = Boolean(storeSetting?.applyIncomeTax);
     const storeIncomeTaxCategory = storeApplyIncomeTax ? normalizeIncomeTaxCategory(storeSetting?.incomeTaxCategory) : "none";
     const storeDependentCount = normalizeDependentCount(storeSetting?.dependentCount);
@@ -460,7 +474,10 @@ export async function POST(request: Request) {
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from,
         apply_employment_insurance,
+        employment_insurance_deduction_from,
         apply_labor_insurance,
         apply_income_tax,
         income_tax_category,
@@ -482,8 +499,11 @@ export async function POST(request: Request) {
         ${storeMonthlySalary},
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
-        ${Boolean(storeSetting?.applySocialInsurance)},
-        ${Boolean(storeSetting?.applyEmploymentInsurance)},
+        ${storeApplySocialInsurance},
+        ${storeSocialInsuranceStandardMonthlyAmount},
+        ${storeApplySocialInsurance ? storeSocialInsuranceDeductionFrom : null},
+        ${storeApplyEmploymentInsurance},
+        ${storeApplyEmploymentInsurance ? storeEmploymentInsuranceDeductionFrom : null},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${storeApplyIncomeTax},
         ${storeIncomeTaxCategory},
@@ -503,7 +523,10 @@ export async function POST(request: Request) {
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
+        social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from,
         apply_employment_insurance,
+        employment_insurance_deduction_from,
         apply_labor_insurance,
         apply_income_tax,
         income_tax_category,
@@ -524,8 +547,11 @@ export async function POST(request: Request) {
         ${storeMonthlySalary},
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
-        ${Boolean(storeSetting?.applySocialInsurance)},
-        ${Boolean(storeSetting?.applyEmploymentInsurance)},
+        ${storeApplySocialInsurance},
+        ${storeSocialInsuranceStandardMonthlyAmount},
+        ${storeApplySocialInsurance ? storeSocialInsuranceDeductionFrom : null},
+        ${storeApplyEmploymentInsurance},
+        ${storeApplyEmploymentInsurance ? storeEmploymentInsuranceDeductionFrom : null},
         ${Boolean(storeSetting?.applyLaborInsurance)},
         ${storeApplyIncomeTax},
         ${storeIncomeTaxCategory},
@@ -545,7 +571,10 @@ export async function POST(request: Request) {
         commute_allowance_per_workday = excluded.commute_allowance_per_workday,
         commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
         apply_social_insurance = excluded.apply_social_insurance,
+        social_insurance_standard_monthly_amount = excluded.social_insurance_standard_monthly_amount,
+        social_insurance_deduction_from = excluded.social_insurance_deduction_from,
         apply_employment_insurance = excluded.apply_employment_insurance,
+        employment_insurance_deduction_from = excluded.employment_insurance_deduction_from,
         apply_labor_insurance = excluded.apply_labor_insurance,
         apply_income_tax = excluded.apply_income_tax,
         income_tax_category = excluded.income_tax_category,

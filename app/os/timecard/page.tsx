@@ -88,6 +88,8 @@ type PayrollRow = {
   overtimePay?: number;
   nightPremiumPay?: number;
   basePay: number;
+  socialInsurance?: number;
+  employmentInsurance?: number;
   incomeTax?: number;
   commuteAllowance: number;
   totalPay: number;
@@ -103,6 +105,8 @@ type PayrollTotals = {
   laborCost: number;
   overtimePay?: number;
   nightPremiumPay?: number;
+  socialInsurance?: number;
+  employmentInsurance?: number;
   incomeTax?: number;
   commuteAllowance: number;
   totalPay: number;
@@ -550,6 +554,7 @@ export function TimecardPage({
   const [attendanceCsvFile, setAttendanceCsvFile] = useState<File | null>(null);
   const [attendanceImportMessage, setAttendanceImportMessage] = useState("");
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
+  const [isAttendanceImportOpen, setIsAttendanceImportOpen] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
@@ -589,6 +594,8 @@ export function TimecardPage({
     laborCost: 0,
     overtimePay: 0,
     nightPremiumPay: 0,
+    socialInsurance: 0,
+    employmentInsurance: 0,
     incomeTax: 0,
     commuteAllowance: 0,
     totalPay: 0
@@ -1094,38 +1101,40 @@ export function TimecardPage({
               {canViewPayroll ? (
                 <>
               <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost)} note={`交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
-              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`源泉 ${formatMoney(displayedPayrollTotals.incomeTax ?? 0)}${payrollConfirmation ? " / 確定済み" : ""}`} />
+              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`控除 ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0))}${payrollConfirmation ? " / 確定済み" : ""}`} />
             </>
           ) : null}
         </section>
 
-        {data?.canEditActualTime ? (
+        {data?.canEditActualTime && mainView === "schedule" ? (
           <section className="timecard-import-panel">
-            <div className="panel-title">
-              <FileUp />
-              <div>
-                <h3>勤怠CSV取り込み</h3>
+            <button className="secondary-button timecard-import-toggle" type="button" onClick={() => setIsAttendanceImportOpen((current) => !current)}>
+              <FileUp size={16} />
+              勤怠CSV取り込み
+            </button>
+            {isAttendanceImportOpen ? (
+              <div className="timecard-import-body">
                 <p>選択中の店舗と月度に Smaregi 勤怠CSVを取り込みます。同じ月度のCSV取込データだけを置き換えます。</p>
+                <div className="timecard-import-controls">
+                  <label>
+                    <span>CSVファイル</span>
+                    <input
+                      key={attendanceCsvFile ? "attendance-csv-selected" : "attendance-csv-empty"}
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={(event) => {
+                        setAttendanceCsvFile(event.target.files?.[0] ?? null);
+                        setAttendanceImportMessage("");
+                      }}
+                    />
+                  </label>
+                  <button className="secondary-button" type="button" disabled={!attendanceCsvFile || isImportingAttendance} onClick={() => void importAttendanceCsv()}>
+                    {isImportingAttendance ? "取り込み中" : "CSVを取り込む"}
+                  </button>
+                  <small>{attendanceCsvFile ? `${selectedStore?.name ?? "店舗"} / ${month} / ${attendanceCsvFile.name}` : `${selectedStore?.name ?? "店舗"} / ${month}`}</small>
+                </div>
               </div>
-            </div>
-            <div className="timecard-import-controls">
-              <label>
-                <span>CSVファイル</span>
-                <input
-                  key={attendanceCsvFile ? "attendance-csv-selected" : "attendance-csv-empty"}
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(event) => {
-                    setAttendanceCsvFile(event.target.files?.[0] ?? null);
-                    setAttendanceImportMessage("");
-                  }}
-                />
-              </label>
-              <button className="secondary-button" type="button" disabled={!attendanceCsvFile || isImportingAttendance} onClick={() => void importAttendanceCsv()}>
-                {isImportingAttendance ? "取り込み中" : "CSVを取り込む"}
-              </button>
-              <small>{attendanceCsvFile ? `${selectedStore?.name ?? "店舗"} / ${month} / ${attendanceCsvFile.name}` : `${selectedStore?.name ?? "店舗"} / ${month}`}</small>
-            </div>
+            ) : null}
             {attendanceImportMessage ? <p className="timecard-import-message">{attendanceImportMessage}</p> : null}
           </section>
         ) : null}
@@ -1516,6 +1525,8 @@ export function TimecardPage({
                     <th>時間外</th>
                     <th>深夜割増</th>
                     <th>交通費</th>
+                    <th>社会保険</th>
+                    <th>雇用保険</th>
                     <th>源泉所得税</th>
                     <th>差引支給額</th>
                     <th>確認</th>
@@ -1534,6 +1545,8 @@ export function TimecardPage({
                       <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
                       <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
                       <td>{formatMoney(row.commuteAllowance)}</td>
+                      <td>{formatMoney(row.socialInsurance ?? 0)}</td>
+                      <td>{formatMoney(row.employmentInsurance ?? 0)}</td>
                       <td>{formatMoney(row.incomeTax ?? 0)}</td>
                       <td><strong>{formatMoney(row.totalPay)}</strong></td>
                       <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
@@ -1571,6 +1584,8 @@ export function TimecardPage({
                       <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
                       <MetricCard label="時間外労働賃金" value={formatPayrollDetailMoney(selectedPayrollRow.overtimePay ?? 0)} note="1日8時間超過を1.25倍で計算" />
                       <MetricCard label="深夜割増" value={formatPayrollDetailMoney(selectedPayrollRow.nightPremiumPay ?? 0)} note="22:00-05:00を0.25倍で計算" />
+                      <MetricCard label="社会保険" value={formatMoney(selectedPayrollRow.socialInsurance ?? 0)} note="店舗の社会保険所在地と標準報酬月額で計算" />
+                      <MetricCard label="雇用保険" value={formatMoney(selectedPayrollRow.employmentInsurance ?? 0)} note="一般の事業の労働者負担率で計算" />
                       <MetricCard label="源泉所得税" value={formatMoney(selectedPayrollRow.incomeTax ?? 0)} note="税額表に基づく控除" />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>

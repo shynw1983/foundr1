@@ -31,7 +31,10 @@ type WorkStoreOption = StoreOption & {
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
+  socialInsuranceStandardMonthlyAmount?: number | string | null;
+  socialInsuranceDeductionFrom?: string | null;
   applyEmploymentInsurance?: boolean | null;
+  employmentInsuranceDeductionFrom?: string | null;
   applyLaborInsurance?: boolean | null;
   applyIncomeTax?: boolean | null;
   incomeTaxCategory?: string | null;
@@ -316,7 +319,10 @@ export default function StaffPage() {
         commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0"),
         commuteAllowanceMonthlyCap: String(formData.get(`commuteAllowanceMonthlyCap:${store.id}`) ?? ""),
         applySocialInsurance: formData.getAll("applySocialInsuranceStoreIds").map((value) => String(value)).includes(store.id),
+        socialInsuranceStandardMonthlyAmount: String(formData.get(`socialInsuranceStandardMonthlyAmount:${store.id}`) ?? ""),
+        socialInsuranceDeductionFromMonth: String(formData.get(`socialInsuranceDeductionFromMonth:${store.id}`) ?? ""),
         applyEmploymentInsurance: formData.getAll("applyEmploymentInsuranceStoreIds").map((value) => String(value)).includes(store.id),
+        employmentInsuranceDeductionFromMonth: String(formData.get(`employmentInsuranceDeductionFromMonth:${store.id}`) ?? ""),
         applyLaborInsurance: formData.getAll("applyLaborInsuranceStoreIds").map((value) => String(value)).includes(store.id),
         applyIncomeTax: formData.getAll("applyIncomeTaxStoreIds").map((value) => String(value)).includes(store.id),
         incomeTaxCategory: String(formData.get(`incomeTaxCategory:${store.id}`) ?? "none"),
@@ -900,9 +906,21 @@ function StaffFormFields({
                     <input type="checkbox" name="applySocialInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applySocialInsurance)} />
                     社会保険
                   </label>
+                  <label className="staff-tax-select">
+                    <span>標準報酬月額</span>
+                    <input name={`socialInsuranceStandardMonthlyAmount:${store.id}`} type="number" min="0" step="1000" defaultValue={setting?.socialInsuranceStandardMonthlyAmount ?? ""} placeholder="例: 220000" />
+                  </label>
+                  <label className="staff-tax-select">
+                    <span>社保控除開始月</span>
+                    <input name={`socialInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.socialInsuranceDeductionFrom ?? "").slice(0, 7)} />
+                  </label>
                   <label>
                     <input type="checkbox" name="applyEmploymentInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyEmploymentInsurance)} />
                     雇用保険
+                  </label>
+                  <label className="staff-tax-select">
+                    <span>雇保控除開始月</span>
+                    <input name={`employmentInsuranceDeductionFromMonth:${store.id}`} type="month" defaultValue={String(setting?.employmentInsuranceDeductionFrom ?? "").slice(0, 7)} />
                   </label>
                   <label>
                     <input type="checkbox" name="applyLaborInsuranceStoreIds" value={store.id} defaultChecked={Boolean(setting?.applyLaborInsurance)} />

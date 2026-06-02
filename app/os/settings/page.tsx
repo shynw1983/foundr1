@@ -36,6 +36,25 @@ type WithholdingTaxTable = {
   rowCount: number;
 };
 
+type SocialInsuranceTable = {
+  id: string;
+  fiscalYear: number;
+  title: string;
+  sourceFileName: string | null;
+  effectiveFrom: string;
+  rowCount: number;
+};
+
+type EmploymentInsuranceTable = {
+  id: string;
+  fiscalYear: number;
+  title: string;
+  sourceFileName: string | null;
+  effectiveFrom: string;
+  effectiveTo: string;
+  rowCount: number;
+};
+
 type PayrollStatutoryAlert = {
   key: string;
   level: "critical" | "warning";
@@ -49,18 +68,28 @@ export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [taxTables, setTaxTables] = useState<WithholdingTaxTable[]>([]);
+  const [socialInsuranceTables, setSocialInsuranceTables] = useState<SocialInsuranceTable[]>([]);
+  const [employmentInsuranceTables, setEmploymentInsuranceTables] = useState<EmploymentInsuranceTable[]>([]);
   const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
   const [taxFile, setTaxFile] = useState<File | null>(null);
+  const [socialInsuranceFile, setSocialInsuranceFile] = useState<File | null>(null);
+  const [employmentInsuranceFile, setEmploymentInsuranceFile] = useState<File | null>(null);
   const [taxYear, setTaxYear] = useState(String(new Date().getFullYear()));
+  const [socialInsuranceYear, setSocialInsuranceYear] = useState(String(new Date().getFullYear()));
+  const [employmentInsuranceYear, setEmploymentInsuranceYear] = useState(String(new Date().getFullYear()));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
+  const [uploadingSocialInsurance, setUploadingSocialInsurance] = useState(false);
+  const [uploadingEmploymentInsurance, setUploadingEmploymentInsurance] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
-      const [settingsResponse, taxResponse, alertResponse] = await Promise.all([
+      const [settingsResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse] = await Promise.all([
         fetch("/api/settings?module=store", { cache: "no-store" }),
         fetch("/api/settings/withholding-tax", { cache: "no-store" }),
+        fetch("/api/settings/social-insurance", { cache: "no-store" }),
+        fetch("/api/settings/employment-insurance", { cache: "no-store" }),
         fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" })
       ]);
       if (settingsResponse.ok) {
@@ -70,6 +99,14 @@ export default function OsSettingsPage() {
       if (taxResponse.ok) {
         const body = await taxResponse.json() as { tables?: WithholdingTaxTable[] };
         setTaxTables(body.tables ?? []);
+      }
+      if (socialInsuranceResponse.ok) {
+        const body = await socialInsuranceResponse.json() as { tables?: SocialInsuranceTable[] };
+        setSocialInsuranceTables(body.tables ?? []);
+      }
+      if (employmentInsuranceResponse.ok) {
+        const body = await employmentInsuranceResponse.json() as { tables?: EmploymentInsuranceTable[] };
+        setEmploymentInsuranceTables(body.tables ?? []);
       }
       if (alertResponse.ok) {
         const body = await alertResponse.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
@@ -132,6 +169,60 @@ export default function OsSettingsPage() {
       setTaxTables(taxBody.tables ?? []);
     }
     showNotice(`源泉税表を取り込みました。${body.rowCount ?? 0}行`);
+  }
+
+  async function uploadSocialInsuranceTable() {
+    if (!socialInsuranceFile) {
+      showNotice("社会保険料表ファイルを選択してください。", "info");
+      return;
+    }
+    setUploadingSocialInsurance(true);
+    const fileBase64 = await fileToBase64(socialInsuranceFile);
+    const response = await fetch("/api/settings/social-insurance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: socialInsuranceFile.name, fileBase64, fiscalYear: socialInsuranceYear })
+    });
+    setUploadingSocialInsurance(false);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice(String(body.error ?? "社会保険料表を取り込めませんでした。"), "info");
+      return;
+    }
+    setSocialInsuranceFile(null);
+    const listResponse = await fetch("/api/settings/social-insurance", { cache: "no-store" });
+    if (listResponse.ok) {
+      const listBody = await listResponse.json() as { tables?: SocialInsuranceTable[] };
+      setSocialInsuranceTables(listBody.tables ?? []);
+    }
+    showNotice(`社会保険料表を取り込みました。${body.rowCount ?? 0}行`);
+  }
+
+  async function uploadEmploymentInsuranceTable() {
+    if (!employmentInsuranceFile) {
+      showNotice("雇用保険料率ファイルを選択してください。", "info");
+      return;
+    }
+    setUploadingEmploymentInsurance(true);
+    const fileBase64 = await fileToBase64(employmentInsuranceFile);
+    const response = await fetch("/api/settings/employment-insurance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: employmentInsuranceFile.name, fileBase64, fiscalYear: employmentInsuranceYear })
+    });
+    setUploadingEmploymentInsurance(false);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice(String(body.error ?? "雇用保険料率を取り込めませんでした。"), "info");
+      return;
+    }
+    setEmploymentInsuranceFile(null);
+    const listResponse = await fetch("/api/settings/employment-insurance", { cache: "no-store" });
+    if (listResponse.ok) {
+      const listBody = await listResponse.json() as { tables?: EmploymentInsuranceTable[] };
+      setEmploymentInsuranceTables(listBody.tables ?? []);
+    }
+    showNotice(`雇用保険料率を取り込みました。${body.rowCount ?? 0}行`);
   }
 
   return (
@@ -205,6 +296,44 @@ export default function OsSettingsPage() {
                 {uploadingTaxTable ? "取り込み中" : "源泉税表を取り込む"}
               </button>
             </div>
+            <div className="settings-tax-import">
+              <label className="settings-field">
+                <span>対象年度</span>
+                <input value={socialInsuranceYear} inputMode="numeric" onChange={(event) => setSocialInsuranceYear(event.target.value)} placeholder="例: 2026" />
+              </label>
+              <label className="settings-field">
+                <span>社会保険料表 Excel</span>
+                <input
+                  key={socialInsuranceFile ? "social-file-selected" : "social-file-empty"}
+                  type="file"
+                  accept=".xls,.xlsx"
+                  onChange={(event) => setSocialInsuranceFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button className="secondary-button" type="button" disabled={!socialInsuranceFile || uploadingSocialInsurance} onClick={() => void uploadSocialInsuranceTable()}>
+                <Upload size={16} />
+                {uploadingSocialInsurance ? "取り込み中" : "社会保険料表を取り込む"}
+              </button>
+            </div>
+            <div className="settings-tax-import">
+              <label className="settings-field">
+                <span>対象年度</span>
+                <input value={employmentInsuranceYear} inputMode="numeric" onChange={(event) => setEmploymentInsuranceYear(event.target.value)} placeholder="例: 2026" />
+              </label>
+              <label className="settings-field">
+                <span>雇用保険料率 PDF</span>
+                <input
+                  key={employmentInsuranceFile ? "employment-file-selected" : "employment-file-empty"}
+                  type="file"
+                  accept=".pdf"
+                  onChange={(event) => setEmploymentInsuranceFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button className="secondary-button" type="button" disabled={!employmentInsuranceFile || uploadingEmploymentInsurance} onClick={() => void uploadEmploymentInsuranceTable()}>
+                <Upload size={16} />
+                {uploadingEmploymentInsurance ? "取り込み中" : "雇用保険料率を取り込む"}
+              </button>
+            </div>
             <div className="settings-tax-table-list">
               {taxTables.length ? taxTables.map((table) => (
                 <article key={table.id}>
@@ -214,6 +343,18 @@ export default function OsSettingsPage() {
               )) : (
                 <p className="empty-state-text">源泉税表はまだ登録されていません。</p>
               )}
+              {socialInsuranceTables.map((table) => (
+                <article key={table.id}>
+                  <strong>{table.fiscalYear}年度 / {table.title}</strong>
+                  <span>社会保険 {table.rowCount}行 / {table.sourceFileName ?? "ファイル名なし"}</span>
+                </article>
+              ))}
+              {employmentInsuranceTables.map((table) => (
+                <article key={table.id}>
+                  <strong>{table.fiscalYear}年度 / {table.title}</strong>
+                  <span>雇用保険 {table.rowCount}行 / {table.sourceFileName ?? "ファイル名なし"} / {String(table.effectiveFrom).slice(0, 10)}〜{String(table.effectiveTo).slice(0, 10)}</span>
+                </article>
+              ))}
             </div>
             <div className="statutory-schedule-list" aria-label="給与法定データ更新時期">
               <article>

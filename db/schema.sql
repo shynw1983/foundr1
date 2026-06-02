@@ -157,7 +157,10 @@ create table if not exists employee_work_stores (
   commute_allowance_per_workday numeric not null default 0,
   commute_allowance_monthly_cap numeric,
   apply_social_insurance boolean not null default false,
+  social_insurance_standard_monthly_amount numeric(12, 2),
+  social_insurance_deduction_from date,
   apply_employment_insurance boolean not null default false,
+  employment_insurance_deduction_from date,
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
@@ -178,7 +181,10 @@ alter table employee_work_stores add column if not exists monthly_salary numeric
 alter table employee_work_stores add column if not exists commute_allowance_per_workday numeric not null default 0;
 alter table employee_work_stores add column if not exists commute_allowance_monthly_cap numeric;
 alter table employee_work_stores add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_stores add column if not exists social_insurance_standard_monthly_amount numeric(12, 2);
+alter table employee_work_stores add column if not exists social_insurance_deduction_from date;
 alter table employee_work_stores add column if not exists apply_employment_insurance boolean not null default false;
+alter table employee_work_stores add column if not exists employment_insurance_deduction_from date;
 alter table employee_work_stores add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_stores add column if not exists apply_income_tax boolean not null default false;
 alter table employee_work_stores add column if not exists income_tax_category text not null default 'none';
@@ -240,7 +246,10 @@ create table if not exists timecard_employee_settings (
 
 alter table timecard_employee_settings add column if not exists commute_allowance_monthly_cap numeric(12, 2);
 alter table timecard_employee_settings add column if not exists apply_social_insurance boolean not null default false;
+alter table timecard_employee_settings add column if not exists social_insurance_standard_monthly_amount numeric(12, 2);
+alter table timecard_employee_settings add column if not exists social_insurance_deduction_from date;
 alter table timecard_employee_settings add column if not exists apply_employment_insurance boolean not null default false;
+alter table timecard_employee_settings add column if not exists employment_insurance_deduction_from date;
 alter table timecard_employee_settings add column if not exists apply_labor_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists apply_income_tax boolean not null default false;
 alter table timecard_employee_settings add column if not exists income_tax_category text not null default 'none';
@@ -258,7 +267,10 @@ create table if not exists employee_work_store_payroll_history (
   commute_allowance_per_workday numeric(12, 2) not null default 0,
   commute_allowance_monthly_cap numeric(12, 2),
   apply_social_insurance boolean not null default false,
+  social_insurance_standard_monthly_amount numeric(12, 2),
+  social_insurance_deduction_from date,
   apply_employment_insurance boolean not null default false,
+  employment_insurance_deduction_from date,
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
@@ -272,7 +284,10 @@ create table if not exists employee_work_store_payroll_history (
 
 alter table employee_work_store_payroll_history add column if not exists commute_allowance_monthly_cap numeric(12, 2);
 alter table employee_work_store_payroll_history add column if not exists apply_social_insurance boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists social_insurance_standard_monthly_amount numeric(12, 2);
+alter table employee_work_store_payroll_history add column if not exists social_insurance_deduction_from date;
 alter table employee_work_store_payroll_history add column if not exists apply_employment_insurance boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists employment_insurance_deduction_from date;
 alter table employee_work_store_payroll_history add column if not exists apply_labor_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists apply_income_tax boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists income_tax_category text not null default 'none';
@@ -307,7 +322,10 @@ set
   commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0),
   commute_allowance_monthly_cap = coalesce(employee_work_stores.commute_allowance_monthly_cap, latest_settings.commute_allowance_monthly_cap),
   apply_social_insurance = coalesce(latest_settings.apply_social_insurance, employee_work_stores.apply_social_insurance),
+  social_insurance_standard_monthly_amount = coalesce(latest_settings.social_insurance_standard_monthly_amount, employee_work_stores.social_insurance_standard_monthly_amount),
+  social_insurance_deduction_from = coalesce(latest_settings.social_insurance_deduction_from, employee_work_stores.social_insurance_deduction_from),
   apply_employment_insurance = coalesce(latest_settings.apply_employment_insurance, employee_work_stores.apply_employment_insurance),
+  employment_insurance_deduction_from = coalesce(latest_settings.employment_insurance_deduction_from, employee_work_stores.employment_insurance_deduction_from),
   apply_labor_insurance = coalesce(latest_settings.apply_labor_insurance, employee_work_stores.apply_labor_insurance),
   apply_income_tax = coalesce(latest_settings.apply_income_tax, employee_work_stores.apply_income_tax),
   income_tax_category = coalesce(latest_settings.income_tax_category, employee_work_stores.income_tax_category),
@@ -322,7 +340,10 @@ from (
     commute_allowance_per_workday,
     commute_allowance_monthly_cap,
     apply_social_insurance,
+    social_insurance_standard_monthly_amount,
+    social_insurance_deduction_from,
     apply_employment_insurance,
+    employment_insurance_deduction_from,
     apply_labor_insurance,
     apply_income_tax,
     income_tax_category,
@@ -369,6 +390,71 @@ create table if not exists withholding_tax_table_rows (
 
 create index if not exists withholding_tax_table_rows_lookup_idx
   on withholding_tax_table_rows(table_id, salary_min, salary_max);
+
+create table if not exists social_insurance_tables (
+  id uuid primary key default gen_random_uuid(),
+  fiscal_year integer not null,
+  title text not null,
+  source_file_name text,
+  effective_from date not null,
+  child_support_effective_from date,
+  is_active boolean not null default true,
+  uploaded_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (fiscal_year)
+);
+
+create table if not exists social_insurance_table_rows (
+  id uuid primary key default gen_random_uuid(),
+  table_id uuid not null references social_insurance_tables(id) on delete cascade,
+  prefecture text not null,
+  grade text not null,
+  standard_monthly_amount integer not null,
+  reward_min integer,
+  reward_max integer,
+  health_rate_without_care numeric(8, 5),
+  health_rate_with_care numeric(8, 5),
+  child_support_rate numeric(8, 5),
+  pension_rate numeric(8, 5),
+  health_half_without_care numeric(12, 2),
+  health_half_with_care numeric(12, 2),
+  child_support_half numeric(12, 2),
+  pension_half numeric(12, 2),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists social_insurance_rows_lookup_idx
+  on social_insurance_table_rows(table_id, prefecture, standard_monthly_amount);
+
+create table if not exists employment_insurance_rate_tables (
+  id uuid primary key default gen_random_uuid(),
+  fiscal_year integer not null,
+  title text not null,
+  source_file_name text,
+  effective_from date not null,
+  effective_to date not null,
+  is_active boolean not null default true,
+  uploaded_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (fiscal_year)
+);
+
+create table if not exists employment_insurance_rate_rows (
+  id uuid primary key default gen_random_uuid(),
+  table_id uuid not null references employment_insurance_rate_tables(id) on delete cascade,
+  business_type text not null,
+  employee_rate numeric(8, 5) not null,
+  employer_rate numeric(8, 5),
+  benefit_rate numeric(8, 5),
+  two_projects_rate numeric(8, 5),
+  total_rate numeric(8, 5),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists employment_insurance_rate_rows_lookup_idx
+  on employment_insurance_rate_rows(table_id, business_type);
 
 create table if not exists timecard_punches (
   id uuid primary key default gen_random_uuid(),
