@@ -10,6 +10,16 @@ import {
 
 const workloadSettingsRoles = new Set(["owner", "manager", "store_owner"]);
 const managementRoles = new Set(["owner", "manager", "store_owner"]);
+const highLoadOrderThreshold = 8;
+const highLoadScoreThreshold = 8;
+const hourMs = 60 * 60 * 1000;
+const workloadSliceMinutes = 15;
+
+type WorkloadOrder = {
+  orderedAtMs: number;
+  total: number;
+  loadScore: number;
+};
 
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
@@ -34,15 +44,87 @@ function minutesBetween(start: Date, end: Date) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
 }
 
-function getPeakHourOrderCount(orderedTimes: number[]) {
-  const sorted = [...orderedTimes].sort((a, b) => a - b);
-  let peak = 0;
+function getPeakHourMetrics(orders: WorkloadOrder[]) {
+  const sorted = [...orders].sort((a, b) => a.orderedAtMs - b.orderedAtMs);
+  let peakOrderCount = 0;
+  let peakSales = 0;
+  let peakLoadScore = 0;
   let end = 0;
   for (let start = 0; start < sorted.length; start += 1) {
-    while (end < sorted.length && sorted[end] - sorted[start] <= 60 * 60 * 1000) end += 1;
-    peak = Math.max(peak, end - start);
+    while (end < sorted.length && sorted[end].orderedAtMs - sorted[start].orderedAtMs <= hourMs) end += 1;
+    const windowOrders = sorted.slice(start, end);
+    peakOrderCount = Math.max(peakOrderCount, windowOrders.length);
+    peakSales = Math.max(peakSales, windowOrders.reduce((sum, order) => sum + order.total, 0));
+    peakLoadScore = Math.max(peakLoadScore, windowOrders.reduce((sum, order) => sum + order.loadScore, 0));
   }
-  return peak;
+  return {
+    peakOrderCount,
+    peakSales,
+    peakLoadScore
+  };
+}
+
+function getActiveStaffCountDuringWindow(
+  shiftIntervals: Array<{ startMs: number; endMs: number }>,
+  windowStart: number,
+  windowEnd: number
+) {
+  const sliceMs = workloadSliceMinutes * 60_000;
+  let onePersonMinutes = 0;
+  let totalSampledMinutes = 0;
+
+  for (let time = windowStart; time < windowEnd; time += sliceMs) {
+    const sliceEnd = Math.min(time + sliceMs, windowEnd);
+    const sliceMinutes = Math.max(0, Math.round((sliceEnd - time) / 60_000));
+    const activeCount = shiftIntervals.filter((candidate) => candidate.startMs < sliceEnd && candidate.endMs > time).length;
+    totalSampledMinutes += sliceMinutes;
+    if (activeCount === 1) onePersonMinutes += sliceMinutes;
+  }
+
+  return {
+    onePersonMinutes,
+    totalSampledMinutes
+  };
+}
+
+function isMostlyOnePersonShift(
+  shiftIntervals: Array<{ startMs: number; endMs: number }>,
+  shiftStart: number,
+  shiftEnd: number
+) {
+  const staff = getActiveStaffCountDuringWindow(shiftIntervals, shiftStart, shiftEnd);
+  return staff.totalSampledMinutes > 0 && staff.onePersonMinutes / staff.totalSampledMinutes >= 0.5;
+}
+
+function getOnePersonHighLoadMinutes(
+  orders: WorkloadOrder[],
+  shiftIntervals: Array<{ startMs: number; endMs: number }>,
+  shiftStart: number,
+  shiftEnd: number
+) {
+  const sorted = [...orders].sort((a, b) => a.orderedAtMs - b.orderedAtMs);
+  const countedWindows: Array<{ start: number; end: number }> = [];
+  let highLoadMinutes = 0;
+
+  for (const order of sorted) {
+    const windowStart = Math.max(shiftStart, order.orderedAtMs);
+    const windowEnd = Math.min(shiftEnd, windowStart + hourMs);
+    if (windowEnd - windowStart < 30 * 60_000) continue;
+
+    const windowOrders = sorted.filter((candidate) => candidate.orderedAtMs >= windowStart && candidate.orderedAtMs <= windowEnd);
+    const orderCount = windowOrders.length;
+    const loadScore = windowOrders.reduce((sum, candidate) => sum + candidate.loadScore, 0);
+    if (orderCount < highLoadOrderThreshold && loadScore < highLoadScoreThreshold) continue;
+    const staff = getActiveStaffCountDuringWindow(shiftIntervals, windowStart, windowEnd);
+    if (staff.onePersonMinutes < 30) continue;
+
+    const overlapsCountedWindow = countedWindows.some((window) => window.start < windowEnd && window.end > windowStart);
+    if (overlapsCountedWindow) continue;
+    countedWindows.push({ start: windowStart, end: windowEnd });
+    highLoadMinutes += staff.onePersonMinutes;
+  }
+
+  return highLoadMinutes;
 }
 
 function getIdleBlockMinutes(orderedTimes: number[], shiftStart: number, shiftEnd: number) {
@@ -162,6 +244,9 @@ export async function GET(request: Request) {
       and total > 0
     order by ordered_at asc
   ` : [];
+  const averageOrderTotal = orders.length > 0
+    ? orders.reduce((sum, order) => sum + Number(order.total ?? 0), 0) / orders.length
+    : 0;
 
   const shiftIntervals = dailySummaries.map((summary) => ({
     ...summary,
@@ -176,6 +261,8 @@ export async function GET(request: Request) {
     orderCount: number;
     sales: number;
     peakHourOrderCount: number;
+    peakHourSales: number;
+    peakHourLoadScore: number;
     onePersonHighLoadMinutes: number;
     idleBlockCount: number;
     idleMinutes: number;
@@ -187,16 +274,20 @@ export async function GET(request: Request) {
       const orderedAt = new Date(String(order.orderedAt)).getTime();
       return orderedAt >= shift.startMs && orderedAt <= shift.endMs;
     });
-    const orderedTimes = shiftOrders.map((order) => new Date(String(order.orderedAt)).getTime());
+    const workloadOrders = shiftOrders.map((order) => {
+      const total = Number(order.total ?? 0);
+      return {
+        orderedAtMs: new Date(String(order.orderedAt)).getTime(),
+        total,
+        loadScore: averageOrderTotal > 0 ? Math.max(1, total / averageOrderTotal) : 1
+      };
+    });
+    const orderedTimes = workloadOrders.map((order) => order.orderedAtMs);
     const shiftSales = shiftOrders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
-    const peakHourOrderCount = getPeakHourOrderCount(orderedTimes);
-    const overlappingShiftCount = shiftIntervals.filter((candidate) => (
-      candidate.storeId === shift.storeId
-      && candidate.startMs < shift.endMs
-      && candidate.endMs > shift.startMs
-    )).length;
-    const isOnePerson = overlappingShiftCount <= 1;
-    const onePersonHighLoadMinutes = isOnePerson && peakHourOrderCount >= 8 ? 60 : 0;
+    const peakMetrics = getPeakHourMetrics(workloadOrders);
+    const storeShiftIntervals = shiftIntervals.filter((candidate) => candidate.storeId === shift.storeId);
+    const isOnePerson = isMostlyOnePersonShift(storeShiftIntervals, shift.startMs, shift.endMs);
+    const onePersonHighLoadMinutes = getOnePersonHighLoadMinutes(workloadOrders, storeShiftIntervals, shift.startMs, shift.endMs);
     const idle = getIdleBlockMinutes(orderedTimes, shift.startMs, shift.endMs);
     const entry = employeeMap.get(shift.employeeId) ?? {
       employeeId: shift.employeeId,
@@ -206,6 +297,8 @@ export async function GET(request: Request) {
       orderCount: 0,
       sales: 0,
       peakHourOrderCount: 0,
+      peakHourSales: 0,
+      peakHourLoadScore: 0,
       onePersonHighLoadMinutes: 0,
       idleBlockCount: 0,
       idleMinutes: 0
@@ -215,7 +308,9 @@ export async function GET(request: Request) {
     entry.workDays += 1;
     entry.orderCount += shiftOrders.length;
     entry.sales += shiftSales;
-    entry.peakHourOrderCount = Math.max(entry.peakHourOrderCount, peakHourOrderCount);
+    entry.peakHourOrderCount = Math.max(entry.peakHourOrderCount, peakMetrics.peakOrderCount);
+    entry.peakHourSales = Math.max(entry.peakHourSales, peakMetrics.peakSales);
+    entry.peakHourLoadScore = Math.max(entry.peakHourLoadScore, peakMetrics.peakLoadScore);
     entry.onePersonHighLoadMinutes += onePersonHighLoadMinutes;
     entry.idleBlockCount += idle.idleBlockCount;
     entry.idleMinutes += idle.idleMinutes;
@@ -231,7 +326,9 @@ export async function GET(request: Request) {
       orderCount: shiftOrders.length,
       sales: shiftSales,
       ordersPerHour: shift.workMinutes > 0 ? shiftOrders.length / (shift.workMinutes / 60) : 0,
-      peakHourOrderCount,
+      peakHourOrderCount: peakMetrics.peakOrderCount,
+      peakHourSales: peakMetrics.peakSales,
+      peakHourLoadScore: peakMetrics.peakLoadScore,
       isOnePerson,
       idleMinutes: idle.idleMinutes
     });
@@ -258,6 +355,7 @@ export async function GET(request: Request) {
     employees: employees.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount),
     busiestEmployees: [...employees].sort((a, b) => (
       b.onePersonHighLoadMinutes - a.onePersonHighLoadMinutes
+      || b.peakHourLoadScore - a.peakHourLoadScore
       || b.ordersPerHour - a.ordersPerHour
       || b.peakHourOrderCount - a.peakHourOrderCount
     )).slice(0, 5),

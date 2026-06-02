@@ -477,6 +477,26 @@ type TimecardMainView = "overview" | "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
 type TimecardPayrollView = "summary" | "employee";
 
+const timecardMonthStorageKey = "foundr1:timecard:selected-month";
+const timecardStoreStorageKey = "foundr1:timecard:selected-store-id";
+
+function getStoredTimecardMonth() {
+  if (typeof window === "undefined") return getJstMonthLabel();
+  const stored = window.localStorage.getItem(timecardMonthStorageKey);
+  return stored && /^\d{4}-\d{2}$/.test(stored) ? stored : getJstMonthLabel();
+}
+
+function getStoredTimecardStoreId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(timecardStoreStorageKey) ?? "";
+}
+
+function storeTimecardSelection(nextMonth: string, nextStoreId: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(timecardMonthStorageKey, nextMonth);
+  if (nextStoreId) window.localStorage.setItem(timecardStoreStorageKey, nextStoreId);
+}
+
 export function TimecardPage({
   initialMainView = "overview",
   initialScheduleView = "planned",
@@ -487,7 +507,7 @@ export function TimecardPage({
   initialPayrollView?: TimecardPayrollView;
 }) {
   const [data, setData] = useState<TimecardPayload | null>(null);
-  const [month, setMonth] = useState(getJstMonthLabel());
+  const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [mainView] = useState<TimecardMainView>(initialMainView);
@@ -519,6 +539,7 @@ export function TimecardPage({
       setData(body);
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
+      storeTimecardSelection(body.month, body.selectedStoreId);
       if (!options.keepShiftDraft) setShiftDraft(null);
       if (!options.keepActualDraft) setActualDraft(null);
     }
@@ -526,7 +547,8 @@ export function TimecardPage({
   }
 
   useEffect(() => {
-    void loadTimecard(month, "");
+    void loadTimecard(getStoredTimecardMonth(), getStoredTimecardStoreId());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => {
@@ -979,12 +1001,14 @@ export function TimecardPage({
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
+              storeTimecardSelection(event.target.value, selectedStoreId);
               setIsShiftMultiSelectMode(false);
               setSelectedShiftCells([]);
               void loadTimecard(event.target.value, selectedStoreId);
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
+              storeTimecardSelection(month, event.target.value);
               setIsShiftMultiSelectMode(false);
               setSelectedShiftCells([]);
               void loadTimecard(month, event.target.value);

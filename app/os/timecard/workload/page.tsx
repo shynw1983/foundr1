@@ -33,6 +33,8 @@ type WorkloadEmployee = {
   orderCount: number;
   sales: number;
   peakHourOrderCount: number;
+  peakHourSales: number;
+  peakHourLoadScore: number;
   onePersonHighLoadMinutes: number;
   idleBlockCount: number;
   idleMinutes: number;
@@ -50,6 +52,8 @@ type WorkloadShift = {
   sales: number;
   ordersPerHour: number;
   peakHourOrderCount: number;
+  peakHourSales: number;
+  peakHourLoadScore: number;
   isOnePerson: boolean;
   idleMinutes: number;
 };
@@ -132,12 +136,36 @@ function rate(value: number) {
   return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value);
 }
 
+function score(value: number) {
+  return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}pt`;
+}
+
 function percent(value: number) {
   return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}%`;
 }
 
+const timecardMonthStorageKey = "foundr1:timecard:selected-month";
+const timecardStoreStorageKey = "foundr1:timecard:selected-store-id";
+
+function getStoredTimecardMonth() {
+  if (typeof window === "undefined") return getCurrentMonth();
+  const stored = window.localStorage.getItem(timecardMonthStorageKey);
+  return stored && /^\d{4}-\d{2}$/.test(stored) ? stored : getCurrentMonth();
+}
+
+function getStoredTimecardStoreId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(timecardStoreStorageKey) ?? "";
+}
+
+function storeTimecardSelection(nextMonth: string, nextStoreId: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(timecardMonthStorageKey, nextMonth);
+  if (nextStoreId) window.localStorage.setItem(timecardStoreStorageKey, nextStoreId);
+}
+
 export default function TimecardWorkloadPage() {
-  const [month, setMonth] = useState(getCurrentMonth());
+  const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [data, setData] = useState<WorkloadSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,18 +180,23 @@ export default function TimecardWorkloadPage() {
       const body = await response.json() as WorkloadSummary;
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
+      storeTimecardSelection(body.month, body.selectedStoreId);
     }
     setIsLoading(false);
   }
 
   useEffect(() => {
-    void loadWorkload();
+    void loadWorkload(getStoredTimecardMonth(), getStoredTimecardStoreId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const busiest = data?.busiestEmployees[0] ?? null;
   const lightest = data?.lightestEmployees[0] ?? null;
   const totalContributionSales = data?.employees.reduce((sum, employee) => sum + employee.sales, 0) ?? 0;
+  const salesContributionEmployees = [...(data?.employees ?? [])].sort((a, b) => (
+    b.sales - a.sales
+    || b.salesPerHour - a.salesPerHour
+  ));
 
   async function saveIncludeManagement(includeManagement: boolean) {
     if (!selectedStoreId) return;
@@ -206,10 +239,12 @@ export default function TimecardWorkloadPage() {
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
+              storeTimecardSelection(event.target.value, selectedStoreId);
               void loadWorkload(event.target.value, selectedStoreId);
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
+              storeTimecardSelection(month, event.target.value);
               void loadWorkload(month, event.target.value);
             }}>
               {data?.stores.map((store) => (
@@ -266,7 +301,7 @@ export default function TimecardWorkloadPage() {
             <ChartColumn size={18} />
             <div>
               <h3>スタッフ別負荷</h3>
-              <p>実勤務時間内に入った注文と売上貢献をスタッフ別に集計します。</p>
+              <p>実勤務時間内に入った注文とピーク負荷をスタッフ別に集計します。</p>
             </div>
           </div>
           <div className="timecard-table-wrap">
@@ -276,11 +311,9 @@ export default function TimecardWorkloadPage() {
                   <th>スタッフ</th>
                   <th>勤務</th>
                   <th>注文</th>
-                  <th>売上貢献</th>
-                  <th>貢献率</th>
                   <th>注文/時</th>
                   <th>売上/時</th>
-                  <th>ピーク</th>
+                  <th>負荷ピーク</th>
                   <th>ワンオペ高負荷</th>
                   <th>空き時間</th>
                 </tr>
@@ -291,11 +324,12 @@ export default function TimecardWorkloadPage() {
                     <td><strong>{employee.employeeName}</strong></td>
                     <td>{employee.workDays}日 / {formatDuration(employee.workMinutes)}</td>
                     <td>{employee.orderCount}件</td>
-                    <td>{formatMoney(employee.sales)}</td>
-                    <td>{percent(totalContributionSales > 0 ? (employee.sales / totalContributionSales) * 100 : 0)}</td>
                     <td>{rate(employee.ordersPerHour)}</td>
                     <td>{formatMoney(employee.salesPerHour)}</td>
-                    <td>{employee.peakHourOrderCount}件/時</td>
+                    <td>
+                      <strong>{score(employee.peakHourLoadScore)}/時</strong>
+                      <small>注文 {employee.peakHourOrderCount}件 / {formatMoney(employee.peakHourSales)}</small>
+                    </td>
                     <td>{formatDuration(employee.onePersonHighLoadMinutes)}</td>
                     <td>{formatDuration(employee.idleMinutes)}</td>
                   </tr>
@@ -306,6 +340,45 @@ export default function TimecardWorkloadPage() {
           {data && data.employees.length === 0 ? <div className="empty-state">勤怠または売上データがまだありません</div> : null}
         </section>
 
+        <section className="panel workload-table-panel">
+          <div className="panel-title">
+            <ChartColumn size={18} />
+            <div>
+              <h3>売上貢献度</h3>
+              <p>勤務中にカバーした売上と、1時間あたりの売上貢献を集計します。</p>
+            </div>
+          </div>
+          <div className="timecard-table-wrap">
+            <table className="timecard-table workload-table">
+              <thead>
+                <tr>
+                  <th>スタッフ</th>
+                  <th>勤務</th>
+                  <th>カバー売上</th>
+                  <th>貢献率</th>
+                  <th>売上/時</th>
+                  <th>カバー注文</th>
+                  <th>注文/時</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salesContributionEmployees.map((employee) => (
+                  <tr key={employee.employeeId}>
+                    <td><strong>{employee.employeeName}</strong></td>
+                    <td>{employee.workDays}日 / {formatDuration(employee.workMinutes)}</td>
+                    <td>{formatMoney(employee.sales)}</td>
+                    <td>{percent(totalContributionSales > 0 ? (employee.sales / totalContributionSales) * 100 : 0)}</td>
+                    <td>{formatMoney(employee.salesPerHour)}</td>
+                    <td>{employee.orderCount}件</td>
+                    <td>{rate(employee.ordersPerHour)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data && salesContributionEmployees.length === 0 ? <div className="empty-state">売上貢献データはありません</div> : null}
+        </section>
+
         <section className="sales-grid">
           <article className="panel">
             <h3>高負荷だった勤務（シフト別）</h3>
@@ -313,8 +386,8 @@ export default function TimecardWorkloadPage() {
               {(data?.busiestShifts ?? []).map((shift) => (
                 <div className="sales-rank-row" key={`${shift.employeeId}-${shift.workDate}-${shift.clockIn}`}>
                   <span>{formatDate(shift.workDate)} {shift.employeeName}</span>
-                  <strong>{rate(shift.ordersPerHour)}件/時</strong>
-                  <small>{formatTime(shift.clockIn)}-{formatTime(shift.clockOut)} / {shift.isOnePerson ? "ワンオペ" : "複数名"}</small>
+                  <strong>{score(shift.peakHourLoadScore)}/時</strong>
+                  <small>{formatTime(shift.clockIn)}-{formatTime(shift.clockOut)} / 注文ピーク {shift.peakHourOrderCount}件 / {shift.isOnePerson ? "ワンオペ" : "複数名"}</small>
                 </div>
               ))}
             </div>
@@ -326,7 +399,7 @@ export default function TimecardWorkloadPage() {
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
                   <strong>{formatDuration(employee.onePersonHighLoadMinutes)}</strong>
-                  <small>{rate(employee.ordersPerHour)}件/時 / ピーク {employee.peakHourOrderCount}件/時</small>
+                  <small>{rate(employee.ordersPerHour)}件/時 / 負荷ピーク {score(employee.peakHourLoadScore)}/時 / 注文ピーク {employee.peakHourOrderCount}件</small>
                 </div>
               ))}
             </div>

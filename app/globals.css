@@ -11143,6 +11143,14 @@ button {
   white-space: nowrap;
 }
 
+.workload-table td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 @media (max-width: 1180px) {
   .sales-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
