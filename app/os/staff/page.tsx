@@ -826,21 +826,26 @@ function StaffFormFields({
                     </select>
                   </label>
                   <label>
-                    <span>入社日</span>
-                    <input name={`hireDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.hireDate)} />
-                  </label>
-                  <label>
-                    <span>退職日</span>
-                    <input name={`resignationDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.resignationDate)} />
-                  </label>
-                  <label>
                     <span>従事する業務の種類</span>
                     <input name={`businessType:${store.id}`} defaultValue={setting?.businessType ?? ""} placeholder="例: 接客、調理、店舗管理" />
                   </label>
-                  <label className="staff-employment-wide">
-                    <span>退職理由</span>
-                    <textarea name={`resignationReason:${store.id}`} defaultValue={setting?.resignationReason ?? ""} placeholder="退職時のみ入力" />
-                  </label>
+                  <details className="staff-employment-more">
+                    <summary>入退社情報</summary>
+                    <div>
+                      <label>
+                        <span>入社日</span>
+                        <input name={`hireDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.hireDate)} />
+                      </label>
+                      <label>
+                        <span>退職日</span>
+                        <input name={`resignationDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.resignationDate)} />
+                      </label>
+                      <label className="staff-employment-wide">
+                        <span>退職理由</span>
+                        <textarea name={`resignationReason:${store.id}`} defaultValue={setting?.resignationReason ?? ""} placeholder="退職時のみ入力" />
+                      </label>
+                    </div>
+                  </details>
                 </fieldset>
                 <label>
                   <span>給与計算に含める</span>

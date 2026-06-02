@@ -2004,6 +2004,50 @@ button {
   grid-column: span 2;
 }
 
+.staff-employment-more {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.staff-employment-more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+  list-style: none;
+}
+
+.staff-employment-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.staff-employment-more summary::after {
+  content: "＋";
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.staff-employment-more[open] summary::after {
+  content: "－";
+}
+
+.staff-employment-more > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
 .staff-payroll-deductions {
   display: flex;
   flex-wrap: wrap;
@@ -8774,6 +8818,10 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 
+  .staff-employment-more > div {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .staff-payroll-store-toggle {
     grid-column: 1 / -1;
   }
@@ -9126,6 +9174,10 @@ button {
   }
 
   .staff-employment-store-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-employment-more > div {
     grid-template-columns: 1fr;
   }
 
@@ -10982,6 +11034,7 @@ html:lang(ja) :where(
   .staff-form-tabs button,
   .staff-payroll-deductions > span,
   .staff-employment-store-fields > span,
+  .staff-employment-more summary,
   .staff-payroll-history > span
 ) {
   font-weight: 600;
