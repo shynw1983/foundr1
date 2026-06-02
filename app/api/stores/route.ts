@@ -1,5 +1,6 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { getSalesSourceDefinition, salesSourceDefinitions } from "../../../lib/sales-sources";
 import { serializeBusinessHours } from "../../../lib/store-business-hours";
 
 async function normalizeStoreBrands(brandNames: string[]) {
@@ -41,6 +42,58 @@ function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
   return Number.isFinite(day) ? Math.max(1, Math.min(30, day)) : 25;
 }
 
+function normalizeSalesSources(formData: FormData, brandNames: string[]) {
+  const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
+
+  return salesSourceDefinitions.flatMap((definition, index) => {
+    const enabled = formData.get(`salesSource:${definition.platform}:enabled`) === "on";
+    if (!enabled) return [];
+    const sourceBrands = definition.sourceType === "delivery" ? concreteBrandNames : [""];
+    const labels = sourceBrands.length > 0 ? sourceBrands : [""];
+
+    return labels.map((brandName, brandIndex) => ({
+      platform: definition.platform,
+      label: definition.label,
+      sourceType: definition.sourceType,
+      brandName,
+      sortOrder: (index + 1) * 100 + brandIndex
+    }));
+  });
+}
+
+async function replaceStoreSalesSources(storeId: string, formData: FormData, brandNames: string[]) {
+  const sources = normalizeSalesSources(formData, brandNames);
+  await sql`delete from store_sales_sources where store_id = ${storeId}`;
+
+  for (const source of sources) {
+    const definition = getSalesSourceDefinition(source.platform);
+    await sql`
+      insert into store_sales_sources (
+        store_id,
+        source_platform,
+        source_label,
+        source_type,
+        brand_name,
+        is_enabled,
+        sort_order,
+        metadata,
+        updated_at
+      )
+      values (
+        ${storeId},
+        ${source.platform},
+        ${definition?.label ?? source.label},
+        ${definition?.sourceType ?? source.sourceType},
+        ${source.brandName},
+        true,
+        ${source.sortOrder},
+        ${JSON.stringify({ importSupported: Boolean(definition?.importSupported) })}::jsonb,
+        now()
+      )
+    `;
+  }
+}
+
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -77,6 +130,7 @@ export async function POST(request: Request) {
     returning id
   `;
   const storeId = rows[0]?.id;
+  if (!storeId) return Response.json({ error: "店舗を保存できませんでした。" }, { status: 500 });
 
   await sql`delete from store_brands where store_id = ${storeId}`;
 
@@ -89,6 +143,8 @@ export async function POST(request: Request) {
       on conflict do nothing
     `;
   }
+
+  await replaceStoreSalesSources(String(storeId), formData, brandNames);
 
   return Response.json({ ok: true });
 }
@@ -160,6 +216,8 @@ export async function PUT(request: Request) {
       on conflict do nothing
     `;
   }
+
+  await replaceStoreSalesSources(String(storeId), formData, brandNames);
 
   return Response.json({ ok: true });
 }

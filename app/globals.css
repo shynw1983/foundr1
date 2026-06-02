@@ -11014,10 +11014,21 @@ button {
   gap: 18px;
 }
 
+.sales-workspace {
+  --sales-gap: 18px;
+  --sales-panel-padding: 18px;
+  --sales-inner-gap: 12px;
+}
+
 .workload-workspace {
   --workload-gap: 18px;
   --workload-panel-padding: 18px;
   --workload-inner-gap: 12px;
+}
+
+.sales-workspace > .metric-grid,
+.sales-workspace > .sales-grid {
+  gap: var(--sales-gap);
 }
 
 .workload-workspace > .metric-grid,
@@ -11026,8 +11037,71 @@ button {
   gap: var(--workload-gap);
 }
 
+.sales-workspace > .metric-grid,
+.workload-workspace > .metric-grid {
+  margin-bottom: 0;
+}
+
+.sales-workspace .metric-card,
+.workload-workspace .metric-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  min-height: 138px;
+  transition: none;
+}
+
+.sales-workspace .metric-card {
+  padding: var(--sales-panel-padding);
+}
+
+.workload-workspace .metric-card {
+  padding: var(--workload-panel-padding);
+}
+
+.sales-workspace .metric-card:hover,
+.workload-workspace .metric-card:hover {
+  border-color: var(--line);
+  transform: none;
+}
+
+.sales-workspace .metric-card span,
+.workload-workspace .metric-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.sales-workspace .metric-card strong,
+.workload-workspace .metric-card strong {
+  align-self: center;
+  margin: 0;
+  color: var(--ink);
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.sales-workspace .metric-card small,
+.workload-workspace .metric-card small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.sales-workspace .sales-grid > .panel {
+  padding: var(--sales-panel-padding);
+}
+
 .workload-workspace > .panel {
   padding: var(--workload-panel-padding);
+}
+
+.sales-workspace .panel-title {
+  margin-bottom: var(--sales-inner-gap);
 }
 
 .workload-workspace .panel-title {
@@ -11064,6 +11138,27 @@ button {
   gap: 10px;
   align-items: center;
   margin-top: 14px;
+}
+
+.sales-source-select {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-source-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-source-select select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .sales-upload-row input[type="file"] {

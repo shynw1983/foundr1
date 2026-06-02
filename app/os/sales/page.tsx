@@ -34,6 +34,14 @@ type ImportBatch = {
   rawRowCount: number;
   createdAt: string;
 };
+type SalesSourceOption = {
+  id: string;
+  sourcePlatform: string;
+  sourceLabel: string;
+  sourceType: string;
+  brandName: string;
+  importSupported: boolean;
+};
 type SalesSummary = {
   month: string;
   stores: StoreOption[];
@@ -54,6 +62,8 @@ type SalesSummary = {
 type ImportState = {
   canImport: boolean;
   stores: StoreOption[];
+  selectedStoreId: string;
+  salesSources: SalesSourceOption[];
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -103,11 +113,39 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+const salesMonthStorageKey = "foundr1:sales:selected-month";
+const salesStoreStorageKey = "foundr1:sales:selected-store-id";
+const salesSourceStorageKey = "foundr1:sales:selected-source-id";
+
+function getStoredSalesMonth() {
+  if (typeof window === "undefined") return getCurrentMonth();
+  const stored = window.localStorage.getItem(salesMonthStorageKey);
+  return stored && /^\d{4}-\d{2}$/.test(stored) ? stored : getCurrentMonth();
+}
+
+function getStoredSalesStoreId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(salesStoreStorageKey) ?? "";
+}
+
+function getStoredSalesSourceId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(salesSourceStorageKey) ?? "";
+}
+
+function storeSalesSelection(nextMonth: string, nextStoreId: string, nextSourceId = "") {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(salesMonthStorageKey, nextMonth);
+  if (nextStoreId) window.localStorage.setItem(salesStoreStorageKey, nextStoreId);
+  if (nextSourceId) window.localStorage.setItem(salesSourceStorageKey, nextSourceId);
+}
+
 export default function SalesPage() {
-  const [month, setMonth] = useState(getCurrentMonth());
+  const [month, setMonth] = useState(getStoredSalesMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<SalesSummary | null>(null);
-  const [importState, setImportState] = useState<ImportState>({ canImport: false, stores: [] });
+  const [importState, setImportState] = useState<ImportState>({ canImport: false, stores: [], selectedStoreId: "", salesSources: [] });
+  const [selectedSalesSourceId, setSelectedSalesSourceId] = useState(getStoredSalesSourceId);
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -117,38 +155,62 @@ export default function SalesPage() {
     setIsLoading(true);
     const params = new URLSearchParams({ month: nextMonth });
     if (nextStoreId) params.set("storeId", nextStoreId);
+    const importParams = new URLSearchParams();
+    if (nextStoreId) importParams.set("storeId", nextStoreId);
     const [summaryResponse, importsResponse] = await Promise.all([
       fetch(`/api/sales/summary?${params.toString()}`, { cache: "no-store" }),
-      fetch("/api/sales/imports", { cache: "no-store" })
+      fetch(`/api/sales/imports?${importParams.toString()}`, { cache: "no-store" })
     ]);
 
+    let resolvedMonth = nextMonth;
+    let resolvedStoreId = nextStoreId;
     if (summaryResponse.ok) {
       const body = await summaryResponse.json() as SalesSummary;
       setSummary(body);
       setSelectedStoreId(body.selectedStoreId);
+      resolvedMonth = body.month;
+      resolvedStoreId = body.selectedStoreId;
     }
     if (importsResponse.ok) {
       const body = await importsResponse.json() as ImportState;
-      setImportState({ canImport: body.canImport, stores: body.stores ?? [] });
+      const salesSources = body.salesSources ?? [];
+      const storedSourceId = getStoredSalesSourceId();
+      const nextSourceId = salesSources.some((source) => source.id === selectedSalesSourceId)
+        ? selectedSalesSourceId
+        : salesSources.some((source) => source.id === storedSourceId)
+          ? storedSourceId
+          : salesSources[0]?.id ?? "";
+      setImportState({
+        canImport: body.canImport,
+        stores: body.stores ?? [],
+        selectedStoreId: body.selectedStoreId ?? resolvedStoreId,
+        salesSources
+      });
+      setSelectedSalesSourceId(nextSourceId);
+      storeSalesSelection(resolvedMonth, resolvedStoreId || body.selectedStoreId || "", nextSourceId);
+    } else {
+      storeSalesSelection(resolvedMonth, resolvedStoreId);
     }
     setIsLoading(false);
   }
 
   useEffect(() => {
-    void loadSales();
+    void loadSales(getStoredSalesMonth(), getStoredSalesStoreId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const maxDailyOrders = useMemo(() => Math.max(1, ...(summary?.daily.map((day) => day.orderCount) ?? [1])), [summary]);
   const selectedStoreName = summary?.stores.find((store) => store.id === selectedStoreId)?.name ?? "";
+  const selectedSalesSource = importState.salesSources.find((source) => source.id === selectedSalesSourceId) ?? null;
 
   async function uploadCsv() {
-    if (!file || !selectedStoreId) return;
+    if (!file || !selectedStoreId || !selectedSalesSourceId) return;
     setIsUploading(true);
     setMessage("");
     const formData = new FormData();
     formData.set("storeId", selectedStoreId);
     formData.set("month", month);
+    formData.set("salesSourceId", selectedSalesSourceId);
     formData.set("file", file);
     const response = await fetch("/api/sales/imports", {
       method: "POST",
@@ -161,7 +223,7 @@ export default function SalesPage() {
       return;
     }
     setFile(null);
-    setMessage(`Uber Eats CSVを取り込みました。注文 ${body.importedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
+    setMessage(`${selectedSalesSource?.sourceLabel ?? "売上"} CSVを取り込みました。注文 ${body.importedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
     await loadSales(month, selectedStoreId);
   }
 
@@ -192,10 +254,13 @@ export default function SalesPage() {
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
+              storeSalesSelection(event.target.value, selectedStoreId, selectedSalesSourceId);
               void loadSales(event.target.value, selectedStoreId);
             }} />
             <select value={selectedStoreId} onChange={(event) => {
               setSelectedStoreId(event.target.value);
+              setSelectedSalesSourceId("");
+              storeSalesSelection(month, event.target.value, "");
               void loadSales(month, event.target.value);
             }}>
               {(summary?.stores.length ? summary.stores : importState.stores).map((store) => (
@@ -233,23 +298,42 @@ export default function SalesPage() {
             <div className="panel-title">
               <Upload size={18} />
               <div>
-                <h3>Uber Eats CSV取込</h3>
-                <p>月初に手動ダウンロードしたCSVを店舗別に取り込みます。</p>
+                <h3>売上 CSV取込</h3>
+                <p>店舗設定の売上源に合わせて、月初に手動ダウンロードしたCSVを取り込みます。</p>
               </div>
             </div>
+            <label className="sales-source-select">
+              <span>売上源</span>
+              <select
+                value={selectedSalesSourceId}
+                disabled={!importState.canImport || isUploading || importState.salesSources.length === 0}
+                onChange={(event) => {
+                  setSelectedSalesSourceId(event.target.value);
+                  storeSalesSelection(month, selectedStoreId, event.target.value);
+                }}
+              >
+                {importState.salesSources.map((source) => (
+                  <option value={source.id} key={source.id}>
+                    {source.sourceLabel}{source.importSupported ? "" : "（準備中）"}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="sales-upload-row">
               <input
                 type="file"
                 accept=".csv,text/csv"
-                disabled={!importState.canImport || isUploading}
+                disabled={!importState.canImport || isUploading || !selectedSalesSource?.importSupported}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
-              <button className="primary-button" type="button" disabled={!file || !selectedStoreId || !importState.canImport || isUploading} onClick={() => void uploadCsv()}>
+              <button className="primary-button" type="button" disabled={!file || !selectedStoreId || !selectedSalesSource?.importSupported || !importState.canImport || isUploading} onClick={() => void uploadCsv()}>
                 {isUploading ? "取込中" : "取込"}
               </button>
             </div>
             {message ? <p className="sales-import-message">{message}</p> : null}
             {!importState.canImport ? <p className="sales-import-message">売上データの取込は owner / manager が操作できます。</p> : null}
+            {importState.canImport && importState.salesSources.length === 0 ? <p className="sales-import-message">この店舗の売上源が未設定です。店舗・ブランド設定で売上源を追加してください。</p> : null}
+            {selectedSalesSource && !selectedSalesSource.importSupported ? <p className="sales-import-message">{selectedSalesSource.sourceLabel} のCSV取込は次フェーズで対応します。</p> : null}
             <div className="sales-import-list">
               {(summary?.imports ?? []).map((item) => (
                 <div className="sales-import-row" key={item.id}>

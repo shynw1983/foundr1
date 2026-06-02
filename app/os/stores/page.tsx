@@ -8,6 +8,7 @@ import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { salesSourceDefinitions } from "../../../lib/sales-sources";
 import {
   defaultBusinessHours,
   formatBusinessHoursSummary,
@@ -30,6 +31,15 @@ type StoreItem = {
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
   socialInsurancePrefecture?: string;
+  salesSources?: SalesSourceItem[];
+};
+
+type SalesSourceItem = {
+  platform: string;
+  label: string;
+  sourceType: string;
+  brandName: string;
+  isEnabled: boolean;
 };
 
 type BrandItem = {
@@ -37,7 +47,7 @@ type BrandItem = {
   type: string;
 };
 
-type StoreEditTab = "basic" | "hours" | "payroll";
+type StoreEditTab = "basic" | "hours" | "sales" | "payroll";
 
 const prefectureOptions = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -84,6 +94,8 @@ export default function StoresPage() {
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
+  const [selectedSalesSourcePlatforms, setSelectedSalesSourcePlatforms] = useState<string[]>(["smaregi", "uber_eats"]);
+  const [editingSalesSourcePlatforms, setEditingSalesSourcePlatforms] = useState<string[]>([]);
 
   async function loadData() {
     const response = await fetch("/api/dashboard");
@@ -115,6 +127,7 @@ export default function StoresPage() {
     formData.set("payrollCycleType", "month_end");
     formData.set("payrollClosingDay", "31");
     formData.set("socialInsurancePrefecture", "福岡県");
+    selectedSalesSourcePlatforms.forEach((platform) => formData.set(`salesSource:${platform}:enabled`, "on"));
 
     if (!name.trim()) return;
 
@@ -134,6 +147,7 @@ export default function StoresPage() {
       { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote, payrollCycleType: "month_end", payrollClosingDay: 31, socialInsurancePrefecture: "福岡県" }
     ]);
     setSelectedStoreBrands([]);
+    setSelectedSalesSourcePlatforms(["smaregi", "uber_eats"]);
     setNewBusinessHours(defaultBusinessHours);
     form.reset();
     void loadData();
@@ -262,6 +276,7 @@ export default function StoresPage() {
     formData.set("currentName", editingStore.name);
     formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
     editingStoreBrands.forEach((brandName) => formData.append("brand", brandName));
+    editingSalesSourcePlatforms.forEach((platform) => formData.set(`salesSource:${platform}:enabled`, "on"));
 
     const response = await fetch("/api/stores", {
       method: "PUT",
@@ -279,6 +294,7 @@ export default function StoresPage() {
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
+    setEditingSalesSourcePlatforms([]);
     setEditingReservationNote("");
     setEditingStoreTab("basic");
     void loadData();
@@ -297,6 +313,7 @@ export default function StoresPage() {
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
+    setEditingSalesSourcePlatforms(Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => source.platform))));
   }
 
   function toggleBrandSelection(
@@ -325,6 +342,18 @@ export default function StoresPage() {
 
   function toggleEditingStoreBrand(brandName: string, checked: boolean) {
     setEditingStoreBrands((current) => toggleBrandSelection(current, brandName, checked));
+  }
+
+  function toggleSalesSourcePlatform(current: string[], platform: string, checked: boolean) {
+    return checked
+      ? Array.from(new Set([...current, platform]))
+      : current.filter((item) => item !== platform);
+  }
+
+  function formatStoreSalesSources(store: StoreItem) {
+    const platforms = Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => source.platform)));
+    if (platforms.length === 0) return "売上源未設定";
+    return platforms.map((platform) => salesSourceDefinitions.find((source) => source.platform === platform)?.label ?? platform).join(" / ");
   }
 
   function formatStoreBrands(brandNames: string[]) {
@@ -374,6 +403,7 @@ export default function StoresPage() {
                     <strong>{store.name}</strong>
                     <p>{store.companyName || "所属会社未設定"} / {store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
+                    <small>売上源: {formatStoreSalesSources(store)}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
@@ -429,6 +459,11 @@ export default function StoresPage() {
                   </label>
                 ))}
               </div>
+              <SalesSourceSelector
+                selectedPlatforms={selectedSalesSourcePlatforms}
+                onToggle={(platform, checked) => setSelectedSalesSourcePlatforms((current) => toggleSalesSourcePlatform(current, platform, checked))}
+                selectedBrandCount={selectedStoreBrands.length}
+              />
               <button className="primary-button" type="submit">店舗を追加</button>
             </form>
           </section>
@@ -486,6 +521,7 @@ export default function StoresPage() {
             <div className="store-settings-tabs" aria-label="店舗設定メニュー">
               <button className={editingStoreTab === "basic" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("basic")}>基本情報</button>
               <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
+              <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
             </div>
             <div className="edit-fields">
@@ -537,6 +573,13 @@ export default function StoresPage() {
               )}
               {editingStoreTab === "hours" ? (
                 <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+              ) : null}
+              {editingStoreTab === "sales" ? (
+                <SalesSourceSelector
+                  selectedPlatforms={editingSalesSourcePlatforms}
+                  onToggle={(platform, checked) => setEditingSalesSourcePlatforms((current) => toggleSalesSourcePlatform(current, platform, checked))}
+                  selectedBrandCount={editingStoreBrands.length}
+                />
               ) : null}
               {editingStoreTab === "payroll" ? (
                 <div className="store-payroll-settings">
@@ -645,6 +688,39 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
         <h3>{title}</h3>
         <p>{subtitle}</p>
       </div>
+    </div>
+  );
+}
+
+function SalesSourceSelector({
+  selectedPlatforms,
+  onToggle,
+  selectedBrandCount
+}: {
+  selectedPlatforms: string[];
+  onToggle: (platform: string, checked: boolean) => void;
+  selectedBrandCount?: number;
+}) {
+  return (
+    <div className="checkbox-group sales-source-settings">
+      <span>売上源</span>
+      {salesSourceDefinitions.map((source) => {
+        const generatedCount = source.sourceType === "delivery" ? Math.max(1, selectedBrandCount ?? 1) : 1;
+        return (
+          <label key={source.platform}>
+            <input
+              type="checkbox"
+              name={`salesSource:${source.platform}:enabled`}
+              checked={selectedPlatforms.includes(source.platform)}
+              onChange={(event) => onToggle(source.platform, event.target.checked)}
+            />
+            <span>
+              {source.label}
+              {source.sourceType === "delivery" ? ` / ブランド別 ${generatedCount}件` : ""}
+            </span>
+          </label>
+        );
+      })}
     </div>
   );
 }

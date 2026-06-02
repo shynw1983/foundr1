@@ -119,6 +119,18 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
           coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay",
           coalesce(stores.social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
+          coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'id', store_sales_sources.id::text,
+              'platform', store_sales_sources.source_platform,
+              'label', store_sales_sources.source_label,
+              'sourceType', store_sales_sources.source_type,
+              'brandName', store_sales_sources.brand_name,
+              'isEnabled', store_sales_sources.is_enabled
+            ) order by store_sales_sources.sort_order, store_sales_sources.source_label, store_sales_sources.brand_name)
+            from store_sales_sources
+            where store_sales_sources.store_id = stores.id
+          ), '[]'::jsonb) as "salesSources",
           coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null and brands.name <> '共通'), '{}') as brands
         from stores
         left join store_brands on store_brands.store_id = stores.id

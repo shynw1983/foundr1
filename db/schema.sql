@@ -1020,6 +1020,21 @@ create table if not exists sales_import_batches (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists store_sales_sources (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  source_platform text not null,
+  source_label text not null,
+  source_type text not null default 'delivery',
+  brand_name text not null default '',
+  is_enabled boolean not null default true,
+  sort_order integer not null default 0,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, source_platform, source_label, brand_name)
+);
+
 create table if not exists sales_import_rows (
   id uuid primary key default gen_random_uuid(),
   batch_id uuid not null references sales_import_batches(id) on delete cascade,

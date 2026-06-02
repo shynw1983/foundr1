@@ -2,6 +2,7 @@ import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 import { parseUberSalesCsv } from "../../../../lib/sales-imports";
+import { getSalesSourceDefinition } from "../../../../lib/sales-sources";
 
 const salesImportRoles = new Set(["owner", "manager"]);
 
@@ -24,7 +25,19 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   `;
 }
 
-async function getStoreBrandId(storeId: string) {
+async function getStoreBrandId(storeId: string, brandName = "") {
+  if (brandName) {
+    const namedRows = await sql`
+      select brands.id::text as "brandId"
+      from brands
+      join store_brands on store_brands.brand_id = brands.id
+      where store_brands.store_id::text = ${storeId}
+        and brands.name = ${brandName}
+      limit 1
+    `;
+    if (namedRows[0]?.brandId) return String(namedRows[0].brandId);
+  }
+
   const rows = await sql`
     select brand_id::text as "brandId"
     from store_brands
@@ -35,13 +48,50 @@ async function getStoreBrandId(storeId: string) {
   return rows[0]?.brandId ? String(rows[0].brandId) : null;
 }
 
-export async function GET() {
+async function getStoreSalesSources(storeId: string) {
+  const rows = storeId ? await sql`
+    select
+      id::text,
+      source_platform as "sourcePlatform",
+      source_label as "sourceLabel",
+      source_type as "sourceType",
+      brand_name as "brandName",
+      is_enabled as "isEnabled",
+      metadata
+    from store_sales_sources
+    where store_id::text = ${storeId}
+      and is_enabled = true
+    order by sort_order, source_label, brand_name
+  ` : [];
+
+  return rows.map((row) => {
+    const definition = getSalesSourceDefinition(String(row.sourcePlatform));
+    const brandName = row.brandName ? String(row.brandName) : "";
+    return {
+      id: String(row.id),
+      sourcePlatform: String(row.sourcePlatform),
+      sourceLabel: brandName ? `${String(row.sourceLabel)} / ${brandName}` : String(row.sourceLabel),
+      baseLabel: String(row.sourceLabel),
+      sourceType: String(row.sourceType),
+      brandName,
+      importSupported: Boolean(definition?.importSupported)
+    };
+  });
+}
+
+export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
+  const url = new URL(request.url);
   const scope = await getSessionStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
+  const requestedStoreId = url.searchParams.get("storeId");
+  const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
+    ? requestedStoreId
+    : visibleStoreIds[0] ?? "";
+  const salesSources = await getStoreSalesSources(selectedStoreId);
   const imports = visibleStoreIds.length ? await sql`
     select
       sales_import_batches.id::text,
@@ -69,6 +119,8 @@ export async function GET() {
   return Response.json({
     canImport: salesImportRoles.has(session.role),
     stores,
+    selectedStoreId,
+    salesSources,
     imports: imports.map((row) => ({
       id: String(row.id),
       storeId: row.storeId ? String(row.storeId) : null,
@@ -94,13 +146,35 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const storeId = String(formData.get("storeId") ?? "");
+  const salesSourceId = String(formData.get("salesSourceId") ?? "");
   const file = formData.get("file");
   if (!storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
+  if (!salesSourceId) return Response.json({ error: "売上源を選択してください。" }, { status: 400 });
   if (!(file instanceof File)) return Response.json({ error: "CSVファイルを選択してください。" }, { status: 400 });
 
   const scope = await getSessionStoreScope(session);
   if (!scope.allStores && !scope.storeIds.includes(storeId)) {
     return Response.json({ error: "この店舗に取り込む権限がありません。" }, { status: 403 });
+  }
+
+  const sourceRows = await sql`
+    select
+      id::text,
+      source_platform as "sourcePlatform",
+      source_label as "sourceLabel",
+      brand_name as "brandName"
+    from store_sales_sources
+    where id::text = ${salesSourceId}
+      and store_id::text = ${storeId}
+      and is_enabled = true
+    limit 1
+  `;
+  const source = sourceRows[0];
+  if (!source) return Response.json({ error: "この店舗の売上源が見つかりません。" }, { status: 404 });
+  const sourcePlatform = String(source.sourcePlatform);
+  const sourceDefinition = getSalesSourceDefinition(sourcePlatform);
+  if (!sourceDefinition?.importSupported) {
+    return Response.json({ error: "この売上源のCSV取込はまだ対応していません。" }, { status: 400 });
   }
 
   const text = await file.text();
@@ -114,7 +188,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "対象月を判定できませんでした。" }, { status: 400 });
   }
 
-  const brandId = await getStoreBrandId(storeId);
+  const brandName = source.brandName ? String(source.brandName) : "";
+  const brandId = await getStoreBrandId(storeId, brandName);
   const batchRows = await sql`
     insert into sales_import_batches (
       store_id,
@@ -130,14 +205,14 @@ export async function POST(request: Request) {
     )
     values (
       ${storeId},
-      'uber_eats',
+      ${sourcePlatform},
       ${importMonth},
       ${file.name},
       ${parsed.rawRows.length},
       ${parsed.orders.length},
       ${parsed.skippedRowCount},
       ${session.id},
-      ${JSON.stringify({ detectedMonth: parsed.detectedMonth })}::jsonb,
+      ${JSON.stringify({ detectedMonth: parsed.detectedMonth, salesSourceId, brandName })}::jsonb,
       now()
     )
     returning id::text
@@ -164,7 +239,7 @@ export async function POST(request: Request) {
       )
       select
         ${batchId},
-        'uber_eats',
+        ${sourcePlatform},
         nullif(payload.source_external_id, ''),
         nullif(payload.order_no, ''),
         nullif(payload.ordered_at, '')::timestamptz,
@@ -207,7 +282,7 @@ export async function POST(request: Request) {
         ${brandId},
         ${storeId},
         'delivery',
-        'uber_eats',
+        ${sourcePlatform},
         ${order.orderNo},
         'completed',
         'paid',
@@ -221,6 +296,9 @@ export async function POST(request: Request) {
         'JPY',
         ${JSON.stringify({
           importBatchId: batchId,
+          salesSourceId,
+          salesSourceLabel: source.sourceLabel,
+          sourceBrandName: brandName,
           sourceStoreName: order.storeName,
           adjustment: order.adjustment,
           rowCount: order.rowCount,
@@ -250,10 +328,10 @@ export async function POST(request: Request) {
 
   await writeAuditLog({
     actorEmployeeId: session.id,
-    action: "sales.import.uber_eats",
+    action: `sales.import.${sourcePlatform}`,
     targetType: "sales_import_batch",
     targetId: batchId,
-    metadata: { storeId, importMonth, fileName: file.name, importedOrderCount: parsed.orders.length },
+    metadata: { storeId, salesSourceId, sourcePlatform, importMonth, fileName: file.name, importedOrderCount: parsed.orders.length },
     request
   });
 
