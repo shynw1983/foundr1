@@ -20,6 +20,15 @@ type ParsedEmploymentInsuranceRateRow = {
   totalRate: number | null;
 };
 
+type DatabaseErrorLike = {
+  message?: unknown;
+  code?: unknown;
+  detail?: unknown;
+  constraint?: unknown;
+  table?: unknown;
+  column?: unknown;
+};
+
 const businessTypes = [
   { key: "general", label: "一般の事業" },
   { key: "agriculture_sake", label: "農林水産・清酒製造の事業" },
@@ -266,6 +275,7 @@ export async function POST(request: Request) {
       `;
       tableId = String(inserted[0]?.id ?? "");
     }
+    if (!tableId) throw new Error("employment_insurance_rate_tables id was not returned.");
 
     await sql`
       update employment_insurance_rate_tables
@@ -310,7 +320,19 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Failed to save employment insurance rates", error);
-    return Response.json({ error: "雇用保険料率は読み取れましたが、保存できませんでした。データベース設定を確認してください。" }, { status: 500 });
+    const dbError = error as DatabaseErrorLike;
+    const details = [
+      dbError.code ? `code=${String(dbError.code)}` : "",
+      dbError.constraint ? `constraint=${String(dbError.constraint)}` : "",
+      dbError.table ? `table=${String(dbError.table)}` : "",
+      dbError.column ? `column=${String(dbError.column)}` : "",
+      dbError.detail ? `detail=${String(dbError.detail)}` : ""
+    ].filter(Boolean).join(" / ");
+    return Response.json({
+      error: details
+        ? `雇用保険料率は読み取れましたが、保存できませんでした。${details}`
+        : "雇用保険料率は読み取れましたが、保存できませんでした。データベース設定を確認してください。"
+    }, { status: 500 });
   }
 
   return Response.json({ ok: true, tableId, fiscalYear: parsed.fiscalYear, title: parsed.title, rowCount: parsed.rows.length });
