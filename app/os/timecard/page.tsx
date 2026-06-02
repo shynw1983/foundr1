@@ -82,6 +82,10 @@ type PayrollRow = {
   workMinutes: number;
   breakMinutes: number;
   nightMinutes: number;
+  regularWorkMinutes?: number;
+  overtimeMinutes?: number;
+  regularPay?: number;
+  overtimePay?: number;
   basePay: number;
   commuteAllowance: number;
   totalPay: number;
@@ -93,7 +97,9 @@ type PayrollTotals = {
   punchCount: number;
   workMinutes: number;
   nightMinutes: number;
+  overtimeMinutes?: number;
   laborCost: number;
+  overtimePay?: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -562,7 +568,9 @@ export function TimecardPage({
     punchCount: 0,
     workMinutes: 0,
     nightMinutes: 0,
+    overtimeMinutes: 0,
     laborCost: 0,
+    overtimePay: 0,
     commuteAllowance: 0,
     totalPay: 0
   };
@@ -1022,7 +1030,7 @@ export function TimecardPage({
 
         <section className="metric-grid">
               <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
-              <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
+              <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`時間外 ${formatDuration(canViewPayroll ? totals.overtimeMinutes ?? 0 : 0)} / 深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
               {canViewPayroll ? (
                 <>
               <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost)} note={`交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
@@ -1414,6 +1422,7 @@ export function TimecardPage({
                     <th>勤務</th>
                     <th>勤務時間</th>
                     <th>基本給</th>
+                    <th>時間外</th>
                     <th>交通費</th>
                     <th>差引支給額</th>
                     <th>確認</th>
@@ -1428,14 +1437,15 @@ export function TimecardPage({
                       </td>
                       <td>{row.workDays}日 / {row.punchCount}回</td>
                       <td>{formatDuration(row.workMinutes)}</td>
-                      <td>{formatMoney(row.basePay)}</td>
+                      <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
+                      <td>{formatMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
                       <td>{formatMoney(row.commuteAllowance)}</td>
                       <td><strong>{formatMoney(row.totalPay)}</strong></td>
                       <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={7}>この月の打刻実績はまだありません。</td>
+                      <td colSpan={8}>この月の打刻実績はまだありません。</td>
                     </tr>
                   )}
                 </tbody>
@@ -1462,8 +1472,9 @@ export function TimecardPage({
                   <>
                     <div className="timecard-detail-grid">
                       <MetricCard label="勤務日数" value={`${selectedPayrollRow.workDays}日`} note={`${selectedPayrollRow.punchCount}回`} />
-                      <MetricCard label="勤務時間" value={formatDuration(selectedPayrollRow.workMinutes)} note={`深夜 ${formatDuration(selectedPayrollRow.nightMinutes)}`} />
-                      <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
+                      <MetricCard label="勤務時間" value={formatDuration(selectedPayrollRow.workMinutes)} note={`時間外 ${formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)} / 深夜 ${formatDuration(selectedPayrollRow.nightMinutes)}`} />
+                      <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
+                      <MetricCard label="時間外労働賃金" value={formatMoney(selectedPayrollRow.overtimePay ?? 0)} note="1日8時間超過を1.25倍で計算" />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>
                     <div className="timecard-table-wrap">

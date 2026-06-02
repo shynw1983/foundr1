@@ -54,7 +54,9 @@ const emptyPayrollTotals = {
   punchCount: 0,
   workMinutes: 0,
   nightMinutes: 0,
+  overtimeMinutes: 0,
   laborCost: 0,
+  overtimePay: 0,
   commuteAllowance: 0,
   totalPay: 0
 };

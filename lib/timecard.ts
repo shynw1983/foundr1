@@ -65,6 +65,10 @@ export type TimecardPayrollRow = {
   workMinutes: number;
   breakMinutes: number;
   nightMinutes: number;
+  regularWorkMinutes: number;
+  overtimeMinutes: number;
+  regularPay: number;
+  overtimePay: number;
   basePay: number;
   commuteAllowance: number;
   totalPay: number;
@@ -76,7 +80,9 @@ export type TimecardPayrollTotals = {
   punchCount: number;
   workMinutes: number;
   nightMinutes: number;
+  overtimeMinutes: number;
   laborCost: number;
+  overtimePay: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -84,6 +90,8 @@ export type TimecardPayrollTotals = {
 const jstTimeZone = "Asia/Tokyo";
 const minuteMs = 60_000;
 const overnightWindowMs = 36 * 60 * minuteMs;
+const dailyLegalWorkMinutes = 8 * 60;
+const overtimePremiumRate = 1.25;
 
 export function isTimecardPunchType(value: string): value is TimecardPunchType {
   return (timecardPunchTypes as readonly string[]).includes(value);
@@ -277,6 +285,10 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
       workMinutes: 0,
       breakMinutes: 0,
       nightMinutes: 0,
+      regularWorkMinutes: 0,
+      overtimeMinutes: 0,
+      regularPay: 0,
+      overtimePay: 0,
       basePay: 0,
       commuteAllowance: 0,
       totalPay: 0,
@@ -311,7 +323,10 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
 
   const rows = Array.from(rowsByEmployee.values()).map((row) => {
     const employee = employeeById.get(row.employeeId);
-    let basePay = 0;
+    let regularWorkMinutes = 0;
+    let overtimeMinutes = 0;
+    let regularPay = 0;
+    let overtimePay = 0;
     let commuteAllowance = 0;
     for (const setting of employee?.storePayrollSettings ?? []) {
       if (!setting.payrollEnabled) continue;
@@ -321,11 +336,19 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
         .filter((day) => getEffectiveCommuteSetting(employee, day.storeId, day.workDate) === setting);
       const workDays = storeDays.filter((day) => day.workMinutes > 0).length;
       const workMinutes = storeDays.reduce((sum, day) => sum + day.workMinutes, 0);
+      const storeRegularMinutes = storeDays.reduce((sum, day) => sum + Math.min(day.workMinutes, dailyLegalWorkMinutes), 0);
+      const storeOvertimeMinutes = storeDays.reduce((sum, day) => sum + Math.max(0, day.workMinutes - dailyLegalWorkMinutes), 0);
       const commuteWorkDays = commuteDays.filter((day) => day.workMinutes > 0).length;
       if (workDays > 0 || workMinutes > 0) {
-        basePay += setting.employmentType === "monthly"
-          ? Math.ceil(setting.monthlySalary ?? 0)
-          : Math.ceil((workMinutes / 60) * (setting.hourlyWage ?? 0));
+        if (setting.employmentType === "monthly") {
+          regularWorkMinutes += workMinutes;
+          regularPay += Math.ceil(setting.monthlySalary ?? 0);
+        } else {
+          regularWorkMinutes += storeRegularMinutes;
+          overtimeMinutes += storeOvertimeMinutes;
+          regularPay += Math.ceil((storeRegularMinutes / 60) * (setting.hourlyWage ?? 0));
+          overtimePay += Math.ceil((storeOvertimeMinutes / 60) * (setting.hourlyWage ?? 0) * overtimePremiumRate);
+        }
       }
       if (commuteWorkDays === 0) continue;
       const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
@@ -333,8 +356,13 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
         ? uncappedCommuteAllowance
         : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
     }
+    const basePay = regularPay + overtimePay;
     return {
       ...row,
+      regularWorkMinutes,
+      overtimeMinutes,
+      regularPay,
+      overtimePay,
       basePay,
       commuteAllowance,
       totalPay: basePay + commuteAllowance
@@ -346,7 +374,9 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     punchCount: acc.punchCount + row.punchCount,
     workMinutes: acc.workMinutes + row.workMinutes,
     nightMinutes: acc.nightMinutes + row.nightMinutes,
+    overtimeMinutes: acc.overtimeMinutes + row.overtimeMinutes,
     laborCost: acc.laborCost + row.basePay,
+    overtimePay: acc.overtimePay + row.overtimePay,
     commuteAllowance: acc.commuteAllowance + row.commuteAllowance,
     totalPay: acc.totalPay + row.totalPay
   }), {
@@ -354,7 +384,9 @@ export function summarizePayroll(employees: TimecardEmployee[], dailySummaries: 
     punchCount: 0,
     workMinutes: 0,
     nightMinutes: 0,
+    overtimeMinutes: 0,
     laborCost: 0,
+    overtimePay: 0,
     commuteAllowance: 0,
     totalPay: 0
   });
