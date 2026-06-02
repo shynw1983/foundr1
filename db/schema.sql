@@ -946,6 +946,7 @@ create table if not exists store_customer_order_items (
 create table if not exists sales_orders (
   id uuid primary key default gen_random_uuid(),
   source_order_id uuid unique,
+  source_external_id text,
   brand_id uuid references brands(id) on delete set null,
   store_id uuid references stores(id) on delete set null,
   channel text not null,
@@ -975,6 +976,8 @@ create table if not exists sales_orders (
   updated_at timestamptz not null default now()
 );
 
+alter table sales_orders add column if not exists source_external_id text;
+
 create table if not exists sales_order_items (
   id uuid primary key default gen_random_uuid(),
   sales_order_id uuid not null references sales_orders(id) on delete cascade,
@@ -988,6 +991,34 @@ create table if not exists sales_order_items (
   line_total integer not null default 0,
   modifiers_json jsonb not null default '{}'::jsonb,
   sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists sales_import_batches (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid references stores(id) on delete set null,
+  source_platform text not null,
+  import_month text not null,
+  file_name text not null default '',
+  raw_row_count integer not null default 0,
+  imported_order_count integer not null default 0,
+  skipped_row_count integer not null default 0,
+  status text not null default 'completed',
+  imported_by uuid references employees(id) on delete set null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists sales_import_rows (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null references sales_import_batches(id) on delete cascade,
+  source_platform text not null,
+  source_external_id text,
+  order_no text,
+  ordered_at timestamptz,
+  row_index integer not null default 0,
+  raw_json jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -1245,7 +1276,14 @@ create index if not exists idx_store_customer_order_items_order on store_custome
 create index if not exists idx_sales_orders_store_channel_paid on sales_orders(store_id, channel, paid_at desc);
 create index if not exists idx_sales_orders_ordered_at on sales_orders(ordered_at desc);
 create index if not exists idx_sales_orders_channel_status on sales_orders(channel, status);
+create unique index if not exists idx_sales_orders_source_external
+  on sales_orders(source_platform, source_external_id)
+  where source_external_id is not null;
 create index if not exists idx_sales_order_items_order on sales_order_items(sales_order_id, sort_order);
+create index if not exists idx_sales_import_batches_store_month
+  on sales_import_batches(store_id, source_platform, import_month, created_at desc);
+create index if not exists idx_sales_import_rows_batch
+  on sales_import_rows(batch_id, row_index);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
 create index if not exists idx_procedure_book_stores_store on procedure_book_stores(store_id);
 create index if not exists idx_procedure_steps_book_order on procedure_steps(procedure_book_id, sort_order);

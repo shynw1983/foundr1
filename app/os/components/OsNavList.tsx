@@ -9,6 +9,7 @@ import {
   Clock3,
   ExternalLink,
   FileText,
+  ChartColumn,
   Lightbulb,
   MenuSquare,
   MessageSquareWarning,
@@ -38,13 +39,14 @@ const orderModulePaths = new Set([
   "/os/orders",
   "/os/procurement",
   "/os/history",
+  "/os/sales",
   "/os/suppliers",
   "/os/field-notes",
   "/os/product-comparisons",
   "/os/reports"
 ]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
-const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
+const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
@@ -53,11 +55,13 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
+  { label: "売上分析", href: "/os/sales", icon: ChartColumn },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
   { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "負荷分析", href: "/os/timecard/workload", icon: ChartColumn },
   { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
@@ -100,6 +104,7 @@ const navModules: OsNavModule[] = [
       { href: "/os/orders" },
       { href: "/os/procurement" },
       { href: "/os/history" },
+      { href: "/os/sales" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
       { href: "/os/suppliers" },
@@ -123,6 +128,7 @@ const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/timecard" },
       { href: "/os/timecard/schedule" },
+      { href: "/os/timecard/workload" },
       { href: "/os/timecard/payroll" },
       { href: "/os/staff", isShortcut: true },
       { href: "/os/stores", isShortcut: true }

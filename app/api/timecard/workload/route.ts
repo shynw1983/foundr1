@@ -1,0 +1,243 @@
+import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
+import { sql } from "../../../../lib/db";
+import {
+  getJstMonthLabel,
+  getJstMonthRange,
+  isTimecardPunchType,
+  summarizeTimecardDays,
+  type TimecardPunch
+} from "../../../../lib/timecard";
+
+async function getVisibleStores(allStores: boolean, storeIds: string[]) {
+  if (allStores) {
+    return sql`
+      select id::text, name
+      from stores
+      where status = 'active'
+      order by name
+    `;
+  }
+  if (storeIds.length === 0) return [];
+  return sql`
+    select id::text, name
+    from stores
+    where status = 'active'
+      and id::text = any(${storeIds})
+    order by name
+  `;
+}
+
+function minutesBetween(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
+}
+
+function getPeakHourOrderCount(orderedTimes: number[]) {
+  const sorted = [...orderedTimes].sort((a, b) => a - b);
+  let peak = 0;
+  let end = 0;
+  for (let start = 0; start < sorted.length; start += 1) {
+    while (end < sorted.length && sorted[end] - sorted[start] <= 60 * 60 * 1000) end += 1;
+    peak = Math.max(peak, end - start);
+  }
+  return peak;
+}
+
+function getIdleBlockMinutes(orderedTimes: number[], shiftStart: number, shiftEnd: number) {
+  const sorted = [...orderedTimes].sort((a, b) => a - b);
+  const points = [shiftStart, ...sorted, shiftEnd];
+  let idleBlockCount = 0;
+  let idleMinutes = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const gapMinutes = Math.max(0, Math.round((points[index] - points[index - 1]) / 60_000));
+    if (gapMinutes >= 30) {
+      idleBlockCount += 1;
+      idleMinutes += gapMinutes;
+    }
+  }
+
+  return { idleBlockCount, idleMinutes };
+}
+
+export async function GET(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+
+  const url = new URL(request.url);
+  const monthParam = url.searchParams.get("month") || getJstMonthLabel();
+  const { month, startUtc, endUtc } = getJstMonthRange(monthParam);
+  const scope = await getSessionStoreScope(session);
+  const stores = await getVisibleStores(scope.allStores, scope.storeIds);
+  const visibleStoreIds = stores.map((store) => String(store.id));
+  const requestedStoreId = url.searchParams.get("storeId");
+  const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
+    ? requestedStoreId
+    : visibleStoreIds[0] ?? "";
+
+  const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
+  const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
+
+  const punches = selectedStoreId ? await sql`
+    select
+      timecard_punches.id::text,
+      timecard_punches.employee_id::text as "employeeId",
+      employees.name as "employeeName",
+      timecard_punches.store_id::text as "storeId",
+      stores.name as "storeName",
+      timecard_punches.punch_type as "punchType",
+      timecard_punches.punched_at as "punchedAt",
+      timecard_punches.source,
+      timecard_punches.note
+    from timecard_punches
+    join employees on employees.id = timecard_punches.employee_id
+    join stores on stores.id = timecard_punches.store_id
+    where timecard_punches.store_id::text = ${selectedStoreId}
+      and timecard_punches.punched_at >= ${punchWindowStartUtc.toISOString()}
+      and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
+    order by timecard_punches.punched_at asc
+  ` : [];
+
+  const typedPunches = punches.map((row) => {
+    const punchType = String(row.punchType);
+    return {
+      id: String(row.id),
+      employeeId: String(row.employeeId),
+      employeeName: String(row.employeeName),
+      storeId: String(row.storeId),
+      storeName: String(row.storeName),
+      punchType: isTimecardPunchType(punchType) ? punchType : "clock_in",
+      punchedAt: new Date(String(row.punchedAt)).toISOString(),
+      source: row.source ? String(row.source) : null,
+      note: row.note ? String(row.note) : null
+    };
+  }) satisfies TimecardPunch[];
+
+  const dailySummaries = summarizeTimecardDays(typedPunches, {
+    workDateStart: month + "-01",
+    workDateEndExclusive: new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(endUtc)
+  }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
+
+  const orders = selectedStoreId ? await sql`
+    select
+      id::text,
+      order_no as "orderNo",
+      ordered_at as "orderedAt",
+      total,
+      source_platform as "sourcePlatform"
+    from sales_orders
+    where store_id::text = ${selectedStoreId}
+      and ordered_at >= ${startUtc.toISOString()}
+      and ordered_at < ${endUtc.toISOString()}
+      and status <> 'cancelled'
+      and payment_status <> 'failed'
+      and total > 0
+    order by ordered_at asc
+  ` : [];
+
+  const shiftIntervals = dailySummaries.map((summary) => ({
+    ...summary,
+    startMs: new Date(summary.clockIn as string).getTime(),
+    endMs: new Date(summary.clockOut as string).getTime()
+  }));
+  const employeeMap = new Map<string, {
+    employeeId: string;
+    employeeName: string;
+    workMinutes: number;
+    workDays: number;
+    orderCount: number;
+    sales: number;
+    peakHourOrderCount: number;
+    onePersonHighLoadMinutes: number;
+    idleBlockCount: number;
+    idleMinutes: number;
+  }>();
+  const busyShifts = [];
+
+  for (const shift of shiftIntervals) {
+    const shiftOrders = orders.filter((order) => {
+      const orderedAt = new Date(String(order.orderedAt)).getTime();
+      return orderedAt >= shift.startMs && orderedAt <= shift.endMs;
+    });
+    const orderedTimes = shiftOrders.map((order) => new Date(String(order.orderedAt)).getTime());
+    const shiftSales = shiftOrders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
+    const peakHourOrderCount = getPeakHourOrderCount(orderedTimes);
+    const overlappingShiftCount = shiftIntervals.filter((candidate) => (
+      candidate.storeId === shift.storeId
+      && candidate.startMs < shift.endMs
+      && candidate.endMs > shift.startMs
+    )).length;
+    const isOnePerson = overlappingShiftCount <= 1;
+    const onePersonHighLoadMinutes = isOnePerson && peakHourOrderCount >= 8 ? 60 : 0;
+    const idle = getIdleBlockMinutes(orderedTimes, shift.startMs, shift.endMs);
+    const entry = employeeMap.get(shift.employeeId) ?? {
+      employeeId: shift.employeeId,
+      employeeName: shift.employeeName,
+      workMinutes: 0,
+      workDays: 0,
+      orderCount: 0,
+      sales: 0,
+      peakHourOrderCount: 0,
+      onePersonHighLoadMinutes: 0,
+      idleBlockCount: 0,
+      idleMinutes: 0
+    };
+
+    entry.workMinutes += shift.workMinutes;
+    entry.workDays += 1;
+    entry.orderCount += shiftOrders.length;
+    entry.sales += shiftSales;
+    entry.peakHourOrderCount = Math.max(entry.peakHourOrderCount, peakHourOrderCount);
+    entry.onePersonHighLoadMinutes += onePersonHighLoadMinutes;
+    entry.idleBlockCount += idle.idleBlockCount;
+    entry.idleMinutes += idle.idleMinutes;
+    employeeMap.set(shift.employeeId, entry);
+
+    busyShifts.push({
+      employeeId: shift.employeeId,
+      employeeName: shift.employeeName,
+      workDate: shift.workDate,
+      clockIn: shift.clockIn,
+      clockOut: shift.clockOut,
+      workMinutes: shift.workMinutes,
+      orderCount: shiftOrders.length,
+      sales: shiftSales,
+      ordersPerHour: shift.workMinutes > 0 ? shiftOrders.length / (shift.workMinutes / 60) : 0,
+      peakHourOrderCount,
+      isOnePerson,
+      idleMinutes: idle.idleMinutes
+    });
+  }
+
+  const employees = Array.from(employeeMap.values()).map((entry) => ({
+    ...entry,
+    ordersPerHour: entry.workMinutes > 0 ? entry.orderCount / (entry.workMinutes / 60) : 0,
+    salesPerHour: entry.workMinutes > 0 ? Math.round(entry.sales / (entry.workMinutes / 60)) : 0
+  }));
+
+  return Response.json({
+    month,
+    stores,
+    selectedStoreId,
+    totals: {
+      workMinutes: employees.reduce((sum, entry) => sum + entry.workMinutes, 0),
+      orderCount: employees.reduce((sum, entry) => sum + entry.orderCount, 0),
+      sales: employees.reduce((sum, entry) => sum + entry.sales, 0)
+    },
+    employees: employees.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount),
+    busiestEmployees: [...employees].sort((a, b) => (
+      b.onePersonHighLoadMinutes - a.onePersonHighLoadMinutes
+      || b.ordersPerHour - a.ordersPerHour
+      || b.peakHourOrderCount - a.peakHourOrderCount
+    )).slice(0, 5),
+    lightestEmployees: [...employees].filter((entry) => entry.workMinutes > 0).sort((a, b) => (
+      a.ordersPerHour - b.ordersPerHour
+      || b.idleMinutes - a.idleMinutes
+    )).slice(0, 5),
+    busiestShifts: busyShifts.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount).slice(0, 8)
+  });
+}
