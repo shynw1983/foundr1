@@ -25,6 +25,16 @@ import { UserBadge } from "../components/UserBadge";
 type StoreOption = { id: string; name: string };
 type SalesDay = { date: string; orderCount: number; sales: number };
 type SalesHour = { hour: number; orderCount: number; sales: number };
+type RevenueGroup = {
+  key: string;
+  label: string;
+  orderCount: number;
+  sales: number;
+  feeRate: number;
+  estimatedFee: number;
+  estimatedDeposit: number;
+  share: number;
+};
 type ImportBatch = {
   id: string;
   importMonth: string;
@@ -49,9 +59,13 @@ type SalesSummary = {
   totals: {
     orderCount: number;
     sales: number;
+    estimatedFee: number;
+    estimatedDeposit: number;
+    deliveryShare: number;
     averageOrderValue: number;
     activeDayCount: number;
   };
+  revenueGroups: RevenueGroup[];
   daily: SalesDay[];
   hourly: SalesHour[];
   busiestDays: SalesDay[];
@@ -111,6 +125,10 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatPercent(value: number) {
+  return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}%`;
 }
 
 const salesMonthStorageKey = "foundr1:sales:selected-month";
@@ -272,28 +290,57 @@ export default function SalesPage() {
 
         <section className="metric-grid">
           <article className="metric-card">
-            <span>注文数</span>
-            <strong>{summary?.totals.orderCount ?? 0}件</strong>
-            <small>稼働日 {summary?.totals.activeDayCount ?? 0} 日</small>
-          </article>
-          <article className="metric-card">
-            <span>売上</span>
+            <span>売上高</span>
             <strong>{formatMoney(summary?.totals.sales ?? 0)}</strong>
-            <small>平均 {formatMoney(summary?.totals.averageOrderValue ?? 0)}</small>
+            <small>注文 {summary?.totals.orderCount ?? 0}件 / 稼働日 {summary?.totals.activeDayCount ?? 0}日</small>
           </article>
           <article className="metric-card">
-            <span>最忙日</span>
-            <strong>{summary?.busiestDays[0] ? formatDate(summary.busiestDays[0].date) : "-"}</strong>
-            <small>{summary?.busiestDays[0]?.orderCount ?? 0} 件</small>
+            <span>推定入金額</span>
+            <strong>{formatMoney(summary?.totals.estimatedDeposit ?? 0)}</strong>
+            <small>手数料控除後の目安</small>
           </article>
           <article className="metric-card">
-            <span>ピーク時間</span>
-            <strong>{summary?.peakHours[0] ? `${String(summary.peakHours[0].hour).padStart(2, "0")}:00` : "-"}</strong>
-            <small>{summary?.peakHours[0]?.orderCount ?? 0} 件</small>
+            <span>推定手数料</span>
+            <strong>{formatMoney(summary?.totals.estimatedFee ?? 0)}</strong>
+            <small>デリバリー 38.5%で概算</small>
+          </article>
+          <article className="metric-card">
+            <span>デリバリー比率</span>
+            <strong>{formatPercent(summary?.totals.deliveryShare ?? 0)}</strong>
+            <small>平均客単価 {formatMoney(summary?.totals.averageOrderValue ?? 0)}</small>
           </article>
         </section>
 
         <section className="sales-grid">
+          <article className="panel sales-revenue-panel">
+            <div className="panel-title">
+              <ChartColumn size={18} />
+              <div>
+                <h3>売上口径</h3>
+                <p>店内・予約とデリバリーを分けて、入金額の目安を確認します。</p>
+              </div>
+            </div>
+            <div className="sales-revenue-list">
+              <div className="sales-revenue-row is-header">
+                <span>区分</span>
+                <span>売上高</span>
+                <span>推定手数料</span>
+                <span>推定入金額</span>
+              </div>
+              {(summary?.revenueGroups ?? []).map((group) => (
+                <div className="sales-revenue-row" key={group.key}>
+                  <div>
+                    <strong>{group.label}</strong>
+                    <small>{group.orderCount}件 / 手数料率 {formatPercent(group.feeRate * 100)}</small>
+                  </div>
+                  <span>{formatMoney(group.sales)}</span>
+                  <span>{formatMoney(group.estimatedFee)}</span>
+                  <strong>{formatMoney(group.estimatedDeposit)}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
           <article className="panel sales-import-panel">
             <div className="panel-title">
               <Upload size={18} />

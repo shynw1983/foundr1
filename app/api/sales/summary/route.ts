@@ -26,6 +26,16 @@ function getDaysInMonth(month: string) {
   return new Date(Date.UTC(year, monthText, 0)).getUTCDate();
 }
 
+const deliveryFeeRate = 0.385;
+
+function getRevenueGroup(channel: string, sourcePlatform: string) {
+  if (channel === "delivery" || ["uber_eats", "rocket_now", "demae_can"].includes(sourcePlatform)) {
+    return { key: "delivery", label: "デリバリー", feeRate: deliveryFeeRate };
+  }
+
+  return { key: "in_store", label: "店内・予約", feeRate: 0 };
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -45,6 +55,7 @@ export async function GET(request: Request) {
     select
       id::text,
       order_no as "orderNo",
+      channel,
       source_platform as "sourcePlatform",
       ordered_at as "orderedAt",
       subtotal,
@@ -65,6 +76,7 @@ export async function GET(request: Request) {
   const dayMap = new Map<string, { date: string; orderCount: number; sales: number }>();
   const hourMap = new Map<number, { hour: number; orderCount: number; sales: number }>();
   const platformMap = new Map<string, { sourcePlatform: string; orderCount: number; sales: number }>();
+  const revenueGroupMap = new Map<string, { key: string; label: string; orderCount: number; sales: number; feeRate: number }>();
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -105,12 +117,40 @@ export async function GET(request: Request) {
     platformEntry.orderCount += 1;
     platformEntry.sales += sales;
     platformMap.set(sourcePlatform, platformEntry);
+
+    const group = getRevenueGroup(String(order.channel), sourcePlatform);
+    const groupEntry = revenueGroupMap.get(group.key) ?? {
+      key: group.key,
+      label: group.label,
+      orderCount: 0,
+      sales: 0,
+      feeRate: group.feeRate
+    };
+    groupEntry.orderCount += 1;
+    groupEntry.sales += sales;
+    revenueGroupMap.set(group.key, groupEntry);
   }
 
   const daily = Array.from(dayMap.values());
   const hourly = Array.from(hourMap.values());
   const totalOrders = orders.length;
   const totalSales = orders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
+  const revenueGroups = ["in_store", "delivery"].map((key) => {
+    const fallback = key === "delivery"
+      ? { key, label: "デリバリー", orderCount: 0, sales: 0, feeRate: deliveryFeeRate }
+      : { key, label: "店内・予約", orderCount: 0, sales: 0, feeRate: 0 };
+    const group = revenueGroupMap.get(key) ?? fallback;
+    const estimatedFee = Math.round(group.sales * group.feeRate);
+    return {
+      ...group,
+      estimatedFee,
+      estimatedDeposit: group.sales - estimatedFee,
+      share: totalSales > 0 ? (group.sales / totalSales) * 100 : 0
+    };
+  });
+  const estimatedFeeTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedFee, 0);
+  const estimatedDepositTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedDeposit, 0);
+  const deliverySales = revenueGroups.find((group) => group.key === "delivery")?.sales ?? 0;
   const activeDays = daily.filter((day) => day.orderCount > 0);
   const busiestDays = [...activeDays].sort((a, b) => b.orderCount - a.orderCount || b.sales - a.sales).slice(0, 5);
   const quietestDays = [...activeDays].sort((a, b) => a.orderCount - b.orderCount || a.sales - b.sales).slice(0, 5);
@@ -138,9 +178,13 @@ export async function GET(request: Request) {
     totals: {
       orderCount: totalOrders,
       sales: totalSales,
+      estimatedFee: estimatedFeeTotal,
+      estimatedDeposit: estimatedDepositTotal,
+      deliveryShare: totalSales > 0 ? (deliverySales / totalSales) * 100 : 0,
       averageOrderValue: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0,
       activeDayCount: activeDays.length
     },
+    revenueGroups,
     daily,
     hourly,
     busiestDays,

@@ -11044,7 +11044,14 @@ button {
 
 .sales-workspace,
 .workload-workspace {
+  display: grid;
+  align-content: start;
   gap: 18px;
+}
+
+.sales-workspace > .topbar,
+.workload-workspace > .topbar {
+  margin-bottom: 0;
 }
 
 .sales-workspace {
@@ -11153,8 +11160,13 @@ button {
 }
 
 .sales-import-panel,
+.sales-revenue-panel,
 .workload-table-panel {
   grid-column: span 1;
+}
+
+.sales-revenue-panel {
+  grid-column: span 2;
 }
 
 .sales-grid > .sales-import-panel:first-child {
@@ -11171,6 +11183,10 @@ button {
   gap: 10px;
   align-items: center;
   margin-top: 14px;
+}
+
+.sales-workspace .sales-upload-row {
+  margin-top: var(--sales-inner-gap);
 }
 
 .sales-source-select {
@@ -11210,11 +11226,74 @@ button {
   font-size: 13px;
 }
 
+.sales-revenue-list {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sales-revenue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(100px, 0.7fr));
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sales-revenue-row:first-child {
+  border-top: 0;
+}
+
+.sales-revenue-row.is-header {
+  min-height: auto;
+  background: #f8fbff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-revenue-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sales-revenue-row strong,
+.sales-revenue-row span,
+.sales-revenue-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sales-revenue-row > span,
+.sales-revenue-row > strong:last-child {
+  text-align: right;
+  font-weight: 800;
+}
+
+.sales-revenue-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .sales-import-list,
 .sales-rank-list {
   display: grid;
   gap: 10px;
-  margin-top: var(--workload-inner-gap, 14px);
+  margin-top: 14px;
+}
+
+.sales-workspace .sales-import-list,
+.sales-workspace .sales-rank-list {
+  margin-top: var(--sales-inner-gap);
+}
+
+.workload-workspace .sales-rank-list {
+  margin-top: var(--workload-inner-gap);
 }
 
 .sales-import-row,
@@ -11256,6 +11335,10 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 14px;
   margin-top: 14px;
+}
+
+.sales-workspace .sales-day-bars {
+  margin-top: var(--sales-inner-gap);
 }
 
 .sales-day-bar {
@@ -11442,6 +11525,10 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .sales-revenue-panel {
+    grid-column: span 2;
+  }
+
   .sales-grid > .panel:has(.sales-day-bars) {
     grid-column: span 1;
   }
@@ -11466,6 +11553,19 @@ button {
 @media (max-width: 760px) {
   .sales-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sales-revenue-panel {
+    grid-column: span 1;
+  }
+
+  .sales-revenue-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-revenue-row > span,
+  .sales-revenue-row > strong:last-child {
+    text-align: left;
   }
 
   .workload-chart-grid {
