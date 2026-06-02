@@ -320,6 +320,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 export default function ProductsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const [returnToOrdersAfterProduct, setReturnToOrdersAfterProduct] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
@@ -404,6 +405,18 @@ export default function ProductsPage() {
   useEffect(() => {
     void loadProductData();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const shouldCreateFromOrders = params.get("from") === "orders" && params.get("new") === "1";
+
+    setReturnToOrdersAfterProduct(params.get("from") === "orders");
+    if (shouldCreateFromOrders && dataSource === "neon" && canManageProducts && !editTarget) {
+      openNewProductEditor();
+      window.history.replaceState(null, "", "/os/products?from=orders");
+    }
+  }, [canManageProducts, dataSource, editTarget]);
 
   const productCategories = categoryMaster.length > 0
     ? categoryMaster.map((category) => category.name)
@@ -524,7 +537,7 @@ export default function ProductsPage() {
 
     await loadProductData();
     setEditTarget(null);
-    showNotice("商品を保存しました。");
+    showNotice(returnToOrdersAfterProduct ? "商品を保存しました。発注依頼に戻ると作成中の内容を続けられます。" : "商品を保存しました。");
   }
 
   function openNewProductEditor() {
@@ -778,6 +791,11 @@ export default function ProductsPage() {
             <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
           </div>
           <div className="topbar-actions">
+            {returnToOrdersAfterProduct ? (
+              <a className="secondary-button" href="/os/orders#create-order-panel">
+                発注依頼に戻る
+              </a>
+            ) : null}
             <label className="search-box">
               <Search size={17} />
               <input

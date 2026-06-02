@@ -7,7 +7,7 @@ import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   orders,
   products as initialProducts,
@@ -94,6 +94,20 @@ type EditingOrder = {
   buyerStaffId: string;
   items: OrderItemDraft[];
 };
+
+type NewOrderDraftSession = {
+  store: string;
+  deadline: string;
+  priority: string;
+  note: string;
+  requesterStaffId: string;
+  buyerStaffId: string;
+  categoryFilter: string;
+  subcategoryFilter: string;
+  items: OrderItemDraft[];
+};
+
+const newOrderDraftStorageKey = "foundr1-os:new-order-draft";
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -269,6 +283,7 @@ function getFirstProductInSubcategory(products: ProductWithCategory[], category:
 }
 
 function syncOrderItemWithProducts(item: OrderItemDraft, availableProducts: ProductWithCategory[]) {
+  if (availableProducts.length === 0) return item;
   if (availableProducts.some((product) => product.id === item.productId || (!item.productId && product.name === item.productName))) return item;
 
   const firstSameCategory = getFirstProductInCategory(availableProducts, item.category);
@@ -282,6 +297,51 @@ function syncOrderItemWithProducts(item: OrderItemDraft, availableProducts: Prod
     productName: nextProduct?.name ?? "",
     unit: nextProduct?.unit ?? "個"
   };
+}
+
+function readSavedNewOrderDraft(): NewOrderDraftSession | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const rawDraft = window.sessionStorage.getItem(newOrderDraftStorageKey);
+    if (!rawDraft) return null;
+    const parsed = JSON.parse(rawDraft) as Partial<NewOrderDraftSession>;
+    const items = Array.isArray(parsed.items)
+      ? parsed.items
+          .map((item, index) => ({
+            id: Number(item?.id) || Date.now() + index,
+            productId: String(item?.productId ?? ""),
+            category: String(item?.category ?? ""),
+            subcategory: String(item?.subcategory ?? "未分類"),
+            productName: String(item?.productName ?? ""),
+            quantity: Math.min(999, Math.max(1, Number(item?.quantity) || 1)),
+            unit: String(item?.unit ?? "個")
+          }))
+          .filter((item) => item.productId || item.productName)
+      : [];
+
+    if (
+      !String(parsed.store ?? "") &&
+      !String(parsed.note ?? "") &&
+      items.length === 0
+    ) {
+      return null;
+    }
+
+    return {
+      store: String(parsed.store ?? ""),
+      deadline: String(parsed.deadline ?? "") || getDefaultDeadlineValue(),
+      priority: String(parsed.priority ?? "中"),
+      note: String(parsed.note ?? ""),
+      requesterStaffId: String(parsed.requesterStaffId ?? ""),
+      buyerStaffId: String(parsed.buyerStaffId ?? ""),
+      categoryFilter: String(parsed.categoryFilter ?? ""),
+      subcategoryFilter: String(parsed.subcategoryFilter ?? ""),
+      items
+    };
+  } catch {
+    return null;
+  }
 }
 
 function createStoreFeedbackItems(
@@ -378,6 +438,8 @@ function formatPrice(value: number) {
 
 export default function OrdersPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const hasRestoredNewOrderDraft = useRef(false);
+  const shouldSkipInitialDraftSave = useRef(true);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<typeof stores>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -430,6 +492,23 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const savedDraft = readSavedNewOrderDraft();
+    hasRestoredNewOrderDraft.current = true;
+
+    if (!savedDraft) return;
+
+    setDraftStore(savedDraft.store);
+    setDraftDeadline(savedDraft.deadline);
+    setDraftPriority(savedDraft.priority || "中");
+    setDraftNote(savedDraft.note);
+    setDraftRequesterStaffId(savedDraft.requesterStaffId);
+    setDraftBuyerStaffId(savedDraft.buyerStaffId);
+    setDraftCategoryFilter(savedDraft.categoryFilter);
+    setDraftSubcategoryFilter(savedDraft.subcategoryFilter);
+    setOrderItemDrafts(savedDraft.items);
   }, []);
 
   const orderableStores = storesData
@@ -510,6 +589,44 @@ export default function OrdersPage() {
     setDraftRequesterStaffId((current) => getSelectedRequesterStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
     setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
   }, [selectedDraftStore, currentUserId, staffOptions]);
+
+  useEffect(() => {
+    if (!hasRestoredNewOrderDraft.current || typeof window === "undefined") return;
+    if (shouldSkipInitialDraftSave.current) {
+      shouldSkipInitialDraftSave.current = false;
+      return;
+    }
+
+    const draft: NewOrderDraftSession = {
+      store: selectedDraftStore,
+      deadline: draftDeadline,
+      priority: draftPriority,
+      note: draftNote,
+      requesterStaffId: selectedDraftRequesterStaffId,
+      buyerStaffId: selectedDraftBuyerStaffId,
+      categoryFilter: selectedDraftCategory,
+      subcategoryFilter: selectedDraftSubcategory,
+      items: orderItemDrafts.filter((item) => item.productId || item.productName)
+    };
+    const hasDraftContent = draft.items.length > 0 || draft.note.trim().length > 0;
+
+    if (!hasDraftContent) {
+      window.sessionStorage.removeItem(newOrderDraftStorageKey);
+      return;
+    }
+
+    window.sessionStorage.setItem(newOrderDraftStorageKey, JSON.stringify(draft));
+  }, [
+    selectedDraftStore,
+    draftDeadline,
+    draftPriority,
+    draftNote,
+    selectedDraftRequesterStaffId,
+    selectedDraftBuyerStaffId,
+    selectedDraftCategory,
+    selectedDraftSubcategory,
+    orderItemDrafts
+  ]);
 
   function getQueueFilterCount(filter: QueueFilter) {
     if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
@@ -648,6 +765,7 @@ export default function OrdersPage() {
       setDraftCategoryFilter("");
       setDraftSubcategoryFilter("");
       setOrderItemDrafts([]);
+      window.sessionStorage.removeItem(newOrderDraftStorageKey);
       await loadDashboardData();
     } finally {
       setIsSubmittingOrder(false);
@@ -1001,6 +1119,10 @@ export default function OrdersPage() {
               <div className="builder-heading">
                 <strong>依頼商品リスト</strong>
                 <span>{orderItemDrafts.filter((item) => item.productId || item.productName).length} 件</span>
+                <a className="secondary-button" href="/os/products?from=orders&new=1">
+                  <Plus size={16} />
+                  商品マスタに追加
+                </a>
               </div>
               <div className="order-product-picker">
                 <div className="product-category-strip" aria-label="依頼商品大分類">
