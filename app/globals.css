@@ -56,8 +56,47 @@ textarea {
   font: inherit;
 }
 
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+  min-width: 0;
+}
+
+input[type="file"] {
+  width: 100%;
+}
+
 button {
   cursor: pointer;
+}
+
+:where(
+  .workspace,
+  .topbar,
+  .topbar-actions,
+  .panel,
+  .metric-card,
+  .workspace-grid,
+  .dashboard-report-grid,
+  .management-grid,
+  .admin-grid,
+  .content-grid,
+  .settings-grid,
+  .management-form,
+  .edit-fields,
+  .row-actions,
+  .sales-workspace,
+  .workload-workspace
+) > *,
+body :where(
+  [class$="-grid"],
+  [class$="-layout"],
+  [class$="-row"],
+  [class$="-actions"]
+) > * {
+  min-width: 0;
 }
 
 .shell {
@@ -1343,6 +1382,7 @@ button {
   align-items: center;
   justify-content: center;
   max-width: 100%;
+  min-width: 0;
   border-radius: 8px;
   text-align: center;
 }
@@ -1905,7 +1945,7 @@ button {
 
 .settings-tax-import {
   display: grid;
-  grid-template-columns: minmax(150px, 0.34fr) minmax(320px, 1fr) minmax(220px, auto);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 10px;
   align-items: end;
   margin-top: 12px;
@@ -1920,8 +1960,10 @@ button {
 .settings-tax-import .secondary-button {
   justify-content: center;
   width: 100%;
-  min-height: 58px;
-  white-space: nowrap;
+  min-height: 46px;
+  padding-inline: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .settings-tax-table-list {
@@ -1977,17 +2019,6 @@ button {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
-}
-
-@media (max-width: 1180px) {
-  .settings-tax-import {
-    grid-template-columns: minmax(140px, 0.36fr) minmax(0, 1fr);
-  }
-
-  .settings-tax-import .secondary-button {
-    grid-column: 2;
-    min-height: 46px;
-  }
 }
 
 .management-row div {
