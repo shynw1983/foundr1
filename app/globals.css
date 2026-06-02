@@ -11014,6 +11014,26 @@ button {
   gap: 18px;
 }
 
+.workload-workspace {
+  --workload-gap: 18px;
+  --workload-panel-padding: 18px;
+  --workload-inner-gap: 12px;
+}
+
+.workload-workspace > .metric-grid,
+.workload-chart-grid,
+.workload-workspace > .sales-grid {
+  gap: var(--workload-gap);
+}
+
+.workload-workspace > .panel {
+  padding: var(--workload-panel-padding);
+}
+
+.workload-workspace .panel-title {
+  margin-bottom: var(--workload-inner-gap);
+}
+
 .sales-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -11065,8 +11085,8 @@ button {
 .sales-import-list,
 .sales-rank-list {
   display: grid;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: var(--workload-inner-gap, 14px);
 }
 
 .sales-import-row,
@@ -11075,7 +11095,7 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--border);
 }
 
@@ -11154,13 +11174,13 @@ button {
 .workload-chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--workload-gap);
 }
 
 .workload-chart-list {
   display: grid;
-  gap: 14px;
-  margin-top: 14px;
+  gap: var(--workload-inner-gap);
+  margin-top: 0;
 }
 
 .workload-chart-row {
@@ -11236,7 +11256,7 @@ button {
   align-items: center;
   justify-content: space-between;
   min-height: 52px;
-  padding: 0 18px;
+  padding: 0 var(--workload-panel-padding);
   cursor: pointer;
   font-weight: 700;
   list-style: none;
@@ -11268,7 +11288,7 @@ button {
 }
 
 .workload-guide-grid article {
-  padding: 16px 18px;
+  padding: var(--workload-panel-padding);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }

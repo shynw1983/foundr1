@@ -290,7 +290,7 @@ export default function TimecardWorkloadPage() {
           <article className="metric-card">
             <span>負荷最少</span>
             <strong>{lightest?.employeeName ?? "-"}</strong>
-            <small>{lightest ? `${rate(lightest.ordersPerHour)} 件/時` : "データなし"}</small>
+            <small>{lightest ? `${rate(lightest.ordersPerHour)} 件/時間` : "データなし"}</small>
           </article>
         </section>
 
@@ -357,13 +357,13 @@ export default function TimecardWorkloadPage() {
                 <div className="workload-chart-row" key={employee.employeeId}>
                   <div className="workload-chart-heading">
                     <strong>{employee.employeeName}</strong>
-                    <span>{score(employee.peakHourLoadScore)}/時</span>
+                    <span>{score(employee.peakHourLoadScore)}/時間</span>
                   </div>
                   <div className="workload-chart-bar" aria-label={`${employee.employeeName} 負荷ピーク ${score(employee.peakHourLoadScore)}`}>
                     <i className="is-load" style={{ width: chartWidth(employee.peakHourLoadScore, maxPeakLoadScore) }} />
                   </div>
                   <div className="workload-chart-subbar">
-                    <span>平均注文 {rate(employee.ordersPerHour)}件/時</span>
+                    <span>平均注文 {rate(employee.ordersPerHour)}件/時間</span>
                     <div><i style={{ width: chartWidth(employee.ordersPerHour, maxOrdersPerHour) }} /></div>
                   </div>
                 </div>
@@ -416,7 +416,7 @@ export default function TimecardWorkloadPage() {
                   <th>スタッフ</th>
                   <th>勤務</th>
                   <th>注文</th>
-                  <th>注文/時</th>
+                  <th>注文/時間</th>
                   <th>売上/時間</th>
                   <th>負荷ピーク</th>
                   <th>ワンオペ高負荷</th>
@@ -432,7 +432,7 @@ export default function TimecardWorkloadPage() {
                     <td>{rate(employee.ordersPerHour)}</td>
                     <td>{formatMoney(employee.salesPerHour)}</td>
                     <td>
-                      <strong>{score(employee.peakHourLoadScore)}/時</strong>
+                      <strong>{score(employee.peakHourLoadScore)}/時間</strong>
                       <small>注文 {employee.peakHourOrderCount}件 / {formatMoney(employee.peakHourSales)}</small>
                     </td>
                     <td>{formatDuration(employee.onePersonHighLoadMinutes)}</td>
@@ -463,7 +463,7 @@ export default function TimecardWorkloadPage() {
                   <th>貢献率</th>
                   <th>売上/時間</th>
                   <th>カバー注文</th>
-                  <th>注文/時</th>
+                  <th>注文/時間</th>
                 </tr>
               </thead>
               <tbody>
@@ -491,7 +491,7 @@ export default function TimecardWorkloadPage() {
               {(data?.busiestShifts ?? []).map((shift) => (
                 <div className="sales-rank-row" key={`${shift.employeeId}-${shift.workDate}-${shift.clockIn}`}>
                   <span>{formatDate(shift.workDate)} {shift.employeeName}</span>
-                  <strong>{score(shift.peakHourLoadScore)}/時</strong>
+                  <strong>{score(shift.peakHourLoadScore)}/時間</strong>
                   <small>{formatTime(shift.clockIn)}-{formatTime(shift.clockOut)} / 注文ピーク {shift.peakHourOrderCount}件 / {shift.isOnePerson ? "ワンオペ" : "複数名"}</small>
                 </div>
               ))}
@@ -504,7 +504,7 @@ export default function TimecardWorkloadPage() {
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
                   <strong>{formatDuration(employee.onePersonHighLoadMinutes)}</strong>
-                  <small>{rate(employee.ordersPerHour)}件/時 / 負荷ピーク {score(employee.peakHourLoadScore)}/時 / 注文ピーク {employee.peakHourOrderCount}件</small>
+                  <small>{rate(employee.ordersPerHour)}件/時間 / 負荷ピーク {score(employee.peakHourLoadScore)}/時間 / 注文ピーク {employee.peakHourOrderCount}件</small>
                 </div>
               ))}
             </div>
@@ -516,7 +516,7 @@ export default function TimecardWorkloadPage() {
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
                   <strong>{percent(idleRate(employee))}</strong>
-                  <small>空き {formatDuration(employee.idleMinutes)} / 勤務 {formatDuration(employee.workMinutes)} / {rate(employee.ordersPerHour)}件/時</small>
+                  <small>空き {formatDuration(employee.idleMinutes)} / 勤務 {formatDuration(employee.workMinutes)} / {rate(employee.ordersPerHour)}件/時間</small>
                 </div>
               ))}
             </div>
