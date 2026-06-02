@@ -10806,8 +10806,63 @@ button {
     flex: 1 1 0;
   }
 
+  .timecard-workspace > .panel .panel-title {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .timecard-workspace > .panel .panel-title .shift-multi-select-toggle {
+    align-self: start;
+    min-width: max-content;
+    white-space: nowrap;
+  }
+
+  .shift-grid-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .shift-grid {
-    min-width: 980px;
+    min-width: max-content;
+    font-size: 12px;
+  }
+
+  .shift-grid th,
+  .shift-grid td {
+    min-width: 54px;
+    height: 54px;
+  }
+
+  .shift-grid thead th {
+    height: 44px;
+    padding: 2px 1px;
+  }
+
+  .shift-grid .shift-employee-head,
+  .shift-grid .shift-employee-cell {
+    min-width: 82px;
+    width: 82px;
+    padding: 0 4px;
+    font-size: 12px;
+  }
+
+  .shift-grid .shift-cost-head,
+  .shift-grid .shift-cost-cell {
+    position: static;
+    min-width: 92px;
+    width: 92px;
+    border-left: 0;
+  }
+
+  .shift-cell {
+    height: 54px;
+    font-size: 11px;
+  }
+
+  .shift-cell strong {
+    font-size: 12px;
   }
 
   .timecard-punch-button {
