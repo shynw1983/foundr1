@@ -219,37 +219,60 @@ export async function POST(request: Request) {
 
   let tableId = "";
   try {
-    const upserted = await sql`
-      insert into employment_insurance_rate_tables (
-        fiscal_year,
-        title,
-        source_file_name,
-        effective_from,
-        effective_to,
-        is_active,
-        uploaded_by
-      )
-      values (
-        ${parsed.fiscalYear},
-        ${parsed.title},
-        ${body.fileName ?? null},
-        ${parsed.effectiveFrom}::date,
-        ${parsed.effectiveTo}::date,
-        true,
-        ${session.id}
-      )
-      on conflict (fiscal_year)
-      do update set
-        title = excluded.title,
-        source_file_name = excluded.source_file_name,
-        effective_from = excluded.effective_from,
-        effective_to = excluded.effective_to,
-        is_active = true,
-        uploaded_by = excluded.uploaded_by,
-        created_at = now()
-      returning id::text
+    const existingTables = await sql`
+      select id::text
+      from employment_insurance_rate_tables
+      where fiscal_year = ${parsed.fiscalYear}
+      order by created_at desc
+      limit 1
     `;
-    tableId = String(upserted[0]?.id ?? "");
+
+    if (existingTables[0]?.id) {
+      const updated = await sql`
+        update employment_insurance_rate_tables
+        set
+          title = ${parsed.title},
+          source_file_name = ${body.fileName ?? null},
+          effective_from = ${parsed.effectiveFrom}::date,
+          effective_to = ${parsed.effectiveTo}::date,
+          is_active = true,
+          uploaded_by = ${session.id},
+          created_at = now()
+        where id = ${existingTables[0].id}
+        returning id::text
+      `;
+      tableId = String(updated[0]?.id ?? existingTables[0].id);
+    } else {
+      const inserted = await sql`
+        insert into employment_insurance_rate_tables (
+          fiscal_year,
+          title,
+          source_file_name,
+          effective_from,
+          effective_to,
+          is_active,
+          uploaded_by
+        )
+        values (
+          ${parsed.fiscalYear},
+          ${parsed.title},
+          ${body.fileName ?? null},
+          ${parsed.effectiveFrom}::date,
+          ${parsed.effectiveTo}::date,
+          true,
+          ${session.id}
+        )
+        returning id::text
+      `;
+      tableId = String(inserted[0]?.id ?? "");
+    }
+
+    await sql`
+      update employment_insurance_rate_tables
+      set is_active = false
+      where fiscal_year = ${parsed.fiscalYear}
+        and id <> ${tableId}
+    `;
 
     await sql`delete from employment_insurance_rate_rows where table_id = ${tableId}`;
     for (const row of parsed.rows) {
