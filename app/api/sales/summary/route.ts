@@ -59,29 +59,33 @@ function getDatesBetween(startDate: string, endDate: string) {
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
 const hourMs = 60 * 60 * 1000;
-const workloadLevels = [
+const salesAnalysisSettingsRoles = new Set(["owner", "manager", "store_owner"]);
+const salesAnalysisLevels = [
   { key: "veryIdle", label: "かなり空き", scoreKey: "scoreVeryIdle" },
   { key: "normal", label: "通常", scoreKey: "scoreNormal" },
   { key: "busy", label: "忙しい", scoreKey: "scoreBusy" },
   { key: "high", label: "高負荷", scoreKey: "scoreHigh" },
   { key: "extreme", label: "超負荷", scoreKey: "scoreExtreme" }
 ] as const;
-const defaultWorkloadSettings = {
-  minOrderLoadScore: 1,
-  amountScoreMultiplier: 1,
-  orderVeryIdleMax: 4,
-  orderNormalMax: 8,
-  orderBusyMax: 12,
-  orderHighMax: 15,
-  salesVeryIdleMax: 4999,
-  salesNormalMax: 9999,
-  salesBusyMax: 14999,
-  salesHighMax: 19999,
+const defaultSalesAnalysisSettings = {
+  veryIdleRateMax: 0.6,
+  normalRateMax: 1.1,
+  busyRateMax: 1.5,
+  highRateMax: 2,
   scoreVeryIdle: 20,
   scoreNormal: 60,
   scoreBusy: 90,
   scoreHigh: 120,
   scoreExtreme: 150
+};
+const workloadScoreSettings = {
+  minOrderLoadScore: 1,
+  amountScoreMultiplier: 1,
+  scoreVeryIdle: defaultSalesAnalysisSettings.scoreVeryIdle,
+  scoreNormal: defaultSalesAnalysisSettings.scoreNormal,
+  scoreBusy: defaultSalesAnalysisSettings.scoreBusy,
+  scoreHigh: defaultSalesAnalysisSettings.scoreHigh,
+  scoreExtreme: defaultSalesAnalysisSettings.scoreExtreme
 };
 const defaultWeatherLocation = {
   name: "福岡市",
@@ -89,7 +93,8 @@ const defaultWeatherLocation = {
   longitude: 130.4017
 };
 
-type WorkloadSettings = typeof defaultWorkloadSettings;
+type SalesAnalysisSettings = typeof defaultSalesAnalysisSettings;
+type WorkloadScoreSettings = typeof workloadScoreSettings;
 
 type WeatherDay = {
   date: string;
@@ -118,49 +123,40 @@ function numberFrom(value: unknown, fallback: number) {
   return Number.isFinite(nextValue) ? nextValue : fallback;
 }
 
-function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
+function clampNumber(value: unknown, fallback: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, numberFrom(value, fallback)));
+}
+
+function normalizeSalesAnalysisSettings(settings: Partial<SalesAnalysisSettings>): SalesAnalysisSettings {
+  const veryIdleRateMax = clampNumber(settings.veryIdleRateMax, defaultSalesAnalysisSettings.veryIdleRateMax, 0, 10);
+  const normalRateMax = Math.max(veryIdleRateMax + 0.1, clampNumber(settings.normalRateMax, defaultSalesAnalysisSettings.normalRateMax, 0.1, 15));
+  const busyRateMax = Math.max(normalRateMax + 0.1, clampNumber(settings.busyRateMax, defaultSalesAnalysisSettings.busyRateMax, 0.2, 20));
+  const highRateMax = Math.max(busyRateMax + 0.1, clampNumber(settings.highRateMax, defaultSalesAnalysisSettings.highRateMax, 0.3, 30));
   return {
-    minOrderLoadScore: numberFrom(settings.minOrderLoadScore, defaultWorkloadSettings.minOrderLoadScore),
-    amountScoreMultiplier: numberFrom(settings.amountScoreMultiplier, defaultWorkloadSettings.amountScoreMultiplier),
-    orderVeryIdleMax: numberFrom(settings.orderVeryIdleMax, defaultWorkloadSettings.orderVeryIdleMax),
-    orderNormalMax: numberFrom(settings.orderNormalMax, defaultWorkloadSettings.orderNormalMax),
-    orderBusyMax: numberFrom(settings.orderBusyMax, defaultWorkloadSettings.orderBusyMax),
-    orderHighMax: numberFrom(settings.orderHighMax, defaultWorkloadSettings.orderHighMax),
-    salesVeryIdleMax: numberFrom(settings.salesVeryIdleMax, defaultWorkloadSettings.salesVeryIdleMax),
-    salesNormalMax: numberFrom(settings.salesNormalMax, defaultWorkloadSettings.salesNormalMax),
-    salesBusyMax: numberFrom(settings.salesBusyMax, defaultWorkloadSettings.salesBusyMax),
-    salesHighMax: numberFrom(settings.salesHighMax, defaultWorkloadSettings.salesHighMax),
-    scoreVeryIdle: numberFrom(settings.scoreVeryIdle, defaultWorkloadSettings.scoreVeryIdle),
-    scoreNormal: numberFrom(settings.scoreNormal, defaultWorkloadSettings.scoreNormal),
-    scoreBusy: numberFrom(settings.scoreBusy, defaultWorkloadSettings.scoreBusy),
-    scoreHigh: numberFrom(settings.scoreHigh, defaultWorkloadSettings.scoreHigh),
-    scoreExtreme: numberFrom(settings.scoreExtreme, defaultWorkloadSettings.scoreExtreme)
+    veryIdleRateMax: Math.round(veryIdleRateMax * 100) / 100,
+    normalRateMax: Math.round(normalRateMax * 100) / 100,
+    busyRateMax: Math.round(busyRateMax * 100) / 100,
+    highRateMax: Math.round(highRateMax * 100) / 100,
+    scoreVeryIdle: defaultSalesAnalysisSettings.scoreVeryIdle,
+    scoreNormal: defaultSalesAnalysisSettings.scoreNormal,
+    scoreBusy: defaultSalesAnalysisSettings.scoreBusy,
+    scoreHigh: defaultSalesAnalysisSettings.scoreHigh,
+    scoreExtreme: defaultSalesAnalysisSettings.scoreExtreme
   };
 }
 
-async function getWorkloadSettings(storeId: string) {
+async function getSalesAnalysisSettings(storeId: string) {
   const rows = await sql`
     select
-      coalesce(order_very_idle_max, 4) as "orderVeryIdleMax",
-      coalesce(order_normal_max, 8) as "orderNormalMax",
-      coalesce(order_busy_max, 12) as "orderBusyMax",
-      coalesce(order_high_max, 15) as "orderHighMax",
-      coalesce(min_order_load_score, 1) as "minOrderLoadScore",
-      coalesce(amount_score_multiplier, 1) as "amountScoreMultiplier",
-      coalesce(sales_very_idle_max, 4999) as "salesVeryIdleMax",
-      coalesce(sales_normal_max, 9999) as "salesNormalMax",
-      coalesce(sales_busy_max, 14999) as "salesBusyMax",
-      coalesce(sales_high_max, 19999) as "salesHighMax",
-      coalesce(score_very_idle, 20) as "scoreVeryIdle",
-      coalesce(score_normal, 60) as "scoreNormal",
-      coalesce(score_busy, 90) as "scoreBusy",
-      coalesce(score_high, 120) as "scoreHigh",
-      coalesce(score_extreme, 150) as "scoreExtreme"
-    from timecard_workload_settings
+      coalesce(very_idle_rate_max, 0.6) as "veryIdleRateMax",
+      coalesce(normal_rate_max, 1.1) as "normalRateMax",
+      coalesce(busy_rate_max, 1.5) as "busyRateMax",
+      coalesce(high_rate_max, 2) as "highRateMax"
+    from sales_analysis_settings
     where store_id::text = ${storeId}
     limit 1
   `;
-  return normalizeWorkloadSettings(rows[0] ?? defaultWorkloadSettings);
+  return normalizeSalesAnalysisSettings(rows[0] ?? defaultSalesAnalysisSettings);
 }
 
 function getPeakHourMetrics(orders: WorkloadOrder[]) {
@@ -211,30 +207,19 @@ function getCoverageMinutes(intervals: Array<{ startMs: number; endMs: number }>
   return Math.round(total / 60_000);
 }
 
-function getLoadLevelIndex(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
-  const orderLevel = ordersPerHour <= settings.orderVeryIdleMax
-    ? 0
-    : ordersPerHour <= settings.orderNormalMax
-      ? 1
-      : ordersPerHour <= settings.orderBusyMax
-        ? 2
-        : ordersPerHour <= settings.orderHighMax
-          ? 3
-          : 4;
-  const salesLevel = salesPerHour <= settings.salesVeryIdleMax
-    ? 0
-    : salesPerHour <= settings.salesNormalMax
-      ? 1
-      : salesPerHour <= settings.salesBusyMax
-        ? 2
-        : salesPerHour <= settings.salesHighMax
-          ? 3
-          : 4;
-  return Math.max(orderLevel, salesLevel);
+function getSalesAnalysisLevelIndex(valueRate: number, settings: SalesAnalysisSettings) {
+  if (valueRate <= settings.veryIdleRateMax) return 0;
+  if (valueRate <= settings.normalRateMax) return 1;
+  if (valueRate <= settings.busyRateMax) return 2;
+  if (valueRate <= settings.highRateMax) return 3;
+  return 4;
 }
 
-function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number, settings: WorkloadSettings) {
-  const level = workloadLevels[getLoadLevelIndex(ordersPerHour, salesPerHour, settings)];
+function getSalesAnalysisLevelMetrics(orderRate: number, salesRate: number, settings: SalesAnalysisSettings) {
+  const level = salesAnalysisLevels[Math.max(
+    getSalesAnalysisLevelIndex(orderRate, settings),
+    getSalesAnalysisLevelIndex(salesRate, settings)
+  )];
   return {
     loadLevel: level.key,
     loadLevelLabel: level.label,
@@ -323,7 +308,7 @@ export async function GET(request: Request) {
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
-  const workloadSettings = selectedStoreId ? await getWorkloadSettings(selectedStoreId) : defaultWorkloadSettings;
+  const salesAnalysisSettings = selectedStoreId ? await getSalesAnalysisSettings(selectedStoreId) : defaultSalesAnalysisSettings;
   const storeWeatherRows = selectedStoreId ? await sql`
     select
       coalesce(weather_location_name, '') as "weatherLocationName",
@@ -438,8 +423,8 @@ export async function GET(request: Request) {
         orderedAtMs: new Date(String(order.orderedAt)).getTime(),
         total,
         loadScore: averageOrderTotal > 0
-          ? Math.max(workloadSettings.minOrderLoadScore, (total / averageOrderTotal) * workloadSettings.amountScoreMultiplier)
-          : workloadSettings.minOrderLoadScore
+          ? Math.max(workloadScoreSettings.minOrderLoadScore, (total / averageOrderTotal) * workloadScoreSettings.amountScoreMultiplier)
+          : workloadScoreSettings.minOrderLoadScore
       };
     });
     const peakMetrics = getPeakHourMetrics(workloadOrders);
@@ -594,7 +579,7 @@ export async function GET(request: Request) {
     revenueGroupMap.set(group.key, groupEntry);
   }
 
-  const daily = Array.from(dayMap.values()).map((day) => {
+  const rawDaily = Array.from(dayMap.values()).map((day) => {
     const workMinutes = dailyWorkMinutes.get(day.date) ?? 0;
     const workHours = workMinutes / 60;
     const ordersPerHour = workHours > 0 ? day.orderCount / workHours : 0;
@@ -604,8 +589,6 @@ export async function GET(request: Request) {
       peakHourSales: 0,
       peakHourLoadScore: 0
     };
-    const averageLoadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour, workloadSettings);
-    const peakLoadLevel = getLoadLevelMetrics(peakMetrics.peakHourOrderCount, peakMetrics.peakHourSales, workloadSettings);
     const weather = weatherByDate.get(day.date) ?? {
       date: day.date,
       weatherCode: null,
@@ -619,13 +602,6 @@ export async function GET(request: Request) {
       workloadAvailable: workHours > 0,
       ordersPerHour,
       salesPerHour,
-      loadLevel: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevel : averageLoadLevel.loadLevel,
-      loadLevelLabel: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevelLabel : averageLoadLevel.loadLevelLabel,
-      averageLoadLevel: averageLoadLevel.loadLevel,
-      averageLoadLevelLabel: averageLoadLevel.loadLevelLabel,
-      peakLoadLevel: peakLoadLevel.loadLevel,
-      peakLoadLevelLabel: peakLoadLevel.loadLevelLabel,
-      peakLoadLevelScore: peakMetrics.peakHourOrderCount > 0 ? peakLoadLevel.loadLevelScore : averageLoadLevel.loadLevelScore,
       peakHourOrderCount: peakMetrics.peakHourOrderCount,
       peakHourSales: peakMetrics.peakHourSales,
       peakHourLoadScore: peakMetrics.peakHourLoadScore,
@@ -633,6 +609,30 @@ export async function GET(request: Request) {
       weatherLabel: weather.weatherLabel,
       temperatureMean: weather.temperatureMean,
       precipitation: weather.precipitation
+    };
+  });
+  const activeRawDaily = rawDaily.filter((day) => day.workMinutes > 0 && day.orderCount > 0);
+  const averageDailyOrders = activeRawDaily.length > 0
+    ? activeRawDaily.reduce((sum, day) => sum + day.orderCount, 0) / activeRawDaily.length
+    : 0;
+  const averageDailySales = activeRawDaily.length > 0
+    ? activeRawDaily.reduce((sum, day) => sum + day.sales, 0) / activeRawDaily.length
+    : 0;
+  const daily = rawDaily.map((day) => {
+    const orderRate = averageDailyOrders > 0 ? day.orderCount / averageDailyOrders : 0;
+    const salesRate = averageDailySales > 0 ? day.sales / averageDailySales : 0;
+    const salesAnalysisLevel = getSalesAnalysisLevelMetrics(orderRate, salesRate, salesAnalysisSettings);
+    return {
+      ...day,
+      orderRate,
+      salesRate,
+      loadLevel: day.orderCount > 0 ? salesAnalysisLevel.loadLevel : "veryIdle",
+      loadLevelLabel: day.orderCount > 0 ? salesAnalysisLevel.loadLevelLabel : "かなり空き",
+      averageLoadLevel: day.orderCount > 0 ? salesAnalysisLevel.loadLevel : "veryIdle",
+      averageLoadLevelLabel: day.orderCount > 0 ? salesAnalysisLevel.loadLevelLabel : "かなり空き",
+      peakLoadLevel: day.orderCount > 0 ? salesAnalysisLevel.loadLevel : "veryIdle",
+      peakLoadLevelLabel: day.orderCount > 0 ? salesAnalysisLevel.loadLevelLabel : "かなり空き",
+      peakLoadLevelScore: day.orderCount > 0 ? salesAnalysisLevel.loadLevelScore : salesAnalysisSettings.scoreVeryIdle
     };
   });
   for (const day of daily) {
@@ -714,6 +714,12 @@ export async function GET(request: Request) {
     endDate,
     stores,
     selectedStoreId,
+    canEditSalesAnalysisSettings: salesAnalysisSettingsRoles.has(session.role),
+    salesAnalysisSettings,
+    salesAnalysisBaseline: {
+      averageDailyOrders,
+      averageDailySales
+    },
     totals: {
       orderCount: totalOrders,
       sales: totalSales,
@@ -749,5 +755,63 @@ export async function GET(request: Request) {
       createdAt: new Date(String(row.createdAt)).toISOString(),
       brandName: String(row.metadata?.brandName ?? "")
     }))
+  });
+}
+
+export async function POST(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  if (!salesAnalysisSettingsRoles.has(session.role)) {
+    return Response.json({ error: "売上分析設定を変更する権限がありません。" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({})) as Partial<SalesAnalysisSettings> & { storeId?: string };
+  const storeId = String(body.storeId ?? "");
+  if (!storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
+
+  const scope = await getSessionStoreScope(session);
+  if (!scope.allStores && !scope.storeIds.includes(storeId)) {
+    return Response.json({ error: "この店舗の設定を変更する権限がありません。" }, { status: 403 });
+  }
+
+  const settings = normalizeSalesAnalysisSettings({
+    veryIdleRateMax: body.veryIdleRateMax,
+    normalRateMax: body.normalRateMax,
+    busyRateMax: body.busyRateMax,
+    highRateMax: body.highRateMax
+  });
+
+  await sql`
+    insert into sales_analysis_settings (
+      store_id,
+      very_idle_rate_max,
+      normal_rate_max,
+      busy_rate_max,
+      high_rate_max,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${storeId},
+      ${settings.veryIdleRateMax},
+      ${settings.normalRateMax},
+      ${settings.busyRateMax},
+      ${settings.highRateMax},
+      ${session.id},
+      now()
+    )
+    on conflict (store_id)
+    do update set
+      very_idle_rate_max = excluded.very_idle_rate_max,
+      normal_rate_max = excluded.normal_rate_max,
+      busy_rate_max = excluded.busy_rate_max,
+      high_rate_max = excluded.high_rate_max,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+  `;
+
+  return Response.json({
+    ok: true,
+    settings
   });
 }

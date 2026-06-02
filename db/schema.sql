@@ -554,6 +554,24 @@ alter table timecard_workload_settings add column if not exists average_weight n
 alter table timecard_workload_settings add column if not exists one_person_weight numeric(8, 2) not null default 10;
 alter table timecard_workload_settings add column if not exists one_person_rate_score_cap numeric(8, 2) not null default 30;
 
+create table if not exists sales_analysis_settings (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  very_idle_rate_max numeric(8, 2) not null default 0.6,
+  normal_rate_max numeric(8, 2) not null default 1.1,
+  busy_rate_max numeric(8, 2) not null default 1.5,
+  high_rate_max numeric(8, 2) not null default 2,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id)
+);
+
+alter table sales_analysis_settings add column if not exists very_idle_rate_max numeric(8, 2) not null default 0.6;
+alter table sales_analysis_settings add column if not exists normal_rate_max numeric(8, 2) not null default 1.1;
+alter table sales_analysis_settings add column if not exists busy_rate_max numeric(8, 2) not null default 1.5;
+alter table sales_analysis_settings add column if not exists high_rate_max numeric(8, 2) not null default 2;
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,

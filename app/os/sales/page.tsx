@@ -11,6 +11,7 @@ import {
   MessageSquareWarning,
   PackageCheck,
   Search,
+  Settings,
   Store,
   Truck,
   Upload,
@@ -34,6 +35,8 @@ type SalesDay = {
   workloadAvailable: boolean;
   ordersPerHour: number;
   salesPerHour: number;
+  orderRate: number;
+  salesRate: number;
   loadLevel: string;
   loadLevelLabel: string;
   averageLoadLevel: string;
@@ -99,6 +102,12 @@ type SalesSummary = {
   endDate: string;
   stores: StoreOption[];
   selectedStoreId: string;
+  canEditSalesAnalysisSettings: boolean;
+  salesAnalysisSettings: SalesAnalysisSettings;
+  salesAnalysisBaseline: {
+    averageDailyOrders: number;
+    averageDailySales: number;
+  };
   totals: {
     orderCount: number;
     sales: number;
@@ -124,6 +133,13 @@ type SalesSummary = {
   peakHours: SalesHour[];
   imports: ImportBatch[];
 };
+type SalesAnalysisSettings = {
+  veryIdleRateMax: number;
+  normalRateMax: number;
+  busyRateMax: number;
+  highRateMax: number;
+};
+type SalesAnalysisSettingKey = keyof SalesAnalysisSettings;
 type ImportState = {
   canImport: boolean;
   stores: StoreOption[];
@@ -216,6 +232,13 @@ function getDensityLevelClass(loadLevel: string) {
   return "is-quiet";
 }
 
+const defaultSalesAnalysisSettings: SalesAnalysisSettings = {
+  veryIdleRateMax: 0.6,
+  normalRateMax: 1.1,
+  busyRateMax: 1.5,
+  highRateMax: 2
+};
+
 function addDays(dateString: string, amount: number) {
   const [year, month, day] = dateString.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
@@ -254,6 +277,8 @@ function getCalendarDays(startDate: string, endDate: string, days: SalesDay[]) {
       workloadAvailable: false,
       ordersPerHour: 0,
       salesPerHour: 0,
+      orderRate: 0,
+      salesRate: 0,
       loadLevel: "veryIdle",
       loadLevelLabel: "かなり空き",
       averageLoadLevel: "veryIdle",
@@ -459,6 +484,8 @@ export default function SalesPage() {
   const [importState, setImportState] = useState<ImportState>({ canImport: false, stores: [], selectedStoreId: "", salesSources: [] });
   const [filesBySource, setFilesBySource] = useState<Record<string, File | null>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [settingsDraft, setSettingsDraft] = useState<SalesAnalysisSettings>(defaultSalesAnalysisSettings);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [uploadingSourceId, setUploadingSourceId] = useState("");
   const [message, setMessage] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisState>({ text: "", model: "", error: "" });
@@ -484,6 +511,7 @@ export default function SalesPage() {
     if (summaryResponse.ok) {
       const body = await summaryResponse.json() as SalesSummary;
       setSummary(body);
+      setSettingsDraft(body.salesAnalysisSettings);
       setSelectedStoreId(body.selectedStoreId);
       resolvedMonth = body.month;
       resolvedStoreId = body.selectedStoreId;
@@ -516,6 +544,8 @@ export default function SalesPage() {
       .sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount)
   ), [summary?.weekdays]);
   const selectedStoreName = summary?.stores.find((store) => store.id === selectedStoreId)?.name ?? "";
+  const currentSettings = settingsDraft ?? summary?.salesAnalysisSettings ?? defaultSalesAnalysisSettings;
+  const settingsDisabled = !summary?.canEditSalesAnalysisSettings || isSavingSettings || !selectedStoreId;
   const importedSourceMap = useMemo(() => {
     const map = new Map<string, ImportBatch>();
     for (const item of summary?.imports ?? []) {
@@ -531,6 +561,27 @@ export default function SalesPage() {
     }
     return map;
   }, [importState.salesSources, summary?.imports]);
+
+  function updateSettingsDraft(key: SalesAnalysisSettingKey, value: number) {
+    setSettingsDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveSalesAnalysisSettings() {
+    if (!selectedStoreId) return;
+    setIsSavingSettings(true);
+    const response = await fetch("/api/sales/summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: selectedStoreId, ...currentSettings })
+    });
+    if (response.ok) {
+      await loadSales(month, selectedStoreId, range);
+    } else {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(body.error ?? "売上分析設定を保存できませんでした。");
+    }
+    setIsSavingSettings(false);
+  }
 
   async function uploadSalesFile(source: SalesSourceOption) {
     const selectedFile = filesBySource[source.id];
@@ -693,6 +744,56 @@ export default function SalesPage() {
           </article>
         </section>
 
+        <section className="panel workload-settings-panel">
+          <div className="panel-title">
+            <Settings size={18} />
+            <div>
+              <h3>売上分析の判定基準</h3>
+              <p>月視図の「忙しい」「空き」は、従業員負荷とは別に、日ごとの売上・注文数が本期平均の何倍かで判定します。</p>
+            </div>
+          </div>
+          <div className="workload-settings-content">
+            <div className="workload-settings-section">
+              <h4>本期平均との比較</h4>
+              <p>
+                平均 注文 {formatRate(summary?.salesAnalysisBaseline.averageDailyOrders ?? 0)}件/日、
+                売上 {formatMoney(summary?.salesAnalysisBaseline.averageDailySales ?? 0)} / 日を基準にします。
+              </p>
+              <div className="workload-level-settings-grid">
+                {([
+                  ["かなり空き", "veryIdleRateMax", "平均のこの倍率まで"],
+                  ["通常", "normalRateMax", "平均のこの倍率まで"],
+                  ["忙しい", "busyRateMax", "平均のこの倍率まで"],
+                  ["高負荷", "highRateMax", "平均のこの倍率まで"]
+                ] as Array<[string, SalesAnalysisSettingKey, string]>).map(([label, key, note]) => (
+                  <label key={key}>
+                    <span>{label}</span>
+                    <div className="workload-setting-input-row">
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        step="0.1"
+                        value={String(currentSettings[key])}
+                        disabled={settingsDisabled}
+                        onChange={(event) => updateSettingsDraft(key, Number(event.target.value))}
+                      />
+                      <em>倍</em>
+                    </div>
+                    <small>{note}</small>
+                  </label>
+                ))}
+              </div>
+              <small>注文数と売上をそれぞれ平均比で判定し、高い方を採用します。高負荷の上限を超える日は「超負荷」です。</small>
+            </div>
+            <div className="workload-settings-actions">
+              <button className="secondary-button" type="button" disabled={settingsDisabled} onClick={() => void saveSalesAnalysisSettings()}>
+                {isSavingSettings ? "保存中" : "判定基準を保存"}
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section className="panel sales-ai-panel">
           <div className="sales-ai-heading">
             <div>
@@ -820,7 +921,7 @@ export default function SalesPage() {
               <CalendarDays size={18} />
               <div>
                 <h3>月視図カレンダー</h3>
-                <p>日ごとの売上と天気を一覧します。負荷判定は実際に誰かが在店していた時間を使います。</p>
+                <p>日ごとの売上と天気を一覧します。忙しさは本期の平均営業日と比較して判定します。</p>
               </div>
             </div>
             <div className="sales-calendar">
@@ -840,7 +941,7 @@ export default function SalesPage() {
                       <span><em>デリバリー入金目安</em><b>{formatMoney(day.deliveryEstimatedDeposit)}</b></span>
                     </div>
                     {day.workloadAvailable ? (
-                      <small>{day.loadLevelLabel} / ピーク {day.peakHourOrderCount}件/時間</small>
+                      <small>{day.loadLevelLabel} / 注文 平均比 {formatRate(day.orderRate)}倍</small>
                     ) : day.orderCount > 0 ? (
                       <small>勤怠未登録 / {day.orderCount}件</small>
                     ) : (
@@ -866,7 +967,7 @@ export default function SalesPage() {
                   </div>
                   <div>
                     <strong>{day.loadLevelLabel}</strong>
-                    <small>ピーク {day.peakHourOrderCount}件/時間 / 平均 {formatRate(day.ordersPerHour)}件/時間</small>
+                    <small>注文 平均比 {formatRate(day.orderRate)}倍 / 売上 平均比 {formatRate(day.salesRate)}倍</small>
                   </div>
                 </div>
               ))}
@@ -883,7 +984,7 @@ export default function SalesPage() {
                   </div>
                   <div>
                     <strong>{day.averageLoadLevelLabel}</strong>
-                    <small>平均 {formatRate(day.ordersPerHour)}件/時間 / ピーク {day.peakHourOrderCount}件/時間</small>
+                    <small>注文 平均比 {formatRate(day.orderRate)}倍 / ピーク {day.peakHourOrderCount}件/時間</small>
                   </div>
                 </div>
               ))}
