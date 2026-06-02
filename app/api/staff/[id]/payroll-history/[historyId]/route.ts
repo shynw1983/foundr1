@@ -81,13 +81,16 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
   `;
   const wage = wageRows[0] ?? current;
   const commute = commuteRows[0] ?? current;
+  const employmentType = normalizeEmploymentType(String(wage.employmentType ?? current.employmentType ?? ""));
+  const hourlyWage = employmentType === "hourly" ? toNullableNumber(wage.hourlyWage ?? current.hourlyWage) : null;
+  const monthlySalary = employmentType === "monthly" ? toNullableNumber(wage.monthlySalary ?? current.monthlySalary) : null;
 
   await sql`
     update employee_work_stores
     set payroll_enabled = ${wage.payrollEnabled !== false},
-        employment_type = ${normalizeEmploymentType(String(wage.employmentType ?? current.employmentType ?? ""))},
-        hourly_wage = ${toNullableNumber(wage.hourlyWage ?? current.hourlyWage)},
-        monthly_salary = ${toNullableNumber(wage.monthlySalary ?? current.monthlySalary)},
+        employment_type = ${employmentType},
+        hourly_wage = ${hourlyWage},
+        monthly_salary = ${monthlySalary},
         commute_allowance_per_workday = ${toNullableNumber(commute.commuteAllowancePerWorkday ?? current.commuteAllowancePerWorkday) ?? 0},
         commute_allowance_monthly_cap = ${toNullableNumber(commute.commuteAllowanceMonthlyCap ?? current.commuteAllowanceMonthlyCap)},
         apply_social_insurance = ${Boolean(wage.applySocialInsurance ?? current.applySocialInsurance)},

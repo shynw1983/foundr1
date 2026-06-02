@@ -672,6 +672,26 @@ function StaffFormFields({
     if (input) input.value = value === null || value === undefined ? "" : String(value);
   }
 
+  function syncPayrollWageInputs(form: HTMLFormElement, storeId: string, employmentType: string) {
+    const isMonthly = employmentType === "monthly";
+    const hourlyInput = form.elements.namedItem(`hourlyWage:${storeId}`) as HTMLInputElement | null;
+    const monthlyInput = form.elements.namedItem(`monthlySalary:${storeId}`) as HTMLInputElement | null;
+    if (hourlyInput) {
+      hourlyInput.disabled = isMonthly;
+      if (isMonthly) hourlyInput.value = "";
+    }
+    if (monthlyInput) {
+      monthlyInput.disabled = !isMonthly;
+      if (!isMonthly) monthlyInput.value = "";
+    }
+  }
+
+  function handlePayrollEmploymentTypeChange(event: FormEvent<HTMLSelectElement>, storeId: string) {
+    const form = event.currentTarget.form;
+    if (!form) return;
+    syncPayrollWageInputs(form, storeId, event.currentTarget.value);
+  }
+
   function setCheckedValue(form: HTMLFormElement, name: string, value: string, checked: boolean) {
     const inputs = Array.from(form.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`));
     const input = inputs.find((candidate) => candidate.value === value);
@@ -687,6 +707,7 @@ function StaffFormFields({
     setNamedInputValue(form, `employmentType:${store.id}`, record.employmentType === "monthly" ? "monthly" : "hourly");
     setNamedInputValue(form, `hourlyWage:${store.id}`, record.hourlyWage ?? "");
     setNamedInputValue(form, `monthlySalary:${store.id}`, record.monthlySalary ?? "");
+    syncPayrollWageInputs(form, store.id, record.employmentType === "monthly" ? "monthly" : "hourly");
     setNamedInputValue(form, `commuteAllowancePerWorkday:${store.id}`, record.commuteAllowancePerWorkday ?? 0);
     setNamedInputValue(form, `commuteAllowanceMonthlyCap:${store.id}`, record.commuteAllowanceMonthlyCap ?? "");
     setNamedInputValue(form, `wageValidFromMonth:${store.id}`, formatPayrollMonth(record.wageValidFrom ?? record.validFrom, store));
@@ -882,18 +903,22 @@ function StaffFormFields({
                   </label>
                   <label>
                     <span>給与形態</span>
-                    <select name={`employmentType:${store.id}`} defaultValue={defaultEmploymentType === "monthly" ? "monthly" : "hourly"}>
+                    <select
+                      name={`employmentType:${store.id}`}
+                      defaultValue={defaultEmploymentType === "monthly" ? "monthly" : "hourly"}
+                      onChange={(event) => handlePayrollEmploymentTypeChange(event, store.id)}
+                    >
                       <option value="hourly">時給</option>
                       <option value="monthly">月給</option>
                     </select>
                   </label>
                   <label>
                     <span>時給</span>
-                    <input name={`hourlyWage:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.hourlyWage ?? member?.hourlyWage ?? ""} placeholder="例: 1200" />
+                    <input name={`hourlyWage:${store.id}`} type="number" min="0" step="1" defaultValue={defaultEmploymentType === "monthly" ? "" : setting?.hourlyWage ?? member?.hourlyWage ?? ""} placeholder="例: 1200" disabled={defaultEmploymentType === "monthly"} />
                   </label>
                   <label>
                     <span>月給</span>
-                    <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.monthlySalary ?? member?.monthlySalary ?? ""} placeholder="月給のみ" />
+                    <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={defaultEmploymentType === "monthly" ? setting?.monthlySalary ?? member?.monthlySalary ?? "" : ""} placeholder="月給のみ" disabled={defaultEmploymentType !== "monthly"} />
                   </label>
                   <label>
                     <span>交通費 / 勤務日</span>

@@ -347,8 +347,8 @@ export async function POST(request: Request) {
   const staffCategory = normalizeStaffCategory(body.staffCategory);
   const payrollSubject = normalizePayrollSubject(body.payrollSubject);
   const employmentType = normalizeEmploymentType(body.employmentType);
-  const hourlyWage = toNullableNumber(body.hourlyWage);
-  const monthlySalary = toNullableNumber(body.monthlySalary);
+  const hourlyWage = employmentType === "hourly" ? toNullableNumber(body.hourlyWage) : null;
+  const monthlySalary = employmentType === "monthly" ? toNullableNumber(body.monthlySalary) : null;
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = normalizeStatus(body.status);
@@ -458,8 +458,8 @@ export async function POST(request: Request) {
     const storeBusinessType = toNullableText(storeSetting?.businessType);
     const storeEmployeeType = normalizeEmployeeType(storeSetting?.employeeType);
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
-    const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
-    const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
+    const storeHourlyWage = storeEmploymentType === "hourly" ? toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage : null;
+    const storeMonthlySalary = storeEmploymentType === "monthly" ? toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary : null;
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;

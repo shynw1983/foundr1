@@ -193,8 +193,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const staffCategory = normalizeStaffCategory(body.staffCategory);
   const payrollSubject = normalizePayrollSubject(body.payrollSubject);
   const employmentType = normalizeEmploymentType(body.employmentType);
-  const hourlyWage = toNullableNumber(body.hourlyWage);
-  const monthlySalary = toNullableNumber(body.monthlySalary);
+  const hourlyWage = employmentType === "hourly" ? toNullableNumber(body.hourlyWage) : null;
+  const monthlySalary = employmentType === "monthly" ? toNullableNumber(body.monthlySalary) : null;
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = id === session.id ? "active" : normalizeStatus(body.status);
@@ -320,8 +320,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const storeBusinessType = toNullableText(storeSetting?.businessType);
     const storeEmployeeType = normalizeEmployeeType(storeSetting?.employeeType);
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
-    const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
-    const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
+    const storeHourlyWage = storeEmploymentType === "hourly" ? toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage : null;
+    const storeMonthlySalary = storeEmploymentType === "monthly" ? toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary : null;
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
@@ -345,8 +345,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const shouldKeepCurrentCommuteUntilFutureDate = Boolean(existingStore && storeCommuteValidFrom > getJstDateLabel());
     const currentPayrollEnabled = shouldKeepCurrentWageUntilFutureDate ? existingStore?.payrollEnabled !== false : storePayrollEnabled;
     const currentEmploymentType = shouldKeepCurrentWageUntilFutureDate ? normalizeEmploymentType(String(existingStore?.employmentType ?? "")) : storeEmploymentType;
-    const currentHourlyWage = shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.hourlyWage) : storeHourlyWage;
-    const currentMonthlySalary = shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.monthlySalary) : storeMonthlySalary;
+    const currentHourlyWage = currentEmploymentType === "hourly"
+      ? shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.hourlyWage) : storeHourlyWage
+      : null;
+    const currentMonthlySalary = currentEmploymentType === "monthly"
+      ? shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.monthlySalary) : storeMonthlySalary
+      : null;
     const currentCommuteAllowancePerWorkday = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowancePerWorkday) ?? 0 : storeCommuteAllowancePerWorkday;
     const currentCommuteAllowanceMonthlyCap = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowanceMonthlyCap) : storeCommuteAllowanceMonthlyCap;
     const currentApplySocialInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
