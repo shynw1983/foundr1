@@ -57,16 +57,11 @@ function parseBusinessTypeLine(text: string, label: string) {
   };
 }
 
-async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: unknown) {
-  const parser = new PDFParse({ data: Buffer.from(fileBase64, "base64") });
-  const result = await parser.getText();
-  await parser.destroy();
-  const text = result.text;
-  const fiscalYear = detectFiscalYear(text, fiscalYearValue);
-  const rows = businessTypes.map((businessType, index) => {
+function parseEmploymentInsuranceRateRows(text: string) {
+  const normalized = normalizeText(text);
+  const namedRows = businessTypes.map((businessType, index) => {
     const parsed = parseBusinessTypeLine(text, businessType.label);
-    if (parsed?.employeeRate === null || parsed?.totalRate === null) return null;
-    if (!parsed) return null;
+    if (!parsed || parsed.employeeRate === null || parsed.totalRate === null) return null;
     return {
       businessType: businessType.key,
       label: businessType.label,
@@ -74,6 +69,39 @@ async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: 
       ...parsed
     };
   }).filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  if (namedRows.length === businessTypes.length) return namedRows;
+
+  const currentRateBlock = /＜令和\d+年度の雇用保険料率＞(.+?)(?:※|•|$)/.exec(normalized)?.[1] ?? normalized;
+  const currentRates = currentRateBlock.match(/\d+(?:\.\d+)?\/1,?000/g) ?? [];
+  if (currentRates.length < businessTypes.length * 5) return namedRows;
+  const rateStride = currentRates.length >= businessTypes.length * 10 ? 10 : 5;
+
+  const fallbackRows = businessTypes.map((businessType, index) => {
+    const offset = index * rateStride;
+    const rates = currentRates.slice(offset, offset + 5);
+    return {
+      businessType: businessType.key,
+      label: businessType.label,
+      sortOrder: index,
+      employeeRate: parseRate(rates[0]),
+      employerRate: parseRate(rates[1]),
+      benefitRate: parseRate(rates[2]),
+      twoProjectsRate: parseRate(rates[3]),
+      totalRate: parseRate(rates[4])
+    };
+  });
+
+  return fallbackRows.filter((row) => row.employeeRate !== null && row.totalRate !== null);
+}
+
+async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: unknown) {
+  const parser = new PDFParse({ data: Buffer.from(fileBase64, "base64") });
+  const result = await parser.getText();
+  await parser.destroy();
+  const text = result.text;
+  const fiscalYear = detectFiscalYear(text, fiscalYearValue);
+  const rows = parseEmploymentInsuranceRateRows(text);
 
   if (!rows.length) throw new Error("雇用保険料率を読み取れませんでした。解析器の更新が必要です。");
   return {
@@ -125,72 +153,78 @@ export async function POST(request: Request) {
     return Response.json({ error: error instanceof Error ? error.message : "雇用保険料率を読み取れませんでした。" }, { status: 400 });
   }
 
-  const upserted = await sql`
-    insert into employment_insurance_rate_tables (
-      fiscal_year,
-      title,
-      source_file_name,
-      effective_from,
-      effective_to,
-      is_active,
-      uploaded_by
-    )
-    values (
-      ${parsed.fiscalYear},
-      ${parsed.title},
-      ${body.fileName ?? null},
-      ${parsed.effectiveFrom}::date,
-      ${parsed.effectiveTo}::date,
-      true,
-      ${session.id}
-    )
-    on conflict (fiscal_year)
-    do update set
-      title = excluded.title,
-      source_file_name = excluded.source_file_name,
-      effective_from = excluded.effective_from,
-      effective_to = excluded.effective_to,
-      is_active = true,
-      uploaded_by = excluded.uploaded_by,
-      created_at = now()
-    returning id::text
-  `;
-  const tableId = String(upserted[0]?.id ?? "");
-
-  await sql`delete from employment_insurance_rate_rows where table_id = ${tableId}`;
-  for (const row of parsed.rows) {
-    await sql`
-      insert into employment_insurance_rate_rows (
-        table_id,
-        business_type,
-        employee_rate,
-        employer_rate,
-        benefit_rate,
-        two_projects_rate,
-        total_rate,
-        sort_order
+  let tableId = "";
+  try {
+    const upserted = await sql`
+      insert into employment_insurance_rate_tables (
+        fiscal_year,
+        title,
+        source_file_name,
+        effective_from,
+        effective_to,
+        is_active,
+        uploaded_by
       )
       values (
-        ${tableId},
-        ${row.businessType},
-        ${row.employeeRate},
-        ${row.employerRate},
-        ${row.benefitRate},
-        ${row.twoProjectsRate},
-        ${row.totalRate},
-        ${row.sortOrder}
+        ${parsed.fiscalYear},
+        ${parsed.title},
+        ${body.fileName ?? null},
+        ${parsed.effectiveFrom}::date,
+        ${parsed.effectiveTo}::date,
+        true,
+        ${session.id}
       )
+      on conflict (fiscal_year)
+      do update set
+        title = excluded.title,
+        source_file_name = excluded.source_file_name,
+        effective_from = excluded.effective_from,
+        effective_to = excluded.effective_to,
+        is_active = true,
+        uploaded_by = excluded.uploaded_by,
+        created_at = now()
+      returning id::text
     `;
-  }
+    tableId = String(upserted[0]?.id ?? "");
 
-  await writeAuditLog({
-    actorEmployeeId: session.id,
-    action: "settings.employment_insurance.imported",
-    targetType: "employment_insurance_rate_table",
-    targetId: tableId,
-    metadata: { fiscalYear: parsed.fiscalYear, rowCount: parsed.rows.length, fileName: body.fileName ?? null },
-    request
-  });
+    await sql`delete from employment_insurance_rate_rows where table_id = ${tableId}`;
+    for (const row of parsed.rows) {
+      await sql`
+        insert into employment_insurance_rate_rows (
+          table_id,
+          business_type,
+          employee_rate,
+          employer_rate,
+          benefit_rate,
+          two_projects_rate,
+          total_rate,
+          sort_order
+        )
+        values (
+          ${tableId},
+          ${row.businessType},
+          ${row.employeeRate},
+          ${row.employerRate},
+          ${row.benefitRate},
+          ${row.twoProjectsRate},
+          ${row.totalRate},
+          ${row.sortOrder}
+        )
+      `;
+    }
+
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "settings.employment_insurance.imported",
+      targetType: "employment_insurance_rate_table",
+      targetId: tableId,
+      metadata: { fiscalYear: parsed.fiscalYear, rowCount: parsed.rows.length, fileName: body.fileName ?? null },
+      request
+    });
+  } catch (error) {
+    console.error("Failed to save employment insurance rates", error);
+    return Response.json({ error: "雇用保険料率は読み取れましたが、保存できませんでした。データベース設定を確認してください。" }, { status: 500 });
+  }
 
   return Response.json({ ok: true, tableId, fiscalYear: parsed.fiscalYear, title: parsed.title, rowCount: parsed.rows.length });
 }
