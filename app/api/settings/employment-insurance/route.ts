@@ -16,7 +16,13 @@ const businessTypes = [
 ];
 
 function normalizeText(text: string) {
-  return text.replace(/\s+/g, " ").replace(/，/g, ",").trim();
+  return text
+    .replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 0xff10))
+    .replace(/．/g, ".")
+    .replace(/[，、]/g, ",")
+    .replace(/\s+/g, " ")
+    .replace("農林水産・ 清酒製造", "農林水産・清酒製造")
+    .trim();
 }
 
 function parseRate(text: string | undefined) {
@@ -25,20 +31,22 @@ function parseRate(text: string | undefined) {
 }
 
 function detectFiscalYear(text: string, fallback: unknown) {
+  const normalized = normalizeText(text);
   const fallbackYear = Number(fallback);
   if (Number.isFinite(fallbackYear) && fallbackYear >= 2020 && fallbackYear <= 2100) return Math.round(fallbackYear);
-  const reiwa = /令和\s*(\d+)[（(]?\s*20?\s*\d*\s*[）)]?\s*年度/.exec(text);
+  const reiwa = /令和\s*(\d+)[（(]?\s*(?:20)?\d*\s*[）)]?\s*年度/.exec(normalized);
   if (reiwa) return 2018 + Number(reiwa[1]);
-  const western = /(20\d{2})\s*年度/.exec(text);
+  const western = /(20\d{2})\s*年度/.exec(normalized);
   return western ? Number(western[1]) : new Date().getFullYear();
 }
 
 function parseBusinessTypeLine(text: string, label: string) {
-  const normalized = normalizeText(text).replace("農林水産・ 清酒製造", "農林水産・清酒製造");
+  const normalized = normalizeText(text);
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`${escaped} ([^（]+?)(?:（令和|$)`).exec(normalized);
-  if (!match) return null;
-  const rates = match[1].match(/\d+(?:\.\d+)?\/1,?000/g) ?? [];
+  const primaryMatch = new RegExp(`${escaped} ([^（]+?)(?:（令和|$)`).exec(normalized);
+  const fallbackMatch = new RegExp(`${escaped}(.{0,180})`).exec(normalized);
+  const rateSource = primaryMatch?.[1] ?? fallbackMatch?.[1] ?? "";
+  const rates = rateSource.match(/\d+(?:\.\d+)?\/1,?000/g) ?? [];
   if (rates.length < 5) return null;
   return {
     employeeRate: parseRate(rates[0]),
@@ -57,7 +65,8 @@ async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: 
   const fiscalYear = detectFiscalYear(text, fiscalYearValue);
   const rows = businessTypes.map((businessType, index) => {
     const parsed = parseBusinessTypeLine(text, businessType.label);
-    if (!parsed?.employeeRate || !parsed.totalRate) return null;
+    if (parsed?.employeeRate === null || parsed?.totalRate === null) return null;
+    if (!parsed) return null;
     return {
       businessType: businessType.key,
       label: businessType.label,

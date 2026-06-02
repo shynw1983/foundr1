@@ -1530,60 +1530,125 @@ export function TimecardPage({
 
             {payrollView === "summary" ? (
               <section className="panel">
-            <div className="panel-title">
-              <WalletCards />
-              <div>
-                <h3>月別 給与</h3>
-                <p>スタッフ管理の人事情報と打刻実績から概算支給額を計算します。</p>
-              </div>
-            </div>
-            <div className="timecard-table-wrap">
-              <table className="timecard-table">
-                <thead>
-                  <tr>
-                    <th>従業員</th>
-                    <th>勤務</th>
-                    <th>勤務時間</th>
-                    <th>基本給</th>
-                    <th>時間外</th>
-                    <th>深夜割増</th>
-                    <th>交通費</th>
-                    <th>社会保険</th>
-                    <th>雇用保険</th>
-                    <th>源泉所得税</th>
-                    <th>住民税</th>
-                    <th>差引支給額</th>
-                    <th>確認</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <div className="panel-title">
+                  <WalletCards />
+                  <div>
+                    <h3>月別 給与</h3>
+                    <p>スタッフ管理の人事情報と打刻実績から概算支給額を計算します。</p>
+                  </div>
+                </div>
+                <div className="timecard-table-wrap payroll-summary-table-wrap">
+                  <table className="timecard-table">
+                    <thead>
+                      <tr>
+                        <th>従業員</th>
+                        <th>勤務</th>
+                        <th>勤務時間</th>
+                        <th>基本給</th>
+                        <th>時間外</th>
+                        <th>深夜割増</th>
+                        <th>交通費</th>
+                        <th>社会保険</th>
+                        <th>雇用保険</th>
+                        <th>源泉所得税</th>
+                        <th>住民税</th>
+                        <th>差引支給額</th>
+                        <th>確認</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedPayrollRows.length ? displayedPayrollRows.map((row) => (
+                        <tr key={row.employeeId}>
+                          <td>
+                            <strong>{row.employeeName}</strong>
+                            <span>{row.storeNames.join("、") || "店舗未設定"}</span>
+                          </td>
+                          <td>{row.workDays}日 / {row.punchCount}回</td>
+                          <td>{formatDuration(row.workMinutes)}</td>
+                          <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
+                          <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
+                          <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
+                          <td>{formatMoney(row.commuteAllowance)}</td>
+                          <td>{formatMoney(row.socialInsurance ?? 0)}</td>
+                          <td>{formatMoney(row.employmentInsurance ?? 0)}</td>
+                          <td>{formatMoney(row.incomeTax ?? 0)}</td>
+                          <td>{formatMoney(row.residentTax ?? 0)}</td>
+                          <td><strong>{formatMoney(row.totalPay)}</strong></td>
+                          <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={13}>この月の打刻実績はまだありません。</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="payroll-card-list">
                   {displayedPayrollRows.length ? displayedPayrollRows.map((row) => (
-                    <tr key={row.employeeId}>
-                      <td>
-                        <strong>{row.employeeName}</strong>
-                        <span>{row.storeNames.join("、") || "店舗未設定"}</span>
-                      </td>
-                      <td>{row.workDays}日 / {row.punchCount}回</td>
-                      <td>{formatDuration(row.workMinutes)}</td>
-                      <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
-                      <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
-                      <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
-                      <td>{formatMoney(row.commuteAllowance)}</td>
-                      <td>{formatMoney(row.socialInsurance ?? 0)}</td>
-                      <td>{formatMoney(row.employmentInsurance ?? 0)}</td>
-                      <td>{formatMoney(row.incomeTax ?? 0)}</td>
-                      <td>{formatMoney(row.residentTax ?? 0)}</td>
-                      <td><strong>{formatMoney(row.totalPay)}</strong></td>
-                      <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
-                    </tr>
+                    <article className="payroll-row-card" key={`payroll-card-${row.employeeId}`}>
+                      <div className="payroll-row-card-head">
+                        <div>
+                          <strong>{row.employeeName}</strong>
+                          <span>{row.storeNames.join("、") || "店舗未設定"}</span>
+                        </div>
+                        {row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}
+                      </div>
+                      <div className="payroll-row-card-main">
+                        <div>
+                          <span>差引支給額</span>
+                          <strong>{formatMoney(row.totalPay)}</strong>
+                        </div>
+                        <div>
+                          <span>基本給</span>
+                          <strong>{formatMoney(row.regularPay ?? row.basePay)}</strong>
+                        </div>
+                        <div>
+                          <span>勤務</span>
+                          <strong>{row.workDays}日 / {row.punchCount}回</strong>
+                        </div>
+                        <div>
+                          <span>勤務時間</span>
+                          <strong>{formatDuration(row.workMinutes)}</strong>
+                        </div>
+                      </div>
+                      <div className="payroll-row-card-details">
+                        <div>
+                          <span>時間外</span>
+                          <strong>{formatPayrollDetailMoney(row.overtimePay ?? 0)}</strong>
+                          <small>{formatDuration(row.overtimeMinutes ?? 0)}</small>
+                        </div>
+                        <div>
+                          <span>深夜割増</span>
+                          <strong>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}</strong>
+                          <small>{formatDuration(row.nightMinutes)}</small>
+                        </div>
+                        <div>
+                          <span>交通費</span>
+                          <strong>{formatMoney(row.commuteAllowance)}</strong>
+                        </div>
+                        <div>
+                          <span>社会保険</span>
+                          <strong>{formatMoney(row.socialInsurance ?? 0)}</strong>
+                        </div>
+                        <div>
+                          <span>雇用保険</span>
+                          <strong>{formatMoney(row.employmentInsurance ?? 0)}</strong>
+                        </div>
+                        <div>
+                          <span>源泉所得税</span>
+                          <strong>{formatMoney(row.incomeTax ?? 0)}</strong>
+                        </div>
+                        <div>
+                          <span>住民税</span>
+                          <strong>{formatMoney(row.residentTax ?? 0)}</strong>
+                        </div>
+                      </div>
+                    </article>
                   )) : (
-                    <tr>
-                      <td colSpan={13}>この月の打刻実績はまだありません。</td>
-                    </tr>
+                    <div className="payroll-card-empty">この月の打刻実績はまだありません。</div>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
               </section>
             ) : (
               <section className="panel">
