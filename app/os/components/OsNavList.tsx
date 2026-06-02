@@ -39,12 +39,12 @@ const orderModulePaths = new Set([
   "/os/orders",
   "/os/procurement",
   "/os/history",
-  "/os/sales",
   "/os/suppliers",
   "/os/field-notes",
   "/os/product-comparisons",
   "/os/reports"
 ]);
+const salesModulePaths = new Set(["/os/sales"]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
@@ -104,13 +104,13 @@ const navModules: OsNavModule[] = [
       { href: "/os/orders" },
       { href: "/os/procurement" },
       { href: "/os/history" },
-      { href: "/os/sales" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
       { href: "/os/suppliers" },
       { href: "/os/product-comparisons", isShortcut: true }
     ]
   },
+  { id: "sales", label: "売上分析", icon: ChartColumn, href: "/os/sales", paths: [{ href: "/os/sales" }] },
   {
     id: "store-operations",
     label: "店舗運営",
@@ -166,6 +166,10 @@ function getModuleNavPaths(pathname: string) {
 
   if (pathname === "/os/menus" || pathname.startsWith("/os/menus/")) {
     return sharedDataPaths;
+  }
+
+  if (pathname === "/os/sales" || pathname.startsWith("/os/sales/")) {
+    return salesModulePaths;
   }
 
   if (pathname === "/os/timecard" || pathname.startsWith("/os/timecard/")) {

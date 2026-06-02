@@ -260,6 +260,46 @@ function getCalendarDays(startDate: string, endDate: string, days: SalesDay[]) {
 }
 
 function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
+  const averageOrdersPerHour = (days: SalesDay[]) => {
+    const minutes = days.reduce((sum, day) => sum + day.workMinutes, 0);
+    return minutes > 0 ? Math.round((days.reduce((sum, day) => sum + day.orderCount, 0) / (minutes / 60)) * 10) / 10 : 0;
+  };
+  const averageSalesPerHour = (days: SalesDay[]) => {
+    const minutes = days.reduce((sum, day) => sum + day.workMinutes, 0);
+    return minutes > 0 ? Math.round(days.reduce((sum, day) => sum + day.sales, 0) / (minutes / 60)) : 0;
+  };
+  const trackedActiveDays = summary.daily.filter((day) => day.orderCount > 0 && day.workloadAvailable);
+  const rainyTrackedDays = trackedActiveDays.filter((day) => (day.precipitation ?? 0) > 0);
+  const dryTrackedDays = trackedActiveDays.filter((day) => (day.precipitation ?? 0) <= 0);
+  const totalWorkMinutes = trackedActiveDays.reduce((sum, day) => sum + day.workMinutes, 0);
+  const trackedSales = trackedActiveDays.reduce((sum, day) => sum + day.sales, 0);
+  const trackedOrders = trackedActiveDays.reduce((sum, day) => sum + day.orderCount, 0);
+  const topSalesDay = [...trackedActiveDays].sort((a, b) => b.sales - a.sales || b.ordersPerHour - a.ordersPerHour)[0] ?? null;
+  const topLoadDay = [...trackedActiveDays].sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour)[0] ?? null;
+  const lowestLoadDay = [...trackedActiveDays].sort((a, b) => a.ordersPerHour - b.ordersPerHour || a.salesPerHour - b.salesPerHour)[0] ?? null;
+  const weekdayLoadRanking = [...summary.weekdays]
+    .filter((weekday) => weekday.dayCount > 0 && weekday.workMinutes > 0)
+    .sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour)
+    .map((weekday) => ({
+      label: `${weekday.label}曜日`,
+      dayCount: weekday.dayCount,
+      orderCount: weekday.orderCount,
+      sales: weekday.sales,
+      workHours: Math.round((weekday.workMinutes / 60) * 10) / 10,
+      ordersPerHour: Math.round(weekday.ordersPerHour * 10) / 10,
+      salesPerHour: weekday.salesPerHour,
+      rainyDayCount: weekday.rainyDayCount
+    }));
+  const revenueGroups = summary.revenueGroups.map((group) => ({
+    label: group.label,
+    orderCount: group.orderCount,
+    sales: group.sales,
+    estimatedFee: group.estimatedFee,
+    estimatedDeposit: group.estimatedDeposit,
+    share: Math.round(group.share * 10) / 10,
+    feeRate: Math.round(group.feeRate * 1000) / 10,
+    averageOrderValue: group.orderCount > 0 ? Math.round(group.sales / group.orderCount) : 0
+  }));
   const untrackedDays = summary.daily
     .filter((day) => day.orderCount > 0 && !day.workloadAvailable)
     .map((day) => ({
@@ -270,8 +310,19 @@ function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
   return {
     storeName,
     period: { startDate: summary.startDate, endDate: summary.endDate },
-    totals: summary.totals,
-    revenueGroups: summary.revenueGroups,
+    totals: {
+      ...summary.totals,
+      trackedWorkHours: Math.round((totalWorkMinutes / 60) * 10) / 10,
+      trackedOrdersPerHour: totalWorkMinutes > 0 ? Math.round((trackedOrders / (totalWorkMinutes / 60)) * 10) / 10 : 0,
+      trackedSalesPerHour: totalWorkMinutes > 0 ? Math.round(trackedSales / (totalWorkMinutes / 60)) : 0,
+      estimatedDepositPerWorkHour: totalWorkMinutes > 0 ? Math.round(summary.totals.estimatedDeposit / (totalWorkMinutes / 60)) : 0
+    },
+    revenueGroups,
+    keyDays: {
+      topSalesDay,
+      topLoadDay,
+      lowestLoadDay
+    },
     busiestDays: summary.busiestDays.map((day) => ({
       date: day.date,
       orderCount: day.orderCount,
@@ -301,12 +352,30 @@ function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
         ordersPerHour: Math.round(weekday.ordersPerHour * 10) / 10,
         salesPerHour: weekday.salesPerHour
       })),
+    weekdayLoadRanking,
     peakHours: summary.peakHours,
     weather: {
       location: summary.weatherLocation.name,
       rainyDays: summary.daily.filter((day) => (day.precipitation ?? 0) > 0).length,
-      highSalesRainyDays: summary.busiestDays.filter((day) => (day.precipitation ?? 0) > 0).map((day) => day.date)
+      highSalesRainyDays: summary.busiestDays.filter((day) => (day.precipitation ?? 0) > 0).map((day) => day.date),
+      rainyTrackedDayAverage: rainyTrackedDays.length > 0 ? {
+        dayCount: rainyTrackedDays.length,
+        ordersPerHour: averageOrdersPerHour(rainyTrackedDays),
+        salesPerHour: averageSalesPerHour(rainyTrackedDays)
+      } : null,
+      dryTrackedDayAverage: dryTrackedDays.length > 0 ? {
+        dayCount: dryTrackedDays.length,
+        ordersPerHour: averageOrdersPerHour(dryTrackedDays),
+        salesPerHour: averageSalesPerHour(dryTrackedDays)
+      } : null
     },
+    imports: summary.imports.map((item) => ({
+      sourcePlatform: item.sourcePlatform,
+      brandName: item.brandName,
+      fileName: item.fileName,
+      importedOrderCount: item.importedOrderCount,
+      createdAt: item.createdAt
+    })),
     untrackedDays
   };
 }
@@ -613,7 +682,7 @@ export default function SalesPage() {
             <div>
               <p className="eyebrow">AI Review</p>
               <h3>AI月次分析</h3>
-              <p>現在の分析期間の売上構成、忙しさ、外卖手数料、勤怠未覆盖の注意点を要約します。</p>
+              <p>現在の分析期間から、売上口径、忙しさ、人員配置、勤怠未覆盖の注意点と次月の具体策を整理します。</p>
             </div>
             <button className="primary-button" type="button" disabled={!summary || isGeneratingAnalysis} onClick={() => void generateAiAnalysis()}>
               {isGeneratingAnalysis ? "作成中" : "AI分析を作成"}
@@ -626,7 +695,7 @@ export default function SalesPage() {
               {aiAnalysis.model ? <small>Model: {aiAnalysis.model}</small> : null}
             </div>
           ) : (
-            <p className="sales-ai-empty">ボタンを押すと、集計済みデータだけを使ってAIコメントを作成します。</p>
+            <p className="sales-ai-empty">ボタンを押すと、集計済みデータだけを使って経営レビューを作成します。</p>
           )}
         </section>
 
