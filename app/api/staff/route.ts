@@ -38,6 +38,12 @@ type StaffPayload = {
 
 type WorkStoreSettingPayload = {
   storeId?: string;
+  employeeNumber?: string;
+  hireDate?: string;
+  resignationDate?: string;
+  resignationReason?: string;
+  businessType?: string;
+  employeeType?: string;
   payrollEnabled?: boolean;
   employmentType?: string;
   hourlyWage?: number | string | null;
@@ -156,13 +162,7 @@ export async function GET() {
       employees.name_kana as "nameKana",
       employees.address,
       employees.birth_date as "birthDate",
-      employees.employee_number as "employeeNumber",
-      employees.hire_date as "hireDate",
-      employees.resignation_date as "resignationDate",
-      employees.resignation_reason as "resignationReason",
-      employees.business_type as "businessType",
       employees.is_foreign_national as "isForeignNational",
-      employees.employee_type as "employeeType",
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
       employees.role,
@@ -193,9 +193,14 @@ export async function GET() {
       limit 1
     ) latest_settings on true
     left join lateral (
-      select json_agg(json_build_object('id', stores.id, 'name', stores.name) order by stores.name) as stores
+      select json_agg(json_build_object(
+        'id', stores.id,
+        'name', stores.name,
+        'companyName', companies.name
+      ) order by stores.name) as stores
       from employee_scopes
       join stores on stores.id = employee_scopes.store_id
+      left join companies on companies.id = stores.company_id
       where employee_scopes.employee_id = employees.id
         and employee_scopes.scope_type = 'store'
     ) visible_stores on true
@@ -204,6 +209,13 @@ export async function GET() {
         json_build_object(
           'id', stores.id,
           'name', stores.name,
+          'companyName', companies.name,
+          'employeeNumber', employee_work_stores.employee_number,
+          'hireDate', employee_work_stores.hire_date,
+          'resignationDate', employee_work_stores.resignation_date,
+          'resignationReason', employee_work_stores.resignation_reason,
+          'businessType', employee_work_stores.business_type,
+          'employeeType', employee_work_stores.employee_type,
           'payrollEnabled', employee_work_stores.payroll_enabled,
           'employmentType', employee_work_stores.employment_type,
           'hourlyWage', employee_work_stores.hourly_wage,
@@ -221,6 +233,7 @@ export async function GET() {
       ) as stores
       from employee_work_stores
       join stores on stores.id = employee_work_stores.store_id
+      left join companies on companies.id = stores.company_id
       left join lateral (
         select json_agg(
           json_build_object(
@@ -286,13 +299,7 @@ export async function POST(request: Request) {
   const nameKana = toNullableText(body.nameKana);
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
-  const employeeNumber = toNullableText(body.employeeNumber);
-  const hireDate = toNullableDate(body.hireDate);
-  const resignationDate = toNullableDate(body.resignationDate);
-  const resignationReason = toNullableText(body.resignationReason);
-  const businessType = toNullableText(body.businessType);
   const isForeignNational = Boolean(body.isForeignNational);
-  const employeeType = normalizeEmployeeType(body.employeeType);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -326,13 +333,7 @@ export async function POST(request: Request) {
       name_kana,
       address,
       birth_date,
-      employee_number,
-      hire_date,
-      resignation_date,
-      resignation_reason,
-      business_type,
       is_foreign_national,
-      employee_type,
       lark_open_id,
       lark_user_id,
       role,
@@ -350,13 +351,7 @@ export async function POST(request: Request) {
       ${nameKana},
       ${address},
       ${birthDate},
-      ${employeeNumber},
-      ${hireDate},
-      ${resignationDate},
-      ${resignationReason},
-      ${businessType},
       ${isForeignNational},
-      ${employeeType},
       ${larkOpenId || null},
       ${larkUserId || null},
       ${role},
@@ -416,6 +411,12 @@ export async function POST(request: Request) {
   for (const storeId of workStoreIds) {
     const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
     const payrollStore = payrollStoreById.get(storeId);
+    const storeEmployeeNumber = toNullableText(storeSetting?.employeeNumber);
+    const storeHireDate = toNullableDate(storeSetting?.hireDate);
+    const storeResignationDate = toNullableDate(storeSetting?.resignationDate);
+    const storeResignationReason = toNullableText(storeSetting?.resignationReason);
+    const storeBusinessType = toNullableText(storeSetting?.businessType);
+    const storeEmployeeType = normalizeEmployeeType(storeSetting?.employeeType);
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
     const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
     const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
@@ -429,6 +430,12 @@ export async function POST(request: Request) {
       insert into employee_work_stores (
         employee_id,
         store_id,
+        employee_number,
+        hire_date,
+        resignation_date,
+        resignation_reason,
+        business_type,
+        employee_type,
         payroll_enabled,
         employment_type,
         hourly_wage,
@@ -444,6 +451,12 @@ export async function POST(request: Request) {
       values (
         ${employeeId},
         ${storeId},
+        ${storeEmployeeNumber},
+        ${storeHireDate},
+        ${storeResignationDate},
+        ${storeResignationReason},
+        ${storeBusinessType},
+        ${storeEmployeeType},
         ${storePayrollEnabled},
         ${storeEmploymentType},
         ${storeHourlyWage},
@@ -522,7 +535,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory, payrollSubject, status, employeeType, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

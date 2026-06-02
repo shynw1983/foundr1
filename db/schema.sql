@@ -144,6 +144,12 @@ create table if not exists employee_work_stores (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references employees(id) on delete cascade,
   store_id uuid not null references stores(id) on delete cascade,
+  employee_number text,
+  hire_date date,
+  resignation_date date,
+  resignation_reason text,
+  business_type text,
+  employee_type text not null default 'part_time',
   payroll_enabled boolean not null default true,
   employment_type text not null default 'hourly',
   hourly_wage numeric,
@@ -160,6 +166,12 @@ create table if not exists employee_work_stores (
 );
 
 alter table employee_work_stores add column if not exists payroll_enabled boolean not null default true;
+alter table employee_work_stores add column if not exists employee_number text;
+alter table employee_work_stores add column if not exists hire_date date;
+alter table employee_work_stores add column if not exists resignation_date date;
+alter table employee_work_stores add column if not exists resignation_reason text;
+alter table employee_work_stores add column if not exists business_type text;
+alter table employee_work_stores add column if not exists employee_type text not null default 'part_time';
 alter table employee_work_stores add column if not exists employment_type text not null default 'hourly';
 alter table employee_work_stores add column if not exists hourly_wage numeric;
 alter table employee_work_stores add column if not exists monthly_salary numeric;
@@ -177,6 +189,16 @@ from employee_scopes
 where scope_type = 'store'
   and store_id is not null
 on conflict do nothing;
+
+update employee_work_stores
+set
+  employee_number = coalesce(employee_work_stores.employee_number, employees.employee_number),
+  hire_date = coalesce(employee_work_stores.hire_date, employees.hire_date),
+  resignation_date = coalesce(employee_work_stores.resignation_date, employees.resignation_date),
+  resignation_reason = coalesce(employee_work_stores.resignation_reason, employees.resignation_reason),
+  business_type = coalesce(employee_work_stores.business_type, employees.business_type)
+from employees
+where employees.id = employee_work_stores.employee_id;
 
 create table if not exists timecard_store_settings (
   id uuid primary key default gen_random_uuid(),

@@ -38,6 +38,12 @@ type StaffPayload = {
 
 type WorkStoreSettingPayload = {
   storeId?: string;
+  employeeNumber?: string;
+  hireDate?: string;
+  resignationDate?: string;
+  resignationReason?: string;
+  businessType?: string;
+  employeeType?: string;
   payrollEnabled?: boolean;
   employmentType?: string;
   hourlyWage?: number | string | null;
@@ -155,13 +161,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const nameKana = toNullableText(body.nameKana);
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
-  const employeeNumber = toNullableText(body.employeeNumber);
-  const hireDate = toNullableDate(body.hireDate);
-  const resignationDate = toNullableDate(body.resignationDate);
-  const resignationReason = toNullableText(body.resignationReason);
-  const businessType = toNullableText(body.businessType);
   const isForeignNational = Boolean(body.isForeignNational);
-  const employeeType = normalizeEmployeeType(body.employeeType);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -198,13 +198,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           name_kana = ${nameKana},
           address = ${address},
           birth_date = ${birthDate},
-          employee_number = ${employeeNumber},
-          hire_date = ${hireDate},
-          resignation_date = ${resignationDate},
-          resignation_reason = ${resignationReason},
-          business_type = ${businessType},
           is_foreign_national = ${isForeignNational},
-          employee_type = ${employeeType},
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
@@ -226,13 +220,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           name_kana = ${nameKana},
           address = ${address},
           birth_date = ${birthDate},
-          employee_number = ${employeeNumber},
-          hire_date = ${hireDate},
-          resignation_date = ${resignationDate},
-          resignation_reason = ${resignationReason},
-          business_type = ${businessType},
           is_foreign_national = ${isForeignNational},
-          employee_type = ${employeeType},
           lark_open_id = ${larkOpenId || null},
           lark_user_id = ${larkUserId || null},
           role = ${role},
@@ -249,6 +237,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const existingWorkStores = await sql`
     select
       store_id::text as "storeId",
+      employee_number as "employeeNumber",
+      hire_date as "hireDate",
+      resignation_date as "resignationDate",
+      resignation_reason as "resignationReason",
+      business_type as "businessType",
+      employee_type as "employeeType",
       payroll_enabled as "payrollEnabled",
       employment_type as "employmentType",
       hourly_wage as "hourlyWage",
@@ -287,6 +281,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   for (const storeId of workStoreIds) {
     const storeSetting = workStoreSettings.find((setting) => String(setting.storeId ?? "") === storeId);
     const payrollStore = payrollStoreById.get(storeId);
+    const storeEmployeeNumber = toNullableText(storeSetting?.employeeNumber);
+    const storeHireDate = toNullableDate(storeSetting?.hireDate);
+    const storeResignationDate = toNullableDate(storeSetting?.resignationDate);
+    const storeResignationReason = toNullableText(storeSetting?.resignationReason);
+    const storeBusinessType = toNullableText(storeSetting?.businessType);
+    const storeEmployeeType = normalizeEmployeeType(storeSetting?.employeeType);
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
     const storeHourlyWage = toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage;
     const storeMonthlySalary = toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary;
@@ -314,6 +314,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       insert into employee_work_stores (
         employee_id,
         store_id,
+        employee_number,
+        hire_date,
+        resignation_date,
+        resignation_reason,
+        business_type,
+        employee_type,
         payroll_enabled,
         employment_type,
         hourly_wage,
@@ -329,6 +335,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       values (
         ${id},
         ${storeId},
+        ${storeEmployeeNumber},
+        ${storeHireDate},
+        ${storeResignationDate},
+        ${storeResignationReason},
+        ${storeBusinessType},
+        ${storeEmployeeType},
         ${currentPayrollEnabled},
         ${currentEmploymentType},
         ${currentHourlyWage},
@@ -432,7 +444,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory, payrollSubject, status, employeeType, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

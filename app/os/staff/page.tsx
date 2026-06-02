@@ -18,6 +18,12 @@ type StoreOption = {
 };
 
 type WorkStoreOption = StoreOption & {
+  employeeNumber?: string | null;
+  hireDate?: string | null;
+  resignationDate?: string | null;
+  resignationReason?: string | null;
+  businessType?: string | null;
+  employeeType?: string | null;
   payrollEnabled?: boolean | null;
   employmentType?: string | null;
   hourlyWage?: number | string | null;
@@ -59,13 +65,7 @@ type StaffMember = {
   nameKana?: string | null;
   address?: string | null;
   birthDate?: string | null;
-  employeeNumber?: string | null;
-  hireDate?: string | null;
-  resignationDate?: string | null;
-  resignationReason?: string | null;
-  businessType?: string | null;
   isForeignNational?: boolean | null;
-  employeeType?: string | null;
   larkOpenId?: string | null;
   larkUserId?: string | null;
   role: string;
@@ -282,13 +282,7 @@ export default function StaffPage() {
       nameKana: String(formData.get("nameKana") ?? ""),
       address: String(formData.get("address") ?? ""),
       birthDate: String(formData.get("birthDate") ?? ""),
-      employeeNumber: String(formData.get("employeeNumber") ?? ""),
-      hireDate: String(formData.get("hireDate") ?? ""),
-      resignationDate: String(formData.get("resignationDate") ?? ""),
-      resignationReason: String(formData.get("resignationReason") ?? ""),
-      businessType: String(formData.get("businessType") ?? ""),
       isForeignNational: formData.get("isForeignNational") === "true",
-      employeeType: String(formData.get("employeeType") ?? "part_time"),
       larkOpenId: String(formData.get("larkOpenId") ?? ""),
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
@@ -305,6 +299,12 @@ export default function StaffPage() {
       workStoreIds,
       workStoreSettings: stores.map((store) => ({
         storeId: store.id,
+        employeeNumber: String(formData.get(`employeeNumber:${store.id}`) ?? ""),
+        hireDate: String(formData.get(`hireDate:${store.id}`) ?? ""),
+        resignationDate: String(formData.get(`resignationDate:${store.id}`) ?? ""),
+        resignationReason: String(formData.get(`resignationReason:${store.id}`) ?? ""),
+        businessType: String(formData.get(`businessType:${store.id}`) ?? ""),
+        employeeType: String(formData.get(`employeeType:${store.id}`) ?? "part_time"),
         payrollEnabled: payrollEnabledStoreIds.has(store.id),
         employmentType: String(formData.get(`employmentType:${store.id}`) ?? "hourly"),
         hourlyWage: String(formData.get(`hourlyWage:${store.id}`) ?? ""),
@@ -479,14 +479,13 @@ export default function StaffPage() {
                       </div>
                       <p>
                         {[
-                          member.employeeNumber ? `社員番号 ${member.employeeNumber}` : `ID ${member.loginId}`,
+                          `ID ${member.loginId}`,
                           roleLabels[member.role] ?? member.role,
-                          staffCategoryLabels[member.staffCategory] ?? member.staffCategory,
-                          employeeTypeLabels[member.employeeType ?? ""] ?? "雇用区分未設定"
+                          staffCategoryLabels[member.staffCategory] ?? member.staffCategory
                         ].join(" / ")}
                       </p>
                       <small>
-                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: {getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: {getWorkStores(member).length ? getWorkStores(member).map((store) => store.name).join("、") : "未設定"} ・ {formatLastSeen(member.lastSeenAt)}
+                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: {getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: {getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ {formatLastSeen(member.lastSeenAt)}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -561,6 +560,14 @@ function getMemberStores(member: StaffMember) {
     storeMap.set(store.id, store);
   }
   return Array.from(storeMap.values());
+}
+
+function formatWorkStoreSummary(store: WorkStoreOption) {
+  const details = [
+    store.employeeNumber ? `社員番号 ${store.employeeNumber}` : "",
+    employeeTypeLabels[store.employeeType ?? ""] ?? ""
+  ].filter(Boolean);
+  return details.length ? `${store.name}（${details.join(" / ")}）` : store.name;
 }
 
 function StaffFormFields({
@@ -691,7 +698,7 @@ function StaffFormFields({
     <>
       <div className="staff-form-tabs" role="tablist" aria-label="スタッフ情報">
         <button className={activeTab === "basic" ? "is-active" : ""} type="button" onClick={() => setActiveTab("basic")}>基本情報</button>
-        <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>給与情報</button>
+        <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>勤務・給与情報</button>
         <button className={activeTab === "other" ? "is-active" : ""} type="button" onClick={() => setActiveTab("other")}>その他</button>
       </div>
 
@@ -718,41 +725,14 @@ function StaffFormFields({
           <input name="birthDate" type="date" defaultValue={toDateInputValue(member?.birthDate)} />
         </label>
         <label>
-          <span>社員番号</span>
-          <input name="employeeNumber" defaultValue={member?.employeeNumber ?? ""} placeholder="例: B202605001" />
-        </label>
-        <label>
-          <span>入社日</span>
-          <input name="hireDate" type="date" defaultValue={toDateInputValue(member?.hireDate)} />
-        </label>
-        <label>
-          <span>退職日</span>
-          <input name="resignationDate" type="date" defaultValue={toDateInputValue(member?.resignationDate)} />
-        </label>
-        <label>
-          <span>退職理由</span>
-          <textarea name="resignationReason" defaultValue={member?.resignationReason ?? ""} placeholder="退職時のみ入力" />
-        </label>
-        <label>
           <span>住所</span>
           <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />
-        </label>
-        <label>
-          <span>従事する業務の種類</span>
-          <input name="businessType" defaultValue={member?.businessType ?? ""} placeholder="例: 接客、調理、店舗管理" />
         </label>
         <label>
           <span>外国人</span>
           <select name="isForeignNational" defaultValue={member?.isForeignNational ? "true" : "false"}>
             <option value="false">該当しない</option>
             <option value="true">該当する</option>
-          </select>
-        </label>
-        <label>
-          <span>雇用区分</span>
-          <select name="employeeType" defaultValue={member?.employeeType ?? "part_time"}>
-            <option value="part_time">アルバイト</option>
-            <option value="full_time">正社員</option>
           </select>
         </label>
         <label>
@@ -796,8 +776,8 @@ function StaffFormFields({
 
       <section className={activeTab === "payroll" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <div className="staff-payroll-guide">
-          <strong>勤務店舗ごとに給与を設定</strong>
-          <p>まず実際に勤務する店舗を選びます。選択した店舗だけ、給与計算・賃金・交通費・控除設定を管理できます。閲覧権限は「その他」タブで別に設定します。</p>
+          <strong>勤務店舗ごとに雇用情報と給与を設定</strong>
+          <p>社員番号、入社日、退職情報、業務の種類、雇用区分は勤務先ごとの雇用関係として管理します。閲覧権限は「その他」タブで別に設定します。</p>
         </div>
         <input name="employmentType" type="hidden" value={member?.employmentType ?? "hourly"} readOnly />
         <input name="hourlyWage" type="hidden" value={String(member?.hourlyWage ?? "")} readOnly />
@@ -832,6 +812,36 @@ function StaffFormFields({
                   </div>
                 ) : (
                   <>
+                <fieldset className="staff-employment-store-fields">
+                  <span>雇用基本情報</span>
+                  <label>
+                    <span>社員番号</span>
+                    <input name={`employeeNumber:${store.id}`} defaultValue={setting?.employeeNumber ?? ""} placeholder="例: B202605001" />
+                  </label>
+                  <label>
+                    <span>雇用区分</span>
+                    <select name={`employeeType:${store.id}`} defaultValue={setting?.employeeType ?? "part_time"}>
+                      <option value="part_time">アルバイト</option>
+                      <option value="full_time">正社員</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>入社日</span>
+                    <input name={`hireDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.hireDate)} />
+                  </label>
+                  <label>
+                    <span>退職日</span>
+                    <input name={`resignationDate:${store.id}`} type="date" defaultValue={toDateInputValue(setting?.resignationDate)} />
+                  </label>
+                  <label>
+                    <span>従事する業務の種類</span>
+                    <input name={`businessType:${store.id}`} defaultValue={setting?.businessType ?? ""} placeholder="例: 接客、調理、店舗管理" />
+                  </label>
+                  <label className="staff-employment-wide">
+                    <span>退職理由</span>
+                    <textarea name={`resignationReason:${store.id}`} defaultValue={setting?.resignationReason ?? ""} placeholder="退職時のみ入力" />
+                  </label>
+                </fieldset>
                 <label>
                   <span>給与計算に含める</span>
                   <span className="staff-payroll-check">
