@@ -372,11 +372,20 @@ create table if not exists timecard_workload_settings (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,
   include_management boolean not null default true,
+  min_order_load_score numeric(8, 2) not null default 1,
+  amount_score_multiplier numeric(8, 2) not null default 1,
+  high_load_order_threshold integer not null default 8,
+  high_load_score_threshold numeric(8, 2) not null default 8,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (store_id)
 );
+
+alter table timecard_workload_settings add column if not exists min_order_load_score numeric(8, 2) not null default 1;
+alter table timecard_workload_settings add column if not exists amount_score_multiplier numeric(8, 2) not null default 1;
+alter table timecard_workload_settings add column if not exists high_load_order_threshold integer not null default 8;
+alter table timecard_workload_settings add column if not exists high_load_score_threshold numeric(8, 2) not null default 8;
 
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),

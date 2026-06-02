@@ -10,16 +10,52 @@ import {
 
 const workloadSettingsRoles = new Set(["owner", "manager", "store_owner"]);
 const managementRoles = new Set(["owner", "manager", "store_owner"]);
-const highLoadOrderThreshold = 8;
-const highLoadScoreThreshold = 8;
 const hourMs = 60 * 60 * 1000;
 const workloadSliceMinutes = 15;
+const defaultWorkloadSettings = {
+  includeManagement: true,
+  minOrderLoadScore: 1,
+  amountScoreMultiplier: 1,
+  highLoadOrderThreshold: 8,
+  highLoadScoreThreshold: 8
+};
+
+type WorkloadSettings = typeof defaultWorkloadSettings;
 
 type WorkloadOrder = {
   orderedAtMs: number;
   total: number;
   loadScore: number;
 };
+
+function numberFrom(value: unknown, fallback: number) {
+  const nextValue = Number(value);
+  return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, numberFrom(value, fallback)));
+}
+
+function normalizeWorkloadSettings(settings: Partial<WorkloadSettings>): WorkloadSettings {
+  return {
+    includeManagement: settings.includeManagement !== false,
+    minOrderLoadScore: clampNumber(settings.minOrderLoadScore, defaultWorkloadSettings.minOrderLoadScore, 0.1, 10),
+    amountScoreMultiplier: clampNumber(settings.amountScoreMultiplier, defaultWorkloadSettings.amountScoreMultiplier, 0.1, 5),
+    highLoadOrderThreshold: Math.round(clampNumber(
+      settings.highLoadOrderThreshold,
+      defaultWorkloadSettings.highLoadOrderThreshold,
+      1,
+      50
+    )),
+    highLoadScoreThreshold: clampNumber(
+      settings.highLoadScoreThreshold,
+      defaultWorkloadSettings.highLoadScoreThreshold,
+      1,
+      100
+    )
+  };
+}
 
 async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
@@ -100,7 +136,8 @@ function getOnePersonHighLoadMinutes(
   orders: WorkloadOrder[],
   shiftIntervals: Array<{ startMs: number; endMs: number }>,
   shiftStart: number,
-  shiftEnd: number
+  shiftEnd: number,
+  settings: WorkloadSettings
 ) {
   const sorted = [...orders].sort((a, b) => a.orderedAtMs - b.orderedAtMs);
   const countedWindows: Array<{ start: number; end: number }> = [];
@@ -114,7 +151,7 @@ function getOnePersonHighLoadMinutes(
     const windowOrders = sorted.filter((candidate) => candidate.orderedAtMs >= windowStart && candidate.orderedAtMs <= windowEnd);
     const orderCount = windowOrders.length;
     const loadScore = windowOrders.reduce((sum, candidate) => sum + candidate.loadScore, 0);
-    if (orderCount < highLoadOrderThreshold && loadScore < highLoadScoreThreshold) continue;
+    if (orderCount < settings.highLoadOrderThreshold && loadScore < settings.highLoadScoreThreshold) continue;
     const staff = getActiveStaffCountDuringWindow(shiftIntervals, windowStart, windowEnd);
     if (staff.onePersonMinutes < 30) continue;
 
@@ -146,14 +183,17 @@ function getIdleBlockMinutes(orderedTimes: number[], shiftStart: number, shiftEn
 
 async function getWorkloadSettings(storeId: string) {
   const rows = await sql`
-    select coalesce(include_management, true) as "includeManagement"
+    select
+      coalesce(include_management, true) as "includeManagement",
+      coalesce(min_order_load_score, 1) as "minOrderLoadScore",
+      coalesce(amount_score_multiplier, 1) as "amountScoreMultiplier",
+      coalesce(high_load_order_threshold, 8) as "highLoadOrderThreshold",
+      coalesce(high_load_score_threshold, 8) as "highLoadScoreThreshold"
     from timecard_workload_settings
     where store_id::text = ${storeId}
     limit 1
   `;
-  return {
-    includeManagement: rows[0]?.includeManagement !== false
-  };
+  return normalizeWorkloadSettings(rows[0] ?? defaultWorkloadSettings);
 }
 
 export async function GET(request: Request) {
@@ -170,7 +210,7 @@ export async function GET(request: Request) {
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
-  const settings = selectedStoreId ? await getWorkloadSettings(selectedStoreId) : { includeManagement: true };
+  const settings = selectedStoreId ? await getWorkloadSettings(selectedStoreId) : defaultWorkloadSettings;
 
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
@@ -279,7 +319,9 @@ export async function GET(request: Request) {
       return {
         orderedAtMs: new Date(String(order.orderedAt)).getTime(),
         total,
-        loadScore: averageOrderTotal > 0 ? Math.max(1, total / averageOrderTotal) : 1
+        loadScore: averageOrderTotal > 0
+          ? Math.max(settings.minOrderLoadScore, (total / averageOrderTotal) * settings.amountScoreMultiplier)
+          : settings.minOrderLoadScore
       };
     });
     const orderedTimes = workloadOrders.map((order) => order.orderedAtMs);
@@ -287,7 +329,13 @@ export async function GET(request: Request) {
     const peakMetrics = getPeakHourMetrics(workloadOrders);
     const storeShiftIntervals = shiftIntervals.filter((candidate) => candidate.storeId === shift.storeId);
     const isOnePerson = isMostlyOnePersonShift(storeShiftIntervals, shift.startMs, shift.endMs);
-    const onePersonHighLoadMinutes = getOnePersonHighLoadMinutes(workloadOrders, storeShiftIntervals, shift.startMs, shift.endMs);
+    const onePersonHighLoadMinutes = getOnePersonHighLoadMinutes(
+      workloadOrders,
+      storeShiftIntervals,
+      shift.startMs,
+      shift.endMs,
+      settings
+    );
     const idle = getIdleBlockMinutes(orderedTimes, shift.startMs, shift.endMs);
     const entry = employeeMap.get(shift.employeeId) ?? {
       employeeId: shift.employeeId,
@@ -379,7 +427,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "負荷分析設定を変更する権限がありません。" }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; includeManagement?: unknown };
+  const body = await request.json().catch(() => ({})) as Partial<WorkloadSettings> & { storeId?: string };
   const storeId = String(body.storeId ?? "");
   if (!storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
 
@@ -388,29 +436,47 @@ export async function POST(request: Request) {
     return Response.json({ error: "この店舗の設定を変更する権限がありません。" }, { status: 403 });
   }
 
-  const includeManagement = body.includeManagement !== false;
+  const settings = normalizeWorkloadSettings({
+    includeManagement: body.includeManagement,
+    minOrderLoadScore: body.minOrderLoadScore,
+    amountScoreMultiplier: body.amountScoreMultiplier,
+    highLoadOrderThreshold: body.highLoadOrderThreshold,
+    highLoadScoreThreshold: body.highLoadScoreThreshold
+  });
   await sql`
     insert into timecard_workload_settings (
       store_id,
       include_management,
+      min_order_load_score,
+      amount_score_multiplier,
+      high_load_order_threshold,
+      high_load_score_threshold,
       updated_by,
       updated_at
     )
     values (
       ${storeId},
-      ${includeManagement},
+      ${settings.includeManagement},
+      ${settings.minOrderLoadScore},
+      ${settings.amountScoreMultiplier},
+      ${settings.highLoadOrderThreshold},
+      ${settings.highLoadScoreThreshold},
       ${session.id},
       now()
     )
     on conflict (store_id)
     do update set
       include_management = excluded.include_management,
+      min_order_load_score = excluded.min_order_load_score,
+      amount_score_multiplier = excluded.amount_score_multiplier,
+      high_load_order_threshold = excluded.high_load_order_threshold,
+      high_load_score_threshold = excluded.high_load_score_threshold,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
 
   return Response.json({
     ok: true,
-    settings: { includeManagement }
+    settings
   });
 }

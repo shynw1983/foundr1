@@ -57,14 +57,19 @@ type WorkloadShift = {
   isOnePerson: boolean;
   idleMinutes: number;
 };
+type WorkloadSettings = {
+  includeManagement: boolean;
+  minOrderLoadScore: number;
+  amountScoreMultiplier: number;
+  highLoadOrderThreshold: number;
+  highLoadScoreThreshold: number;
+};
 type WorkloadSummary = {
   month: string;
   stores: StoreOption[];
   selectedStoreId: string;
   canEditSettings: boolean;
-  settings: {
-    includeManagement: boolean;
-  };
+  settings: WorkloadSettings;
   excludedManagementShiftCount: number;
   totals: {
     workMinutes: number;
@@ -155,6 +160,13 @@ function chartWidth(value: number, maxValue: number) {
 
 const timecardMonthStorageKey = "foundr1:timecard:selected-month";
 const timecardStoreStorageKey = "foundr1:timecard:selected-store-id";
+const defaultWorkloadSettings: WorkloadSettings = {
+  includeManagement: true,
+  minOrderLoadScore: 1,
+  amountScoreMultiplier: 1,
+  highLoadOrderThreshold: 8,
+  highLoadScoreThreshold: 8
+};
 
 function getStoredTimecardMonth() {
   if (typeof window === "undefined") return getCurrentMonth();
@@ -177,6 +189,7 @@ export default function TimecardWorkloadPage() {
   const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [data, setData] = useState<WorkloadSummary | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<WorkloadSettings>(defaultWorkloadSettings);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
@@ -188,6 +201,7 @@ export default function TimecardWorkloadPage() {
     if (response.ok) {
       const body = await response.json() as WorkloadSummary;
       setData(body);
+      setSettingsDraft(body.settings);
       setSelectedStoreId(body.selectedStoreId);
       storeTimecardSelection(body.month, body.selectedStoreId);
     }
@@ -214,14 +228,22 @@ export default function TimecardWorkloadPage() {
   const maxOrdersPerHour = Math.max(0, ...workloadChartEmployees.map((employee) => employee.ordersPerHour));
   const maxSales = Math.max(0, ...salesContributionEmployees.map((employee) => employee.sales));
   const maxSalesPerHour = Math.max(0, ...salesContributionEmployees.map((employee) => employee.salesPerHour));
+  const currentSettings = settingsDraft ?? data?.settings ?? defaultWorkloadSettings;
+  const settingsDisabled = !data?.canEditSettings || isSavingSettings || !selectedStoreId;
 
-  async function saveIncludeManagement(includeManagement: boolean) {
+  function updateSettingsDraft(key: keyof WorkloadSettings, value: boolean | number) {
+    setSettingsDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveWorkloadSettings(patch: Partial<WorkloadSettings> = {}) {
     if (!selectedStoreId) return;
+    const nextSettings = { ...currentSettings, ...patch };
+    setSettingsDraft(nextSettings);
     setIsSavingSettings(true);
     const response = await fetch("/api/timecard/workload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: selectedStoreId, includeManagement })
+      body: JSON.stringify({ storeId: selectedStoreId, ...nextSettings })
     });
     if (response.ok) {
       await loadWorkload(month, selectedStoreId);
@@ -295,22 +317,90 @@ export default function TimecardWorkloadPage() {
         </section>
 
         <section className="panel workload-settings-panel">
-          <label className="settings-toggle-row workload-toggle-row">
-            <input
-              type="checkbox"
-              checked={data?.settings.includeManagement ?? true}
-              disabled={!data?.canEditSettings || isSavingSettings}
-              onChange={(event) => void saveIncludeManagement(event.target.checked)}
-            />
+          <div className="panel-title">
+            <Settings size={18} />
             <div>
-              <strong>管理職を負荷計算に含める</strong>
-              <span>
-                {data?.settings.includeManagement
-                  ? "店長・管理者の勤務もスタッフ負荷に含めています。"
-                  : `店長・管理者の勤務を除外しています${data?.excludedManagementShiftCount ? `（除外 ${data.excludedManagementShiftCount} 勤務）` : ""}。`}
-              </span>
+              <h3>負荷点数設定</h3>
+              <p>注文の複雑さと高負荷判定の基準を店舗ごとに調整します。</p>
             </div>
-          </label>
+          </div>
+          <div className="workload-settings-content">
+            <label className="settings-toggle-row workload-toggle-row">
+              <input
+                type="checkbox"
+                checked={currentSettings.includeManagement}
+                disabled={settingsDisabled}
+                onChange={(event) => void saveWorkloadSettings({ includeManagement: event.target.checked })}
+              />
+              <div>
+                <strong>管理職を負荷計算に含める</strong>
+                <span>
+                  {currentSettings.includeManagement
+                    ? "店長・管理者の勤務もスタッフ負荷に含めています。"
+                    : `店長・管理者の勤務を除外しています${data?.excludedManagementShiftCount ? `（除外 ${data.excludedManagementShiftCount} 勤務）` : ""}。`}
+                </span>
+              </div>
+            </label>
+            <div className="workload-settings-grid">
+              <label>
+                <span>最低負荷点数</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  value={currentSettings.minOrderLoadScore}
+                  disabled={settingsDisabled}
+                  onChange={(event) => updateSettingsDraft("minOrderLoadScore", Number(event.target.value))}
+                />
+                <small>低単価の注文でも最低この点数で扱います。</small>
+              </label>
+              <label>
+                <span>金額倍率</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="5"
+                  step="0.1"
+                  value={currentSettings.amountScoreMultiplier}
+                  disabled={settingsDisabled}
+                  onChange={(event) => updateSettingsDraft("amountScoreMultiplier", Number(event.target.value))}
+                />
+                <small>単価による複雑さを強める、または弱めます。</small>
+              </label>
+              <label>
+                <span>高負荷注文数</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="1"
+                  value={currentSettings.highLoadOrderThreshold}
+                  disabled={settingsDisabled}
+                  onChange={(event) => updateSettingsDraft("highLoadOrderThreshold", Number(event.target.value))}
+                />
+                <small>1時間内の注文数がこの件数以上なら高負荷です。</small>
+              </label>
+              <label>
+                <span>高負荷点数</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="0.5"
+                  value={currentSettings.highLoadScoreThreshold}
+                  disabled={settingsDisabled}
+                  onChange={(event) => updateSettingsDraft("highLoadScoreThreshold", Number(event.target.value))}
+                />
+                <small>1時間内の負荷点数がこの点数以上なら高負荷です。</small>
+              </label>
+            </div>
+            <div className="workload-settings-actions">
+              <button className="secondary-button" type="button" disabled={settingsDisabled} onClick={() => void saveWorkloadSettings()}>
+                {isSavingSettings ? "保存中" : "設定を保存"}
+              </button>
+            </div>
+          </div>
         </section>
 
         <details className="panel workload-guide-panel">
@@ -326,11 +416,11 @@ export default function TimecardWorkloadPage() {
             </article>
             <article>
               <h3>負荷ピーク</h3>
-              <p>連続1時間の中で、注文数・売上・負荷点数が最も高い時間帯を見ます。負荷点数は「注文金額 ÷ 当月平均客単価」で計算し、低金額の注文も最低1ptとして扱います。</p>
+              <p>連続1時間の中で、注文数・売上・負荷点数が最も高い時間帯を見ます。負荷点数は「注文金額 ÷ 当月平均客単価 × 金額倍率」で計算し、低金額の注文も最低{score(currentSettings.minOrderLoadScore)}として扱います。</p>
             </article>
             <article>
               <h3>ワンオペ高負荷</h3>
-              <p>ワンオペの時間帯で、1時間あたり注文8件以上、または負荷点数8pt以上になった時間を集計します。実際にワンオペだった分数だけを加算します。</p>
+              <p>ワンオペの時間帯で、1時間あたり注文{currentSettings.highLoadOrderThreshold}件以上、または負荷点数{score(currentSettings.highLoadScoreThreshold)}以上になった時間を集計します。実際にワンオペだった分数だけを加算します。</p>
             </article>
             <article>
               <h3>売上貢献度</h3>
