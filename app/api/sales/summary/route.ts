@@ -204,6 +204,26 @@ export async function GET(request: Request) {
       note: row.note ? String(row.note) : null
     };
   }) satisfies TimecardPunch[];
+  const workDateEndExclusive = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(endUtc);
+  const dailySummaries = summarizeTimecardDays(typedPunches, {
+    workDateStart: month + "-01",
+    workDateEndExclusive
+  }).filter((summary) => summary.clockIn && summary.clockOut && summary.workMinutes > 0);
+  const shiftIntervals = dailySummaries.map((summary) => ({
+    workDate: summary.workDate,
+    startMs: new Date(summary.clockIn as string).getTime(),
+    endMs: new Date(summary.clockOut as string).getTime(),
+    workMinutes: summary.workMinutes
+  }));
+  const dailyWorkMinutes = new Map<string, number>();
+  for (const summary of dailySummaries) {
+    dailyWorkMinutes.set(summary.workDate, (dailyWorkMinutes.get(summary.workDate) ?? 0) + summary.workMinutes);
+  }
 
   const dayMap = new Map<string, { date: string; orderCount: number; sales: number; workMinutes: number; ordersPerHour: number; salesPerHour: number }>();
   const hourMap = new Map<number, { hour: number; orderCount: number; sales: number }>();
@@ -265,7 +285,9 @@ export async function GET(request: Request) {
 
   for (const order of orders) {
     const orderedAt = new Date(String(order.orderedAt));
-    const date = formatter.format(orderedAt);
+    const orderedAtMs = orderedAt.getTime();
+    const matchedShift = shiftIntervals.find((shift) => orderedAtMs >= shift.startMs && orderedAtMs <= shift.endMs);
+    const date = matchedShift?.workDate ?? formatter.format(orderedAt);
     const hour = Number(hourFormatter.format(orderedAt));
     const sales = Number(order.total ?? 0);
     const dayEntry = dayMap.get(date) ?? { date, orderCount: 0, sales: 0, workMinutes: 0, ordersPerHour: 0, salesPerHour: 0 };
@@ -297,22 +319,6 @@ export async function GET(request: Request) {
     revenueGroupMap.set(group.key, groupEntry);
   }
 
-  const workDateEndExclusive = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(endUtc);
-  const dailyWorkMinutes = new Map<string, number>();
-  summarizeTimecardDays(typedPunches, {
-    workDateStart: month + "-01",
-    workDateEndExclusive
-  }).forEach((summary) => {
-    if (summary.workMinutes > 0) {
-      dailyWorkMinutes.set(summary.workDate, (dailyWorkMinutes.get(summary.workDate) ?? 0) + summary.workMinutes);
-    }
-  });
-
   const daily = Array.from(dayMap.values()).map((day) => {
     const workMinutes = dailyWorkMinutes.get(day.date) ?? 0;
     const workHours = workMinutes / 60;
@@ -326,8 +332,9 @@ export async function GET(request: Request) {
     return {
       ...day,
       workMinutes,
-      ordersPerHour: workHours > 0 ? day.orderCount / workHours : day.orderCount,
-      salesPerHour: workHours > 0 ? Math.round(day.sales / workHours) : day.sales,
+      workloadAvailable: workHours > 0,
+      ordersPerHour: workHours > 0 ? day.orderCount / workHours : 0,
+      salesPerHour: workHours > 0 ? Math.round(day.sales / workHours) : 0,
       weatherCode: weather.weatherCode,
       weatherLabel: weather.weatherLabel,
       temperatureMean: weather.temperatureMean,
@@ -338,10 +345,12 @@ export async function GET(request: Request) {
     const weekday = new Date(`${day.date}T00:00:00+09:00`).getDay();
     const entry = weekdayMap.get(weekday);
     if (!entry) continue;
-    entry.dayCount += day.orderCount > 0 || day.workMinutes > 0 ? 1 : 0;
-    entry.orderCount += day.orderCount;
-    entry.sales += day.sales;
-    entry.workMinutes += day.workMinutes;
+    if (day.workMinutes > 0) {
+      entry.dayCount += 1;
+      entry.orderCount += day.orderCount;
+      entry.sales += day.sales;
+      entry.workMinutes += day.workMinutes;
+    }
     entry.precipitationSum += day.precipitation ?? 0;
     entry.weatherDayCount += day.temperatureMean === null ? 0 : 1;
     entry.temperatureTotal += day.temperatureMean ?? 0;
@@ -351,8 +360,8 @@ export async function GET(request: Request) {
     const workHours = weekday.workMinutes / 60;
     return {
       ...weekday,
-      ordersPerHour: workHours > 0 ? weekday.orderCount / workHours : weekday.orderCount,
-      salesPerHour: workHours > 0 ? Math.round(weekday.sales / workHours) : weekday.sales,
+      ordersPerHour: workHours > 0 ? weekday.orderCount / workHours : 0,
+      salesPerHour: workHours > 0 ? Math.round(weekday.sales / workHours) : 0,
       temperatureMean: weekday.weatherDayCount > 0 ? Math.round((weekday.temperatureTotal / weekday.weatherDayCount) * 10) / 10 : null
     };
   });
@@ -375,7 +384,7 @@ export async function GET(request: Request) {
   const estimatedFeeTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedFee, 0);
   const estimatedDepositTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedDeposit, 0);
   const deliverySales = revenueGroups.find((group) => group.key === "delivery")?.sales ?? 0;
-  const activeDays = daily.filter((day) => day.orderCount > 0 || day.workMinutes > 0);
+  const activeDays = daily.filter((day) => day.workMinutes > 0);
   const busiestDays = [...activeDays].sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount).slice(0, 5);
   const quietestDays = [...activeDays].sort((a, b) => a.ordersPerHour - b.ordersPerHour || a.salesPerHour - b.salesPerHour || a.orderCount - b.orderCount).slice(0, 5);
   const activeWeekdays = weekdays.filter((weekday) => weekday.dayCount > 0);

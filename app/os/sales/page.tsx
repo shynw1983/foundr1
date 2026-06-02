@@ -28,6 +28,7 @@ type SalesDay = {
   orderCount: number;
   sales: number;
   workMinutes: number;
+  workloadAvailable: boolean;
   ordersPerHour: number;
   salesPerHour: number;
   weatherCode: number | null;
@@ -176,10 +177,50 @@ function formatDuration(minutes: number) {
   return `${hours}時間${String(mins).padStart(2, "0")}分`;
 }
 
-function formatWeather(day: Pick<SalesDay, "weatherLabel" | "temperatureMean" | "precipitation">) {
-  const temperature = day.temperatureMean === null ? "" : ` / ${formatRate(day.temperatureMean)}℃`;
-  const precipitation = day.precipitation === null ? "" : ` / 雨量 ${formatRate(day.precipitation)}mm`;
-  return `${day.weatherLabel}${temperature}${precipitation}`;
+function getWeatherIcon(code: number | null) {
+  if (code === null) return "・";
+  if (code === 0) return "☀";
+  if ([1, 2].includes(code)) return "🌤";
+  if ([3, 45, 48].includes(code)) return "☁";
+  if (code >= 51 && code <= 67) return "☂";
+  if (code >= 80 && code <= 82) return "☔";
+  if (code >= 95) return "雷";
+  return "☁";
+}
+
+function getDensityLevel(value: number) {
+  if (value >= 16) return { label: "非常に高い", className: "is-critical" };
+  if (value >= 13) return { label: "高負荷", className: "is-high" };
+  if (value >= 9) return { label: "忙しい", className: "is-busy" };
+  if (value >= 5) return { label: "通常", className: "is-normal" };
+  return { label: "空き", className: "is-quiet" };
+}
+
+function getMonthCalendarDays(month: string, days: SalesDay[]) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  if (!year || !monthIndex) return [];
+  const dayMap = new Map(days.map((day) => [day.date, day]));
+  const firstWeekday = (new Date(Date.UTC(year, monthIndex - 1, 1)).getUTCDay() + 6) % 7;
+  const dayCount = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  const cells: Array<SalesDay | null> = Array.from({ length: firstWeekday }, () => null);
+  for (let day = 1; day <= dayCount; day += 1) {
+    const date = `${year}-${String(monthIndex).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    cells.push(dayMap.get(date) ?? {
+      date,
+      orderCount: 0,
+      sales: 0,
+      workMinutes: 0,
+      workloadAvailable: false,
+      ordersPerHour: 0,
+      salesPerHour: 0,
+      weatherCode: null,
+      weatherLabel: "",
+      temperatureMean: null,
+      precipitation: null
+    });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
 }
 
 const salesMonthStorageKey = "foundr1:sales:selected-month";
@@ -253,7 +294,12 @@ export default function SalesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const maxDailyDensity = useMemo(() => Math.max(1, ...(summary?.daily.map((day) => day.ordersPerHour) ?? [1])), [summary]);
+  const calendarDays = useMemo(() => getMonthCalendarDays(month, summary?.daily ?? []), [month, summary?.daily]);
+  const sortedWeekdays = useMemo(() => (
+    [...(summary?.weekdays ?? [])]
+      .filter((weekday) => weekday.dayCount > 0)
+      .sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount)
+  ), [summary?.weekdays]);
   const selectedStoreName = summary?.stores.find((store) => store.id === selectedStoreId)?.name ?? "";
   const importedSourceMap = useMemo(() => {
     const map = new Map<string, ImportBatch>();
@@ -463,19 +509,36 @@ export default function SalesPage() {
             <div className="panel-title">
               <CalendarDays size={18} />
               <div>
-                <h3>日別の忙しさ</h3>
-                <p>その日の実勤務時間に対する注文密度で月内の波を確認します。天気は {summary?.weatherLocation.name ?? "店舗所在地"} の参考値です。</p>
+                <h3>月視図カレンダー</h3>
+                <p>日ごとの売上と天気を一覧します。負荷は勤務時間が登録された日のみ判定します。</p>
               </div>
             </div>
-            <div className="sales-day-bars">
-              {(summary?.daily ?? []).map((day) => (
-                <div className="sales-day-bar" key={day.date}>
-                  <span>{day.date.slice(8)}</span>
-                  <div><i style={{ width: `${Math.max(4, (day.ordersPerHour / maxDailyDensity) * 100)}%` }} /></div>
-                  <strong>{formatRate(day.ordersPerHour)}</strong>
-                </div>
+            <div className="sales-calendar">
+              {["月", "火", "水", "木", "金", "土", "日"].map((label) => (
+                <span className="sales-calendar-weekday" key={label}>{label}</span>
               ))}
+              {calendarDays.map((day, index) => {
+                if (!day) return <span className="sales-calendar-cell is-empty" key={`empty-${index}`} />;
+                const level = getDensityLevel(day.ordersPerHour);
+                return (
+                  <div className={`sales-calendar-cell ${day.workloadAvailable ? level.className : "is-untracked"}`} key={day.date}>
+                    <div className="sales-calendar-cell-head">
+                      <strong>{Number(day.date.slice(8))}</strong>
+                      <span title={day.weatherLabel || "天気未取得"}>{getWeatherIcon(day.weatherCode)}</span>
+                    </div>
+                    <b>{day.sales > 0 ? formatMoney(day.sales) : "売上なし"}</b>
+                    {day.workloadAvailable ? (
+                      <small>{level.label} / {formatRate(day.ordersPerHour)}件/時間</small>
+                    ) : day.orderCount > 0 ? (
+                      <small>勤怠未登録 / {day.orderCount}件</small>
+                    ) : (
+                      <small>注文なし</small>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+            <p className="sales-calendar-note">天気: {summary?.weatherLocation.name ?? "店舗所在地"} の参考値</p>
           </article>
         </section>
 
@@ -484,11 +547,15 @@ export default function SalesPage() {
             <h3>忙しい日</h3>
             <div className="sales-rank-list">
               {(summary?.busiestDays ?? []).map((day) => (
-                <div className="sales-rank-row" key={day.date}>
-                  <span>{formatDate(day.date)}</span>
-                  <strong>{formatRate(day.ordersPerHour)}件/時間</strong>
-                  <small>{day.orderCount}件 / {formatMoney(day.salesPerHour)}/時間 / 勤務 {formatDuration(day.workMinutes)}</small>
-                  <small>{formatWeather(day)}</small>
+                <div className={`sales-analysis-row ${getDensityLevel(day.ordersPerHour).className}`} key={day.date}>
+                  <div>
+                    <span>{formatDate(day.date)}</span>
+                    <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
+                  </div>
+                  <div>
+                    <strong>{getDensityLevel(day.ordersPerHour).label}</strong>
+                    <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
+                  </div>
                 </div>
               ))}
             </div>
@@ -497,33 +564,33 @@ export default function SalesPage() {
             <h3>空きやすい日</h3>
             <div className="sales-rank-list">
               {(summary?.quietestDays ?? []).map((day) => (
-                <div className="sales-rank-row" key={day.date}>
-                  <span>{formatDate(day.date)}</span>
-                  <strong>{formatRate(day.ordersPerHour)}件/時間</strong>
-                  <small>{day.orderCount}件 / {formatMoney(day.salesPerHour)}/時間 / 勤務 {formatDuration(day.workMinutes)}</small>
-                  <small>{formatWeather(day)}</small>
+                <div className={`sales-analysis-row ${getDensityLevel(day.ordersPerHour).className}`} key={day.date}>
+                  <div>
+                    <span>{formatDate(day.date)}</span>
+                    <small>{day.orderCount}件 / 勤務 {formatDuration(day.workMinutes)} / 売上 {formatMoney(day.sales)}</small>
+                  </div>
+                  <div>
+                    <strong>{getDensityLevel(day.ordersPerHour).label}</strong>
+                    <small>注文密度 {formatRate(day.ordersPerHour)}件/時間</small>
+                  </div>
                 </div>
               ))}
             </div>
           </article>
           <article className="panel">
             <h3>曜日別の忙しさ</h3>
-            <div className="sales-rank-list">
-              {(summary?.busiestWeekdays ?? []).map((weekday) => (
-                <div className="sales-rank-row" key={`busy-${weekday.weekday}`}>
-                  <span>{weekday.label}曜日</span>
-                  <strong>{formatRate(weekday.ordersPerHour)}件/時間</strong>
-                  <small>{weekday.dayCount}日 / {weekday.orderCount}件 / {formatMoney(weekday.salesPerHour)}/時間</small>
-                  <small>雨日 {weekday.rainyDayCount}日 / 雨量 {formatRate(weekday.precipitationSum)}mm{weekday.temperatureMean === null ? "" : ` / 平均 ${formatRate(weekday.temperatureMean)}℃`}</small>
-                </div>
-              ))}
-              <div className="sales-rank-divider" />
-              {(summary?.quietestWeekdays ?? []).map((weekday) => (
-                <div className="sales-rank-row" key={`quiet-${weekday.weekday}`}>
-                  <span>{weekday.label}曜日 空き</span>
-                  <strong>{formatRate(weekday.ordersPerHour)}件/時間</strong>
-                  <small>{weekday.dayCount}日 / {weekday.orderCount}件 / {formatMoney(weekday.salesPerHour)}/時間</small>
-                  <small>雨日 {weekday.rainyDayCount}日 / 雨量 {formatRate(weekday.precipitationSum)}mm{weekday.temperatureMean === null ? "" : ` / 平均 ${formatRate(weekday.temperatureMean)}℃`}</small>
+            <div className="sales-weekday-list">
+              {sortedWeekdays.map((weekday, index) => (
+                <div className="sales-weekday-row" key={weekday.weekday}>
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{weekday.label}曜日</strong>
+                    <small>{weekday.dayCount}日 / {weekday.orderCount}件 / 勤務 {formatDuration(weekday.workMinutes)}</small>
+                  </div>
+                  <div className="sales-weekday-meter">
+                    <i style={{ width: `${Math.max(8, (weekday.ordersPerHour / Math.max(1, sortedWeekdays[0]?.ordersPerHour ?? 1)) * 100)}%` }} />
+                  </div>
+                  <b>{formatRate(weekday.ordersPerHour)}件/時間</b>
                 </div>
               ))}
             </div>

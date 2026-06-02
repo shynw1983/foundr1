@@ -11914,7 +11914,8 @@ body :where(
   grid-column: span 1;
 }
 
-.sales-grid > .panel:has(.sales-day-bars) {
+.sales-grid > .panel:has(.sales-day-bars),
+.sales-grid > .panel:has(.sales-calendar) {
   grid-column: span 2;
 }
 
@@ -11968,7 +11969,7 @@ body :where(
 
 .sales-source-upload-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -12013,7 +12014,7 @@ body :where(
 
 .sales-source-upload-control {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
 }
@@ -12142,6 +12143,211 @@ body :where(
   height: 1px;
   margin: 2px 0;
   background: var(--border);
+}
+
+.sales-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: var(--sales-inner-gap);
+}
+
+.sales-calendar-weekday {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.sales-calendar-cell {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 112px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f9fbfd;
+}
+
+.sales-calendar-cell.is-empty {
+  min-height: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sales-calendar-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sales-calendar-cell-head strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.sales-calendar-cell-head span {
+  min-width: 24px;
+  text-align: right;
+  font-size: 15px;
+}
+
+.sales-calendar-cell b {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.sales-calendar-cell small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.sales-calendar-cell.is-quiet {
+  background: #f6faf8;
+  border-color: #d8eadf;
+}
+
+.sales-calendar-cell.is-normal {
+  background: #f8fbff;
+  border-color: #d8e4f2;
+}
+
+.sales-calendar-cell.is-busy {
+  background: #fffaf0;
+  border-color: #f1d8a8;
+}
+
+.sales-calendar-cell.is-high,
+.sales-calendar-cell.is-critical {
+  background: #fff5f3;
+  border-color: #efc5be;
+}
+
+.sales-calendar-cell.is-untracked {
+  background: #fbfaf7;
+  border-style: dashed;
+}
+
+.sales-calendar-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-analysis-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.sales-analysis-row span,
+.sales-analysis-row strong,
+.sales-analysis-row small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sales-analysis-row span {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.sales-analysis-row strong {
+  text-align: right;
+  font-size: 14px;
+}
+
+.sales-analysis-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-analysis-row.is-quiet {
+  border-left-color: #83b99b;
+}
+
+.sales-analysis-row.is-normal {
+  border-left-color: #6d8db5;
+}
+
+.sales-analysis-row.is-busy {
+  border-left-color: #d8a13d;
+}
+
+.sales-analysis-row.is-high,
+.sales-analysis-row.is-critical {
+  border-left-color: #d86b58;
+}
+
+.sales-weekday-list {
+  display: grid;
+  gap: 12px;
+  margin-top: var(--sales-inner-gap);
+}
+
+.sales-weekday-row {
+  display: grid;
+  grid-template-columns: 28px minmax(96px, 0.7fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.sales-weekday-row > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sales-weekday-row strong,
+.sales-weekday-row small {
+  display: block;
+}
+
+.sales-weekday-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-weekday-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f6;
+}
+
+.sales-weekday-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6d8db5, #d8a13d, #d86b58);
+}
+
+.sales-weekday-row b {
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .sales-day-bars {
@@ -12495,7 +12701,8 @@ body :where(
     grid-column: span 2;
   }
 
-  .sales-grid > .panel:has(.sales-day-bars) {
+  .sales-grid > .panel:has(.sales-day-bars),
+  .sales-grid > .panel:has(.sales-calendar) {
     grid-column: span 1;
   }
 
@@ -12505,6 +12712,15 @@ body :where(
 
   .sales-source-upload-row {
     grid-template-columns: 1fr;
+  }
+
+  .sales-calendar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .sales-calendar-weekday,
+  .sales-calendar-cell.is-empty {
+    display: none;
   }
 
   .workload-guide-grid {
@@ -12590,8 +12806,25 @@ body :where(
     grid-template-columns: 1fr;
   }
 
+  .sales-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-calendar-cell {
+    min-height: 104px;
+  }
+
   .sales-rank-row {
     grid-template-columns: 1fr;
+  }
+
+  .sales-analysis-row,
+  .sales-weekday-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-analysis-row strong {
+    text-align: left;
   }
 
   .sales-rank-row strong {
