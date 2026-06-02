@@ -8878,15 +8878,18 @@ button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     min-height: 42px;
     width: 100%;
-    padding: 0 12px;
+    padding: 0 10px;
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.07);
     color: #f7fafc;
+    font-size: 15px;
     font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
   }
 
@@ -10347,7 +10350,8 @@ button {
   }
 
   .mobile-nav-menu summary {
-    padding: 0 9px;
+    padding: 0 8px;
+    font-size: 13px;
   }
 
   .workspace {
