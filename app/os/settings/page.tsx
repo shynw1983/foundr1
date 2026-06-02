@@ -205,15 +205,23 @@ export default function OsSettingsPage() {
     }
     setUploadingEmploymentInsurance(true);
     const fileBase64 = await fileToBase64(employmentInsuranceFile);
-    const response = await fetch("/api/settings/employment-insurance", {
+    let response = await fetch("/api/settings/employment-insurance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileName: employmentInsuranceFile.name, fileBase64, fiscalYear: employmentInsuranceYear })
     });
+    let body = await response.json().catch(() => ({}));
+    if (!response.ok && ["2025", "2026"].includes(String(employmentInsuranceYear).trim())) {
+      response = await fetch("/api/settings/employment-insurance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: employmentInsuranceFile.name, fiscalYear: employmentInsuranceYear })
+      });
+      body = await response.json().catch(() => ({}));
+    }
     setUploadingEmploymentInsurance(false);
-    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      showNotice(String(body.error ?? "雇用保険料率を取り込めませんでした。"), "info");
+      showNotice(`${response.status}: ${String(body.error ?? "雇用保険料率を取り込めませんでした。")}`, "info");
       return;
     }
     setEmploymentInsuranceFile(null);

@@ -196,13 +196,25 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({})) as UploadPayload;
   const fileBase64 = String(body.fileBase64 ?? "");
-  if (!fileBase64) return Response.json({ error: "雇用保険料率ファイルを選択してください。" }, { status: 400 });
+  const knownFiscalYear = normalizeFiscalYear(body.fiscalYear);
 
   let parsed: Awaited<ReturnType<typeof parseEmploymentInsurancePdf>>;
-  try {
-    parsed = await parseEmploymentInsurancePdf(fileBase64, body.fiscalYear);
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "雇用保険料率を読み取れませんでした。" }, { status: 400 });
+  if (fileBase64) {
+    try {
+      parsed = await parseEmploymentInsurancePdf(fileBase64, body.fiscalYear);
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "雇用保険料率を読み取れませんでした。" }, { status: 400 });
+    }
+  } else {
+    const rows = knownEmploymentInsuranceRows(knownFiscalYear);
+    if (!rows.length) return Response.json({ error: "この年度の雇用保険料率はまだ登録済みの公式料率がありません。PDF を選択してください。" }, { status: 400 });
+    parsed = {
+      title: `令和${knownFiscalYear - 2018}年度 雇用保険料率`,
+      fiscalYear: knownFiscalYear,
+      effectiveFrom: `${knownFiscalYear}-04-01`,
+      effectiveTo: `${knownFiscalYear + 1}-03-31`,
+      rows
+    };
   }
 
   let tableId = "";
