@@ -9962,6 +9962,23 @@ button {
     overflow: hidden;
   }
 
+  .create-order-panel .builder-heading {
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .create-order-panel .builder-heading .secondary-button {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .create-order-panel .builder-heading .secondary-button svg {
+    width: 14px;
+    height: 14px;
+  }
+
   .order-product-grid {
     grid-template-columns: 1fr;
   }
