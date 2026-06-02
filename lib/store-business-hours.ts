@@ -77,6 +77,10 @@ function crossesMidnight(day: StoreBusinessDay) {
   return toMinutes(day.close) <= toMinutes(day.open);
 }
 
+function tokyoDateTimeToDate(dateString: string, timeString: string) {
+  return new Date(`${dateString}T${timeString}:00+09:00`);
+}
+
 function normalizeTime(value: unknown, fallback: string) {
   const text = String(value ?? "").trim();
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
@@ -179,17 +183,50 @@ export function getNextBusinessOpening(value: unknown, now = new Date()) {
   return "";
 }
 
+export function getCurrentBusinessDayClosing(value: unknown, now = new Date()) {
+  if (!value || (typeof value === "object" && Object.keys(value).length === 0)) return null;
+  const hours = normalizeBusinessHours(value);
+  const current = getTokyoDateTimeParts(now);
+  const currentKey = getWeekdayKey(current.date);
+  if (!currentKey) return null;
+
+  const candidates: Date[] = [];
+  const currentTimeMinutes = toMinutes(current.time);
+  const previousKey = getPreviousWeekdayKey(currentKey);
+  const previousDay = hours[previousKey];
+  if (!previousDay.closed && crossesMidnight(previousDay) && currentTimeMinutes <= toMinutes(previousDay.close)) {
+    candidates.push(tokyoDateTimeToDate(current.date, previousDay.close));
+  }
+
+  for (let offset = 0; offset <= 14; offset += 1) {
+    const date = addDays(current.date, offset);
+    const key = getWeekdayKey(date);
+    if (!key) continue;
+    const day = hours[key];
+    if (day.closed) continue;
+    const closeDate = crossesMidnight(day) ? addDays(date, 1) : date;
+    const closeAt = tokyoDateTimeToDate(closeDate, day.close);
+    if (closeAt.getTime() > now.getTime()) candidates.push(closeAt);
+  }
+
+  return candidates.sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+}
+
 export function getStoreReceptionState(input: {
   businessHours: unknown;
   reservationsEnabled: boolean;
   statusNote?: string;
+  temporaryStatusUntil?: string | Date | null;
   now?: Date;
 }): StoreReceptionState {
   const statusNote = String(input.statusNote ?? "").trim();
-  const isManuallyAccepting = input.reservationsEnabled;
-  const current = getTokyoDateTimeParts(input.now);
+  const now = input.now ?? new Date();
+  const temporaryStatusUntil = input.temporaryStatusUntil ? new Date(input.temporaryStatusUntil) : null;
+  const temporaryStatusExpired = Boolean(temporaryStatusUntil && temporaryStatusUntil.getTime() <= now.getTime());
+  const isManuallyAccepting = temporaryStatusExpired ? true : input.reservationsEnabled;
+  const current = getTokyoDateTimeParts(now);
   const isWithinBusinessHours = isPickupWithinBusinessHours(input.businessHours, current.date, current.time);
-  const nextOpenLabel = isWithinBusinessHours ? "" : getNextBusinessOpening(input.businessHours, input.now);
+  const nextOpenLabel = isWithinBusinessHours ? "" : getNextBusinessOpening(input.businessHours, now);
 
   if (!isManuallyAccepting) {
     const manualStatusLabel = statusNote === "本日休業" ? "本日休業" : "一時休止";

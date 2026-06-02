@@ -105,6 +105,7 @@ export async function GET(request: Request) {
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
   const requestedStoreId = url.searchParams.get("storeId");
+  const requestedMonth = url.searchParams.get("month");
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
@@ -113,6 +114,7 @@ export async function GET(request: Request) {
     select
       sales_import_batches.id::text,
       sales_import_batches.store_id::text as "storeId",
+      sales_import_batches.sales_source_id::text as "salesSourceId",
       stores.name as "storeName",
       sales_import_batches.source_platform as "sourcePlatform",
       sales_import_batches.import_month as "importMonth",
@@ -121,6 +123,7 @@ export async function GET(request: Request) {
       sales_import_batches.imported_order_count as "importedOrderCount",
       sales_import_batches.skipped_row_count as "skippedRowCount",
       sales_import_batches.created_at as "createdAt",
+      sales_import_batches.metadata,
       employees.name as "importedByName"
     from sales_import_batches
     left join stores on stores.id = sales_import_batches.store_id
@@ -129,6 +132,8 @@ export async function GET(request: Request) {
       ${scope.allStores}
       or sales_import_batches.store_id::text = any(${visibleStoreIds})
     )
+      and (${!selectedStoreId} or sales_import_batches.store_id::text = ${selectedStoreId})
+      and (${!requestedMonth} or sales_import_batches.import_month = ${requestedMonth ?? ""})
     order by sales_import_batches.created_at desc
     limit 20
   ` : [];
@@ -141,6 +146,7 @@ export async function GET(request: Request) {
     imports: imports.map((row) => ({
       id: String(row.id),
       storeId: row.storeId ? String(row.storeId) : null,
+      salesSourceId: row.salesSourceId ? String(row.salesSourceId) : String(row.metadata?.salesSourceId ?? ""),
       storeName: row.storeName ? String(row.storeName) : "",
       sourcePlatform: String(row.sourcePlatform),
       importMonth: String(row.importMonth),
@@ -149,6 +155,7 @@ export async function GET(request: Request) {
       importedOrderCount: Number(row.importedOrderCount ?? 0),
       skippedRowCount: Number(row.skippedRowCount ?? 0),
       createdAt: new Date(String(row.createdAt)).toISOString(),
+      brandName: String(row.metadata?.brandName ?? ""),
       importedByName: row.importedByName ? String(row.importedByName) : ""
     }))
   });
@@ -232,6 +239,7 @@ export async function POST(request: Request) {
   const batchRows = await sql`
     insert into sales_import_batches (
       store_id,
+      sales_source_id,
       source_platform,
       import_month,
       file_name,
@@ -244,6 +252,7 @@ export async function POST(request: Request) {
     )
     values (
       ${storeId},
+      ${salesSourceId},
       ${sourcePlatform},
       ${importMonth},
       ${file.name},

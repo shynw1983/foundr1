@@ -55,6 +55,7 @@ type StoreOperation = {
   reservationNote: string;
   reservationsEnabled: boolean;
   statusNote: string;
+  temporaryStatusUntil?: string | null;
   receptionState?: {
     manualStatusLabel: string;
     statusLabel: string;
@@ -66,6 +67,17 @@ type StoreOperation = {
     tone: "active" | "warning" | "off";
   };
 };
+
+function formatTemporaryStatusUntil(value?: string | null) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
 
 export default function StoreHomePage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -113,7 +125,9 @@ export default function StoreHomePage() {
       });
       if (!response.ok) throw new Error("save failed");
       await loadOperation(selectedStoreId);
-      setMessage("営業状態を更新しました。");
+      setMessage(next.statusNote === "本日休業" && next.reservationsEnabled === false
+        ? "本日休業にしました。Google マップの営業状態は管理者・経営層へ連絡してください。"
+        : "営業状態を更新しました。");
     } catch {
       setOperation(operation);
       setMessage("営業状態を保存できませんでした。");
@@ -163,7 +177,12 @@ export default function StoreHomePage() {
                   {operation.receptionState.isManuallyAccepting ? "（営業時間に従う）" : ""}
                 </span>
                 <strong>{operation.receptionState.statusLabel}</strong>
-                <small>{operation.receptionState.detailLabel}</small>
+                <small>
+                  {operation.receptionState.detailLabel}
+                  {operation.temporaryStatusUntil && !operation.reservationsEnabled && operation.statusNote === "本日休業"
+                    ? ` / 自動解除 ${formatTemporaryStatusUntil(operation.temporaryStatusUntil)}`
+                    : ""}
+                </small>
               </div>
             ) : null}
             <div className="store-operation-actions">
@@ -203,6 +222,12 @@ export default function StoreHomePage() {
                 メモ保存
               </button>
             </div>
+            {!operation.reservationsEnabled && operation.statusNote === "本日休業" ? (
+              <div className="store-google-business-alert">
+                <strong>Google マップの営業状態も確認してください</strong>
+                <span>本日休業にした場合は、Google ビジネス プロフィールを変更できる管理者・経営層へ連絡してください。</span>
+              </div>
+            ) : null}
           </>
         ) : null}
         {message ? <div className="inline-alert">{message}</div> : null}

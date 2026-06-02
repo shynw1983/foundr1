@@ -195,8 +195,15 @@ export async function GET(request: Request) {
         select
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",
-          coalesce(store_operations.reservations_enabled, true) as "reservationsEnabled",
-          coalesce(store_operations.status_note, '') as "statusNote"
+          case
+            when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
+            else coalesce(store_operations.reservations_enabled, true)
+          end as "reservationsEnabled",
+          case
+            when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then ''
+            else coalesce(store_operations.status_note, '')
+          end as "statusNote",
+          store_operations.temporary_status_until as "temporaryStatusUntil"
         from stores
         left join store_operations on store_operations.store_id = stores.id
         where stores.id = ${store.id}

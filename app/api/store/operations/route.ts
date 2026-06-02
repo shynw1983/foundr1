@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { getStoreReceptionState } from "../../../../lib/store-business-hours";
+import { getCurrentBusinessDayClosing, getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +30,15 @@ export async function GET(request: Request) {
       stores.name,
       stores.business_hours as "businessHours",
       coalesce(stores.reservation_note, '') as "reservationNote",
-      coalesce(store_operations.reservations_enabled, true) as "reservationsEnabled",
-      coalesce(store_operations.status_note, '') as "statusNote"
+      case
+        when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
+        else coalesce(store_operations.reservations_enabled, true)
+      end as "reservationsEnabled",
+      case
+        when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then ''
+        else coalesce(store_operations.status_note, '')
+      end as "statusNote",
+      store_operations.temporary_status_until as "temporaryStatusUntil"
     from stores
     left join store_operations on store_operations.store_id = stores.id
     where stores.id = ${storeId}
@@ -42,6 +49,7 @@ export async function GET(request: Request) {
     businessHours?: unknown;
     reservationsEnabled?: boolean;
     statusNote?: string;
+    temporaryStatusUntil?: string | Date | null;
   }) | undefined;
 
   return NextResponse.json({
@@ -53,7 +61,8 @@ export async function GET(request: Request) {
           receptionState: getStoreReceptionState({
             businessHours: operation.businessHours,
             reservationsEnabled: operation.reservationsEnabled !== false,
-            statusNote: operation.statusNote
+            statusNote: operation.statusNote,
+            temporaryStatusUntil: operation.temporaryStatusUntil
           })
         }
       : null
@@ -73,14 +82,25 @@ export async function PATCH(request: Request) {
 
   const reservationsEnabled = body?.reservationsEnabled !== false;
   const statusNote = String(body?.statusNote ?? "").trim();
+  const storeRows = await sql`
+    select business_hours as "businessHours"
+    from stores
+    where id = ${storeId}
+    limit 1
+  `;
+  const businessHours = storeRows[0]?.businessHours;
+  const temporaryStatusUntil = !reservationsEnabled && statusNote === "本日休業"
+    ? getCurrentBusinessDayClosing(businessHours)
+    : null;
 
   await sql`
-    insert into store_operations (store_id, reservations_enabled, status_note, updated_by, updated_at)
-    values (${storeId}, ${reservationsEnabled}, ${statusNote}, ${session.id}, now())
+    insert into store_operations (store_id, reservations_enabled, status_note, temporary_status_until, updated_by, updated_at)
+    values (${storeId}, ${reservationsEnabled}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
     on conflict (store_id)
     do update set
       reservations_enabled = excluded.reservations_enabled,
       status_note = excluded.status_note,
+      temporary_status_until = excluded.temporary_status_until,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;

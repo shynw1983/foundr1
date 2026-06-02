@@ -372,6 +372,11 @@ body :where(
   background: var(--green-soft);
 }
 
+.status-pill.is-muted {
+  color: var(--muted);
+  background: #f3f6f9;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
@@ -1702,6 +1707,38 @@ body :where(
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.store-weather-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.store-weather-settings > strong,
+.store-weather-settings > p {
+  grid-column: 1 / -1;
+}
+
+.store-weather-settings > strong {
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.store-weather-settings > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.store-weather-settings label {
+  min-width: 0;
 }
 
 .management-form .business-hours-closed,
@@ -3859,6 +3896,28 @@ body :where(
 .store-reception-state strong {
   color: var(--ink);
   font-size: 18px;
+}
+
+.store-google-business-alert {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(188, 54, 54, 0.32);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #a72f2f;
+  background: #fff4f4;
+}
+
+.store-google-business-alert strong {
+  color: #8f1f1f;
+  font-size: 14px;
+}
+
+.store-google-business-alert span {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .store-operation-actions input {
@@ -11902,6 +11961,73 @@ body :where(
   color: var(--text);
 }
 
+.sales-source-upload-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sales-source-upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.sales-source-upload-row.is-uploaded {
+  background: #f7fffb;
+  border-color: #c9eadc;
+}
+
+.sales-source-upload-main,
+.sales-source-upload-control {
+  min-width: 0;
+}
+
+.sales-source-upload-main {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-source-upload-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sales-source-upload-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sales-source-upload-main small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sales-source-upload-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.sales-source-upload-control input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
 .sales-import-message {
   margin: 10px 0 0;
   color: var(--muted);
@@ -12012,6 +12138,12 @@ body :where(
   white-space: nowrap;
 }
 
+.sales-rank-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
+
 .sales-day-bars {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12025,7 +12157,7 @@ body :where(
 
 .sales-day-bar {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 34px;
+  grid-template-columns: 28px minmax(0, 1fr) 46px;
   gap: 8px;
   align-items: center;
   min-height: 24px;
@@ -12371,6 +12503,10 @@ body :where(
     grid-template-columns: 1fr;
   }
 
+  .sales-source-upload-row {
+    grid-template-columns: 1fr;
+  }
+
   .workload-guide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -12394,6 +12530,10 @@ body :where(
 }
 
 @media (max-width: 760px) {
+  .store-weather-settings {
+    grid-template-columns: 1fr;
+  }
+
   .sales-grid {
     grid-template-columns: 1fr;
   }
@@ -12443,6 +12583,10 @@ body :where(
   }
 
   .sales-upload-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-source-upload-control {
     grid-template-columns: 1fr;
   }
 

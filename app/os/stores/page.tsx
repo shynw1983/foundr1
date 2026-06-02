@@ -31,6 +31,9 @@ type StoreItem = {
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
   socialInsurancePrefecture?: string;
+  weatherLocationName?: string;
+  weatherLatitude?: number | null;
+  weatherLongitude?: number | null;
   salesSources?: SalesSourceItem[];
 };
 
@@ -85,6 +88,13 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
 
+function parseOptionalCoordinate(value: FormDataEntryValue | string | null) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const coordinate = Number(text);
+  return Number.isFinite(coordinate) ? coordinate : null;
+}
+
 export default function StoresPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
@@ -100,6 +110,9 @@ export default function StoresPage() {
   const [editingCompanyName, setEditingCompanyName] = useState("");
   const [editingOwner, setEditingOwner] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
+  const [editingWeatherLocationName, setEditingWeatherLocationName] = useState("");
+  const [editingWeatherLatitude, setEditingWeatherLatitude] = useState("");
+  const [editingWeatherLongitude, setEditingWeatherLongitude] = useState("");
   const [editingStoreTab, setEditingStoreTab] = useState<StoreEditTab>("basic");
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
@@ -132,6 +145,9 @@ export default function StoresPage() {
     const companyName = String(formData.get("companyName") ?? "");
     const owner = String(formData.get("owner") ?? "");
     const reservationNote = String(formData.get("reservationNote") ?? "");
+    const weatherLocationName = String(formData.get("weatherLocationName") ?? "");
+    const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude"));
+    const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude"));
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
     formData.set("businessHours", serializeBusinessHours(newBusinessHours));
     formData.set("payrollCycleType", "month_end");
@@ -157,7 +173,20 @@ export default function StoresPage() {
 
     setStoresData((items) => [
       ...items.filter((item) => item.name !== name),
-      { name, companyName, owner, brands: selectedBrands, businessHours: newBusinessHours, reservationNote, payrollCycleType: "month_end", payrollClosingDay: 31, socialInsurancePrefecture: "福岡県" }
+      {
+        name,
+        companyName,
+        owner,
+        brands: selectedBrands,
+        businessHours: newBusinessHours,
+        reservationNote,
+        payrollCycleType: "month_end",
+        payrollClosingDay: 31,
+        socialInsurancePrefecture: "福岡県",
+        weatherLocationName,
+        weatherLatitude,
+        weatherLongitude
+      }
     ]);
     setSelectedStoreBrands([]);
     setSelectedSalesSourceKeys([salesSourceKey("smaregi")]);
@@ -280,6 +309,9 @@ export default function StoresPage() {
     const companyName = String(formData.get("companyName") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
+    const weatherLocationName = String(formData.get("weatherLocationName") ?? editingWeatherLocationName).trim();
+    const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude") ?? editingWeatherLatitude);
+    const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude") ?? editingWeatherLongitude);
     const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
     const payrollClosingDay = payrollCycleType === "month_end" ? 31 : Math.max(1, Math.min(30, Math.round(Number(formData.get("payrollClosingDay") ?? editingPayrollClosingDay) || editingPayrollClosingDay)));
     const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
@@ -306,12 +338,29 @@ export default function StoresPage() {
     }
 
     setStoresData((items) =>
-      items.map((item) => item.name === editingStore.name ? { ...item, name: nextName, companyName, owner, brands: editingStoreBrands, businessHours: editingBusinessHours, reservationNote, payrollCycleType, payrollClosingDay, socialInsurancePrefecture } : item)
+      items.map((item) => item.name === editingStore.name ? {
+        ...item,
+        name: nextName,
+        companyName,
+        owner,
+        brands: editingStoreBrands,
+        businessHours: editingBusinessHours,
+        reservationNote,
+        payrollCycleType,
+        payrollClosingDay,
+        socialInsurancePrefecture,
+        weatherLocationName,
+        weatherLatitude,
+        weatherLongitude
+      } : item)
     );
     setEditingStore(null);
     setEditingStoreBrands([]);
     setEditingSalesSourceKeys([]);
     setEditingReservationNote("");
+    setEditingWeatherLocationName("");
+    setEditingWeatherLatitude("");
+    setEditingWeatherLongitude("");
     setEditingStoreTab("basic");
     void loadData();
     showNotice("店舗を更新しました。");
@@ -325,6 +374,9 @@ export default function StoresPage() {
     setEditingCompanyName(store.companyName ?? "");
     setEditingOwner(store.owner);
     setEditingReservationNote(store.reservationNote ?? "");
+    setEditingWeatherLocationName(store.weatherLocationName ?? "");
+    setEditingWeatherLatitude(store.weatherLatitude === null || store.weatherLatitude === undefined ? "" : String(store.weatherLatitude));
+    setEditingWeatherLongitude(store.weatherLongitude === null || store.weatherLongitude === undefined ? "" : String(store.weatherLongitude));
     setEditingStoreTab("basic");
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
@@ -424,6 +476,7 @@ export default function StoresPage() {
                     <small>売上源: {formatStoreSalesSources(store)}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
+                    <small>天気: {store.weatherLocationName || (store.weatherLatitude && store.weatherLongitude ? `${store.weatherLatitude}, ${store.weatherLongitude}` : "福岡市（既定）")}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
                   <div className="row-actions">
@@ -462,6 +515,22 @@ export default function StoresPage() {
                 <span>予約画面メモ</span>
                 <input name="reservationNote" placeholder="例: ラストオーダーは閉店30分前" />
               </label>
+              <div className="store-weather-settings">
+                <strong>天気分析地点</strong>
+                <p>未入力の場合は福岡市中心部の天気を売上分析の参考値として使用します。</p>
+                <label>
+                  <span>地点名</span>
+                  <input name="weatherLocationName" placeholder="例: 福岡市中央区 清水店" />
+                </label>
+                <label>
+                  <span>緯度</span>
+                  <input name="weatherLatitude" inputMode="decimal" placeholder="例: 33.5902" />
+                </label>
+                <label>
+                  <span>経度</span>
+                  <input name="weatherLongitude" inputMode="decimal" placeholder="例: 130.4017" />
+                </label>
+              </div>
               <div className="checkbox-group">
                 <span>取り扱いブランド</span>
                 {brandsData.map((brand) => (
@@ -566,6 +635,22 @@ export default function StoresPage() {
                       placeholder="例: ラストオーダーは閉店30分前"
                     />
                   </label>
+                  <div className="store-weather-settings">
+                    <strong>天気分析地点</strong>
+                    <p>売上分析で日別・曜日別の天気参考値として使います。未入力の場合は福岡市中心部を使用します。</p>
+                    <label>
+                      <span>地点名</span>
+                      <input name="weatherLocationName" value={editingWeatherLocationName} onChange={(event) => setEditingWeatherLocationName(event.target.value)} placeholder="例: 福岡市中央区 清水店" />
+                    </label>
+                    <label>
+                      <span>緯度</span>
+                      <input name="weatherLatitude" inputMode="decimal" value={editingWeatherLatitude} onChange={(event) => setEditingWeatherLatitude(event.target.value)} placeholder="例: 33.5902" />
+                    </label>
+                    <label>
+                      <span>経度</span>
+                      <input name="weatherLongitude" inputMode="decimal" value={editingWeatherLongitude} onChange={(event) => setEditingWeatherLongitude(event.target.value)} placeholder="例: 130.4017" />
+                    </label>
+                  </div>
                   <div className="checkbox-group">
                     <span>取り扱いブランド</span>
                     {brandsData.map((brand) => (
@@ -587,6 +672,9 @@ export default function StoresPage() {
                   <input type="hidden" name="companyName" value={editingCompanyName} />
                   <input type="hidden" name="owner" value={editingOwner} />
                   <input type="hidden" name="reservationNote" value={editingReservationNote} />
+                  <input type="hidden" name="weatherLocationName" value={editingWeatherLocationName} />
+                  <input type="hidden" name="weatherLatitude" value={editingWeatherLatitude} />
+                  <input type="hidden" name="weatherLongitude" value={editingWeatherLongitude} />
                 </>
               )}
               {editingStoreTab === "hours" ? (

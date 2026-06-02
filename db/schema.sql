@@ -24,6 +24,9 @@ alter table stores add column if not exists reservation_note text not null defau
 alter table stores add column if not exists payroll_cycle_type text not null default 'month_end';
 alter table stores add column if not exists payroll_closing_day integer not null default 31;
 alter table stores add column if not exists social_insurance_prefecture text not null default '福岡県';
+alter table stores add column if not exists weather_location_name text;
+alter table stores add column if not exists weather_latitude numeric(10, 6);
+alter table stores add column if not exists weather_longitude numeric(10, 6);
 
 create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
@@ -1034,10 +1037,13 @@ create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,
   reservations_enabled boolean not null default true,
   status_note text not null default '',
+  temporary_status_until timestamptz,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table store_operations add column if not exists temporary_status_until timestamptz;
 
 create table if not exists menu_store_settings (
   id uuid primary key default gen_random_uuid(),
@@ -1180,6 +1186,7 @@ create table if not exists sales_order_items (
 create table if not exists sales_import_batches (
   id uuid primary key default gen_random_uuid(),
   store_id uuid references stores(id) on delete set null,
+  sales_source_id uuid,
   source_platform text not null,
   import_month text not null,
   file_name text not null default '',
@@ -1207,6 +1214,9 @@ create table if not exists store_sales_sources (
   updated_at timestamptz not null default now(),
   unique (store_id, source_platform, source_label, brand_name)
 );
+
+alter table sales_import_batches
+  add column if not exists sales_source_id uuid;
 
 create table if not exists sales_import_rows (
   id uuid primary key default gen_random_uuid(),
@@ -1481,6 +1491,8 @@ create unique index if not exists idx_sales_orders_source_external
 create index if not exists idx_sales_order_items_order on sales_order_items(sales_order_id, sort_order);
 create index if not exists idx_sales_import_batches_store_month
   on sales_import_batches(store_id, source_platform, import_month, created_at desc);
+create index if not exists idx_sales_import_batches_source_month
+  on sales_import_batches(store_id, sales_source_id, import_month, created_at desc);
 create index if not exists idx_sales_import_rows_batch
   on sales_import_rows(batch_id, row_index);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);

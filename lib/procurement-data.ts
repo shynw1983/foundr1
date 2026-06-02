@@ -119,6 +119,9 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
           coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay",
           coalesce(stores.social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
+          coalesce(stores.weather_location_name, '') as "weatherLocationName",
+          stores.weather_latitude::float as "weatherLatitude",
+          stores.weather_longitude::float as "weatherLongitude",
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', store_sales_sources.id::text,

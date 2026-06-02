@@ -42,6 +42,12 @@ function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
   return Number.isFinite(day) ? Math.max(1, Math.min(30, day)) : 25;
 }
 
+function normalizeCoordinate(value: string, min: number, max: number) {
+  if (!value.trim()) return null;
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max ? coordinate : null;
+}
+
 function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
 
@@ -106,6 +112,9 @@ export async function POST(request: Request) {
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
   const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
+  const weatherLocationName = String(formData.get("weatherLocationName") ?? "").trim();
+  const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
+  const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId(companyName);
 
@@ -114,8 +123,34 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    insert into stores (name, company_id, owner_name, business_hours, reservation_note, payroll_cycle_type, payroll_closing_day, social_insurance_prefecture, updated_at)
-    values (${name}, ${companyId}, ${owner}, ${businessHours}::jsonb, ${reservationNote}, ${payrollCycleType}, ${payrollClosingDay}, ${socialInsurancePrefecture}, now())
+    insert into stores (
+      name,
+      company_id,
+      owner_name,
+      business_hours,
+      reservation_note,
+      payroll_cycle_type,
+      payroll_closing_day,
+      social_insurance_prefecture,
+      weather_location_name,
+      weather_latitude,
+      weather_longitude,
+      updated_at
+    )
+    values (
+      ${name},
+      ${companyId},
+      ${owner},
+      ${businessHours}::jsonb,
+      ${reservationNote},
+      ${payrollCycleType},
+      ${payrollClosingDay},
+      ${socialInsurancePrefecture},
+      ${weatherLocationName || null},
+      ${weatherLatitude},
+      ${weatherLongitude},
+      now()
+    )
     on conflict (name)
     do update set
       company_id = excluded.company_id,
@@ -125,6 +160,9 @@ export async function POST(request: Request) {
       payroll_cycle_type = excluded.payroll_cycle_type,
       payroll_closing_day = excluded.payroll_closing_day,
       social_insurance_prefecture = excluded.social_insurance_prefecture,
+      weather_location_name = excluded.weather_location_name,
+      weather_latitude = excluded.weather_latitude,
+      weather_longitude = excluded.weather_longitude,
       updated_at = now()
     returning id
   `;
@@ -162,6 +200,9 @@ export async function PUT(request: Request) {
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
   const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
+  const weatherLocationName = String(formData.get("weatherLocationName") ?? "").trim();
+  const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
+  const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId(companyName);
 
@@ -194,6 +235,9 @@ export async function PUT(request: Request) {
       payroll_cycle_type = ${payrollCycleType},
       payroll_closing_day = ${payrollClosingDay},
       social_insurance_prefecture = ${socialInsurancePrefecture},
+      weather_location_name = ${weatherLocationName || null},
+      weather_latitude = ${weatherLatitude},
+      weather_longitude = ${weatherLongitude},
       updated_at = now()
     where name = ${currentName}
     returning id
