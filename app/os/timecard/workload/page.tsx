@@ -132,6 +132,10 @@ function rate(value: number) {
   return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value);
 }
 
+function percent(value: number) {
+  return `${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 }).format(value)}%`;
+}
+
 export default function TimecardWorkloadPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -159,6 +163,7 @@ export default function TimecardWorkloadPage() {
 
   const busiest = data?.busiestEmployees[0] ?? null;
   const lightest = data?.lightestEmployees[0] ?? null;
+  const totalContributionSales = data?.employees.reduce((sum, employee) => sum + employee.sales, 0) ?? 0;
 
   async function saveIncludeManagement(includeManagement: boolean) {
     if (!selectedStoreId) return;
@@ -261,7 +266,7 @@ export default function TimecardWorkloadPage() {
             <ChartColumn size={18} />
             <div>
               <h3>スタッフ別負荷</h3>
-              <p>実勤務時間内に入った注文をスタッフ別に集計します。</p>
+              <p>実勤務時間内に入った注文と売上貢献をスタッフ別に集計します。</p>
             </div>
           </div>
           <div className="timecard-table-wrap">
@@ -271,6 +276,8 @@ export default function TimecardWorkloadPage() {
                   <th>スタッフ</th>
                   <th>勤務</th>
                   <th>注文</th>
+                  <th>売上貢献</th>
+                  <th>貢献率</th>
                   <th>注文/時</th>
                   <th>売上/時</th>
                   <th>ピーク</th>
@@ -284,6 +291,8 @@ export default function TimecardWorkloadPage() {
                     <td><strong>{employee.employeeName}</strong></td>
                     <td>{employee.workDays}日 / {formatDuration(employee.workMinutes)}</td>
                     <td>{employee.orderCount}件</td>
+                    <td>{formatMoney(employee.sales)}</td>
+                    <td>{percent(totalContributionSales > 0 ? (employee.sales / totalContributionSales) * 100 : 0)}</td>
                     <td>{rate(employee.ordersPerHour)}</td>
                     <td>{formatMoney(employee.salesPerHour)}</td>
                     <td>{employee.peakHourOrderCount}件/時</td>
