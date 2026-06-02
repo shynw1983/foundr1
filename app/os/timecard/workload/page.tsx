@@ -309,6 +309,36 @@ export default function TimecardWorkloadPage() {
           </label>
         </section>
 
+        <details className="panel workload-guide-panel">
+          <summary>計算ロジック</summary>
+          <div className="workload-guide-grid">
+            <article>
+              <h3>集計対象</h3>
+              <p>選択した店舗・月度の売上注文と、タイムカードの実勤務時間を重ね合わせます。管理職の勤務は「管理職を負荷計算に含める」の設定に従って含める、または除外します。</p>
+            </article>
+            <article>
+              <h3>ワンオペ</h3>
+              <p>勤務全体ではなく15分単位で在勤人数を判定します。管理職を除外している場合、管理職は在勤人数にも含めません。</p>
+            </article>
+            <article>
+              <h3>負荷ピーク</h3>
+              <p>連続1時間の中で、注文数・売上・負荷点数が最も高い時間帯を見ます。負荷点数は「注文金額 ÷ 当月平均客単価」で計算し、低金額の注文も最低1ptとして扱います。</p>
+            </article>
+            <article>
+              <h3>ワンオペ高負荷</h3>
+              <p>ワンオペの時間帯で、1時間あたり注文8件以上、または負荷点数8pt以上になった時間を集計します。実際にワンオペだった分数だけを加算します。</p>
+            </article>
+            <article>
+              <h3>売上貢献度</h3>
+              <p>スタッフが勤務中にカバーした売上を集計します。現在はカバー口径のため、複数名勤務では同じ注文が複数スタッフに含まれます。賞与連動では、後続で分担売上の口径も追加できます。</p>
+            </article>
+            <article>
+              <h3>売上/時</h3>
+              <p>カバー売上を実勤務時間で割った単位時間あたりの売上貢献です。長時間勤務による総額の差を補正して比較するための指標です。</p>
+            </article>
+          </div>
+        </details>
+
         <section className="workload-chart-grid">
           <article className="panel workload-chart-panel">
             <div className="panel-title">
