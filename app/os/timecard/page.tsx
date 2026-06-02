@@ -91,6 +91,7 @@ type PayrollRow = {
   socialInsurance?: number;
   employmentInsurance?: number;
   incomeTax?: number;
+  residentTax?: number;
   commuteAllowance: number;
   totalPay: number;
   alerts: string[];
@@ -108,6 +109,7 @@ type PayrollTotals = {
   socialInsurance?: number;
   employmentInsurance?: number;
   incomeTax?: number;
+  residentTax?: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -597,6 +599,7 @@ export function TimecardPage({
     socialInsurance: 0,
     employmentInsurance: 0,
     incomeTax: 0,
+    residentTax: 0,
     commuteAllowance: 0,
     totalPay: 0
   };
@@ -1119,7 +1122,7 @@ export function TimecardPage({
               {canViewPayroll ? (
                 <>
               <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost)} note={`交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
-              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`控除 ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0))}${payrollConfirmation ? " / 確定済み" : ""}`} />
+              <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`控除 ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0) + (displayedPayrollTotals.residentTax ?? 0))}${payrollConfirmation ? " / 確定済み" : ""}`} />
             </>
           ) : null}
         </section>
@@ -1548,6 +1551,7 @@ export function TimecardPage({
                     <th>社会保険</th>
                     <th>雇用保険</th>
                     <th>源泉所得税</th>
+                    <th>住民税</th>
                     <th>差引支給額</th>
                     <th>確認</th>
                   </tr>
@@ -1568,12 +1572,13 @@ export function TimecardPage({
                       <td>{formatMoney(row.socialInsurance ?? 0)}</td>
                       <td>{formatMoney(row.employmentInsurance ?? 0)}</td>
                       <td>{formatMoney(row.incomeTax ?? 0)}</td>
+                      <td>{formatMoney(row.residentTax ?? 0)}</td>
                       <td><strong>{formatMoney(row.totalPay)}</strong></td>
                       <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={10}>この月の打刻実績はまだありません。</td>
+                      <td colSpan={13}>この月の打刻実績はまだありません。</td>
                     </tr>
                   )}
                 </tbody>
@@ -1607,6 +1612,7 @@ export function TimecardPage({
                       <MetricCard label="社会保険" value={formatMoney(selectedPayrollRow.socialInsurance ?? 0)} note="店舗の社会保険所在地と標準報酬月額で計算" />
                       <MetricCard label="雇用保険" value={formatMoney(selectedPayrollRow.employmentInsurance ?? 0)} note="一般の事業の労働者負担率で計算" />
                       <MetricCard label="源泉所得税" value={formatMoney(selectedPayrollRow.incomeTax ?? 0)} note="税額表に基づく控除" />
+                      <MetricCard label="住民税" value={formatMoney(selectedPayrollRow.residentTax ?? 0)} note="6月分と7月以降分を年度で控除" />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>
                     <div className="timecard-table-wrap">

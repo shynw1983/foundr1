@@ -34,7 +34,10 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
       apply_employment_insurance as "applyEmploymentInsurance",
       apply_labor_insurance as "applyLaborInsurance",
       apply_income_tax as "applyIncomeTax",
-      apply_resident_tax as "applyResidentTax"
+      apply_resident_tax as "applyResidentTax",
+      resident_tax_year as "residentTaxYear",
+      resident_tax_june_amount as "residentTaxJuneAmount",
+      resident_tax_monthly_amount as "residentTaxMonthlyAmount"
     from employee_work_stores
     where employee_id = ${employeeId}
       and store_id = ${storeId}
@@ -54,7 +57,10 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
       apply_employment_insurance as "applyEmploymentInsurance",
       apply_labor_insurance as "applyLaborInsurance",
       apply_income_tax as "applyIncomeTax",
-      apply_resident_tax as "applyResidentTax"
+      apply_resident_tax as "applyResidentTax",
+      resident_tax_year as "residentTaxYear",
+      resident_tax_june_amount as "residentTaxJuneAmount",
+      resident_tax_monthly_amount as "residentTaxMonthlyAmount"
     from employee_work_store_payroll_history
     where employee_id = ${employeeId}
       and store_id = ${storeId}
@@ -88,7 +94,10 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
         apply_employment_insurance = ${Boolean(wage.applyEmploymentInsurance ?? current.applyEmploymentInsurance)},
         apply_labor_insurance = ${Boolean(wage.applyLaborInsurance ?? current.applyLaborInsurance)},
         apply_income_tax = ${Boolean(wage.applyIncomeTax ?? current.applyIncomeTax)},
-        apply_resident_tax = ${Boolean(wage.applyResidentTax ?? current.applyResidentTax)}
+        apply_resident_tax = ${Boolean(wage.applyResidentTax ?? current.applyResidentTax)},
+        resident_tax_year = ${wage.residentTaxYear ?? current.residentTaxYear ?? null},
+        resident_tax_june_amount = ${toNullableNumber(wage.residentTaxJuneAmount ?? current.residentTaxJuneAmount)},
+        resident_tax_monthly_amount = ${toNullableNumber(wage.residentTaxMonthlyAmount ?? current.residentTaxMonthlyAmount)}
     where employee_id = ${employeeId}
       and store_id = ${storeId}
   `;

@@ -164,6 +164,9 @@ create table if not exists employee_work_stores (
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
+  resident_tax_year integer,
+  resident_tax_june_amount numeric(12, 2),
+  resident_tax_monthly_amount numeric(12, 2),
   created_at timestamptz not null default now(),
   unique (employee_id, store_id)
 );
@@ -190,6 +193,9 @@ alter table employee_work_stores add column if not exists apply_income_tax boole
 alter table employee_work_stores add column if not exists income_tax_category text not null default 'none';
 alter table employee_work_stores add column if not exists dependent_count integer not null default 0;
 alter table employee_work_stores add column if not exists apply_resident_tax boolean not null default false;
+alter table employee_work_stores add column if not exists resident_tax_year integer;
+alter table employee_work_stores add column if not exists resident_tax_june_amount numeric(12, 2);
+alter table employee_work_stores add column if not exists resident_tax_monthly_amount numeric(12, 2);
 
 insert into employee_work_stores (employee_id, store_id)
 select distinct employee_id, store_id
@@ -274,6 +280,9 @@ create table if not exists employee_work_store_payroll_history (
   apply_labor_insurance boolean not null default false,
   apply_income_tax boolean not null default false,
   apply_resident_tax boolean not null default false,
+  resident_tax_year integer,
+  resident_tax_june_amount numeric(12, 2),
+  resident_tax_monthly_amount numeric(12, 2),
   wage_valid_from date not null default '1970-01-01',
   commute_valid_from date not null default '1970-01-01',
   valid_from date not null default current_date,
@@ -293,6 +302,9 @@ alter table employee_work_store_payroll_history add column if not exists apply_i
 alter table employee_work_store_payroll_history add column if not exists income_tax_category text not null default 'none';
 alter table employee_work_store_payroll_history add column if not exists dependent_count integer not null default 0;
 alter table employee_work_store_payroll_history add column if not exists apply_resident_tax boolean not null default false;
+alter table employee_work_store_payroll_history add column if not exists resident_tax_year integer;
+alter table employee_work_store_payroll_history add column if not exists resident_tax_june_amount numeric(12, 2);
+alter table employee_work_store_payroll_history add column if not exists resident_tax_monthly_amount numeric(12, 2);
 alter table employee_work_store_payroll_history add column if not exists wage_valid_from date not null default '1970-01-01';
 alter table employee_work_store_payroll_history add column if not exists commute_valid_from date not null default '1970-01-01';
 update employee_work_store_payroll_history

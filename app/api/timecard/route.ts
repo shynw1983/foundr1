@@ -66,6 +66,7 @@ const emptyPayrollTotals = {
   socialInsurance: 0,
   employmentInsurance: 0,
   incomeTax: 0,
+  residentTax: 0,
   commuteAllowance: 0,
   totalPay: 0
 };
@@ -143,6 +144,10 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
             'applyIncomeTax', payroll_settings.apply_income_tax,
             'incomeTaxCategory', payroll_settings.income_tax_category,
             'dependentCount', payroll_settings.dependent_count,
+            'applyResidentTax', payroll_settings.apply_resident_tax,
+            'residentTaxYear', payroll_settings.resident_tax_year,
+            'residentTaxJuneAmount', payroll_settings.resident_tax_june_amount,
+            'residentTaxMonthlyAmount', payroll_settings.resident_tax_monthly_amount,
             'validFrom', payroll_settings.valid_from,
             'wageValidFrom', payroll_settings.wage_valid_from,
             'commuteValidFrom', payroll_settings.commute_valid_from
@@ -172,6 +177,10 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_stores.apply_income_tax,
         employee_work_stores.income_tax_category,
         employee_work_stores.dependent_count,
+        employee_work_stores.apply_resident_tax,
+        employee_work_stores.resident_tax_year,
+        employee_work_stores.resident_tax_june_amount,
+        employee_work_stores.resident_tax_monthly_amount,
         '1970-01-01'::date as valid_from,
         '1970-01-01'::date as wage_valid_from,
         '1970-01-01'::date as commute_valid_from
@@ -192,6 +201,10 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_store_payroll_history.apply_income_tax,
         employee_work_store_payroll_history.income_tax_category,
         employee_work_store_payroll_history.dependent_count,
+        employee_work_store_payroll_history.apply_resident_tax,
+        employee_work_store_payroll_history.resident_tax_year,
+        employee_work_store_payroll_history.resident_tax_june_amount,
+        employee_work_store_payroll_history.resident_tax_monthly_amount,
         employee_work_store_payroll_history.valid_from,
         employee_work_store_payroll_history.wage_valid_from,
         employee_work_store_payroll_history.commute_valid_from
@@ -233,6 +246,10 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       applyIncomeTax: setting.applyIncomeTax === true,
       incomeTaxCategory: setting.incomeTaxCategory === "kou" || setting.incomeTaxCategory === "otsu" ? setting.incomeTaxCategory : "none",
       dependentCount: Math.max(0, Math.min(7, Math.round(Number(setting.dependentCount ?? 0) || 0))),
+      applyResidentTax: setting.applyResidentTax === true,
+      residentTaxYear: Number.isFinite(Number(setting.residentTaxYear)) ? Math.round(Number(setting.residentTaxYear)) : null,
+      residentTaxJuneAmount: toMoneyNumber(setting.residentTaxJuneAmount),
+      residentTaxMonthlyAmount: toMoneyNumber(setting.residentTaxMonthlyAmount),
       validFrom: String(setting.validFrom ?? "1970-01-01").slice(0, 10),
       wageValidFrom: String(setting.wageValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10),
       commuteValidFrom: String(setting.commuteValidFrom ?? setting.validFrom ?? "1970-01-01").slice(0, 10)

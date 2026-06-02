@@ -40,6 +40,9 @@ type WorkStoreOption = StoreOption & {
   incomeTaxCategory?: string | null;
   dependentCount?: number | string | null;
   applyResidentTax?: boolean | null;
+  residentTaxYear?: number | string | null;
+  residentTaxJuneAmount?: number | string | null;
+  residentTaxMonthlyAmount?: number | string | null;
   payrollHistory?: PayrollHistoryEntry[];
 };
 
@@ -59,6 +62,9 @@ type PayrollHistoryEntry = {
   incomeTaxCategory?: string | null;
   dependentCount?: number | string | null;
   applyResidentTax?: boolean | null;
+  residentTaxYear?: number | string | null;
+  residentTaxJuneAmount?: number | string | null;
+  residentTaxMonthlyAmount?: number | string | null;
   wageValidFrom?: string | null;
   commuteValidFrom?: string | null;
 };
@@ -328,6 +334,9 @@ export default function StaffPage() {
         incomeTaxCategory: String(formData.get(`incomeTaxCategory:${store.id}`) ?? "none"),
         dependentCount: String(formData.get(`dependentCount:${store.id}`) ?? "0"),
         applyResidentTax: formData.getAll("applyResidentTaxStoreIds").map((value) => String(value)).includes(store.id),
+        residentTaxYear: String(formData.get(`residentTaxYear:${store.id}`) ?? ""),
+        residentTaxJuneAmount: String(formData.get(`residentTaxJuneAmount:${store.id}`) ?? ""),
+        residentTaxMonthlyAmount: String(formData.get(`residentTaxMonthlyAmount:${store.id}`) ?? ""),
         wageValidFromMonth: String(formData.get(`wageValidFromMonth:${store.id}`) ?? ""),
         commuteValidFromMonth: String(formData.get(`commuteValidFromMonth:${store.id}`) ?? "")
       }))
@@ -687,6 +696,9 @@ function StaffFormFields({
     setCheckedValue(form, "applyLaborInsuranceStoreIds", store.id, Boolean(record.applyLaborInsurance));
     setCheckedValue(form, "applyIncomeTaxStoreIds", store.id, Boolean(record.applyIncomeTax));
     setCheckedValue(form, "applyResidentTaxStoreIds", store.id, Boolean(record.applyResidentTax));
+    setNamedInputValue(form, `residentTaxYear:${store.id}`, record.residentTaxYear ?? "");
+    setNamedInputValue(form, `residentTaxJuneAmount:${store.id}`, record.residentTaxJuneAmount ?? "");
+    setNamedInputValue(form, `residentTaxMonthlyAmount:${store.id}`, record.residentTaxMonthlyAmount ?? "");
     onNotice?.("給与変更履歴を入力欄に読み込みました。保存すると反映されます。");
   }
 
@@ -988,6 +1000,18 @@ function StaffFormFields({
                           適用する
                         </span>
                       </label>
+                      <label className="staff-tax-select">
+                        <span>対象年度</span>
+                        <input name={`residentTaxYear:${store.id}`} type="number" min="1900" max="2999" step="1" defaultValue={setting?.residentTaxYear ?? ""} placeholder="例: 2026" />
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>6月分</span>
+                        <input name={`residentTaxJuneAmount:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.residentTaxJuneAmount ?? ""} placeholder="例: 8500" />
+                      </label>
+                      <label className="staff-tax-select">
+                        <span>7月以降分</span>
+                        <input name={`residentTaxMonthlyAmount:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.residentTaxMonthlyAmount ?? ""} placeholder="例: 8200" />
+                      </label>
                     </div>
                   </section>
                 </fieldset>
@@ -996,7 +1020,7 @@ function StaffFormFields({
                   {history.length ? history.map((record, index) => (
                     <div className="staff-payroll-history-row" key={`${store.id}-${record.id ?? record.validFrom ?? index}`}>
                       <small>
-                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"}
+                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"} / 住民税 {record.applyResidentTax ? `${record.residentTaxYear ?? "-"}年度 6月${formatPayrollAmount(record.residentTaxJuneAmount)} 7月以降${formatPayrollAmount(record.residentTaxMonthlyAmount)}` : "なし"}
                       </small>
                       <span className="staff-payroll-history-actions">
                         <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>

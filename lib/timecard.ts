@@ -41,6 +41,10 @@ export type TimecardStorePayrollSetting = {
   applyIncomeTax?: boolean;
   incomeTaxCategory?: "none" | "kou" | "otsu";
   dependentCount?: number;
+  applyResidentTax?: boolean;
+  residentTaxYear?: number | null;
+  residentTaxJuneAmount?: number | null;
+  residentTaxMonthlyAmount?: number | null;
   validFrom: string;
   wageValidFrom: string;
   commuteValidFrom: string;
@@ -106,6 +110,7 @@ export type TimecardPayrollRow = {
   socialInsurance: number;
   employmentInsurance: number;
   incomeTax: number;
+  residentTax: number;
   commuteAllowance: number;
   totalPay: number;
   alerts: string[];
@@ -123,6 +128,7 @@ export type TimecardPayrollTotals = {
   socialInsurance: number;
   employmentInsurance: number;
   incomeTax: number;
+  residentTax: number;
   commuteAllowance: number;
   totalPay: number;
 };
@@ -278,6 +284,20 @@ function getEmploymentInsuranceDeduction(setting: TimecardStorePayrollSetting, m
   return Math.floor(Math.max(0, wageAmount) * rate);
 }
 
+function getResidentTaxDeduction(setting: TimecardStorePayrollSetting, month: string) {
+  if (!setting.applyResidentTax) return 0;
+  const taxYear = Math.round(Number(setting.residentTaxYear ?? 0) || 0);
+  if (!taxYear) return 0;
+  const targetMonth = Number(month.slice(5, 7));
+  const targetYear = Number(month.slice(0, 4));
+  if (!Number.isFinite(targetYear) || !Number.isFinite(targetMonth)) return 0;
+  if (month < `${taxYear}-06` || month > `${taxYear + 1}-05`) return 0;
+  if (targetYear === taxYear && targetMonth === 6) {
+    return Math.max(0, Math.round(Number(setting.residentTaxJuneAmount ?? 0) || 0));
+  }
+  return Math.max(0, Math.round(Number(setting.residentTaxMonthlyAmount ?? 0) || 0));
+}
+
 export function summarizeTimecardDays(
   punches: TimecardPunch[],
   options: { workDateStart?: string; workDateEndExclusive?: string } = {}
@@ -415,6 +435,7 @@ export function summarizePayroll(
       socialInsurance: 0,
       employmentInsurance: 0,
       incomeTax: 0,
+      residentTax: 0,
       commuteAllowance: 0,
       totalPay: 0,
       alerts: []
@@ -456,6 +477,7 @@ export function summarizePayroll(
     let socialInsurance = 0;
     let employmentInsurance = 0;
     let incomeTax = 0;
+    let residentTax = 0;
     let commuteAllowance = 0;
     for (const setting of employee?.storePayrollSettings ?? []) {
       if (!setting.payrollEnabled) continue;
@@ -502,6 +524,7 @@ export function summarizePayroll(
       const employmentDeduction = getEmploymentInsuranceDeduction(setting, payrollMonth, storeTaxablePay + storeCommuteAllowance, employmentInsuranceRateRows);
       employmentInsurance += employmentDeduction;
       incomeTax += getWithholdingTax(Math.max(0, storeTaxablePay - socialResult.amount - employmentDeduction), setting, withholdingTaxRows);
+      residentTax += getResidentTaxDeduction(setting, payrollMonth);
     }
     const basePay = Math.ceil(regularPay + overtimePay + nightPremiumPay);
     return {
@@ -515,8 +538,9 @@ export function summarizePayroll(
       socialInsurance,
       employmentInsurance,
       incomeTax,
+      residentTax,
       commuteAllowance,
-      totalPay: basePay + commuteAllowance - socialInsurance - employmentInsurance - incomeTax
+      totalPay: basePay + commuteAllowance - socialInsurance - employmentInsurance - incomeTax - residentTax
     };
   }).sort((a, b) => a.employeeName.localeCompare(b.employeeName, "ja"));
 
@@ -532,6 +556,7 @@ export function summarizePayroll(
     socialInsurance: acc.socialInsurance + row.socialInsurance,
     employmentInsurance: acc.employmentInsurance + row.employmentInsurance,
     incomeTax: acc.incomeTax + row.incomeTax,
+    residentTax: acc.residentTax + row.residentTax,
     commuteAllowance: acc.commuteAllowance + row.commuteAllowance,
     totalPay: acc.totalPay + row.totalPay
   }), {
@@ -546,6 +571,7 @@ export function summarizePayroll(
     socialInsurance: 0,
     employmentInsurance: 0,
     incomeTax: 0,
+    residentTax: 0,
     commuteAllowance: 0,
     totalPay: 0
   });

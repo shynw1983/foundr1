@@ -60,6 +60,9 @@ type WorkStoreSettingPayload = {
   incomeTaxCategory?: string;
   dependentCount?: number | string | null;
   applyResidentTax?: boolean;
+  residentTaxYear?: number | string | null;
+  residentTaxJuneAmount?: number | string | null;
+  residentTaxMonthlyAmount?: number | string | null;
   validFrom?: string;
   validFromMonth?: string;
   wageValidFromMonth?: string;
@@ -126,6 +129,14 @@ function toNullableNumber(value: number | string | null | undefined) {
 
 function normalizeDependentCount(value: number | string | null | undefined) {
   return Math.max(0, Math.min(7, Math.round(Number(value ?? 0) || 0)));
+}
+
+function normalizeResidentTaxYear(value: number | string | null | undefined) {
+  const number = Math.round(Number(value ?? 0) || 0);
+  if (number >= 1900 && number <= 2999) return number;
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  return month >= 6 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
 function getJstDateLabel(date = new Date()) {
@@ -271,7 +282,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       apply_income_tax as "applyIncomeTax",
       income_tax_category as "incomeTaxCategory",
       dependent_count as "dependentCount",
-      apply_resident_tax as "applyResidentTax"
+      apply_resident_tax as "applyResidentTax",
+      resident_tax_year as "residentTaxYear",
+      resident_tax_june_amount as "residentTaxJuneAmount",
+      resident_tax_monthly_amount as "residentTaxMonthlyAmount"
     from employee_work_stores
     where employee_id = ${id}
   `;
@@ -319,6 +333,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const storeApplyIncomeTax = Boolean(storeSetting?.applyIncomeTax);
     const storeIncomeTaxCategory = storeApplyIncomeTax ? normalizeIncomeTaxCategory(storeSetting?.incomeTaxCategory) : "none";
     const storeDependentCount = normalizeDependentCount(storeSetting?.dependentCount);
+    const storeApplyResidentTax = Boolean(storeSetting?.applyResidentTax);
+    const storeResidentTaxYear = normalizeResidentTaxYear(storeSetting?.residentTaxYear);
+    const storeResidentTaxJuneAmount = toNullableNumber(storeSetting?.residentTaxJuneAmount) ?? 0;
+    const storeResidentTaxMonthlyAmount = toNullableNumber(storeSetting?.residentTaxMonthlyAmount) ?? 0;
     const storeWageValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.wageValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeCommuteValidFrom = getPayrollMonthStartDate(normalizePayrollMonth(storeSetting?.commuteValidFromMonth ?? storeSetting?.validFromMonth ?? storeSetting?.validFrom?.slice(0, 7)), payrollStore);
     const storeValidFrom = storeWageValidFrom < storeCommuteValidFrom ? storeWageValidFrom : storeCommuteValidFrom;
@@ -340,7 +358,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const currentApplyIncomeTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyIncomeTax) : storeApplyIncomeTax;
     const currentIncomeTaxCategory = shouldKeepCurrentWageUntilFutureDate ? normalizeIncomeTaxCategory(String(existingStore?.incomeTaxCategory ?? "")) : storeIncomeTaxCategory;
     const currentDependentCount = shouldKeepCurrentWageUntilFutureDate ? normalizeDependentCount(existingStore?.dependentCount as number | string | null | undefined) : storeDependentCount;
-    const currentApplyResidentTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyResidentTax) : Boolean(storeSetting?.applyResidentTax);
+    const currentApplyResidentTax = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applyResidentTax) : storeApplyResidentTax;
+    const currentResidentTaxYear = shouldKeepCurrentWageUntilFutureDate ? normalizeResidentTaxYear(existingStore?.residentTaxYear as number | string | null | undefined) : storeResidentTaxYear;
+    const currentResidentTaxJuneAmount = shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.residentTaxJuneAmount as number | string | null | undefined) ?? 0 : storeResidentTaxJuneAmount;
+    const currentResidentTaxMonthlyAmount = shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.residentTaxMonthlyAmount as number | string | null | undefined) ?? 0 : storeResidentTaxMonthlyAmount;
     await sql`
       insert into employee_work_stores (
         employee_id,
@@ -366,7 +387,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         apply_income_tax,
         income_tax_category,
         dependent_count,
-        apply_resident_tax
+        apply_resident_tax,
+        resident_tax_year,
+        resident_tax_june_amount,
+        resident_tax_monthly_amount
       )
       values (
         ${id},
@@ -392,7 +416,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${currentApplyIncomeTax},
         ${currentIncomeTaxCategory},
         ${currentDependentCount},
-        ${currentApplyResidentTax}
+        ${currentApplyResidentTax},
+        ${currentApplyResidentTax ? currentResidentTaxYear : null},
+        ${currentApplyResidentTax ? currentResidentTaxJuneAmount : null},
+        ${currentApplyResidentTax ? currentResidentTaxMonthlyAmount : null}
       )
       on conflict do nothing
     `;
@@ -416,6 +443,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         income_tax_category,
         dependent_count,
         apply_resident_tax,
+        resident_tax_year,
+        resident_tax_june_amount,
+        resident_tax_monthly_amount,
         wage_valid_from,
         commute_valid_from,
         valid_from,
@@ -440,7 +470,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${storeApplyIncomeTax},
         ${storeIncomeTaxCategory},
         ${storeDependentCount},
-        ${Boolean(storeSetting?.applyResidentTax)},
+        ${storeApplyResidentTax},
+        ${storeApplyResidentTax ? storeResidentTaxYear : null},
+        ${storeApplyResidentTax ? storeResidentTaxJuneAmount : null},
+        ${storeApplyResidentTax ? storeResidentTaxMonthlyAmount : null},
         ${storeWageValidFrom},
         ${storeCommuteValidFrom},
         ${storeValidFrom},
@@ -464,6 +497,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         income_tax_category = excluded.income_tax_category,
         dependent_count = excluded.dependent_count,
         apply_resident_tax = excluded.apply_resident_tax,
+        resident_tax_year = excluded.resident_tax_year,
+        resident_tax_june_amount = excluded.resident_tax_june_amount,
+        resident_tax_monthly_amount = excluded.resident_tax_monthly_amount,
         valid_from = excluded.valid_from,
         updated_by = excluded.updated_by,
         updated_at = now()
