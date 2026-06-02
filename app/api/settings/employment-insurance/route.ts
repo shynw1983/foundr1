@@ -7,6 +7,14 @@ type UploadPayload = {
   fileName?: string;
   fileBase64?: string;
   fiscalYear?: number | string;
+  manualRows?: Array<{
+    businessType?: string;
+    employeeRate?: number | string | null;
+    employerRate?: number | string | null;
+    benefitRate?: number | string | null;
+    twoProjectsRate?: number | string | null;
+    totalRate?: number | string | null;
+  }>;
 };
 
 type ParsedEmploymentInsuranceRateRow = {
@@ -48,6 +56,12 @@ function normalizeText(text: string) {
 function parseRate(text: string | undefined) {
   const match = /(\d+(?:\.\d+)?)\/1,?000/.exec(text ?? "");
   return match ? Number(match[1]) / 1000 : null;
+}
+
+function parseManualRate(value: unknown) {
+  const numeric = Number(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return numeric > 1 ? numeric / 1000 : numeric;
 }
 
 function detectFiscalYear(text: string, fallback: unknown) {
@@ -148,6 +162,31 @@ function knownEmploymentInsuranceRows(fiscalYear: number) {
   })) satisfies ParsedEmploymentInsuranceRateRow[];
 }
 
+function parseManualRows(rows: UploadPayload["manualRows"]) {
+  if (!Array.isArray(rows)) return [] satisfies ParsedEmploymentInsuranceRateRow[];
+  const parsedRows: ParsedEmploymentInsuranceRateRow[] = [];
+  businessTypes.forEach((businessType, index) => {
+    const row = rows.find((item) => String(item?.businessType ?? "") === businessType.key);
+    const employeeRate = parseManualRate(row?.employeeRate);
+    const employerRate = parseManualRate(row?.employerRate);
+    const benefitRate = parseManualRate(row?.benefitRate);
+    const twoProjectsRate = parseManualRate(row?.twoProjectsRate);
+    const totalRate = parseManualRate(row?.totalRate);
+    if (employeeRate === null || totalRate === null) return;
+    parsedRows.push({
+      businessType: businessType.key,
+      label: businessType.label,
+      sortOrder: index,
+      employeeRate,
+      employerRate,
+      benefitRate,
+      twoProjectsRate,
+      totalRate
+    });
+  });
+  return parsedRows;
+}
+
 async function parseEmploymentInsurancePdf(fileBase64: string, fiscalYearValue: unknown) {
   let text = "";
   let parser: PDFParse | null = null;
@@ -206,9 +245,19 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as UploadPayload;
   const fileBase64 = String(body.fileBase64 ?? "");
   const knownFiscalYear = normalizeFiscalYear(body.fiscalYear);
+  const manualRows = parseManualRows(body.manualRows);
 
   let parsed: Awaited<ReturnType<typeof parseEmploymentInsurancePdf>>;
-  if (fileBase64) {
+  if (manualRows.length) {
+    if (manualRows.length !== businessTypes.length) return Response.json({ error: "雇用保険料率を3種類すべて入力してください。" }, { status: 400 });
+    parsed = {
+      title: `令和${knownFiscalYear - 2018}年度 雇用保険料率`,
+      fiscalYear: knownFiscalYear,
+      effectiveFrom: `${knownFiscalYear}-04-01`,
+      effectiveTo: `${knownFiscalYear + 1}-03-31`,
+      rows: manualRows
+    };
+  } else if (fileBase64) {
     try {
       parsed = await parseEmploymentInsurancePdf(fileBase64, body.fiscalYear);
     } catch (error) {

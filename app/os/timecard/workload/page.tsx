@@ -40,6 +40,13 @@ type WorkloadEmployee = {
   idleMinutes: number;
   ordersPerHour: number;
   salesPerHour: number;
+  loadLevel: string;
+  loadLevelLabel: string;
+  loadLevelScore: number;
+  peakLoadLevel: string;
+  peakLoadLevelLabel: string;
+  peakLoadLevelScore: number;
+  evaluationScore: number;
 };
 type WorkloadShift = {
   employeeId: string;
@@ -51,9 +58,13 @@ type WorkloadShift = {
   orderCount: number;
   sales: number;
   ordersPerHour: number;
+  salesPerHour: number;
   peakHourOrderCount: number;
   peakHourSales: number;
   peakHourLoadScore: number;
+  peakLoadLevel: string;
+  peakLoadLevelLabel: string;
+  peakLoadLevelScore: number;
   isOnePerson: boolean;
   idleMinutes: number;
 };
@@ -423,6 +434,14 @@ export default function TimecardWorkloadPage() {
               <p>ワンオペの時間帯で、1時間あたり注文{currentSettings.highLoadOrderThreshold}件以上、または負荷点数{score(currentSettings.highLoadScoreThreshold)}以上になった時間を集計します。実際にワンオペだった分数だけを加算します。</p>
             </article>
             <article>
+              <h3>負荷レベル</h3>
+              <p>1時間あたり注文数と売上/時間をそれぞれ判定し、高い方のレベルを採用します。注文は0-4件=かなり空き、5-8件=通常、9-12件=忙しい、13-15件=高負荷、16件以上=超負荷。売上は5,000円未満=かなり空き、10,000円未満=通常、15,000円未満=忙しい、20,000円未満=高負荷、20,000円以上=超負荷です。</p>
+            </article>
+            <article>
+              <h3>評価点</h3>
+              <p>ピーク負荷レベルを60%、平均負荷レベルを30%、ワンオペ高負荷の比率を10%として点数化します。賞与や考課に使う場合、今後この点数を店舗別に調整できます。</p>
+            </article>
+            <article>
               <h3>売上貢献度</h3>
               <p>スタッフが勤務中にカバーした売上を集計します。現在はカバー口径のため、複数名勤務では同じ注文が複数スタッフに含まれます。賞与連動では、後続で分担売上の口径も追加できます。</p>
             </article>
@@ -508,7 +527,9 @@ export default function TimecardWorkloadPage() {
                   <th>注文</th>
                   <th>注文/時間</th>
                   <th>売上/時間</th>
+                  <th>負荷レベル</th>
                   <th>負荷ピーク</th>
+                  <th>評価点</th>
                   <th>ワンオペ高負荷</th>
                   <th>空き時間</th>
                 </tr>
@@ -522,9 +543,14 @@ export default function TimecardWorkloadPage() {
                     <td>{rate(employee.ordersPerHour)}</td>
                     <td>{formatMoney(employee.salesPerHour)}</td>
                     <td>
-                      <strong>{score(employee.peakHourLoadScore)}/時間</strong>
-                      <small>注文 {employee.peakHourOrderCount}件 / {formatMoney(employee.peakHourSales)}</small>
+                      <strong>{employee.loadLevelLabel}</strong>
+                      <small>平均 {employee.loadLevelScore}pt</small>
                     </td>
+                    <td>
+                      <strong>{score(employee.peakHourLoadScore)}/時間</strong>
+                      <small>{employee.peakLoadLevelLabel} / 注文 {employee.peakHourOrderCount}件 / {formatMoney(employee.peakHourSales)}</small>
+                    </td>
+                    <td>{score(employee.evaluationScore)}</td>
                     <td>{formatDuration(employee.onePersonHighLoadMinutes)}</td>
                     <td>{formatDuration(employee.idleMinutes)}</td>
                   </tr>
@@ -576,13 +602,13 @@ export default function TimecardWorkloadPage() {
 
         <section className="sales-grid">
           <article className="panel">
-            <h3>高負荷だった勤務（シフト別）</h3>
+            <h3>負荷が高かった勤務（シフト別）</h3>
             <div className="sales-rank-list">
               {(data?.busiestShifts ?? []).map((shift) => (
                 <div className="sales-rank-row" key={`${shift.employeeId}-${shift.workDate}-${shift.clockIn}`}>
                   <span>{formatDate(shift.workDate)} {shift.employeeName}</span>
-                  <strong>{score(shift.peakHourLoadScore)}/時間</strong>
-                  <small>{formatTime(shift.clockIn)}-{formatTime(shift.clockOut)} / 注文ピーク {shift.peakHourOrderCount}件 / {shift.isOnePerson ? "ワンオペ" : "複数名"}</small>
+                  <strong>{shift.peakLoadLevelLabel}</strong>
+                  <small>{formatTime(shift.clockIn)}-{formatTime(shift.clockOut)} / ピーク {score(shift.peakHourLoadScore)}/時間 / 注文 {shift.peakHourOrderCount}件 / 売上 {formatMoney(shift.peakHourSales)} / {shift.isOnePerson ? "ワンオペ" : "複数名"}</small>
                 </div>
               ))}
             </div>
@@ -593,8 +619,8 @@ export default function TimecardWorkloadPage() {
               {(data?.busiestEmployees ?? []).map((employee) => (
                 <div className="sales-rank-row" key={employee.employeeId}>
                   <span>{employee.employeeName}</span>
-                  <strong>{formatDuration(employee.onePersonHighLoadMinutes)}</strong>
-                  <small>{rate(employee.ordersPerHour)}件/時間 / 負荷ピーク {score(employee.peakHourLoadScore)}/時間 / 注文ピーク {employee.peakHourOrderCount}件</small>
+                  <strong>{score(employee.evaluationScore)}</strong>
+                  <small>平均 {employee.loadLevelLabel} / ピーク {employee.peakLoadLevelLabel} / ワンオペ高負荷 {formatDuration(employee.onePersonHighLoadMinutes)}</small>
                 </div>
               ))}
             </div>

@@ -1966,6 +1966,72 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.settings-manual-rate-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.settings-manual-rate-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-manual-rate-panel strong {
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.settings-manual-rate-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.settings-manual-rate-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(5, minmax(80px, 0.6fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-manual-rate-grid > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.settings-manual-rate-row {
+  display: contents;
+}
+
+.settings-manual-rate-row strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.settings-manual-rate-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.settings-manual-rate-panel > .secondary-button {
+  justify-self: start;
+}
+
 .settings-tax-table-list {
   display: grid;
   gap: 8px;
@@ -9681,6 +9747,30 @@ body :where(
   .statutory-alert-card {
     align-items: stretch;
     grid-template-columns: 1fr;
+  }
+
+  .settings-manual-rate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-manual-rate-grid > span {
+    display: none;
+  }
+
+  .settings-manual-rate-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .settings-manual-rate-row strong {
+    grid-column: 1 / -1;
+  }
+
+  .settings-manual-rate-panel > .secondary-button {
+    width: 100%;
   }
 
   .statutory-alert-heading {

@@ -9,6 +9,12 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
+const employmentInsuranceManualRows = [
+  { businessType: "general", label: "一般の事業", employeeRate: "5", employerRate: "8.5", benefitRate: "5", twoProjectsRate: "3.5", totalRate: "13.5" },
+  { businessType: "agriculture_sake", label: "農林水産・清酒製造の事業", employeeRate: "6", employerRate: "9.5", benefitRate: "6", twoProjectsRate: "3.5", totalRate: "15.5" },
+  { businessType: "construction", label: "建設の事業", employeeRate: "6", employerRate: "10.5", benefitRate: "6", twoProjectsRate: "4.5", totalRate: "16.5" }
+];
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -233,6 +239,35 @@ export default function OsSettingsPage() {
     showNotice(`雇用保険料率を取り込みました。${body.rowCount ?? 0}行`);
   }
 
+  async function saveManualEmploymentInsuranceTable() {
+    setUploadingEmploymentInsurance(true);
+    const manualRows = employmentInsuranceManualRows.map((row) => ({
+      businessType: row.businessType,
+      employeeRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualEmployeeRate:${row.businessType}"]`)?.value ?? ""),
+      employerRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualEmployerRate:${row.businessType}"]`)?.value ?? ""),
+      benefitRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualBenefitRate:${row.businessType}"]`)?.value ?? ""),
+      twoProjectsRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualTwoProjectsRate:${row.businessType}"]`)?.value ?? ""),
+      totalRate: (document.querySelector<HTMLInputElement>(`input[name="employmentManualTotalRate:${row.businessType}"]`)?.value ?? "")
+    }));
+    const response = await fetch("/api/settings/employment-insurance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: "manual", fiscalYear: employmentInsuranceYear, manualRows })
+    });
+    setUploadingEmploymentInsurance(false);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice(`${response.status}: ${String(body.error ?? "雇用保険料率を保存できませんでした。")}`, "info");
+      return;
+    }
+    const listResponse = await fetch("/api/settings/employment-insurance", { cache: "no-store" });
+    if (listResponse.ok) {
+      const listBody = await listResponse.json() as { tables?: EmploymentInsuranceTable[] };
+      setEmploymentInsuranceTables(listBody.tables ?? []);
+    }
+    showNotice(`雇用保険料率を保存しました。${body.rowCount ?? 0}行`);
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -340,6 +375,34 @@ export default function OsSettingsPage() {
               <button className="secondary-button" type="button" disabled={!employmentInsuranceFile || uploadingEmploymentInsurance} onClick={() => void uploadEmploymentInsuranceTable()}>
                 <Upload size={16} />
                 {uploadingEmploymentInsurance ? "取り込み中" : "雇用保険料率を取り込む"}
+              </button>
+            </div>
+            <div className="settings-manual-rate-panel">
+              <div>
+                <strong>雇用保険料率を手動入力</strong>
+                <span>数値は「/1000」で入力します。例: 5/1000 の場合は 5。</span>
+              </div>
+              <div className="settings-manual-rate-grid">
+                <span>事業の種類</span>
+                <span>労働者負担</span>
+                <span>事業主負担</span>
+                <span>給付分</span>
+                <span>二事業分</span>
+                <span>合計</span>
+                {employmentInsuranceManualRows.map((row) => (
+                  <div className="settings-manual-rate-row" key={row.businessType}>
+                    <strong>{row.label}</strong>
+                    <input name={`employmentManualEmployeeRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employeeRate} placeholder="労働者負担" aria-label={`${row.label} 労働者負担`} />
+                    <input name={`employmentManualEmployerRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employerRate} placeholder="事業主負担" aria-label={`${row.label} 事業主負担`} />
+                    <input name={`employmentManualBenefitRate:${row.businessType}`} inputMode="decimal" defaultValue={row.benefitRate} placeholder="給付分" aria-label={`${row.label} 給付分`} />
+                    <input name={`employmentManualTwoProjectsRate:${row.businessType}`} inputMode="decimal" defaultValue={row.twoProjectsRate} placeholder="二事業分" aria-label={`${row.label} 二事業分`} />
+                    <input name={`employmentManualTotalRate:${row.businessType}`} inputMode="decimal" defaultValue={row.totalRate} placeholder="合計" aria-label={`${row.label} 合計`} />
+                  </div>
+                ))}
+              </div>
+              <button className="secondary-button" type="button" disabled={uploadingEmploymentInsurance} onClick={() => void saveManualEmploymentInsuranceTable()}>
+                <Save size={16} />
+                {uploadingEmploymentInsurance ? "保存中" : "手動入力した料率を保存"}
               </button>
             </div>
             <div className="settings-tax-table-list">

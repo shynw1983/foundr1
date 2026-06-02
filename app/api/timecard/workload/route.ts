@@ -12,6 +12,13 @@ const workloadSettingsRoles = new Set(["owner", "manager", "store_owner"]);
 const managementRoles = new Set(["owner", "manager", "store_owner"]);
 const hourMs = 60 * 60 * 1000;
 const workloadSliceMinutes = 15;
+const workloadLevels = [
+  { key: "very_idle", label: "かなり空き", score: 20 },
+  { key: "normal", label: "通常", score: 60 },
+  { key: "busy", label: "忙しい", score: 90 },
+  { key: "high", label: "高負荷", score: 120 },
+  { key: "extreme", label: "超負荷", score: 150 }
+] as const;
 const defaultWorkloadSettings = {
   includeManagement: true,
   minOrderLoadScore: 1,
@@ -97,6 +104,32 @@ function getPeakHourMetrics(orders: WorkloadOrder[]) {
     peakOrderCount,
     peakSales,
     peakLoadScore
+  };
+}
+
+function getOrderLoadLevelIndex(ordersPerHour: number) {
+  if (ordersPerHour <= 4) return 0;
+  if (ordersPerHour <= 8) return 1;
+  if (ordersPerHour <= 12) return 2;
+  if (ordersPerHour <= 15) return 3;
+  return 4;
+}
+
+function getSalesLoadLevelIndex(salesPerHour: number) {
+  if (salesPerHour < 5000) return 0;
+  if (salesPerHour < 10000) return 1;
+  if (salesPerHour < 15000) return 2;
+  if (salesPerHour < 20000) return 3;
+  return 4;
+}
+
+function getLoadLevelMetrics(ordersPerHour: number, salesPerHour: number) {
+  const levelIndex = Math.max(getOrderLoadLevelIndex(ordersPerHour), getSalesLoadLevelIndex(salesPerHour));
+  const level = workloadLevels[levelIndex];
+  return {
+    loadLevel: level.key,
+    loadLevelLabel: level.label,
+    loadLevelScore: level.score
   };
 }
 
@@ -364,6 +397,9 @@ export async function GET(request: Request) {
     entry.idleMinutes += idle.idleMinutes;
     employeeMap.set(shift.employeeId, entry);
 
+    const shiftOrdersPerHour = shift.workMinutes > 0 ? shiftOrders.length / (shift.workMinutes / 60) : 0;
+    const shiftSalesPerHour = shift.workMinutes > 0 ? Math.round(shiftSales / (shift.workMinutes / 60)) : 0;
+    const shiftPeakLoadLevel = getLoadLevelMetrics(peakMetrics.peakOrderCount, peakMetrics.peakSales);
     busyShifts.push({
       employeeId: shift.employeeId,
       employeeName: shift.employeeName,
@@ -373,20 +409,43 @@ export async function GET(request: Request) {
       workMinutes: shift.workMinutes,
       orderCount: shiftOrders.length,
       sales: shiftSales,
-      ordersPerHour: shift.workMinutes > 0 ? shiftOrders.length / (shift.workMinutes / 60) : 0,
+      ordersPerHour: shiftOrdersPerHour,
+      salesPerHour: shiftSalesPerHour,
       peakHourOrderCount: peakMetrics.peakOrderCount,
       peakHourSales: peakMetrics.peakSales,
       peakHourLoadScore: peakMetrics.peakLoadScore,
+      peakLoadLevel: shiftPeakLoadLevel.loadLevel,
+      peakLoadLevelLabel: shiftPeakLoadLevel.loadLevelLabel,
+      peakLoadLevelScore: shiftPeakLoadLevel.loadLevelScore,
       isOnePerson,
       idleMinutes: idle.idleMinutes
     });
   }
 
-  const employees = Array.from(employeeMap.values()).map((entry) => ({
-    ...entry,
-    ordersPerHour: entry.workMinutes > 0 ? entry.orderCount / (entry.workMinutes / 60) : 0,
-    salesPerHour: entry.workMinutes > 0 ? Math.round(entry.sales / (entry.workMinutes / 60)) : 0
-  }));
+  const employees = Array.from(employeeMap.values()).map((entry) => {
+    const ordersPerHour = entry.workMinutes > 0 ? entry.orderCount / (entry.workMinutes / 60) : 0;
+    const salesPerHour = entry.workMinutes > 0 ? Math.round(entry.sales / (entry.workMinutes / 60)) : 0;
+    const averageLoadLevel = getLoadLevelMetrics(ordersPerHour, salesPerHour);
+    const peakLoadLevel = getLoadLevelMetrics(entry.peakHourOrderCount, entry.peakHourSales);
+    const onePersonHighLoadRate = entry.workMinutes > 0 ? entry.onePersonHighLoadMinutes / entry.workMinutes : 0;
+    const evaluationScore = Math.round((
+      peakLoadLevel.loadLevelScore * 0.6
+      + averageLoadLevel.loadLevelScore * 0.3
+      + Math.min(30, onePersonHighLoadRate * 100) * 0.1
+    ) * 10) / 10;
+    return {
+      ...entry,
+      ordersPerHour,
+      salesPerHour,
+      loadLevel: averageLoadLevel.loadLevel,
+      loadLevelLabel: averageLoadLevel.loadLevelLabel,
+      loadLevelScore: averageLoadLevel.loadLevelScore,
+      peakLoadLevel: peakLoadLevel.loadLevel,
+      peakLoadLevelLabel: peakLoadLevel.loadLevelLabel,
+      peakLoadLevelScore: peakLoadLevel.loadLevelScore,
+      evaluationScore
+    };
+  });
 
   return Response.json({
     month,
@@ -402,7 +461,8 @@ export async function GET(request: Request) {
     },
     employees: employees.sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.orderCount - a.orderCount),
     busiestEmployees: [...employees].sort((a, b) => (
-      b.onePersonHighLoadMinutes - a.onePersonHighLoadMinutes
+      b.evaluationScore - a.evaluationScore
+      || b.onePersonHighLoadMinutes - a.onePersonHighLoadMinutes
       || b.peakHourLoadScore - a.peakHourLoadScore
       || b.ordersPerHour - a.ordersPerHour
       || b.peakHourOrderCount - a.peakHourOrderCount
@@ -413,7 +473,8 @@ export async function GET(request: Request) {
       || b.idleMinutes - a.idleMinutes
     )).slice(0, 5),
     busiestShifts: busyShifts.sort((a, b) => (
-      b.peakHourLoadScore - a.peakHourLoadScore
+      b.peakLoadLevelScore - a.peakLoadLevelScore
+      || b.peakHourLoadScore - a.peakHourLoadScore
       || b.peakHourOrderCount - a.peakHourOrderCount
       || b.ordersPerHour - a.ordersPerHour
     )).slice(0, 8)
