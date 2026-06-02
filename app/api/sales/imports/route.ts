@@ -1,7 +1,12 @@
 import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
-import { parseSmaregiSalesCsv, parseUberSalesCsv, SalesCsvParserUpdateRequiredError } from "../../../../lib/sales-imports";
+import {
+  parseRocketNowSalesXlsx,
+  parseSmaregiSalesCsv,
+  parseUberSalesCsv,
+  SalesCsvParserUpdateRequiredError
+} from "../../../../lib/sales-imports";
 import { getSalesSourceDefinition } from "../../../../lib/sales-sources";
 
 const salesImportRoles = new Set(["owner", "manager"]);
@@ -162,7 +167,7 @@ export async function POST(request: Request) {
   const file = formData.get("file");
   if (!storeId) return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
   if (!salesSourceId) return Response.json({ error: "売上源を選択してください。" }, { status: 400 });
-  if (!(file instanceof File)) return Response.json({ error: "CSVファイルを選択してください。" }, { status: 400 });
+  if (!(file instanceof File)) return Response.json({ error: "売上ファイルを選択してください。" }, { status: 400 });
 
   const scope = await getSessionStoreScope(session);
   if (!scope.allStores && !scope.storeIds.includes(storeId)) {
@@ -187,13 +192,14 @@ export async function POST(request: Request) {
   const sourcePlatform = String(source.sourcePlatform);
   const sourceDefinition = getSalesSourceDefinition(sourcePlatform);
   if (!sourceDefinition?.importSupported) {
-    return Response.json({ error: "この売上源のCSV取込はまだ対応していません。" }, { status: 400 });
+    return Response.json({ error: "この売上源の売上ファイル取込はまだ対応していません。" }, { status: 400 });
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const text = decodeSalesCsv(bytes, sourcePlatform);
   const parsed = (() => {
     try {
+      if (sourcePlatform === "rocket_now") return parseRocketNowSalesXlsx(bytes);
+      const text = decodeSalesCsv(bytes, sourcePlatform);
       if (sourcePlatform === "smaregi") return parseSmaregiSalesCsv(text);
       return parseUberSalesCsv(text);
     } catch (error) {
@@ -211,7 +217,7 @@ export async function POST(request: Request) {
   }
   if (parsed.orders.length === 0) {
     return Response.json({
-      error: "取り込める注文がありませんでした。CSV形式が変わっている可能性があるため、解析器の更新が必要です。",
+      error: "取り込める注文がありませんでした。ファイル形式が変わっている可能性があるため、解析器の更新が必要です。",
       parserUpdateRequired: true
     }, { status: 422 });
   }

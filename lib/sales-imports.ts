@@ -1,3 +1,5 @@
+import * as XLSX from "xlsx";
+
 export type SalesCsvOrder = {
   sourceExternalId: string;
   orderNo: string;
@@ -56,6 +58,18 @@ const smaregiHeaderKeys = {
   tax: "内消費税",
   quantityTotal: "数量合計",
   returnedQuantityTotal: "返品数量合計"
+};
+
+const rocketNowHeaderKeys = {
+  storeName: "店舗名",
+  tradedAt: "取引日時",
+  transactionType: "取引タイプ",
+  orderNo: "注文番号",
+  sales: "売上高",
+  coupon: "店舗負担クーポン金額",
+  fee: "総手数料",
+  tax: "消費税",
+  settlement: "精算予定金額"
 };
 
 function parseCsvLine(line: string) {
@@ -117,6 +131,15 @@ function findSmaregiHeaderRow(rows: string[][]) {
   });
 }
 
+function findRocketNowHeaderRow(rows: string[][]) {
+  return rows.findIndex((row) => {
+    const normalized = new Set(row.map(normalizeHeader));
+    return normalized.has(normalizeHeader(rocketNowHeaderKeys.orderNo))
+      && normalized.has(normalizeHeader(rocketNowHeaderKeys.tradedAt))
+      && normalized.has(normalizeHeader(rocketNowHeaderKeys.sales));
+  });
+}
+
 function getHeaderDiagnostics(rows: string[][]) {
   const firstRows = rows.slice(0, 5).map((row) => row.map((cell) => cell.trim()).filter(Boolean));
   const flatCells = firstRows.flat();
@@ -142,6 +165,12 @@ function parseMoney(value: string) {
   return Number.isFinite(numberValue) ? Math.round(numberValue) : 0;
 }
 
+function stringifyCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
 function parseUberDateTime(dateValue: string, timeValue: string) {
   const dateMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(dateValue.trim());
   const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue.trim());
@@ -162,6 +191,18 @@ function parseSmaregiDateTime(value: string) {
   return new Date(
     `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hour.padStart(2, "0")}:${minute}:${second.padStart(2, "0")}+09:00`
   );
+}
+
+function parseRocketNowDateTime(value: string) {
+  const trimmed = value.trim();
+  const isoMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed);
+  if (isoMatch) {
+    const [, year, month, day, hour, minute, second = "00"] = isoMatch;
+    return new Date(
+      `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hour.padStart(2, "0")}:${minute}:${second.padStart(2, "0")}+09:00`
+    );
+  }
+  return parseSmaregiDateTime(trimmed.replace("T", " "));
 }
 
 function getJstMonth(date: Date) {
@@ -325,6 +366,116 @@ export function parseSmaregiSalesCsv(text: string): SalesCsvParseResult {
   if (orders.length === 0 && rawRows.length > 0) {
     throw new SalesCsvParserUpdateRequiredError(
       "Smaregi CSVのヘッダーは検出できましたが、取引ID・取引日時・合計を正しく解析できませんでした。CSV形式が変わっている可能性があるため、解析器の更新が必要です。"
+    );
+  }
+
+  const monthCounts = new Map<string, number>();
+  for (const order of orders) {
+    const month = getJstMonth(order.orderedAt);
+    monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
+  }
+  const detectedMonth = Array.from(monthCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  return {
+    orders,
+    rawRows,
+    skippedRowCount,
+    detectedMonth
+  };
+}
+
+export function parseRocketNowSalesXlsx(bytes: Uint8Array): SalesCsvParseResult {
+  const workbook = XLSX.read(bytes, {
+    type: "buffer",
+    cellDates: false,
+    raw: false
+  });
+  const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === normalizeHeader("Sales Detail"))
+    ?? workbook.SheetNames[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) {
+    throw new SalesCsvParserUpdateRequiredError(
+      "Rocket NowのExcelファイルに読み取れるシートがありません。解析器の更新が必要です。"
+    );
+  }
+
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    blankrows: false,
+    raw: false,
+    defval: ""
+  }).map((row) => row.map(stringifyCell));
+  const headerIndex = findRocketNowHeaderRow(rows);
+  if (headerIndex < 0) {
+    throw new SalesCsvParserUpdateRequiredError(
+      `このExcel形式は現在のRocket Now解析器では読み取れません。解析器の更新が必要です。（行数: ${rows.length}）`
+    );
+  }
+
+  const headers = rows[headerIndex].map((header) => header.trim());
+  const dataRows = rows.slice(headerIndex + 1);
+  const groupedOrders = new Map<string, SalesCsvOrder>();
+  const rawRows: SalesCsvParseResult["rawRows"] = [];
+  let skippedRowCount = 0;
+
+  dataRows.forEach((cells, index) => {
+    const raw = Object.fromEntries(headers.map((header, cellIndex) => [header, cells[cellIndex] ?? ""]));
+    const orderNo = getValue(raw, rocketNowHeaderKeys.orderNo).trim();
+    const sourceExternalId = orderNo ? `rocket_now:${orderNo}` : "";
+    const orderedAt = parseRocketNowDateTime(getValue(raw, rocketNowHeaderKeys.tradedAt));
+    const transactionType = getValue(raw, rocketNowHeaderKeys.transactionType).trim().toUpperCase();
+    rawRows.push({
+      rowIndex: index + 1,
+      sourceExternalId: sourceExternalId || null,
+      orderNo: orderNo || null,
+      orderedAt,
+      raw
+    });
+
+    if (!orderNo || !orderedAt || transactionType !== "PAY") {
+      skippedRowCount += 1;
+      return;
+    }
+
+    const total = parseMoney(getValue(raw, rocketNowHeaderKeys.sales));
+    if (total <= 0) {
+      skippedRowCount += 1;
+      return;
+    }
+    const tax = parseMoney(getValue(raw, rocketNowHeaderKeys.tax));
+    const discount = parseMoney(getValue(raw, rocketNowHeaderKeys.coupon));
+    const existing = groupedOrders.get(sourceExternalId);
+
+    if (existing) {
+      existing.subtotal += Math.max(0, total - tax);
+      existing.tax += tax;
+      existing.discount += discount;
+      existing.total += total;
+      existing.rowCount += 1;
+      existing.rawRows.push(raw);
+      if (orderedAt < existing.orderedAt) existing.orderedAt = orderedAt;
+      return;
+    }
+
+    groupedOrders.set(sourceExternalId, {
+      sourceExternalId,
+      orderNo,
+      storeName: getValue(raw, rocketNowHeaderKeys.storeName).trim(),
+      orderedAt,
+      subtotal: Math.max(0, total - tax),
+      tax,
+      discount,
+      adjustment: 0,
+      total,
+      rowCount: 1,
+      rawRows: [raw]
+    });
+  });
+
+  const orders = Array.from(groupedOrders.values()).sort((a, b) => a.orderedAt.getTime() - b.orderedAt.getTime());
+  if (orders.length === 0 && rawRows.length > 0) {
+    throw new SalesCsvParserUpdateRequiredError(
+      "Rocket Now Excelのヘッダーは検出できましたが、注文番号・取引日時・売上高を正しく解析できませんでした。Excel形式が変わっている可能性があるため、解析器の更新が必要です。"
     );
   }
 

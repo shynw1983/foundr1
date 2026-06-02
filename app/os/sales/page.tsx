@@ -221,7 +221,7 @@ export default function SalesPage() {
   const selectedStoreName = summary?.stores.find((store) => store.id === selectedStoreId)?.name ?? "";
   const selectedSalesSource = importState.salesSources.find((source) => source.id === selectedSalesSourceId) ?? null;
 
-  async function uploadCsv() {
+  async function uploadSalesFile() {
     if (!file || !selectedStoreId || !selectedSalesSourceId) return;
     setIsUploading(true);
     setMessage("");
@@ -237,11 +237,11 @@ export default function SalesPage() {
     const body = await response.json().catch(() => ({})) as { error?: string; importedOrderCount?: number; rawRowCount?: number };
     setIsUploading(false);
     if (!response.ok) {
-      setMessage(body.error ?? "CSVを取り込めませんでした。");
+      setMessage(body.error ?? "売上ファイルを取り込めませんでした。");
       return;
     }
     setFile(null);
-    setMessage(`${selectedSalesSource?.sourceLabel ?? "売上"} CSVを取り込みました。注文 ${body.importedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
+    setMessage(`${selectedSalesSource?.sourceLabel ?? "売上"} の売上ファイルを取り込みました。注文 ${body.importedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
     await loadSales(month, selectedStoreId);
   }
 
@@ -345,8 +345,8 @@ export default function SalesPage() {
             <div className="panel-title">
               <Upload size={18} />
               <div>
-                <h3>売上 CSV取込</h3>
-                <p>店舗設定の売上源に合わせて、月初に手動ダウンロードしたCSVを取り込みます。</p>
+                <h3>売上ファイル取込</h3>
+                <p>店舗設定の売上源に合わせて、月初に手動ダウンロードしたCSV・Excelを取り込みます。</p>
               </div>
             </div>
             <label className="sales-source-select">
@@ -369,18 +369,18 @@ export default function SalesPage() {
             <div className="sales-upload-row">
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 disabled={!importState.canImport || isUploading || !selectedSalesSource?.importSupported}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
-              <button className="primary-button" type="button" disabled={!file || !selectedStoreId || !selectedSalesSource?.importSupported || !importState.canImport || isUploading} onClick={() => void uploadCsv()}>
+              <button className="primary-button" type="button" disabled={!file || !selectedStoreId || !selectedSalesSource?.importSupported || !importState.canImport || isUploading} onClick={() => void uploadSalesFile()}>
                 {isUploading ? "取込中" : "取込"}
               </button>
             </div>
             {message ? <p className="sales-import-message">{message}</p> : null}
             {!importState.canImport ? <p className="sales-import-message">売上データの取込は owner / manager が操作できます。</p> : null}
             {importState.canImport && importState.salesSources.length === 0 ? <p className="sales-import-message">この店舗の売上源が未設定です。店舗・ブランド設定で売上源を追加してください。</p> : null}
-            {selectedSalesSource && !selectedSalesSource.importSupported ? <p className="sales-import-message">{selectedSalesSource.sourceLabel} のCSV取込は次フェーズで対応します。</p> : null}
+            {selectedSalesSource && !selectedSalesSource.importSupported ? <p className="sales-import-message">{selectedSalesSource.sourceLabel} の売上ファイル取込は次フェーズで対応します。</p> : null}
             <div className="sales-import-list">
               {(summary?.imports ?? []).map((item) => (
                 <div className="sales-import-row" key={item.id}>
