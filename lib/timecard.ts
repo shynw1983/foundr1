@@ -470,6 +470,7 @@ export function summarizePayroll(
       const storeNightMinutes = storeDays.reduce((sum, day) => sum + day.nightMinutes, 0);
       const commuteWorkDays = commuteDays.filter((day) => day.workMinutes > 0).length;
       let storeTaxablePay = 0;
+      let storeCommuteAllowance = 0;
       if (workDays > 0 || workMinutes > 0) {
         if (setting.employmentType === "monthly") {
           regularWorkMinutes += workMinutes;
@@ -488,12 +489,13 @@ export function summarizePayroll(
           storeTaxablePay = Math.ceil(storeRegularPay + storeOvertimePay + storeNightPremiumPay);
         }
       }
-      if (commuteWorkDays === 0) continue;
-      const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
-      const storeCommuteAllowance = setting.commuteAllowanceMonthlyCap === null
-        ? uncappedCommuteAllowance
-        : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
-      commuteAllowance += storeCommuteAllowance;
+      if (commuteWorkDays > 0) {
+        const uncappedCommuteAllowance = Math.ceil(commuteWorkDays * setting.commuteAllowancePerWorkday);
+        storeCommuteAllowance = setting.commuteAllowanceMonthlyCap === null
+          ? uncappedCommuteAllowance
+          : Math.min(uncappedCommuteAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
+        commuteAllowance += storeCommuteAllowance;
+      }
       const socialResult = getSocialInsuranceDeduction(employee, setting, payrollMonth, socialInsuranceRows);
       socialInsurance += socialResult.amount;
       row.alerts = uniqueStrings([...row.alerts, ...socialResult.alerts]);

@@ -1873,6 +1873,7 @@ button {
   display: grid;
   align-items: stretch;
   gap: 6px;
+  min-width: 0;
   padding: 10px 12px;
 }
 
@@ -1891,6 +1892,8 @@ button {
 }
 
 .settings-field input {
+  width: 100%;
+  min-width: 0;
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1902,13 +1905,23 @@ button {
 
 .settings-tax-import {
   display: grid;
-  grid-template-columns: minmax(120px, 0.4fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(150px, 0.34fr) minmax(320px, 1fr) minmax(220px, auto);
   gap: 10px;
   align-items: end;
+  margin-top: 12px;
 }
 
 .settings-tax-import input[type="file"] {
+  overflow: hidden;
   padding: 8px 10px;
+  text-overflow: ellipsis;
+}
+
+.settings-tax-import .secondary-button {
+  justify-content: center;
+  width: 100%;
+  min-height: 58px;
+  white-space: nowrap;
 }
 
 .settings-tax-table-list {
@@ -1964,6 +1977,17 @@ button {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+@media (max-width: 1180px) {
+  .settings-tax-import {
+    grid-template-columns: minmax(140px, 0.36fr) minmax(0, 1fr);
+  }
+
+  .settings-tax-import .secondary-button {
+    grid-column: 2;
+    min-height: 46px;
+  }
 }
 
 .management-row div {
