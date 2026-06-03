@@ -1041,8 +1041,7 @@ body :where(
 
   .sidebar .brand-block > div:last-child,
   .sidebar-user .user-badge-name,
-  .sidebar-user .user-badge-role,
-  .sidebar-user .os-language-picker {
+  .sidebar-user .user-badge-role {
     display: none;
   }
 
@@ -1089,8 +1088,25 @@ body :where(
 
   .sidebar-user .user-badge,
   .sidebar-user .notification-menu,
-  .sidebar-user .notification-placeholder {
+  .sidebar-user .notification-placeholder,
+  .sidebar-user .os-language-picker {
     width: 48px;
+  }
+
+  .sidebar-user .os-language-picker {
+    display: grid;
+  }
+
+  .sidebar-user .os-language-picker span {
+    display: none;
+  }
+
+  .sidebar-user .os-language-picker select {
+    min-height: 42px;
+    width: 48px;
+    padding: 0 4px;
+    font-size: 11px;
+    text-align: center;
   }
 
   .sidebar-user .user-badge {
@@ -1104,6 +1120,17 @@ body :where(
     width: 100%;
     min-height: 42px;
     padding: 0 8px;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker,
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
+    width: 100%;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
+    padding: 0 10px;
+    font-size: 13px;
+    text-align: left;
   }
 
   .sidebar-user .account-menu-panel,

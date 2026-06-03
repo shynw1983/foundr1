@@ -186,6 +186,7 @@ When editing UI:
 - Use normal button heights for mobile action rows.
 - Sidebar/mobile menu must be scrollable when content is long.
 - Product cards and comparison history must wrap before tablet widths overflow.
+- The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation.
 
 ## Translation
 
