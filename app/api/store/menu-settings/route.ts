@@ -140,8 +140,10 @@ export async function GET(request: Request) {
         and menu_option_store_settings.store_id = ${selectedStoreId}
       where menu_options.is_active = true
         and menu_option_groups.is_active = true
-        and menu_option_groups.menu_catalog_item_id is null
-        and menu_option_groups.group_key in ('option', 'topping')
+        and (
+          menu_option_groups.group_key in ('option', 'topping')
+          or menu_option_groups.selection_type in ('multiple', 'quantity')
+        )
         and menu_options.option_key <> 'none'
       order by brands.name, menu_option_groups.sort_order, menu_options.sort_order, menu_options.name
     `

@@ -20,6 +20,8 @@ export type MaamaaCompatibleMenu = {
     name: string;
     price: number;
     note: string;
+    isAvailable: boolean;
+    websiteEnabled: boolean;
   };
   medicinalSpiceOptions: MaamaaPricedOption[];
   heatLevels: MaamaaPricedOption[];
@@ -59,6 +61,13 @@ type MenuOptionRow = {
   name: string;
   priceDelta: number | null;
   sortOrder: number;
+};
+
+type StoreSettingRow = {
+  menuCatalogItemId: string;
+  websiteEnabled: boolean;
+  isAvailable: boolean;
+  priceOverride: number | null;
 };
 
 function choice(option: MenuOptionRow): MaamaaPricedOption {
@@ -178,6 +187,22 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     : [];
   const unavailableOptionKeys = new Set(optionStoreSettings.map((setting) => String(setting.optionKey)));
 
+  const storeSettings = selectedStore
+    ? (await sql`
+        select
+          menu_catalog_item_id::text as "menuCatalogItemId",
+          website_enabled as "websiteEnabled",
+          is_available as "isAvailable",
+          price_override::float as "priceOverride"
+        from menu_store_settings
+        where brand_id = ${brand.id}
+          and store_id = ${selectedStore.osStoreId}
+          and menu_catalog_item_id = ${base.id}
+        limit 1
+      `) as StoreSettingRow[]
+    : [];
+  const baseSetting = storeSettings[0];
+
   const groupByKey = new Map(groups.map((group) => [group.groupKey, group]));
   const choices = (key: string) => (optionsByGroup.get(groupByKey.get(key)?.id ?? "") ?? [])
     .filter((option) => !unavailableOptionKeys.has(option.optionKey))
@@ -223,8 +248,10 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         id: base.externalId || "mala-soup",
         menuCatalogItemId: base.id,
         name: base.name,
-        price: base.basePrice ?? 0,
-        note: base.description
+        price: baseSetting?.priceOverride ?? base.basePrice ?? 0,
+        note: base.description,
+        isAvailable: baseSetting?.isAvailable ?? true,
+        websiteEnabled: baseSetting?.websiteEnabled ?? true
       },
       medicinalSpiceOptions: choices("medicinal-spice"),
       heatLevels: choices("heat"),

@@ -135,6 +135,9 @@ export async function POST(request: Request) {
   if (!operation.reservationsEnabled) {
     return Response.json({ error: "Reservations are temporarily paused for this store" }, { status: 409 });
   }
+  if (menu.baseSoup.websiteEnabled === false || menu.baseSoup.isAvailable === false) {
+    return Response.json({ error: "Menu item is temporarily unavailable" }, { status: 409 });
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate) || !/^\d{2}:\d{2}$/.test(pickup)) {
     return Response.json({ error: "Invalid pickup time" }, { status: 400 });
   }
