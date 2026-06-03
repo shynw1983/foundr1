@@ -105,8 +105,8 @@ type SalesSummary = {
   canEditSalesAnalysisSettings: boolean;
   salesAnalysisSettings: SalesAnalysisSettings;
   salesAnalysisBaseline: {
-    averageDailyOrders: number;
-    averageDailySales: number;
+    averageOrdersPerHour: number;
+    averageSalesPerHour: number;
   };
   totals: {
     orderCount: number;
@@ -749,15 +749,15 @@ export default function SalesPage() {
             <Settings size={18} />
             <div>
               <h3>売上分析の判定基準</h3>
-              <p>月視図の「忙しい」「空き」は、従業員負荷とは別に、日ごとの売上・注文数が本期平均の何倍かで判定します。</p>
+              <p>月視図の「忙しい」「空き」は、従業員負荷とは別に、在店時間で割った売上・注文数が本期平均の何倍かで判定します。</p>
             </div>
           </div>
           <div className="workload-settings-content">
             <div className="workload-settings-section">
               <h4>本期平均との比較</h4>
               <p>
-                平均 注文 {formatRate(summary?.salesAnalysisBaseline.averageDailyOrders ?? 0)}件/日、
-                売上 {formatMoney(summary?.salesAnalysisBaseline.averageDailySales ?? 0)} / 日を基準にします。
+                平均 注文 {formatRate(summary?.salesAnalysisBaseline.averageOrdersPerHour ?? 0)}件/時間、
+                売上 {formatMoney(summary?.salesAnalysisBaseline.averageSalesPerHour ?? 0)} / 時間を基準にします。
               </p>
               <div className="workload-level-settings-grid">
                 {([
@@ -784,7 +784,7 @@ export default function SalesPage() {
                   </label>
                 ))}
               </div>
-              <small>注文数と売上をそれぞれ平均比で判定し、高い方を採用します。高負荷の上限を超える日は「超負荷」です。</small>
+              <small>注文/時間と売上/時間をそれぞれ平均比で判定し、高い方を採用します。高負荷の上限を超える日は「超負荷」です。</small>
             </div>
             <div className="workload-settings-actions">
               <button className="secondary-button" type="button" disabled={settingsDisabled} onClick={() => void saveSalesAnalysisSettings()}>
@@ -921,7 +921,7 @@ export default function SalesPage() {
               <CalendarDays size={18} />
               <div>
                 <h3>月視図カレンダー</h3>
-                <p>日ごとの売上と天気を一覧します。忙しさは本期の平均営業日と比較して判定します。</p>
+                <p>日ごとの売上と天気を一覧します。忙しさは在店時間で割った本期平均と比較して判定します。</p>
               </div>
             </div>
             <div className="sales-calendar">

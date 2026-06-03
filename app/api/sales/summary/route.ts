@@ -612,15 +612,15 @@ export async function GET(request: Request) {
     };
   });
   const activeRawDaily = rawDaily.filter((day) => day.workMinutes > 0 && day.orderCount > 0);
-  const averageDailyOrders = activeRawDaily.length > 0
-    ? activeRawDaily.reduce((sum, day) => sum + day.orderCount, 0) / activeRawDaily.length
+  const averageOrdersPerHour = activeRawDaily.length > 0
+    ? activeRawDaily.reduce((sum, day) => sum + day.ordersPerHour, 0) / activeRawDaily.length
     : 0;
-  const averageDailySales = activeRawDaily.length > 0
-    ? activeRawDaily.reduce((sum, day) => sum + day.sales, 0) / activeRawDaily.length
+  const averageSalesPerHour = activeRawDaily.length > 0
+    ? activeRawDaily.reduce((sum, day) => sum + day.salesPerHour, 0) / activeRawDaily.length
     : 0;
   const daily = rawDaily.map((day) => {
-    const orderRate = averageDailyOrders > 0 ? day.orderCount / averageDailyOrders : 0;
-    const salesRate = averageDailySales > 0 ? day.sales / averageDailySales : 0;
+    const orderRate = averageOrdersPerHour > 0 ? day.ordersPerHour / averageOrdersPerHour : 0;
+    const salesRate = averageSalesPerHour > 0 ? day.salesPerHour / averageSalesPerHour : 0;
     const salesAnalysisLevel = getSalesAnalysisLevelMetrics(orderRate, salesRate, salesAnalysisSettings);
     return {
       ...day,
@@ -717,8 +717,8 @@ export async function GET(request: Request) {
     canEditSalesAnalysisSettings: salesAnalysisSettingsRoles.has(session.role),
     salesAnalysisSettings,
     salesAnalysisBaseline: {
-      averageDailyOrders,
-      averageDailySales
+      averageOrdersPerHour,
+      averageSalesPerHour
     },
     totals: {
       orderCount: totalOrders,
