@@ -21,6 +21,9 @@ type StoreOrder = {
   ice: string;
   option: string;
   toppings: string;
+  customerName: string;
+  customerPhone: string;
+  customerNote: string;
   createdAt: string;
   squareReceiptUrl: string;
 };
@@ -299,7 +302,7 @@ export default function StoreOrdersPage() {
   }, [soundEnabled, selectedStoreId]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
-    const matchesQuery = `${order.pickupCode} ${order.drink}`.toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = `${order.pickupCode} ${order.drink} ${order.customerName} ${order.customerPhone}`.toLowerCase().includes(query.toLowerCase());
     if (status === "all") return matchesQuery;
     const matchesStatus = status === "active"
       ? ["pending_payment", "new", "preparing", "ready"].includes(order.status)
@@ -414,7 +417,7 @@ export default function StoreOrdersPage() {
           <div className="store-orders-controls">
             <input
               aria-label="注文を検索"
-              placeholder="受取番号・商品名"
+              placeholder="番号・商品・お客様"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -462,6 +465,9 @@ export default function StoreOrdersPage() {
               >
                 <span className="store-order-code">{order.pickupCode}</span>
                 <strong>{splitLines(order.drink).join(" / ")}</strong>
+                <span className="store-order-customer">
+                  {order.customerName || "名前未入力"}{order.customerPhone ? ` / ${order.customerPhone}` : ""}
+                </span>
                 <small>{order.pickupDate} {order.pickupTime} / {statusLabels[order.status] ?? order.status}</small>
               </button>
             ))}
@@ -494,6 +500,23 @@ export default function StoreOrdersPage() {
                     <p>{selectedOrder.option} / {selectedOrder.toppings}</p>
                   </>
                 )}
+              </div>
+
+              <div className="store-order-customer-panel">
+                <div>
+                  <span>お客様</span>
+                  <strong>{selectedOrder.customerName || "名前未入力"}</strong>
+                </div>
+                <div>
+                  <span>電話番号</span>
+                  {selectedOrder.customerPhone ? <a href={`tel:${selectedOrder.customerPhone}`}>{selectedOrder.customerPhone}</a> : <strong>未入力</strong>}
+                </div>
+                {selectedOrder.customerNote ? (
+                  <div className="is-wide">
+                    <span>メモ</span>
+                    <p>{selectedOrder.customerNote}</p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="store-order-total">

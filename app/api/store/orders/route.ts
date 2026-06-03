@@ -35,6 +35,21 @@ export async function GET(request: Request) {
       store_customer_orders.ice,
       store_customer_orders.option_text as "option",
       store_customer_orders.toppings,
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,name}',
+        store_customer_orders.customer_summary ->> 'name',
+        ''
+      ) as "customerName",
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,phone}',
+        store_customer_orders.customer_summary ->> 'phone',
+        ''
+      ) as "customerPhone",
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,note}',
+        store_customer_orders.customer_summary ->> 'note',
+        ''
+      ) as "customerNote",
       store_customer_orders.created_at as "createdAt",
       coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
     from store_customer_orders

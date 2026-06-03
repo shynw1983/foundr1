@@ -4547,8 +4547,12 @@ body :where(
 }
 
 .store-order-card strong,
+.store-order-customer,
 .store-order-card small,
-.store-order-lines p {
+.store-order-lines p,
+.store-order-customer-panel p,
+.store-order-customer-panel a,
+.store-order-customer-panel strong {
   overflow-wrap: anywhere;
 }
 
@@ -4556,6 +4560,12 @@ body :where(
   color: #1f6f55;
   font-size: 18px;
   font-weight: 950;
+}
+
+.store-order-customer {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .store-order-status-stack {
@@ -4579,6 +4589,45 @@ body :where(
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.store-order-customer-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.store-order-customer-panel div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff7ed;
+  padding: 12px;
+}
+
+.store-order-customer-panel .is-wide {
+  grid-column: 1 / -1;
+}
+
+.store-order-customer-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-order-customer-panel strong,
+.store-order-customer-panel a {
+  color: var(--ink);
+  font-weight: 950;
+}
+
+.store-order-customer-panel p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.55;
 }
 
 .store-order-total {

@@ -28,6 +28,9 @@ export type CustomerOrderRow = {
   ice: string;
   option: string;
   toppings: string;
+  customerName: string;
+  customerPhone: string;
+  customerNote: string;
   createdAt: string;
   updatedAt: string;
   paidAt: string;
@@ -81,6 +84,9 @@ export function toPublicCustomerOrder(order: CustomerOrderRow) {
     ice: order.ice,
     option: order.option,
     toppings: order.toppings,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    customerNote: order.customerNote,
     amount: order.amount,
     pickupDate: order.pickupDate,
     pickupTime: order.pickupTime
@@ -263,6 +269,21 @@ export async function findCustomerOrderById(orderId: string) {
       store_customer_orders.ice,
       store_customer_orders.option_text as "option",
       store_customer_orders.toppings,
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,name}',
+        store_customer_orders.customer_summary ->> 'name',
+        ''
+      ) as "customerName",
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,phone}',
+        store_customer_orders.customer_summary ->> 'phone',
+        ''
+      ) as "customerPhone",
+      coalesce(
+        store_customer_orders.customer_summary #>> '{customer,note}',
+        store_customer_orders.customer_summary ->> 'note',
+        ''
+      ) as "customerNote",
       store_customer_orders.created_at as "createdAt",
       store_customer_orders.updated_at as "updatedAt",
       coalesce(store_customer_orders.paid_at::text, '') as "paidAt"
