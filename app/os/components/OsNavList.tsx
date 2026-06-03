@@ -11,6 +11,7 @@ import {
   FileText,
   ChartColumn,
   Lightbulb,
+  LineChart,
   MenuSquare,
   MessageSquareWarning,
   PackageCheck,
@@ -44,7 +45,7 @@ const orderModulePaths = new Set([
   "/os/product-comparisons",
   "/os/reports"
 ]);
-const salesModulePaths = new Set(["/os/sales"]);
+const analyticsModulePaths = new Set(["/os/analytics", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/profit"]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
@@ -55,7 +56,11 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
+  { label: "経営分析", href: "/os/analytics", icon: LineChart },
   { label: "売上分析", href: "/os/sales", icon: ChartColumn },
+  { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
+  { label: "原価分析", href: "/os/analytics/cost", icon: Boxes },
+  { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
@@ -110,7 +115,18 @@ const navModules: OsNavModule[] = [
       { href: "/os/product-comparisons", isShortcut: true }
     ]
   },
-  { id: "sales", label: "売上分析", icon: ChartColumn, href: "/os/sales", paths: [{ href: "/os/sales" }] },
+  {
+    id: "analytics",
+    label: "経営分析",
+    icon: LineChart,
+    paths: [
+      { href: "/os/analytics" },
+      { href: "/os/sales" },
+      { href: "/os/analytics/labor" },
+      { href: "/os/analytics/cost" },
+      { href: "/os/analytics/profit" }
+    ]
+  },
   {
     id: "store-operations",
     label: "店舗運営",
@@ -168,8 +184,8 @@ function getModuleNavPaths(pathname: string) {
     return sharedDataPaths;
   }
 
-  if (pathname === "/os/sales" || pathname.startsWith("/os/sales/")) {
-    return salesModulePaths;
+  if (pathname === "/os/analytics" || pathname.startsWith("/os/analytics/") || pathname === "/os/sales" || pathname.startsWith("/os/sales/")) {
+    return analyticsModulePaths;
   }
 
   if (pathname === "/os/timecard" || pathname.startsWith("/os/timecard/")) {
@@ -196,6 +212,7 @@ function canShowInCurrentModule(pathname: string, item: OsNavItem) {
 function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
+  if (["/os/analytics", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner"].includes(role);
   if (item.href === "/os/field-notes") return true;

@@ -3,6 +3,7 @@
 import {
   ClipboardCheck,
   Clock3,
+  LineChart,
   MenuSquare,
   PackageCheck,
   Settings,
@@ -57,6 +58,14 @@ const osModules: OsModule[] = [
     icon: Clock3,
     status: "active",
     roles: ["owner", "manager", "store_owner", "staff"]
+  },
+  {
+    title: "経営分析",
+    description: "売上、人件費、原価、月次損益を横断して確認",
+    href: "/os/analytics",
+    icon: LineChart,
+    status: "active",
+    roles: ["owner", "manager", "buyer"]
   },
   {
     title: "POS",
