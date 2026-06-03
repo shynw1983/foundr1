@@ -108,8 +108,28 @@ function chartWidth(value: number, maxValue: number) {
   return `${Math.min(100, Math.max(4, (value / maxValue) * 100))}%`;
 }
 
+const analyticsMonthStorageKey = "foundr1:analytics:selected-month";
+const analyticsStoreStorageKey = "foundr1:analytics:selected-store-id";
+
+function getStoredAnalyticsMonth() {
+  if (typeof window === "undefined") return getCurrentMonth();
+  const stored = window.localStorage.getItem(analyticsMonthStorageKey);
+  return stored && /^\d{4}-\d{2}$/.test(stored) ? stored : getCurrentMonth();
+}
+
+function getStoredAnalyticsStoreId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(analyticsStoreStorageKey) ?? "";
+}
+
+function storeAnalyticsSelection(nextMonth: string, nextStoreId: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(analyticsMonthStorageKey, nextMonth);
+  if (nextStoreId) window.localStorage.setItem(analyticsStoreStorageKey, nextStoreId);
+}
+
 export default function AnalyticsPage() {
-  const [month, setMonth] = useState(getCurrentMonth);
+  const [month, setMonth] = useState(getStoredAnalyticsMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [state, setState] = useState<AnalyticsState>({ sales: null, timecard: null, error: "" });
@@ -141,6 +161,7 @@ export default function AnalyticsPage() {
 
       setStores(sales.stores.length ? sales.stores : timecard?.stores ?? []);
       setSelectedStoreId(resolvedStoreId || timecard?.selectedStoreId || "");
+      storeAnalyticsSelection(sales.month || nextMonth, resolvedStoreId || timecard?.selectedStoreId || "");
       setState({ sales, timecard, error: timecardResponse.ok ? "" : "人件費データを読み込めませんでした。" });
     } catch (error) {
       setState({ sales: null, timecard: null, error: error instanceof Error ? error.message : "経営分析データを読み込めませんでした。" });
@@ -150,7 +171,7 @@ export default function AnalyticsPage() {
   }
 
   useEffect(() => {
-    void loadAnalytics(getCurrentMonth(), "");
+    void loadAnalytics(getStoredAnalyticsMonth(), getStoredAnalyticsStoreId());
   }, []);
 
   const salesTotals = state.sales?.totals;
@@ -189,6 +210,7 @@ export default function AnalyticsPage() {
                 onChange={(event) => {
                   const nextMonth = event.target.value || getCurrentMonth();
                   setMonth(nextMonth);
+                  storeAnalyticsSelection(nextMonth, selectedStoreId);
                   void loadAnalytics(nextMonth, selectedStoreId);
                 }}
               />
@@ -199,6 +221,7 @@ export default function AnalyticsPage() {
                 value={selectedStoreId}
                 onChange={(event) => {
                   setSelectedStoreId(event.target.value);
+                  storeAnalyticsSelection(month, event.target.value);
                   void loadAnalytics(month, event.target.value);
                 }}
               >
