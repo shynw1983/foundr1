@@ -11,7 +11,7 @@ function compareDateTime(dateA: string, timeA: string, dateB: string, timeB: str
 
 function getTokyoMinimumPickup() {
   const now = new Date();
-  const minimum = new Date(now.getTime() + 5 * 60 * 1000);
+  const minimum = new Date(now.getTime() + 15 * 60 * 1000);
   const formatter = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
   }
   const minimumPickup = getTokyoMinimumPickup();
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
-    return Response.json({ error: "Pickup time must be at least 5 minutes from now" }, { status: 400 });
+    return Response.json({ error: "Pickup time must be at least 15 minutes from now" }, { status: 400 });
   }
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
