@@ -42,6 +42,72 @@ function komojuAuthHeader(secretKey: string) {
   return `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
 }
 
+function selectedFlavorIds(body: Record<string, unknown>) {
+  const raw = body.specialFlavors ?? body.flavors ?? body.specialFlavor ?? [];
+  return Array.isArray(raw) ? raw.map(String).filter(Boolean) : String(raw || "").trim() ? [String(raw)] : [];
+}
+
+function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<ReturnType<typeof getMaamaaCompatibleMenu>>["baseMenu"]) {
+  const medicinalSpice = findChoice(menu.medicinalSpiceOptions, String(rawItem.medicinalSpice || rawItem.medicinalSpiceOption || rawItem.spice || ""), menu.medicinalSpiceOptions.length > 0);
+  const heat = findChoice(menu.heatLevels, String(rawItem.heat || rawItem.heatLevel || ""), menu.heatLevels.length > 0);
+  const numb = findChoice(menu.numbLevels, String(rawItem.numb || rawItem.numbLevel || ""), menu.numbLevels.length > 0);
+  const specialFlavorItems = selectedFlavorIds(rawItem).map((id) => findChoice(menu.specialFlavors, id, true));
+
+  if ((menu.medicinalSpiceOptions.length && !medicinalSpice) || (menu.heatLevels.length && !heat) || (menu.numbLevels.length && !numb)) {
+    return { error: "Invalid soup customization" };
+  }
+  if (specialFlavorItems.some((item) => !item)) {
+    return { error: "Invalid special flavor" };
+  }
+
+  let selectionError = "";
+  const selectedSections = menu.menuSections.map((section) => {
+    const ids = selectedIdsForSection(rawItem, section);
+    if (ids.length > section.limit) {
+      selectionError = `${section.title} can only select up to ${section.limit}`;
+      return { section, items: [] };
+    }
+    const items = ids.map((id) => findChoice(section.items, id, true));
+    if (items.some((item) => !item)) {
+      selectionError = `Invalid selection in ${section.title}`;
+      return { section, items: [] };
+    }
+    return { section, items: items as MaamaaPricedOption[] };
+  });
+  if (selectionError) return { error: selectionError };
+
+  const optionItems = [medicinalSpice, heat, numb, ...specialFlavorItems].filter(Boolean) as MaamaaPricedOption[];
+  const toppingItems = selectedSections.flatMap((section) => section.items);
+  const amount = menu.baseSoup.price +
+    optionItems.reduce((sum, item) => sum + item.price, 0) +
+    toppingItems.reduce((sum, item) => sum + item.price, 0);
+  if (amount <= 0) return { error: "Invalid amount" };
+
+  const customizationLabels = [
+    medicinalSpice?.name,
+    heat ? `辛さ: ${heat.name}` : "",
+    numb ? `痺れ: ${numb.name}` : "",
+    ...((specialFlavorItems.filter(Boolean) as MaamaaPricedOption[]).map((item) => `味変: ${item.name}`))
+  ].filter(Boolean);
+  const sectionLabels = selectedSections
+    .filter((section) => section.items.length)
+    .map(({ section, items }) => `${section.title}: ${items.map((item) => item.name).join(", ")}`);
+  const detailLabel = [...customizationLabels, ...sectionLabels].join("\n");
+
+  return {
+    amount,
+    detailLabel,
+    optionItems,
+    toppingItems,
+    selectedSections,
+    medicinalSpice,
+    heat,
+    numb,
+    specialFlavorItems: specialFlavorItems.filter(Boolean) as MaamaaPricedOption[],
+    sectionLabels
+  };
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return Response.json({ error: "Invalid request body" }, { status: 400 });
@@ -80,49 +146,27 @@ export async function POST(request: Request) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
 
-  const medicinalSpice = findChoice(menu.medicinalSpiceOptions, String(body.medicinalSpice || body.medicinalSpiceOption || ""), menu.medicinalSpiceOptions.length > 0);
-  const heat = findChoice(menu.heatLevels, String(body.heat || body.heatLevel || ""), menu.heatLevels.length > 0);
-  const numb = findChoice(menu.numbLevels, String(body.numb || body.numbLevel || ""), menu.numbLevels.length > 0);
-  const specialFlavor = findChoice(menu.specialFlavors, String(body.specialFlavor || ""), false);
-
-  if ((menu.medicinalSpiceOptions.length && !medicinalSpice) || (menu.heatLevels.length && !heat) || (menu.numbLevels.length && !numb)) {
-    return Response.json({ error: "Invalid soup customization" }, { status: 400 });
+  const requestedItems = Array.isArray(body.items) && body.items.length
+    ? body.items.map((item) => item as Record<string, unknown>)
+    : [body];
+  if (!requestedItems.length || requestedItems.length > 12) {
+    return Response.json({ error: "Invalid order items" }, { status: 400 });
   }
-
-  let selectionError = "";
-  const selectedSections = menu.menuSections.map((section) => {
-    const ids = selectedIdsForSection(body, section);
-    if (ids.length > section.limit) {
-      selectionError = `${section.title} can only select up to ${section.limit}`;
-      return { section, items: [] };
-    }
-    const items = ids.map((id) => findChoice(section.items, id, true));
-    if (items.some((item) => !item)) {
-      selectionError = `Invalid selection in ${section.title}`;
-      return { section, items: [] };
-    }
-    return { section, items: items as MaamaaPricedOption[] };
-  });
-  if (selectionError) return Response.json({ error: selectionError }, { status: 400 });
-
-  const optionItems = [medicinalSpice, heat, numb, specialFlavor].filter(Boolean) as MaamaaPricedOption[];
-  const toppingItems = selectedSections.flatMap((section) => section.items);
-  const amount = menu.baseSoup.price +
-    optionItems.reduce((sum, item) => sum + item.price, 0) +
-    toppingItems.reduce((sum, item) => sum + item.price, 0);
-  if (amount <= 0) return Response.json({ error: "Invalid amount" }, { status: 400 });
+  const validatedItems = requestedItems.map((item) => validateBuildableItem(item, menu));
+  const invalidItem = validatedItems.find((item) => "error" in item);
+  if (invalidItem && "error" in invalidItem) {
+    return Response.json({ error: invalidItem.error }, { status: 400 });
+  }
+  const buildableItems = validatedItems as Array<Exclude<ReturnType<typeof validateBuildableItem>, { error: string }>>;
+  const amount = buildableItems.reduce((sum, item) => sum + item.amount, 0);
 
   const pickupCode = createPickupCode("M");
-  const customizationLabels = [
-    medicinalSpice?.name,
-    heat ? `辛さ: ${heat.name}` : "",
-    numb ? `痺れ: ${numb.name}` : "",
-    specialFlavor ? `味変: ${specialFlavor.name}` : ""
-  ].filter(Boolean);
-  const sectionLabels = selectedSections
-    .filter((section) => section.items.length)
-    .map(({ section, items }) => `${section.title}: ${items.map((item) => item.name).join(", ")}`);
-  const detailLabel = [...customizationLabels, ...sectionLabels].join("\n");
+  const itemSummaries = buildableItems.map((item, index) => ({
+    name: `${menu.baseSoup.name}${buildableItems.length > 1 ? ` #${index + 1}` : ""}`,
+    detailLabel: item.detailLabel || "カスタマイズなし",
+    sectionLabel: item.sectionLabels.join("\n") || "トッピングなし"
+  }));
+  const detailLabel = itemSummaries.map((item, index) => `${index + 1}. ${item.name}\n${item.detailLabel}`).join("\n\n");
 
   const localOrder = await createCustomerOrder({
     brandId,
@@ -139,33 +183,41 @@ export async function POST(request: Request) {
       brand: "maamaa",
       store: publicStore.label,
       paymentAccountName: paymentAccount.accountName,
-      selections: selectedSections.map(({ section, items }) => ({
-        sectionId: section.id,
-        sectionTitle: section.title,
-        items
+      customer: {
+        name: completionSummary.name ?? body.name ?? "",
+        phone: completionSummary.phone ?? body.phone ?? "",
+        note: completionSummary.note ?? body.note ?? ""
+      },
+      items: buildableItems.map((item, index) => ({
+        itemIndex: index + 1,
+        selections: item.selectedSections.map(({ section, items }) => ({
+          sectionId: section.id,
+          sectionTitle: section.title,
+          items
+        }))
       }))
     },
-    drink: menu.baseSoup.name,
+    drink: buildableItems.length === 1 ? menu.baseSoup.name : itemSummaries.map((item) => item.name).join("\n"),
     size: detailLabel || "カスタマイズなし",
-    temperature: heat?.name ?? "",
-    sweetness: numb?.name ?? "",
-    ice: medicinalSpice?.name ?? "",
-    option: specialFlavor?.name ?? "",
-    toppings: sectionLabels.join("\n") || "トッピングなし",
-    items: [{
+    temperature: buildableItems.length === 1 ? buildableItems[0].heat?.name ?? "" : "商品ごと",
+    sweetness: buildableItems.length === 1 ? buildableItems[0].numb?.name ?? "" : "商品ごと",
+    ice: buildableItems.length === 1 ? buildableItems[0].medicinalSpice?.name ?? "" : "商品ごと",
+    option: buildableItems.length === 1 ? buildableItems[0].specialFlavorItems.map((item) => item.name).join(", ") : "商品ごと",
+    toppings: itemSummaries.map((item, index) => `${index + 1}. ${item.sectionLabel}`).join("\n\n") || "トッピングなし",
+    items: buildableItems.map((item) => ({
       menuCatalogItemId: menu.baseSoup.menuCatalogItemId,
       itemName: menu.baseSoup.name,
       sizeKey: "buildable",
-      sizeLabel: detailLabel || "カスタマイズなし",
-      temperature: heat?.name ?? "",
-      sweetness: numb?.name ?? "",
-      ice: medicinalSpice?.name ?? "",
-      optionKey: specialFlavor?.id ?? "",
-      optionLabel: specialFlavor?.name ?? "",
-      toppingKeys: [...optionItems, ...toppingItems].map((item) => item.id),
-      toppingLabels: [...optionItems, ...toppingItems].map((item) => item.name),
-      amount
-    }]
+      sizeLabel: item.detailLabel || "カスタマイズなし",
+      temperature: item.heat?.name ?? "",
+      sweetness: item.numb?.name ?? "",
+      ice: item.medicinalSpice?.name ?? "",
+      optionKey: item.specialFlavorItems.map((flavor) => flavor.id).join(","),
+      optionLabel: item.specialFlavorItems.map((flavor) => flavor.name).join(", "),
+      toppingKeys: [...item.optionItems, ...item.toppingItems].map((option) => option.id),
+      toppingLabels: [...item.optionItems, ...item.toppingItems].map((option) => option.name),
+      amount: item.amount
+    }))
   });
   if (!localOrder) return Response.json({ error: "Order could not be created" }, { status: 500 });
 
