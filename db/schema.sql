@@ -1113,6 +1113,7 @@ create table if not exists menu_options (
 create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,
   reservations_enabled boolean not null default true,
+  minimum_pickup_minutes integer,
   status_note text not null default '',
   temporary_status_until timestamptz,
   updated_by uuid references employees(id) on delete set null,
@@ -1121,6 +1122,7 @@ create table if not exists store_operations (
 );
 
 alter table store_operations add column if not exists temporary_status_until timestamptz;
+alter table store_operations add column if not exists minimum_pickup_minutes integer;
 
 create table if not exists menu_store_settings (
   id uuid primary key default gen_random_uuid(),

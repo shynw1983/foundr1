@@ -52,6 +52,12 @@ type StoreOrderStats = {
   storeBreakdown: Array<{ name: string; paidOrders: number; sales: number }>;
 };
 
+type StoreOperation = {
+  minimumPickupMinutes?: number | null;
+  reservationsEnabled: boolean;
+  statusNote: string;
+};
+
 const statusLabels: Record<string, string> = {
   new: "新規",
   preparing: "制作中",
@@ -94,6 +100,10 @@ export default function StoreOrdersPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
   const [statsDays, setStatsDays] = useState(1);
+  const [operation, setOperation] = useState<StoreOperation | null>(null);
+  const [minimumPickupDraft, setMinimumPickupDraft] = useState("");
+  const [operationSaving, setOperationSaving] = useState(false);
+  const [operationMessage, setOperationMessage] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
   const [selectedId, setSelectedId] = useState("");
@@ -106,6 +116,52 @@ export default function StoreOrdersPage() {
   const [soundReady, setSoundReady] = useState(false);
   const [error, setError] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  const loadOperation = async (storeId = selectedStoreId) => {
+    if (!storeId) {
+      setOperation(null);
+      setMinimumPickupDraft("");
+      return;
+    }
+    const params = new URLSearchParams({ storeId });
+    const response = await fetch(`/api/store/operations?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    const nextOperation = body.operation as StoreOperation | null;
+    setOperation(nextOperation);
+    setMinimumPickupDraft(
+      nextOperation?.minimumPickupMinutes === null || nextOperation?.minimumPickupMinutes === undefined
+        ? ""
+        : String(nextOperation.minimumPickupMinutes),
+    );
+  };
+
+  const saveMinimumPickupMinutes = async () => {
+    if (!selectedStoreId || !operation) return;
+    const rawMinutes = minimumPickupDraft.trim();
+    const minutes = rawMinutes === "" ? null : Math.max(0, Math.min(240, Math.round(Number(rawMinutes) || 0)));
+    setOperationSaving(true);
+    setOperationMessage("");
+    try {
+      const response = await fetch("/api/store/operations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: selectedStoreId,
+          reservationsEnabled: operation.reservationsEnabled,
+          statusNote: operation.statusNote,
+          minimumPickupMinutes: minutes
+        })
+      });
+      if (!response.ok) throw new Error("save failed");
+      await loadOperation(selectedStoreId);
+      setOperationMessage(minutes === null ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。");
+    } catch {
+      setOperationMessage("最短準備時間を保存できませんでした。");
+    } finally {
+      setOperationSaving(false);
+    }
+  };
 
   const ensureAudioReady = async () => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -216,6 +272,17 @@ export default function StoreOrdersPage() {
       window.clearInterval(timer);
     };
   }, [realtimeStatus, statsDays, selectedStoreId]);
+
+  useEffect(() => {
+    void loadOperation(selectedStoreId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
+
+  useEffect(() => {
+    if (!operationMessage) return;
+    const timer = window.setTimeout(() => setOperationMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [operationMessage]);
 
   useEffect(() => {
     let pusher: any;
@@ -410,6 +477,30 @@ export default function StoreOrdersPage() {
               <strong>{counters.ready}</strong>
             </article>
           </section>
+          {selectedStoreId && operation ? (
+            <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
+              <div>
+                <span>最短受け取り準備時間</span>
+                <small>空欄でブランド初期値</small>
+              </div>
+              <label>
+                <input
+                  inputMode="numeric"
+                  min={0}
+                  max={240}
+                  type="number"
+                  value={minimumPickupDraft}
+                  onChange={(event) => setMinimumPickupDraft(event.target.value)}
+                  placeholder="初期値"
+                />
+                分後
+              </label>
+              <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes()}>
+                {operationSaving ? "保存中..." : "保存"}
+              </button>
+              {operationMessage ? <p>{operationMessage}</p> : null}
+            </section>
+          ) : null}
           <div className="store-orders-toolbar">
             <h2>Web予約注文</h2>
             <button type="button" className="secondary-button" onClick={refresh}>

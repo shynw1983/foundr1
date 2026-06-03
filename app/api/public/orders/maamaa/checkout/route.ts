@@ -9,9 +9,15 @@ function compareDateTime(dateA: string, timeA: string, dateB: string, timeB: str
   return `${dateA}T${timeA}`.localeCompare(`${dateB}T${timeB}`);
 }
 
-function getTokyoMinimumPickup() {
+function normalizeMinimumPickupMinutes(value: unknown, fallback: number) {
+  const minutes = Math.round(Number(value));
+  if (!Number.isFinite(minutes)) return fallback;
+  return Math.max(0, Math.min(240, minutes));
+}
+
+function getTokyoMinimumPickup(leadMinutes: number) {
   const now = new Date();
-  const minimum = new Date(now.getTime() + 15 * 60 * 1000);
+  const minimum = new Date(now.getTime() + leadMinutes * 60 * 1000);
   const formatter = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -141,9 +147,10 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate) || !/^\d{2}:\d{2}$/.test(pickup)) {
     return Response.json({ error: "Invalid pickup time" }, { status: 400 });
   }
-  const minimumPickup = getTokyoMinimumPickup();
+  const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
+  const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
-    return Response.json({ error: "Pickup time must be at least 15 minutes from now" }, { status: 400 });
+    return Response.json({ error: `Pickup time must be at least ${minimumPickupMinutes} minutes from now` }, { status: 400 });
   }
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });

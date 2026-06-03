@@ -35,6 +35,7 @@ export type MaamaaCompatibleMenu = {
     statusNote: string;
     businessHours: unknown;
     reservationNote: string;
+    minimumPickupMinutes?: number | null;
   };
 };
 
@@ -225,6 +226,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         select
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",
+          store_operations.minimum_pickup_minutes as "minimumPickupMinutes",
           case
             when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
             else coalesce(store_operations.reservations_enabled, true)
@@ -264,7 +266,8 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         reservationsEnabled: true,
         statusNote: "",
         businessHours: {},
-        reservationNote: ""
+        reservationNote: "",
+        minimumPickupMinutes: null
       }
     }
   };

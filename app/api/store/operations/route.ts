@@ -9,8 +9,16 @@ export const dynamic = "force-dynamic";
 type StoreOperationPatch = {
   storeId?: string;
   reservationsEnabled?: boolean;
+  minimumPickupMinutes?: number;
   statusNote?: string;
 };
+
+function normalizeMinimumPickupMinutes(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const minutes = Math.round(Number(value));
+  if (!Number.isFinite(minutes)) return null;
+  return Math.max(0, Math.min(240, minutes));
+}
 
 export async function GET(request: Request) {
   const session = await requireOsSession();
@@ -30,6 +38,7 @@ export async function GET(request: Request) {
       stores.name,
       stores.business_hours as "businessHours",
       coalesce(stores.reservation_note, '') as "reservationNote",
+      store_operations.minimum_pickup_minutes as "minimumPickupMinutes",
       case
         when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
         else coalesce(store_operations.reservations_enabled, true)
@@ -47,6 +56,7 @@ export async function GET(request: Request) {
 
   const operation = rows[0] as (Record<string, unknown> & {
     businessHours?: unknown;
+    minimumPickupMinutes?: number | null;
     reservationsEnabled?: boolean;
     statusNote?: string;
     temporaryStatusUntil?: string | Date | null;
@@ -81,6 +91,8 @@ export async function PATCH(request: Request) {
   }
 
   const reservationsEnabled = body?.reservationsEnabled !== false;
+  const hasMinimumPickupMinutes = Object.prototype.hasOwnProperty.call(body ?? {}, "minimumPickupMinutes");
+  const minimumPickupMinutes = normalizeMinimumPickupMinutes(body?.minimumPickupMinutes);
   const statusNote = String(body?.statusNote ?? "").trim();
   const storeRows = await sql`
     select business_hours as "businessHours"
@@ -94,11 +106,15 @@ export async function PATCH(request: Request) {
     : null;
 
   await sql`
-    insert into store_operations (store_id, reservations_enabled, status_note, temporary_status_until, updated_by, updated_at)
-    values (${storeId}, ${reservationsEnabled}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
+    insert into store_operations (store_id, reservations_enabled, minimum_pickup_minutes, status_note, temporary_status_until, updated_by, updated_at)
+    values (${storeId}, ${reservationsEnabled}, ${minimumPickupMinutes}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
     on conflict (store_id)
     do update set
       reservations_enabled = excluded.reservations_enabled,
+      minimum_pickup_minutes = case
+        when ${hasMinimumPickupMinutes} then excluded.minimum_pickup_minutes
+        else store_operations.minimum_pickup_minutes
+      end,
       status_note = excluded.status_note,
       temporary_status_until = excluded.temporary_status_until,
       updated_by = excluded.updated_by,

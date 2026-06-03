@@ -4390,6 +4390,64 @@ body :where(
   margin-bottom: 14px;
 }
 
+.store-pickup-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+}
+
+.store-pickup-setting div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.store-pickup-setting span,
+.store-pickup-setting small,
+.store-pickup-setting p,
+.store-pickup-setting label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-pickup-setting span {
+  color: var(--ink);
+}
+
+.store-pickup-setting small,
+.store-pickup-setting p {
+  color: var(--muted);
+}
+
+.store-pickup-setting p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.store-pickup-setting label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.store-pickup-setting input {
+  width: 72px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  font-weight: 900;
+}
+
 .store-stats-heading {
   display: flex;
   align-items: center;
@@ -12005,6 +12063,15 @@ body :where(
 
   .store-orders-layout {
     grid-template-columns: 1fr;
+  }
+
+  .store-pickup-setting {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .store-pickup-setting .secondary-button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .store-nav-tabs {
