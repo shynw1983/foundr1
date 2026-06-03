@@ -10,7 +10,7 @@ const analyticsCards = [
   {
     title: "売上分析",
     description: "売上、入金見込み、チャネル、忙しさ、天気、取込状況を確認します。",
-    href: "/os/sales",
+    href: "/os/analytics/sales",
     icon: ChartColumn,
     status: "利用可能"
   },

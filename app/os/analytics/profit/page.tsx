@@ -7,7 +7,7 @@ const profitItems = [
   {
     title: "売上",
     description: "売上分析から、月別の売上、入金見込み、販売チャネルを参照します。",
-    href: "/os/sales",
+    href: "/os/analytics/sales",
     icon: ChartColumn,
     status: "接続済み"
   },

@@ -5,17 +5,11 @@ import {
   CalendarDays,
   ChartColumn,
   ClipboardList,
-  FileText,
-  Lightbulb,
+  LineChart,
   LogOut,
-  MessageSquareWarning,
-  PackageCheck,
-  Search,
   Settings,
-  Store,
-  Truck,
   Upload,
-  UserCog
+  WalletCards
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -154,17 +148,11 @@ type AiAnalysisState = {
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
-  { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
-  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
-  { label: "発注履歴", href: "/os/history", icon: FileText },
-  { label: "売上分析", href: "/os/sales", icon: ChartColumn },
-  { label: "商品マスタ", href: "/os/products", icon: Boxes },
-  { label: "店舗・ブランド", href: "/os/stores", icon: Store },
-  { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
-  { label: "発注先管理", href: "/os/suppliers", icon: Truck },
-  { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
-  { label: "商品比較", href: "/os/product-comparisons", icon: Search },
-  { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
+  { label: "経営分析", href: "/os/analytics", icon: LineChart },
+  { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
+  { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
+  { label: "原価分析", href: "/os/analytics/cost", icon: Boxes },
+  { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
 

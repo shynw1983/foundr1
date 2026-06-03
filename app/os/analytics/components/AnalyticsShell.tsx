@@ -17,7 +17,7 @@ import { UserBadge } from "../../components/UserBadge";
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "経営分析", href: "/os/analytics", icon: LineChart },
-  { label: "売上分析", href: "/os/sales", icon: ChartColumn },
+  { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
   { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
   { label: "原価分析", href: "/os/analytics/cost", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },

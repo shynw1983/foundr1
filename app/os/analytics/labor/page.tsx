@@ -21,7 +21,7 @@ const laborLinks = [
   {
     title: "売上分析と比較",
     description: "売上、人件費率、時間あたり売上を同じ月次軸で比較します。",
-    href: "/os/sales",
+    href: "/os/analytics/sales",
     icon: ChartColumn,
     status: "接続先"
   },
