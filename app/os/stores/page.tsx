@@ -24,6 +24,10 @@ type StoreItem = {
   id?: string;
   name: string;
   companyName?: string;
+  companyLegalName?: string;
+  invoiceRegistrationNumber?: string;
+  companyAddress?: string;
+  companyPhone?: string;
   owner: string;
   brands: string[];
   businessHours?: unknown;
@@ -63,7 +67,7 @@ type BrandItem = {
   type: string;
 };
 
-type StoreEditTab = "basic" | "hours" | "sales" | "payment" | "payroll";
+type StoreEditTab = "basic" | "hours" | "sales" | "payment" | "receipt" | "payroll";
 
 function salesSourceKey(platform: string, brandName = "") {
   return `${platform}::${brandName}`;
@@ -121,6 +125,10 @@ export default function StoresPage() {
   const [editingBusinessHours, setEditingBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
   const [editingStoreName, setEditingStoreName] = useState("");
   const [editingCompanyName, setEditingCompanyName] = useState("");
+  const [editingCompanyLegalName, setEditingCompanyLegalName] = useState("");
+  const [editingInvoiceRegistrationNumber, setEditingInvoiceRegistrationNumber] = useState("");
+  const [editingCompanyAddress, setEditingCompanyAddress] = useState("");
+  const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
   const [editingOwner, setEditingOwner] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
   const [editingWeatherLocationName, setEditingWeatherLocationName] = useState("");
@@ -326,6 +334,10 @@ export default function StoresPage() {
     const formData = new FormData(form);
     const nextName = String(formData.get("name") ?? "").trim();
     const companyName = String(formData.get("companyName") ?? "").trim();
+    const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+    const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
+    const companyAddress = String(formData.get("companyAddress") ?? "").trim();
+    const companyPhone = String(formData.get("companyPhone") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
     const weatherLocationName = String(formData.get("weatherLocationName") ?? editingWeatherLocationName).trim();
@@ -367,6 +379,10 @@ export default function StoresPage() {
         ...item,
         name: nextName,
         companyName,
+        companyLegalName,
+        invoiceRegistrationNumber,
+        companyAddress,
+        companyPhone,
         owner,
         brands: editingStoreBrands,
         businessHours: editingBusinessHours,
@@ -403,6 +419,10 @@ export default function StoresPage() {
     setEditingBusinessHours(normalizeBusinessHours(store.businessHours));
     setEditingStoreName(store.name);
     setEditingCompanyName(store.companyName ?? "");
+    setEditingCompanyLegalName(store.companyLegalName ?? "");
+    setEditingInvoiceRegistrationNumber(store.invoiceRegistrationNumber ?? "");
+    setEditingCompanyAddress(store.companyAddress ?? "");
+    setEditingCompanyPhone(store.companyPhone ?? "");
     setEditingOwner(store.owner);
     setEditingReservationNote(store.reservationNote ?? "");
     setEditingWeatherLocationName(store.weatherLocationName ?? "");
@@ -512,6 +532,7 @@ export default function StoresPage() {
                     <small>{formatStoreBrands(store.brands)}</small>
                     <small>売上源: {formatStoreSalesSources(store)}</small>
                     <small>決済: {store.paymentAccount?.isActive ? `KOMOJU / ${store.paymentAccount.accountName || "アカウント名未設定"}` : "未設定"}</small>
+                    <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     <small>天気: {store.weatherLocationName || (store.weatherLatitude && store.weatherLongitude ? `${store.weatherLatitude}, ${store.weatherLongitude}` : "福岡市（既定）")}</small>
@@ -648,6 +669,7 @@ export default function StoresPage() {
               <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
               <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
+              <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>領収書</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
             </div>
             <div className="edit-fields">
@@ -709,6 +731,10 @@ export default function StoresPage() {
                 <>
                   <input type="hidden" name="name" value={editingStoreName} />
                   <input type="hidden" name="companyName" value={editingCompanyName} />
+                  <input type="hidden" name="companyLegalName" value={editingCompanyLegalName} />
+                  <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
+                  <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
+                  <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
                   <input type="hidden" name="owner" value={editingOwner} />
                   <input type="hidden" name="reservationNote" value={editingReservationNote} />
                   <input type="hidden" name="weatherLocationName" value={editingWeatherLocationName} />
@@ -767,6 +793,37 @@ export default function StoresPage() {
                   </div>
                 </div>
               ) : null}
+              {editingStoreTab === "receipt" ? (
+                <div className="store-payroll-settings">
+                  <div className="store-payroll-summary">
+                    <strong>領収書発行情報</strong>
+                    <p>前台の取货号画面からダウンロードされる PDF 領収書に表示する会社情報です。この店舗に紐づく会社情報として保存されます。</p>
+                  </div>
+                  <label>
+                    <span>宛名に表示する会社名</span>
+                    <input name="companyLegalName" value={editingCompanyLegalName} onChange={(event) => setEditingCompanyLegalName(event.target.value)} placeholder="例: 株式会社丸九" />
+                  </label>
+                  <label>
+                    <span>インボイス登録番号</span>
+                    <input name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} onChange={(event) => setEditingInvoiceRegistrationNumber(event.target.value)} placeholder="例: T1234567890123" />
+                  </label>
+                  <label>
+                    <span>会社住所</span>
+                    <input name="companyAddress" value={editingCompanyAddress} onChange={(event) => setEditingCompanyAddress(event.target.value)} placeholder="例: 福岡県福岡市..." />
+                  </label>
+                  <label>
+                    <span>会社電話番号</span>
+                    <input name="companyPhone" value={editingCompanyPhone} onChange={(event) => setEditingCompanyPhone(event.target.value)} placeholder="例: 092-000-0000" />
+                  </label>
+                </div>
+              ) : (
+                <>
+                  <input type="hidden" name="companyLegalName" value={editingCompanyLegalName} />
+                  <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
+                  <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
+                  <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
+                </>
+              )}
               {editingStoreTab === "payroll" ? (
                 <div className="store-payroll-settings">
                   <div className="store-payroll-summary">

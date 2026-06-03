@@ -17,15 +17,44 @@ async function normalizeStoreBrands(brandNames: string[]) {
   return Array.from(new Set(brandNames.filter((brandName) => brandName && brandName !== "共通")));
 }
 
-async function resolveCompanyId(companyName: string) {
-  const name = companyName.trim();
-  if (!name) return null;
+async function resolveCompanyId(input: {
+  name: string;
+  legalName?: string;
+  invoiceRegistrationNumber?: string;
+  address?: string;
+  phone?: string;
+}) {
+  const companyName = input.name.trim();
+  const legalName = String(input.legalName ?? "").trim();
+  const invoiceRegistrationNumber = String(input.invoiceRegistrationNumber ?? "").trim();
+  const address = String(input.address ?? "").trim();
+  const phone = String(input.phone ?? "").trim();
+  if (!companyName) return null;
 
   const rows = await sql`
-    insert into companies (name, updated_at)
-    values (${name}, now())
+    insert into companies (
+      name,
+      legal_name,
+      invoice_registration_number,
+      address,
+      phone,
+      updated_at
+    )
+    values (
+      ${companyName},
+      ${legalName || null},
+      ${invoiceRegistrationNumber},
+      ${address},
+      ${phone},
+      now()
+    )
     on conflict (name)
-    do update set updated_at = now()
+    do update set
+      legal_name = coalesce(nullif(${legalName}, ''), companies.legal_name),
+      invoice_registration_number = ${invoiceRegistrationNumber},
+      address = ${address},
+      phone = ${phone},
+      updated_at = now()
     returning id
   `;
 
@@ -185,6 +214,10 @@ export async function POST(request: Request) {
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
   const companyName = String(formData.get("companyName") ?? "").trim();
+  const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+  const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
+  const companyAddress = String(formData.get("companyAddress") ?? "").trim();
+  const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
@@ -194,7 +227,13 @@ export async function POST(request: Request) {
   const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
   const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
-  const companyId = await resolveCompanyId(companyName);
+  const companyId = await resolveCompanyId({
+    name: companyName,
+    legalName: companyLegalName,
+    invoiceRegistrationNumber,
+    address: companyAddress,
+    phone: companyPhone
+  });
 
   if (!name) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
@@ -274,6 +313,10 @@ export async function PUT(request: Request) {
   const nextName = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
   const companyName = String(formData.get("companyName") ?? "").trim();
+  const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+  const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
+  const companyAddress = String(formData.get("companyAddress") ?? "").trim();
+  const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
@@ -283,7 +326,13 @@ export async function PUT(request: Request) {
   const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
   const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
-  const companyId = await resolveCompanyId(companyName);
+  const companyId = await resolveCompanyId({
+    name: companyName,
+    legalName: companyLegalName,
+    invoiceRegistrationNumber,
+    address: companyAddress,
+    phone: companyPhone
+  });
 
   if (!currentName || !nextName) {
     return Response.json({ error: "店舗名を入力してください。" }, { status: 400 });
