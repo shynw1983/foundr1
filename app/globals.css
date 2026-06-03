@@ -12636,6 +12636,33 @@ body :where(
   gap: var(--workload-inner-gap);
 }
 
+.sales-analysis-settings-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sales-analysis-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sales-analysis-settings-summary::after {
+  content: "開く";
+  align-self: center;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sales-analysis-settings-panel[open] .sales-analysis-settings-summary::after {
+  content: "閉じる";
+}
+
 .workload-settings-content {
   display: grid;
   gap: var(--workload-inner-gap);

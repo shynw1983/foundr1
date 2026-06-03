@@ -485,6 +485,7 @@ export default function SalesPage() {
   const [filesBySource, setFilesBySource] = useState<Record<string, File | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [settingsDraft, setSettingsDraft] = useState<SalesAnalysisSettings>(defaultSalesAnalysisSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [uploadingSourceId, setUploadingSourceId] = useState("");
   const [message, setMessage] = useState("");
@@ -576,6 +577,7 @@ export default function SalesPage() {
     });
     if (response.ok) {
       await loadSales(month, selectedStoreId, range);
+      setSettingsOpen(false);
     } else {
       const body = await response.json().catch(() => ({})) as { error?: string };
       setMessage(body.error ?? "売上分析設定を保存できませんでした。");
@@ -744,14 +746,18 @@ export default function SalesPage() {
           </article>
         </section>
 
-        <section className="panel workload-settings-panel">
-          <div className="panel-title">
+        <details
+          className="panel workload-settings-panel sales-analysis-settings-panel"
+          open={settingsOpen}
+          onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
+        >
+          <summary className="sales-analysis-settings-summary">
             <Settings size={18} />
             <div>
               <h3>売上分析の判定基準</h3>
               <p>月視図の「忙しい」「空き」は、従業員負荷とは別に、在店時間で割った売上・注文数が本期平均の何倍かで判定します。</p>
             </div>
-          </div>
+          </summary>
           <div className="workload-settings-content">
             <div className="workload-settings-section">
               <h4>本期平均との比較</h4>
@@ -792,7 +798,7 @@ export default function SalesPage() {
               </button>
             </div>
           </div>
-        </section>
+        </details>
 
         <section className="panel sales-ai-panel">
           <div className="sales-ai-heading">
