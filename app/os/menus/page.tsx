@@ -943,6 +943,7 @@ export default function MenuAdminPage() {
                           {group.menuCatalogItemId ? `商品専用: ${getMenuItemName(filteredItems, group.menuCatalogItemId) || "未設定"}` : "ブランド共通"}
                           {" / "}
                           {group.groupKey}
+                          {!group.isActive ? " / 停止中" : ""}
                         </span>
                       </button>
                     ))}
@@ -993,6 +994,10 @@ export default function MenuAdminPage() {
                         <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
                         <span>手順に影響する</span>
                       </label>
+                      <label className="checkbox-group menu-inline-check">
+                        <input type="checkbox" checked={groupDraft.isActive} onChange={(event) => setGroupDraft({ ...groupDraft, isActive: event.target.checked })} />
+                        <span>メニューに表示する</span>
+                      </label>
                       <button className="primary-button" type="button" disabled={savingKind === "group"} onClick={() => void save("group", { ...groupDraft, brandId: groupDraft.brandId || activeBrandId })}>
                         <Save size={16} />
                         {savingKind === "group" ? "保存中" : "グループを保存"}
@@ -1024,6 +1029,7 @@ export default function MenuAdminPage() {
                             key={option.id}
                           >
                             {option.name}
+                            {!option.isActive ? " / 停止中" : ""}
                           </button>
                         ))}
                         {activeOptionGroup && !activeGroupOptions.length ? <p className="empty-state">このグループには選択肢がありません。</p> : null}
@@ -1050,6 +1056,10 @@ export default function MenuAdminPage() {
                       <label className="checkbox-group menu-inline-check">
                         <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
                         <span>手順に影響する</span>
+                      </label>
+                      <label className="checkbox-group menu-inline-check">
+                        <input type="checkbox" checked={optionDraft.isActive} onChange={(event) => setOptionDraft({ ...optionDraft, isActive: event.target.checked })} />
+                        <span>メニューに表示する</span>
                       </label>
                       <div className="row-actions">
                         {optionDraft.id ? (
