@@ -209,6 +209,8 @@ export async function POST(request: Request) {
   const localOrder = await createCustomerOrder({
     brandId,
     storeId: publicStore.osStoreId,
+    orderSource: "nanacha_web",
+    paymentProvider: "square",
     pickupCode,
     pickupDate,
     pickupTime: pickup,
@@ -289,7 +291,11 @@ export async function POST(request: Request) {
     return Response.json({ code: "SQUARE_CHECKOUT_FAILED", error: "Square checkout could not be created", details: squareBody.errors || squareBody }, { status: squareResponse.status });
   }
 
-  await updateCustomerOrder(localOrder.id, { squareOrderId: squareBody.payment_link?.order_id || "" });
+  await updateCustomerOrder(localOrder.id, {
+    paymentProvider: "square",
+    paymentSessionId: squareBody.payment_link?.order_id || "",
+    squareOrderId: squareBody.payment_link?.order_id || ""
+  });
   return Response.json({
     checkoutUrl: squareBody.payment_link?.url,
     orderId: squareBody.payment_link?.order_id,

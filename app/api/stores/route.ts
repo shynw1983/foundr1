@@ -99,6 +99,84 @@ async function replaceStoreSalesSources(storeId: string, formData: FormData, bra
   }
 }
 
+function parsePaymentTypes(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+async function replaceStorePaymentAccount(storeId: string, formData: FormData) {
+  const enabled = formData.get("komojuEnabled") === "on";
+  if (!enabled) {
+    await sql`
+      update store_payment_accounts
+      set is_active = false, updated_at = now()
+      where store_id = ${storeId}
+        and provider = 'komoju'
+    `;
+    return;
+  }
+
+  const accountName = String(formData.get("komojuAccountName") ?? "").trim();
+  const secretKey = String(formData.get("komojuSecretKey") ?? "").trim();
+  const secretKeyEnvName = String(formData.get("komojuSecretKeyEnvName") ?? "").trim();
+  const webhookSecret = String(formData.get("komojuWebhookSecret") ?? "").trim();
+  const webhookSecretEnvName = String(formData.get("komojuWebhookSecretEnvName") ?? "").trim();
+  const paymentTypes = parsePaymentTypes(String(formData.get("komojuPaymentTypes") ?? ""));
+  const paymentTypesEnvName = String(formData.get("komojuPaymentTypesEnvName") ?? "").trim();
+
+  const existingRows = await sql`
+    select id::text
+    from store_payment_accounts
+    where store_id = ${storeId}
+      and provider = 'komoju'
+    order by updated_at desc
+    limit 1
+  `;
+  const existingId = existingRows[0]?.id;
+
+  if (existingId) {
+    await sql`
+      update store_payment_accounts
+      set
+        account_name = ${accountName},
+        secret_key = case when ${secretKey} <> '' then ${secretKey} else secret_key end,
+        secret_key_env_name = ${secretKeyEnvName},
+        webhook_secret = case when ${webhookSecret} <> '' then ${webhookSecret} else webhook_secret end,
+        webhook_secret_env_name = ${webhookSecretEnvName},
+        payment_types = ${paymentTypes},
+        payment_types_env_name = ${paymentTypesEnvName},
+        is_active = true,
+        updated_at = now()
+      where id = ${existingId}
+    `;
+    return;
+  }
+
+  await sql`
+    insert into store_payment_accounts (
+      store_id,
+      provider,
+      account_name,
+      secret_key,
+      secret_key_env_name,
+      webhook_secret,
+      webhook_secret_env_name,
+      payment_types,
+      payment_types_env_name
+    )
+    values (
+      ${storeId},
+      'komoju',
+      ${accountName},
+      ${secretKey},
+      ${secretKeyEnvName},
+      ${webhookSecret},
+      ${webhookSecretEnvName},
+      ${paymentTypes},
+      ${paymentTypesEnvName}
+    )
+  `;
+}
+
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -182,6 +260,7 @@ export async function POST(request: Request) {
   }
 
   await replaceStoreSalesSources(String(storeId), formData, brandNames);
+  await replaceStorePaymentAccount(String(storeId), formData);
 
   return Response.json({ ok: true });
 }
@@ -261,6 +340,7 @@ export async function PUT(request: Request) {
   }
 
   await replaceStoreSalesSources(String(storeId), formData, brandNames);
+  await replaceStorePaymentAccount(String(storeId), formData);
 
   return Response.json({ ok: true });
 }

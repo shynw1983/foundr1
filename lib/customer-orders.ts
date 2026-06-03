@@ -9,6 +9,11 @@ export type CustomerOrderRow = {
   pickupCode: string;
   status: string;
   paymentStatus: string;
+  paymentProvider: string;
+  paymentAccountId: string;
+  paymentSessionId: string;
+  paymentId: string;
+  paymentReceiptUrl: string;
   squareOrderId: string;
   squarePaymentId: string;
   squareReceiptUrl: string;
@@ -47,6 +52,19 @@ export function createPickupCode(prefix = "N") {
   return `${prefix}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
 }
 
+function pickupCodeCandidates(pickupCode: string) {
+  const code = String(pickupCode ?? "").trim();
+  if (!code) return [];
+  const candidates = new Set([code]);
+  const withoutKnownPrefix = code.replace(/^[A-Z]-/i, "");
+  if (withoutKnownPrefix) {
+    candidates.add(withoutKnownPrefix);
+    candidates.add(`N-${withoutKnownPrefix}`);
+    candidates.add(`M-${withoutKnownPrefix}`);
+  }
+  return Array.from(candidates);
+}
+
 export function toPublicCustomerOrder(order: CustomerOrderRow) {
   return {
     orderId: order.id,
@@ -72,6 +90,9 @@ export function toPublicCustomerOrder(order: CustomerOrderRow) {
 export async function createCustomerOrder(input: {
   brandId: string;
   storeId: string;
+  orderSource?: string;
+  paymentProvider?: string;
+  paymentAccountId?: string;
   pickupCode: string;
   pickupDate: string;
   pickupTime: string;
@@ -91,6 +112,9 @@ export async function createCustomerOrder(input: {
     insert into store_customer_orders (
       brand_id,
       store_id,
+      order_source,
+      payment_provider,
+      payment_account_id,
       pickup_code,
       pickup_date,
       pickup_time,
@@ -108,6 +132,9 @@ export async function createCustomerOrder(input: {
     values (
       ${input.brandId},
       ${input.storeId},
+      ${input.orderSource ?? "nanacha_web"},
+      ${input.paymentProvider ?? "square"},
+      ${input.paymentAccountId || null},
       ${input.pickupCode},
       ${input.pickupDate},
       ${input.pickupTime},
@@ -171,6 +198,12 @@ export async function createCustomerOrder(input: {
 export async function updateCustomerOrder(orderId: string, patch: Partial<{
   status: string;
   paymentStatus: string;
+  paymentProvider: string;
+  paymentAccountId: string;
+  paymentSessionId: string;
+  paymentId: string;
+  paymentReceiptUrl: string;
+  paymentUpdatedAt: string;
   squareOrderId: string;
   squarePaymentId: string;
   squareReceiptUrl: string;
@@ -182,6 +215,12 @@ export async function updateCustomerOrder(orderId: string, patch: Partial<{
     set
       status = coalesce(${patch.status ?? null}, status),
       payment_status = coalesce(${patch.paymentStatus ?? null}, payment_status),
+      payment_provider = coalesce(${patch.paymentProvider ?? null}, payment_provider),
+      payment_account_id = coalesce(nullif(${patch.paymentAccountId ?? null}, '')::uuid, payment_account_id),
+      payment_session_id = coalesce(${patch.paymentSessionId ?? null}, payment_session_id),
+      payment_id = coalesce(${patch.paymentId ?? null}, payment_id),
+      payment_receipt_url = coalesce(${patch.paymentReceiptUrl ?? null}, payment_receipt_url),
+      payment_updated_at = coalesce(${patch.paymentUpdatedAt ?? null}::timestamptz, payment_updated_at),
       square_order_id = coalesce(${patch.squareOrderId ?? null}, square_order_id),
       square_payment_id = coalesce(${patch.squarePaymentId ?? null}, square_payment_id),
       square_receipt_url = coalesce(${patch.squareReceiptUrl ?? null}, square_receipt_url),
@@ -205,6 +244,11 @@ export async function findCustomerOrderById(orderId: string) {
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      store_customer_orders.payment_provider as "paymentProvider",
+      coalesce(store_customer_orders.payment_account_id::text, '') as "paymentAccountId",
+      coalesce(store_customer_orders.payment_session_id, '') as "paymentSessionId",
+      coalesce(store_customer_orders.payment_id, '') as "paymentId",
+      coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "paymentReceiptUrl",
       coalesce(store_customer_orders.square_order_id, '') as "squareOrderId",
       coalesce(store_customer_orders.square_payment_id, '') as "squarePaymentId",
       coalesce(store_customer_orders.square_receipt_url, '') as "squareReceiptUrl",
@@ -235,6 +279,34 @@ export async function findCustomerOrderBySquareOrderId(squareOrderId: string) {
     select id::text
     from store_customer_orders
     where square_order_id = ${squareOrderId}
+      or (payment_provider = 'square' and payment_session_id = ${squareOrderId})
+    limit 1
+  `;
+  return rows[0]?.id ? findCustomerOrderById(rows[0].id as string) : null;
+}
+
+export async function findCustomerOrderByPaymentReference(input: {
+  provider: string;
+  sessionId?: string | null;
+  paymentId?: string | null;
+  orderId?: string | null;
+}) {
+  const provider = String(input.provider ?? "").trim();
+  const sessionId = String(input.sessionId ?? "").trim();
+  const paymentId = String(input.paymentId ?? "").trim();
+  const orderId = String(input.orderId ?? "").trim();
+  if (!provider || (!sessionId && !paymentId && !orderId)) return null;
+
+  const rows = await sql`
+    select id::text
+    from store_customer_orders
+    where payment_provider = ${provider}
+      and (
+        (${sessionId} <> '' and payment_session_id = ${sessionId})
+        or (${paymentId} <> '' and payment_id = ${paymentId})
+        or (${orderId} <> '' and id::text = ${orderId})
+      )
+    order by updated_at desc
     limit 1
   `;
   return rows[0]?.id ? findCustomerOrderById(rows[0].id as string) : null;
@@ -246,12 +318,13 @@ export async function findPublicCustomerOrder(input: { orderId?: string | null; 
   const pickupDate = String(input.pickupDate ?? "").trim();
   if (orderId) return findCustomerOrderById(orderId);
   if (!pickupCode) return null;
+  const candidates = pickupCodeCandidates(pickupCode);
 
   const rows = pickupDate
     ? await sql`
         select id::text
         from store_customer_orders
-        where pickup_code in (${pickupCode}, ${pickupCode.startsWith("N-") ? pickupCode.slice(2) : `N-${pickupCode}`})
+        where pickup_code = any(${candidates})
           and pickup_date = ${pickupDate}
         order by created_at desc
         limit 1
@@ -259,7 +332,7 @@ export async function findPublicCustomerOrder(input: { orderId?: string | null; 
     : await sql`
         select id::text
         from store_customer_orders
-        where pickup_code in (${pickupCode}, ${pickupCode.startsWith("N-") ? pickupCode.slice(2) : `N-${pickupCode}`})
+        where pickup_code = any(${candidates})
         order by created_at desc
         limit 1
       `;

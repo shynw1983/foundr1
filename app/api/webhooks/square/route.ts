@@ -44,6 +44,11 @@ export async function POST(request: Request) {
     const updatedOrder = await updateCustomerOrder(order.id, {
       status: order.status === "pending_payment" ? "new" : order.status,
       paymentStatus: "paid",
+      paymentProvider: "square",
+      paymentSessionId: squareOrderId,
+      paymentId: payment.id || "",
+      paymentReceiptUrl: payment.receipt_url || "",
+      paymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString(),
       squarePaymentId: payment.id || "",
       squareReceiptUrl: payment.receipt_url || "",
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString(),
@@ -54,6 +59,11 @@ export async function POST(request: Request) {
     const updatedOrder = await updateCustomerOrder(order.id, {
       status: "payment_failed",
       paymentStatus: String(payment.status).toLowerCase(),
+      paymentProvider: "square",
+      paymentSessionId: squareOrderId,
+      paymentId: payment.id || "",
+      paymentReceiptUrl: payment.receipt_url || "",
+      paymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString(),
       squarePaymentId: payment.id || "",
       squareReceiptUrl: payment.receipt_url || "",
       squarePaymentUpdatedAt: payment.updated_at || payment.created_at || new Date().toISOString()

@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       store_customer_orders.option_text as "option",
       store_customer_orders.toppings,
       store_customer_orders.created_at as "createdAt",
-      coalesce(store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
+      coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
     from store_customer_orders
     left join stores on stores.id = store_customer_orders.store_id
     where (${access.allStores} or store_customer_orders.store_id::text = any(${access.storeIds}))

@@ -60,6 +60,27 @@ create table if not exists store_brands (
   primary key (store_id, brand_id)
 );
 
+create table if not exists store_payment_accounts (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  provider text not null default 'komoju',
+  account_name text not null default '',
+  secret_key text not null default '',
+  secret_key_env_name text not null default '',
+  webhook_secret text not null default '',
+  webhook_secret_env_name text not null default '',
+  payment_types text[] not null default '{}',
+  payment_types_env_name text not null default '',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_store_payment_accounts_store_provider
+  on store_payment_accounts(store_id, provider, is_active);
+
+alter table store_payment_accounts add column if not exists payment_types_env_name text not null default '';
+
 create table if not exists employees (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -199,6 +220,19 @@ alter table employee_work_stores add column if not exists apply_resident_tax boo
 alter table employee_work_stores add column if not exists resident_tax_year integer;
 alter table employee_work_stores add column if not exists resident_tax_june_amount numeric(12, 2);
 alter table employee_work_stores add column if not exists resident_tax_monthly_amount numeric(12, 2);
+
+create table if not exists payroll_statutory_alert_dismissals (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  alert_key text not null,
+  target_year integer not null,
+  dismissed_by uuid references employees(id) on delete set null,
+  dismissed_at timestamptz not null default now(),
+  unique (store_id, alert_key, target_year)
+);
+
+create index if not exists payroll_statutory_alert_dismissals_lookup_idx
+  on payroll_statutory_alert_dismissals(alert_key, target_year, store_id);
 
 insert into employee_work_stores (employee_id, store_id)
 select distinct employee_id, store_id
@@ -1126,6 +1160,12 @@ create table if not exists store_customer_orders (
   pickup_code text not null,
   status text not null default 'pending_payment',
   payment_status text not null default 'pending',
+  payment_provider text not null default 'square',
+  payment_account_id uuid references store_payment_accounts(id) on delete set null,
+  payment_session_id text,
+  payment_id text,
+  payment_receipt_url text,
+  payment_updated_at timestamptz,
   square_order_id text,
   square_payment_id text,
   square_receipt_url text,
@@ -1155,6 +1195,12 @@ alter table store_customer_orders add column if not exists preparing_at timestam
 alter table store_customer_orders add column if not exists ready_at timestamptz;
 alter table store_customer_orders add column if not exists completed_at timestamptz;
 alter table store_customer_orders add column if not exists cancelled_at timestamptz;
+alter table store_customer_orders add column if not exists payment_provider text not null default 'square';
+alter table store_customer_orders add column if not exists payment_account_id uuid references store_payment_accounts(id) on delete set null;
+alter table store_customer_orders add column if not exists payment_session_id text;
+alter table store_customer_orders add column if not exists payment_id text;
+alter table store_customer_orders add column if not exists payment_receipt_url text;
+alter table store_customer_orders add column if not exists payment_updated_at timestamptz;
 
 create table if not exists store_customer_order_items (
   id uuid primary key default gen_random_uuid(),
@@ -1524,6 +1570,9 @@ create index if not exists idx_stores_company_id on stores(company_id);
 create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);
 create index if not exists idx_store_customer_orders_pickup on store_customer_orders(pickup_code, pickup_date);
 create index if not exists idx_store_customer_orders_square_order on store_customer_orders(square_order_id);
+create index if not exists idx_store_customer_orders_payment_account on store_customer_orders(payment_account_id, created_at desc);
+create index if not exists idx_store_customer_orders_payment_session on store_customer_orders(payment_provider, payment_session_id);
+create index if not exists idx_store_customer_orders_payment_id on store_customer_orders(payment_provider, payment_id);
 create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
 create index if not exists idx_sales_orders_store_channel_paid on sales_orders(store_id, channel, paid_at desc);
 create index if not exists idx_sales_orders_ordered_at on sales_orders(ordered_at desc);

@@ -134,6 +134,25 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             from store_sales_sources
             where store_sales_sources.store_id = stores.id
           ), '[]'::jsonb) as "salesSources",
+          (
+            select jsonb_build_object(
+              'provider', store_payment_accounts.provider,
+              'accountName', store_payment_accounts.account_name,
+              'secretKeyEnvName', store_payment_accounts.secret_key_env_name,
+              'hasSecretKey', store_payment_accounts.secret_key <> '' or store_payment_accounts.secret_key_env_name <> '',
+              'webhookSecretEnvName', store_payment_accounts.webhook_secret_env_name,
+              'hasWebhookSecret', store_payment_accounts.webhook_secret <> '' or store_payment_accounts.webhook_secret_env_name <> '',
+              'paymentTypes', store_payment_accounts.payment_types,
+              'paymentTypesEnvName', store_payment_accounts.payment_types_env_name,
+              'isActive', store_payment_accounts.is_active
+            )
+            from store_payment_accounts
+            where store_payment_accounts.store_id = stores.id
+              and store_payment_accounts.provider = 'komoju'
+              and store_payment_accounts.is_active = true
+            order by store_payment_accounts.updated_at desc
+            limit 1
+          ) as "paymentAccount",
           coalesce(array_agg(brands.name order by brands.name) filter (where brands.name is not null and brands.name <> '共通'), '{}') as brands
         from stores
         left join store_brands on store_brands.store_id = stores.id

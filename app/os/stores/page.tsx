@@ -35,6 +35,7 @@ type StoreItem = {
   weatherLatitude?: number | null;
   weatherLongitude?: number | null;
   salesSources?: SalesSourceItem[];
+  paymentAccount?: PaymentAccountItem | null;
 };
 
 type SalesSourceItem = {
@@ -45,12 +46,24 @@ type SalesSourceItem = {
   isEnabled: boolean;
 };
 
+type PaymentAccountItem = {
+  provider: string;
+  accountName: string;
+  secretKeyEnvName: string;
+  hasSecretKey: boolean;
+  webhookSecretEnvName: string;
+  hasWebhookSecret: boolean;
+  paymentTypes: string[];
+  paymentTypesEnvName: string;
+  isActive: boolean;
+};
+
 type BrandItem = {
   name: string;
   type: string;
 };
 
-type StoreEditTab = "basic" | "hours" | "sales" | "payroll";
+type StoreEditTab = "basic" | "hours" | "sales" | "payment" | "payroll";
 
 function salesSourceKey(platform: string, brandName = "") {
   return `${platform}::${brandName}`;
@@ -119,6 +132,12 @@ export default function StoresPage() {
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
   const [selectedSalesSourceKeys, setSelectedSalesSourceKeys] = useState<string[]>([salesSourceKey("smaregi")]);
   const [editingSalesSourceKeys, setEditingSalesSourceKeys] = useState<string[]>([]);
+  const [editingKomojuEnabled, setEditingKomojuEnabled] = useState(false);
+  const [editingKomojuAccountName, setEditingKomojuAccountName] = useState("");
+  const [editingKomojuSecretKeyEnvName, setEditingKomojuSecretKeyEnvName] = useState("");
+  const [editingKomojuWebhookSecretEnvName, setEditingKomojuWebhookSecretEnvName] = useState("");
+  const [editingKomojuPaymentTypesEnvName, setEditingKomojuPaymentTypesEnvName] = useState("");
+  const [editingKomojuPaymentTypes, setEditingKomojuPaymentTypes] = useState("");
 
   async function loadData() {
     const response = await fetch("/api/dashboard");
@@ -325,6 +344,12 @@ export default function StoresPage() {
       const [platform, brandName = ""] = key.split("::");
       formData.set(salesSourceFormField(platform, brandName), "on");
     });
+    if (editingKomojuEnabled) formData.set("komojuEnabled", "on");
+    formData.set("komojuAccountName", editingKomojuAccountName);
+    formData.set("komojuSecretKeyEnvName", editingKomojuSecretKeyEnvName);
+    formData.set("komojuWebhookSecretEnvName", editingKomojuWebhookSecretEnvName);
+    formData.set("komojuPaymentTypesEnvName", editingKomojuPaymentTypesEnvName);
+    formData.set("komojuPaymentTypes", editingKomojuPaymentTypes);
 
     const response = await fetch("/api/stores", {
       method: "PUT",
@@ -357,6 +382,12 @@ export default function StoresPage() {
     setEditingStore(null);
     setEditingStoreBrands([]);
     setEditingSalesSourceKeys([]);
+    setEditingKomojuEnabled(false);
+    setEditingKomojuAccountName("");
+    setEditingKomojuSecretKeyEnvName("");
+    setEditingKomojuWebhookSecretEnvName("");
+    setEditingKomojuPaymentTypesEnvName("");
+    setEditingKomojuPaymentTypes("");
     setEditingReservationNote("");
     setEditingWeatherLocationName("");
     setEditingWeatherLatitude("");
@@ -382,6 +413,12 @@ export default function StoresPage() {
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
     setEditingSalesSourceKeys(Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => salesSourceKey(source.platform, source.brandName)))));
+    setEditingKomojuEnabled(store.paymentAccount?.isActive === true);
+    setEditingKomojuAccountName(store.paymentAccount?.accountName ?? "");
+    setEditingKomojuSecretKeyEnvName(store.paymentAccount?.secretKeyEnvName ?? "");
+    setEditingKomojuWebhookSecretEnvName(store.paymentAccount?.webhookSecretEnvName ?? "");
+    setEditingKomojuPaymentTypesEnvName(store.paymentAccount?.paymentTypesEnvName ?? "");
+    setEditingKomojuPaymentTypes((store.paymentAccount?.paymentTypes ?? []).join(","));
   }
 
   function toggleBrandSelection(
@@ -474,6 +511,7 @@ export default function StoresPage() {
                     <p>{store.companyName || "所属会社未設定"} / {store.owner || "担当者未設定"}</p>
                     <small>{formatStoreBrands(store.brands)}</small>
                     <small>売上源: {formatStoreSalesSources(store)}</small>
+                    <small>決済: {store.paymentAccount?.isActive ? `KOMOJU / ${store.paymentAccount.accountName || "アカウント名未設定"}` : "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     <small>天気: {store.weatherLocationName || (store.weatherLatitude && store.weatherLongitude ? `${store.weatherLatitude}, ${store.weatherLongitude}` : "福岡市（既定）")}</small>
@@ -609,6 +647,7 @@ export default function StoresPage() {
               <button className={editingStoreTab === "basic" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("basic")}>基本情報</button>
               <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
+              <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
             </div>
             <div className="edit-fields">
@@ -686,6 +725,47 @@ export default function StoresPage() {
                   brandNames={editingStoreBrands}
                   onToggle={(key, checked) => setEditingSalesSourceKeys((current) => toggleSalesSourceKey(current, key, checked))}
                 />
+              ) : null}
+              {editingStoreTab === "payment" ? (
+                <div className="store-payroll-settings">
+                  <div className="store-payroll-summary">
+                    <strong>KOMOJU 店舗決済</strong>
+                    <p>麻辣烫のブランドサイトでこの店舗が選択されたときに使う KOMOJU アカウントです。Webhook URL は店舗ごとに分けて設定します。</p>
+                  </div>
+                  <label className="inline-checkbox">
+                    <input
+                      type="checkbox"
+                      name="komojuEnabled"
+                      checked={editingKomojuEnabled}
+                      onChange={(event) => setEditingKomojuEnabled(event.target.checked)}
+                    />
+                    KOMOJU を有効にする
+                  </label>
+                  <label>
+                    <span>決済アカウント名</span>
+                    <input name="komojuAccountName" value={editingKomojuAccountName} onChange={(event) => setEditingKomojuAccountName(event.target.value)} placeholder="例: 清水店 KOMOJU" />
+                  </label>
+                  <label>
+                    <span>Secret key env 名</span>
+                    <input name="komojuSecretKeyEnvName" value={editingKomojuSecretKeyEnvName} onChange={(event) => setEditingKomojuSecretKeyEnvName(event.target.value)} placeholder="例: KOMOJU_SECRET_KEY_SHIMIZU" />
+                  </label>
+                  <label>
+                    <span>Webhook secret env 名</span>
+                    <input name="komojuWebhookSecretEnvName" value={editingKomojuWebhookSecretEnvName} onChange={(event) => setEditingKomojuWebhookSecretEnvName(event.target.value)} placeholder="例: KOMOJU_WEBHOOK_SECRET_SHIMIZU" />
+                  </label>
+                  <label>
+                    <span>支払い方法 env 名</span>
+                    <input name="komojuPaymentTypesEnvName" value={editingKomojuPaymentTypesEnvName} onChange={(event) => setEditingKomojuPaymentTypesEnvName(event.target.value)} placeholder="例: KOMOJU_SHIMIZU_PAYMENT_TYPES" />
+                  </label>
+                  <label>
+                    <span>支払い方法（直接指定）</span>
+                    <input name="komojuPaymentTypes" value={editingKomojuPaymentTypes} onChange={(event) => setEditingKomojuPaymentTypes(event.target.value)} placeholder="例: paypay,credit_card" />
+                  </label>
+                  <div className="store-payroll-summary">
+                    <strong>Webhook URL</strong>
+                    <p>{editingStore.id ? `/api/webhooks/komoju/${editingStore.id}` : "/api/webhooks/komoju/{storeId}"}</p>
+                  </div>
+                </div>
               ) : null}
               {editingStoreTab === "payroll" ? (
                 <div className="store-payroll-settings">
