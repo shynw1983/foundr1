@@ -19,7 +19,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "経営分析", href: "/os/analytics", icon: LineChart },
   { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
   { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
-  { label: "原価分析", href: "/os/analytics/cost", icon: Boxes },
+  { label: "原価・経費分析", href: "/os/analytics/cost", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];

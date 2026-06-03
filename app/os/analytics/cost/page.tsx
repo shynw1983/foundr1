@@ -34,16 +34,59 @@ const costLinks = [
   }
 ];
 
+const expenseBuckets = [
+  {
+    title: "固定費",
+    description: "毎月ほぼ固定で発生する家賃、設備リースを月次損益へ接続します。",
+    status: "接続予定"
+  },
+  {
+    title: "変動費",
+    description: "水道光熱費、通信費など、月によって変動する経費を管理します。",
+    status: "接続予定"
+  },
+  {
+    title: "雑費",
+    description: "ごみ処理、その他の店舗費用を月次の経費として整理します。",
+    status: "接続予定"
+  }
+];
+
 export default function CostAnalyticsPage() {
   return (
-    <AnalyticsShell eyebrow="Cost Analytics" title="原価分析" sourceLabel="発注・購入 / レシートを参照">
+    <AnalyticsShell eyebrow="Cost Analytics" title="原価・経費分析" sourceLabel="発注・購入 / 月次経費を参照">
       <section className="panel">
         <div className="panel-title">
           <PackageCheck size={18} />
           <div>
-            <h3>原価は発注・購入から集計</h3>
-            <p>購入原価は将来的に注文システム側の購入実績とレシートから取ります。経営分析では商品別、発注先別、月次損益への接続をまとめます。</p>
+            <h3>原価と経費を分けて集計</h3>
+            <p>購入原価は注文システム側の購入実績とレシートから取り、固定費、変動費、雑費は月次経費として整理します。</p>
           </div>
+        </div>
+      </section>
+
+      <section className="os-module-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Expense Buckets</p>
+            <h2>経費の分類</h2>
+          </div>
+        </div>
+        <div className="os-module-grid">
+          {expenseBuckets.map((item) => (
+            <article className="os-module-card" key={item.title}>
+              <div className="os-module-icon">
+                <Boxes size={24} />
+              </div>
+              <div>
+                <div className="os-module-heading">
+                  <h3>{item.title}</h3>
+                  <span className="status-pill">{item.status}</span>
+                </div>
+                <p>{item.description}</p>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 

@@ -60,8 +60,8 @@ const analyticsCards = [
     status: "準備中"
   },
   {
-    title: "原価分析",
-    description: "発注・購入・レシートから、食材原価や包材・消耗品コストを集計します。",
+    title: "原価・経費分析",
+    description: "発注・購入原価、固定費、変動費、雑費を月次で整理します。",
     href: "/os/analytics/cost",
     icon: Boxes,
     status: "準備中"
@@ -241,7 +241,7 @@ export default function AnalyticsPage() {
               <ChartColumn size={18} />
               <div>
                 <h3>月次損益の接続状況</h3>
-                <p>原価とその他費用は今後、発注・購入データから接続します。</p>
+                <p>原価と経費は今後、発注・購入データと月次経費データから接続します。</p>
               </div>
             </div>
             <div className="analytics-bar-list">
@@ -265,7 +265,7 @@ export default function AnalyticsPage() {
               <Boxes size={18} />
               <div>
                 <h3>未接続コスト</h3>
-                <p>発注・購入、レシート、その他費用を接続すると月次利益まで表示します。</p>
+                <p>発注・購入、レシート、固定費、変動費、雑費を接続すると月次利益まで表示します。</p>
               </div>
             </div>
             <div className="analytics-placeholder-list">
@@ -275,14 +275,24 @@ export default function AnalyticsPage() {
                 <p>発注・購入 / レシート</p>
               </div>
               <div>
-                <span>その他費用</span>
+                <span>固定費</span>
                 <strong>接続予定</strong>
-                <p>家賃、光熱費、決済手数料など</p>
+                <p>家賃、設備リース</p>
+              </div>
+              <div>
+                <span>変動費</span>
+                <strong>接続予定</strong>
+                <p>水道光熱費、通信費</p>
+              </div>
+              <div>
+                <span>雑費</span>
+                <strong>接続予定</strong>
+                <p>ごみ処理、その他の店舗費用</p>
               </div>
               <div>
                 <span>月次利益</span>
                 <strong>設計中</strong>
-                <p>売上 - 人件費 - 原価 - その他費用</p>
+                <p>売上 - 人件費 - 原価 - 経費</p>
               </div>
             </div>
           </article>

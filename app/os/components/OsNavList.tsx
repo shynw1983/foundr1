@@ -59,7 +59,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "経営分析", href: "/os/analytics", icon: LineChart },
   { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
   { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
-  { label: "原価分析", href: "/os/analytics/cost", icon: Boxes },
+  { label: "原価・経費分析", href: "/os/analytics/cost", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
