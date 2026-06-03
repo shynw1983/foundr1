@@ -12,7 +12,7 @@ type OsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20260603-os-i18n-v45";
+const localeCacheVersion = "20260603-os-i18n-v46";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
@@ -270,9 +270,9 @@ export function OsLanguagePicker() {
         onChange={(event) => setLanguage(event.target.value as OsLanguage)}
         aria-label="Language"
       >
-        <option value="ja">日本語</option>
-        <option value="zh-Hans">简体中文</option>
-        <option value="zh-Hant">繁體中文</option>
+        <option value="ja">日</option>
+        <option value="zh-Hans">简</option>
+        <option value="zh-Hant">繁</option>
       </select>
     </label>
   );

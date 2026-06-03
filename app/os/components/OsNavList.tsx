@@ -101,7 +101,6 @@ export type OsNavModuleWithChildren = OsNavModule & {
 };
 
 const navModules: OsNavModule[] = [
-  { id: "home", label: "OS ホーム", icon: ClipboardList, href: "/os", paths: [{ href: "/os" }] },
   {
     id: "orders",
     label: "発注・購入管理",

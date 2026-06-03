@@ -32,6 +32,9 @@ type PayrollStatutoryAlert = {
   message: string;
   actionLabel: string;
   dueLabel: string;
+  targetYear?: number;
+  dismissible?: boolean;
+  dismissActionLabel?: string;
 };
 
 const osModules: OsModule[] = [
@@ -149,6 +152,7 @@ function ModuleCard({ module }: { module: OsModule }) {
 export default function Foundr1OsHome() {
   const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
   const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
+  const [dismissingAlertKey, setDismissingAlertKey] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -182,8 +186,32 @@ export default function Foundr1OsHome() {
     };
   }, []);
 
+  async function dismissPayrollStatutoryAlert(alert: PayrollStatutoryAlert) {
+    if (!alert.targetYear) return;
+    setDismissingAlertKey(alert.key);
+    const response = await fetch("/api/settings/payroll-statutory-alerts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "dismiss_payroll_statutory_alert",
+        alertKey: alert.key,
+        targetYear: alert.targetYear
+      })
+    });
+    if (response.ok) {
+      const nextResponse = await fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" });
+      if (nextResponse.ok) {
+        const body = await nextResponse.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
+        if (body.canView) setPayrollAlerts(body.alerts ?? []);
+      }
+    }
+    setDismissingAlertKey("");
+  }
+
   const permittedModules = useMemo(() => osModules.filter((module) => canAccessModule(role, module)), [role]);
   const permittedSystemModules = useMemo(() => systemModules.filter((module) => canAccessModule(role, module)), [role]);
+  const payrollAlertActionHref = role === "store_owner" ? "/os/timecard/payroll" : "/os/settings";
+  const payrollAlertActionLabel = role === "store_owner" ? "給与へ" : "システム設定へ";
 
   return (
     <main className="os-home-shell">
@@ -212,7 +240,7 @@ export default function Foundr1OsHome() {
         <section className="statutory-alert-panel" aria-label="給与法定データ更新アラート">
           <div className="statutory-alert-heading">
             <strong>給与計算データの更新が必要です</strong>
-            <a className="secondary-button" href="/os/settings">システム設定へ</a>
+            <a className="secondary-button" href={payrollAlertActionHref}>{payrollAlertActionLabel}</a>
           </div>
           <div className="statutory-alert-list">
             {payrollAlerts.map((alert) => (
@@ -222,7 +250,19 @@ export default function Foundr1OsHome() {
                   <h3>{alert.title}</h3>
                   <p>{alert.message}</p>
                 </div>
-                <strong>{alert.actionLabel}</strong>
+                <div className="statutory-alert-card-actions">
+                  <strong>{alert.actionLabel}</strong>
+                  {alert.dismissible ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={dismissingAlertKey === alert.key}
+                      onClick={() => void dismissPayrollStatutoryAlert(alert)}
+                    >
+                      {dismissingAlertKey === alert.key ? "保存中" : alert.dismissActionLabel ?? "閉じる"}
+                    </button>
+                  ) : null}
+                </div>
               </article>
             ))}
           </div>
