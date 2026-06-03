@@ -171,7 +171,7 @@ export default function AnalyticsPage() {
   ], [afterLabor, estimatedDeposit, laborCost, salesAmount, state.timecard?.canViewPayroll]);
 
   return (
-    <AnalyticsShell eyebrow="Management Analytics" title="経営分析" sourceLabel={isLoading ? "読み込み中" : `${selectedStoreName} / ${month}`}>
+    <AnalyticsShell eyebrow="Management Analytics" title="経営分析" sourceLabel={isLoading ? "読み込み中" : `${selectedStoreName} / ${month}`} workspaceClassName="analytics-workspace">
         <section className="panel analytics-overview-panel">
           <div className="panel-title">
             <LineChart size={18} />

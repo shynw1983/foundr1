@@ -1524,6 +1524,21 @@ body :where(
   padding: 18px;
 }
 
+.analytics-workspace {
+  --analytics-section-gap: 18px;
+}
+
+.analytics-workspace > .panel,
+.analytics-workspace > .metric-grid,
+.analytics-workspace > .analytics-chart-grid,
+.analytics-workspace > .os-module-section {
+  margin-bottom: 0;
+}
+
+.analytics-workspace > * + * {
+  margin-top: var(--analytics-section-gap);
+}
+
 .analytics-control-row {
   display: flex;
   flex-wrap: wrap;
@@ -1550,7 +1565,49 @@ body :where(
 }
 
 .analytics-metric-grid {
+  gap: var(--analytics-section-gap);
   margin-bottom: 0;
+}
+
+.analytics-metric-grid .metric-card {
+  display: grid;
+  grid-template-rows: auto minmax(44px, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  min-height: 142px;
+  padding: 18px;
+  transition: none;
+}
+
+.analytics-metric-grid .metric-card:hover {
+  border-color: var(--line);
+  transform: none;
+}
+
+.analytics-metric-grid .metric-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.analytics-metric-grid .metric-card strong {
+  align-self: center;
+  margin: 0;
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.analytics-metric-grid .metric-card p {
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .analytics-chart-grid {

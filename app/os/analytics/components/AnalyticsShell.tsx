@@ -28,11 +28,13 @@ export function AnalyticsShell({
   eyebrow,
   title,
   sourceLabel,
+  workspaceClassName,
   children
 }: {
   eyebrow: string;
   title: string;
   sourceLabel: string;
+  workspaceClassName?: string;
   children: ReactNode;
 }) {
   return (
@@ -52,7 +54,7 @@ export function AnalyticsShell({
         <OsNavList navItems={navItems} />
       </aside>
 
-      <section className="workspace">
+      <section className={`workspace${workspaceClassName ? ` ${workspaceClassName}` : ""}`}>
         <header className="topbar">
           <div>
             <p className="eyebrow">{eyebrow}</p>
