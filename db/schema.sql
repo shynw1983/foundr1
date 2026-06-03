@@ -1166,6 +1166,10 @@ create table if not exists store_customer_orders (
   payment_id text,
   payment_receipt_url text,
   payment_updated_at timestamptz,
+  payment_refund_id text,
+  payment_refund_status text not null default '',
+  payment_refund_error text not null default '',
+  payment_refunded_at timestamptz,
   square_order_id text,
   square_payment_id text,
   square_receipt_url text,
@@ -1201,6 +1205,10 @@ alter table store_customer_orders add column if not exists payment_session_id te
 alter table store_customer_orders add column if not exists payment_id text;
 alter table store_customer_orders add column if not exists payment_receipt_url text;
 alter table store_customer_orders add column if not exists payment_updated_at timestamptz;
+alter table store_customer_orders add column if not exists payment_refund_id text;
+alter table store_customer_orders add column if not exists payment_refund_status text not null default '';
+alter table store_customer_orders add column if not exists payment_refund_error text not null default '';
+alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
 
 create table if not exists store_customer_order_items (
   id uuid primary key default gen_random_uuid(),

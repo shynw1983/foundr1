@@ -1,4 +1,5 @@
-import { findPublicCustomerOrder, toPublicCustomerOrder } from "../../../../../lib/customer-orders";
+import { cancelPublicMaamaaCustomerOrder, findPublicCustomerOrder, toPublicCustomerOrder } from "../../../../../lib/customer-orders";
+import { publishCustomerOrderEvent } from "../../../../../lib/order-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -15,4 +16,27 @@ export async function GET(request: Request) {
   }
 
   return Response.json({ order: toPublicCustomerOrder(order) }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function PATCH(request: Request) {
+  const body = await request.json().catch(() => ({})) as {
+    orderId?: string | null;
+    pickupCode?: string | null;
+    pickupDate?: string | null;
+  };
+  const result = await cancelPublicMaamaaCustomerOrder({
+    orderId: body.orderId,
+    pickupCode: body.pickupCode,
+    pickupDate: body.pickupDate
+  });
+
+  if (!result.order) {
+    return Response.json({ error: result.error }, { status: result.status, headers: { "Cache-Control": "no-store" } });
+  }
+  if (result.error) {
+    return Response.json({ error: result.error, order: toPublicCustomerOrder(result.order) }, { status: result.status, headers: { "Cache-Control": "no-store" } });
+  }
+
+  await publishCustomerOrderEvent("order.updated", result.order);
+  return Response.json({ order: toPublicCustomerOrder(result.order) }, { headers: { "Cache-Control": "no-store" } });
 }

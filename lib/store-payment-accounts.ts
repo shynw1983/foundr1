@@ -106,6 +106,29 @@ export async function getActiveStorePaymentAccount(input: {
   return null;
 }
 
+export async function getStorePaymentAccountById(accountId: string) {
+  const id = clean(accountId);
+  if (!id) return null;
+
+  const rows = await sql`
+    select
+      id::text,
+      store_id::text as "storeId",
+      provider,
+      account_name as "accountName",
+      secret_key as "secretKey",
+      secret_key_env_name as "secretKeyEnvName",
+      webhook_secret as "webhookSecret",
+      webhook_secret_env_name as "webhookSecretEnvName",
+      payment_types as "paymentTypes",
+      payment_types_env_name as "paymentTypesEnvName"
+    from store_payment_accounts
+    where id = ${id}
+    limit 1
+  `;
+  return rows[0] ? hydrate(rows[0] as StorePaymentAccountRow) : null;
+}
+
 export async function getActiveStorePaymentAccountByStoreReference(input: {
   storeReference: string;
   provider: string;

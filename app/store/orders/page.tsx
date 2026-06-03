@@ -58,6 +58,7 @@ const statusLabels: Record<string, string> = {
   ready: "受け取り可",
   completed: "完了",
   cancelled: "キャンセル",
+  refund_pending: "返金処理中",
   pending_payment: "決済待ち",
   checkout_failed: "決済作成失敗",
   payment_failed: "決済失敗"
@@ -67,7 +68,8 @@ const paymentLabels: Record<string, string> = {
   pending: "未決済",
   paid: "支払済み",
   failed: "失敗",
-  canceled: "キャンセル"
+  canceled: "キャンセル",
+  refunded: "返金済み"
 };
 
 const nextActions: Record<string, Array<{ status: string; label: string }>> = {
