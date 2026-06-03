@@ -1731,6 +1731,97 @@ body :where(
   margin: 0;
 }
 
+.analytics-placeholder-list > .secondary-button {
+  width: 100%;
+}
+
+.expense-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.expense-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.expense-form label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.expense-form input,
+.expense-form select {
+  width: 100%;
+  min-height: 42px;
+}
+
+.expense-form .primary-button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.expense-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.expense-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.expense-row.is-active {
+  border-color: rgba(33, 116, 91, 0.45);
+  background: #ffffff;
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.expense-row > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.expense-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.expense-row strong,
+.expense-row b {
+  color: var(--ink);
+}
+
+.expense-row strong {
+  overflow-wrap: anywhere;
+}
+
+.expense-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.expense-row b {
+  white-space: nowrap;
+}
+
 .metric-icon {
   display: grid;
   flex: 0 0 auto;
@@ -13167,6 +13258,10 @@ body :where(
   .workload-score-settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .expense-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -13212,6 +13307,20 @@ body :where(
   .workload-level-settings-grid,
   .workload-score-settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .expense-form,
+  .expense-row {
+    grid-template-columns: 1fr;
+  }
+
+  .expense-form .primary-button,
+  .expense-row .icon-button {
+    width: 100%;
+  }
+
+  .expense-row b {
+    white-space: normal;
   }
 
   .workload-settings-actions {

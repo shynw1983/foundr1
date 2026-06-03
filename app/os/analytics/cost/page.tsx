@@ -31,6 +31,13 @@ const costLinks = [
     href: "/os/analytics/profit",
     icon: LineChart,
     status: "接続先"
+  },
+  {
+    title: "経費設定を開く",
+    description: "固定費、変動費、雑費を店舗別に設定します。",
+    href: "/os/analytics/expenses",
+    icon: Boxes,
+    status: "利用可能"
   }
 ];
 

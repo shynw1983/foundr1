@@ -572,6 +572,31 @@ alter table sales_analysis_settings add column if not exists normal_rate_max num
 alter table sales_analysis_settings add column if not exists busy_rate_max numeric(8, 2) not null default 1.5;
 alter table sales_analysis_settings add column if not exists high_rate_max numeric(8, 2) not null default 2;
 
+create table if not exists analytics_expenses (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  category text not null default 'misc',
+  name text not null default '',
+  amount numeric(12, 2) not null default 0,
+  start_month text not null default '2026-01',
+  end_month text,
+  note text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table analytics_expenses add column if not exists category text not null default 'misc';
+alter table analytics_expenses add column if not exists name text not null default '';
+alter table analytics_expenses add column if not exists amount numeric(12, 2) not null default 0;
+alter table analytics_expenses add column if not exists start_month text not null default '2026-01';
+alter table analytics_expenses add column if not exists end_month text;
+alter table analytics_expenses add column if not exists note text not null default '';
+alter table analytics_expenses add column if not exists created_by uuid references employees(id) on delete set null;
+alter table analytics_expenses add column if not exists updated_by uuid references employees(id) on delete set null;
+create index if not exists analytics_expenses_store_month_idx on analytics_expenses (store_id, start_month, end_month);
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,

@@ -317,6 +317,7 @@ export default function AnalyticsPage() {
                 <strong>設計中</strong>
                 <p>売上 - 人件費 - 原価 - 経費</p>
               </div>
+              <a className="secondary-button" href="/os/analytics/expenses">経費設定を開く</a>
             </div>
           </article>
         </section>

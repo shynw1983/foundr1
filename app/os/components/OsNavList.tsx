@@ -45,7 +45,7 @@ const orderModulePaths = new Set([
   "/os/product-comparisons",
   "/os/reports"
 ]);
-const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/profit"]);
+const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
@@ -60,6 +60,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "売上分析", href: "/os/analytics/sales", icon: ChartColumn },
   { label: "人件費分析", href: "/os/analytics/labor", icon: WalletCards },
   { label: "原価・経費分析", href: "/os/analytics/cost", icon: Boxes },
+  { label: "経費設定", href: "/os/analytics/expenses", icon: Boxes },
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
@@ -125,6 +126,7 @@ const navModules: OsNavModule[] = [
       { href: "/os/sales" },
       { href: "/os/analytics/labor" },
       { href: "/os/analytics/cost" },
+      { href: "/os/analytics/expenses" },
       { href: "/os/analytics/profit" }
     ]
   },
@@ -213,7 +215,7 @@ function canShowInCurrentModule(pathname: string, item: OsNavItem) {
 function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
-  if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
+  if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
   if (item.href === "/os/staff") return role === "owner";
   if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner"].includes(role);
   if (item.href === "/os/field-notes") return true;
