@@ -4438,7 +4438,8 @@ body :where(
   white-space: nowrap;
 }
 
-.store-pickup-setting input {
+.store-pickup-setting input,
+.store-pickup-setting select {
   width: 72px;
   min-height: 36px;
   border: 1px solid var(--line);
@@ -4446,6 +4447,10 @@ body :where(
   padding: 0 10px;
   background: white;
   font-weight: 900;
+}
+
+.store-pickup-setting select {
+  width: min(180px, 100%);
 }
 
 .store-stats-heading {

@@ -477,27 +477,38 @@ export default function StoreOrdersPage() {
               <strong>{counters.ready}</strong>
             </article>
           </section>
-          {selectedStoreId && operation ? (
+          {access?.stores.length ? (
             <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
               <div>
                 <span>最短受け取り準備時間</span>
-                <small>空欄でブランド初期値</small>
+                <small>{selectedStoreId ? "空欄でブランド初期値" : "店舗を選択して設定"}</small>
               </div>
-              <label>
-                <input
-                  inputMode="numeric"
-                  min={0}
-                  max={240}
-                  type="number"
-                  value={minimumPickupDraft}
-                  onChange={(event) => setMinimumPickupDraft(event.target.value)}
-                  placeholder="初期値"
-                />
-                分後
-              </label>
-              <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes()}>
-                {operationSaving ? "保存中..." : "保存"}
-              </button>
+              {selectedStoreId && operation ? (
+                <>
+                  <label>
+                    <input
+                      inputMode="numeric"
+                      min={0}
+                      max={240}
+                      type="number"
+                      value={minimumPickupDraft}
+                      onChange={(event) => setMinimumPickupDraft(event.target.value)}
+                      placeholder="初期値"
+                    />
+                    分後
+                  </label>
+                  <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes()}>
+                    {operationSaving ? "保存中..." : "保存"}
+                  </button>
+                </>
+              ) : (
+                <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} aria-label="最短受け取り準備時間を設定する店舗">
+                  <option value="">店舗を選択</option>
+                  {access.stores.map((store) => (
+                    <option value={store.id} key={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              )}
               {operationMessage ? <p>{operationMessage}</p> : null}
             </section>
           ) : null}
