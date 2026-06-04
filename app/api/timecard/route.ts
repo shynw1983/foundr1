@@ -23,6 +23,10 @@ type TimecardPostBody = {
   punchType?: string;
   note?: string;
   employeeId?: string;
+  source?: string;
+  mobileLatitude?: number | string;
+  mobileLongitude?: number | string;
+  mobileAccuracyMeters?: number | string;
   workDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
@@ -53,6 +57,7 @@ type PayrollConfirmationRow = {
 
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
 const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner"]);
+const mobilePunchRoles = new Set(["staff"]);
 
 const emptyPayrollTotals = {
   workDays: 0,
@@ -86,7 +91,12 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
         business_hours as "businessHours",
         coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
         coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
-        coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture"
+        coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
+        coalesce(attendance_location_enabled, false) as "attendanceLocationEnabled",
+        attendance_latitude::float as "attendanceLatitude",
+        attendance_longitude::float as "attendanceLongitude",
+        coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
+        coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
       from stores
       where status = 'active'
       order by name
@@ -102,7 +112,12 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
       business_hours as "businessHours",
       coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
       coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
-      coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture"
+      coalesce(social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
+      coalesce(attendance_location_enabled, false) as "attendanceLocationEnabled",
+      attendance_latitude::float as "attendanceLatitude",
+      attendance_longitude::float as "attendanceLongitude",
+      coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
+      coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
     from stores
     where status = 'active'
       and id::text = any(${storeIds})
@@ -594,6 +609,129 @@ function toPunchDateTime(workDate: string, time: string, baseTime?: string | nul
   return date.toISOString();
 }
 
+function getClientIp(request: Request) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || request.headers.get("x-real-ip")
+    || null;
+}
+
+function normalizeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function getDistanceMeters(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (value: number) => value * Math.PI / 180;
+  const deltaLatitude = toRadians(to.latitude - from.latitude);
+  const deltaLongitude = toRadians(to.longitude - from.longitude);
+  const fromLatitude = toRadians(from.latitude);
+  const toLatitude = toRadians(to.latitude);
+  const halfChord = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(fromLatitude) * Math.cos(toLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(halfChord), Math.sqrt(1 - halfChord));
+}
+
+async function getAttendanceStoreLocation(storeId: string) {
+  const rows = await sql`
+    select
+      id::text,
+      coalesce(attendance_location_enabled, false) as "attendanceLocationEnabled",
+      attendance_latitude::float as "attendanceLatitude",
+      attendance_longitude::float as "attendanceLongitude",
+      coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
+      coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
+    from stores
+    where id::text = ${storeId}
+      and status = 'active'
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+async function validateMobilePunchLocation(storeId: string, body: TimecardPostBody) {
+  const store = await getAttendanceStoreLocation(storeId);
+  if (!store) {
+    return { ok: false, status: 404, error: "店舗が見つかりません。" };
+  }
+
+  const locationEnabled = store.attendanceLocationEnabled === true;
+  const storeLatitude = normalizeNumber(store.attendanceLatitude);
+  const storeLongitude = normalizeNumber(store.attendanceLongitude);
+  const mobileLatitude = normalizeNumber(body.mobileLatitude);
+  const mobileLongitude = normalizeNumber(body.mobileLongitude);
+  const mobileAccuracyMeters = normalizeNumber(body.mobileAccuracyMeters);
+  const radiusMeters = Math.max(10, Math.min(2000, Math.round(Number(store.attendanceRadiusMeters ?? 100) || 100)));
+  const accuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(store.attendanceAccuracyThresholdMeters ?? 100) || 100)));
+
+  if (!locationEnabled) {
+    return {
+      ok: true,
+      verdict: "not_required",
+      mobileLatitude,
+      mobileLongitude,
+      mobileAccuracyMeters,
+      storeLatitude,
+      storeLongitude,
+      distanceMeters: null
+    };
+  }
+
+  if (storeLatitude === null || storeLongitude === null) {
+    return { ok: false, status: 409, error: "この店舗の打刻地点が未設定です。管理画面で設定してください。" };
+  }
+
+  if (mobileLatitude === null || mobileLongitude === null) {
+    return { ok: false, status: 400, error: "位置情報を取得してから打刻してください。" };
+  }
+
+  const distanceMeters = getDistanceMeters(
+    { latitude: mobileLatitude, longitude: mobileLongitude },
+    { latitude: storeLatitude, longitude: storeLongitude }
+  );
+  if (mobileAccuracyMeters !== null && mobileAccuracyMeters > accuracyThresholdMeters) {
+    return {
+      ok: false,
+      status: 409,
+      error: `位置情報の精度が低いため打刻できません。精度 ${Math.round(mobileAccuracyMeters)}m / 上限 ${accuracyThresholdMeters}m`,
+      verdict: "low_accuracy",
+      mobileLatitude,
+      mobileLongitude,
+      mobileAccuracyMeters,
+      storeLatitude,
+      storeLongitude,
+      distanceMeters
+    };
+  }
+
+  if (distanceMeters > radiusMeters) {
+    return {
+      ok: false,
+      status: 409,
+      error: `店舗から離れているため打刻できません。現在約${Math.round(distanceMeters)}m / 許可範囲 ${radiusMeters}m`,
+      verdict: "outside_radius",
+      mobileLatitude,
+      mobileLongitude,
+      mobileAccuracyMeters,
+      storeLatitude,
+      storeLongitude,
+      distanceMeters
+    };
+  }
+
+  return {
+    ok: true,
+    verdict: "inside_radius",
+    mobileLatitude,
+    mobileLongitude,
+    mobileAccuracyMeters,
+    storeLatitude,
+    storeLongitude,
+    distanceMeters
+  };
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -738,6 +876,7 @@ export async function GET(request: Request) {
   return Response.json({
     month,
     currentEmployeeId: session.id,
+    currentEmployeeRole: session.role,
     canEditActualTime: timecardActualEditRoles.has(session.role),
     canViewPayroll,
     stores,
@@ -1332,13 +1471,45 @@ export async function POST(request: Request) {
     return Response.json({ error: "打刻種別と店舗を確認してください。" }, { status: 400 });
   }
 
-  const employeeId = String(body.employeeId ?? "");
+  const source = String(body.source ?? "").trim();
+  const isMobilePunch = source === "mobile";
+  const employeeId = isMobilePunch && mobilePunchRoles.has(session.role)
+    ? session.id
+    : String(body.employeeId ?? "");
   if (!employeeId) {
     return Response.json({ error: "打刻する従業員を選択してください。" }, { status: 400 });
   }
 
+  if (isMobilePunch && !mobilePunchRoles.has(session.role)) {
+    return Response.json({ error: "モバイル打刻は店舗スタッフ本人のみ利用できます。" }, { status: 403 });
+  }
+
   if (!await canPunchForEmployee(storeId, employeeId)) {
     return Response.json({ error: "この従業員は選択した店舗で打刻できません。" }, { status: 403 });
+  }
+
+  const locationCheck = isMobilePunch ? await validateMobilePunchLocation(storeId, body) : null;
+  if (locationCheck && !locationCheck.ok) {
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.mobile_punch.rejected",
+      targetType: "timecard_punch",
+      targetId: storeId,
+      metadata: {
+        storeId,
+        punchType,
+        employeeId,
+        verdict: locationCheck.verdict ?? "invalid",
+        mobileLatitude: locationCheck.mobileLatitude ?? null,
+        mobileLongitude: locationCheck.mobileLongitude ?? null,
+        mobileAccuracyMeters: locationCheck.mobileAccuracyMeters ?? null,
+        storeLatitude: locationCheck.storeLatitude ?? null,
+        storeLongitude: locationCheck.storeLongitude ?? null,
+        distanceMeters: locationCheck.distanceMeters ?? null
+      },
+      request
+    });
+    return Response.json({ error: locationCheck.error }, { status: locationCheck.status });
   }
 
   const inserted = await sql`
@@ -1348,14 +1519,32 @@ export async function POST(request: Request) {
       punch_type,
       source,
       note,
+      mobile_latitude,
+      mobile_longitude,
+      mobile_accuracy_meters,
+      store_latitude,
+      store_longitude,
+      distance_from_store_meters,
+      location_verdict,
+      user_agent,
+      ip_address,
       created_by
     )
     values (
       ${employeeId},
       ${storeId},
       ${punchType},
-      'store_tablet',
+      ${isMobilePunch ? "mobile" : "store_tablet"},
       ${String(body.note ?? "").trim() || null},
+      ${locationCheck?.mobileLatitude ?? null},
+      ${locationCheck?.mobileLongitude ?? null},
+      ${locationCheck?.mobileAccuracyMeters ?? null},
+      ${locationCheck?.storeLatitude ?? null},
+      ${locationCheck?.storeLongitude ?? null},
+      ${locationCheck?.distanceMeters ?? null},
+      ${locationCheck?.verdict ?? (isMobilePunch ? "not_checked" : null)},
+      ${request.headers.get("user-agent")},
+      ${getClientIp(request)},
       ${session.id}
     )
     returning id::text
@@ -1366,7 +1555,16 @@ export async function POST(request: Request) {
     action: "timecard.punched",
     targetType: "timecard_punch",
     targetId: String(inserted[0]?.id ?? ""),
-    metadata: { storeId, punchType, employeeId, createdBy: session.id },
+    metadata: {
+      storeId,
+      punchType,
+      employeeId,
+      createdBy: session.id,
+      source: isMobilePunch ? "mobile" : "store_tablet",
+      locationVerdict: locationCheck?.verdict ?? null,
+      distanceMeters: locationCheck?.distanceMeters ?? null,
+      mobileAccuracyMeters: locationCheck?.mobileAccuracyMeters ?? null
+    },
     request
   });
 

@@ -64,12 +64,18 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
+  const [employeeRole, setEmployeeRole] = useState("");
+  const [isTimecardEmployee, setIsTimecardEmployee] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
   const hasInitializedOrderWatchRef = useRef(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
+  const visibleTabs = isMobileViewport && employeeRole === "staff" && isTimecardEmployee
+    ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard")
+    : tabs;
 
   const clearOrderAlert = () => {
     setHasPendingOrderAlert(false);
@@ -90,6 +96,31 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobileViewport(query.matches);
+    updateViewport();
+    query.addEventListener("change", updateViewport);
+    return () => query.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCurrentEmployee() {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
+      if (isMounted) {
+        setEmployeeRole(String(body.employee?.role ?? ""));
+        setIsTimecardEmployee(body.employee?.isTimecardEmployee === true);
+      }
+    }
+    void loadCurrentEmployee();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -214,7 +245,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
         <UserBadge showNotifications={settings.header.showNotifications} showLanguagePicker={settings.header.showLanguagePicker} />
       </div>
       <nav className="store-nav-tabs" aria-label="店舗ワークベンチ">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isOrdersTab = tab.href === "/store/orders";
           const className = [
@@ -238,7 +269,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
           <span>メニュー</span>
         </summary>
         <nav className="mobile-nav-list store-nav-list" aria-label="店舗ワークベンチメニュー">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isOrdersTab = tab.href === "/store/orders";
             const className = [

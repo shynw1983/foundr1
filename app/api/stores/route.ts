@@ -77,6 +77,11 @@ function normalizeCoordinate(value: string, min: number, max: number) {
   return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max ? coordinate : null;
 }
 
+function normalizeMeters(value: string, fallback: number) {
+  const meters = Math.round(Number(value));
+  return Number.isFinite(meters) ? Math.max(10, Math.min(2000, meters)) : fallback;
+}
+
 function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
 
@@ -226,6 +231,11 @@ export async function POST(request: Request) {
   const weatherLocationName = String(formData.get("weatherLocationName") ?? "").trim();
   const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
   const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
+  const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
+  const attendanceLatitude = normalizeCoordinate(String(formData.get("attendanceLatitude") ?? ""), -90, 90);
+  const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
+  const attendanceRadiusMeters = normalizeMeters(String(formData.get("attendanceRadiusMeters") ?? ""), 100);
+  const attendanceAccuracyThresholdMeters = normalizeMeters(String(formData.get("attendanceAccuracyThresholdMeters") ?? ""), 100);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -252,6 +262,11 @@ export async function POST(request: Request) {
       weather_location_name,
       weather_latitude,
       weather_longitude,
+      attendance_location_enabled,
+      attendance_latitude,
+      attendance_longitude,
+      attendance_radius_meters,
+      attendance_accuracy_threshold_meters,
       updated_at
     )
     values (
@@ -266,6 +281,11 @@ export async function POST(request: Request) {
       ${weatherLocationName || null},
       ${weatherLatitude},
       ${weatherLongitude},
+      ${attendanceLocationEnabled},
+      ${attendanceLatitude},
+      ${attendanceLongitude},
+      ${attendanceRadiusMeters},
+      ${attendanceAccuracyThresholdMeters},
       now()
     )
     on conflict (name)
@@ -280,6 +300,11 @@ export async function POST(request: Request) {
       weather_location_name = excluded.weather_location_name,
       weather_latitude = excluded.weather_latitude,
       weather_longitude = excluded.weather_longitude,
+      attendance_location_enabled = excluded.attendance_location_enabled,
+      attendance_latitude = excluded.attendance_latitude,
+      attendance_longitude = excluded.attendance_longitude,
+      attendance_radius_meters = excluded.attendance_radius_meters,
+      attendance_accuracy_threshold_meters = excluded.attendance_accuracy_threshold_meters,
       updated_at = now()
     returning id
   `;
@@ -325,6 +350,11 @@ export async function PUT(request: Request) {
   const weatherLocationName = String(formData.get("weatherLocationName") ?? "").trim();
   const weatherLatitude = normalizeCoordinate(String(formData.get("weatherLatitude") ?? ""), -90, 90);
   const weatherLongitude = normalizeCoordinate(String(formData.get("weatherLongitude") ?? ""), -180, 180);
+  const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
+  const attendanceLatitude = normalizeCoordinate(String(formData.get("attendanceLatitude") ?? ""), -90, 90);
+  const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
+  const attendanceRadiusMeters = normalizeMeters(String(formData.get("attendanceRadiusMeters") ?? ""), 100);
+  const attendanceAccuracyThresholdMeters = normalizeMeters(String(formData.get("attendanceAccuracyThresholdMeters") ?? ""), 100);
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -366,6 +396,11 @@ export async function PUT(request: Request) {
       weather_location_name = ${weatherLocationName || null},
       weather_latitude = ${weatherLatitude},
       weather_longitude = ${weatherLongitude},
+      attendance_location_enabled = ${attendanceLocationEnabled},
+      attendance_latitude = ${attendanceLatitude},
+      attendance_longitude = ${attendanceLongitude},
+      attendance_radius_meters = ${attendanceRadiusMeters},
+      attendance_accuracy_threshold_meters = ${attendanceAccuracyThresholdMeters},
       updated_at = now()
     where name = ${currentName}
     returning id

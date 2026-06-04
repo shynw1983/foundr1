@@ -9,6 +9,9 @@ import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } fr
 type StoreOption = {
   id: string;
   name: string;
+  attendanceLocationEnabled?: boolean;
+  attendanceRadiusMeters?: number;
+  attendanceAccuracyThresholdMeters?: number;
 };
 
 type LatestPunch = {
@@ -41,12 +44,21 @@ type DailySummary = {
 type TimecardPayload = {
   month: string;
   currentEmployeeId: string;
+  currentEmployeeRole: string;
   stores: StoreOption[];
   selectedStoreId: string;
   latestPunch: LatestPunch;
   latestPunches: LatestPunch[];
   employees: TimecardEmployee[];
   dailySummaries: DailySummary[];
+};
+
+type MobileLocationState = {
+  status: "idle" | "locating" | "ready" | "error";
+  message: string;
+  latitude: number | null;
+  longitude: number | null;
+  accuracyMeters: number | null;
 };
 
 const punchActions = [
@@ -74,6 +86,14 @@ export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileLocation, setMobileLocation] = useState<MobileLocationState>({
+    status: "idle",
+    message: "位置情報を取得してから打刻します。",
+    latitude: null,
+    longitude: null,
+    accuracyMeters: null
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState("");
   const [message, setMessage] = useState("");
@@ -95,7 +115,10 @@ export default function StoreTimecardPage() {
       setSelectedStoreId(body.selectedStoreId);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
       const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
-      setSelectedEmployeeId((current) => storeEmployees.some((employee) => employee.id === current) ? current : storeEmployees[0]?.id ?? "");
+      setSelectedEmployeeId((current) => {
+        if (body.currentEmployeeRole === "staff") return body.currentEmployeeId;
+        return storeEmployees.some((employee) => employee.id === current) ? current : storeEmployees[0]?.id ?? "";
+      });
     } catch {
       setMessage("タイムカード情報を読み込めませんでした。");
     } finally {
@@ -107,8 +130,19 @@ export default function StoreTimecardPage() {
     void loadTimecard(getStoredStoreSelection());
   }, []);
 
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobileViewport(query.matches);
+    updateViewport();
+    query.addEventListener("change", updateViewport);
+    return () => query.removeEventListener("change", updateViewport);
+  }, []);
+
   const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
-  const selectedEmployee = employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
+  const isMobileStaffPunch = isMobileViewport && data?.currentEmployeeRole === "staff";
+  const selectedEmployee = isMobileStaffPunch
+    ? employeesForStore.find((employee) => employee.id === data?.currentEmployeeId) ?? null
+    : employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
   const selectedLatestPunch = data?.latestPunches.find((punch) => punch?.employeeId === selectedEmployee?.id) ?? null;
 
   const selectedEmployeeDays = useMemo(() => {
@@ -118,16 +152,72 @@ export default function StoreTimecardPage() {
 
   const state = getPunchState(selectedLatestPunch);
   const statusLabel = state === "working" ? "勤務中" : state === "break" ? "休憩中" : "未出勤";
-  const selectedStoreName = data?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択";
+  const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  const selectedStoreName = selectedStore?.name ?? "店舗未選択";
+
+  function requestMobileLocation() {
+    if (!navigator.geolocation) {
+      setMobileLocation({
+        status: "error",
+        message: "この端末では位置情報を取得できません。",
+        latitude: null,
+        longitude: null,
+        accuracyMeters: null
+      });
+      return Promise.resolve<MobileLocationState | null>(null);
+    }
+
+    setMobileLocation((current) => ({ ...current, status: "locating", message: "位置情報を取得しています。" }));
+    return new Promise<MobileLocationState | null>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const next = {
+            status: "ready" as const,
+            message: `位置情報取得済み（精度 約${Math.round(position.coords.accuracy)}m）`,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters: position.coords.accuracy
+          };
+          setMobileLocation(next);
+          resolve(next);
+        },
+        () => {
+          const next = {
+            status: "error" as const,
+            message: "位置情報の許可が必要です。ブラウザの位置情報設定を確認してください。",
+            latitude: null,
+            longitude: null,
+            accuracyMeters: null
+          };
+          setMobileLocation(next);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
+      );
+    });
+  }
 
   async function punch(punchType: string) {
     if (!selectedStoreId || !selectedEmployee) return;
     setIsPunching(punchType);
     setMessage("");
+    const location = isMobileStaffPunch ? await requestMobileLocation() : null;
+    if (isMobileStaffPunch && !location) {
+      setIsPunching("");
+      return;
+    }
     const response = await fetch("/api/timecard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: selectedStoreId, employeeId: selectedEmployee.id, punchType })
+      body: JSON.stringify({
+        storeId: selectedStoreId,
+        employeeId: selectedEmployee.id,
+        punchType,
+        source: isMobileStaffPunch ? "mobile" : "store_tablet",
+        mobileLatitude: location?.latitude ?? null,
+        mobileLongitude: location?.longitude ?? null,
+        mobileAccuracyMeters: location?.accuracyMeters ?? null
+      })
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
@@ -181,7 +271,20 @@ export default function StoreTimecardPage() {
             </button>
           </div>
 
-          <div className="timecard-employee-picker" aria-label="打刻する従業員">
+          {isMobileStaffPunch ? (
+            <div className={`mobile-timecard-location is-${mobileLocation.status}`}>
+              <div>
+                <strong>{selectedStore?.attendanceLocationEnabled ? "位置確認あり" : "位置記録"}</strong>
+                <span>{mobileLocation.message}</span>
+                {selectedStore?.attendanceLocationEnabled ? <small>許可範囲 {selectedStore.attendanceRadiusMeters ?? 100}m / 精度上限 {selectedStore.attendanceAccuracyThresholdMeters ?? 100}m</small> : null}
+              </div>
+              <button className="secondary-button" type="button" disabled={mobileLocation.status === "locating"} onClick={() => void requestMobileLocation()}>
+                {mobileLocation.status === "locating" ? "取得中" : "位置取得"}
+              </button>
+            </div>
+          ) : null}
+
+          <div className={`timecard-employee-picker${isMobileStaffPunch ? " is-mobile-staff-hidden" : ""}`} aria-label="打刻する従業員">
             {employeesForStore.length ? employeesForStore.map((employee) => {
               const latestPunch = data?.latestPunches.find((punch) => punch?.employeeId === employee.id) ?? null;
               const employeeState = getPunchState(latestPunch);

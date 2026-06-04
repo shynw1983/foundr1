@@ -126,6 +126,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(stores.weather_location_name, '') as "weatherLocationName",
           stores.weather_latitude::float as "weatherLatitude",
           stores.weather_longitude::float as "weatherLongitude",
+          coalesce(stores.attendance_location_enabled, false) as "attendanceLocationEnabled",
+          stores.attendance_latitude::float as "attendanceLatitude",
+          stores.attendance_longitude::float as "attendanceLongitude",
+          coalesce(stores.attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
+          coalesce(stores.attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters",
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', store_sales_sources.id::text,

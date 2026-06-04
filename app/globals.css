@@ -5134,6 +5134,54 @@ body :where(
   font-weight: 800;
 }
 
+.mobile-timecard-location {
+  display: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.mobile-timecard-location strong,
+.mobile-timecard-location span,
+.mobile-timecard-location small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mobile-timecard-location strong {
+  font-size: 13px;
+}
+
+.mobile-timecard-location span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.mobile-timecard-location small {
+  margin-top: 4px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.mobile-timecard-location.is-ready {
+  border-color: rgba(33, 116, 91, 0.32);
+  background: var(--green-soft);
+}
+
+.mobile-timecard-location.is-error {
+  border-color: rgba(176, 54, 54, 0.32);
+  background: #fff5f4;
+}
+
 .timecard-employee-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12390,6 +12438,19 @@ body :where(
 
   .timecard-punch-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobile-timecard-location {
+    display: grid;
+  }
+
+  .mobile-timecard-location .secondary-button {
+    min-height: 42px;
+    padding: 0 14px;
+  }
+
+  .timecard-employee-picker.is-mobile-staff-hidden {
+    display: none;
   }
 
   .timecard-employee-picker {

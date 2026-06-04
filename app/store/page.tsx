@@ -1,6 +1,7 @@
 "use client";
 
 import { BookOpen, Clock3, ClipboardList, ShoppingCart, Tags } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
@@ -42,6 +43,40 @@ const storeModules = [
 ];
 
 export default function StoreHomePage() {
+  const [employeeRole, setEmployeeRole] = useState("");
+  const [isTimecardEmployee, setIsTimecardEmployee] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const visibleModules = useMemo(() => (
+    isMobileViewport && employeeRole === "staff" && isTimecardEmployee
+      ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard")
+      : storeModules
+  ), [employeeRole, isMobileViewport, isTimecardEmployee]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobileViewport(query.matches);
+    updateViewport();
+    query.addEventListener("change", updateViewport);
+    return () => query.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCurrentEmployee() {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
+      if (isMounted) {
+        setEmployeeRole(String(body.employee?.role ?? ""));
+        setIsTimecardEmployee(body.employee?.isTimecardEmployee === true);
+      }
+    }
+    void loadCurrentEmployee();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -56,7 +91,7 @@ export default function StoreHomePage() {
       </header>
 
       <section className="store-workbench-grid">
-        {storeModules.map((module) => {
+        {visibleModules.map((module) => {
           const Icon = module.icon;
           const content = (
             <>

@@ -27,6 +27,11 @@ alter table stores add column if not exists social_insurance_prefecture text not
 alter table stores add column if not exists weather_location_name text;
 alter table stores add column if not exists weather_latitude numeric(10, 6);
 alter table stores add column if not exists weather_longitude numeric(10, 6);
+alter table stores add column if not exists attendance_location_enabled boolean not null default false;
+alter table stores add column if not exists attendance_latitude numeric(10, 6);
+alter table stores add column if not exists attendance_longitude numeric(10, 6);
+alter table stores add column if not exists attendance_radius_meters integer not null default 100;
+alter table stores add column if not exists attendance_accuracy_threshold_meters integer not null default 100;
 
 create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
@@ -516,9 +521,28 @@ create table if not exists timecard_punches (
   punched_at timestamptz not null default now(),
   source text not null default 'store',
   note text,
+  mobile_latitude numeric(10, 6),
+  mobile_longitude numeric(10, 6),
+  mobile_accuracy_meters numeric(10, 2),
+  store_latitude numeric(10, 6),
+  store_longitude numeric(10, 6),
+  distance_from_store_meters numeric(10, 2),
+  location_verdict text,
+  user_agent text,
+  ip_address text,
   created_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table timecard_punches add column if not exists mobile_latitude numeric(10, 6);
+alter table timecard_punches add column if not exists mobile_longitude numeric(10, 6);
+alter table timecard_punches add column if not exists mobile_accuracy_meters numeric(10, 2);
+alter table timecard_punches add column if not exists store_latitude numeric(10, 6);
+alter table timecard_punches add column if not exists store_longitude numeric(10, 6);
+alter table timecard_punches add column if not exists distance_from_store_meters numeric(10, 2);
+alter table timecard_punches add column if not exists location_verdict text;
+alter table timecard_punches add column if not exists user_agent text;
+alter table timecard_punches add column if not exists ip_address text;
 
 create table if not exists timecard_shifts (
   id uuid primary key default gen_random_uuid(),

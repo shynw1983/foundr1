@@ -38,6 +38,11 @@ type StoreItem = {
   weatherLocationName?: string;
   weatherLatitude?: number | null;
   weatherLongitude?: number | null;
+  attendanceLocationEnabled?: boolean;
+  attendanceLatitude?: number | null;
+  attendanceLongitude?: number | null;
+  attendanceRadiusMeters?: number;
+  attendanceAccuracyThresholdMeters?: number;
   salesSources?: SalesSourceItem[];
   paymentAccount?: PaymentAccountItem | null;
 };
@@ -134,6 +139,11 @@ export default function StoresPage() {
   const [editingWeatherLocationName, setEditingWeatherLocationName] = useState("");
   const [editingWeatherLatitude, setEditingWeatherLatitude] = useState("");
   const [editingWeatherLongitude, setEditingWeatherLongitude] = useState("");
+  const [editingAttendanceLocationEnabled, setEditingAttendanceLocationEnabled] = useState(false);
+  const [editingAttendanceLatitude, setEditingAttendanceLatitude] = useState("");
+  const [editingAttendanceLongitude, setEditingAttendanceLongitude] = useState("");
+  const [editingAttendanceRadiusMeters, setEditingAttendanceRadiusMeters] = useState("100");
+  const [editingAttendanceAccuracyThresholdMeters, setEditingAttendanceAccuracyThresholdMeters] = useState("100");
   const [editingStoreTab, setEditingStoreTab] = useState<StoreEditTab>("basic");
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
@@ -175,6 +185,11 @@ export default function StoresPage() {
     const weatherLocationName = String(formData.get("weatherLocationName") ?? "");
     const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude"));
     const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude"));
+    const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
+    const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude"));
+    const attendanceLongitude = parseOptionalCoordinate(formData.get("attendanceLongitude"));
+    const attendanceRadiusMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceRadiusMeters") ?? 100) || 100)));
+    const attendanceAccuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceAccuracyThresholdMeters") ?? 100) || 100)));
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
     formData.set("businessHours", serializeBusinessHours(newBusinessHours));
     formData.set("payrollCycleType", "month_end");
@@ -212,7 +227,12 @@ export default function StoresPage() {
         socialInsurancePrefecture: "福岡県",
         weatherLocationName,
         weatherLatitude,
-        weatherLongitude
+        weatherLongitude,
+        attendanceLocationEnabled,
+        attendanceLatitude,
+        attendanceLongitude,
+        attendanceRadiusMeters,
+        attendanceAccuracyThresholdMeters
       }
     ]);
     setSelectedStoreBrands([]);
@@ -343,6 +363,11 @@ export default function StoresPage() {
     const weatherLocationName = String(formData.get("weatherLocationName") ?? editingWeatherLocationName).trim();
     const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude") ?? editingWeatherLatitude);
     const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude") ?? editingWeatherLongitude);
+    const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
+    const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude") ?? editingAttendanceLatitude);
+    const attendanceLongitude = parseOptionalCoordinate(formData.get("attendanceLongitude") ?? editingAttendanceLongitude);
+    const attendanceRadiusMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceRadiusMeters") ?? editingAttendanceRadiusMeters) || 100)));
+    const attendanceAccuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceAccuracyThresholdMeters") ?? editingAttendanceAccuracyThresholdMeters) || 100)));
     const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
     const payrollClosingDay = payrollCycleType === "month_end" ? 31 : Math.max(1, Math.min(30, Math.round(Number(formData.get("payrollClosingDay") ?? editingPayrollClosingDay) || editingPayrollClosingDay)));
     const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
@@ -392,7 +417,12 @@ export default function StoresPage() {
         socialInsurancePrefecture,
         weatherLocationName,
         weatherLatitude,
-        weatherLongitude
+        weatherLongitude,
+        attendanceLocationEnabled,
+        attendanceLatitude,
+        attendanceLongitude,
+        attendanceRadiusMeters,
+        attendanceAccuracyThresholdMeters
       } : item)
     );
     setEditingStore(null);
@@ -408,6 +438,11 @@ export default function StoresPage() {
     setEditingWeatherLocationName("");
     setEditingWeatherLatitude("");
     setEditingWeatherLongitude("");
+    setEditingAttendanceLocationEnabled(false);
+    setEditingAttendanceLatitude("");
+    setEditingAttendanceLongitude("");
+    setEditingAttendanceRadiusMeters("100");
+    setEditingAttendanceAccuracyThresholdMeters("100");
     setEditingStoreTab("basic");
     void loadData();
     showNotice("店舗を更新しました。");
@@ -428,6 +463,11 @@ export default function StoresPage() {
     setEditingWeatherLocationName(store.weatherLocationName ?? "");
     setEditingWeatherLatitude(store.weatherLatitude === null || store.weatherLatitude === undefined ? "" : String(store.weatherLatitude));
     setEditingWeatherLongitude(store.weatherLongitude === null || store.weatherLongitude === undefined ? "" : String(store.weatherLongitude));
+    setEditingAttendanceLocationEnabled(store.attendanceLocationEnabled === true);
+    setEditingAttendanceLatitude(store.attendanceLatitude === null || store.attendanceLatitude === undefined ? "" : String(store.attendanceLatitude));
+    setEditingAttendanceLongitude(store.attendanceLongitude === null || store.attendanceLongitude === undefined ? "" : String(store.attendanceLongitude));
+    setEditingAttendanceRadiusMeters(String(store.attendanceRadiusMeters ?? 100));
+    setEditingAttendanceAccuracyThresholdMeters(String(store.attendanceAccuracyThresholdMeters ?? 100));
     setEditingStoreTab("basic");
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
@@ -536,6 +576,7 @@ export default function StoresPage() {
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     <small>天気: {store.weatherLocationName || (store.weatherLatitude && store.weatherLongitude ? `${store.weatherLatitude}, ${store.weatherLongitude}` : "福岡市（既定）")}</small>
+                    <small>打刻地点: {store.attendanceLocationEnabled ? `${store.attendanceLatitude ?? "--"}, ${store.attendanceLongitude ?? "--"} / ${store.attendanceRadiusMeters ?? 100}m` : "位置制限なし"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
                   <div className="row-actions">
@@ -588,6 +629,30 @@ export default function StoresPage() {
                 <label>
                   <span>経度</span>
                   <input name="weatherLongitude" inputMode="decimal" placeholder="例: 130.4017" />
+                </label>
+              </div>
+              <div className="store-weather-settings">
+                <strong>モバイル打刻地点</strong>
+                <p>店舗スタッフ本人のスマホ打刻で使用します。</p>
+                <label className="inline-checkbox">
+                  <input type="checkbox" name="attendanceLocationEnabled" />
+                  位置範囲内のみ打刻を許可
+                </label>
+                <label>
+                  <span>緯度</span>
+                  <input name="attendanceLatitude" inputMode="decimal" placeholder="例: 33.5902" />
+                </label>
+                <label>
+                  <span>経度</span>
+                  <input name="attendanceLongitude" inputMode="decimal" placeholder="例: 130.4017" />
+                </label>
+                <label>
+                  <span>許可範囲（m）</span>
+                  <input name="attendanceRadiusMeters" type="number" min="10" max="2000" defaultValue="100" />
+                </label>
+                <label>
+                  <span>位置精度上限（m）</span>
+                  <input name="attendanceAccuracyThresholdMeters" type="number" min="10" max="2000" defaultValue="100" />
                 </label>
               </div>
               <div className="checkbox-group">
@@ -712,6 +777,35 @@ export default function StoresPage() {
                       <input name="weatherLongitude" inputMode="decimal" value={editingWeatherLongitude} onChange={(event) => setEditingWeatherLongitude(event.target.value)} placeholder="例: 130.4017" />
                     </label>
                   </div>
+                  <div className="store-weather-settings">
+                    <strong>モバイル打刻地点</strong>
+                    <p>店舗スタッフ本人のスマホ打刻で、店舗からの距離と位置精度を確認します。</p>
+                    <label className="inline-checkbox">
+                      <input
+                        type="checkbox"
+                        name="attendanceLocationEnabled"
+                        checked={editingAttendanceLocationEnabled}
+                        onChange={(event) => setEditingAttendanceLocationEnabled(event.target.checked)}
+                      />
+                      位置範囲内のみ打刻を許可
+                    </label>
+                    <label>
+                      <span>緯度</span>
+                      <input name="attendanceLatitude" inputMode="decimal" value={editingAttendanceLatitude} onChange={(event) => setEditingAttendanceLatitude(event.target.value)} placeholder="例: 33.5902" />
+                    </label>
+                    <label>
+                      <span>経度</span>
+                      <input name="attendanceLongitude" inputMode="decimal" value={editingAttendanceLongitude} onChange={(event) => setEditingAttendanceLongitude(event.target.value)} placeholder="例: 130.4017" />
+                    </label>
+                    <label>
+                      <span>許可範囲（m）</span>
+                      <input name="attendanceRadiusMeters" type="number" min="10" max="2000" value={editingAttendanceRadiusMeters} onChange={(event) => setEditingAttendanceRadiusMeters(event.target.value)} />
+                    </label>
+                    <label>
+                      <span>位置精度上限（m）</span>
+                      <input name="attendanceAccuracyThresholdMeters" type="number" min="10" max="2000" value={editingAttendanceAccuracyThresholdMeters} onChange={(event) => setEditingAttendanceAccuracyThresholdMeters(event.target.value)} />
+                    </label>
+                  </div>
                   <div className="checkbox-group">
                     <span>取り扱いブランド</span>
                     {brandsData.map((brand) => (
@@ -740,6 +834,11 @@ export default function StoresPage() {
                   <input type="hidden" name="weatherLocationName" value={editingWeatherLocationName} />
                   <input type="hidden" name="weatherLatitude" value={editingWeatherLatitude} />
                   <input type="hidden" name="weatherLongitude" value={editingWeatherLongitude} />
+                  {editingAttendanceLocationEnabled ? <input type="hidden" name="attendanceLocationEnabled" value="on" /> : null}
+                  <input type="hidden" name="attendanceLatitude" value={editingAttendanceLatitude} />
+                  <input type="hidden" name="attendanceLongitude" value={editingAttendanceLongitude} />
+                  <input type="hidden" name="attendanceRadiusMeters" value={editingAttendanceRadiusMeters} />
+                  <input type="hidden" name="attendanceAccuracyThresholdMeters" value={editingAttendanceAccuracyThresholdMeters} />
                 </>
               )}
               {editingStoreTab === "hours" ? (
