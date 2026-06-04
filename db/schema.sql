@@ -1360,10 +1360,13 @@ create table if not exists store_customer_order_items (
   option_label text not null default '',
   topping_keys text[] not null default '{}',
   topping_labels text[] not null default '{}',
+  quantity integer not null default 1,
   amount integer not null default 0,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table store_customer_order_items add column if not exists quantity integer not null default 1;
 
 create table if not exists sales_orders (
   id uuid primary key default gen_random_uuid(),

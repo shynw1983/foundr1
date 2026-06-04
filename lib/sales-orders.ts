@@ -38,6 +38,7 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
   if (!order) return null;
 
   const orderedAt = order.created_at ?? new Date();
+  const isPosOrder = order.order_source === "store_pos";
   const salesOrderRows = await sql`
     insert into sales_orders (
       source_order_id,
@@ -68,8 +69,8 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       ${order.id},
       ${order.brand_id},
       ${order.store_id},
-      'web_reservation',
-      ${order.order_source || "nanacha_web"},
+      ${isPosOrder ? "in_store" : "web_reservation"},
+      ${isPosOrder ? "pos" : order.order_source || "nanacha_web"},
       ${order.pickup_code},
       ${order.pickup_code},
       ${order.status},
@@ -140,6 +141,7 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       store_customer_order_items.option_label,
       store_customer_order_items.topping_keys,
       store_customer_order_items.topping_labels,
+      coalesce(store_customer_order_items.quantity, 1) as quantity,
       store_customer_order_items.amount,
       store_customer_order_items.sort_order
     from store_customer_order_items
@@ -169,8 +171,8 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
         ${item.menu_catalog_item_id},
         ${item.item_name},
         ${item.category || null},
-        1,
-        ${item.amount},
+        ${item.quantity ?? 1},
+        ${Math.round(Number(item.amount ?? 0) / Math.max(1, Number(item.quantity ?? 1)))},
         0,
         ${item.amount},
         ${JSON.stringify({
@@ -189,6 +191,7 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
         menu_catalog_item_id = excluded.menu_catalog_item_id,
         product_name_snapshot = excluded.product_name_snapshot,
         category_snapshot = excluded.category_snapshot,
+        quantity = excluded.quantity,
         unit_price = excluded.unit_price,
         line_total = excluded.line_total,
         modifiers_json = excluded.modifiers_json,
