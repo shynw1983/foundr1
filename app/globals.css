@@ -5574,6 +5574,28 @@ body :where(
   margin-bottom: 12px;
 }
 
+.shift-schedule-period-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.shift-schedule-period-label svg {
+  color: var(--green);
+}
+
+.shift-schedule-period-label strong {
+  color: var(--ink);
+}
+
 .shift-coverage-card {
   padding: 16px;
 }
@@ -5635,6 +5657,11 @@ body :where(
 .shift-coverage-row.is-approved {
   border-color: rgba(33, 116, 91, 0.22);
   background: var(--green-soft);
+}
+
+.shift-coverage-row.is-scheduled {
+  border-color: rgba(17, 24, 39, 0.14);
+  background: #f7f9fc;
 }
 
 .shift-coverage-person {

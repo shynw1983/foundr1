@@ -35,7 +35,10 @@ type ShiftRequestPayload = {
   selectedStoreId: string;
   stores: StoreOption[];
   employees: EmployeeOption[];
+  schedulingPeriod?: { periodType: string; startDate: string; endDate: string; label: string };
+  schedulingDates?: string[];
   requests: ShiftRequestItem[];
+  myShifts?: Array<{ id: string; workDate: string; scheduledStart: string | null; scheduledEnd: string | null; employeeName: string }>;
   publications: Array<{ id: string; scheduleMonth: string; note: string | null; publishedAt: string; publishedByName: string | null }>;
 };
 
@@ -131,6 +134,7 @@ function getBarStyle(start: string | null | undefined, end: string | null | unde
 
 function getCoverageSummary(
   requests: ShiftRequestItem[],
+  shifts: Array<{ scheduledStart: string | null; scheduledEnd: string | null }>,
   day: { open: string; close: string; closed: boolean },
   drafts: Record<string, ApprovalDraft>
 ) {
@@ -138,7 +142,7 @@ function getCoverageSummary(
   const openMinutes = timeToMinutes(day.open);
   const closeBase = timeToMinutes(day.close);
   const closeMinutes = closeBase <= openMinutes ? closeBase + 1440 : closeBase;
-  const intervals = requests
+  const requestIntervals = requests
     .filter((request) => request.status !== "rejected")
     .map((request) => {
       const window = getShiftWindow(request);
@@ -151,7 +155,18 @@ function getCoverageSummary(
         start: Math.max(openMinutes, start),
         end: Math.min(closeMinutes, end)
       };
-    })
+    });
+  const shiftIntervals = shifts.map((shift) => {
+    const startBase = timeToMinutes(shift.scheduledStart);
+    const endBase = timeToMinutes(shift.scheduledEnd);
+    const start = startBase < openMinutes ? startBase + 1440 : startBase;
+    const end = endBase <= startBase ? endBase + 1440 : endBase;
+    return {
+      start: Math.max(openMinutes, start),
+      end: Math.min(closeMinutes, end)
+    };
+  });
+  const intervals = [...requestIntervals, ...shiftIntervals]
     .filter((interval) => interval.end > interval.start)
     .sort((left, right) => left.start - right.start);
 
@@ -224,8 +239,16 @@ export default function TimecardShiftRequestsPage() {
       if (request.requestType !== "availability" || !request.workDate) continue;
       groups.set(request.workDate, [...(groups.get(request.workDate) ?? []), request]);
     }
-    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
+    return groups;
   }, [filteredRequests]);
+  const shiftsByDate = useMemo(() => {
+    const groups = new Map<string, NonNullable<ShiftRequestPayload["myShifts"]>>();
+    for (const shift of data?.myShifts ?? []) {
+      groups.set(shift.workDate, [...(groups.get(shift.workDate) ?? []), shift]);
+    }
+    return groups;
+  }, [data?.myShifts]);
+  const calendarDates = data?.schedulingDates ?? Array.from(availabilityByDate.keys()).sort((left, right) => left.localeCompare(right));
   const otherRequests = useMemo(() => filteredRequests.filter((request) => request.requestType !== "availability"), [filteredRequests]);
 
   async function reviewRequest(request: ShiftRequestItem, approved: boolean, candidateId = "", approvalDraft?: ApprovalDraft) {
@@ -340,16 +363,25 @@ export default function TimecardShiftRequestsPage() {
 
         <section className="shift-coverage-list">
           {isLoading ? <div className="empty-state">読み込み中</div> : null}
-          {!isLoading && availabilityByDate.length === 0 ? <div className="empty-state">対象の希望シフトはありません。</div> : null}
-          {availabilityByDate.map(([workDate, requests]) => {
+          {!isLoading && calendarDates.length === 0 ? <div className="empty-state">排班対象期間がありません。</div> : null}
+          {data?.schedulingPeriod ? (
+            <div className="shift-schedule-period-label">
+              <CalendarDays size={16} />
+              <strong>{data.schedulingPeriod.label}</strong>
+              <span>{data.schedulingPeriod.startDate} - {data.schedulingPeriod.endDate}</span>
+            </div>
+          ) : null}
+          {calendarDates.map((workDate) => {
+            const requests = availabilityByDate.get(workDate) ?? [];
+            const shifts = shiftsByDate.get(workDate) ?? [];
             const day = getBusinessDay(businessHours, workDate);
-            const coverageSummary = getCoverageSummary(requests, day, approvalDrafts);
+            const coverageSummary = getCoverageSummary(requests, shifts, day, approvalDrafts);
             return (
               <article className="panel shift-coverage-card" key={workDate}>
                 <div className="shift-coverage-head">
                   <div>
                     <h3>{formatWorkDate(workDate)}</h3>
-                    <p>営業時間 {day.closed ? "休業" : `${day.open}-${day.close}`} / 希望 {requests.length} 件</p>
+                    <p>営業時間 {day.closed ? "休業" : `${day.open}-${day.close}`} / 希望 {requests.length} 件 / 確定 {shifts.length} 件</p>
                   </div>
                   <strong>{coverageSummary}</strong>
                 </div>
@@ -359,6 +391,24 @@ export default function TimecardShiftRequestsPage() {
                       <span>{day.open}</span>
                       <span>{day.close}</span>
                     </div>
+                    {shifts.map((shift) => (
+                      <div className="shift-coverage-row is-approved is-scheduled" key={`shift-${shift.id}`}>
+                        <div className="shift-coverage-person">
+                          <strong>{shift.employeeName}</strong>
+                          <span>確定 {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</span>
+                        </div>
+                        <div className="shift-coverage-bar-track">
+                          <span className="shift-coverage-business-line" />
+                          <span
+                            className="shift-coverage-approved-bar"
+                            style={getBarStyle(shift.scheduledStart, shift.scheduledEnd, day.open, day.close)}
+                          />
+                        </div>
+                        <div className="shift-coverage-controls">
+                          <strong>確定済み</strong>
+                        </div>
+                      </div>
+                    ))}
                     {requests.map((request) => {
                       const window = getShiftWindow(request);
                       const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
@@ -406,6 +456,7 @@ export default function TimecardShiftRequestsPage() {
                         </div>
                       );
                     })}
+                    {!requests.length && !shifts.length ? <p className="empty-state-text">この日の希望シフトはまだありません。</p> : null}
                   </div>
                 ) : (
                   <p className="empty-state-text">この日は休業日です。承認前に営業時間または対象日を確認してください。</p>

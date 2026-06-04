@@ -140,6 +140,31 @@ function getShiftSubmissionPeriod(store: { firstHalfDeadlineDay?: unknown; secon
     .sort((left, right) => left.comparable - right.comparable)[0] ?? candidates[candidates.length - 1];
 }
 
+function getCurrentSchedulingPeriod() {
+  const now = getJstNowParts();
+  const targetYear = now.year;
+  const targetMonth = now.month - 1;
+  if (now.day < 15) {
+    const monthLabel = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}`;
+    const nextMonthStart = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
+    return {
+      periodType: "second_half",
+      startDate: `${monthLabel}-15`,
+      endDate: formatDateKey(new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000)),
+      label: `${monthLabel} 後半`
+    };
+  }
+
+  const nextMonthStart = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
+  const nextMonthLabel = `${nextMonthStart.getUTCFullYear()}-${String(nextMonthStart.getUTCMonth() + 1).padStart(2, "0")}`;
+  return {
+    periodType: "first_half",
+    startDate: `${nextMonthLabel}-01`,
+    endDate: `${nextMonthLabel}-14`,
+    label: `${nextMonthLabel} 前半`
+  };
+}
+
 function enumerateDates(startDate: string, endDate: string) {
   const dates: string[] = [];
   const current = new Date(`${startDate}T00:00:00+09:00`);
@@ -274,6 +299,12 @@ export async function GET(request: Request) {
   ` : [];
   const submissionPeriod = getShiftSubmissionPeriod(shiftSettingsRows[0] ?? null);
   const submissionDates = enumerateDates(submissionPeriod.startDate, submissionPeriod.endDate);
+  const schedulingPeriod = getCurrentSchedulingPeriod();
+  const schedulingDates = enumerateDates(schedulingPeriod.startDate, schedulingPeriod.endDate);
+  const queryStartDate = startDate < schedulingPeriod.startDate ? startDate : schedulingPeriod.startDate;
+  const schedulingEndExclusive = new Date(`${schedulingPeriod.endDate}T00:00:00+09:00`);
+  schedulingEndExclusive.setUTCDate(schedulingEndExclusive.getUTCDate() + 1);
+  const queryEndDate = endDate > schedulingPeriod.endDate ? endDate : formatDateKey(schedulingEndExclusive);
 
   const requests = selectedStoreId ? await sql`
     select
@@ -334,8 +365,8 @@ export async function GET(request: Request) {
       and (
         timecard_shift_requests.work_date is null
         or (
-          timecard_shift_requests.work_date >= ${startDate}::date
-          and timecard_shift_requests.work_date < ${endDate}::date
+          timecard_shift_requests.work_date >= ${queryStartDate}::date
+          and timecard_shift_requests.work_date < ${queryEndDate}::date
         )
       )
       and (
@@ -358,8 +389,8 @@ export async function GET(request: Request) {
     from timecard_shifts
     join employees on employees.id = timecard_shifts.employee_id
     where timecard_shifts.store_id::text = ${selectedStoreId}
-      and timecard_shifts.work_date >= ${startDate}::date
-      and timecard_shifts.work_date < ${endDate}::date
+      and timecard_shifts.work_date >= ${queryStartDate}::date
+      and timecard_shifts.work_date < ${queryEndDate}::date
       and (${managerRoles.has(session.role)} or timecard_shifts.employee_id::text = ${session.id})
     order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc
   ` : [];
@@ -388,6 +419,8 @@ export async function GET(request: Request) {
     employees,
     submissionPeriod,
     submissionDates,
+    schedulingPeriod,
+    schedulingDates,
     requests,
     myShifts,
     publications
