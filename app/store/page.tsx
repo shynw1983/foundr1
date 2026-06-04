@@ -31,7 +31,7 @@ const storeModules = [
     description: "出退勤、休憩、シフト確認を行います。",
     href: "/store/timecard",
     icon: Clock3,
-    status: "準備中"
+    status: "利用可能"
   },
   {
     title: "POS",
