@@ -12432,7 +12432,7 @@ body :where(
   }
 
   .store-nav-menu summary {
-    width: 118px;
+    width: 100%;
     margin-left: auto;
     padding-inline: 10px;
   }
