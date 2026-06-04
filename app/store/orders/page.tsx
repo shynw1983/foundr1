@@ -148,8 +148,9 @@ export default function StoreOrdersPage() {
     );
   };
 
-  const saveMinimumPickupMinutes = async () => {
+  const saveOperationSettings = async (patch: Partial<StoreOperation> = {}, successMessage = "受付設定を保存しました。") => {
     if (!selectedStoreId || !operation) return;
+    const nextOperation = { ...operation, ...patch };
     const rawMinutes = minimumPickupDraft.trim();
     const minutes = rawMinutes === "" ? null : Math.max(0, Math.min(240, Math.round(Number(rawMinutes) || 0)));
     setOperationSaving(true);
@@ -160,19 +161,27 @@ export default function StoreOrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           storeId: selectedStoreId,
-          reservationsEnabled: operation.reservationsEnabled,
-          statusNote: operation.statusNote,
+          reservationsEnabled: nextOperation.reservationsEnabled,
+          statusNote: nextOperation.statusNote,
           minimumPickupMinutes: minutes
         })
       });
       if (!response.ok) throw new Error("save failed");
       await loadOperation(selectedStoreId);
-      setOperationMessage(minutes === null ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。");
+      setOperationMessage(successMessage);
     } catch {
-      setOperationMessage("最短準備時間を保存できませんでした。");
+      setOperationMessage("受付設定を保存できませんでした。");
     } finally {
       setOperationSaving(false);
     }
+  };
+
+  const saveMinimumPickupMinutes = async () => {
+    const rawMinutes = minimumPickupDraft.trim();
+    await saveOperationSettings(
+      {},
+      rawMinutes === "" ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。",
+    );
   };
 
   const ensureAudioReady = async () => {
@@ -506,11 +515,37 @@ export default function StoreOrdersPage() {
           {access?.stores.length ? (
             <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
               <div>
-                <span>最短受け取り準備時間</span>
-                <small>空欄でブランド初期値</small>
+                <span>受付設定</span>
+                <small>受付状態と最短準備時間</small>
               </div>
               {operation ? (
                 <>
+                  <div className="store-reception-buttons" aria-label="受付状態">
+                    <button
+                      className={operation.reservationsEnabled ? "store-reception-button is-on" : "store-reception-button"}
+                      type="button"
+                      disabled={operationSaving}
+                      onClick={() => void saveOperationSettings({ reservationsEnabled: true, statusNote: "" }, "通常受付にしました。")}
+                    >
+                      通常受付
+                    </button>
+                    <button
+                      className={!operation.reservationsEnabled && operation.statusNote !== "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
+                      type="button"
+                      disabled={operationSaving}
+                      onClick={() => void saveOperationSettings({ reservationsEnabled: false, statusNote: "一時休止" }, "一時休止にしました。")}
+                    >
+                      一時休止
+                    </button>
+                    <button
+                      className={!operation.reservationsEnabled && operation.statusNote === "本日休業" ? "store-reception-button is-off" : "store-reception-button"}
+                      type="button"
+                      disabled={operationSaving}
+                      onClick={() => void saveOperationSettings({ reservationsEnabled: false, statusNote: "本日休業" }, "本日休業にしました。")}
+                    >
+                      本日休業
+                    </button>
+                  </div>
                   <label>
                     <input
                       inputMode="numeric"

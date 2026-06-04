@@ -4392,7 +4392,7 @@ body :where(
 
 .store-pickup-setting {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   border: 1px solid var(--line);
@@ -4406,6 +4406,11 @@ body :where(
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.store-pickup-setting > div:first-child,
+.store-reception-buttons {
+  grid-column: 1 / -1;
 }
 
 .store-pickup-setting span,
@@ -4451,6 +4456,40 @@ body :where(
 
 .store-pickup-setting select {
   width: min(180px, 100%);
+}
+
+.store-reception-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.store-reception-button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.store-reception-button.is-on {
+  border-color: rgba(33, 116, 91, 0.32);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-reception-button.is-off {
+  border-color: rgba(188, 54, 54, 0.28);
+  background: #fff4f4;
+  color: #a72f2f;
+}
+
+.store-reception-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .store-stats-heading {
