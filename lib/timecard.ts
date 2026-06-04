@@ -172,6 +172,18 @@ export function formatJstTime(date: Date | string | null | undefined) {
   }).format(new Date(date));
 }
 
+export function formatJstDateTime(date: Date | string | null | undefined) {
+  if (!date) return null;
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: jstTimeZone,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(date));
+}
+
 export function getJstMonthRange(month: string) {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
   const nowMonth = getJstMonthLabel();

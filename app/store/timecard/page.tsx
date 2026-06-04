@@ -4,7 +4,7 @@ import { BriefcaseBusiness, Clock3, Coffee, LogIn, LogOut, RefreshCw } from "luc
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
-import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
+import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 
 type StoreOption = {
   id: string;
@@ -199,7 +199,7 @@ export default function StoreTimecardPage() {
                   <span className="timecard-employee-avatar">{employee.name.slice(0, 1)}</span>
                   <span>
                     <strong>{employee.name}</strong>
-                    <small>{employeeStatus}{latestPunch ? `・${formatJstTime(latestPunch.punchedAt)}` : ""}</small>
+                    <small>{employeeStatus}{latestPunch ? `・${formatJstDateTime(latestPunch.punchedAt)}` : ""}</small>
                   </span>
                 </button>
               );
@@ -210,7 +210,7 @@ export default function StoreTimecardPage() {
 
           <div className={`timecard-status is-${state}`}>
             <span>{selectedEmployee?.name ?? "従業員未選択"} / {statusLabel}</span>
-            <strong>{selectedLatestPunch ? `${formatJstTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
+            <strong>{selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
           </div>
 
           {message ? <div className="timecard-message">{message}</div> : null}
