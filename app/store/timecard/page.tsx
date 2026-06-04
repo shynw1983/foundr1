@@ -572,7 +572,7 @@ export default function StoreTimecardPage() {
         ) : null}
 
         <section className={`panel store-timecard-history${isMobileStaffPunch && activeMobilePanel !== "history" ? " is-mobile-collapsed" : ""}`}>
-          <div className="panel-title">
+          <div className="panel-title store-mobile-panel-title">
             <BriefcaseBusiness />
             <div>
               <h2>今月の実績</h2>
@@ -599,7 +599,7 @@ export default function StoreTimecardPage() {
         </section>
 
         <section className={`panel store-shift-request-panel${isMobileStaffPunch && (activeMobilePanel === "" || activeMobilePanel === "history") ? " is-mobile-collapsed" : ""} is-mobile-panel-${activeMobilePanel}`}>
-          <div className="panel-title">
+          <div className="panel-title store-mobile-panel-title">
             <ShiftPanelIcon />
             <div>
               <h2>{shiftPanelHeading.title}</h2>
