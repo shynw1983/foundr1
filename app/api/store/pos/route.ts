@@ -407,9 +407,9 @@ export async function POST(request: Request) {
   }
 
   const amount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
-  const cashSessionId = paymentMethod === "cash" ? await getOpenCashSessionId(storeId) : null;
-  if (paymentMethod === "cash" && !cashSessionId) {
-    return Response.json({ error: "現金会計の前に日次レジ締めを開始してください。" }, { status: 400 });
+  const cashSessionId = await getOpenCashSessionId(storeId);
+  if (!cashSessionId) {
+    return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
   }
   const { pickupDate, pickupTime } = getJstParts();
   const pickupCode = createPickupCode("P");

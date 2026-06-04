@@ -287,6 +287,7 @@ export default function StorePosPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const canUseRegister = Boolean(reconciliation.activeSession);
 
   function getItemOptionGroups(item: PosMenuItem) {
     return optionGroups
@@ -319,6 +320,10 @@ export default function StorePosPage() {
   }
 
   function addItem(item: PosMenuItem, selectedOptions: PosSelectedOption[] = []) {
+    if (!canUseRegister) {
+      setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
+      return;
+    }
     const optionTotal = selectedOptions.reduce((sum, option) => sum + getOptionPrice(option), 0);
     const cartKey = getCartKey(item, selectedOptions);
     setCart((current) => {
@@ -331,6 +336,10 @@ export default function StorePosPage() {
   }
 
   function beginItemSelection(item: PosMenuItem) {
+    if (!canUseRegister) {
+      setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
+      return;
+    }
     const groups = getItemOptionGroups(item);
     if (!groups.length) {
       addItem(item);
@@ -404,6 +413,10 @@ export default function StorePosPage() {
 
   async function checkout() {
     if (!selectedStoreId || cart.length === 0 || saving) return;
+    if (!canUseRegister) {
+      setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -431,7 +444,7 @@ export default function StorePosPage() {
       setCart([]);
       setNote("");
       setSummary(body.todaySummary as PosSummary);
-      if (paymentMethod === "cash") await loadReconciliation(selectedStoreId);
+      await loadReconciliation(selectedStoreId);
       setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
@@ -590,7 +603,7 @@ export default function StorePosPage() {
             <ReceiptText size={18} />
             <div>
               <strong>今日のレジ締めはまだ開始されていません。</strong>
-              <span>現金会計をする前に、釣銭準備金を入力してください。</span>
+              <span>POS 会計を始める前に、開店前のレジ金額を確認してください。</span>
             </div>
             <input inputMode="numeric" value={cashOpeningAmount} onChange={(event) => setCashOpeningAmount(event.target.value)} placeholder="開始金額" />
             <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving}>
@@ -677,6 +690,11 @@ export default function StorePosPage() {
               </div>
               <span>{visibleItems.length} 件</span>
             </div>
+            {!canUseRegister ? (
+              <div className="store-pos-lock-notice">
+                開店前のレジ金額を確認すると商品選択を開始できます。
+              </div>
+            ) : null}
 
             {loading ? (
               <div className="store-pos-empty">読み込み中...</div>
@@ -685,7 +703,7 @@ export default function StorePosPage() {
             ) : (
               <div className="store-pos-item-grid">
                 {visibleItems.map((item) => (
-                  <button key={item.id} className="store-pos-item-button" type="button" onClick={() => beginItemSelection(item)}>
+                  <button key={item.id} className="store-pos-item-button" type="button" onClick={() => beginItemSelection(item)} disabled={!canUseRegister}>
                     {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="store-pos-image-empty">F1</span>}
                     <div className="store-pos-item-info">
                       <span>{item.category || item.brandName}</span>
@@ -757,7 +775,7 @@ export default function StorePosPage() {
             <span>合計</span>
             <strong>{formatYen(subtotal)}</strong>
           </div>
-          <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={cart.length === 0 || saving}>
+          <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={cart.length === 0 || saving || !canUseRegister}>
             {saving ? "保存中..." : "会計を確定"}
           </button>
         </aside>

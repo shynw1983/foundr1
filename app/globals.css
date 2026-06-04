@@ -5463,6 +5463,11 @@ body :where(
   text-align: left;
 }
 
+.store-pos-item-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .store-pos-item-button img,
 .store-pos-image-empty {
   width: 82px;
@@ -5641,6 +5646,16 @@ body :where(
   background: #f8fafc;
   font-weight: 850;
   text-align: center;
+}
+
+.store-pos-lock-notice {
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--green-soft);
+  color: #1f6f55;
+  font-size: 13px;
+  font-weight: 850;
 }
 
 .store-pos-option-overlay {
