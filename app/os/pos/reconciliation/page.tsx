@@ -219,72 +219,70 @@ export default function PosReconciliationPage() {
   }, []);
 
   return (
-    <main className="os-home-shell pos-admin-page">
-      <header className="os-home-topbar">
-        <a className="brand-block" href="/os" aria-label="Foundr1 OS ホーム">
+    <main className="shell">
+      <aside className="sidebar" aria-label="管理画面ナビゲーション">
+        <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 OS</p>
-            <h1>POS</h1>
+            <h1>Foundr1 OS</h1>
           </div>
         </a>
-        <div className="topbar-actions">
+        <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
           <UserBadge />
-          <MobileNavMenu navItems={navItems} />
         </div>
-      </header>
+        <OsNavList navItems={navItems} />
+      </aside>
 
-      <div className="os-layout">
-        <aside className="sidebar">
-          <OsNavList navItems={navItems} />
-        </aside>
-
-        <section className="os-main-content">
-          <div className="management-header">
-            <div>
-              <p className="eyebrow">POS Cash</p>
-              <h2>日次レジ締め</h2>
-              <p>店舗ごとの現金残高、入出金、点検金額、差額理由を確認します。</p>
-            </div>
+      <section className="workspace pos-admin-page">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">POS Cash</p>
+            <h2>日次レジ締め</h2>
+            <span className="source-indicator">{loading ? "読み込み中" : "データ同期済み"}</span>
+          </div>
+          <div className="topbar-actions">
             <a className="secondary-button" href="/os/pos">
               <ArrowLeft size={16} />
               POS に戻る
             </a>
           </div>
+        </header>
 
-          {message ? <div className="action-notice">{message}</div> : null}
+        {message ? <div className="action-notice">{message}</div> : null}
 
-          <section className="panel pos-admin-toolbar">
-            <label>
-              <span>店舗</span>
-              <select
-                value={selectedStoreId}
-                onChange={(event) => {
-                  const storeId = event.target.value;
-                  setSelectedStoreId(storeId);
-                  void load(storeId, businessDate);
-                }}
-              >
-                {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>日付</span>
-              <input
-                type="date"
-                value={businessDate}
-                onChange={(event) => {
-                  const date = event.target.value;
-                  setBusinessDate(date);
-                  void load(selectedStoreId, date);
-                }}
-              />
-            </label>
-            <div className="pos-admin-actions">
-              <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
-              <a href="/store/pos" target="_blank" rel="noreferrer"><ShoppingCart size={16} />店舗 POS</a>
-            </div>
-          </section>
+        <section className="panel pos-admin-toolbar">
+          <label>
+            <span>店舗</span>
+            <select
+              value={selectedStoreId}
+              onChange={(event) => {
+                const storeId = event.target.value;
+                setSelectedStoreId(storeId);
+                void load(storeId, businessDate);
+              }}
+            >
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>日付</span>
+            <input
+              type="date"
+              value={businessDate}
+              onChange={(event) => {
+                const date = event.target.value;
+                setBusinessDate(date);
+                void load(selectedStoreId, date);
+              }}
+            />
+          </label>
+          <div className="pos-admin-actions">
+            <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
+            <a href="/store/pos" target="_blank" rel="noreferrer"><ShoppingCart size={16} />店舗 POS</a>
+          </div>
+        </section>
 
           <section className="metric-grid pos-admin-metrics">
             <article className="metric-card">
@@ -477,8 +475,7 @@ export default function PosReconciliationPage() {
               </div>
             )}
           </section>
-        </section>
-      </div>
+      </section>
     </main>
   );
 }

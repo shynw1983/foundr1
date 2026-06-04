@@ -156,173 +156,170 @@ export default function PosPage() {
   }, []);
 
   return (
-    <main className="os-home-shell pos-admin-page">
-      <header className="os-home-topbar">
-        <a className="brand-block" href="/os" aria-label="Foundr1 OS ホーム">
+    <main className="shell">
+      <aside className="sidebar" aria-label="管理画面ナビゲーション">
+        <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
           <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 OS</p>
-            <h1>POS</h1>
+            <h1>Foundr1 OS</h1>
           </div>
         </a>
-        <div className="topbar-actions">
+        <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
           <UserBadge />
-          <MobileNavMenu navItems={navItems} />
         </div>
-      </header>
+        <OsNavList navItems={navItems} />
+      </aside>
 
-      <div className="os-layout">
-        <aside className="sidebar">
-          <OsNavList navItems={navItems} />
-        </aside>
-
-        <section className="os-main-content">
-          <div className="management-header">
-            <div>
-              <p className="eyebrow">POS</p>
-              <h2>店頭会計</h2>
-              <p>店舗のレジ操作、販売メニュー、店頭売上を管理します。</p>
-            </div>
+      <section className="workspace pos-admin-page">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">POS</p>
+            <h2>店頭会計</h2>
+            <span className="source-indicator">{loading ? "読み込み中" : "データ同期済み"}</span>
+          </div>
+          <div className="topbar-actions">
             <a className="secondary-button" href="/store/pos" target="_blank" rel="noreferrer">
               <ExternalLink size={16} />
               店舗 POS を開く
             </a>
           </div>
+        </header>
 
-          {message ? <div className="action-notice">{message}</div> : null}
+        {message ? <div className="action-notice">{message}</div> : null}
 
-          <section className="panel pos-admin-toolbar">
-            <label>
-              <span>店舗</span>
-              <select
-                value={selectedStoreId}
-                onChange={(event) => {
-                  const storeId = event.target.value;
-                  setSelectedStoreId(storeId);
-                  void load(storeId);
-                }}
-              >
-                {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-            <div className="pos-admin-actions">
-              <a href="/os/menus"><MenuSquare size={16} />メニュー管理</a>
-              <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
-              <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
-              <a href="/os/stores"><Store size={16} />店舗設定</a>
-            </div>
-          </section>
-
-          <section className="metric-grid pos-admin-metrics">
-            <article className="metric-card">
-              <span>本日 POS 件数</span>
-              <strong>{loading ? "-" : `${summary.orderCount} 件`}</strong>
-              <p>店頭会計のみ</p>
-            </article>
-            <article className="metric-card">
-              <span>本日 POS 売上</span>
-              <strong>{loading ? "-" : formatYen(summary.total)}</strong>
-              <p>キャンセル除外</p>
-            </article>
-            <article className="metric-card">
-              <span>平均会計</span>
-              <strong>{loading ? "-" : formatYen(summary.average)}</strong>
-              <p>客単価の目安</p>
-            </article>
-            <article className="metric-card">
-              <span>現金差額</span>
-              <strong>{loading ? "-" : formatYen(reconciliation.totals.differenceAmount)}</strong>
-              <p>{reconciliation.activeSession ? "開いているレジ締めあり" : "締め済みセッション合計"}</p>
-            </article>
-          </section>
-
-          <section className="panel pos-admin-reconciliation">
-            <div className="panel-title">
-              <WalletCards />
-              <div>
-                <h3>日次レジ締め</h3>
-                <p>釣銭準備金、現金売上、入出金、点検金額の差額を確認します。</p>
-              </div>
-              <a className="text-button" href="/os/pos/reconciliation">明細を見る</a>
-            </div>
-            <div className="pos-admin-cash-grid">
-              <div>
-                <span>開始金額</span>
-                <strong>{formatYen(reconciliation.totals.openingAmount)}</strong>
-              </div>
-              <div>
-                <span>現金売上</span>
-                <strong>{formatYen(reconciliation.totals.cashSales)}</strong>
-              </div>
-              <div>
-                <span>入金 / 出金</span>
-                <strong>{formatYen(reconciliation.totals.cashIn)} / {formatYen(reconciliation.totals.cashOut)}</strong>
-              </div>
-              <div>
-                <span>システム上の現金</span>
-                <strong>{formatYen(reconciliation.totals.expectedCashAmount)}</strong>
-              </div>
-              <div>
-                <span>実際の現金</span>
-                <strong>{formatYen(reconciliation.totals.countedCashAmount)}</strong>
-              </div>
-              <div>
-                <span>差額</span>
-                <strong>{formatYen(reconciliation.totals.differenceAmount)}</strong>
-              </div>
-            </div>
-            {reconciliation.sessions.length === 0 ? (
-              <div className="empty-state">
-                <WalletCards />
-                <p>今日のレジ締めはまだありません。</p>
-              </div>
-            ) : (
-              <div className="pos-admin-order-list">
-                {reconciliation.sessions.map((session) => (
-                  <div key={session.id} className="pos-admin-order-row">
-                    <div>
-                      <strong>{session.registerName} / {session.status === "open" ? "進行中" : "締め済み"}</strong>
-                      <span>
-                        現金売上 {formatYen(session.cashSales)} / 予定 {formatYen(session.expectedCashAmount)}
-                        {session.countedCashAmount !== null ? ` / 実際 ${formatYen(session.countedCashAmount)}` : ""}
-                      </span>
-                    </div>
-                    <b>{session.differenceAmount === null ? "-" : formatYen(session.differenceAmount)}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel pos-admin-history">
-            <div className="panel-title">
-              <ShoppingCart />
-              <div>
-                <h3>直近の POS 会計</h3>
-                <p>店舗 POS で確定した注文が表示されます。</p>
-              </div>
-            </div>
-            {summary.latestOrders.length === 0 ? (
-              <div className="empty-state">
-                <MonitorSmartphone />
-                <p>今日の POS 会計はまだありません。</p>
-              </div>
-            ) : (
-              <div className="pos-admin-order-list">
-                {summary.latestOrders.map((order) => (
-                  <div key={order.id} className="pos-admin-order-row">
-                    <div>
-                      <strong>{order.pickupCode}</strong>
-                      <span>{order.createdTime} / {getPaymentLabel(order.paymentMethod)}</span>
-                    </div>
-                    <b>{formatYen(order.amount)}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+        <section className="panel pos-admin-toolbar">
+          <label>
+            <span>店舗</span>
+            <select
+              value={selectedStoreId}
+              onChange={(event) => {
+                const storeId = event.target.value;
+                setSelectedStoreId(storeId);
+                void load(storeId);
+              }}
+            >
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          </label>
+          <div className="pos-admin-actions">
+            <a href="/os/menus"><MenuSquare size={16} />メニュー管理</a>
+            <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
+            <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
+            <a href="/os/stores"><Store size={16} />店舗設定</a>
+          </div>
         </section>
-      </div>
+
+        <section className="metric-grid pos-admin-metrics">
+          <article className="metric-card">
+            <span>本日 POS 件数</span>
+            <strong>{loading ? "-" : `${summary.orderCount} 件`}</strong>
+            <p>店頭会計のみ</p>
+          </article>
+          <article className="metric-card">
+            <span>本日 POS 売上</span>
+            <strong>{loading ? "-" : formatYen(summary.total)}</strong>
+            <p>キャンセル除外</p>
+          </article>
+          <article className="metric-card">
+            <span>平均会計</span>
+            <strong>{loading ? "-" : formatYen(summary.average)}</strong>
+            <p>客単価の目安</p>
+          </article>
+          <article className="metric-card">
+            <span>現金差額</span>
+            <strong>{loading ? "-" : formatYen(reconciliation.totals.differenceAmount)}</strong>
+            <p>{reconciliation.activeSession ? "開いているレジ締めあり" : "締め済みセッション合計"}</p>
+          </article>
+        </section>
+
+        <section className="panel pos-admin-reconciliation">
+          <div className="panel-title">
+            <WalletCards />
+            <div>
+              <h3>日次レジ締め</h3>
+              <p>釣銭準備金、現金売上、入出金、点検金額の差額を確認します。</p>
+            </div>
+            <a className="text-button" href="/os/pos/reconciliation">明細を見る</a>
+          </div>
+          <div className="pos-admin-cash-grid">
+            <div>
+              <span>開始金額</span>
+              <strong>{formatYen(reconciliation.totals.openingAmount)}</strong>
+            </div>
+            <div>
+              <span>現金売上</span>
+              <strong>{formatYen(reconciliation.totals.cashSales)}</strong>
+            </div>
+            <div>
+              <span>入金 / 出金</span>
+              <strong>{formatYen(reconciliation.totals.cashIn)} / {formatYen(reconciliation.totals.cashOut)}</strong>
+            </div>
+            <div>
+              <span>システム上の現金</span>
+              <strong>{formatYen(reconciliation.totals.expectedCashAmount)}</strong>
+            </div>
+            <div>
+              <span>実際の現金</span>
+              <strong>{formatYen(reconciliation.totals.countedCashAmount)}</strong>
+            </div>
+            <div>
+              <span>差額</span>
+              <strong>{formatYen(reconciliation.totals.differenceAmount)}</strong>
+            </div>
+          </div>
+          {reconciliation.sessions.length === 0 ? (
+            <div className="empty-state">
+              <WalletCards />
+              <p>今日のレジ締めはまだありません。</p>
+            </div>
+          ) : (
+            <div className="pos-admin-order-list">
+              {reconciliation.sessions.map((session) => (
+                <div key={session.id} className="pos-admin-order-row">
+                  <div>
+                    <strong>{session.registerName} / {session.status === "open" ? "進行中" : "締め済み"}</strong>
+                    <span>
+                      現金売上 {formatYen(session.cashSales)} / 予定 {formatYen(session.expectedCashAmount)}
+                      {session.countedCashAmount !== null ? ` / 実際 ${formatYen(session.countedCashAmount)}` : ""}
+                    </span>
+                  </div>
+                  <b>{session.differenceAmount === null ? "-" : formatYen(session.differenceAmount)}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="panel pos-admin-history">
+          <div className="panel-title">
+            <ShoppingCart />
+            <div>
+              <h3>直近の POS 会計</h3>
+              <p>店舗 POS で確定した注文が表示されます。</p>
+            </div>
+          </div>
+          {summary.latestOrders.length === 0 ? (
+            <div className="empty-state">
+              <MonitorSmartphone />
+              <p>今日の POS 会計はまだありません。</p>
+            </div>
+          ) : (
+            <div className="pos-admin-order-list">
+              {summary.latestOrders.map((order) => (
+                <div key={order.id} className="pos-admin-order-row">
+                  <div>
+                    <strong>{order.pickupCode}</strong>
+                    <span>{order.createdTime} / {getPaymentLabel(order.paymentMethod)}</span>
+                  </div>
+                  <b>{formatYen(order.amount)}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
     </main>
   );
 }
