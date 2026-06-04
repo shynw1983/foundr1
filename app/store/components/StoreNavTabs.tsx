@@ -53,8 +53,6 @@ function isNewPaidOrder(order: StoreOrderRealtimePayload["order"]) {
 }
 
 function shouldAlertOrder(order: StoreOrderRealtimePayload["order"]) {
-  if (!order?.id) return false;
-  if (order.status === "pending_payment") return true;
   return isNewPaidOrder(order);
 }
 
@@ -185,6 +183,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
           const channel = pusher.subscribe(channelName);
           channel.bind("pusher:subscription_error", startPolling);
           channel.bind("order.created", handleOrderCreated);
+          channel.bind("order.updated", handleOrderCreated);
           return channel;
         });
       })
@@ -195,6 +194,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
       if (pollingTimer) window.clearInterval(pollingTimer);
       channels.forEach((channel) => {
         channel.unbind("order.created", handleOrderCreated);
+        channel.unbind("order.updated", handleOrderCreated);
         pusher?.unsubscribe(channel.name);
       });
       pusher?.disconnect();

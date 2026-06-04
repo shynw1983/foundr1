@@ -101,6 +101,10 @@ function getPaymentPillClass(paymentStatus: string) {
   return "status-pill is-payment-unpaid";
 }
 
+function isPaidOrder(order?: StoreOrder | null) {
+  return order?.paymentStatus === "paid";
+}
+
 export default function StoreOrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [access, setAccess] = useState<StoreOrderAccess | null>(null);
@@ -432,7 +436,7 @@ export default function StoreOrdersPage() {
       : order.status === status;
     return matchesQuery && matchesStatus;
   }), [orders, query, status]);
-  const selectedOrder = visibleOrders.find((order) => order.id === selectedId) ?? visibleOrders[0];
+  const selectedOrder = visibleOrders.find((order) => order.id === selectedId && isPaidOrder(order)) ?? visibleOrders.find(isPaidOrder);
   const counters = {
     new: orders.filter((order) => order.status === "new").length,
     preparing: orders.filter((order) => order.status === "preparing").length,
@@ -635,12 +639,16 @@ export default function StoreOrdersPage() {
                 type="button"
                 className={[
                   "store-order-card",
+                  !isPaidOrder(order) ? "is-payment-pending" : "",
                   selectedOrder?.id === order.id ? "is-active" : "",
                   newOrderIds.includes(order.id) ? "is-new" : ""
                 ].filter(Boolean).join(" ")}
                 key={order.id}
-                onClick={() => setSelectedId(order.id)}
+                onClick={() => {
+                  if (isPaidOrder(order)) setSelectedId(order.id);
+                }}
               >
+                {!isPaidOrder(order) ? <span className="store-order-payment-badge">決済待ち</span> : null}
                 <span className="store-order-code">{order.pickupCode}</span>
                 <strong>{splitLines(order.drink).join(" / ")}</strong>
                 <span className="store-order-customer">
@@ -716,7 +724,7 @@ export default function StoreOrdersPage() {
               </div>
             </>
           ) : (
-            <p className="muted-text">注文を選択してください。</p>
+            <p className="muted-text">決済済みの注文を選択してください。未決済の注文は左側リストで確認できます。</p>
           )}
         </section>
       </section>

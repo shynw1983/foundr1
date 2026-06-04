@@ -4771,6 +4771,7 @@ body :where(
 }
 
 .store-order-card {
+  position: relative;
   display: grid;
   gap: 5px;
   width: 100%;
@@ -4780,6 +4781,34 @@ body :where(
   background: white;
   color: var(--ink);
   text-align: left;
+}
+
+.store-order-card.is-payment-pending {
+  border-color: #d8dee8;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f6f8fb,
+    #f6f8fb 10px,
+    #eef2f6 10px,
+    #eef2f6 20px
+  );
+  color: #667085;
+}
+
+.store-order-card.is-payment-pending .store-order-code,
+.store-order-card.is-payment-pending .store-order-customer,
+.store-order-card.is-payment-pending small {
+  color: #667085;
+}
+
+.store-order-payment-badge {
+  justify-self: start;
+  border-radius: 8px;
+  background: #e5e7eb;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 8px;
 }
 
 .store-order-card.is-active {
