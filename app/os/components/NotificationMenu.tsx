@@ -43,7 +43,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: string };
       setPushState("granted");
-      setPushMessage(body.error ?? "通知端末を保存できませんでした。");
+      setPushMessage(body.error ?? "この端末の通知情報を保存できませんでした。");
       return false;
     }
     setPushState("enabled");
@@ -171,7 +171,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
         </div>
         {pushState === "ready" || pushState === "granted" || pushState === "saving" ? (
           <button className="notification-push-button" type="button" disabled={pushState === "saving"} onClick={() => void enableWebPush()}>
-            {pushState === "ready" ? "プッシュ通知を許可" : pushState === "saving" ? "通知端末を登録中" : "通知端末を登録"}
+            {pushState === "ready" ? "プッシュ通知を許可" : pushState === "saving" ? "この端末を登録中" : "この端末を登録"}
           </button>
         ) : null}
         {pushState === "enabled" ? (

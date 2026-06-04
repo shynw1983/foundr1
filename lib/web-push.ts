@@ -59,7 +59,7 @@ export function parsePushSubscription(input: PushSubscriptionInput) {
 export async function saveWebPushSubscription(employeeId: string, subscription: PushSubscriptionInput, userAgent: string | null) {
   const parsed = parsePushSubscription(subscription);
   if (!parsed) {
-    return { ok: false, error: "通知端末情報を保存できませんでした。" };
+    return { ok: false, error: "この端末の通知情報を保存できませんでした。" };
   }
   await sql`
     insert into web_push_subscriptions (employee_id, endpoint, p256dh, auth, user_agent, revoked_at, updated_at)

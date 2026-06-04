@@ -30,7 +30,7 @@ export async function DELETE(request: Request) {
 
   const body = await request.json().catch(() => ({})) as SubscriptionBody;
   const endpoint = String(body.endpoint ?? body.subscription?.endpoint ?? "").trim();
-  if (!endpoint) return Response.json({ error: "通知端末情報が見つかりません。" }, { status: 400 });
+  if (!endpoint) return Response.json({ error: "この端末の通知情報が見つかりません。" }, { status: 400 });
   await removeWebPushSubscription(session.id, endpoint);
   return Response.json({ ok: true });
 }

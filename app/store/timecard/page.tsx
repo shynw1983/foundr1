@@ -387,7 +387,7 @@ export default function StoreTimecardPage() {
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
-      setShiftRequestMessage(body.error ?? "シフト申請を送信できませんでした。");
+      setShiftRequestMessage(body.error ?? "希望シフトを送信できませんでした。");
       return;
     }
     setShiftRequestMessage("希望シフトを送信しました。");
