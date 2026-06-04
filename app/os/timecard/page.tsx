@@ -536,6 +536,7 @@ export function TimecardPage({
   const [month, setMonth] = useState(getStoredTimecardMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [mainView] = useState<TimecardMainView>(initialMainView);
   const [scheduleView, setScheduleView] = useState<TimecardScheduleView>(initialScheduleView);
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
@@ -561,10 +562,16 @@ export function TimecardPage({
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
     setIsLoading(true);
-    const params = new URLSearchParams({ month: nextMonth });
-    if (nextStoreId) params.set("storeId", nextStoreId);
-    const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
-    if (response.ok) {
+    setLoadError("");
+    try {
+      const params = new URLSearchParams({ month: nextMonth });
+      if (nextStoreId) params.set("storeId", nextStoreId);
+      const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setLoadError(String(body.error ?? "タイムカード情報を読み込めませんでした。"));
+        return;
+      }
       const body = await response.json() as TimecardPayload;
       setData(body);
       setMonth(body.month);
@@ -572,8 +579,11 @@ export function TimecardPage({
       storeTimecardSelection(body.month, body.selectedStoreId);
       if (!options.keepShiftDraft) setShiftDraft(null);
       if (!options.keepActualDraft) setActualDraft(null);
+    } catch {
+      setLoadError("タイムカード情報を読み込めませんでした。データベース接続を確認してください。");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   useEffect(() => {
@@ -1093,6 +1103,7 @@ export function TimecardPage({
             <p className="eyebrow">出退勤、実績、給与計算</p>
             <h2>タイムカード</h2>
             <span className="source-indicator">{isLoading ? "読み込み中" : `給与期間 ${payrollPeriod?.label ?? "月度"} 集計済み`}</span>
+            {loadError ? <p className="timecard-import-message">{loadError}</p> : null}
           </div>
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {

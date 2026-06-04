@@ -25,7 +25,14 @@ const tables = [
   "purchase_exceptions",
   "price_records",
   "os_audit_logs",
-  "os_notifications"
+  "os_notifications",
+  "employee_work_stores",
+  "timecard_store_settings",
+  "timecard_employee_settings",
+  "timecard_punches",
+  "timecard_shifts",
+  "timecard_payroll_confirmations",
+  "timecard_workload_settings"
 ];
 
 const rows = await sql`
