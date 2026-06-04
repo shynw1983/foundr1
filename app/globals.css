@@ -5337,6 +5337,10 @@ body :where(
   opacity: 0.42;
 }
 
+.store-timecard-mobile-actions {
+  display: none;
+}
+
 .timecard-day-list {
   display: grid;
   gap: 10px;
@@ -13139,6 +13143,61 @@ body :where(
 
   .timecard-punch-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-timecard-mobile-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .store-timecard-mobile-actions button {
+    display: grid;
+    gap: 3px;
+    min-height: 58px;
+    align-content: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: white;
+    color: var(--ink);
+    text-align: left;
+  }
+
+  .store-timecard-mobile-actions button.is-active {
+    border-color: rgba(33, 116, 91, 0.42);
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .store-timecard-mobile-actions strong,
+  .store-timecard-mobile-actions span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .store-timecard-mobile-actions strong {
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .store-timecard-mobile-actions span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .store-timecard-history.is-mobile-collapsed,
+  .store-shift-request-panel.is-mobile-collapsed,
+  .store-shift-request-panel.is-mobile-panel-next_shift .store-mobile-section-availability,
+  .store-shift-request-panel.is-mobile-panel-next_shift .store-mobile-section-swap,
+  .store-shift-request-panel.is-mobile-panel-next_shift .store-mobile-section-shift-messages,
+  .store-shift-request-panel.is-mobile-panel-availability .store-mobile-section-next-shift,
+  .store-shift-request-panel.is-mobile-panel-availability .store-mobile-section-swap,
+  .store-shift-request-panel.is-mobile-panel-swap .store-mobile-section-next-shift,
+  .store-shift-request-panel.is-mobile-panel-swap .store-mobile-section-availability {
+    display: none;
   }
 
   .store-shift-period-row,

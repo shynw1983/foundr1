@@ -96,6 +96,8 @@ type ShiftRequestDraft = {
   note: string;
 };
 
+type MobileTimecardPanel = "history" | "next_shift" | "availability" | "swap";
+
 type AvailabilityDayDraft = {
   workDate: string;
   wantsWork: boolean;
@@ -159,6 +161,7 @@ export default function StoreTimecardPage() {
   const [isPunching, setIsPunching] = useState("");
   const [message, setMessage] = useState("");
   const [shiftRequestMessage, setShiftRequestMessage] = useState("");
+  const [activeMobilePanel, setActiveMobilePanel] = useState<MobileTimecardPanel | "">("");
 
   async function loadTimecard(nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -246,6 +249,12 @@ export default function StoreTimecardPage() {
   const selectedStoreName = selectedStore?.name ?? "店舗未選択";
   const selectedShiftStore = data?.stores.find((store) => store.id === selectedShiftStoreId) ?? null;
   const selectedShiftStoreName = selectedShiftStore?.name ?? "店舗未選択";
+  const mobilePanelItems: Array<{ key: MobileTimecardPanel; label: string; detail: string }> = [
+    { key: "next_shift", label: "次回シフト", detail: `${myShifts.length} 件` },
+    { key: "history", label: "今月の実績", detail: `${selectedEmployeeDays.length} 日` },
+    { key: "availability", label: "希望シフト", detail: submissionPeriod?.label ?? "提出期間" },
+    { key: "swap", label: "交代募集", detail: myShifts.length ? "募集作成" : "確定待ち" }
+  ];
 
   function requestMobileLocation() {
     if (!navigator.geolocation) {
@@ -506,7 +515,23 @@ export default function StoreTimecardPage() {
           </div>
         </section>
 
-        <section className="panel store-timecard-history">
+        {isMobileStaffPunch ? (
+          <section className="store-timecard-mobile-actions" aria-label="タイムカード機能">
+            {mobilePanelItems.map((item) => (
+              <button
+                className={activeMobilePanel === item.key ? "is-active" : ""}
+                type="button"
+                onClick={() => setActiveMobilePanel(item.key)}
+                key={item.key}
+              >
+                <strong>{item.label}</strong>
+                <span>{item.detail}</span>
+              </button>
+            ))}
+          </section>
+        ) : null}
+
+        <section className={`panel store-timecard-history${isMobileStaffPunch && activeMobilePanel !== "history" ? " is-mobile-collapsed" : ""}`}>
           <div className="panel-title">
             <BriefcaseBusiness />
             <div>
@@ -533,7 +558,7 @@ export default function StoreTimecardPage() {
           </div>
         </section>
 
-        <section className="panel store-shift-request-panel">
+        <section className={`panel store-shift-request-panel${isMobileStaffPunch && (activeMobilePanel === "" || activeMobilePanel === "history") ? " is-mobile-collapsed" : ""} is-mobile-panel-${activeMobilePanel}`}>
           <div className="panel-title">
             <CalendarDays />
             <div>
@@ -557,7 +582,7 @@ export default function StoreTimecardPage() {
             </label>
           </div>
 
-          <div className="store-next-shift-block">
+          <div className="store-next-shift-block store-mobile-section-next-shift">
             <div className="store-next-shift-heading">
               <div>
                 <strong>次回シフト</strong>
@@ -581,7 +606,7 @@ export default function StoreTimecardPage() {
             </div>
           </div>
 
-          <div className="store-shift-period-list">
+          <div className="store-shift-period-list store-mobile-section-availability">
             {availabilityDrafts.map((draft) => (
               <article className="store-shift-period-row" key={draft.workDate}>
                 <strong>{formatShiftDate(draft.workDate)}</strong>
@@ -599,7 +624,7 @@ export default function StoreTimecardPage() {
             {availabilityDrafts.length === 0 ? <p className="empty-state-text">提出できる希望シフト期間がありません。</p> : null}
           </div>
 
-          <div className="store-shift-request-form is-swap">
+          <div className="store-shift-request-form is-swap store-mobile-section-swap">
             <label>
               <span>交代募集するシフト</span>
               <select value={shiftRequestDraft.targetShiftId} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, targetShiftId: event.target.value })}>
@@ -614,13 +639,13 @@ export default function StoreTimecardPage() {
             </label>
             <button className="secondary-button" type="button" onClick={submitSwapRequest}>交代募集</button>
           </div>
-          {shiftRequestMessage ? <div className="timecard-message">{shiftRequestMessage}</div> : null}
-          <button className="primary-button store-shift-submit-button" type="button" onClick={submitAvailabilityPeriod}>
+          {shiftRequestMessage ? <div className="timecard-message store-mobile-section-shift-messages">{shiftRequestMessage}</div> : null}
+          <button className="primary-button store-shift-submit-button store-mobile-section-availability" type="button" onClick={submitAvailabilityPeriod}>
             <Send size={16} />
             希望シフトを保存
           </button>
 
-          <div className="store-shift-request-list">
+          <div className="store-shift-request-list store-mobile-section-shift-messages">
             <h3>最近のシフト連絡</h3>
             {shiftRequests.length ? shiftRequests.slice(0, 5).map((request) => (
               <article className="store-shift-request-row" key={request.id}>
