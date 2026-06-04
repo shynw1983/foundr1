@@ -5886,6 +5886,54 @@ body :where(
   gap: 7px;
 }
 
+.store-pos-cash-payment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.75fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.store-pos-cash-payment label,
+.store-pos-cash-payment > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-pos-cash-payment span,
+.store-pos-cash-payment small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-cash-payment input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 950;
+  outline: 0;
+}
+
+.store-pos-cash-payment strong {
+  color: #1f6f55;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.store-pos-cash-payment .is-short strong,
+.store-pos-cash-payment .is-short small {
+  color: #b91c1c;
+}
+
 .store-pos-cart-list {
   display: grid;
   gap: 8px;
@@ -16250,6 +16298,10 @@ body :where(
   }
 
   .store-pos-payment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .store-pos-cash-payment {
     grid-template-columns: 1fr;
   }
 

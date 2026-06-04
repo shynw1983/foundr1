@@ -19,6 +19,7 @@ type PosCheckoutBody = {
   storeId?: string;
   orderType?: string;
   paymentMethod?: string;
+  cashTenderedAmount?: number | string | null;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -271,6 +272,9 @@ export async function POST(request: Request) {
   const storeId = normalizeText(body.storeId);
   const orderType = normalizeText(body.orderType) || "eat_in";
   const paymentMethod = normalizeText(body.paymentMethod) || "cash";
+  const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
+    ? null
+    : Math.round(Number(body.cashTenderedAmount));
   const note = normalizeText(body.note);
   const cartItems = Array.isArray(body.items) ? body.items : [];
 
@@ -407,6 +411,13 @@ export async function POST(request: Request) {
   }
 
   const amount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+  if (
+    paymentMethod === "cash" &&
+    (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
+  ) {
+    return Response.json({ error: "現金会計はお預かり金額を合計以上で入力してください。" }, { status: 400 });
+  }
+  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount !== null ? cashTenderedAmount - amount : null;
   const cashSessionId = await getOpenCashSessionId(storeId);
   if (!cashSessionId) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
@@ -454,6 +465,8 @@ export async function POST(request: Request) {
         note,
         cashierId: session.id,
         cashierName: session.name,
+        cashTenderedAmount,
+        cashChangeAmount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
         items: normalizedItems.map((item) => ({
           menuCatalogItemId: item.id,
@@ -536,5 +549,5 @@ export async function POST(request: Request) {
 
   await syncWebReservationToSalesOrder(orderId);
   const todaySummary = await getTodaySummary(storeId);
-  return Response.json({ ok: true, orderId, pickupCode, amount, todaySummary });
+  return Response.json({ ok: true, orderId, pickupCode, amount, cashTenderedAmount, cashChangeAmount, todaySummary });
 }

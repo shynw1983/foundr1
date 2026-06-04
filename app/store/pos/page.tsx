@@ -255,6 +255,7 @@ export default function StorePosPage() {
   const [optionDraft, setOptionDraft] = useState<Record<string, string[]>>({});
   const [orderType, setOrderType] = useState("eat_in");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -348,6 +349,14 @@ export default function StorePosPage() {
   const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const canUseRegister = Boolean(reconciliation.activeSession);
+  const cashTenderedValue = Number(cashTenderedAmount || 0);
+  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - subtotal : null;
+  const canCheckout = Boolean(
+    cart.length > 0 &&
+    !saving &&
+    canUseRegister &&
+    (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= subtotal))
+  );
   const openingBreakdownTotal = getCashBreakdownTotal(cashOpeningBreakdown);
   const countedBreakdownTotal = getCashBreakdownTotal(cashCountedBreakdown);
   const openingHandoverDifference = reconciliation.previousClosedSession
@@ -379,6 +388,7 @@ export default function StorePosPage() {
     setSelectedStoreId(storeId);
     setStoredStoreSelection(storeId);
     setCart([]);
+    setCashTenderedAmount("");
     setCashOpeningBreakdown(createCashBreakdownInput());
     setCashOpeningNote("");
     setCashCountedBreakdown(createCashBreakdownInput());
@@ -516,6 +526,10 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < subtotal)) {
+      setMessage("現金会計はお預かり金額を合計以上で入力してください。");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -526,6 +540,7 @@ export default function StorePosPage() {
           storeId: selectedStoreId,
           orderType,
           paymentMethod,
+          cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
           note,
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
@@ -542,9 +557,11 @@ export default function StorePosPage() {
       if (!response.ok) throw new Error(body.error || "checkout failed");
       setCart([]);
       setNote("");
+      setCashTenderedAmount("");
       setSummary(body.todaySummary as PosSummary);
       await loadReconciliation(selectedStoreId);
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}`);
+      const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${changeLabel}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
     } finally {
@@ -817,7 +834,12 @@ export default function StorePosPage() {
             {paymentOptions.map((option) => {
               const Icon = option.icon;
               return (
-                <button key={option.value} className={paymentMethod === option.value ? "is-active" : ""} type="button" onClick={() => setPaymentMethod(option.value)}>
+                <button
+                  key={option.value}
+                  className={paymentMethod === option.value ? "is-active" : ""}
+                  type="button"
+                  onClick={() => setPaymentMethod(option.value)}
+                >
                   <Icon size={18} />
                   {option.label}
                 </button>
@@ -825,11 +847,30 @@ export default function StorePosPage() {
             })}
           </div>
 
+          {paymentMethod === "cash" ? (
+            <div className="store-pos-cash-payment">
+              <label>
+                <span>お預かり</span>
+                <input
+                  inputMode="numeric"
+                  value={cashTenderedAmount}
+                  onChange={(event) => setCashTenderedAmount(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="0"
+                />
+              </label>
+              <div className={cashChangeAmount !== null && cashChangeAmount < 0 ? "is-short" : ""}>
+                <span>お釣り</span>
+                <strong>{cashChangeAmount === null ? "-" : formatYen(Math.max(0, cashChangeAmount))}</strong>
+                {cashChangeAmount !== null && cashChangeAmount < 0 ? <small>不足 {formatYen(Math.abs(cashChangeAmount))}</small> : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="store-pos-total">
             <span>合計</span>
             <strong>{formatYen(subtotal)}</strong>
           </div>
-          <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={cart.length === 0 || saving || !canUseRegister}>
+          <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={!canCheckout}>
             {saving ? "保存中..." : "会計を確定"}
           </button>
         </aside>
