@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
 import { UserBadge } from "../../components/UserBadge";
+import { yenDenominations, type CashBreakdown } from "../../../../lib/pos-cash-denominations";
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -58,8 +59,11 @@ type PosCashSession = {
   registerName: string;
   status: string;
   openingAmount: number;
+  openingCashBreakdown: CashBreakdown;
+  openingNote: string;
   expectedCashAmount: number;
   countedCashAmount: number | null;
+  countedCashBreakdown: CashBreakdown;
   differenceAmount: number | null;
   closingNote: string;
   cashSales: number;
@@ -68,6 +72,14 @@ type PosCashSession = {
   openedByName: string;
   closedByName: string;
   openedAt: string;
+  closedAt: string;
+};
+
+type PreviousClosedSession = {
+  id: string;
+  businessDate: string;
+  countedCashAmount: number;
+  closedByName: string;
   closedAt: string;
 };
 
@@ -120,6 +132,19 @@ function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
 
+function formatDenomination(value: number) {
+  return value >= 1000 ? `¥${value.toLocaleString("ja-JP")}` : `¥${value}`;
+}
+
+function getBreakdownItems(value: CashBreakdown | null | undefined) {
+  return yenDenominations
+    .map((denomination) => ({
+      denomination,
+      count: Number(value?.[String(denomination)] ?? 0)
+    }))
+    .filter((item) => item.count > 0);
+}
+
 function getPaymentLabel(value: string) {
   if (value === "cash") return "現金";
   if (value === "card") return "カード";
@@ -150,6 +175,7 @@ export default function PosReconciliationPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [businessDate, setBusinessDate] = useState(getToday());
   const [sessions, setSessions] = useState<PosCashSession[]>([]);
+  const [previousClosedSession, setPreviousClosedSession] = useState<PreviousClosedSession | null>(null);
   const [movements, setMovements] = useState<PosCashMovement[]>([]);
   const [orders, setOrders] = useState<PosOrder[]>([]);
   const [paymentTotals, setPaymentTotals] = useState<PaymentTotal[]>([]);
@@ -175,6 +201,7 @@ export default function PosReconciliationPage() {
     setSelectedStoreId(body.selectedStoreId ?? "");
     setBusinessDate(body.businessDate ?? date);
     setSessions(body.sessions ?? []);
+    setPreviousClosedSession(body.previousClosedSession ?? null);
     setMovements(body.movements ?? []);
     setOrders(body.orders ?? []);
     setPaymentTotals(body.paymentTotals ?? []);
@@ -201,6 +228,7 @@ export default function PosReconciliationPage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "修正を保存できませんでした。");
       setSessions(body.sessions ?? []);
+      setPreviousClosedSession(body.previousClosedSession ?? previousClosedSession);
       setMovements(body.movements ?? []);
       setOrders(body.orders ?? []);
       setPaymentTotals(body.paymentTotals ?? []);
@@ -217,6 +245,11 @@ export default function PosReconciliationPage() {
     void load("", getToday());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const firstOpenedSession = [...sessions].sort((left, right) => new Date(left.openedAt).getTime() - new Date(right.openedAt).getTime())[0] ?? null;
+  const handoverDifference = previousClosedSession && firstOpenedSession
+    ? Number(firstOpenedSession.openingAmount ?? 0) - Number(previousClosedSession.countedCashAmount ?? 0)
+    : null;
 
   return (
     <main className="shell">
@@ -327,6 +360,25 @@ export default function PosReconciliationPage() {
                 </div>
               ))}
             </div>
+            {previousClosedSession ? (
+              <div className={`pos-admin-handover ${handoverDifference ? "is-warning" : ""}`}>
+                <div>
+                  <span>前回閉店金額</span>
+                  <strong>{formatYen(previousClosedSession.countedCashAmount)}</strong>
+                  <small>{previousClosedSession.businessDate} / {previousClosedSession.closedByName || "-"} / {getTime(previousClosedSession.closedAt)}</small>
+                </div>
+                <div>
+                  <span>今回開始金額</span>
+                  <strong>{firstOpenedSession ? formatYen(firstOpenedSession.openingAmount) : "-"}</strong>
+                  <small>{firstOpenedSession?.openedByName || "-"}</small>
+                </div>
+                <div>
+                  <span>引継ぎ差額</span>
+                  <strong>{handoverDifference === null ? "-" : formatYen(handoverDifference)}</strong>
+                  <small>{firstOpenedSession?.openingNote || (handoverDifference ? "理由未記録" : "差額なし")}</small>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           {access?.canManageCashReconciliation ? (
@@ -404,6 +456,31 @@ export default function PosReconciliationPage() {
                     <span>{formatYen(session.expectedCashAmount)}</span>
                     <span>{session.countedCashAmount === null ? "-" : formatYen(session.countedCashAmount)}</span>
                     <b>{session.differenceAmount === null ? "-" : formatYen(session.differenceAmount)}</b>
+                    <div className="pos-reconciliation-detail">
+                      <div>
+                        <span>開店面額</span>
+                        <p>
+                          {getBreakdownItems(session.openingCashBreakdown).length
+                            ? getBreakdownItems(session.openingCashBreakdown).map((item) => `${formatDenomination(item.denomination)} x ${item.count}`).join(" / ")
+                            : "明細なし"}
+                        </p>
+                        {session.openingNote ? <small>引継ぎ理由: {session.openingNote}</small> : null}
+                      </div>
+                      <div>
+                        <span>閉店面額</span>
+                        <p>
+                          {getBreakdownItems(session.countedCashBreakdown).length
+                            ? getBreakdownItems(session.countedCashBreakdown).map((item) => `${formatDenomination(item.denomination)} x ${item.count}`).join(" / ")
+                            : session.status === "open" ? "未締め" : "明細なし"}
+                        </p>
+                        {session.closingNote ? <small>差額理由: {session.closingNote}</small> : null}
+                      </div>
+                      <div>
+                        <span>担当</span>
+                        <p>開店 {session.openedByName || "-"} / 閉店 {session.closedByName || "-"}</p>
+                        <small>{getTime(session.openedAt)} - {getTime(session.closedAt)}</small>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

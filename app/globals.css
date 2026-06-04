@@ -6142,6 +6142,43 @@ body :where(
   gap: 10px;
 }
 
+.pos-admin-handover {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pos-admin-handover div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--green-soft);
+}
+
+.pos-admin-handover.is-warning div {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: #fff7ed;
+}
+
+.pos-admin-handover span,
+.pos-admin-handover small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.pos-admin-handover strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 950;
+}
+
 .danger-text-button {
   justify-self: start;
   width: fit-content;
@@ -6212,6 +6249,45 @@ body :where(
   color: var(--ink);
   font-size: 13px;
   font-weight: 900;
+}
+
+.pos-reconciliation-detail {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.pos-reconciliation-detail div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: white;
+}
+
+.pos-reconciliation-detail span,
+.pos-reconciliation-detail p,
+.pos-reconciliation-detail small {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-reconciliation-detail span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pos-reconciliation-detail p {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
 }
 
 .store-placeholder-panel {
