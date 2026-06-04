@@ -578,6 +578,16 @@ export async function POST(request: Request) {
             )
           )
       `;
+      await sql`
+        delete from timecard_shifts
+        where store_id::text = ${storeId}
+          and employee_id::text = ${employeeId}
+          and to_char(work_date, 'YYYY-MM-DD') = any(${dateList})
+          and (
+            coalesce(note, '') = '希望シフト承認'
+            or coalesce(note, '') like '希望 % から調整'
+          )
+      `;
       await notifyStoreManagers(storeId, "希望シフトが送信されました", `${session.name} が ${submissionPeriod.label} の希望シフトを未選択で送信しました。`, "/os/timecard/requests");
       await writeAuditLog({
         actorEmployeeId: session.id,
@@ -594,7 +604,12 @@ export async function POST(request: Request) {
     const existingRows = await sql`
       select distinct on (coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')))
         timecard_shift_requests.id::text,
-        coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')) as "workDate"
+        timecard_shift_requests.status,
+        timecard_shift_requests.note,
+        coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')) as "workDate",
+        to_char(timecard_shift_request_windows.available_start, 'HH24:MI') as "availableStart",
+        to_char(timecard_shift_request_windows.available_end, 'HH24:MI') as "availableEnd",
+        timecard_shift_request_windows.note as "windowNote"
       from timecard_shift_requests
       left join timecard_shift_request_windows on timecard_shift_request_windows.request_id = timecard_shift_requests.id
       where timecard_shift_requests.store_id::text = ${storeId}
@@ -606,11 +621,17 @@ export async function POST(request: Request) {
         )
       order by coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')), timecard_shift_requests.created_at desc
     `;
-    const existingByDate = new Map(existingRows.map((row) => [String(row.workDate), String(row.id)]));
+    const existingByDate = new Map(existingRows.map((row) => [String(row.workDate), {
+      id: String(row.id),
+      status: String(row.status ?? ""),
+      availableStart: row.availableStart ? String(row.availableStart) : "",
+      availableEnd: row.availableEnd ? String(row.availableEnd) : "",
+      note: String(row.note ?? row.windowNote ?? "")
+    }]));
     const retainedRequestIds = entries
-      .map((entry) => existingByDate.get(entry.workDate))
+      .map((entry) => existingByDate.get(entry.workDate)?.id)
       .filter((id): id is string => Boolean(id));
-    await sql`
+    const removedRows = await sql`
       delete from timecard_shift_requests
       where store_id::text = ${storeId}
         and employee_id::text = ${employeeId}
@@ -628,19 +649,46 @@ export async function POST(request: Request) {
           coalesce(array_length(${retainedRequestIds}::text[], 1), 0) = 0
           or id::text <> all(${retainedRequestIds}::text[])
         )
+      returning id::text, to_char(work_date, 'YYYY-MM-DD') as "workDate", status
     `;
+    const removedDates = removedRows.map((row) => String(row.workDate ?? "")).filter(Boolean);
+    if (removedDates.length) {
+      await sql`
+        delete from timecard_shifts
+        where store_id::text = ${storeId}
+          and employee_id::text = ${employeeId}
+          and to_char(work_date, 'YYYY-MM-DD') = any(${removedDates})
+          and (
+            coalesce(note, '') = '希望シフト承認'
+            or coalesce(note, '') like '希望 % から調整'
+          )
+      `;
+    }
 
     const insertedIds: string[] = [];
     for (const entry of entries) {
-      const existingRequestId = existingByDate.get(entry.workDate);
-      if (existingRequestId) {
+      const existingRequest = existingByDate.get(entry.workDate);
+      if (existingRequest) {
+        const existingRequestId = existingRequest.id;
+        const changed = existingRequest.availableStart !== entry.availableStart
+          || existingRequest.availableEnd !== entry.availableEnd
+          || existingRequest.note !== entry.note;
+        const shouldReopen = existingRequest.status === "rejected" || (existingRequest.status === "approved" && changed);
+        if (!changed && !shouldReopen) {
+          insertedIds.push(existingRequestId);
+          continue;
+        }
         await sql`
           update timecard_shift_requests
           set
             request_type = 'availability',
+            status = ${shouldReopen ? "open" : existingRequest.status},
             work_date = ${entry.workDate}::date,
             title = '希望シフト',
             note = ${entry.note || null},
+            reviewed_by = case when ${shouldReopen} then null else reviewed_by end,
+            reviewed_at = case when ${shouldReopen} then null else reviewed_at end,
+            review_note = case when ${shouldReopen} then null else review_note end,
             updated_at = now()
           where id::text = ${existingRequestId}
             and store_id::text = ${storeId}
@@ -668,6 +716,18 @@ export async function POST(request: Request) {
             ${entry.note || null}
           )
         `;
+        if (existingRequest.status === "approved" && changed) {
+          await sql`
+            delete from timecard_shifts
+            where store_id::text = ${storeId}
+              and employee_id::text = ${employeeId}
+              and work_date = ${entry.workDate}::date
+              and (
+                coalesce(note, '') = '希望シフト承認'
+                or coalesce(note, '') like '希望 % から調整'
+              )
+          `;
+        }
         insertedIds.push(existingRequestId);
         continue;
       }
@@ -722,13 +782,14 @@ export async function POST(request: Request) {
     const managerHref = firstRequestId
       ? `/os/timecard/requests?storeId=${encodeURIComponent(storeId)}&requestId=${encodeURIComponent(firstRequestId)}&date=${encodeURIComponent(firstWorkDate)}`
       : `/os/timecard/requests?storeId=${encodeURIComponent(storeId)}`;
-    await notifyStoreManagers(storeId, "希望シフトが送信されました", `${session.name} が ${submissionPeriod.label} の希望シフトを送信しました。`, managerHref);
+    const removedMessage = removedDates.length ? ` ${removedDates.length}日分は取り下げられました。` : "";
+    await notifyStoreManagers(storeId, "希望シフトが送信されました", `${session.name} が ${submissionPeriod.label} の希望シフトを送信しました。${removedMessage}`, managerHref);
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: "timecard.shift_request.period_created",
       targetType: "timecard_shift_request",
       targetId: storeId,
-      metadata: { storeId, employeeId, period: submissionPeriod, count: insertedIds.length },
+      metadata: { storeId, employeeId, period: submissionPeriod, count: insertedIds.length, removedCount: removedDates.length },
       request
     });
     return Response.json({ ok: true, count: insertedIds.length, ids: insertedIds.filter(Boolean) });
