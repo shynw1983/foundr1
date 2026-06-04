@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, FileUp, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { MouseEvent } from "react";
@@ -197,6 +197,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "発注履歴", href: "/os/history", icon: FileText },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
   { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "シフト連絡", href: "/os/timecard/requests", icon: MessageSquare },
   { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "商品マスタ", href: "/os/products", icon: BriefcaseBusiness },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },

@@ -559,6 +559,67 @@ create table if not exists timecard_shifts (
   unique (employee_id, store_id, work_date)
 );
 
+create table if not exists timecard_shift_requests (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  employee_id uuid not null references employees(id) on delete cascade,
+  request_type text not null,
+  status text not null default 'open',
+  target_shift_id uuid references timecard_shifts(id) on delete set null,
+  work_date date,
+  title text not null default '',
+  note text,
+  reviewed_by uuid references employees(id) on delete set null,
+  reviewed_at timestamptz,
+  review_note text,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table timecard_shift_requests add column if not exists target_shift_id uuid references timecard_shifts(id) on delete set null;
+alter table timecard_shift_requests add column if not exists review_note text;
+
+create table if not exists timecard_shift_request_windows (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references timecard_shift_requests(id) on delete cascade,
+  work_date date not null,
+  available_start time,
+  available_end time,
+  preference text not null default 'available',
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists timecard_shift_request_candidates (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references timecard_shift_requests(id) on delete cascade,
+  employee_id uuid not null references employees(id) on delete cascade,
+  status text not null default 'applied',
+  note text,
+  approved_by uuid references employees(id) on delete set null,
+  approved_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (request_id, employee_id)
+);
+
+create table if not exists timecard_shift_request_messages (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references timecard_shift_requests(id) on delete cascade,
+  employee_id uuid references employees(id) on delete set null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists timecard_shift_publications (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  schedule_month text not null,
+  note text,
+  published_by uuid references employees(id) on delete set null,
+  published_at timestamptz not null default now()
+);
+
 create table if not exists timecard_payroll_confirmations (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,
@@ -1620,6 +1681,9 @@ create index if not exists idx_os_notifications_recipient_read on os_notificatio
 create index if not exists idx_timecard_punches_employee_punched on timecard_punches(employee_id, punched_at desc);
 create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);
 create index if not exists idx_timecard_shifts_store_date on timecard_shifts(store_id, work_date);
+create index if not exists idx_timecard_shift_requests_store_date on timecard_shift_requests(store_id, work_date, created_at desc);
+create index if not exists idx_timecard_shift_requests_employee on timecard_shift_requests(employee_id, created_at desc);
+create index if not exists idx_timecard_shift_request_candidates_request on timecard_shift_request_candidates(request_id, created_at desc);
 create index if not exists idx_timecard_employee_settings_employee on timecard_employee_settings(employee_id, valid_from desc);
 create index if not exists idx_timecard_workload_settings_store on timecard_workload_settings(store_id);
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);

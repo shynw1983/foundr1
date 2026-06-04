@@ -5135,12 +5135,14 @@ body :where(
 }
 
 .store-timecard-punch,
-.store-timecard-history {
+.store-timecard-history,
+.store-shift-request-panel {
   padding: 18px;
 }
 
 .store-timecard-punch .panel-title,
-.store-timecard-history .panel-title {
+.store-timecard-history .panel-title,
+.store-shift-request-panel .panel-title {
   align-items: center;
 }
 
@@ -5163,6 +5165,7 @@ body :where(
 
 .store-timecard-punch .panel-title svg,
 .store-timecard-history .panel-title svg,
+.store-shift-request-panel .panel-title svg,
 .timecard-management-grid .panel-title svg,
 .timecard-workspace > .panel .panel-title svg {
   color: var(--green);
@@ -5368,6 +5371,216 @@ body :where(
   grid-column: 1 / -1;
   color: var(--amber);
   font-weight: 800;
+}
+
+.store-shift-request-panel {
+  grid-column: 1 / -1;
+}
+
+.store-shift-request-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(160px, 0.7fr) minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.store-shift-request-form .timecard-subtabs {
+  margin: 0;
+}
+
+.store-shift-request-form label,
+.store-shift-request-times {
+  display: grid;
+  gap: 6px;
+}
+
+.store-shift-request-times {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.store-shift-request-form label span,
+.shift-request-detail-grid span,
+.shift-candidate-list > span,
+.store-shift-request-list h3 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-shift-request-form input,
+.store-shift-request-form select,
+.shift-request-publish-actions input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.store-shift-request-form .timecard-message {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.store-shift-request-list,
+.shift-request-list {
+  display: grid;
+  gap: 10px;
+}
+
+.store-shift-request-list h3 {
+  margin: 0;
+}
+
+.store-shift-request-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.store-shift-request-row div,
+.store-shift-request-row strong,
+.store-shift-request-row span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-shift-request-row span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shift-request-publish-panel {
+  padding: 18px;
+}
+
+.shift-request-publish-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.shift-request-card {
+  padding: 16px;
+  border-left: 4px solid var(--blue);
+}
+
+.shift-request-card.is-approved {
+  border-left-color: var(--green);
+}
+
+.shift-request-card.is-rejected {
+  border-left-color: var(--muted);
+}
+
+.shift-request-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.shift-request-card-head h3,
+.shift-request-card-head p {
+  margin: 4px 0 0;
+}
+
+.shift-request-card-head p,
+.shift-request-card-head strong,
+.shift-message-list p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.shift-request-type {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.shift-request-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.shift-request-detail-grid > div,
+.shift-candidate-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.shift-request-detail-grid strong,
+.shift-candidate-row strong,
+.shift-candidate-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.shift-candidate-list,
+.shift-message-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.shift-candidate-row {
+  grid-template-columns: minmax(0, 0.4fr) minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.shift-candidate-row small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.shift-message-list p {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f4f6f9;
+}
+
+.shift-message-list strong {
+  color: var(--ink);
+}
+
+.shift-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .timecard-metric {

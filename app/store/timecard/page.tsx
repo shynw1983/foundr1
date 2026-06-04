@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, Clock3, Coffee, LogIn, LogOut, RefreshCw } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Clock3, Coffee, LogIn, LogOut, RefreshCw, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -41,6 +41,14 @@ type DailySummary = {
   alerts: string[];
 };
 
+type ShiftEntry = {
+  id: string;
+  workDate: string;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  employeeName: string;
+};
+
 type TimecardPayload = {
   month: string;
   currentEmployeeId: string;
@@ -50,7 +58,33 @@ type TimecardPayload = {
   latestPunch: LatestPunch;
   latestPunches: LatestPunch[];
   employees: TimecardEmployee[];
+  shifts?: ShiftEntry[];
   dailySummaries: DailySummary[];
+};
+
+type ShiftRequestItem = {
+  id: string;
+  requestType: "availability" | "day_off" | "swap";
+  status: "open" | "approved" | "rejected";
+  workDate: string | null;
+  title: string;
+  note: string | null;
+  employeeId?: string;
+};
+
+type ShiftRequestPayload = {
+  currentEmployeeId?: string;
+  requests?: ShiftRequestItem[];
+  myShifts?: ShiftEntry[];
+};
+
+type ShiftRequestDraft = {
+  requestType: "availability" | "day_off" | "swap";
+  workDate: string;
+  availableStart: string;
+  availableEnd: string;
+  targetShiftId: string;
+  note: string;
 };
 
 type MobileLocationState = {
@@ -84,8 +118,18 @@ function canUsePunch(type: string, state: string) {
 
 export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
+  const [myShifts, setMyShifts] = useState<ShiftEntry[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [shiftRequestDraft, setShiftRequestDraft] = useState<ShiftRequestDraft>({
+    requestType: "availability",
+    workDate: "",
+    availableStart: "17:00",
+    availableEnd: "22:00",
+    targetShiftId: "",
+    note: ""
+  });
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileLocation, setMobileLocation] = useState<MobileLocationState>({
     status: "idle",
@@ -97,6 +141,7 @@ export default function StoreTimecardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState("");
   const [message, setMessage] = useState("");
+  const [shiftRequestMessage, setShiftRequestMessage] = useState("");
 
   async function loadTimecard(nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -114,6 +159,7 @@ export default function StoreTimecardPage() {
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
+      void loadShiftRequests(body.selectedStoreId);
       const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
       setSelectedEmployeeId((current) => {
         if (body.currentEmployeeRole === "staff") return body.currentEmployeeId;
@@ -124,6 +170,23 @@ export default function StoreTimecardPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function loadShiftRequests(nextStoreId = selectedStoreId) {
+    if (!nextStoreId) return;
+    const response = await fetch(`/api/timecard/shift-requests?storeId=${encodeURIComponent(nextStoreId)}&month=${encodeURIComponent(getJstMonthLabel())}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json() as ShiftRequestPayload;
+    setShiftRequests(body.requests ?? []);
+    setMyShifts(body.myShifts ?? []);
+    setShiftRequestDraft((current) => {
+      const firstShift = body.myShifts?.[0];
+      return {
+        ...current,
+        workDate: current.workDate || firstShift?.workDate || "",
+        targetShiftId: current.targetShiftId || firstShift?.id || ""
+      };
+    });
   }
 
   useEffect(() => {
@@ -227,6 +290,49 @@ export default function StoreTimecardPage() {
       await loadTimecard(selectedStoreId);
     }
     setIsPunching("");
+  }
+
+  async function submitShiftRequest() {
+    if (!selectedStoreId) return;
+    setShiftRequestMessage("");
+    const selectedShift = myShifts.find((shift) => shift.id === shiftRequestDraft.targetShiftId) ?? null;
+    const requestWorkDate = shiftRequestDraft.requestType === "swap"
+      ? selectedShift?.workDate ?? shiftRequestDraft.workDate
+      : shiftRequestDraft.workDate;
+    const response = await fetch("/api/timecard/shift-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_shift_request",
+        storeId: selectedStoreId,
+        requestType: shiftRequestDraft.requestType,
+        workDate: requestWorkDate,
+        availableStart: shiftRequestDraft.requestType === "availability" ? shiftRequestDraft.availableStart : "",
+        availableEnd: shiftRequestDraft.requestType === "availability" ? shiftRequestDraft.availableEnd : "",
+        targetShiftId: shiftRequestDraft.requestType === "swap" ? shiftRequestDraft.targetShiftId : "",
+        note: shiftRequestDraft.note
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setShiftRequestMessage(body.error ?? "シフト申請を送信できませんでした。");
+      return;
+    }
+    setShiftRequestMessage("シフト申請を送信しました。");
+    setShiftRequestDraft((current) => ({ ...current, note: "" }));
+    await loadShiftRequests(selectedStoreId);
+  }
+
+  async function applyForSwap(requestId: string) {
+    if (!selectedStoreId) return;
+    const response = await fetch("/api/timecard/shift-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add_candidate", storeId: selectedStoreId, requestId })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    setShiftRequestMessage(response.ok ? "交代募集に応募しました。" : body.error ?? "応募できませんでした。");
+    if (response.ok) await loadShiftRequests(selectedStoreId);
   }
 
   return (
@@ -364,6 +470,80 @@ export default function StoreTimecardPage() {
             )}
           </div>
         </section>
+
+        <section className="panel store-shift-request-panel">
+          <div className="panel-title">
+            <CalendarDays />
+            <div>
+              <h2>シフト連絡</h2>
+              <p>希望シフト、休み希望、交代募集を店長へ送ります。</p>
+            </div>
+          </div>
+
+          <div className="store-shift-request-form">
+            <div className="timecard-subtabs" aria-label="申請種別">
+              <button className={shiftRequestDraft.requestType === "availability" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "availability" })}>希望</button>
+              <button className={shiftRequestDraft.requestType === "day_off" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "day_off" })}>休み</button>
+              <button className={shiftRequestDraft.requestType === "swap" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "swap" })}>交代</button>
+            </div>
+
+            {shiftRequestDraft.requestType === "swap" ? (
+              <label>
+                <span>対象シフト</span>
+                <select value={shiftRequestDraft.targetShiftId} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, targetShiftId: event.target.value })}>
+                  {myShifts.map((shift) => (
+                    <option value={shift.id} key={shift.id}>{shift.workDate} {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label>
+                <span>日付</span>
+                <input type="date" value={shiftRequestDraft.workDate} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, workDate: event.target.value })} />
+              </label>
+            )}
+
+            {shiftRequestDraft.requestType === "availability" ? (
+              <div className="store-shift-request-times">
+                <label>
+                  <span>開始</span>
+                  <input type="time" value={shiftRequestDraft.availableStart} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, availableStart: event.target.value })} />
+                </label>
+                <label>
+                  <span>終了</span>
+                  <input type="time" value={shiftRequestDraft.availableEnd} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, availableEnd: event.target.value })} />
+                </label>
+              </div>
+            ) : null}
+
+            <label>
+              <span>メモ</span>
+              <input value={shiftRequestDraft.note} placeholder="任意" onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, note: event.target.value })} />
+            </label>
+            {shiftRequestMessage ? <div className="timecard-message">{shiftRequestMessage}</div> : null}
+            <button className="primary-button" type="button" onClick={submitShiftRequest}>
+              <Send size={16} />
+              申請を送信
+            </button>
+          </div>
+
+          <div className="store-shift-request-list">
+            <h3>最近のシフト連絡</h3>
+            {shiftRequests.length ? shiftRequests.slice(0, 5).map((request) => (
+              <article className="store-shift-request-row" key={request.id}>
+                <div>
+                  <strong>{request.title}</strong>
+                  <span>{request.workDate ?? "日付未設定"}・{requestStatusLabel(request.status)}</span>
+                </div>
+                {request.requestType === "swap" && request.status === "open" && request.employeeId !== data?.currentEmployeeId ? (
+                  <button className="secondary-button" type="button" onClick={() => applyForSwap(request.id)}>応募</button>
+                ) : null}
+              </article>
+            )) : (
+              <p className="empty-state-text">シフト連絡はまだありません。</p>
+            )}
+          </div>
+        </section>
       </section>
     </main>
   );
@@ -371,4 +551,10 @@ export default function StoreTimecardPage() {
 
 function getEmployeesForStore(employees: TimecardEmployee[], storeId: string) {
   return employees.filter((employee) => employee.storeIds.length === 0 || employee.storeIds.includes(storeId));
+}
+
+function requestStatusLabel(status: ShiftRequestItem["status"]) {
+  if (status === "approved") return "承認済み";
+  if (status === "rejected") return "却下";
+  return "未確認";
 }
