@@ -633,12 +633,30 @@ export default function StoreTimecardPage() {
                 </span>
               </div>
               <span>{selectedShiftStoreName}</span>
+              {myShifts.some((shift) => shift.scheduledStart && shift.scheduledEnd) ? (
+                <a
+                  className="store-next-shift-calendar-button is-period"
+                  href={createShiftCalendarHref(myShifts, selectedShiftStoreName)}
+                  download={`foundr1-shifts-${schedulingPeriod?.label ?? "period"}.ics`}
+                >
+                  まとめて追加
+                </a>
+              ) : null}
             </div>
             <div className="store-next-shift-list">
               {myShifts.length ? myShifts.map((shift) => (
                 <article className="store-next-shift-row" key={shift.id}>
                   <strong>{formatShiftDate(shift.workDate)}</strong>
                   <span>{shift.scheduledStart ?? "--:--"} - {shift.scheduledEnd ?? "--:--"}</span>
+                  {shift.scheduledStart && shift.scheduledEnd ? (
+                    <a
+                      className="store-next-shift-calendar-button"
+                      href={createShiftCalendarHref([shift], selectedShiftStoreName)}
+                      download={`foundr1-shift-${shift.workDate}.ics`}
+                    >
+                      カレンダーに追加
+                    </a>
+                  ) : null}
                 </article>
               )) : (
                 <p className="empty-state-text">この期間の確定シフトはまだありません。</p>
@@ -757,4 +775,60 @@ function formatShiftDate(value: string) {
     day: "2-digit",
     weekday: "short"
   }).format(date);
+}
+
+function createShiftCalendarHref(shifts: ShiftEntry[], storeName: string) {
+  const events = shifts
+    .filter((shift) => shift.scheduledStart && shift.scheduledEnd)
+    .map((shift) => createShiftCalendarEvent(shift, storeName))
+    .join("\r\n");
+  const body = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Foundr1//Store Shift//JA",
+    "CALSCALE:GREGORIAN",
+    events,
+    "END:VCALENDAR"
+  ].filter(Boolean).join("\r\n");
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(body)}`;
+}
+
+function createShiftCalendarEvent(shift: ShiftEntry, storeName: string) {
+  const start = formatCalendarDateTime(shift.workDate, shift.scheduledStart);
+  const endDate = shouldUseNextCalendarDate(shift.scheduledStart, shift.scheduledEnd)
+    ? addDateDays(shift.workDate, 1)
+    : shift.workDate;
+  const end = formatCalendarDateTime(endDate, shift.scheduledEnd);
+  const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const summary = escapeCalendarText(`Foundr1 シフト ${storeName}`);
+  const description = escapeCalendarText(`${formatShiftDate(shift.workDate)} ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}`);
+  return [
+    "BEGIN:VEVENT",
+    `UID:foundr1-shift-${shift.id}@foundr1.jp`,
+    `DTSTAMP:${now}`,
+    `DTSTART;TZID=Asia/Tokyo:${start}`,
+    `DTEND;TZID=Asia/Tokyo:${end}`,
+    `SUMMARY:${summary}`,
+    `LOCATION:${escapeCalendarText(storeName)}`,
+    `DESCRIPTION:${description}`,
+    "END:VEVENT"
+  ].join("\r\n");
+}
+
+function formatCalendarDateTime(workDate: string, time: string | null) {
+  return `${workDate.replaceAll("-", "")}T${String(time ?? "00:00").replace(":", "")}00`;
+}
+
+function shouldUseNextCalendarDate(start: string | null, end: string | null) {
+  return Boolean(start && end && end <= start);
+}
+
+function addDateDays(workDate: string, days: number) {
+  const date = new Date(`${workDate}T00:00:00+09:00`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function escapeCalendarText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }

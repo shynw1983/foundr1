@@ -5496,7 +5496,7 @@ body :where(
 
 .store-next-shift-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: start;
 }
@@ -5542,6 +5542,28 @@ body :where(
 .store-next-shift-row span {
   color: var(--ink);
   font-weight: 900;
+}
+
+.store-next-shift-calendar-button {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(33, 116, 91, 0.24);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.store-next-shift-calendar-button.is-period {
+  grid-column: auto;
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .store-shift-period-list {
