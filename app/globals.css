@@ -12354,18 +12354,21 @@ body :where(
     gap: 8px;
   }
 
-  .store-workbench-topbar .brand-block {
+  .store-workbench-topbar .brand-block,
+  .procedure-reader-topbar .brand-block {
     overflow: hidden;
     gap: 8px;
   }
 
-  .store-workbench-topbar .brand-mark {
+  .store-workbench-topbar .brand-mark,
+  .procedure-reader-topbar .brand-mark {
     flex: 0 0 40px;
     width: 40px;
     height: 40px;
   }
 
-  .store-workbench-topbar .brand-block h1 {
+  .store-workbench-topbar .brand-block h1,
+  .procedure-reader-topbar .brand-block h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -13860,13 +13863,15 @@ body :where(
     display: none;
   }
 
-  .store-workbench-topbar {
+  .store-workbench-topbar,
+  .procedure-reader-topbar {
     position: relative;
     grid-template-columns: 1fr;
     padding-top: 0;
   }
 
-  .store-workbench-topbar .brand-block {
+  .store-workbench-topbar .brand-block,
+  .procedure-reader-topbar .brand-block {
     padding-right: 58px;
   }
 
