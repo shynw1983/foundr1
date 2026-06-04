@@ -262,13 +262,14 @@ async function notifyStoreManagers(storeId: string, title: string, message: stri
   })));
 }
 
-async function notifyEmployee(employeeId: string, title: string, message: string, href: string) {
+async function notifyEmployee(employeeId: string, title: string, message: string, href: string, sendPush = true) {
   await createOsNotification({
     employeeId,
     type: "timecard_shift_request",
     title,
     message,
-    href
+    href,
+    sendPush
   });
 }
 
@@ -819,6 +820,7 @@ export async function POST(request: Request) {
     const candidateId = String(body.candidateId ?? "");
     let notificationTitle = nextStatus === "approved" ? "シフト申請が承認されました" : "シフト申請が却下されました";
     let notificationMessage = `${String(shiftRequest.workDate ?? "")} の申請結果を確認してください。`;
+    let sendReviewPush = true;
 
     if (nextStatus === "approved" && String(shiftRequest.requestType) === "swap") {
       if (!candidateId) return Response.json({ error: "承認する交代候補を選択してください。" }, { status: 400 });
@@ -909,6 +911,7 @@ export async function POST(request: Request) {
       notificationMessage = adjusted
         ? `${workDate} の希望 ${requestedStart}-${requestedEnd} は ${approvedStart}-${approvedEnd} に調整されました。`
         : `${workDate} ${approvedStart}-${approvedEnd} のシフトが承認されました。`;
+      sendReviewPush = adjusted;
     }
 
     await sql`
@@ -920,7 +923,7 @@ export async function POST(request: Request) {
           updated_at = now()
       where id::text = ${requestId}
     `;
-    await notifyEmployee(String(shiftRequest.employeeId), notificationTitle, notificationMessage, "/store/timecard");
+    await notifyEmployee(String(shiftRequest.employeeId), notificationTitle, notificationMessage, "/store/timecard", sendReviewPush);
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: `timecard.shift_request.${nextStatus}`,

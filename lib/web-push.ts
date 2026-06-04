@@ -144,11 +144,13 @@ export async function createOsNotification(input: {
   title: string;
   message: string;
   href: string;
+  sendPush?: boolean;
 }) {
   await sql`
     insert into os_notifications (recipient_employee_id, notification_type, title, message, href)
     values (${input.employeeId}, ${input.type}, ${input.title}, ${input.message}, ${input.href})
   `;
+  if (input.sendPush === false) return;
   await sendWebPushToEmployee(input.employeeId, {
     title: input.title,
     message: input.message,
