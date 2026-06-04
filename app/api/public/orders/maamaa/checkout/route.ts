@@ -10,6 +10,7 @@ function compareDateTime(dateA: string, timeA: string, dateB: string, timeB: str
 }
 
 function normalizeMinimumPickupMinutes(value: unknown, fallback: number) {
+  if (value === null || value === undefined || value === "") return fallback;
   const minutes = Math.round(Number(value));
   if (!Number.isFinite(minutes)) return fallback;
   return Math.max(0, Math.min(240, minutes));
