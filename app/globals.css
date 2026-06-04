@@ -5444,9 +5444,70 @@ body :where(
 
 .store-shift-request-list,
 .shift-request-list,
+.store-next-shift-list,
 .store-shift-period-list {
   display: grid;
   gap: 10px;
+}
+
+.store-next-shift-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.store-next-shift-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.store-next-shift-heading div,
+.store-next-shift-heading strong,
+.store-next-shift-heading span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-next-shift-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-next-shift-heading div span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-next-shift-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.55fr) minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.store-next-shift-row strong,
+.store-next-shift-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-next-shift-row span {
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .store-shift-period-list {
@@ -13053,6 +13114,8 @@ body :where(
 
   .store-shift-period-row,
   .store-shift-target-select,
+  .store-next-shift-heading,
+  .store-next-shift-row,
   .shift-coverage-axis,
   .shift-coverage-row,
   .store-shift-request-form.is-swap {

@@ -77,6 +77,11 @@ type ShiftRequestPayload = {
   currentEmployeeId?: string;
   requests?: ShiftRequestItem[];
   myShifts?: ShiftEntry[];
+  schedulingPeriod?: {
+    label: string;
+    startDate: string;
+    endDate: string;
+  };
   submissionPeriod?: {
     label: string;
     startDate: string;
@@ -132,6 +137,7 @@ export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
   const [myShifts, setMyShifts] = useState<ShiftEntry[]>([]);
+  const [schedulingPeriod, setSchedulingPeriod] = useState<ShiftRequestPayload["schedulingPeriod"] | null>(null);
   const [submissionPeriod, setSubmissionPeriod] = useState<ShiftRequestPayload["submissionPeriod"] | null>(null);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<AvailabilityDayDraft[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
@@ -195,6 +201,7 @@ export default function StoreTimecardPage() {
       const body = await response.json() as ShiftRequestPayload;
       setShiftRequests(body.requests ?? []);
       setMyShifts(body.myShifts ?? []);
+      setSchedulingPeriod(body.schedulingPeriod ?? null);
       setSubmissionPeriod(body.submissionPeriod ?? null);
       setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
       setShiftRequestDraft((current) => {
@@ -237,6 +244,8 @@ export default function StoreTimecardPage() {
   const statusLabel = state === "working" ? "勤務中" : state === "break" ? "休憩中" : "未出勤";
   const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
   const selectedStoreName = selectedStore?.name ?? "店舗未選択";
+  const selectedShiftStore = data?.stores.find((store) => store.id === selectedShiftStoreId) ?? null;
+  const selectedShiftStoreName = selectedShiftStore?.name ?? "店舗未選択";
 
   function requestMobileLocation() {
     if (!navigator.geolocation) {
@@ -545,6 +554,30 @@ export default function StoreTimecardPage() {
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="store-next-shift-block">
+            <div className="store-next-shift-heading">
+              <div>
+                <strong>次回シフト</strong>
+                <span>
+                  {schedulingPeriod
+                    ? `${schedulingPeriod.label} / ${schedulingPeriod.startDate} - ${schedulingPeriod.endDate}`
+                    : "確定済みシフトを確認しています。"}
+                </span>
+              </div>
+              <span>{selectedShiftStoreName}</span>
+            </div>
+            <div className="store-next-shift-list">
+              {myShifts.length ? myShifts.map((shift) => (
+                <article className="store-next-shift-row" key={shift.id}>
+                  <strong>{formatShiftDate(shift.workDate)}</strong>
+                  <span>{shift.scheduledStart ?? "--:--"} - {shift.scheduledEnd ?? "--:--"}</span>
+                </article>
+              )) : (
+                <p className="empty-state-text">この期間の確定シフトはまだありません。</p>
+              )}
+            </div>
           </div>
 
           <div className="store-shift-period-list">
