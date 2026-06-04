@@ -255,6 +255,36 @@ export default function StoreTimecardPage() {
     { key: "availability", label: "希望シフト", detail: submissionPeriod?.label ?? "提出期間" },
     { key: "swap", label: "交代募集", detail: myShifts.length ? "募集作成" : "確定待ち" }
   ];
+  const shiftPanelHeading = (() => {
+    if (!isMobileStaffPunch) {
+      return {
+        title: "シフト連絡",
+        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"
+      };
+    }
+    if (activeMobilePanel === "next_shift") {
+      return {
+        title: "次回シフト",
+        description: schedulingPeriod ? `${schedulingPeriod.label} / ${selectedShiftStoreName}` : "確定済みシフトを確認しています。"
+      };
+    }
+    if (activeMobilePanel === "availability") {
+      return {
+        title: "希望シフト",
+        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"
+      };
+    }
+    if (activeMobilePanel === "swap") {
+      return {
+        title: "交代募集",
+        description: myShifts.length ? "自分の確定シフトから交代募集を作成します。" : "確定シフトがあると交代募集を作成できます。"
+      };
+    }
+    return {
+      title: "シフト連絡",
+      description: "確認する機能を選択してください。"
+    };
+  })();
 
   function requestMobileLocation() {
     if (!navigator.geolocation) {
@@ -562,8 +592,8 @@ export default function StoreTimecardPage() {
           <div className="panel-title">
             <CalendarDays />
             <div>
-              <h2>シフト連絡</h2>
-              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"}</p>
+              <h2>{shiftPanelHeading.title}</h2>
+              <p>{shiftPanelHeading.description}</p>
             </div>
           </div>
 
@@ -585,7 +615,7 @@ export default function StoreTimecardPage() {
           <div className="store-next-shift-block store-mobile-section-next-shift">
             <div className="store-next-shift-heading">
               <div>
-                <strong>次回シフト</strong>
+                <strong>{isMobileStaffPunch && activeMobilePanel === "next_shift" ? "確定済みシフト" : "次回シフト"}</strong>
                 <span>
                   {schedulingPeriod
                     ? `${schedulingPeriod.label} / ${schedulingPeriod.startDate} - ${schedulingPeriod.endDate}`
