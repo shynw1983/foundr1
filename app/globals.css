@@ -6473,6 +6473,24 @@ body :where(
   min-width: 0;
 }
 
+.pos-admin-tax-toggle > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.pos-admin-tax-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.pos-admin-tax-toggle strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .pos-admin-tax-footer {
   display: flex;
   align-items: center;

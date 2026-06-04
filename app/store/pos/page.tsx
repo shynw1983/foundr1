@@ -121,6 +121,13 @@ type PosAccess = {
   canUseAllStoreView: boolean;
 };
 
+type PosSettings = {
+  dineInEnabled: boolean;
+  dineInTaxRate: number;
+  takeoutTaxRate: number;
+  priceTaxMode: string;
+};
+
 type PosCashSession = {
   id: string;
   businessDate: string;
@@ -293,6 +300,7 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -367,6 +375,14 @@ export default function StorePosPage() {
     setItems(nextItems ?? []);
     setOptionGroups((body.optionGroups ?? []) as PosOptionGroup[]);
     setSummary((body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] }) as PosSummary);
+    const nextPosSettings = {
+      dineInEnabled: body.posSettings?.dineInEnabled !== false,
+      dineInTaxRate: Number(body.posSettings?.dineInTaxRate ?? 10),
+      takeoutTaxRate: Number(body.posSettings?.takeoutTaxRate ?? 8),
+      priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included"
+    };
+    setPosSettings(nextPosSettings);
+    setOrderType((current) => nextPosSettings.dineInEnabled ? current : "takeout");
     const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
@@ -398,6 +414,10 @@ export default function StorePosPage() {
       return true;
     });
   }, [items, query, selectedBrandId, selectedCategory]);
+  const visibleOrderTypeOptions = useMemo(
+    () => orderTypeOptions.filter((option) => posSettings.dineInEnabled || option.value !== "eat_in"),
+    [posSettings.dineInEnabled]
+  );
 
   const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -919,7 +939,7 @@ export default function StorePosPage() {
           </div>
 
           <div className="store-pos-segmented">
-            {orderTypeOptions.map((option) => (
+            {visibleOrderTypeOptions.map((option) => (
               <button key={option.value} className={orderType === option.value ? "is-active" : ""} type="button" onClick={() => setOrderType(option.value)}>
                 {option.label}
               </button>

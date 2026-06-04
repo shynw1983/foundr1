@@ -245,9 +245,10 @@ async function getOpenCashSessionId(selectedStoreId: string) {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  if (!selectedStoreId) return { dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+  if (!selectedStoreId) return { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
   const rows = await sql`
     select
+      coalesce(dine_in_enabled, true) as "dineInEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode"
@@ -255,7 +256,7 @@ async function getPosSettings(selectedStoreId: string) {
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
-  return rows[0] ?? { dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+  return rows[0] ?? { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
 }
 
 export async function GET(request: Request) {

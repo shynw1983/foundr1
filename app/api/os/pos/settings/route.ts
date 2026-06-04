@@ -30,6 +30,7 @@ async function getSettings(storeId: string) {
     select
       stores.id::text as "storeId",
       stores.name as "storeName",
+      coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled",
       coalesce(pos_store_settings.dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(pos_store_settings.takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({})) as {
     storeId?: string;
+    dineInEnabled?: boolean;
     dineInTaxRate?: number | string;
     takeoutTaxRate?: number | string;
     priceTaxMode?: string;
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
   await sql`
     insert into pos_store_settings (
       store_id,
+      dine_in_enabled,
       dine_in_tax_rate,
       takeout_tax_rate,
       price_tax_mode,
@@ -87,6 +90,7 @@ export async function POST(request: Request) {
     )
     values (
       ${storeId},
+      ${body.dineInEnabled !== false},
       ${dineInTaxRate},
       ${takeoutTaxRate},
       ${priceTaxMode},
@@ -95,6 +99,7 @@ export async function POST(request: Request) {
     )
     on conflict (store_id)
     do update set
+      dine_in_enabled = excluded.dine_in_enabled,
       dine_in_tax_rate = excluded.dine_in_tax_rate,
       takeout_tax_rate = excluded.takeout_tax_rate,
       price_tax_mode = excluded.price_tax_mode,

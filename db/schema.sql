@@ -1228,6 +1228,7 @@ alter table store_operations add column if not exists minimum_pickup_minutes int
 
 create table if not exists pos_store_settings (
   store_id uuid primary key references stores(id) on delete cascade,
+  dine_in_enabled boolean not null default true,
   dine_in_tax_rate numeric(5, 2) not null default 10,
   takeout_tax_rate numeric(5, 2) not null default 8,
   price_tax_mode text not null default 'tax_included',
@@ -1235,6 +1236,8 @@ create table if not exists pos_store_settings (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table pos_store_settings add column if not exists dine_in_enabled boolean not null default true;
 
 create table if not exists menu_store_settings (
   id uuid primary key default gen_random_uuid(),

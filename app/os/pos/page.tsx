@@ -98,6 +98,7 @@ type PosReconciliation = {
 type PosTaxSettings = {
   storeId: string;
   storeName: string;
+  dineInEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
   priceTaxMode: string;
@@ -120,7 +121,7 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState({ dineInTaxRate: "10", takeoutTaxRate: "8", priceTaxMode: "tax_included" });
+  const [taxForm, setTaxForm] = useState({ dineInEnabled: true, dineInTaxRate: "10", takeoutTaxRate: "8", priceTaxMode: "tax_included" });
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
@@ -161,6 +162,7 @@ export default function PosPage() {
     setTaxSettings(nextSettings);
     setCanManagePosSettings(Boolean(settingsBody?.access?.canManagePosSettings));
     setTaxForm({
+      dineInEnabled: nextSettings?.dineInEnabled !== false,
       dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
       priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included"
@@ -185,6 +187,7 @@ export default function PosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           storeId: selectedStoreId,
+          dineInEnabled: taxForm.dineInEnabled,
           dineInTaxRate: taxForm.dineInTaxRate,
           takeoutTaxRate: taxForm.takeoutTaxRate,
           priceTaxMode: taxForm.priceTaxMode
@@ -194,6 +197,7 @@ export default function PosPage() {
       if (!response.ok) throw new Error(body.error || "POS 税設定を保存できませんでした。");
       setTaxSettings(body.settings ?? null);
       setTaxForm({
+        dineInEnabled: body.settings?.dineInEnabled !== false,
         dineInTaxRate: String(body.settings?.dineInTaxRate ?? taxForm.dineInTaxRate),
         takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
         priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode
@@ -276,6 +280,18 @@ export default function PosPage() {
             </div>
           </div>
           <div className="pos-admin-tax-grid">
+            <label className="pos-admin-tax-toggle">
+              <span>店内飲食</span>
+              <div>
+                <input
+                  type="checkbox"
+                  checked={taxForm.dineInEnabled}
+                  onChange={(event) => setTaxForm((current) => ({ ...current, dineInEnabled: event.target.checked }))}
+                  disabled={!canManagePosSettings}
+                />
+                <strong>店内飲食を POS に表示する</strong>
+              </div>
+            </label>
             <label>
               <span>店内飲食 税率（%）</span>
               <input
@@ -308,7 +324,7 @@ export default function PosPage() {
           </div>
           <div className="pos-admin-tax-footer">
             <span>
-              現在: 店内 {taxSettings?.dineInTaxRate ?? 10}% / 持ち帰り {taxSettings?.takeoutTaxRate ?? 8}% / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
+              現在: {taxSettings?.dineInEnabled === false ? "持ち帰りのみ" : `店内 ${taxSettings?.dineInTaxRate ?? 10}%`} / 持ち帰り {taxSettings?.takeoutTaxRate ?? 8}% / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
             </span>
             <button className="primary-button" type="button" onClick={() => void saveTaxSettings()} disabled={!canManagePosSettings || taxSaving}>
               {taxSaving ? "保存中..." : "保存"}
