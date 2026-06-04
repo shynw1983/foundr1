@@ -174,19 +174,23 @@ export default function StoreTimecardPage() {
 
   async function loadShiftRequests(nextStoreId = selectedStoreId) {
     if (!nextStoreId) return;
-    const response = await fetch(`/api/timecard/shift-requests?storeId=${encodeURIComponent(nextStoreId)}&month=${encodeURIComponent(getJstMonthLabel())}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json() as ShiftRequestPayload;
-    setShiftRequests(body.requests ?? []);
-    setMyShifts(body.myShifts ?? []);
-    setShiftRequestDraft((current) => {
-      const firstShift = body.myShifts?.[0];
-      return {
-        ...current,
-        workDate: current.workDate || firstShift?.workDate || "",
-        targetShiftId: current.targetShiftId || firstShift?.id || ""
-      };
-    });
+    try {
+      const response = await fetch(`/api/timecard/shift-requests?storeId=${encodeURIComponent(nextStoreId)}&month=${encodeURIComponent(getJstMonthLabel())}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as ShiftRequestPayload;
+      setShiftRequests(body.requests ?? []);
+      setMyShifts(body.myShifts ?? []);
+      setShiftRequestDraft((current) => {
+        const firstShift = body.myShifts?.[0];
+        return {
+          ...current,
+          workDate: current.workDate || firstShift?.workDate || "",
+          targetShiftId: current.targetShiftId || firstShift?.id || ""
+        };
+      });
+    } catch {
+      setShiftRequestMessage("シフト連絡を読み込めませんでした。");
+    }
   }
 
   useEffect(() => {

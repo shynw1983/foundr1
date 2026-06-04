@@ -92,19 +92,24 @@ export default function TimecardShiftRequestsPage() {
   async function loadRequests(nextStoreId = selectedStoreId, nextMonth = month) {
     setIsLoading(true);
     setMessage("");
-    const params = new URLSearchParams({ month: nextMonth });
-    if (nextStoreId) params.set("storeId", nextStoreId);
-    const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
-    if (response.ok) {
-      const body = await response.json() as ShiftRequestPayload;
-      setData(body);
-      setSelectedStoreId(body.selectedStoreId);
-      setMonth(body.month);
-    } else {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      setMessage(body.error ?? "シフト連絡を読み込めませんでした。");
+    try {
+      const params = new URLSearchParams({ month: nextMonth });
+      if (nextStoreId) params.set("storeId", nextStoreId);
+      const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
+      if (response.ok) {
+        const body = await response.json() as ShiftRequestPayload;
+        setData(body);
+        setSelectedStoreId(body.selectedStoreId);
+        setMonth(body.month);
+      } else {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setMessage(body.error ?? "シフト連絡を読み込めませんでした。");
+      }
+    } catch {
+      setMessage("シフト連絡を読み込めませんでした。通信状態を確認してください。");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   useEffect(() => {
