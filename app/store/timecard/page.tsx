@@ -249,11 +249,11 @@ export default function StoreTimecardPage() {
   const selectedStoreName = selectedStore?.name ?? "店舗未選択";
   const selectedShiftStore = data?.stores.find((store) => store.id === selectedShiftStoreId) ?? null;
   const selectedShiftStoreName = selectedShiftStore?.name ?? "店舗未選択";
-  const mobilePanelItems: Array<{ key: MobileTimecardPanel; label: string; detail: string }> = [
-    { key: "next_shift", label: "次回シフト", detail: `${myShifts.length} 件` },
-    { key: "history", label: "今月の実績", detail: `${selectedEmployeeDays.length} 日` },
-    { key: "availability", label: "希望シフト", detail: submissionPeriod?.label ?? "提出期間" },
-    { key: "swap", label: "交代募集", detail: myShifts.length ? "募集作成" : "確定待ち" }
+  const mobilePanelItems: Array<{ key: MobileTimecardPanel; label: string; detail: string; icon: typeof CalendarDays }> = [
+    { key: "next_shift", label: "次回シフト", detail: `${myShifts.length} 件`, icon: CalendarDays },
+    { key: "history", label: "今月の実績", detail: `${selectedEmployeeDays.length} 日`, icon: BriefcaseBusiness },
+    { key: "availability", label: "希望シフト", detail: submissionPeriod?.label ?? "提出期間", icon: Send },
+    { key: "swap", label: "交代募集", detail: myShifts.length ? "募集作成" : "確定待ち", icon: RefreshCw }
   ];
   const shiftPanelHeading = (() => {
     if (!isMobileStaffPunch) {
@@ -547,17 +547,25 @@ export default function StoreTimecardPage() {
 
         {isMobileStaffPunch ? (
           <section className="store-timecard-mobile-actions" aria-label="タイムカード機能">
-            {mobilePanelItems.map((item) => (
-              <button
-                className={activeMobilePanel === item.key ? "is-active" : ""}
-                type="button"
-                onClick={() => setActiveMobilePanel(item.key)}
-                key={item.key}
-              >
-                <strong>{item.label}</strong>
-                <span>{item.detail}</span>
-              </button>
-            ))}
+            {mobilePanelItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeMobilePanel === item.key;
+              return (
+                <button
+                  className={isActive ? "is-active" : ""}
+                  type="button"
+                  aria-expanded={isActive}
+                  onClick={() => setActiveMobilePanel((current) => current === item.key ? "" : item.key)}
+                  key={item.key}
+                >
+                  <span className="store-mobile-action-icon"><Icon size={18} /></span>
+                  <span className="store-mobile-action-copy">
+                    <strong>{item.label}</strong>
+                    <span>{item.detail}</span>
+                  </span>
+                </button>
+              );
+            })}
           </section>
         ) : null}
 

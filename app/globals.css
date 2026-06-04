@@ -5195,6 +5195,9 @@ body :where(
 .store-shift-request-panel .panel-title svg,
 .timecard-management-grid .panel-title svg,
 .timecard-workspace > .panel .panel-title svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   color: var(--green);
 }
 
@@ -13186,9 +13189,10 @@ body :where(
 
   .store-timecard-mobile-actions button {
     display: grid;
-    gap: 3px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
     min-height: 58px;
-    align-content: center;
+    align-items: center;
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 8px 10px;
@@ -13203,18 +13207,45 @@ body :where(
     color: var(--green);
   }
 
-  .store-timecard-mobile-actions strong,
-  .store-timecard-mobile-actions span {
+  .store-mobile-action-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: #f7f9fc;
+    color: var(--green);
+  }
+
+  .store-mobile-action-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.2;
+  }
+
+  .store-timecard-mobile-actions button.is-active .store-mobile-action-icon {
+    background: white;
+  }
+
+  .store-mobile-action-copy {
+    display: grid;
+    gap: 3px;
+    align-content: center;
+    min-width: 0;
+  }
+
+  .store-mobile-action-copy strong,
+  .store-mobile-action-copy span {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .store-timecard-mobile-actions strong {
+  .store-mobile-action-copy strong {
     font-size: 13px;
     font-weight: 900;
   }
 
-  .store-timecard-mobile-actions span {
+  .store-mobile-action-copy span {
     color: var(--muted);
     font-size: 11px;
     font-weight: 800;
