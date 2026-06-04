@@ -6066,6 +6066,7 @@ body :where(
   display: grid;
   grid-template-columns: minmax(240px, 0.36fr) minmax(0, 1fr);
   gap: 12px;
+  max-height: calc(100dvh - 132px);
   min-height: 0;
   overflow: hidden;
 }
@@ -6130,11 +6131,22 @@ body :where(
 .store-pos-transaction-detail {
   display: grid;
   align-content: start;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
+  overflow: hidden;
   background: white;
+}
+
+.store-pos-transaction-scroll {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .store-pos-transaction-summary {
@@ -6223,6 +6235,12 @@ body :where(
 
 .store-pos-refund-panel input {
   width: 100%;
+}
+
+.store-pos-refund-panel {
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 -10px 18px rgba(15, 23, 42, 0.06);
 }
 
 .store-pos-empty {
@@ -16593,6 +16611,10 @@ body :where(
   .store-pos-transaction-body,
   .store-pos-transaction-summary {
     grid-template-columns: 1fr;
+  }
+
+  .store-pos-transaction-body {
+    max-height: calc(90dvh - 92px);
   }
 
   .store-pos-transaction-list {

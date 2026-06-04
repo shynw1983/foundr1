@@ -1059,65 +1059,66 @@ export default function StorePosPage() {
                   <div className="store-pos-empty">会計を選択してください。</div>
                 ) : (
                   <>
-                    <div className="store-pos-transaction-summary">
-                      <div>
-                        <span>会計番号</span>
-                        <strong>{selectedTransaction.pickupCode}</strong>
+                    <div className="store-pos-transaction-scroll">
+                      <div className="store-pos-transaction-summary">
+                        <div>
+                          <span>会計番号</span>
+                          <strong>{selectedTransaction.pickupCode}</strong>
+                        </div>
+                        <div>
+                          <span>合計</span>
+                          <strong>{formatYen(selectedTransaction.amount)}</strong>
+                        </div>
+                        <div>
+                          <span>状態</span>
+                          <strong>{getTransactionStatusLabel(selectedTransaction)}</strong>
+                        </div>
                       </div>
-                      <div>
-                        <span>合計</span>
-                        <strong>{formatYen(selectedTransaction.amount)}</strong>
-                      </div>
-                      <div>
-                        <span>状態</span>
-                        <strong>{getTransactionStatusLabel(selectedTransaction)}</strong>
-                      </div>
-                    </div>
 
-                    <div className="store-pos-transaction-meta">
-                      <span>{selectedTransaction.createdLabel}</span>
-                      <span>{getPaymentLabel(selectedTransaction.paymentMethod)}</span>
-                      {selectedTransaction.orderType ? <span>{getOrderTypeLabel(selectedTransaction.orderType)}</span> : null}
-                      <span>担当 {selectedTransaction.cashierName || "-"}</span>
-                    </div>
-
-                    {selectedTransaction.paymentMethod === "cash" ? (
-                      <div className="store-pos-transaction-cash">
-                        <span>お預かり {selectedTransaction.cashTenderedAmount === null ? "-" : formatYen(selectedTransaction.cashTenderedAmount)}</span>
-                        <span>お釣り {selectedTransaction.cashChangeAmount === null ? "-" : formatYen(selectedTransaction.cashChangeAmount)}</span>
+                      <div className="store-pos-transaction-meta">
+                        <span>{selectedTransaction.createdLabel}</span>
+                        <span>{getPaymentLabel(selectedTransaction.paymentMethod)}</span>
+                        {selectedTransaction.orderType ? <span>{getOrderTypeLabel(selectedTransaction.orderType)}</span> : null}
+                        <span>担当 {selectedTransaction.cashierName || "-"}</span>
                       </div>
-                    ) : null}
 
-                    <div className="store-pos-transaction-items">
-                      {(selectedTransaction.items ?? []).map((item) => {
-                        const modifiers = [
-                          item.size,
-                          item.temperature,
-                          item.sweetness,
-                          item.ice,
-                          item.option,
-                          ...(item.toppings ?? [])
-                        ].filter(Boolean);
-                        return (
-                          <div key={item.id}>
-                            <div>
-                              <strong>{item.name}</strong>
-                              {modifiers.length ? <small>{modifiers.join(" / ")}</small> : null}
-                              <span>{formatYen(Math.round(item.amount / Math.max(1, item.quantity)))} x {item.quantity}</span>
+                      {selectedTransaction.paymentMethod === "cash" ? (
+                        <div className="store-pos-transaction-cash">
+                          <span>お預かり {selectedTransaction.cashTenderedAmount === null ? "-" : formatYen(selectedTransaction.cashTenderedAmount)}</span>
+                          <span>お釣り {selectedTransaction.cashChangeAmount === null ? "-" : formatYen(selectedTransaction.cashChangeAmount)}</span>
+                        </div>
+                      ) : null}
+
+                      <div className="store-pos-transaction-items">
+                        {(selectedTransaction.items ?? []).map((item) => {
+                          const modifiers = [
+                            item.size,
+                            item.temperature,
+                            item.sweetness,
+                            item.ice,
+                            item.option,
+                            ...(item.toppings ?? [])
+                          ].filter(Boolean);
+                          return (
+                            <div key={item.id}>
+                              <div>
+                                <strong>{item.name}</strong>
+                                {modifiers.length ? <small>{modifiers.join(" / ")}</small> : null}
+                                <span>{formatYen(Math.round(item.amount / Math.max(1, item.quantity)))} x {item.quantity}</span>
+                              </div>
+                              <b>{formatYen(item.amount)}</b>
                             </div>
-                            <b>{formatYen(item.amount)}</b>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {selectedTransaction.note ? (
-                      <div className="store-pos-transaction-note">
-                        <span>メモ</span>
-                        <p>{selectedTransaction.note}</p>
+                          );
+                        })}
                       </div>
-                    ) : null}
 
+                      {selectedTransaction.note ? (
+                        <div className="store-pos-transaction-note">
+                          <span>メモ</span>
+                          <p>{selectedTransaction.note}</p>
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="store-pos-refund-panel">
                       <div>
                         <strong>返金操作</strong>
