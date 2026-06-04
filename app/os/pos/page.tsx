@@ -14,6 +14,7 @@ import {
   PackageCheck,
   Search,
   ShoppingCart,
+  WalletCards,
   Store,
   Truck,
   UserCog
@@ -59,6 +60,41 @@ type PosSummary = {
   }>;
 };
 
+type PosCashSession = {
+  id: string;
+  businessDate: string;
+  registerName: string;
+  status: string;
+  openingAmount: number;
+  expectedCashAmount: number;
+  countedCashAmount: number | null;
+  differenceAmount: number | null;
+  cashSales: number;
+  cashIn: number;
+  cashOut: number;
+  openedByName: string;
+  closedByName: string;
+  openedAt: string;
+  closedAt: string;
+};
+
+type PosCashTotals = {
+  openingAmount: number;
+  expectedCashAmount: number;
+  countedCashAmount: number;
+  differenceAmount: number;
+  cashSales: number;
+  cashIn: number;
+  cashOut: number;
+};
+
+type PosReconciliation = {
+  businessDate: string;
+  activeSession: PosCashSession | null;
+  sessions: PosCashSession[];
+  totals: PosCashTotals;
+};
+
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
@@ -74,6 +110,12 @@ export default function PosPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
+  const [reconciliation, setReconciliation] = useState<PosReconciliation>({
+    businessDate: "",
+    activeSession: null,
+    sessions: [],
+    totals: { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 }
+  });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -88,9 +130,22 @@ export default function PosPage() {
       return;
     }
     const body = await response.json();
+    const selectedId = body.selectedStoreId ?? "";
+    const cashParams = new URLSearchParams();
+    if (selectedId) cashParams.set("storeId", selectedId);
+    const cashResponse = selectedId
+      ? await fetch(`/api/store/pos/reconciliation?${cashParams.toString()}`, { cache: "no-store" })
+      : null;
+    const cashBody = cashResponse?.ok ? await cashResponse.json() : null;
     setStores(body.access?.stores ?? []);
-    setSelectedStoreId(body.selectedStoreId ?? "");
+    setSelectedStoreId(selectedId);
     setSummary(body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] });
+    setReconciliation({
+      businessDate: cashBody?.businessDate ?? "",
+      activeSession: cashBody?.activeSession ?? null,
+      sessions: cashBody?.sessions ?? [],
+      totals: cashBody?.totals ?? { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 }
+    });
     setMessage("");
     setLoading(false);
   }
@@ -173,6 +228,68 @@ export default function PosPage() {
               <strong>{loading ? "-" : formatYen(summary.average)}</strong>
               <p>客単価の目安</p>
             </article>
+            <article className="metric-card">
+              <span>現金差額</span>
+              <strong>{loading ? "-" : formatYen(reconciliation.totals.differenceAmount)}</strong>
+              <p>{reconciliation.activeSession ? "開いているレジ締めあり" : "締め済みセッション合計"}</p>
+            </article>
+          </section>
+
+          <section className="panel pos-admin-reconciliation">
+            <div className="panel-title">
+              <WalletCards />
+              <div>
+                <h3>日次レジ締め</h3>
+                <p>釣銭準備金、現金売上、入出金、点検金額の差額を確認します。</p>
+              </div>
+            </div>
+            <div className="pos-admin-cash-grid">
+              <div>
+                <span>開始金額</span>
+                <strong>{formatYen(reconciliation.totals.openingAmount)}</strong>
+              </div>
+              <div>
+                <span>現金売上</span>
+                <strong>{formatYen(reconciliation.totals.cashSales)}</strong>
+              </div>
+              <div>
+                <span>入金 / 出金</span>
+                <strong>{formatYen(reconciliation.totals.cashIn)} / {formatYen(reconciliation.totals.cashOut)}</strong>
+              </div>
+              <div>
+                <span>システム上の現金</span>
+                <strong>{formatYen(reconciliation.totals.expectedCashAmount)}</strong>
+              </div>
+              <div>
+                <span>実際の現金</span>
+                <strong>{formatYen(reconciliation.totals.countedCashAmount)}</strong>
+              </div>
+              <div>
+                <span>差額</span>
+                <strong>{formatYen(reconciliation.totals.differenceAmount)}</strong>
+              </div>
+            </div>
+            {reconciliation.sessions.length === 0 ? (
+              <div className="empty-state">
+                <WalletCards />
+                <p>今日のレジ締めはまだありません。</p>
+              </div>
+            ) : (
+              <div className="pos-admin-order-list">
+                {reconciliation.sessions.map((session) => (
+                  <div key={session.id} className="pos-admin-order-row">
+                    <div>
+                      <strong>{session.registerName} / {session.status === "open" ? "進行中" : "締め済み"}</strong>
+                      <span>
+                        現金売上 {formatYen(session.cashSales)} / 予定 {formatYen(session.expectedCashAmount)}
+                        {session.countedCashAmount !== null ? ` / 実際 ${formatYen(session.countedCashAmount)}` : ""}
+                      </span>
+                    </div>
+                    <b>{session.differenceAmount === null ? "-" : formatYen(session.differenceAmount)}</b>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="panel pos-admin-history">

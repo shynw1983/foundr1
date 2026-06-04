@@ -1346,6 +1346,45 @@ alter table store_customer_orders add column if not exists payment_refund_status
 alter table store_customer_orders add column if not exists payment_refund_error text not null default '';
 alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
 
+create table if not exists pos_cash_sessions (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  business_date date not null,
+  register_name text not null default 'POS',
+  status text not null default 'open',
+  opening_amount integer not null default 0,
+  opening_note text not null default '',
+  expected_cash_amount integer not null default 0,
+  counted_cash_amount integer,
+  difference_amount integer,
+  closing_note text not null default '',
+  source text not null default 'manual',
+  device_id text not null default '',
+  hardware_result text not null default '',
+  opened_by uuid references employees(id) on delete set null,
+  closed_by uuid references employees(id) on delete set null,
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists pos_cash_movements (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references pos_cash_sessions(id) on delete cascade,
+  store_id uuid not null references stores(id) on delete cascade,
+  movement_type text not null,
+  amount integer not null default 0,
+  reason text not null default '',
+  source text not null default 'manual',
+  device_id text not null default '',
+  hardware_result text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table store_customer_orders add column if not exists pos_cash_session_id uuid references pos_cash_sessions(id) on delete set null;
+
 create table if not exists store_customer_order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references store_customer_orders(id) on delete cascade,
@@ -1740,7 +1779,13 @@ create index if not exists idx_store_customer_orders_square_order on store_custo
 create index if not exists idx_store_customer_orders_payment_account on store_customer_orders(payment_account_id, created_at desc);
 create index if not exists idx_store_customer_orders_payment_session on store_customer_orders(payment_provider, payment_session_id);
 create index if not exists idx_store_customer_orders_payment_id on store_customer_orders(payment_provider, payment_id);
+create index if not exists idx_store_customer_orders_pos_cash_session on store_customer_orders(pos_cash_session_id, created_at desc);
 create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
+create index if not exists idx_pos_cash_sessions_store_date on pos_cash_sessions(store_id, business_date desc, status);
+create unique index if not exists idx_pos_cash_sessions_one_open_per_store
+  on pos_cash_sessions(store_id)
+  where status = 'open';
+create index if not exists idx_pos_cash_movements_session on pos_cash_movements(session_id, created_at desc);
 create index if not exists idx_sales_orders_store_channel_paid on sales_orders(store_id, channel, paid_at desc);
 create index if not exists idx_sales_orders_ordered_at on sales_orders(ordered_at desc);
 create index if not exists idx_sales_orders_channel_status on sales_orders(channel, status);

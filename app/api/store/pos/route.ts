@@ -231,6 +231,18 @@ async function getTodaySummary(selectedStoreId: string) {
   };
 }
 
+async function getOpenCashSessionId(selectedStoreId: string) {
+  const rows = await sql`
+    select id::text
+    from pos_cash_sessions
+    where store_id::text = ${selectedStoreId}
+      and status = 'open'
+    order by opened_at desc
+    limit 1
+  `;
+  return rows[0]?.id as string | undefined;
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -395,6 +407,10 @@ export async function POST(request: Request) {
   }
 
   const amount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+  const cashSessionId = paymentMethod === "cash" ? await getOpenCashSessionId(storeId) : null;
+  if (paymentMethod === "cash" && !cashSessionId) {
+    return Response.json({ error: "現金会計の前に日次レジ締めを開始してください。" }, { status: 400 });
+  }
   const { pickupDate, pickupTime } = getJstParts();
   const pickupCode = createPickupCode("P");
   const brandId = normalizedItems[0]?.brandId ?? null;
@@ -418,6 +434,7 @@ export async function POST(request: Request) {
       paid_at,
       completed_at,
       payment_updated_at,
+      pos_cash_session_id,
       updated_at
     )
     values (
@@ -449,6 +466,7 @@ export async function POST(request: Request) {
       now(),
       now(),
       now(),
+      ${cashSessionId ?? null},
       now()
     )
     returning id::text

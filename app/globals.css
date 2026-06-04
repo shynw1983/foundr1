@@ -5241,6 +5241,131 @@ body :where(
   gap: 12px;
 }
 
+.store-pos-cash-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.store-pos-cash-title,
+.store-pos-cash-start,
+.store-pos-cash-actions,
+.store-pos-cash-close {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.store-pos-cash-title {
+  justify-content: space-between;
+}
+
+.store-pos-cash-title h3,
+.store-pos-cash-title p {
+  margin: 0;
+}
+
+.store-pos-cash-title > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-pos-cash-active {
+  display: grid;
+  gap: 12px;
+}
+
+.store-pos-cash-metrics,
+.pos-admin-cash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.store-pos-cash-metrics div,
+.pos-admin-cash-grid div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-pos-cash-metrics span,
+.pos-admin-cash-grid span,
+.store-pos-cash-actions label > span,
+.store-pos-cash-close label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-cash-metrics strong,
+.pos-admin-cash-grid strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.store-pos-cash-start {
+  flex-wrap: wrap;
+}
+
+.store-pos-cash-start > div {
+  display: grid;
+  gap: 3px;
+  min-width: min(260px, 100%);
+  flex: 1 1 260px;
+}
+
+.store-pos-cash-start strong,
+.store-pos-cash-start span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-cash-start span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.store-pos-cash-actions,
+.store-pos-cash-close {
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.store-pos-cash-actions label,
+.store-pos-cash-close label {
+  display: grid;
+  gap: 6px;
+  min-width: min(180px, 100%);
+  flex: 1 1 180px;
+}
+
+.store-pos-cash-start input,
+.store-pos-cash-actions input,
+.store-pos-cash-actions select,
+.store-pos-cash-close input {
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 850;
+}
+
 .store-pos-product-head {
   display: flex;
   align-items: center;

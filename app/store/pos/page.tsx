@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, CreditCard, Minus, Plus, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -84,6 +84,39 @@ type PosSummary = {
 type PosAccess = {
   stores: StoreOption[];
   canUseAllStoreView: boolean;
+};
+
+type PosCashSession = {
+  id: string;
+  businessDate: string;
+  registerName: string;
+  status: string;
+  openingAmount: number;
+  expectedCashAmount: number;
+  countedCashAmount: number | null;
+  differenceAmount: number | null;
+  cashSales: number;
+  cashIn: number;
+  cashOut: number;
+  openedByName: string;
+  openedAt: string;
+  closedAt: string;
+};
+
+type PosCashMovement = {
+  id: string;
+  movementType: string;
+  amount: number;
+  reason: string;
+  createdByName: string;
+  createdTime: string;
+};
+
+type PosReconciliation = {
+  businessDate: string;
+  activeSession: PosCashSession | null;
+  sessions: PosCashSession[];
+  movements: PosCashMovement[];
 };
 
 const paymentOptions = [
@@ -176,6 +209,28 @@ export default function StorePosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", activeSession: null, sessions: [], movements: [] });
+  const [cashOpeningAmount, setCashOpeningAmount] = useState("");
+  const [cashMovementType, setCashMovementType] = useState("cash_out");
+  const [cashMovementAmount, setCashMovementAmount] = useState("");
+  const [cashMovementReason, setCashMovementReason] = useState("");
+  const [cashCountedAmount, setCashCountedAmount] = useState("");
+  const [cashClosingNote, setCashClosingNote] = useState("");
+  const [cashSaving, setCashSaving] = useState(false);
+
+  async function loadReconciliation(storeId = selectedStoreId) {
+    if (!storeId) return;
+    const params = new URLSearchParams({ storeId });
+    const response = await fetch(`/api/store/pos/reconciliation?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    setReconciliation({
+      businessDate: body.businessDate ?? "",
+      activeSession: body.activeSession ?? null,
+      sessions: body.sessions ?? [],
+      movements: body.movements ?? []
+    });
+  }
 
   async function load(nextStoreId = selectedStoreId) {
     setLoading(true);
@@ -201,6 +256,7 @@ export default function StorePosPage() {
     const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
+    await loadReconciliation(responseStoreId);
     setSelectedBrandId((current) => current || nextBrands?.[0]?.id || "");
     setSelectedCategory((current) => current ?? (nextItems?.[0]?.category || "未分類"));
     setMessage("");
@@ -375,11 +431,65 @@ export default function StorePosPage() {
       setCart([]);
       setNote("");
       setSummary(body.todaySummary as PosSummary);
+      if (paymentMethod === "cash") await loadReconciliation(selectedStoreId);
       setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitCashAction(action: "open" | "movement" | "close") {
+    if (!selectedStoreId || cashSaving) return;
+    setCashSaving(true);
+    setMessage("");
+    try {
+      const payload = action === "open"
+        ? { action, storeId: selectedStoreId, openingAmount: Number(cashOpeningAmount || 0) }
+        : action === "movement"
+          ? {
+              action,
+              storeId: selectedStoreId,
+              movementType: cashMovementType,
+              amount: Number(cashMovementAmount || 0),
+              reason: cashMovementReason
+            }
+          : {
+              action,
+              storeId: selectedStoreId,
+              countedCashAmount: Number(cashCountedAmount || 0),
+              note: cashClosingNote
+            };
+      const response = await fetch("/api/store/pos/reconciliation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "レジ締めを保存できませんでした。");
+      setReconciliation({
+        businessDate: body.businessDate ?? reconciliation.businessDate,
+        activeSession: body.activeSession ?? null,
+        sessions: body.sessions ?? [],
+        movements: body.movements ?? []
+      });
+      if (action === "open") {
+        setCashOpeningAmount("");
+        setMessage("日次レジ締めを開始しました。");
+      } else if (action === "movement") {
+        setCashMovementAmount("");
+        setCashMovementReason("");
+        setMessage(cashMovementType === "cash_in" ? "入金を記録しました。" : "出金を記録しました。");
+      } else {
+        setCashCountedAmount("");
+        setCashClosingNote("");
+        setMessage("日次レジ締めを締めました。");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "レジ締めを保存できませんでした。");
+    } finally {
+      setCashSaving(false);
     }
   }
 
@@ -409,6 +519,86 @@ export default function StorePosPage() {
       </section>
 
       {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
+
+      <section className="store-pos-cash-panel">
+        <div className="store-pos-cash-title">
+          <div>
+            <p className="eyebrow">Daily Cash</p>
+            <h3>日次レジ締め</h3>
+          </div>
+          <span>{reconciliation.businessDate || "-"}</span>
+        </div>
+
+        {reconciliation.activeSession ? (
+          <div className="store-pos-cash-active">
+            <div className="store-pos-cash-metrics">
+              <div>
+                <span>開始金額</span>
+                <strong>{formatYen(reconciliation.activeSession.openingAmount)}</strong>
+              </div>
+              <div>
+                <span>現金売上</span>
+                <strong>{formatYen(reconciliation.activeSession.cashSales)}</strong>
+              </div>
+              <div>
+                <span>入金 / 出金</span>
+                <strong>{formatYen(reconciliation.activeSession.cashIn)} / {formatYen(reconciliation.activeSession.cashOut)}</strong>
+              </div>
+              <div>
+                <span>システム上の現金</span>
+                <strong>{formatYen(reconciliation.activeSession.expectedCashAmount)}</strong>
+              </div>
+            </div>
+
+            <div className="store-pos-cash-actions">
+              <label>
+                <span>入出金</span>
+                <select value={cashMovementType} onChange={(event) => setCashMovementType(event.target.value)}>
+                  <option value="cash_out">出金</option>
+                  <option value="cash_in">入金</option>
+                </select>
+              </label>
+              <label>
+                <span>金額</span>
+                <input inputMode="numeric" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(event.target.value)} placeholder="0" />
+              </label>
+              <label>
+                <span>理由</span>
+                <input value={cashMovementReason} onChange={(event) => setCashMovementReason(event.target.value)} placeholder="例: 両替、備品購入" />
+              </label>
+              <button className="secondary-button" type="button" onClick={() => submitCashAction("movement")} disabled={cashSaving}>
+                記録
+              </button>
+            </div>
+
+            <div className="store-pos-cash-close">
+              <label>
+                <span>実際の現金</span>
+                <input inputMode="numeric" value={cashCountedAmount} onChange={(event) => setCashCountedAmount(event.target.value)} placeholder="点検金額" />
+              </label>
+              <label>
+                <span>差額理由</span>
+                <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder="差額がある場合は必須" />
+              </label>
+              <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving}>
+                レジ締め
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="store-pos-cash-start">
+            <ReceiptText size={18} />
+            <div>
+              <strong>今日のレジ締めはまだ開始されていません。</strong>
+              <span>現金会計をする前に、釣銭準備金を入力してください。</span>
+            </div>
+            <input inputMode="numeric" value={cashOpeningAmount} onChange={(event) => setCashOpeningAmount(event.target.value)} placeholder="開始金額" />
+            <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving}>
+              開始
+            </button>
+          </div>
+        )}
+      </section>
 
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
