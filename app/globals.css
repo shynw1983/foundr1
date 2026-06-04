@@ -5851,7 +5851,14 @@ body :where(
   justify-content: space-between;
 }
 
-.store-pos-cart-head > strong {
+.store-pos-cart-head-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.store-pos-cart-head-actions > strong {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6010,6 +6017,212 @@ body :where(
 .store-pos-checkout {
   width: 100%;
   min-height: 52px;
+}
+
+.store-pos-transaction-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.store-pos-transaction-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(1080px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.store-pos-transaction-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-pos-transaction-head h3,
+.store-pos-transaction-head p {
+  margin: 0;
+}
+
+.store-pos-transaction-head span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-pos-transaction-body {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.36fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.store-pos-transaction-list,
+.store-pos-transaction-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.store-pos-transaction-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.store-pos-transaction-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  color: var(--ink);
+  text-align: left;
+}
+
+.store-pos-transaction-list button.is-active {
+  border-color: rgba(31, 111, 85, 0.35);
+  background: var(--green-soft);
+}
+
+.store-pos-transaction-list button > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-pos-transaction-list strong,
+.store-pos-transaction-list span,
+.store-pos-transaction-list small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-transaction-list span,
+.store-pos-transaction-list small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-pos-transaction-list b {
+  color: #1f6f55;
+  font-size: 14px;
+}
+
+.store-pos-transaction-detail {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.store-pos-transaction-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.store-pos-transaction-summary > div,
+.store-pos-transaction-cash,
+.store-pos-transaction-note,
+.store-pos-refund-panel {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-pos-transaction-summary span,
+.store-pos-transaction-meta,
+.store-pos-transaction-cash,
+.store-pos-transaction-note span,
+.store-pos-refund-panel span,
+.store-pos-refund-panel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-transaction-summary strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.store-pos-transaction-meta,
+.store-pos-transaction-cash {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.store-pos-transaction-items {
+  display: grid;
+  gap: 8px;
+}
+
+.store-pos-transaction-items > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.store-pos-transaction-items > div > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-pos-transaction-items strong,
+.store-pos-transaction-items small,
+.store-pos-transaction-items span,
+.store-pos-transaction-note p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-transaction-items small,
+.store-pos-transaction-items span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-pos-refund-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.store-pos-refund-panel input {
+  width: 100%;
 }
 
 .store-pos-empty {
@@ -16297,12 +16510,35 @@ body :where(
     max-height: none;
   }
 
+  .store-pos-cart-head-actions {
+    display: flex;
+  }
+
   .store-pos-payment-grid {
     grid-template-columns: 1fr;
   }
 
   .store-pos-cash-payment {
     grid-template-columns: 1fr;
+  }
+
+  .store-pos-transaction-overlay {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .store-pos-transaction-dialog {
+    max-height: 90dvh;
+    padding: 14px;
+  }
+
+  .store-pos-transaction-body,
+  .store-pos-transaction-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .store-pos-transaction-list {
+    max-height: 30vh;
   }
 
   .store-pos-option-overlay {

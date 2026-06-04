@@ -82,6 +82,40 @@ type PosSummary = {
   }>;
 };
 
+type PosTransactionItem = {
+  id: string;
+  name: string;
+  size: string;
+  temperature: string;
+  sweetness: string;
+  ice: string;
+  option: string;
+  toppings: string[];
+  quantity: number;
+  amount: number;
+};
+
+type PosTransaction = {
+  id: string;
+  pickupCode: string;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  amount: number;
+  orderType?: string;
+  note?: string;
+  cashierName: string;
+  cashTenderedAmount: number | null;
+  cashChangeAmount: number | null;
+  refundReason?: string;
+  createdLabel: string;
+  createdTime?: string;
+  refundStatus: string;
+  refundedAt: string;
+  cashSessionStatus: string;
+  items?: PosTransactionItem[];
+};
+
 type PosAccess = {
   stores: StoreOption[];
   canUseAllStoreView: boolean;
@@ -184,6 +218,19 @@ function formatDenominationLabel(value: number) {
   return value >= 1000 ? `¥${value.toLocaleString("ja-JP")}` : `¥${value}`;
 }
 
+function getPaymentLabel(value: string) {
+  return paymentOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function getOrderTypeLabel(value = "") {
+  return orderTypeOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function getTransactionStatusLabel(transaction: Pick<PosTransaction, "status" | "paymentStatus">) {
+  if (transaction.status === "cancelled" || transaction.paymentStatus === "refunded") return "返金済み";
+  return "会計済み";
+}
+
 function getItemPrice(item: Pick<PosMenuItem, "basePrice" | "priceOverride">) {
   return Math.round(Number(item.priceOverride ?? item.basePrice ?? 0));
 }
@@ -271,6 +318,12 @@ export default function StorePosPage() {
   const [cashClosingResponsibleEmployeeId, setCashClosingResponsibleEmployeeId] = useState("");
   const [cashSaving, setCashSaving] = useState(false);
   const [cashDialog, setCashDialog] = useState<"open" | "movement" | "close" | null>(null);
+  const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
+  const [transactions, setTransactions] = useState<PosTransaction[]>([]);
+  const [selectedTransaction, setSelectedTransaction] = useState<PosTransaction | null>(null);
+  const [transactionLoading, setTransactionLoading] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundSaving, setRefundSaving] = useState(false);
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
@@ -357,6 +410,12 @@ export default function StorePosPage() {
     canUseRegister &&
     (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= subtotal))
   );
+  const canRefundSelectedTransaction = Boolean(
+    selectedTransaction &&
+    selectedTransaction.status !== "cancelled" &&
+    selectedTransaction.paymentStatus !== "refunded" &&
+    selectedTransaction.cashSessionStatus === "open"
+  );
   const openingBreakdownTotal = getCashBreakdownTotal(cashOpeningBreakdown);
   const countedBreakdownTotal = getCashBreakdownTotal(cashCountedBreakdown);
   const openingHandoverDifference = reconciliation.previousClosedSession
@@ -395,6 +454,10 @@ export default function StorePosPage() {
     setCashClosingNote("");
     setCashClosingResponsibleEmployeeId("");
     setCashDialog(null);
+    setTransactionDialogOpen(false);
+    setTransactions([]);
+    setSelectedTransaction(null);
+    setRefundReason("");
     void load(storeId);
   }
 
@@ -559,6 +622,7 @@ export default function StorePosPage() {
       setNote("");
       setCashTenderedAmount("");
       setSummary(body.todaySummary as PosSummary);
+      if (transactionDialogOpen) await loadTransactions();
       await loadReconciliation(selectedStoreId);
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
       setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${changeLabel}`);
@@ -628,6 +692,60 @@ export default function StorePosPage() {
       setMessage(error instanceof Error ? error.message : "レジ締めを保存できませんでした。");
     } finally {
       setCashSaving(false);
+    }
+  }
+
+  async function loadTransactions(orderId = selectedTransaction?.id ?? "") {
+    if (!selectedStoreId) return;
+    setTransactionLoading(true);
+    try {
+      const params = new URLSearchParams({ storeId: selectedStoreId });
+      if (orderId) params.set("orderId", orderId);
+      const response = await fetch(`/api/store/pos/transactions?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "取引履歴を読み込めませんでした。");
+      const nextTransactions = (body.transactions ?? []) as PosTransaction[];
+      setTransactions(nextTransactions);
+      setSelectedTransaction((body.selectedTransaction ?? null) as PosTransaction | null);
+      setRefundReason("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "取引履歴を読み込めませんでした。");
+    } finally {
+      setTransactionLoading(false);
+    }
+  }
+
+  async function openTransactionDialog() {
+    setTransactionDialogOpen(true);
+    await loadTransactions("");
+  }
+
+  async function selectTransaction(orderId: string) {
+    await loadTransactions(orderId);
+  }
+
+  async function refundTransaction() {
+    if (!selectedStoreId || !selectedTransaction || refundSaving) return;
+    setRefundSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/store/pos/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: selectedStoreId, orderId: selectedTransaction.id, reason: refundReason })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "返金を保存できませんでした。");
+      setTransactions((body.transactions ?? []) as PosTransaction[]);
+      setSelectedTransaction((body.selectedTransaction ?? null) as PosTransaction | null);
+      setSummary((current) => ({ ...current, ...(body.todaySummary ?? {}) }));
+      setRefundReason("");
+      await loadReconciliation(selectedStoreId);
+      setMessage(`返金を記録しました。${selectedTransaction.pickupCode} / ${formatYen(selectedTransaction.amount)}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "返金を保存できませんでした。");
+    } finally {
+      setRefundSaving(false);
     }
   }
 
@@ -794,7 +912,10 @@ export default function StorePosPage() {
               <p className="eyebrow">Cart</p>
               <h3>会計内容</h3>
             </div>
-            <strong>{cartCount} 点</strong>
+            <div className="store-pos-cart-head-actions">
+              <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()}>履歴</button>
+              <strong>{cartCount} 点</strong>
+            </div>
           </div>
 
           <div className="store-pos-segmented">
@@ -875,6 +996,135 @@ export default function StorePosPage() {
           </button>
         </aside>
       </section>
+
+      {transactionDialogOpen ? (
+        <div className="store-pos-transaction-overlay" role="dialog" aria-modal="true" aria-label="取引履歴">
+          <div className="store-pos-transaction-dialog">
+            <div className="store-pos-transaction-head">
+              <div>
+                <p className="eyebrow">Transactions</p>
+                <h3>取引履歴</h3>
+                <span>最近 7 日間の POS 会計を確認します。</span>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setTransactionDialogOpen(false)}>閉じる</button>
+            </div>
+
+            <div className="store-pos-transaction-body">
+              <aside className="store-pos-transaction-list">
+                {transactionLoading && transactions.length === 0 ? (
+                  <div className="store-pos-empty">読み込み中...</div>
+                ) : transactions.length === 0 ? (
+                  <div className="store-pos-empty">取引履歴がありません。</div>
+                ) : transactions.map((transaction) => (
+                  <button
+                    key={transaction.id}
+                    className={selectedTransaction?.id === transaction.id ? "is-active" : ""}
+                    type="button"
+                    onClick={() => void selectTransaction(transaction.id)}
+                  >
+                    <div>
+                      <strong>{transaction.pickupCode}</strong>
+                      <span>{transaction.createdLabel} / {getPaymentLabel(transaction.paymentMethod)}</span>
+                    </div>
+                    <div>
+                      <b>{formatYen(transaction.amount)}</b>
+                      <small>{getTransactionStatusLabel(transaction)}</small>
+                    </div>
+                  </button>
+                ))}
+              </aside>
+
+              <section className="store-pos-transaction-detail">
+                {!selectedTransaction ? (
+                  <div className="store-pos-empty">会計を選択してください。</div>
+                ) : (
+                  <>
+                    <div className="store-pos-transaction-summary">
+                      <div>
+                        <span>会計番号</span>
+                        <strong>{selectedTransaction.pickupCode}</strong>
+                      </div>
+                      <div>
+                        <span>合計</span>
+                        <strong>{formatYen(selectedTransaction.amount)}</strong>
+                      </div>
+                      <div>
+                        <span>状態</span>
+                        <strong>{getTransactionStatusLabel(selectedTransaction)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="store-pos-transaction-meta">
+                      <span>{selectedTransaction.createdLabel}</span>
+                      <span>{getPaymentLabel(selectedTransaction.paymentMethod)}</span>
+                      {selectedTransaction.orderType ? <span>{getOrderTypeLabel(selectedTransaction.orderType)}</span> : null}
+                      <span>担当 {selectedTransaction.cashierName || "-"}</span>
+                    </div>
+
+                    {selectedTransaction.paymentMethod === "cash" ? (
+                      <div className="store-pos-transaction-cash">
+                        <span>お預かり {selectedTransaction.cashTenderedAmount === null ? "-" : formatYen(selectedTransaction.cashTenderedAmount)}</span>
+                        <span>お釣り {selectedTransaction.cashChangeAmount === null ? "-" : formatYen(selectedTransaction.cashChangeAmount)}</span>
+                      </div>
+                    ) : null}
+
+                    <div className="store-pos-transaction-items">
+                      {(selectedTransaction.items ?? []).map((item) => {
+                        const modifiers = [
+                          item.size,
+                          item.temperature,
+                          item.sweetness,
+                          item.ice,
+                          item.option,
+                          ...(item.toppings ?? [])
+                        ].filter(Boolean);
+                        return (
+                          <div key={item.id}>
+                            <div>
+                              <strong>{item.name}</strong>
+                              {modifiers.length ? <small>{modifiers.join(" / ")}</small> : null}
+                              <span>{formatYen(Math.round(item.amount / Math.max(1, item.quantity)))} x {item.quantity}</span>
+                            </div>
+                            <b>{formatYen(item.amount)}</b>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {selectedTransaction.note ? (
+                      <div className="store-pos-transaction-note">
+                        <span>メモ</span>
+                        <p>{selectedTransaction.note}</p>
+                      </div>
+                    ) : null}
+
+                    <div className="store-pos-refund-panel">
+                      <div>
+                        <strong>返金操作</strong>
+                        <span>
+                          {canRefundSelectedTransaction
+                            ? "返金するとこの会計は売上と現金集計から除外されます。"
+                            : selectedTransaction.cashSessionStatus !== "open"
+                              ? "締め済みのレジ会計は管理画面で修正してください。"
+                              : "この会計はすでに返金済みです。"}
+                        </span>
+                      </div>
+                      {selectedTransaction.refundReason ? <small>返金理由: {selectedTransaction.refundReason}</small> : null}
+                      <label>
+                        <span>理由</span>
+                        <input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="任意" disabled={!canRefundSelectedTransaction} />
+                      </label>
+                      <button className="danger-button" type="button" onClick={() => void refundTransaction()} disabled={!canRefundSelectedTransaction || refundSaving}>
+                        {refundSaving ? "処理中..." : "返金を記録"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cashDialog ? (
         <div className="store-pos-cash-overlay" role="dialog" aria-modal="true" aria-label="レジ操作">
