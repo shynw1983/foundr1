@@ -259,7 +259,7 @@ export default function StoreTimecardPage() {
     if (!isMobileStaffPunch) {
       return {
         title: "シフト連絡",
-        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"
+        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再送信するとこの期間を上書きします` : "提出できる期間を確認しています。"
       };
     }
     if (activeMobilePanel === "next_shift") {
@@ -271,7 +271,7 @@ export default function StoreTimecardPage() {
     if (activeMobilePanel === "availability") {
       return {
         title: "希望シフト",
-        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"
+        description: submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再送信するとこの期間を上書きします` : "提出できる期間を確認しています。"
       };
     }
     if (activeMobilePanel === "swap") {
@@ -390,7 +390,7 @@ export default function StoreTimecardPage() {
       setShiftRequestMessage(body.error ?? "シフト申請を送信できませんでした。");
       return;
     }
-    setShiftRequestMessage("希望シフトを保存しました。");
+    setShiftRequestMessage("希望シフトを送信しました。");
     await loadShiftRequests(selectedShiftStoreId);
   }
 
@@ -672,7 +672,7 @@ export default function StoreTimecardPage() {
           {shiftRequestMessage ? <div className="timecard-message store-mobile-section-shift-messages">{shiftRequestMessage}</div> : null}
           <button className="primary-button store-shift-submit-button store-mobile-section-availability" type="button" onClick={submitAvailabilityPeriod}>
             <Send size={16} />
-            希望シフトを保存
+            希望シフトを送信
           </button>
 
           <div className="store-shift-request-list store-mobile-section-shift-messages">

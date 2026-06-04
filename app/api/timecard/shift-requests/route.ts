@@ -577,7 +577,7 @@ export async function POST(request: Request) {
             )
           )
       `;
-      await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを空で保存しました。`, "/os/timecard/requests");
+      await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを空で送信しました。`, "/os/timecard/requests");
       await writeAuditLog({
         actorEmployeeId: session.id,
         action: "timecard.shift_request.period_cleared",
@@ -721,7 +721,7 @@ export async function POST(request: Request) {
     const managerHref = firstRequestId
       ? `/os/timecard/requests?storeId=${encodeURIComponent(storeId)}&requestId=${encodeURIComponent(firstRequestId)}&date=${encodeURIComponent(firstWorkDate)}`
       : `/os/timecard/requests?storeId=${encodeURIComponent(storeId)}`;
-    await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを保存しました。`, managerHref);
+    await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを送信しました。`, managerHref);
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: "timecard.shift_request.period_created",
