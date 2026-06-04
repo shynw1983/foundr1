@@ -112,7 +112,8 @@ export async function sendWebPushToEmployee(employeeId: string, payload: Notific
         title: payload.title,
         body: payload.message,
         href: payload.href || "/os",
-        type: payload.type || "foundr1_notification"
+        type: payload.type || "foundr1_notification",
+        sentAt: new Date().toISOString()
       }));
       sent += 1;
       await sql`

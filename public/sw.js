@@ -28,9 +28,9 @@ self.addEventListener("push", (event) => {
   const title = payload.title || fallback.title;
   const options = {
     body: payload.body || payload.message || fallback.body,
-    icon: "/icons/foundr1-app.svg",
-    badge: "/icons/foundr1-app.svg",
-    tag: payload.type || "foundr1_notification",
+    tag: `${payload.type || "foundr1_notification"}:${payload.sentAt || Date.now()}`,
+    renotify: true,
+    timestamp: payload.sentAt ? Date.parse(payload.sentAt) : Date.now(),
     data: {
       href: payload.href || fallback.href
     }

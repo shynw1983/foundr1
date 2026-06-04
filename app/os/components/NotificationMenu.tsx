@@ -102,6 +102,19 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     setIsOpen(false);
   }
 
+  async function sendTestNotification() {
+    setPushMessage("");
+    const response = await fetch("/api/notifications/test-push", { method: "POST" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setPushMessage(body.error ?? "テスト通知を送信できませんでした。");
+      return;
+    }
+    setPushMessage("テスト通知を送信しました。");
+    setIsOpen(false);
+    await loadNotifications();
+  }
+
   async function enableWebPush() {
     setPushMessage("");
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -159,6 +172,11 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
         {pushState === "ready" || pushState === "granted" || pushState === "saving" ? (
           <button className="notification-push-button" type="button" disabled={pushState === "saving"} onClick={() => void enableWebPush()}>
             {pushState === "ready" ? "プッシュ通知を許可" : pushState === "saving" ? "通知端末を登録中" : "通知端末を登録"}
+          </button>
+        ) : null}
+        {pushState === "enabled" ? (
+          <button className="notification-push-button" type="button" onClick={() => void sendTestNotification()}>
+            テスト通知
           </button>
         ) : null}
         {pushState === "enabled" ? <div className="notification-push-status">プッシュ通知は有効です</div> : null}
