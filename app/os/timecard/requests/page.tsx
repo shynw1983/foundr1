@@ -1,7 +1,7 @@
 "use client";
 
 import { BriefcaseBusiness, CalendarCheck2, CalendarDays, ClipboardList, Clock3, FileText, Lightbulb, LogOut, MessageSquare, PackageCheck, RefreshCw, Search, Send, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
@@ -180,6 +180,7 @@ function getCoverageSummary(
 }
 
 export default function TimecardShiftRequestsPage() {
+  const initialQueryRef = useRef<{ storeId: string; requestId: string; date: string; handled: boolean } | null>(null);
   const [data, setData] = useState<ShiftRequestPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -188,6 +189,16 @@ export default function TimecardShiftRequestsPage() {
   const [publishNote, setPublishNote] = useState("");
   const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDraft>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  if (typeof window !== "undefined" && initialQueryRef.current === null) {
+    const params = new URLSearchParams(window.location.search);
+    initialQueryRef.current = {
+      storeId: params.get("storeId") ?? "",
+      requestId: params.get("requestId") ?? "",
+      date: params.get("date") ?? "",
+      handled: false
+    };
+  }
 
   async function loadRequests(nextStoreId = selectedStoreId, nextMonth = month) {
     setIsLoading(true);
@@ -225,8 +236,21 @@ export default function TimecardShiftRequestsPage() {
   }
 
   useEffect(() => {
-    void loadRequests();
+    const initialQuery = initialQueryRef.current;
+    if (initialQuery?.requestId) setStatusFilter("all");
+    void loadRequests(initialQuery?.storeId || selectedStoreId, month);
   }, []);
+
+  useEffect(() => {
+    const initialQuery = initialQueryRef.current;
+    if (!initialQuery || initialQuery.handled || !initialQuery.requestId || isLoading) return;
+    const target = document.getElementById(`shift-request-${initialQuery.requestId}`);
+    if (!target) return;
+    initialQuery.handled = true;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("is-linked-target");
+    window.setTimeout(() => target.classList.remove("is-linked-target"), 3200);
+  }, [data?.requests, isLoading]);
 
   const filteredRequests = useMemo(() => {
     return (data?.requests ?? []).filter((request) => statusFilter === "all" || request.status === statusFilter);
@@ -377,7 +401,7 @@ export default function TimecardShiftRequestsPage() {
             const day = getBusinessDay(businessHours, workDate);
             const coverageSummary = getCoverageSummary(requests, shifts, day, approvalDrafts);
             return (
-              <article className="panel shift-coverage-card" key={workDate}>
+              <article className="panel shift-coverage-card" id={`shift-date-${workDate}`} key={workDate}>
                 <div className="shift-coverage-head">
                   <div>
                     <h3>{formatWorkDate(workDate)}</h3>
@@ -414,7 +438,7 @@ export default function TimecardShiftRequestsPage() {
                       const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
                       const adjusted = draft.approvedStart !== (window?.availableStart ?? "") || draft.approvedEnd !== (window?.availableEnd ?? "");
                       return (
-                        <div className={`shift-coverage-row is-${request.status}`} key={request.id}>
+                        <div className={`shift-coverage-row is-${request.status}`} id={`shift-request-${request.id}`} key={request.id}>
                           <div className="shift-coverage-person">
                             <strong>{request.employeeName}</strong>
                             <span>希望 {window?.availableStart ?? "--:--"}-{window?.availableEnd ?? "--:--"}</span>

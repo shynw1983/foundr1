@@ -5765,6 +5765,11 @@ body :where(
   background: #f7f9fc;
 }
 
+.shift-coverage-row.is-linked-target {
+  border-color: rgba(37, 99, 235, 0.72);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
 .shift-coverage-person {
   display: grid;
   gap: 3px;
