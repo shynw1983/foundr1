@@ -244,6 +244,20 @@ async function getOpenCashSessionId(selectedStoreId: string) {
   return rows[0]?.id as string | undefined;
 }
 
+async function getPosSettings(selectedStoreId: string) {
+  if (!selectedStoreId) return { dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+  const rows = await sql`
+    select
+      coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
+      coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
+      coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode"
+    from pos_store_settings
+    where store_id::text = ${selectedStoreId}
+    limit 1
+  `;
+  return rows[0] ?? { dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -251,15 +265,17 @@ export async function GET(request: Request) {
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [menu, todaySummary] = await Promise.all([
+  const [menu, todaySummary, posSettings] = await Promise.all([
     getPosMenu(selectedStoreId),
-    getTodaySummary(selectedStoreId)
+    getTodaySummary(selectedStoreId),
+    getPosSettings(selectedStoreId)
   ]);
 
   return Response.json({
     access,
     selectedStoreId,
     ...menu,
+    posSettings,
     todaySummary
   });
 }

@@ -6443,6 +6443,46 @@ body :where(
   text-decoration: none;
 }
 
+.pos-admin-tax-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.pos-admin-tax-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pos-admin-tax-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pos-admin-tax-grid span,
+.pos-admin-tax-footer span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pos-admin-tax-grid input,
+.pos-admin-tax-grid select {
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-admin-tax-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 .pos-admin-metrics {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 0;
@@ -16565,6 +16605,12 @@ body :where(
   .pos-admin-actions a {
     flex: 1 1 100%;
     justify-content: center;
+  }
+
+  .pos-admin-tax-grid,
+  .pos-admin-tax-footer {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .pos-admin-metrics {

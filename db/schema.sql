@@ -1226,6 +1226,16 @@ create table if not exists store_operations (
 alter table store_operations add column if not exists temporary_status_until timestamptz;
 alter table store_operations add column if not exists minimum_pickup_minutes integer;
 
+create table if not exists pos_store_settings (
+  store_id uuid primary key references stores(id) on delete cascade,
+  dine_in_tax_rate numeric(5, 2) not null default 10,
+  takeout_tax_rate numeric(5, 2) not null default 8,
+  price_tax_mode text not null default 'tax_included',
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists menu_store_settings (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,

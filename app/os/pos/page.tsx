@@ -95,6 +95,15 @@ type PosReconciliation = {
   totals: PosCashTotals;
 };
 
+type PosTaxSettings = {
+  storeId: string;
+  storeName: string;
+  dineInTaxRate: number;
+  takeoutTaxRate: number;
+  priceTaxMode: string;
+  updatedAt: string;
+};
+
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
@@ -110,6 +119,10 @@ export default function PosPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
+  const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
+  const [taxForm, setTaxForm] = useState({ dineInTaxRate: "10", takeoutTaxRate: "8", priceTaxMode: "tax_included" });
+  const [canManagePosSettings, setCanManagePosSettings] = useState(false);
+  const [taxSaving, setTaxSaving] = useState(false);
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
     businessDate: "",
     activeSession: null,
@@ -136,10 +149,22 @@ export default function PosPage() {
     const cashResponse = selectedId
       ? await fetch(`/api/store/pos/reconciliation?${cashParams.toString()}`, { cache: "no-store" })
       : null;
+    const settingsResponse = selectedId
+      ? await fetch(`/api/os/pos/settings?${cashParams.toString()}`, { cache: "no-store" })
+      : null;
     const cashBody = cashResponse?.ok ? await cashResponse.json() : null;
+    const settingsBody = settingsResponse?.ok ? await settingsResponse.json() : null;
+    const nextSettings = settingsBody?.settings ?? body.posSettings ?? null;
     setStores(body.access?.stores ?? []);
     setSelectedStoreId(selectedId);
     setSummary(body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] });
+    setTaxSettings(nextSettings);
+    setCanManagePosSettings(Boolean(settingsBody?.access?.canManagePosSettings));
+    setTaxForm({
+      dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
+      takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
+      priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included"
+    });
     setReconciliation({
       businessDate: cashBody?.businessDate ?? "",
       activeSession: cashBody?.activeSession ?? null,
@@ -148,6 +173,37 @@ export default function PosPage() {
     });
     setMessage("");
     setLoading(false);
+  }
+
+  async function saveTaxSettings() {
+    if (!selectedStoreId || taxSaving) return;
+    setTaxSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/pos/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: selectedStoreId,
+          dineInTaxRate: taxForm.dineInTaxRate,
+          takeoutTaxRate: taxForm.takeoutTaxRate,
+          priceTaxMode: taxForm.priceTaxMode
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "POS 税設定を保存できませんでした。");
+      setTaxSettings(body.settings ?? null);
+      setTaxForm({
+        dineInTaxRate: String(body.settings?.dineInTaxRate ?? taxForm.dineInTaxRate),
+        takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
+        priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode
+      });
+      setMessage("POS 税設定を保存しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "POS 税設定を保存できませんでした。");
+    } finally {
+      setTaxSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -208,6 +264,55 @@ export default function PosPage() {
             <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
             <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
             <a href="/os/stores"><Store size={16} />店舗設定</a>
+          </div>
+        </section>
+
+        <section className="panel pos-admin-tax-settings">
+          <div className="panel-title">
+            <WalletCards />
+            <div>
+              <h3>消費税設定</h3>
+              <p>店内飲食・持ち帰りの税率と、メニュー価格が税込か税抜かを店舗ごとに管理します。</p>
+            </div>
+          </div>
+          <div className="pos-admin-tax-grid">
+            <label>
+              <span>店内飲食 税率（%）</span>
+              <input
+                inputMode="decimal"
+                value={taxForm.dineInTaxRate}
+                onChange={(event) => setTaxForm((current) => ({ ...current, dineInTaxRate: event.target.value.replace(/[^\d.]/g, "") }))}
+                disabled={!canManagePosSettings}
+              />
+            </label>
+            <label>
+              <span>持ち帰り 税率（%）</span>
+              <input
+                inputMode="decimal"
+                value={taxForm.takeoutTaxRate}
+                onChange={(event) => setTaxForm((current) => ({ ...current, takeoutTaxRate: event.target.value.replace(/[^\d.]/g, "") }))}
+                disabled={!canManagePosSettings}
+              />
+            </label>
+            <label>
+              <span>商品価格の税区分</span>
+              <select
+                value={taxForm.priceTaxMode}
+                onChange={(event) => setTaxForm((current) => ({ ...current, priceTaxMode: event.target.value }))}
+                disabled={!canManagePosSettings}
+              >
+                <option value="tax_included">税込価格</option>
+                <option value="tax_excluded">税抜価格</option>
+              </select>
+            </label>
+          </div>
+          <div className="pos-admin-tax-footer">
+            <span>
+              現在: 店内 {taxSettings?.dineInTaxRate ?? 10}% / 持ち帰り {taxSettings?.takeoutTaxRate ?? 8}% / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
+            </span>
+            <button className="primary-button" type="button" onClick={() => void saveTaxSettings()} disabled={!canManagePosSettings || taxSaving}>
+              {taxSaving ? "保存中..." : "保存"}
+            </button>
           </div>
         </section>
 
