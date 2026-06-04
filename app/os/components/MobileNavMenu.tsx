@@ -22,7 +22,7 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
     <div className="mobile-nav-actions">
       <NotificationMenu className="mobile-visible-notification" />
       <details className="mobile-nav-menu" ref={mobileMenuRef}>
-        <summary>
+        <summary aria-label="メニュー">
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />
           </span>

@@ -261,7 +261,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
         })}
       </nav>
       <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
-        <summary>
+        <summary aria-label="メニュー">
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />
           </span>
