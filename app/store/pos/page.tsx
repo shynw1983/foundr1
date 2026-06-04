@@ -239,7 +239,7 @@ export default function StorePosPage() {
 
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
-          <div className="store-pos-controls">
+          <aside className="store-pos-filter-panel">
             <label>
               <span>店舗</span>
               <select
@@ -256,18 +256,47 @@ export default function StorePosPage() {
                 {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
               </select>
             </label>
-            <label>
+
+            <div className="store-pos-filter-group">
               <span>ブランド</span>
-              <select
-                value={selectedBrandId}
-                onChange={(event) => {
-                  setSelectedBrandId(event.target.value);
-                  setSelectedCategory(null);
-                }}
-              >
-                {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
-              </select>
-            </label>
+              <div className="store-pos-filter-list">
+                {brands.map((brand) => (
+                  <button
+                    key={brand.id}
+                    className={selectedBrandId === brand.id ? "is-active" : ""}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBrandId(brand.id);
+                      setSelectedCategory(null);
+                    }}
+                  >
+                    {brand.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="store-pos-filter-group">
+              <span>分類</span>
+              <div className="store-pos-filter-list">
+                <button className={!selectedCategory ? "is-active" : ""} type="button" onClick={() => setSelectedCategory(null)}>
+                  すべて
+                  <small>{items.filter((item) => !selectedBrandId || item.brandId === selectedBrandId).length}</small>
+                </button>
+                {categorySummaries.map((category) => (
+                  <button
+                    key={category.name}
+                    className={selectedCategory === category.name ? "is-active" : ""}
+                    type="button"
+                    onClick={() => setSelectedCategory(category.name)}
+                  >
+                    {category.name}
+                    <small>{category.count}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <label className="store-pos-search">
               <span>検索</span>
               <div>
@@ -275,41 +304,34 @@ export default function StorePosPage() {
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="商品名" />
               </div>
             </label>
-          </div>
+          </aside>
 
-          <div className="store-pos-category-row">
-            <button className={!selectedCategory ? "is-active" : ""} type="button" onClick={() => setSelectedCategory(null)}>
-              すべて
-            </button>
-            {categorySummaries.map((category) => (
-              <button
-                key={category.name}
-                className={selectedCategory === category.name ? "is-active" : ""}
-                type="button"
-                onClick={() => setSelectedCategory(category.name)}
-              >
-                {category.name}
-                <span>{category.count}</span>
-              </button>
-            ))}
-          </div>
-
-          {loading ? (
-            <div className="store-pos-empty">読み込み中...</div>
-          ) : visibleItems.length === 0 ? (
-            <div className="store-pos-empty">POS で販売できる商品がありません。</div>
-          ) : (
-            <div className="store-pos-item-grid">
-              {visibleItems.map((item) => (
-                <button key={item.id} className="store-pos-item-button" type="button" onClick={() => addItem(item)}>
-                  {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="store-pos-image-empty">F1</span>}
-                  <span>{item.category || item.brandName}</span>
-                  <strong>{item.name}</strong>
-                  <em>{formatYen(getItemPrice(item))}</em>
-                </button>
-              ))}
+          <section className="store-pos-product-panel">
+            <div className="store-pos-product-head">
+              <div>
+                <p className="eyebrow">Products</p>
+                <h3>商品を選択</h3>
+              </div>
+              <span>{visibleItems.length} 件</span>
             </div>
-          )}
+
+            {loading ? (
+              <div className="store-pos-empty">読み込み中...</div>
+            ) : visibleItems.length === 0 ? (
+              <div className="store-pos-empty">POS で販売できる商品がありません。</div>
+            ) : (
+              <div className="store-pos-item-grid">
+                {visibleItems.map((item) => (
+                  <button key={item.id} className="store-pos-item-button" type="button" onClick={() => addItem(item)}>
+                    {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="store-pos-image-empty">F1</span>}
+                    <span>{item.category || item.brandName}</span>
+                    <strong>{item.name}</strong>
+                    <em>{formatYen(getItemPrice(item))}</em>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         <aside className="store-pos-cart-panel">
