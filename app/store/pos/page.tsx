@@ -332,6 +332,7 @@ export default function StorePosPage() {
   const [transactionLoading, setTransactionLoading] = useState(false);
   const [refundReason, setRefundReason] = useState("");
   const [refundSaving, setRefundSaving] = useState(false);
+  const [refundingTransactionId, setRefundingTransactionId] = useState("");
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
@@ -478,6 +479,7 @@ export default function StorePosPage() {
     setTransactions([]);
     setSelectedTransaction(null);
     setRefundReason("");
+    setRefundingTransactionId("");
     void load(storeId);
   }
 
@@ -746,13 +748,15 @@ export default function StorePosPage() {
 
   async function refundTransaction() {
     if (!selectedStoreId || !selectedTransaction || refundSaving) return;
+    const refundingId = selectedTransaction.id;
     setRefundSaving(true);
+    setRefundingTransactionId(refundingId);
     setMessage("");
     try {
       const response = await fetch("/api/store/pos/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeId: selectedStoreId, orderId: selectedTransaction.id, reason: refundReason })
+        body: JSON.stringify({ storeId: selectedStoreId, orderId: refundingId, reason: refundReason })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "返金を保存できませんでした。");
@@ -766,6 +770,7 @@ export default function StorePosPage() {
       setMessage(error instanceof Error ? error.message : "返金を保存できませんでした。");
     } finally {
       setRefundSaving(false);
+      setRefundingTransactionId("");
     }
   }
 
@@ -1038,7 +1043,11 @@ export default function StorePosPage() {
                 ) : transactions.map((transaction) => (
                   <button
                     key={transaction.id}
-                    className={selectedTransaction?.id === transaction.id ? "is-active" : ""}
+                    className={[
+                      selectedTransaction?.id === transaction.id ? "is-active" : "",
+                      transaction.status === "cancelled" || transaction.paymentStatus === "refunded" ? "is-refunded" : "",
+                      refundingTransactionId === transaction.id ? "is-processing" : ""
+                    ].filter(Boolean).join(" ")}
                     type="button"
                     onClick={() => void selectTransaction(transaction.id)}
                   >
@@ -1048,7 +1057,7 @@ export default function StorePosPage() {
                     </div>
                     <div>
                       <b>{formatYen(transaction.amount)}</b>
-                      <small>{getTransactionStatusLabel(transaction)}</small>
+                      <small>{refundingTransactionId === transaction.id ? "返金処理中..." : getTransactionStatusLabel(transaction)}</small>
                     </div>
                   </button>
                 ))}
@@ -1123,7 +1132,9 @@ export default function StorePosPage() {
                       <div>
                         <strong>返金操作</strong>
                         <span>
-                          {canRefundSelectedTransaction
+                          {refundSaving && refundingTransactionId === selectedTransaction.id
+                            ? "返金を処理しています。画面を閉じずにお待ちください。"
+                            : canRefundSelectedTransaction
                             ? "返金するとこの会計は売上と現金集計から除外されます。"
                             : selectedTransaction.cashSessionStatus !== "open"
                               ? "締め済みのレジ会計は管理画面で修正してください。"
@@ -1133,10 +1144,14 @@ export default function StorePosPage() {
                       {selectedTransaction.refundReason ? <small>返金理由: {selectedTransaction.refundReason}</small> : null}
                       <label>
                         <span>理由</span>
-                        <input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="任意" disabled={!canRefundSelectedTransaction} />
+                        <input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="任意" disabled={!canRefundSelectedTransaction || refundSaving} />
                       </label>
                       <button className="danger-button" type="button" onClick={() => void refundTransaction()} disabled={!canRefundSelectedTransaction || refundSaving}>
-                        {refundSaving ? "処理中..." : "返金を記録"}
+                        {refundSaving && refundingTransactionId === selectedTransaction.id
+                          ? "返金処理中..."
+                          : canRefundSelectedTransaction
+                            ? "返金を記録"
+                            : "返金済み"}
                       </button>
                     </div>
                   </>

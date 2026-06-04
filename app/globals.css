@@ -6103,6 +6103,23 @@ body :where(
   background: var(--green-soft);
 }
 
+.store-pos-transaction-list button.is-refunded {
+  border-color: rgba(148, 163, 184, 0.45);
+  background: #eef2f7;
+  color: #64748b;
+}
+
+.store-pos-transaction-list button.is-refunded b,
+.store-pos-transaction-list button.is-refunded strong {
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.store-pos-transaction-list button.is-processing {
+  border-color: rgba(180, 83, 9, 0.45);
+  background: #fff7ed;
+}
+
 .store-pos-transaction-list button > div {
   display: grid;
   gap: 3px;
@@ -6241,6 +6258,10 @@ body :where(
   position: sticky;
   bottom: 0;
   box-shadow: 0 -10px 18px rgba(15, 23, 42, 0.06);
+}
+
+.store-pos-refund-panel .danger-button:disabled {
+  opacity: 1;
 }
 
 .store-pos-empty {
