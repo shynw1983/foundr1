@@ -12272,13 +12272,20 @@ body :where(
   .store-workbench-topbar,
   .procedure-reader-topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 184px;
     align-items: center;
     gap: 8px;
   }
 
   .store-workbench-topbar .brand-block {
     overflow: hidden;
+    gap: 8px;
+  }
+
+  .store-workbench-topbar .brand-mark {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
   }
 
   .store-workbench-topbar .brand-block h1 {
@@ -12326,27 +12333,29 @@ body :where(
     grid-column: 2;
     grid-row: 2;
     justify-self: end;
+    width: 184px;
     min-width: 0;
   }
 
   .store-user-tools .user-panel {
     display: grid;
-    grid-template-columns: 44px 44px minmax(104px, 1fr);
+    grid-template-columns: 42px 42px minmax(88px, 1fr);
     gap: 6px;
-    width: min(100%, 206px);
+    justify-content: end;
+    width: 100%;
     max-width: 100%;
   }
 
   .store-user-tools .user-badge {
     min-width: 0;
-    width: 44px;
-    min-height: 44px;
+    width: 42px;
+    min-height: 42px;
   }
 
   .store-user-tools .notification-menu summary,
   .store-user-tools .notification-placeholder {
-    width: 44px;
-    min-height: 44px;
+    width: 42px;
+    min-height: 42px;
   }
 
   .store-user-tools .os-language-picker {
@@ -12356,7 +12365,7 @@ body :where(
 
   .store-user-tools .os-language-picker select {
     width: 100%;
-    min-height: 44px;
+    min-height: 42px;
     padding-right: 24px;
     padding-left: 8px;
   }
@@ -12392,11 +12401,13 @@ body :where(
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
+    width: 184px;
     display: block;
   }
 
   .store-nav-menu summary {
-    min-width: 118px;
+    width: 118px;
+    margin-left: auto;
     padding-inline: 10px;
   }
 
