@@ -4017,6 +4017,7 @@ body :where(
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  border: 1px solid transparent;
   border-radius: 7px;
   padding: 0 12px;
   color: var(--muted);
@@ -4029,6 +4030,34 @@ body :where(
   background: #1f6f55;
   color: white;
   font-weight: 800;
+}
+
+.store-nav-tabs a.has-order-alert,
+.store-nav-list a.has-order-alert {
+  position: relative;
+  border: 1px solid #d43f21;
+  background: #fff1ed;
+  color: #b72f18;
+  animation: storeOrderTabPulse 1s ease-in-out infinite;
+}
+
+.store-order-alert-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #d43f21;
+  box-shadow: 0 0 0 4px rgba(212, 63, 33, 0.16);
+}
+
+@keyframes storeOrderTabPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 63, 33, 0.24);
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px rgba(212, 63, 33, 0.12);
+  }
 }
 
 .store-nav-menu {
@@ -11805,6 +11834,7 @@ body :where(
   }
 
   .store-nav-list a {
+    border: 1px solid transparent;
     color: var(--ink);
   }
 
