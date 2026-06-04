@@ -12991,6 +12991,15 @@ body :where(
     min-height: 42px;
   }
 
+  .store-user-tools .notification-menu summary:has(span) svg {
+    display: none;
+  }
+
+  .store-user-tools .notification-menu summary span {
+    min-width: 24px;
+    height: 24px;
+  }
+
   .store-user-tools .os-language-picker {
     width: 100%;
     min-width: 0;
@@ -13003,10 +13012,19 @@ body :where(
     padding-left: 8px;
   }
 
-  .store-user-tools .account-menu-panel,
-  .store-user-tools .notification-panel {
+  .store-user-tools .account-menu-panel {
     right: auto;
     left: 0;
+  }
+
+  .store-user-tools .notification-panel {
+    position: fixed;
+    top: 96px;
+    right: auto;
+    left: 50%;
+    width: min(340px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    transform: translateX(-50%);
   }
 
   .store-workbench-grid {

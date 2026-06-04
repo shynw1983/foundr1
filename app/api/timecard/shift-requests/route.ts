@@ -541,9 +541,6 @@ export async function POST(request: Request) {
       }))
       .filter((entry) => allowedDates.has(entry.workDate) && entry.preference === "available");
 
-    if (!entries.length) {
-      return Response.json({ error: "提出する日付を選択してください。" }, { status: 400 });
-    }
     for (const entry of entries) {
       if (!entry.availableStart || !entry.availableEnd) {
         return Response.json({ error: `${entry.workDate} の希望時間を入力してください。` }, { status: 400 });
@@ -558,6 +555,19 @@ export async function POST(request: Request) {
         and request_type in ('availability', 'day_off')
         and work_date::text = any(${dateList})
     `;
+
+    if (!entries.length) {
+      await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを空で保存しました。`, "/os/timecard/requests");
+      await writeAuditLog({
+        actorEmployeeId: session.id,
+        action: "timecard.shift_request.period_cleared",
+        targetType: "timecard_shift_request",
+        targetId: storeId,
+        metadata: { storeId, employeeId, period: submissionPeriod, count: 0 },
+        request
+      });
+      return Response.json({ ok: true, count: 0, ids: [] });
+    }
 
     const insertedIds: string[] = [];
     for (const entry of entries) {
@@ -606,7 +616,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    await notifyStoreManagers(storeId, "希望シフトが提出されました", `${session.name} が ${submissionPeriod.label} の希望シフトを提出しました。`, "/os/timecard/requests");
+    await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを保存しました。`, "/os/timecard/requests");
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: "timecard.shift_request.period_created",

@@ -350,7 +350,7 @@ export default function StoreTimecardPage() {
       setShiftRequestMessage(body.error ?? "シフト申請を送信できませんでした。");
       return;
     }
-    setShiftRequestMessage("希望シフトを提出しました。");
+    setShiftRequestMessage("希望シフトを保存しました。");
     await loadShiftRequests(selectedShiftStoreId);
   }
 
@@ -537,7 +537,7 @@ export default function StoreTimecardPage() {
             <CalendarDays />
             <div>
               <h2>シフト連絡</h2>
-              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 未選択日は提出しません` : "提出できる期間を確認しています。"}</p>
+              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 再保存するとこの期間を上書きします` : "提出できる期間を確認しています。"}</p>
             </div>
           </div>
 
@@ -616,7 +616,7 @@ export default function StoreTimecardPage() {
           {shiftRequestMessage ? <div className="timecard-message">{shiftRequestMessage}</div> : null}
           <button className="primary-button store-shift-submit-button" type="button" onClick={submitAvailabilityPeriod}>
             <Send size={16} />
-            希望シフトを提出
+            希望シフトを保存
           </button>
 
           <div className="store-shift-request-list">
