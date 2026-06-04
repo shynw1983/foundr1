@@ -5093,6 +5093,16 @@ body :where(
   white-space: nowrap;
 }
 
+.store-pos-notice {
+  display: block;
+  width: min(420px, calc(100vw - 32px));
+  min-height: 0;
+  padding: 14px 16px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .store-pos-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.36fr);
@@ -15389,6 +15399,12 @@ body :where(
 
   .store-pos-summary {
     justify-content: space-between;
+  }
+
+  .store-pos-notice {
+    right: 12px;
+    left: 12px;
+    width: auto;
   }
 
   .store-pos-menu-panel,

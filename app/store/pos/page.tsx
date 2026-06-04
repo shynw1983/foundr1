@@ -363,7 +363,7 @@ export default function StorePosPage() {
         </div>
       </section>
 
-      {message ? <div className="action-notice">{message}</div> : null}
+      {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
 
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
