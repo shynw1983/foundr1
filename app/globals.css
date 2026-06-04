@@ -13060,12 +13060,13 @@ body :where(
   }
 
   .store-user-tools .notification-panel {
-    top: calc(100% + 8px);
+    position: fixed;
+    top: 142px;
     right: 0;
-    left: auto;
+    left: 50%;
     width: min(340px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
-    transform: none;
+    transform: translateX(-50%);
   }
 
   .store-workbench-grid {
