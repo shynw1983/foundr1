@@ -5266,7 +5266,8 @@ body :where(
 .store-pos-cash-title,
 .store-pos-cash-start,
 .store-pos-cash-actions,
-.store-pos-cash-close {
+.store-pos-cash-close,
+.store-pos-close-summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -5367,7 +5368,8 @@ body :where(
 .store-pos-cash-start input,
 .store-pos-cash-actions input,
 .store-pos-cash-actions select,
-.store-pos-cash-close input {
+.store-pos-cash-close input,
+.store-pos-cash-close select {
   min-height: 42px;
   min-width: 0;
   border: 1px solid var(--line);
@@ -5376,6 +5378,31 @@ body :where(
   background: white;
   color: var(--ink);
   font-weight: 850;
+}
+
+.store-pos-close-summary {
+  min-width: min(220px, 100%);
+  flex: 1 1 220px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+}
+
+.store-pos-close-summary span,
+.store-pos-close-summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-close-summary strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
 }
 
 .store-pos-product-head {

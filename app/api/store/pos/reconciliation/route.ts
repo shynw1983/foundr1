@@ -27,6 +27,13 @@ type CashSessionRow = {
   closedAt: string;
 };
 
+type ActiveCashResponsibleEmployee = {
+  id: string;
+  name: string;
+  role: string;
+  punchedAt: string;
+};
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -35,6 +42,10 @@ function toMoney(value: unknown) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 0;
   return Math.max(0, Math.min(99999999, Math.round(amount)));
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getJstDate(date = new Date()) {
@@ -223,6 +234,31 @@ async function getMovements(storeId: string, businessDate: string, sessionId?: s
   `;
 }
 
+async function getActiveCashResponsibleEmployees(storeId: string) {
+  const rows = await sql`
+    select
+      employees.id::text,
+      employees.name,
+      employees.role,
+      latest_punch.punched_at::text as "punchedAt"
+    from (
+      select distinct on (timecard_punches.employee_id)
+        timecard_punches.employee_id,
+        timecard_punches.punch_type,
+        timecard_punches.punched_at
+      from timecard_punches
+      where timecard_punches.store_id::text = ${storeId}
+        and timecard_punches.punched_at >= now() - interval '36 hours'
+      order by timecard_punches.employee_id, timecard_punches.punched_at desc
+    ) latest_punch
+    join employees on employees.id = latest_punch.employee_id
+    where latest_punch.punch_type in ('clock_in', 'break_end')
+      and employees.status = 'active'
+    order by latest_punch.punched_at desc, employees.name
+  `;
+  return rows as ActiveCashResponsibleEmployee[];
+}
+
 async function getOrders(storeId: string, businessDate: string) {
   return sql`
     select
@@ -271,10 +307,11 @@ export async function GET(request: Request) {
     getOpenSession(selectedStoreId),
     getSessions(selectedStoreId, businessDate)
   ]);
-  const [movements, orders, paymentTotals] = await Promise.all([
+  const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(selectedStoreId, businessDate),
     getOrders(selectedStoreId, businessDate),
-    getPaymentTotals(selectedStoreId, businessDate)
+    getPaymentTotals(selectedStoreId, businessDate),
+    getActiveCashResponsibleEmployees(selectedStoreId)
   ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,
@@ -295,6 +332,7 @@ export async function GET(request: Request) {
     movements,
     orders,
     paymentTotals,
+    activeCashResponsibleEmployees,
     totals
   });
 }
@@ -316,6 +354,7 @@ export async function POST(request: Request) {
     movementId?: string;
     sessionId?: string;
     businessDate?: string;
+    closingResponsibleEmployeeId?: string;
   };
   const storeId = normalizeText(body.storeId);
   const action = normalizeText(body.action) as CashAction;
@@ -397,6 +436,14 @@ export async function POST(request: Request) {
     if (differenceAmount !== 0 && !note) {
       return Response.json({ error: "差額があるため理由を入力してください。" }, { status: 400 });
     }
+    const closingResponsibleEmployeeId = normalizeText(body.closingResponsibleEmployeeId);
+    if (!closingResponsibleEmployeeId || !isUuid(closingResponsibleEmployeeId)) {
+      return Response.json({ error: "締め責任者を選択してください。" }, { status: 400 });
+    }
+    const activeEmployees = await getActiveCashResponsibleEmployees(storeFilter);
+    if (!activeEmployees.some((employee) => employee.id === closingResponsibleEmployeeId)) {
+      return Response.json({ error: "出勤中の従業員から締め責任者を選択してください。" }, { status: 400 });
+    }
     await sql`
       update pos_cash_sessions
       set
@@ -405,7 +452,7 @@ export async function POST(request: Request) {
         counted_cash_amount = ${countedCashAmount},
         difference_amount = ${differenceAmount},
         closing_note = ${note},
-        closed_by = ${session.id},
+        closed_by = ${closingResponsibleEmployeeId},
         closed_at = now(),
         updated_at = now()
       where id::text = ${activeSession.id}
@@ -456,10 +503,11 @@ export async function POST(request: Request) {
     getOpenSession(storeFilter),
     getSessions(storeFilter, businessDate)
   ]);
-  const [movements, orders, paymentTotals] = await Promise.all([
+  const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(storeFilter, businessDate),
     getOrders(storeFilter, businessDate),
-    getPaymentTotals(storeFilter, businessDate)
+    getPaymentTotals(storeFilter, businessDate),
+    getActiveCashResponsibleEmployees(storeFilter)
   ]);
-  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, activeSession, sessions, movements, orders, paymentTotals });
+  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, activeSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
 }

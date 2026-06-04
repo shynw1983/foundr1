@@ -112,11 +112,19 @@ type PosCashMovement = {
   createdTime: string;
 };
 
+type PosCashResponsibleEmployee = {
+  id: string;
+  name: string;
+  role: string;
+  punchedAt: string;
+};
+
 type PosReconciliation = {
   businessDate: string;
   activeSession: PosCashSession | null;
   sessions: PosCashSession[];
   movements: PosCashMovement[];
+  activeCashResponsibleEmployees: PosCashResponsibleEmployee[];
 };
 
 const paymentOptions = [
@@ -209,13 +217,14 @@ export default function StorePosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", activeSession: null, sessions: [], movements: [] });
+  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", activeSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
   const [cashOpeningAmount, setCashOpeningAmount] = useState("");
   const [cashMovementType, setCashMovementType] = useState("cash_out");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
   const [cashMovementReason, setCashMovementReason] = useState("");
   const [cashCountedAmount, setCashCountedAmount] = useState("");
   const [cashClosingNote, setCashClosingNote] = useState("");
+  const [cashClosingResponsibleEmployeeId, setCashClosingResponsibleEmployeeId] = useState("");
   const [cashSaving, setCashSaving] = useState(false);
 
   async function loadReconciliation(storeId = selectedStoreId) {
@@ -228,7 +237,12 @@ export default function StorePosPage() {
       businessDate: body.businessDate ?? "",
       activeSession: body.activeSession ?? null,
       sessions: body.sessions ?? [],
-      movements: body.movements ?? []
+      movements: body.movements ?? [],
+      activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? []
+    });
+    setCashClosingResponsibleEmployeeId((current) => {
+      const employees = (body.activeCashResponsibleEmployees ?? []) as PosCashResponsibleEmployee[];
+      return employees.some((employee) => employee.id === current) ? current : employees[0]?.id ?? "";
     });
   }
 
@@ -288,6 +302,16 @@ export default function StorePosPage() {
   const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const canUseRegister = Boolean(reconciliation.activeSession);
+  const closingCountedAmount = cashCountedAmount.trim() === "" ? null : Number(cashCountedAmount);
+  const closingDifference = closingCountedAmount === null || !Number.isFinite(closingCountedAmount) || !reconciliation.activeSession
+    ? null
+    : Math.round(closingCountedAmount) - reconciliation.activeSession.expectedCashAmount;
+  const canCloseRegister = Boolean(
+    reconciliation.activeSession &&
+    cashCountedAmount.trim() !== "" &&
+    cashClosingResponsibleEmployeeId &&
+    (closingDifference === 0 || cashClosingNote.trim())
+  );
 
   function getItemOptionGroups(item: PosMenuItem) {
     return optionGroups
@@ -472,7 +496,8 @@ export default function StorePosPage() {
               action,
               storeId: selectedStoreId,
               countedCashAmount: Number(cashCountedAmount || 0),
-              note: cashClosingNote
+              note: cashClosingNote,
+              closingResponsibleEmployeeId: cashClosingResponsibleEmployeeId
             };
       const response = await fetch("/api/store/pos/reconciliation", {
         method: "POST",
@@ -485,7 +510,8 @@ export default function StorePosPage() {
         businessDate: body.businessDate ?? reconciliation.businessDate,
         activeSession: body.activeSession ?? null,
         sessions: body.sessions ?? [],
-        movements: body.movements ?? []
+        movements: body.movements ?? [],
+        activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? reconciliation.activeCashResponsibleEmployees
       });
       if (action === "open") {
         setCashOpeningAmount("");
@@ -497,6 +523,7 @@ export default function StorePosPage() {
       } else {
         setCashCountedAmount("");
         setCashClosingNote("");
+        setCashClosingResponsibleEmployeeId("");
         setMessage("日次レジ締めを締めました。");
       }
     } catch (error) {
@@ -585,15 +612,36 @@ export default function StorePosPage() {
             </div>
 
             <div className="store-pos-cash-close">
+              <div className="store-pos-close-summary">
+                <span>閉店チェック</span>
+                <strong>システム上の現金 {formatYen(reconciliation.activeSession.expectedCashAmount)}</strong>
+                <small>
+                  {closingDifference === null
+                    ? "実際の現金を入力してください。"
+                    : `差額 ${formatYen(closingDifference)}`}
+                </small>
+              </div>
+              <label>
+                <span>締め責任者</span>
+                <select value={cashClosingResponsibleEmployeeId} onChange={(event) => setCashClosingResponsibleEmployeeId(event.target.value)}>
+                  {reconciliation.activeCashResponsibleEmployees.length === 0 ? (
+                    <option value="">出勤中の従業員がいません</option>
+                  ) : (
+                    reconciliation.activeCashResponsibleEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name}</option>
+                    ))
+                  )}
+                </select>
+              </label>
               <label>
                 <span>実際の現金</span>
                 <input inputMode="numeric" value={cashCountedAmount} onChange={(event) => setCashCountedAmount(event.target.value)} placeholder="点検金額" />
               </label>
               <label>
                 <span>差額理由</span>
-                <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder="差額がある場合は必須" />
+                <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder={closingDifference ? "差額がある場合は必須" : "任意"} />
               </label>
-              <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving}>
+              <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving || !canCloseRegister}>
                 レジ締め
               </button>
             </div>
