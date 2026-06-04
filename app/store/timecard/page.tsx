@@ -135,6 +135,7 @@ export default function StoreTimecardPage() {
   const [submissionPeriod, setSubmissionPeriod] = useState<ShiftRequestPayload["submissionPeriod"] | null>(null);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<AvailabilityDayDraft[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
+  const [selectedShiftStoreId, setSelectedShiftStoreId] = useState(() => getStoredStoreSelection());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [shiftRequestDraft, setShiftRequestDraft] = useState<ShiftRequestDraft>({
     targetShiftId: "",
@@ -169,7 +170,11 @@ export default function StoreTimecardPage() {
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
-      void loadShiftRequests(body.selectedStoreId);
+      setSelectedShiftStoreId((current) => {
+        const next = body.stores.some((store) => store.id === current) ? current : body.selectedStoreId;
+        void loadShiftRequests(next);
+        return next;
+      });
       const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
       setSelectedEmployeeId((current) => {
         if (body.currentEmployeeRole === "staff") return body.currentEmployeeId;
@@ -312,20 +317,21 @@ export default function StoreTimecardPage() {
   }
 
   async function submitAvailabilityPeriod() {
-    if (!selectedStoreId) return;
+    if (!selectedShiftStoreId) return;
     setShiftRequestMessage("");
     const response = await fetch("/api/timecard/shift-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "create_availability_period",
-        storeId: selectedStoreId,
+        storeId: selectedShiftStoreId,
         entries: availabilityDrafts
+          .filter((draft) => draft.wantsWork)
           .map((draft) => ({
             workDate: draft.workDate,
-            preference: draft.wantsWork ? "available" : "unavailable",
-            availableStart: draft.wantsWork ? draft.availableStart : "",
-            availableEnd: draft.wantsWork ? draft.availableEnd : "",
+            preference: "available",
+            availableStart: draft.availableStart,
+            availableEnd: draft.availableEnd,
             note: draft.note
           }))
       })
@@ -336,11 +342,11 @@ export default function StoreTimecardPage() {
       return;
     }
     setShiftRequestMessage("希望シフトを提出しました。");
-    await loadShiftRequests(selectedStoreId);
+    await loadShiftRequests(selectedShiftStoreId);
   }
 
   async function submitSwapRequest() {
-    if (!selectedStoreId) return;
+    if (!selectedShiftStoreId) return;
     setShiftRequestMessage("");
     const selectedShift = myShifts.find((shift) => shift.id === shiftRequestDraft.targetShiftId) ?? null;
     if (!selectedShift) {
@@ -352,7 +358,7 @@ export default function StoreTimecardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "create_shift_request",
-        storeId: selectedStoreId,
+        storeId: selectedShiftStoreId,
         requestType: "swap",
         workDate: selectedShift.workDate,
         targetShiftId: shiftRequestDraft.targetShiftId,
@@ -366,19 +372,19 @@ export default function StoreTimecardPage() {
     }
     setShiftRequestMessage("交代募集を送信しました。");
     setShiftRequestDraft((current) => ({ ...current, note: "" }));
-    await loadShiftRequests(selectedStoreId);
+    await loadShiftRequests(selectedShiftStoreId);
   }
 
   async function applyForSwap(requestId: string) {
-    if (!selectedStoreId) return;
+    if (!selectedShiftStoreId) return;
     const response = await fetch("/api/timecard/shift-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "add_candidate", storeId: selectedStoreId, requestId })
+      body: JSON.stringify({ action: "add_candidate", storeId: selectedShiftStoreId, requestId })
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
     setShiftRequestMessage(response.ok ? "交代募集に応募しました。" : body.error ?? "応募できませんでした。");
-    if (response.ok) await loadShiftRequests(selectedStoreId);
+    if (response.ok) await loadShiftRequests(selectedShiftStoreId);
   }
 
   return (
@@ -522,8 +528,23 @@ export default function StoreTimecardPage() {
             <CalendarDays />
             <div>
               <h2>シフト連絡</h2>
-              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt}` : "提出できる期間を確認しています。"}</p>
+              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt} / 未選択日は提出しません` : "提出できる期間を確認しています。"}</p>
             </div>
+          </div>
+
+          <div className="store-shift-target-select">
+            <label>
+              <span>対象店舗</span>
+              <select value={selectedShiftStoreId} onChange={(event) => {
+                setSelectedShiftStoreId(event.target.value);
+                setShiftRequestMessage("");
+                void loadShiftRequests(event.target.value);
+              }}>
+                {data?.stores.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className="store-shift-period-list">
@@ -532,7 +553,7 @@ export default function StoreTimecardPage() {
                 <strong>{formatShiftDate(draft.workDate)}</strong>
                 <label className={`store-shift-wants-work${draft.wantsWork ? " is-selected" : ""}`}>
                   <input type="checkbox" checked={draft.wantsWork} onChange={(event) => updateAvailabilityDraft(draft.workDate, { wantsWork: event.target.checked })} />
-                  是否希望上班
+                  出勤希望
                 </label>
                 <div className="store-shift-request-times">
                   <input type="time" value={draft.availableStart} disabled={!draft.wantsWork} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableStart: event.target.value })} />

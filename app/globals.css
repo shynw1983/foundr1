@@ -5453,6 +5453,34 @@ body :where(
   margin-top: 14px;
 }
 
+.store-shift-target-select {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.38fr);
+  margin-top: 14px;
+}
+
+.store-shift-target-select label {
+  display: grid;
+  gap: 6px;
+}
+
+.store-shift-target-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-shift-target-select select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .store-shift-period-row {
   display: grid;
   grid-template-columns: minmax(82px, 0.35fr) minmax(140px, 0.55fr) minmax(170px, 0.7fr) minmax(160px, 1fr);
@@ -12836,6 +12864,7 @@ body :where(
   }
 
   .store-shift-period-row,
+  .store-shift-target-select,
   .store-shift-request-form.is-swap {
     grid-template-columns: 1fr;
   }

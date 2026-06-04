@@ -504,18 +504,18 @@ export async function POST(request: Request) {
         availableEnd: normalizeTimeValue(entry.availableEnd),
         note: String(entry.note ?? "").trim()
       }))
-      .filter((entry) => allowedDates.has(entry.workDate) && (entry.preference === "available" || entry.preference === "unavailable"));
+      .filter((entry) => allowedDates.has(entry.workDate) && entry.preference === "available");
 
     if (!entries.length) {
       return Response.json({ error: "提出する日付を選択してください。" }, { status: 400 });
     }
     for (const entry of entries) {
-      if (entry.preference === "available" && (!entry.availableStart || !entry.availableEnd)) {
+      if (!entry.availableStart || !entry.availableEnd) {
         return Response.json({ error: `${entry.workDate} の希望時間を入力してください。` }, { status: 400 });
       }
     }
 
-    const dateList = entries.map((entry) => entry.workDate);
+    const dateList = Array.from(allowedDates);
     await sql`
       delete from timecard_shift_requests
       where store_id::text = ${storeId}
@@ -526,7 +526,6 @@ export async function POST(request: Request) {
 
     const insertedIds: string[] = [];
     for (const entry of entries) {
-      const requestType = entry.preference === "available" ? "availability" : "day_off";
       const inserted = await sql`
         insert into timecard_shift_requests (
           store_id,
@@ -541,9 +540,9 @@ export async function POST(request: Request) {
         values (
           ${storeId},
           ${employeeId},
-          ${requestType},
+          'availability',
           ${entry.workDate}::date,
-          ${requestType === "availability" ? "希望シフト" : "休み希望"},
+          '希望シフト',
           ${entry.note || null},
           ${session.id},
           now()
@@ -566,7 +565,7 @@ export async function POST(request: Request) {
           ${entry.workDate}::date,
           ${entry.availableStart ? `${entry.availableStart}:00` : null}::time,
           ${entry.availableEnd ? `${entry.availableEnd}:00` : null}::time,
-          ${entry.preference},
+          'available',
           ${entry.note || null}
         )
       `;
