@@ -835,6 +835,7 @@ body :where(
 }
 
 .os-language-picker {
+  position: relative;
   display: grid;
   gap: 5px;
   width: 100%;
@@ -845,6 +846,10 @@ body :where(
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.os-language-current-short {
+  display: none;
 }
 
 .os-language-picker select {
@@ -1050,7 +1055,7 @@ body :where(
   }
 
   .sidebar:has(.nav-shell.is-expanded) {
-    width: 232px;
+    width: 268px;
     padding-right: 10px;
     box-shadow: 18px 0 40px rgba(15, 23, 42, 0.18);
   }
@@ -1126,11 +1131,26 @@ body :where(
   }
 
   .sidebar-user .os-language-picker select {
+    appearance: none;
+    -webkit-appearance: none;
+    color: transparent;
     min-height: 42px;
     width: 48px;
     padding: 0 4px;
     font-size: 11px;
     text-align: center;
+  }
+
+  .sidebar-user .os-language-current-short {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #f7fafc;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .sidebar-user .user-badge {
@@ -1150,7 +1170,7 @@ body :where(
     grid-template-columns: minmax(0, 1fr) 48px;
     align-items: stretch;
     justify-items: stretch;
-    width: min(100%, 184px);
+    width: min(100%, 218px);
   }
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .account-menu {
@@ -1172,12 +1192,19 @@ body :where(
     grid-column: 1 / -1;
   }
 
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-current-short {
+    display: none;
+  }
+
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker,
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
     width: 100%;
   }
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
+    appearance: auto;
+    -webkit-appearance: menulist;
+    color: #f7fafc;
     padding: 0 10px;
     font-size: 13px;
     text-align: left;
