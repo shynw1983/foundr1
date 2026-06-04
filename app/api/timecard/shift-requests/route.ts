@@ -20,6 +20,8 @@ type ShiftRequestBody = {
   candidateId?: string;
   message?: string;
   reviewNote?: string;
+  approvedStart?: string;
+  approvedEnd?: string;
   entries?: Array<{
     workDate?: string;
     preference?: string;
@@ -172,7 +174,7 @@ async function getVisibleStores(session: EmployeeSession) {
   const scope = await getShiftRequestStoreScope(session);
   if (scope.allStores) {
     return sql`
-      select id::text, name
+      select id::text, name, business_hours as "businessHours"
       from stores
       where status = 'active'
       order by name
@@ -180,7 +182,7 @@ async function getVisibleStores(session: EmployeeSession) {
   }
   if (!scope.storeIds.length) return [];
   return sql`
-    select id::text, name
+    select id::text, name, business_hours as "businessHours"
     from stores
     where status = 'active'
       and id::text = any(${scope.storeIds})
@@ -667,6 +669,8 @@ export async function POST(request: Request) {
     const nextStatus = String(body.reviewNote ?? "").startsWith("reject:") ? "rejected" : "approved";
     const reviewNote = nextStatus === "rejected" ? String(body.reviewNote ?? "").replace(/^reject:/, "").trim() : String(body.reviewNote ?? "").trim();
     const candidateId = String(body.candidateId ?? "");
+    let notificationTitle = nextStatus === "approved" ? "シフト申請が承認されました" : "シフト申請が却下されました";
+    let notificationMessage = `${String(shiftRequest.workDate ?? "")} の申請結果を確認してください。`;
 
     if (nextStatus === "approved" && String(shiftRequest.requestType) === "swap") {
       if (!candidateId) return Response.json({ error: "承認する交代候補を選択してください。" }, { status: 400 });
@@ -699,6 +703,66 @@ export async function POST(request: Request) {
       await notifyEmployee(String(candidate.employeeId), "交代が承認されました", "申請した交代シフトが承認されました。", "/store/timecard");
     }
 
+    if (nextStatus === "approved" && String(shiftRequest.requestType) === "availability") {
+      const approvedStart = normalizeTimeValue(body.approvedStart);
+      const approvedEnd = normalizeTimeValue(body.approvedEnd);
+      if (!approvedStart || !approvedEnd) {
+        return Response.json({ error: "承認する開始・終了時刻を入力してください。" }, { status: 400 });
+      }
+      const windowRows = await sql`
+        select
+          to_char(available_start, 'HH24:MI') as "availableStart",
+          to_char(available_end, 'HH24:MI') as "availableEnd"
+        from timecard_shift_request_windows
+        where request_id::text = ${requestId}
+        order by created_at asc
+        limit 1
+      `;
+      const requestedStart = windowRows[0]?.availableStart ? String(windowRows[0].availableStart) : approvedStart;
+      const requestedEnd = windowRows[0]?.availableEnd ? String(windowRows[0].availableEnd) : approvedEnd;
+      const adjusted = requestedStart !== approvedStart || requestedEnd !== approvedEnd;
+      const workDate = String(shiftRequest.workDate ?? "");
+      if (!isValidWorkDate(workDate)) {
+        return Response.json({ error: "対象日付が見つかりません。" }, { status: 409 });
+      }
+
+      await sql`
+        insert into timecard_shifts (
+          employee_id,
+          store_id,
+          work_date,
+          scheduled_start,
+          scheduled_end,
+          break_minutes,
+          note,
+          created_by,
+          updated_at
+        )
+        values (
+          ${String(shiftRequest.employeeId)},
+          ${storeId},
+          ${workDate}::date,
+          ${approvedStart}::time,
+          ${approvedEnd}::time,
+          0,
+          ${adjusted ? `希望 ${requestedStart}-${requestedEnd} から調整` : "希望シフト承認"},
+          ${session.id},
+          now()
+        )
+        on conflict (employee_id, store_id, work_date)
+        do update set
+          scheduled_start = excluded.scheduled_start,
+          scheduled_end = excluded.scheduled_end,
+          break_minutes = excluded.break_minutes,
+          note = excluded.note,
+          updated_at = now()
+      `;
+      notificationTitle = adjusted ? "希望シフトが調整されました" : "希望シフトが承認されました";
+      notificationMessage = adjusted
+        ? `${workDate} の希望 ${requestedStart}-${requestedEnd} は ${approvedStart}-${approvedEnd} に調整されました。`
+        : `${workDate} ${approvedStart}-${approvedEnd} のシフトが承認されました。`;
+    }
+
     await sql`
       update timecard_shift_requests
       set status = ${nextStatus},
@@ -708,7 +772,7 @@ export async function POST(request: Request) {
           updated_at = now()
       where id::text = ${requestId}
     `;
-    await notifyEmployee(String(shiftRequest.employeeId), nextStatus === "approved" ? "シフト申請が承認されました" : "シフト申請が却下されました", `${String(shiftRequest.workDate ?? "")} の申請結果を確認してください。`, "/store/timecard");
+    await notifyEmployee(String(shiftRequest.employeeId), notificationTitle, notificationMessage, "/store/timecard");
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: `timecard.shift_request.${nextStatus}`,

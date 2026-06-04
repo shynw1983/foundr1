@@ -7,8 +7,9 @@ import { MobileNavMenu } from "../../components/MobileNavMenu";
 import { OsNavList } from "../../components/OsNavList";
 import { UserBadge } from "../../components/UserBadge";
 import { getJstMonthLabel } from "../../../../lib/timecard";
+import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../../lib/store-business-hours";
 
-type StoreOption = { id: string; name: string };
+type StoreOption = { id: string; name: string; businessHours?: unknown };
 type EmployeeOption = { id: string; name: string; role: string };
 type ShiftRequestItem = {
   id: string;
@@ -36,6 +37,11 @@ type ShiftRequestPayload = {
   employees: EmployeeOption[];
   requests: ShiftRequestItem[];
   publications: Array<{ id: string; scheduleMonth: string; note: string | null; publishedAt: string; publishedByName: string | null }>;
+};
+
+type ApprovalDraft = {
+  approvedStart: string;
+  approvedEnd: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -80,6 +86,84 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function timeToMinutes(value: string | null | undefined) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(value ?? ""));
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function getWeekdayKey(workDate: string): WeekdayKey {
+  const date = new Date(`${workDate}T12:00:00+09:00`);
+  const keys: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as WeekdayKey[];
+  return keys[date.getUTCDay()] ?? "mon";
+}
+
+function getBusinessDay(hours: StoreBusinessHours, workDate: string) {
+  return hours[getWeekdayKey(workDate)];
+}
+
+function formatWorkDate(value: string) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short"
+  }).format(new Date(`${value}T00:00:00+09:00`));
+}
+
+function getShiftWindow(request: ShiftRequestItem) {
+  return request.windows.find((window) => window.workDate === request.workDate) ?? request.windows[0] ?? null;
+}
+
+function getBarStyle(start: string | null | undefined, end: string | null | undefined, open: string, close: string) {
+  const openMinutes = timeToMinutes(open);
+  const closeBase = timeToMinutes(close);
+  const closeMinutes = closeBase <= openMinutes ? closeBase + 1440 : closeBase;
+  const startBase = timeToMinutes(start);
+  const endBase = timeToMinutes(end);
+  const startMinutes = startBase < openMinutes ? startBase + 1440 : startBase;
+  const endMinutes = endBase <= startBase ? endBase + 1440 : endBase;
+  const total = Math.max(1, closeMinutes - openMinutes);
+  const left = Math.max(0, Math.min(100, ((startMinutes - openMinutes) / total) * 100));
+  const width = Math.max(4, Math.min(100 - left, ((endMinutes - startMinutes) / total) * 100));
+  return { left: `${left}%`, width: `${width}%` };
+}
+
+function getCoverageSummary(
+  requests: ShiftRequestItem[],
+  day: { open: string; close: string; closed: boolean },
+  drafts: Record<string, ApprovalDraft>
+) {
+  if (day.closed) return "休業日";
+  const openMinutes = timeToMinutes(day.open);
+  const closeBase = timeToMinutes(day.close);
+  const closeMinutes = closeBase <= openMinutes ? closeBase + 1440 : closeBase;
+  const intervals = requests
+    .filter((request) => request.status !== "rejected")
+    .map((request) => {
+      const window = getShiftWindow(request);
+      const draft = drafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
+      const startBase = timeToMinutes(draft.approvedStart);
+      const endBase = timeToMinutes(draft.approvedEnd);
+      const start = startBase < openMinutes ? startBase + 1440 : startBase;
+      const end = endBase <= startBase ? endBase + 1440 : endBase;
+      return {
+        start: Math.max(openMinutes, start),
+        end: Math.min(closeMinutes, end)
+      };
+    })
+    .filter((interval) => interval.end > interval.start)
+    .sort((left, right) => left.start - right.start);
+
+  let cursor = openMinutes;
+  for (const interval of intervals) {
+    if (interval.start > cursor) return "未充足";
+    cursor = Math.max(cursor, interval.end);
+    if (cursor >= closeMinutes) return "充足";
+  }
+  return cursor >= closeMinutes ? "充足" : "未充足";
+}
+
 export default function TimecardShiftRequestsPage() {
   const [data, setData] = useState<ShiftRequestPayload | null>(null);
   const [month, setMonth] = useState(getJstMonthLabel());
@@ -87,6 +171,7 @@ export default function TimecardShiftRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | ShiftRequestItem["status"]>("open");
   const [message, setMessage] = useState("");
   const [publishNote, setPublishNote] = useState("");
+  const [approvalDrafts, setApprovalDrafts] = useState<Record<string, ApprovalDraft>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   async function loadRequests(nextStoreId = selectedStoreId, nextMonth = month) {
@@ -101,6 +186,18 @@ export default function TimecardShiftRequestsPage() {
         setData(body);
         setSelectedStoreId(body.selectedStoreId);
         setMonth(body.month);
+        setApprovalDrafts((current) => {
+          const next = { ...current };
+          for (const request of body.requests ?? []) {
+            if (request.requestType !== "availability" || next[request.id]) continue;
+            const window = getShiftWindow(request);
+            next[request.id] = {
+              approvedStart: window?.availableStart ?? "",
+              approvedEnd: window?.availableEnd ?? ""
+            };
+          }
+          return next;
+        });
       } else {
         const body = await response.json().catch(() => ({})) as { error?: string };
         setMessage(body.error ?? "シフト連絡を読み込めませんでした。");
@@ -119,8 +216,19 @@ export default function TimecardShiftRequestsPage() {
   const filteredRequests = useMemo(() => {
     return (data?.requests ?? []).filter((request) => statusFilter === "all" || request.status === statusFilter);
   }, [data?.requests, statusFilter]);
+  const selectedStore = data?.stores.find((store) => store.id === selectedStoreId) ?? null;
+  const businessHours = useMemo(() => normalizeBusinessHours(selectedStore?.businessHours), [selectedStore?.businessHours]);
+  const availabilityByDate = useMemo(() => {
+    const groups = new Map<string, ShiftRequestItem[]>();
+    for (const request of filteredRequests) {
+      if (request.requestType !== "availability" || !request.workDate) continue;
+      groups.set(request.workDate, [...(groups.get(request.workDate) ?? []), request]);
+    }
+    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
+  }, [filteredRequests]);
+  const otherRequests = useMemo(() => filteredRequests.filter((request) => request.requestType !== "availability"), [filteredRequests]);
 
-  async function reviewRequest(request: ShiftRequestItem, approved: boolean, candidateId = "") {
+  async function reviewRequest(request: ShiftRequestItem, approved: boolean, candidateId = "", approvalDraft?: ApprovalDraft) {
     const response = await fetch("/api/timecard/shift-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -129,6 +237,8 @@ export default function TimecardShiftRequestsPage() {
         storeId: selectedStoreId,
         requestId: request.id,
         candidateId,
+        approvedStart: approvalDraft?.approvedStart,
+        approvedEnd: approvalDraft?.approvedEnd,
         reviewNote: approved ? "" : "reject:"
       })
     });
@@ -228,10 +338,85 @@ export default function TimecardShiftRequestsPage() {
           <button className={statusFilter === "all" ? "is-active" : ""} type="button" onClick={() => setStatusFilter("all")}>すべて</button>
         </section>
 
-        <section className="shift-request-list">
+        <section className="shift-coverage-list">
           {isLoading ? <div className="empty-state">読み込み中</div> : null}
-          {!isLoading && filteredRequests.length === 0 ? <div className="empty-state">対象のシフト連絡はありません。</div> : null}
-          {filteredRequests.map((request) => (
+          {!isLoading && availabilityByDate.length === 0 ? <div className="empty-state">対象の希望シフトはありません。</div> : null}
+          {availabilityByDate.map(([workDate, requests]) => {
+            const day = getBusinessDay(businessHours, workDate);
+            const coverageSummary = getCoverageSummary(requests, day, approvalDrafts);
+            return (
+              <article className="panel shift-coverage-card" key={workDate}>
+                <div className="shift-coverage-head">
+                  <div>
+                    <h3>{formatWorkDate(workDate)}</h3>
+                    <p>営業時間 {day.closed ? "休業" : `${day.open}-${day.close}`} / 希望 {requests.length} 件</p>
+                  </div>
+                  <strong>{coverageSummary}</strong>
+                </div>
+                {!day.closed ? (
+                  <div className="shift-coverage-timeline" aria-label={`${workDate} の希望シフト`}>
+                    <div className="shift-coverage-axis">
+                      <span>{day.open}</span>
+                      <span>{day.close}</span>
+                    </div>
+                    {requests.map((request) => {
+                      const window = getShiftWindow(request);
+                      const draft = approvalDrafts[request.id] ?? { approvedStart: window?.availableStart ?? "", approvedEnd: window?.availableEnd ?? "" };
+                      const adjusted = draft.approvedStart !== (window?.availableStart ?? "") || draft.approvedEnd !== (window?.availableEnd ?? "");
+                      return (
+                        <div className={`shift-coverage-row is-${request.status}`} key={request.id}>
+                          <div className="shift-coverage-person">
+                            <strong>{request.employeeName}</strong>
+                            <span>希望 {window?.availableStart ?? "--:--"}-{window?.availableEnd ?? "--:--"}</span>
+                          </div>
+                          <div className="shift-coverage-bar-track">
+                            <span className="shift-coverage-business-line" />
+                            <span
+                              className="shift-coverage-bar"
+                              style={getBarStyle(window?.availableStart, window?.availableEnd, day.open, day.close)}
+                            />
+                            <span
+                              className={`shift-coverage-approved-bar${adjusted ? " is-adjusted" : ""}`}
+                              style={getBarStyle(draft.approvedStart, draft.approvedEnd, day.open, day.close)}
+                            />
+                          </div>
+                          <div className="shift-coverage-controls">
+                            <input
+                              type="time"
+                              value={draft.approvedStart}
+                              disabled={request.status !== "open"}
+                              onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedStart: event.target.value } }))}
+                            />
+                            <input
+                              type="time"
+                              value={draft.approvedEnd}
+                              disabled={request.status !== "open"}
+                              onChange={(event) => setApprovalDrafts((current) => ({ ...current, [request.id]: { ...draft, approvedEnd: event.target.value } }))}
+                            />
+                            {request.status === "open" ? (
+                              <>
+                                <button className="primary-button" type="button" onClick={() => reviewRequest(request, true, "", draft)}>承認</button>
+                                <button className="secondary-button" type="button" onClick={() => reviewRequest(request, false)}>却下</button>
+                              </>
+                            ) : (
+                              <strong>{statusLabels[request.status]}</strong>
+                            )}
+                          </div>
+                          {adjusted && request.status === "open" ? <small>承認時にスタッフへ調整後の時間を通知します。</small> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="empty-state-text">この日は休業日です。承認前に営業時間または対象日を確認してください。</p>
+                )}
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="shift-request-list">
+          {otherRequests.map((request) => (
             <article className={`panel shift-request-card is-${request.status}`} key={request.id}>
               <div className="shift-request-card-head">
                 <div>
