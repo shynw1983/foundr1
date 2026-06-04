@@ -121,6 +121,8 @@ const punchActions = [
   { type: "clock_out", label: "退勤", icon: LogOut }
 ];
 
+const calendarAddedStorageKey = "foundr1:calendar-shifts:v1";
+
 function getPunchState(latestPunch: LatestPunch) {
   if (!latestPunch || latestPunch.punchType === "clock_out") return "off";
   if (latestPunch.punchType === "break_start") return "break";
@@ -162,6 +164,7 @@ export default function StoreTimecardPage() {
   const [message, setMessage] = useState("");
   const [shiftRequestMessage, setShiftRequestMessage] = useState("");
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobileTimecardPanel | "">("");
+  const [calendarAddedShiftIds, setCalendarAddedShiftIds] = useState<Set<string>>(new Set());
 
   async function loadTimecard(nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -224,6 +227,17 @@ export default function StoreTimecardPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(calendarAddedStorageKey);
+      const parsed = JSON.parse(stored || "[]");
+      const ids = Array.isArray(parsed) ? parsed : [];
+      setCalendarAddedShiftIds(new Set(ids.map(String)));
+    } catch {
+      setCalendarAddedShiftIds(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
     const query = window.matchMedia("(max-width: 760px)");
     const updateViewport = () => setIsMobileViewport(query.matches);
     updateViewport();
@@ -237,6 +251,23 @@ export default function StoreTimecardPage() {
     ? employeesForStore.find((employee) => employee.id === data?.currentEmployeeId) ?? null
     : employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
   const selectedLatestPunch = data?.latestPunches.find((punch) => punch?.employeeId === selectedEmployee?.id) ?? null;
+  const calendarReadyShiftIds = useMemo(() => myShifts
+    .filter((shift) => shift.scheduledStart && shift.scheduledEnd)
+    .map((shift) => shift.id), [myShifts]);
+  const allCalendarReadyShiftsAdded = calendarReadyShiftIds.length > 0 && calendarReadyShiftIds.every((id) => calendarAddedShiftIds.has(id));
+
+  function markCalendarShiftsAdded(ids: string[]) {
+    setCalendarAddedShiftIds((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.add(id));
+      try {
+        window.localStorage.setItem(calendarAddedStorageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        // The calendar file still opens even if this local marker cannot be stored.
+      }
+      return next;
+    });
+  }
 
   const selectedEmployeeDays = useMemo(() => {
     if (!data) return [];
@@ -638,8 +669,9 @@ export default function StoreTimecardPage() {
                   className="store-next-shift-calendar-button is-period"
                   href={createShiftCalendarHref(myShifts, selectedShiftStoreName)}
                   download={`foundr1-shifts-${schedulingPeriod?.label ?? "period"}.ics`}
+                  onClick={() => markCalendarShiftsAdded(calendarReadyShiftIds)}
                 >
-                  まとめて追加
+                  {allCalendarReadyShiftsAdded ? "追加済み（この端末）" : "まとめて追加"}
                 </a>
               ) : null}
             </div>
@@ -650,11 +682,12 @@ export default function StoreTimecardPage() {
                   <span>{shift.scheduledStart ?? "--:--"} - {shift.scheduledEnd ?? "--:--"}</span>
                   {shift.scheduledStart && shift.scheduledEnd ? (
                     <a
-                      className="store-next-shift-calendar-button"
+                      className={`store-next-shift-calendar-button${calendarAddedShiftIds.has(shift.id) ? " is-added" : ""}`}
                       href={createShiftCalendarHref([shift], selectedShiftStoreName)}
                       download={`foundr1-shift-${shift.workDate}.ics`}
+                      onClick={() => markCalendarShiftsAdded([shift.id])}
                     >
-                      カレンダーに追加
+                      {calendarAddedShiftIds.has(shift.id) ? "追加済み（この端末）" : "カレンダーに追加"}
                     </a>
                   ) : null}
                 </article>

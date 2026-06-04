@@ -5566,6 +5566,12 @@ body :where(
   white-space: nowrap;
 }
 
+.store-next-shift-calendar-button.is-added {
+  border-color: rgba(17, 24, 39, 0.12);
+  background: #f7f9fc;
+  color: var(--muted);
+}
+
 .store-shift-period-list {
   margin-top: 14px;
 }
