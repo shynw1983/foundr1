@@ -5522,7 +5522,7 @@ body :where(
   white-space: nowrap;
 }
 
-.store-pos-denomination-grid input {
+.store-pos-denomination-grid select {
   width: 100%;
   min-height: 36px;
   min-width: 0;

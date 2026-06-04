@@ -152,6 +152,14 @@ const orderTypeOptions = [
   { value: "takeout", label: "持ち帰り" }
 ];
 
+const denominationCountOptions = [
+  { value: "", label: "0" },
+  ...Array.from({ length: 50 }, (_, index) => {
+    const value = String(index + 1);
+    return { value, label: value };
+  })
+];
+
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
@@ -346,7 +354,7 @@ export default function StorePosPage() {
     denomination: number,
     value: string
   ) {
-    const normalized = value.replace(/[^\d]/g, "").slice(0, 4);
+    const normalized = value.replace(/[^\d]/g, "");
     setter((current) => ({ ...current, [String(denomination)]: normalized }));
   }
 
@@ -701,12 +709,12 @@ export default function StorePosPage() {
                   {yenDenominations.map((denomination) => (
                     <label key={denomination}>
                       <span>{formatDenominationLabel(denomination)}</span>
-                      <input
-                        inputMode="numeric"
+                      <select
                         value={cashCountedBreakdown[String(denomination)] ?? ""}
                         onChange={(event) => updateCashBreakdown(setCashCountedBreakdown, denomination, event.target.value)}
-                        placeholder="0"
-                      />
+                      >
+                        {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
+                      </select>
                     </label>
                   ))}
                 </div>
@@ -748,12 +756,12 @@ export default function StorePosPage() {
                 {yenDenominations.map((denomination) => (
                   <label key={denomination}>
                     <span>{formatDenominationLabel(denomination)}</span>
-                    <input
-                      inputMode="numeric"
+                    <select
                       value={cashOpeningBreakdown[String(denomination)] ?? ""}
                       onChange={(event) => updateCashBreakdown(setCashOpeningBreakdown, denomination, event.target.value)}
-                      placeholder="0"
-                    />
+                    >
+                      {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
+                    </select>
                   </label>
                 ))}
               </div>
