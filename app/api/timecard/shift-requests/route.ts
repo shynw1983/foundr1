@@ -2,6 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../..
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 import { getJstMonthLabel } from "../../../../lib/timecard";
+import { createOsNotification } from "../../../../lib/web-push";
 import type { EmployeeSession } from "../../../../lib/auth";
 
 type ShiftRequestBody = {
@@ -252,17 +253,23 @@ async function notifyStoreManagers(storeId: string, title: string, message: stri
         )
       )
   `;
-  await Promise.all(managers.map((manager) => sql`
-    insert into os_notifications (recipient_employee_id, notification_type, title, message, href)
-    values (${String(manager.id)}, 'timecard_shift_request', ${title}, ${message}, ${href})
-  `));
+  await Promise.all(managers.map((manager) => createOsNotification({
+    employeeId: String(manager.id),
+    type: "timecard_shift_request",
+    title,
+    message,
+    href
+  })));
 }
 
 async function notifyEmployee(employeeId: string, title: string, message: string, href: string) {
-  await sql`
-    insert into os_notifications (recipient_employee_id, notification_type, title, message, href)
-    values (${employeeId}, 'timecard_shift_request', ${title}, ${message}, ${href})
-  `;
+  await createOsNotification({
+    employeeId,
+    type: "timecard_shift_request",
+    title,
+    message,
+    href
+  });
 }
 
 export async function GET(request: Request) {

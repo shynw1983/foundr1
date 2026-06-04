@@ -1024,6 +1024,20 @@ create table if not exists os_notifications (
 alter table os_notifications add column if not exists lark_sent_at timestamptz;
 alter table os_notifications add column if not exists lark_error text;
 
+create table if not exists web_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  last_success_at timestamptz,
+  last_error text,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists purchase_actuals (
   id uuid primary key default gen_random_uuid(),
   purchase_order_item_id uuid not null references purchase_order_items(id) on delete cascade,
@@ -1681,6 +1695,7 @@ create index if not exists idx_delivery_batches_order_status on delivery_batches
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
 create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_web_push_subscriptions_employee on web_push_subscriptions(employee_id, revoked_at, updated_at desc);
 create index if not exists idx_timecard_punches_employee_punched on timecard_punches(employee_id, punched_at desc);
 create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);
 create index if not exists idx_timecard_shifts_store_date on timecard_shifts(store_id, work_date);

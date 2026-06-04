@@ -790,6 +790,28 @@ body :where(
   cursor: pointer;
 }
 
+.notification-push-button,
+.notification-push-status {
+  width: 100%;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.notification-push-button {
+  border: 1px solid rgba(33, 116, 91, 0.28);
+  background: var(--green-soft);
+  color: var(--green);
+  cursor: pointer;
+}
+
+.notification-push-status {
+  background: #fbfcfe;
+  color: var(--muted);
+}
+
 .notification-item,
 .notification-empty {
   display: grid;
