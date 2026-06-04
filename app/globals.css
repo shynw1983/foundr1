@@ -5455,7 +5455,7 @@ body :where(
 
 .store-shift-period-row {
   display: grid;
-  grid-template-columns: minmax(82px, 0.35fr) minmax(190px, 0.85fr) minmax(170px, 0.7fr) minmax(160px, 1fr);
+  grid-template-columns: minmax(82px, 0.35fr) minmax(140px, 0.55fr) minmax(170px, 0.7fr) minmax(160px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 12px;
@@ -5470,13 +5470,7 @@ body :where(
   overflow-wrap: anywhere;
 }
 
-.store-shift-choice-group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.store-shift-choice-group label {
+.store-shift-wants-work {
   display: flex;
   min-height: 38px;
   align-items: center;
@@ -5490,13 +5484,13 @@ body :where(
   font-weight: 900;
 }
 
-.store-shift-choice-group label.is-selected {
+.store-shift-wants-work.is-selected {
   border-color: rgba(33, 116, 91, 0.4);
   background: var(--green-soft);
   color: var(--green);
 }
 
-.store-shift-choice-group input {
+.store-shift-wants-work input {
   width: 14px;
   min-height: 14px;
 }
@@ -12846,12 +12840,11 @@ body :where(
     grid-template-columns: 1fr;
   }
 
-  .store-shift-choice-group,
   .store-shift-request-times {
     grid-template-columns: 1fr;
   }
 
-  .store-shift-choice-group label {
+  .store-shift-wants-work {
     min-height: 42px;
   }
 

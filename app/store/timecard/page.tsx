@@ -93,7 +93,7 @@ type ShiftRequestDraft = {
 
 type AvailabilityDayDraft = {
   workDate: string;
-  preference: "" | "available" | "unavailable";
+  wantsWork: boolean;
   availableStart: string;
   availableEnd: string;
   note: string;
@@ -321,12 +321,11 @@ export default function StoreTimecardPage() {
         action: "create_availability_period",
         storeId: selectedStoreId,
         entries: availabilityDrafts
-          .filter((draft) => draft.preference)
           .map((draft) => ({
             workDate: draft.workDate,
-            preference: draft.preference,
-            availableStart: draft.preference === "available" ? draft.availableStart : "",
-            availableEnd: draft.preference === "available" ? draft.availableEnd : "",
+            preference: draft.wantsWork ? "available" : "unavailable",
+            availableStart: draft.wantsWork ? draft.availableStart : "",
+            availableEnd: draft.wantsWork ? draft.availableEnd : "",
             note: draft.note
           }))
       })
@@ -531,19 +530,13 @@ export default function StoreTimecardPage() {
             {availabilityDrafts.map((draft) => (
               <article className="store-shift-period-row" key={draft.workDate}>
                 <strong>{formatShiftDate(draft.workDate)}</strong>
-                <div className="store-shift-choice-group">
-                  <label className={draft.preference === "available" ? "is-selected" : ""}>
-                    <input type="radio" name={`shift-${draft.workDate}`} checked={draft.preference === "available"} onChange={() => updateAvailabilityDraft(draft.workDate, { preference: "available" })} />
-                    希望上班
-                  </label>
-                  <label className={draft.preference === "unavailable" ? "is-selected" : ""}>
-                    <input type="radio" name={`shift-${draft.workDate}`} checked={draft.preference === "unavailable"} onChange={() => updateAvailabilityDraft(draft.workDate, { preference: "unavailable" })} />
-                    不希望上班
-                  </label>
-                </div>
+                <label className={`store-shift-wants-work${draft.wantsWork ? " is-selected" : ""}`}>
+                  <input type="checkbox" checked={draft.wantsWork} onChange={(event) => updateAvailabilityDraft(draft.workDate, { wantsWork: event.target.checked })} />
+                  是否希望上班
+                </label>
                 <div className="store-shift-request-times">
-                  <input type="time" value={draft.availableStart} disabled={draft.preference !== "available"} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableStart: event.target.value })} />
-                  <input type="time" value={draft.availableEnd} disabled={draft.preference !== "available"} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableEnd: event.target.value })} />
+                  <input type="time" value={draft.availableStart} disabled={!draft.wantsWork} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableStart: event.target.value })} />
+                  <input type="time" value={draft.availableEnd} disabled={!draft.wantsWork} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableEnd: event.target.value })} />
                 </div>
                 <input value={draft.note} placeholder="メモ" onChange={(event) => updateAvailabilityDraft(draft.workDate, { note: event.target.value })} />
               </article>
@@ -616,7 +609,7 @@ function createAvailabilityDrafts(dates: string[], requests: ShiftRequestItem[])
     const window = request?.windows?.find((item) => item.workDate === workDate);
     return {
       workDate,
-      preference: request?.requestType === "availability" ? "available" : request?.requestType === "day_off" ? "unavailable" : "",
+      wantsWork: request?.requestType === "availability",
       availableStart: window?.availableStart ?? "17:00",
       availableEnd: window?.availableEnd ?? "22:00",
       note: request?.note ?? window?.note ?? ""
