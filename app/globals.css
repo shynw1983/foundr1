@@ -5742,12 +5742,14 @@ body :where(
 
 .shift-coverage-person strong,
 .shift-coverage-person span,
+.shift-coverage-person small,
 .shift-coverage-row small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .shift-coverage-person span,
+.shift-coverage-person small,
 .shift-coverage-row small {
   color: var(--muted);
   font-size: 12px;
@@ -12967,8 +12969,8 @@ body :where(
   }
 
   .store-live-clock strong {
-    min-width: 42px;
-    font-size: 17px;
+    min-width: 72px;
+    font-size: 16px;
   }
 
   .store-user-tools {

@@ -418,6 +418,7 @@ export default function TimecardShiftRequestsPage() {
                           <div className="shift-coverage-person">
                             <strong>{request.employeeName}</strong>
                             <span>希望 {window?.availableStart ?? "--:--"}-{window?.availableEnd ?? "--:--"}</span>
+                            <small>提出 {formatDateTime(request.createdAt)}</small>
                           </div>
                           <div className="shift-coverage-bar-track">
                             <span className="shift-coverage-business-line" />
