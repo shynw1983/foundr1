@@ -5308,15 +5308,17 @@ body :where(
 
 .store-pos-item-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 10px;
 }
 
 .store-pos-item-button {
   display: grid;
-  grid-template-rows: 96px auto minmax(40px, auto) auto;
-  gap: 7px;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
   min-width: 0;
+  min-height: 104px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px;
@@ -5326,8 +5328,8 @@ body :where(
 
 .store-pos-item-button img,
 .store-pos-image-empty {
-  width: 100%;
-  height: 96px;
+  width: 82px;
+  height: 86px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
@@ -5342,26 +5344,33 @@ body :where(
   font-weight: 900;
 }
 
-.store-pos-item-button span,
-.store-pos-item-button strong,
-.store-pos-item-button em {
+.store-pos-item-info {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.store-pos-item-info span,
+.store-pos-item-info strong,
+.store-pos-item-info em {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.store-pos-item-button span {
+.store-pos-item-info span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
 }
 
-.store-pos-item-button strong {
+.store-pos-item-info strong {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.35;
 }
 
-.store-pos-item-button em {
+.store-pos-item-info em {
   color: #1f6f55;
   font-style: normal;
   font-weight: 950;
@@ -15497,7 +15506,7 @@ body :where(
   }
 
   .store-pos-item-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
   }
 
   .store-pos-cart-list {

@@ -43,6 +43,13 @@ function getOptionGroupLimit(ruleJson: Record<string, unknown>, fallback: number
   return Math.max(0, Math.floor(limit));
 }
 
+function getEffectiveSelectionType(group: { groupKey: string; selectionType: string }) {
+  if (group.selectionType === "quantity") return "quantity";
+  if (["size", "temperature", "sweetness", "ice", "option"].includes(group.groupKey)) return "single";
+  if (group.groupKey === "topping") return "multiple";
+  return group.selectionType || "single";
+}
+
 function getAllowedRuleKey(groupKey: string) {
   const ruleKeys: Record<string, string> = {
     size: "allowedSizes",
@@ -353,11 +360,12 @@ export async function POST(request: Request) {
       });
       const groupedCounts = new Map<string, { count: number; optionIds: Set<string>; selectionType: string; limit: number; groupName: string }>();
       for (const option of validSelected) {
+        const selectionType = getEffectiveSelectionType(option);
         const current = groupedCounts.get(option.groupId) ?? {
           count: 0,
           optionIds: new Set<string>(),
-          selectionType: option.selectionType,
-          limit: getOptionGroupLimit(option.ruleJson, option.selectionType === "single" ? 1 : 99),
+          selectionType,
+          limit: getOptionGroupLimit(option.ruleJson, selectionType === "single" ? 1 : 99),
           groupName: option.groupName
         };
         current.count += 1;

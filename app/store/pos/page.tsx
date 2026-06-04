@@ -125,10 +125,17 @@ function getOptionPrice(option: Pick<PosMenuOption, "priceDelta">) {
   return Math.round(Number(option.priceDelta ?? 0));
 }
 
-function getOptionGroupLimit(group: Pick<PosOptionGroup, "selectionType" | "ruleJson">) {
+function getEffectiveSelectionType(group: Pick<PosOptionGroup, "groupKey" | "selectionType">) {
+  if (group.selectionType === "quantity") return "quantity";
+  if (["size", "temperature", "sweetness", "ice", "option"].includes(group.groupKey)) return "single";
+  if (group.groupKey === "topping") return "multiple";
+  return group.selectionType || "single";
+}
+
+function getOptionGroupLimit(group: Pick<PosOptionGroup, "groupKey" | "selectionType" | "ruleJson">) {
   const limit = Number(group.ruleJson?.limit);
   if (Number.isFinite(limit)) return Math.max(0, Math.floor(limit));
-  return group.selectionType === "single" ? 1 : 99;
+  return getEffectiveSelectionType(group) === "single" ? 1 : 99;
 }
 
 function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], brandId: string) {
@@ -275,7 +282,7 @@ export default function StorePosPage() {
     }
     const nextDraft: Record<string, string[]> = {};
     for (const group of groups) {
-      if (group.selectionType === "single" && group.options.length) {
+      if (getEffectiveSelectionType(group) === "single" && group.options.length) {
         nextDraft[group.id] = [group.options[0].id];
       } else {
         nextDraft[group.id] = [];
@@ -288,10 +295,11 @@ export default function StorePosPage() {
   function toggleOption(group: PosOptionGroup, optionId: string) {
     setOptionDraft((current) => {
       const selected = current[group.id] ?? [];
-      if (group.selectionType === "single") {
+      const selectionType = getEffectiveSelectionType(group);
+      if (selectionType === "single") {
         return { ...current, [group.id]: [optionId] };
       }
-      if (group.selectionType === "quantity") {
+      if (selectionType === "quantity") {
         const limit = getOptionGroupLimit(group);
         if (selected.length >= limit) {
           setMessage(`${group.name} は最大${limit}点までです。`);
@@ -321,9 +329,11 @@ export default function StorePosPage() {
     if (!configuringItem) return;
     const selectedOptions = getItemOptionGroups(configuringItem).flatMap((group) => {
       const selectedIds = optionDraft[group.id] ?? [];
-      return group.options
-        .filter((option) => selectedIds.includes(option.id))
-        .map((option) => ({ ...option, groupId: group.id, groupKey: group.groupKey, groupName: group.name }));
+      const optionsById = new Map(group.options.map((option) => [option.id, option]));
+      return selectedIds
+        .map((optionId) => optionsById.get(optionId))
+        .filter(Boolean)
+        .map((option) => ({ ...option, groupId: group.id, groupKey: group.groupKey, groupName: group.name })) as PosSelectedOption[];
     });
     addItem(configuringItem, selectedOptions);
     setConfiguringItem(null);
@@ -487,9 +497,11 @@ export default function StorePosPage() {
                 {visibleItems.map((item) => (
                   <button key={item.id} className="store-pos-item-button" type="button" onClick={() => beginItemSelection(item)}>
                     {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="store-pos-image-empty">F1</span>}
-                    <span>{item.category || item.brandName}</span>
-                    <strong>{item.name}</strong>
-                    <em>{formatYen(getItemPrice(item))}</em>
+                    <div className="store-pos-item-info">
+                      <span>{item.category || item.brandName}</span>
+                      <strong>{item.name}</strong>
+                      <em>{formatYen(getItemPrice(item))}</em>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -574,45 +586,48 @@ export default function StorePosPage() {
             </div>
 
             <div className="store-pos-option-groups">
-              {getItemOptionGroups(configuringItem).map((group) => (
-                <section className="store-pos-option-group" key={group.id}>
-                  <div>
-                    <strong>{group.name}</strong>
-                    <span>
-                      {group.selectionType === "single"
-                        ? "1つ選択"
-                        : group.selectionType === "quantity"
-                          ? `数量で選択 / 最大${getOptionGroupLimit(group)}点`
-                          : `複数選択可 / 最大${getOptionGroupLimit(group)}点`}
-                    </span>
-                  </div>
-                  <div className="store-pos-option-choice-grid">
-                    {group.options.map((option) => {
-                      const selectedIds = optionDraft[group.id] ?? [];
-                      const count = selectedIds.filter((id) => id === option.id).length;
-                      const selected = count > 0;
-                      return (
-                        <div className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"} key={option.id}>
-                          <button
-                            type="button"
-                            onClick={() => toggleOption(group, option.id)}
-                          >
-                            <span>{option.name}</span>
-                            {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
-                          </button>
-                          {group.selectionType === "quantity" ? (
-                            <div className="store-pos-option-stepper">
-                              <button type="button" onClick={() => decrementOption(group, option.id)} aria-label="数量を減らす"><Minus size={14} /></button>
-                              <span>{count}</span>
-                              <button type="button" onClick={() => toggleOption(group, option.id)} aria-label="数量を増やす"><Plus size={14} /></button>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+              {getItemOptionGroups(configuringItem).map((group) => {
+                const selectionType = getEffectiveSelectionType(group);
+                return (
+                  <section className="store-pos-option-group" key={group.id}>
+                    <div>
+                      <strong>{group.name}</strong>
+                      <span>
+                        {selectionType === "single"
+                          ? "1つ選択"
+                          : selectionType === "quantity"
+                            ? `数量で選択 / 最大${getOptionGroupLimit(group)}点`
+                            : `複数選択可 / 最大${getOptionGroupLimit(group)}点`}
+                      </span>
+                    </div>
+                    <div className="store-pos-option-choice-grid">
+                      {group.options.map((option) => {
+                        const selectedIds = optionDraft[group.id] ?? [];
+                        const count = selectedIds.filter((id) => id === option.id).length;
+                        const selected = count > 0;
+                        return (
+                          <div className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"} key={option.id}>
+                            <button
+                              type="button"
+                              onClick={() => toggleOption(group, option.id)}
+                            >
+                              <span>{option.name}</span>
+                              {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
+                            </button>
+                            {selectionType === "quantity" ? (
+                              <div className="store-pos-option-stepper">
+                                <button type="button" onClick={() => decrementOption(group, option.id)} aria-label="数量を減らす"><Minus size={14} /></button>
+                                <span>{count}</span>
+                                <button type="button" onClick={() => toggleOption(group, option.id)} aria-label="数量を増やす"><Plus size={14} /></button>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
 
             <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem}>
