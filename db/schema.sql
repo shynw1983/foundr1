@@ -1154,6 +1154,38 @@ create table if not exists menu_option_store_settings (
   unique (store_id, menu_option_id)
 );
 
+create table if not exists menu_external_platforms (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  platform_key text not null,
+  name text not null,
+  management_url text not null default '',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_id, store_id, platform_key)
+);
+
+create table if not exists menu_change_sync_tasks (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  external_platform_id uuid not null references menu_external_platforms(id) on delete cascade,
+  target_type text not null,
+  target_id uuid,
+  target_label text not null,
+  change_kind text not null,
+  change_summary text not null,
+  status text not null default 'pending',
+  created_by uuid references employees(id) on delete set null,
+  completed_by uuid references employees(id) on delete set null,
+  completion_note text not null default '',
+  created_at timestamptz not null default now(),
+  completed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists store_customer_orders (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid references brands(id) on delete set null,
@@ -1575,6 +1607,22 @@ create index if not exists idx_menu_option_groups_item on menu_option_groups(men
 create index if not exists idx_menu_options_group on menu_options(option_group_id, sort_order);
 create index if not exists idx_menu_store_settings_brand_store on menu_store_settings(brand_id, store_id);
 create index if not exists idx_menu_option_store_settings_brand_store on menu_option_store_settings(brand_id, store_id);
+create index if not exists idx_menu_external_platforms_brand_store on menu_external_platforms(brand_id, store_id, is_active);
+create unique index if not exists idx_menu_external_platforms_unique_scope
+  on menu_external_platforms (
+    brand_id,
+    coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    platform_key
+  );
+create index if not exists idx_menu_change_sync_tasks_brand_status on menu_change_sync_tasks(brand_id, status, created_at desc);
+create unique index if not exists idx_menu_change_sync_tasks_pending_unique
+  on menu_change_sync_tasks (
+    external_platform_id,
+    target_type,
+    coalesce(target_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    change_kind
+  )
+  where status = 'pending';
 create index if not exists idx_stores_external_id on stores(external_id);
 create index if not exists idx_stores_company_id on stores(company_id);
 create index if not exists idx_store_customer_orders_store_status on store_customer_orders(store_id, status, created_at desc);

@@ -2,6 +2,7 @@
 
 import {
   Boxes,
+  CheckCircle2,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -102,6 +103,35 @@ type MenuOption = {
   isActive: boolean;
 };
 
+type MenuExternalPlatform = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  platformKey: string;
+  name: string;
+  managementUrl: string;
+  isActive: boolean;
+};
+
+type MenuSyncTask = {
+  id: string;
+  brandId: string;
+  storeId: string;
+  externalPlatformId: string;
+  platformName: string;
+  targetType: string;
+  targetId: string;
+  targetLabel: string;
+  changeKind: string;
+  changeSummary: string;
+  status: "pending" | "completed";
+  createdByName: string;
+  completedByName: string;
+  completionNote: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 type MenuAdminData = {
   brands: OptionItem[];
   stores: StoreOption[];
@@ -110,6 +140,8 @@ type MenuAdminData = {
   items: MenuItem[];
   groups: MenuGroup[];
   options: MenuOption[];
+  externalPlatforms: MenuExternalPlatform[];
+  syncTasks: MenuSyncTask[];
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -248,6 +280,18 @@ function buildPublicMenuUrl(brandId: string) {
   return `/api/public/menus${params.size ? `?${params.toString()}` : ""}`;
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function getCategoryCounts(items: MenuItem[], categories: MenuCategory[], brandId: string): MenuCategorySummary[] {
   const counts = new Map<string, number>();
   const categoryMasters = new Map<string, MenuCategory>();
@@ -292,7 +336,9 @@ export default function MenuAdminPage() {
     categories: [],
     items: [],
     groups: [],
-    options: []
+    options: [],
+    externalPlatforms: [],
+    syncTasks: []
   });
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -309,6 +355,7 @@ export default function MenuAdminPage() {
   const [savingKind, setSavingKind] = useState<"item" | "category" | "group" | "option" | "">("");
   const [draggingCategory, setDraggingCategory] = useState("");
   const [draggingItemId, setDraggingItemId] = useState("");
+  const [syncCompletionNotes, setSyncCompletionNotes] = useState<Record<string, string>>({});
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -373,6 +420,14 @@ export default function MenuAdminPage() {
 
   const selectedSource = data.sources.find((source) => source.id === itemDraft.menuSourceId);
   const publicMenuUrl = buildPublicMenuUrl(activeBrandId);
+  const brandExternalPlatforms = useMemo(() => data.externalPlatforms.filter((platform) => (
+    platform.brandId === activeBrandId && !platform.storeId
+  )), [activeBrandId, data.externalPlatforms]);
+  const brandSyncTasks = useMemo(() => data.syncTasks.filter((task) => (
+    task.brandId === activeBrandId && !task.storeId
+  )), [activeBrandId, data.syncTasks]);
+  const pendingSyncTasks = brandSyncTasks.filter((task) => task.status === "pending");
+  const completedSyncTasks = brandSyncTasks.filter((task) => task.status === "completed").slice(0, 8);
 
   const visibleGroups = useMemo(() => data.groups.filter((group) => {
     if (!activeBrandId || group.brandId !== activeBrandId) return false;
@@ -540,6 +595,52 @@ export default function MenuAdminPage() {
       return;
     }
     setMessage("並び順を保存しました。");
+  }
+
+  async function saveExternalPlatform(platform: MenuExternalPlatform, patch: Partial<MenuExternalPlatform>) {
+    setMessage("");
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "externalPlatform",
+        ...platform,
+        ...patch,
+        brandId: platform.brandId || activeBrandId,
+        storeId: ""
+      })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(result.error || "外部プラットフォーム設定を保存できませんでした。");
+      return;
+    }
+    await loadMenus(selectedItemId);
+  }
+
+  async function completeSyncTask(task: MenuSyncTask) {
+    setMessage("");
+    const response = await fetch("/api/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "completeSyncTask",
+        id: task.id,
+        completionNote: syncCompletionNotes[task.id] || ""
+      })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(result.error || "同期履歴を更新できませんでした。");
+      return;
+    }
+    setSyncCompletionNotes((current) => {
+      const next = { ...current };
+      delete next[task.id];
+      return next;
+    });
+    setMessage("外部プラットフォーム反映済みにしました。");
+    await loadMenus(selectedItemId);
   }
 
   function reorderCategories(targetCategory: string) {
@@ -775,6 +876,86 @@ export default function MenuAdminPage() {
             OS ではブランドの標準メニューを管理します。店舗ごとの販売可否は店舗画面で切り替え、
             ここでは分類、商品名、価格、公開状態、選択可否を中心に編集します。
           </p>
+        </section>
+
+        <section className="menu-sync-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">External Platforms</p>
+              <h3>外部プラットフォーム反映</h3>
+            </div>
+            <span className={pendingSyncTasks.length ? "menu-sync-count is-pending" : "menu-sync-count"}>
+              未反映 {pendingSyncTasks.length}件
+            </span>
+          </div>
+          <div className="menu-platform-list">
+            {brandExternalPlatforms.map((platform) => (
+              <div className="menu-platform-row" key={platform.id}>
+                <label className="checkbox-group menu-inline-check">
+                  <input
+                    type="checkbox"
+                    checked={platform.isActive}
+                    onChange={(event) => void saveExternalPlatform(platform, { isActive: event.target.checked })}
+                  />
+                  <span>{platform.name}</span>
+                </label>
+                <input
+                  value={platform.managementUrl}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setData((current) => ({
+                      ...current,
+                      externalPlatforms: current.externalPlatforms.map((entry) => (
+                        entry.id === platform.id ? { ...entry, managementUrl: value } : entry
+                      ))
+                    }));
+                  }}
+                  onBlur={(event) => void saveExternalPlatform(platform, { managementUrl: event.target.value })}
+                  placeholder="管理画面 URL"
+                />
+                {platform.managementUrl ? (
+                  <a className="secondary-button compact-button" href={platform.managementUrl} target="_blank" rel="noreferrer">
+                    開く
+                  </a>
+                ) : null}
+              </div>
+            ))}
+            {!brandExternalPlatforms.length ? <p className="empty-state">ブランドを選ぶと Uber Eats などの反映先が表示されます。</p> : null}
+          </div>
+          <div className="menu-sync-task-list">
+            {pendingSyncTasks.map((task) => (
+              <div className="menu-sync-task-row" key={task.id}>
+                <div>
+                  <strong>{task.platformName} / {task.targetLabel}</strong>
+                  <span>{task.changeSummary}</span>
+                  <small>{formatDateTime(task.createdAt)} {task.createdByName ? ` / ${task.createdByName}` : ""}</small>
+                </div>
+                <input
+                  value={syncCompletionNotes[task.id] || ""}
+                  onChange={(event) => setSyncCompletionNotes((current) => ({ ...current, [task.id]: event.target.value }))}
+                  placeholder="反映メモ"
+                />
+                <button className="primary-button compact-button" type="button" onClick={() => void completeSyncTask(task)}>
+                  <CheckCircle2 size={15} />
+                  反映済み
+                </button>
+              </div>
+            ))}
+            {!pendingSyncTasks.length ? <p className="empty-state">現在、外部プラットフォームへ反映待ちの変更はありません。</p> : null}
+          </div>
+          {completedSyncTasks.length ? (
+            <details className="menu-sync-history">
+              <summary>最近の反映履歴</summary>
+              <div>
+                {completedSyncTasks.map((task) => (
+                  <p key={task.id}>
+                    <strong>{task.platformName}</strong>
+                    <span>{task.targetLabel} / {formatDateTime(task.completedAt)} {task.completedByName ? ` / ${task.completedByName}` : ""}</span>
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : null}
         </section>
 
         <div className="filter-bar">

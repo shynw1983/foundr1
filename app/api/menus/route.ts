@@ -3,6 +3,11 @@ import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
 const menuEditorRoles = new Set(["owner", "manager"]);
+const defaultExternalPlatforms = [
+  { key: "uber_eats", name: "Uber Eats" },
+  { key: "wolt", name: "Wolt" },
+  { key: "demae_can", name: "出前館" }
+];
 
 function canEditMenus(session: EmployeeSession) {
   return menuEditorRoles.has(session.role);
@@ -152,7 +157,55 @@ async function readMenuAdminData() {
     `
   ]);
 
-  return { brands, stores, sources, categories, items, groups, options, storeSettings };
+  await ensureDefaultExternalPlatforms(brands.map((brand) => String(brand.id)));
+
+  const [externalPlatforms, syncTasks] = await Promise.all([
+    sql`
+      select
+        id::text,
+        brand_id::text as "brandId",
+        coalesce(store_id::text, '') as "storeId",
+        platform_key as "platformKey",
+        name,
+        management_url as "managementUrl",
+        is_active as "isActive",
+        updated_at as "updatedAt"
+      from menu_external_platforms
+      order by name
+    `,
+    sql`
+      select
+        menu_change_sync_tasks.id::text,
+        menu_change_sync_tasks.brand_id::text as "brandId",
+        coalesce(menu_change_sync_tasks.store_id::text, '') as "storeId",
+        menu_change_sync_tasks.external_platform_id::text as "externalPlatformId",
+        menu_external_platforms.name as "platformName",
+        menu_change_sync_tasks.target_type as "targetType",
+        coalesce(menu_change_sync_tasks.target_id::text, '') as "targetId",
+        menu_change_sync_tasks.target_label as "targetLabel",
+        menu_change_sync_tasks.change_kind as "changeKind",
+        menu_change_sync_tasks.change_summary as "changeSummary",
+        menu_change_sync_tasks.status,
+        coalesce(created_employee.name, '') as "createdByName",
+        coalesce(completed_employee.name, '') as "completedByName",
+        menu_change_sync_tasks.completion_note as "completionNote",
+        menu_change_sync_tasks.created_at as "createdAt",
+        menu_change_sync_tasks.completed_at as "completedAt",
+        menu_change_sync_tasks.updated_at as "updatedAt"
+      from menu_change_sync_tasks
+      join menu_external_platforms on menu_external_platforms.id = menu_change_sync_tasks.external_platform_id
+      left join employees created_employee on created_employee.id = menu_change_sync_tasks.created_by
+      left join employees completed_employee on completed_employee.id = menu_change_sync_tasks.completed_by
+      where menu_change_sync_tasks.status = 'pending'
+         or menu_change_sync_tasks.created_at > now() - interval '30 days'
+      order by
+        case when menu_change_sync_tasks.status = 'pending' then 0 else 1 end,
+        menu_change_sync_tasks.created_at desc
+      limit 200
+    `
+  ]);
+
+  return { brands, stores, sources, categories, items, groups, options, storeSettings, externalPlatforms, syncTasks };
 }
 
 export async function GET() {
@@ -175,12 +228,14 @@ export async function POST(request: Request) {
 
   try {
     if (kind === "source") return Response.json(await upsertSource(body));
-    if (kind === "category") return Response.json(await upsertCategory(body));
-    if (kind === "item") return Response.json(await upsertItem(body));
-    if (kind === "group") return Response.json(await upsertGroup(body));
-    if (kind === "option") return Response.json(await upsertOption(body));
+    if (kind === "category") return Response.json(await upsertCategory(body, session.id));
+    if (kind === "item") return Response.json(await upsertItem(body, session.id));
+    if (kind === "group") return Response.json(await upsertGroup(body, session.id));
+    if (kind === "option") return Response.json(await upsertOption(body, session.id));
     if (kind === "storeSetting") return Response.json(await upsertStoreSetting(body, session.id));
-    if (kind === "sortOrder") return Response.json(await updateSortOrder(body));
+    if (kind === "sortOrder") return Response.json(await updateSortOrder(body, session.id));
+    if (kind === "externalPlatform") return Response.json(await upsertExternalPlatform(body));
+    if (kind === "completeSyncTask") return Response.json(await completeSyncTask(body, session.id));
     return Response.json({ error: "保存対象が不正です。" }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });
@@ -198,14 +253,168 @@ export async function DELETE(request: Request) {
   if (!id) return Response.json({ error: "IDが必要です。" }, { status: 400 });
 
   if (body.kind === "source") await sql`delete from menu_sources where id = ${id}`;
-  else if (body.kind === "category") await deleteCategory(id);
-  else if (body.kind === "item") await sql`delete from menu_catalog_items where id = ${id}`;
-  else if (body.kind === "group") await sql`delete from menu_option_groups where id = ${id}`;
-  else if (body.kind === "option") await sql`delete from menu_options where id = ${id}`;
+  else if (body.kind === "category") await deleteCategory(id, session.id);
+  else if (body.kind === "item") await deleteItem(id, session.id);
+  else if (body.kind === "group") await deleteGroup(id, session.id);
+  else if (body.kind === "option") await deleteOption(id, session.id);
   else if (body.kind === "storeSetting") await sql`delete from menu_store_settings where id = ${id}`;
   else return Response.json({ error: "削除対象が不正です。" }, { status: 400 });
 
   return Response.json({ ok: true });
+}
+
+async function ensureDefaultExternalPlatforms(brandIds: string[]) {
+  for (const brandId of brandIds) {
+    for (const platform of defaultExternalPlatforms) {
+      await sql`
+        insert into menu_external_platforms (brand_id, platform_key, name, is_active, updated_at)
+        values (${brandId}, ${platform.key}, ${platform.name}, true, now())
+        on conflict (
+          brand_id,
+          (coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid)),
+          platform_key
+        )
+        do nothing
+      `;
+    }
+  }
+}
+
+async function recordMenuChangeSyncTasks(input: {
+  brandId: string;
+  storeId?: string | null;
+  targetType: string;
+  targetId?: string | null;
+  targetLabel: string;
+  changeKind: string;
+  changeSummary: string;
+  employeeId: string;
+}) {
+  const platforms = await sql`
+    select id::text
+    from menu_external_platforms
+    where brand_id = ${input.brandId}
+      and is_active = true
+      and (${input.storeId || null}::uuid is null or store_id = ${input.storeId || null})
+      and (${input.storeId || null}::uuid is not null or store_id is null)
+  `;
+
+  for (const platform of platforms) {
+    await sql`
+      insert into menu_change_sync_tasks (
+        brand_id,
+        store_id,
+        external_platform_id,
+        target_type,
+        target_id,
+        target_label,
+        change_kind,
+        change_summary,
+        created_by,
+        updated_at
+      )
+      values (
+        ${input.brandId},
+        ${input.storeId || null},
+        ${platform.id},
+        ${input.targetType},
+        ${input.targetId || null},
+        ${input.targetLabel},
+        ${input.changeKind},
+        ${input.changeSummary},
+        ${input.employeeId},
+        now()
+      )
+      on conflict (
+        external_platform_id,
+        target_type,
+        (coalesce(target_id, '00000000-0000-0000-0000-000000000000'::uuid)),
+        change_kind
+      )
+      where status = 'pending'
+      do update set
+        target_label = excluded.target_label,
+        change_summary = excluded.change_summary,
+        created_by = excluded.created_by,
+        created_at = now(),
+        updated_at = now()
+    `;
+  }
+}
+
+async function upsertExternalPlatform(body: Record<string, unknown>) {
+  const id = cleanOptionalId(body.id);
+  const brandId = cleanOptionalId(body.brandId);
+  const platformKey = String(body.platformKey ?? "").trim();
+  const name = String(body.name ?? "").trim();
+  if (!brandId || !platformKey || !name) throw new Error("ブランド、プラットフォームキー、名称を入力してください。");
+
+  const rows = id
+    ? await sql`
+        update menu_external_platforms
+        set
+          brand_id = ${brandId},
+          store_id = ${cleanOptionalId(body.storeId)},
+          platform_key = ${platformKey},
+          name = ${name},
+          management_url = ${String(body.managementUrl ?? "").trim()},
+          is_active = ${body.isActive !== false},
+          updated_at = now()
+        where id = ${id}
+        returning id::text
+      `
+    : await sql`
+        insert into menu_external_platforms (
+          brand_id,
+          store_id,
+          platform_key,
+          name,
+          management_url,
+          is_active,
+          updated_at
+        )
+        values (
+          ${brandId},
+          ${cleanOptionalId(body.storeId)},
+          ${platformKey},
+          ${name},
+          ${String(body.managementUrl ?? "").trim()},
+          ${body.isActive !== false},
+          now()
+        )
+        on conflict (
+          brand_id,
+          (coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid)),
+          platform_key
+        )
+        do update set
+          name = excluded.name,
+          management_url = excluded.management_url,
+          is_active = excluded.is_active,
+          updated_at = now()
+        returning id::text
+      `;
+
+  return { ok: true, id: rows[0]?.id };
+}
+
+async function completeSyncTask(body: Record<string, unknown>, employeeId: string) {
+  const id = cleanOptionalId(body.id);
+  if (!id) throw new Error("同期履歴を選択してください。");
+
+  await sql`
+    update menu_change_sync_tasks
+    set
+      status = 'completed',
+      completed_by = ${employeeId},
+      completed_at = now(),
+      completion_note = ${String(body.completionNote ?? "").trim()},
+      updated_at = now()
+    where id = ${id}
+      and status = 'pending'
+  `;
+
+  return { ok: true, id };
 }
 
 async function upsertStoreSetting(body: Record<string, unknown>, employeeId: string) {
@@ -262,7 +471,7 @@ async function upsertStoreSetting(body: Record<string, unknown>, employeeId: str
   return { ok: true, id: rows[0]?.id };
 }
 
-async function updateSortOrder(body: Record<string, unknown>) {
+async function updateSortOrder(body: Record<string, unknown>, employeeId: string) {
   const brandId = cleanOptionalId(body.brandId);
   const storeId = cleanOptionalId(body.storeId);
   const categoryNames = Array.isArray(body.categoryNames) ? body.categoryNames.map((value) => String(value).trim()).filter(Boolean) : [];
@@ -295,6 +504,15 @@ async function updateSortOrder(body: Record<string, unknown>) {
         `;
       }
     }
+    await recordMenuChangeSyncTasks({
+      brandId,
+      storeId,
+      targetType: "sort_order",
+      targetLabel: "分類順",
+      changeKind: "sort",
+      changeSummary: "分類の表示順を変更しました。外部プラットフォーム側の分類順も確認してください。",
+      employeeId
+    });
     return { ok: true };
   }
 
@@ -310,13 +528,22 @@ async function updateSortOrder(body: Record<string, unknown>) {
           and (${categoryName} = '' or coalesce(nullif(category, ''), '未分類') = ${categoryName})
       `;
     }
+    await recordMenuChangeSyncTasks({
+      brandId,
+      storeId,
+      targetType: "sort_order",
+      targetLabel: categoryName || "商品順",
+      changeKind: "sort",
+      changeSummary: `${categoryName || "商品"}の表示順を変更しました。外部プラットフォーム側の商品順も確認してください。`,
+      employeeId
+    });
     return { ok: true };
   }
 
   throw new Error("並び替え対象がありません。");
 }
 
-async function upsertCategory(body: Record<string, unknown>) {
+async function upsertCategory(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const brandId = cleanOptionalId(body.brandId);
   const storeId = cleanOptionalId(body.storeId);
@@ -397,10 +624,23 @@ async function upsertCategory(body: Record<string, unknown>) {
     `;
   }
 
+  await recordMenuChangeSyncTasks({
+    brandId,
+    storeId,
+    targetType: "category",
+    targetId: rows[0]?.id,
+    targetLabel: name,
+    changeKind: targetId ? "update" : "create",
+    changeSummary: targetId
+      ? `分類「${previousName || name}」を「${name}」へ更新しました。`
+      : `分類「${name}」を追加しました。`,
+    employeeId
+  });
+
   return { ok: true, id: rows[0]?.id };
 }
 
-async function deleteCategory(id: string) {
+async function deleteCategory(id: string, employeeId: string) {
   const rows = await sql`
     select brand_id::text as "brandId", coalesce(store_id::text, '') as "storeId", name
     from menu_categories
@@ -420,6 +660,86 @@ async function deleteCategory(id: string) {
       and coalesce(nullif(category, ''), '未分類') = ${category.name}
   `;
   await sql`delete from menu_categories where id = ${id}`;
+  await recordMenuChangeSyncTasks({
+    brandId: category.brandId,
+    storeId: category.storeId,
+    targetType: "category",
+    targetId: id,
+    targetLabel: category.name,
+    changeKind: "delete",
+    changeSummary: `分類「${category.name}」を削除しました。外部プラットフォーム側でも削除または非表示にしてください。`,
+    employeeId
+  });
+}
+
+async function deleteItem(id: string, employeeId: string) {
+  const rows = await sql`
+    select brand_id::text as "brandId", coalesce(store_id::text, '') as "storeId", name
+    from menu_catalog_items
+    where id = ${id}
+    limit 1
+  `;
+  const item = rows[0];
+  if (!item) return;
+
+  await sql`delete from menu_catalog_items where id = ${id}`;
+  await recordMenuChangeSyncTasks({
+    brandId: item.brandId,
+    storeId: item.storeId,
+    targetType: "item",
+    targetId: id,
+    targetLabel: item.name,
+    changeKind: "delete",
+    changeSummary: `商品「${item.name}」を削除しました。外部プラットフォーム側でも削除または非表示にしてください。`,
+    employeeId
+  });
+}
+
+async function deleteGroup(id: string, employeeId: string) {
+  const rows = await sql`
+    select brand_id::text as "brandId", name
+    from menu_option_groups
+    where id = ${id}
+    limit 1
+  `;
+  const group = rows[0];
+  if (!group) return;
+
+  await sql`delete from menu_option_groups where id = ${id}`;
+  await recordMenuChangeSyncTasks({
+    brandId: group.brandId,
+    targetType: "option_group",
+    targetId: id,
+    targetLabel: group.name,
+    changeKind: "delete",
+    changeSummary: `選択グループ「${group.name}」を削除しました。外部プラットフォーム側のオプション設定を確認してください。`,
+    employeeId
+  });
+}
+
+async function deleteOption(id: string, employeeId: string) {
+  const rows = await sql`
+    select
+      menu_option_groups.brand_id::text as "brandId",
+      menu_options.name
+    from menu_options
+    join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+    where menu_options.id = ${id}
+    limit 1
+  `;
+  const option = rows[0];
+  if (!option) return;
+
+  await sql`delete from menu_options where id = ${id}`;
+  await recordMenuChangeSyncTasks({
+    brandId: option.brandId,
+    targetType: "option",
+    targetId: id,
+    targetLabel: option.name,
+    changeKind: "delete",
+    changeSummary: `選択肢「${option.name}」を削除しました。外部プラットフォーム側でも削除または非表示にしてください。`,
+    employeeId
+  });
 }
 
 async function upsertSource(body: Record<string, unknown>) {
@@ -459,12 +779,21 @@ async function upsertSource(body: Record<string, unknown>) {
   return { ok: true, id: rows[0]?.id };
 }
 
-async function upsertItem(body: Record<string, unknown>) {
+async function upsertItem(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const brandId = cleanOptionalId(body.brandId);
   const name = String(body.name ?? "").trim();
   if (!brandId || !name) throw new Error("ブランドとメニュー名を入力してください。");
   const variableSchema = JSON.stringify(parseJsonObject(body.variableSchema));
+  const previousRows = id
+    ? await sql`
+        select name, base_price::float as "basePrice", is_active as "isActive"
+        from menu_catalog_items
+        where id = ${id}
+        limit 1
+      `
+    : [];
+  const previous = previousRows[0];
 
   const rows = id
     ? await sql`
@@ -523,10 +852,23 @@ async function upsertItem(body: Record<string, unknown>) {
         returning id::text
       `;
 
+  await recordMenuChangeSyncTasks({
+    brandId,
+    storeId: cleanOptionalId(body.storeId),
+    targetType: "item",
+    targetId: rows[0]?.id,
+    targetLabel: name,
+    changeKind: id ? "update" : "create",
+    changeSummary: id
+      ? `商品「${String(previous?.name ?? name)}」を更新しました。価格、説明、画像、公開状態、選択可否を確認してください。`
+      : `商品「${name}」を追加しました。外部プラットフォーム側にも追加してください。`,
+    employeeId
+  });
+
   return { ok: true, id: rows[0]?.id };
 }
 
-async function upsertGroup(body: Record<string, unknown>) {
+async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const brandId = cleanOptionalId(body.brandId);
   const groupKey = String(body.groupKey ?? "").trim();
@@ -581,15 +923,33 @@ async function upsertGroup(body: Record<string, unknown>) {
         returning id::text
       `;
 
+  await recordMenuChangeSyncTasks({
+    brandId,
+    targetType: "option_group",
+    targetId: rows[0]?.id,
+    targetLabel: name,
+    changeKind: id ? "update" : "create",
+    changeSummary: `選択グループ「${name}」を${id ? "更新" : "追加"}しました。外部プラットフォーム側のオプション設定を確認してください。`,
+    employeeId
+  });
+
   return { ok: true, id: rows[0]?.id };
 }
 
-async function upsertOption(body: Record<string, unknown>) {
+async function upsertOption(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const optionGroupId = cleanOptionalId(body.optionGroupId);
   const optionKey = String(body.optionKey ?? "").trim();
   const name = String(body.name ?? "").trim();
   if (!optionGroupId || !optionKey || !name) throw new Error("グループ、キー、名称を入力してください。");
+  const groupRows = await sql`
+    select brand_id::text as "brandId", name
+    from menu_option_groups
+    where id = ${optionGroupId}
+    limit 1
+  `;
+  const group = groupRows[0];
+  if (!group) throw new Error("選択グループが見つかりません。");
 
   const rows = id
     ? await sql`
@@ -632,6 +992,16 @@ async function upsertOption(body: Record<string, unknown>) {
         )
         returning id::text
       `;
+
+  await recordMenuChangeSyncTasks({
+    brandId: group.brandId,
+    targetType: "option",
+    targetId: rows[0]?.id,
+    targetLabel: name,
+    changeKind: id ? "update" : "create",
+    changeSummary: `選択肢「${name}」を${id ? "更新" : "追加"}しました。外部プラットフォーム側の価格差額と公開状態を確認してください。`,
+    employeeId
+  });
 
   return { ok: true, id: rows[0]?.id };
 }

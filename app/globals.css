@@ -3211,6 +3211,101 @@ body :where(
   box-shadow: none;
 }
 
+.menu-sync-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.menu-sync-count {
+  border-radius: 999px;
+  background: #eef4f1;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.menu-sync-count.is-pending {
+  background: #fff4d8;
+  color: #8a5a00;
+}
+
+.menu-platform-list,
+.menu-sync-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-platform-row,
+.menu-sync-task-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.22fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.menu-sync-task-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.35fr) auto;
+}
+
+.menu-sync-task-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menu-sync-task-row strong,
+.menu-sync-task-row span,
+.menu-sync-task-row small,
+.menu-sync-history p span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-sync-task-row span,
+.menu-sync-task-row small,
+.menu-sync-history p span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.menu-sync-history {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+
+.menu-sync-history summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.menu-sync-history div {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.menu-sync-history p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0;
+}
+
 .category-edit-card {
   border-color: rgba(30, 107, 186, 0.2);
   background: #fbfdff;
@@ -3873,11 +3968,12 @@ body :where(
   background: #eef2f6;
 }
 
-.store-workbench-topbar {
-  display: flex;
+.store-workbench-topbar,
+.procedure-reader-topbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px 14px;
   min-height: 62px;
   margin-bottom: 18px;
 }
@@ -3900,16 +3996,14 @@ body :where(
 }
 
 .store-nav-cluster {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
+  display: contents;
 }
 
 .store-live-clock {
+  grid-column: 2;
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 7px;
   min-height: 48px;
   min-width: 178px;
@@ -3939,6 +4033,8 @@ body :where(
 }
 
 .store-user-tools {
+  grid-column: 3;
+  justify-self: end;
   min-width: 0;
 }
 
@@ -4000,19 +4096,24 @@ body :where(
 }
 
 .store-nav-tabs {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 5px;
   background: white;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
 }
 
 .store-nav-tabs a {
+  flex: 0 0 auto;
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -5829,15 +5930,15 @@ body :where(
 
 .procedure-reader-topbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 1fr) auto auto;
   align-items: center;
-  gap: 16px;
+  gap: 10px 14px;
   min-height: 62px;
   margin-bottom: 18px;
 }
 
 .procedure-reader-topbar .store-nav-tabs {
-  justify-self: end;
+  justify-self: stretch;
 }
 
 .procedure-reader-home {
@@ -11793,26 +11894,12 @@ body :where(
 }
 
 @media (max-width: 1100px) {
-  .store-workbench-topbar {
-    align-items: center;
-  }
-
-  .store-workbench-topbar .brand-block {
-    flex: 1 1 180px;
-  }
-
-  .store-nav-cluster {
-    flex: 0 1 auto;
-  }
-
   .store-nav-tabs {
-    display: none;
+    display: flex;
   }
 
   .store-nav-menu {
-    position: relative;
-    flex: 0 0 132px;
-    display: block;
+    display: none;
   }
 
   .store-nav-menu summary {
@@ -11948,6 +12035,8 @@ body :where(
   .menu-option-editor,
   .menu-choice-editor,
   .menu-option-group-row,
+  .menu-platform-row,
+  .menu-sync-task-row,
   .settings-grid {
     grid-template-columns: 1fr;
   }
