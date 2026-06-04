@@ -1146,9 +1146,35 @@ body :where(
     padding: 0 8px;
   }
 
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-panel {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    align-items: stretch;
+    justify-items: stretch;
+    width: min(100%, 184px);
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .account-menu {
+    min-width: 0;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .notification-menu,
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .notification-placeholder {
+    width: 48px;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .notification-menu summary,
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .notification-placeholder {
+    width: 48px;
+    min-height: 42px;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker {
+    grid-column: 1 / -1;
+  }
+
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker,
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
-    width: 128px;
+    width: 100%;
   }
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker select {
