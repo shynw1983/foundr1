@@ -910,14 +910,17 @@ body :where(
 }
 
 .nav-item:hover,
-.nav-item.is-active,
-.nav-item.is-open {
+.nav-item.is-active {
   background: rgba(255, 255, 255, 0.09);
 }
 
-.nav-item.is-active,
-.nav-item.is-open {
+.nav-item.is-active {
   color: white;
+}
+
+.nav-item.is-open:not(.is-active) {
+  color: #dce5ee;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .nav-item.is-home,
@@ -1267,7 +1270,11 @@ body :where(
     line-height: 1;
   }
 
-  .nav-item.is-open {
+  .nav-item.is-open:not(.is-active) {
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .nav-item.is-open.is-active {
     background: rgba(255, 255, 255, 0.14);
   }
 
