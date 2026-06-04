@@ -269,6 +269,7 @@ export default function StorePosPage() {
   const [cashClosingNote, setCashClosingNote] = useState("");
   const [cashClosingResponsibleEmployeeId, setCashClosingResponsibleEmployeeId] = useState("");
   const [cashSaving, setCashSaving] = useState(false);
+  const [cashDialog, setCashDialog] = useState<"open" | "movement" | "close" | null>(null);
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
@@ -383,6 +384,7 @@ export default function StorePosPage() {
     setCashCountedBreakdown(createCashBreakdownInput());
     setCashClosingNote("");
     setCashClosingResponsibleEmployeeId("");
+    setCashDialog(null);
     void load(storeId);
   }
 
@@ -591,15 +593,18 @@ export default function StorePosPage() {
       if (action === "open") {
         setCashOpeningBreakdown(createCashBreakdownInput());
         setCashOpeningNote("");
+        setCashDialog(null);
         setMessage("日次レジ締めを開始しました。");
       } else if (action === "movement") {
         setCashMovementAmount("");
         setCashMovementReason("");
+        setCashDialog(null);
         setMessage(cashMovementType === "cash_in" ? "入金を記録しました。" : "出金を記録しました。");
       } else {
         setCashCountedBreakdown(createCashBreakdownInput());
         setCashClosingNote("");
         setCashClosingResponsibleEmployeeId("");
+        setCashDialog(null);
         setMessage("日次レジ締めを締めました。");
       }
     } catch (error) {
@@ -648,165 +653,35 @@ export default function StorePosPage() {
 
       {message ? <div className="action-notice store-pos-notice">{message}</div> : null}
 
-      <section className="store-pos-cash-panel">
-        <div className="store-pos-cash-title">
-          <div>
-            <p className="eyebrow">Daily Cash</p>
-            <h3>日次レジ締め</h3>
-          </div>
-          <span>{reconciliation.businessDate || "-"}</span>
+      <section className={`store-pos-cash-strip ${reconciliation.activeSession ? "is-open" : "is-locked"}`}>
+        <div>
+          <span>レジ状態</span>
+          <strong>{reconciliation.activeSession ? "開店済み" : "未開店"}</strong>
+          <small>
+            {reconciliation.businessState
+              ? `${reconciliation.businessState.statusLabel} / 営業日 ${reconciliation.businessState.businessDate}`
+              : reconciliation.businessDate || "-"}
+          </small>
         </div>
-        {reconciliation.businessState ? (
-          <div className={`store-pos-business-state is-${reconciliation.businessState.tone}`}>
-            <div>
-              <span>営業日 {reconciliation.businessState.businessDate}</span>
-              <strong>{reconciliation.businessState.statusLabel}</strong>
-            </div>
-            <p>{reconciliation.businessState.openLabel} - {reconciliation.businessState.closeLabel}</p>
-            <small>{reconciliation.businessState.detailLabel}</small>
-          </div>
-        ) : null}
-
-        {reconciliation.activeSession ? (
-          <div className="store-pos-cash-active">
-            <div className="store-pos-cash-metrics">
-              <div>
-                <span>開始金額</span>
-                <strong>{formatYen(reconciliation.activeSession.openingAmount)}</strong>
-              </div>
-              <div>
-                <span>現金売上</span>
-                <strong>{formatYen(reconciliation.activeSession.cashSales)}</strong>
-              </div>
-              <div>
-                <span>入金 / 出金</span>
-                <strong>{formatYen(reconciliation.activeSession.cashIn)} / {formatYen(reconciliation.activeSession.cashOut)}</strong>
-              </div>
-              <div>
-                <span>システム上の現金</span>
-                <strong>{formatYen(reconciliation.activeSession.expectedCashAmount)}</strong>
-              </div>
-            </div>
-
-            <div className="store-pos-cash-actions">
-              <label>
-                <span>入出金</span>
-                <select value={cashMovementType} onChange={(event) => setCashMovementType(event.target.value)}>
-                  <option value="cash_out">出金</option>
-                  <option value="cash_in">入金</option>
-                </select>
-              </label>
-              <label>
-                <span>金額</span>
-                <input inputMode="numeric" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(event.target.value)} placeholder="0" />
-              </label>
-              <label>
-                <span>理由</span>
-                <input value={cashMovementReason} onChange={(event) => setCashMovementReason(event.target.value)} placeholder="例: 両替、備品購入" />
-              </label>
-              <button className="secondary-button" type="button" onClick={() => submitCashAction("movement")} disabled={cashSaving}>
-                記録
-              </button>
-            </div>
-
-            <div className="store-pos-cash-close">
-              <div className="store-pos-close-summary">
-                <span>閉店チェック</span>
-                <strong>システム上の現金 {formatYen(reconciliation.activeSession.expectedCashAmount)}</strong>
-                <small>
-                  {closingDifference === null
-                    ? "実際の現金を入力してください。"
-                    : `差額 ${formatYen(closingDifference)}`}
-                </small>
-              </div>
-              <div className="store-pos-denomination-panel">
-                <div className="store-pos-denomination-head">
-                  <span>実際の現金</span>
-                  <strong>{formatYen(countedBreakdownTotal)}</strong>
-                </div>
-                <div className="store-pos-denomination-grid">
-                  {yenDenominations.map((denomination) => (
-                    <label key={denomination}>
-                      <span>{formatDenominationLabel(denomination)}</span>
-                      <select
-                        value={cashCountedBreakdown[String(denomination)] ?? ""}
-                        onChange={(event) => updateCashBreakdown(setCashCountedBreakdown, denomination, event.target.value)}
-                      >
-                        {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <label>
-                <span>締め責任者</span>
-                <select value={cashClosingResponsibleEmployeeId} onChange={(event) => setCashClosingResponsibleEmployeeId(event.target.value)}>
-                  {reconciliation.activeCashResponsibleEmployees.length === 0 ? (
-                    <option value="">出勤中の従業員がいません</option>
-                  ) : (
-                    reconciliation.activeCashResponsibleEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>{employee.name}</option>
-                    ))
-                  )}
-                </select>
-              </label>
-              <label>
-                <span>差額理由</span>
-                <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder={closingDifference ? "差額がある場合は必須" : "任意"} />
-              </label>
-              <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving || !canCloseRegister}>
-                レジ締め
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="store-pos-cash-start">
-            <ReceiptText size={18} />
-            <div>
-              <strong>今日のレジ締めはまだ開始されていません。</strong>
-              <span>POS 会計を始める前に、開店前のレジ金額を確認してください。</span>
-            </div>
-            {reconciliation.previousClosedSession ? (
-              <div className={`store-pos-handover-summary ${hasOpeningHandoverDifference ? "is-warning" : ""}`}>
-                <span>前回閉店 {reconciliation.previousClosedSession.businessDate}</span>
-                <strong>{formatYen(reconciliation.previousClosedSession.countedCashAmount)}</strong>
-                <small>
-                  {hasOpeningHandoverDifference
-                    ? `引継ぎ差額 ${formatYen(openingHandoverDifference ?? 0)}`
-                    : "前回閉店金額と一致しています。"}
-                </small>
-              </div>
-            ) : null}
-            <div className="store-pos-denomination-panel">
-              <div className="store-pos-denomination-head">
-                <span>開始金額</span>
-                <strong>{formatYen(openingBreakdownTotal)}</strong>
-              </div>
-              <div className="store-pos-denomination-grid">
-                {yenDenominations.map((denomination) => (
-                  <label key={denomination}>
-                    <span>{formatDenominationLabel(denomination)}</span>
-                    <select
-                      value={cashOpeningBreakdown[String(denomination)] ?? ""}
-                      onChange={(event) => updateCashBreakdown(setCashOpeningBreakdown, denomination, event.target.value)}
-                    >
-                      {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
-                    </select>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {hasOpeningHandoverDifference ? (
-              <label className="store-pos-handover-note">
-                <span>引継ぎ差額理由</span>
-                <input value={cashOpeningNote} onChange={(event) => setCashOpeningNote(event.target.value)} placeholder="例: 両替済み、前日回収、確認差額" />
-              </label>
-            ) : null}
-            <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving || !canOpenRegister}>
-              開始
-            </button>
-          </div>
-        )}
+        <div>
+          <span>システム上の現金</span>
+          <strong>{reconciliation.activeSession ? formatYen(reconciliation.activeSession.expectedCashAmount) : "-"}</strong>
+          <small>
+            {reconciliation.activeSession
+              ? `開始 ${formatYen(reconciliation.activeSession.openingAmount)} / 現金売上 ${formatYen(reconciliation.activeSession.cashSales)}`
+              : "開店確認後に POS 会計を開始できます。"}
+          </small>
+        </div>
+        <div className="store-pos-cash-strip-actions">
+          {reconciliation.activeSession ? (
+            <>
+              <button className="secondary-button" type="button" onClick={() => setCashDialog("movement")}>入出金</button>
+              <button className="primary-button" type="button" onClick={() => setCashDialog("close")}>レジ締め</button>
+            </>
+          ) : (
+            <button className="primary-button" type="button" onClick={() => setCashDialog("open")}>開店確認</button>
+          )}
+        </div>
       </section>
 
       <section className="store-pos-layout">
@@ -959,6 +834,145 @@ export default function StorePosPage() {
           </button>
         </aside>
       </section>
+
+      {cashDialog ? (
+        <div className="store-pos-cash-overlay" role="dialog" aria-modal="true" aria-label="レジ操作">
+          <div className="store-pos-cash-dialog">
+            <div className="store-pos-cash-dialog-head">
+              <div>
+                <p className="eyebrow">Daily Cash</p>
+                <h3>{cashDialog === "open" ? "開店確認" : cashDialog === "movement" ? "入出金" : "レジ締め"}</h3>
+                <span>{reconciliation.businessState?.detailLabel ?? reconciliation.businessDate}</span>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setCashDialog(null)}>閉じる</button>
+            </div>
+
+            {cashDialog === "open" ? (
+              <div className="store-pos-cash-start">
+                <ReceiptText size={18} />
+                <div>
+                  <strong>開店前のレジ金額を確認してください。</strong>
+                  <span>面額ごとの枚数を選ぶと開始金額を自動計算します。</span>
+                </div>
+                {reconciliation.previousClosedSession ? (
+                  <div className={`store-pos-handover-summary ${hasOpeningHandoverDifference ? "is-warning" : ""}`}>
+                    <span>前回閉店 {reconciliation.previousClosedSession.businessDate}</span>
+                    <strong>{formatYen(reconciliation.previousClosedSession.countedCashAmount)}</strong>
+                    <small>
+                      {hasOpeningHandoverDifference
+                        ? `引継ぎ差額 ${formatYen(openingHandoverDifference ?? 0)}`
+                        : "前回閉店金額と一致しています。"}
+                    </small>
+                  </div>
+                ) : null}
+                <div className="store-pos-denomination-panel">
+                  <div className="store-pos-denomination-head">
+                    <span>開始金額</span>
+                    <strong>{formatYen(openingBreakdownTotal)}</strong>
+                  </div>
+                  <div className="store-pos-denomination-grid">
+                    {yenDenominations.map((denomination) => (
+                      <label key={denomination}>
+                        <span>{formatDenominationLabel(denomination)}</span>
+                        <select
+                          value={cashOpeningBreakdown[String(denomination)] ?? ""}
+                          onChange={(event) => updateCashBreakdown(setCashOpeningBreakdown, denomination, event.target.value)}
+                        >
+                          {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {hasOpeningHandoverDifference ? (
+                  <label className="store-pos-handover-note">
+                    <span>引継ぎ差額理由</span>
+                    <input value={cashOpeningNote} onChange={(event) => setCashOpeningNote(event.target.value)} placeholder="例: 両替済み、前日回収、確認差額" />
+                  </label>
+                ) : null}
+                <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving || !canOpenRegister}>
+                  開始
+                </button>
+              </div>
+            ) : null}
+
+            {cashDialog === "movement" ? (
+              <div className="store-pos-cash-actions">
+                <label>
+                  <span>入出金</span>
+                  <select value={cashMovementType} onChange={(event) => setCashMovementType(event.target.value)}>
+                    <option value="cash_out">出金</option>
+                    <option value="cash_in">入金</option>
+                  </select>
+                </label>
+                <label>
+                  <span>金額</span>
+                  <input inputMode="numeric" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(event.target.value)} placeholder="0" />
+                </label>
+                <label>
+                  <span>理由</span>
+                  <input value={cashMovementReason} onChange={(event) => setCashMovementReason(event.target.value)} placeholder="例: 両替、備品購入" />
+                </label>
+                <button className="secondary-button" type="button" onClick={() => submitCashAction("movement")} disabled={cashSaving}>
+                  記録
+                </button>
+              </div>
+            ) : null}
+
+            {cashDialog === "close" && reconciliation.activeSession ? (
+              <div className="store-pos-cash-close">
+                <div className="store-pos-close-summary">
+                  <span>閉店チェック</span>
+                  <strong>システム上の現金 {formatYen(reconciliation.activeSession.expectedCashAmount)}</strong>
+                  <small>
+                    {closingDifference === null
+                      ? "実際の現金を入力してください。"
+                      : `差額 ${formatYen(closingDifference)}`}
+                  </small>
+                </div>
+                <div className="store-pos-denomination-panel">
+                  <div className="store-pos-denomination-head">
+                    <span>実際の現金</span>
+                    <strong>{formatYen(countedBreakdownTotal)}</strong>
+                  </div>
+                  <div className="store-pos-denomination-grid">
+                    {yenDenominations.map((denomination) => (
+                      <label key={denomination}>
+                        <span>{formatDenominationLabel(denomination)}</span>
+                        <select
+                          value={cashCountedBreakdown[String(denomination)] ?? ""}
+                          onChange={(event) => updateCashBreakdown(setCashCountedBreakdown, denomination, event.target.value)}
+                        >
+                          {denominationCountOptions.map((count) => <option key={count.value || "zero"} value={count.value}>{count.label}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <label>
+                  <span>締め責任者</span>
+                  <select value={cashClosingResponsibleEmployeeId} onChange={(event) => setCashClosingResponsibleEmployeeId(event.target.value)}>
+                    {reconciliation.activeCashResponsibleEmployees.length === 0 ? (
+                      <option value="">出勤中の従業員がいません</option>
+                    ) : (
+                      reconciliation.activeCashResponsibleEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>{employee.name}</option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <label>
+                  <span>差額理由</span>
+                  <input value={cashClosingNote} onChange={(event) => setCashClosingNote(event.target.value)} placeholder={closingDifference ? "差額がある場合は必須" : "任意"} />
+                </label>
+                <button className="primary-button" type="button" onClick={() => submitCashAction("close")} disabled={cashSaving || !canCloseRegister}>
+                  レジ締め
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {configuringItem ? (
         <div className="store-pos-option-overlay" role="dialog" aria-modal="true" aria-label="商品オプション">

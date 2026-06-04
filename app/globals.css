@@ -5293,6 +5293,106 @@ body :where(
   box-shadow: var(--shadow-soft);
 }
 
+.store-pos-cash-strip {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.85fr) minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.store-pos-cash-strip.is-open {
+  border-color: rgba(31, 111, 85, 0.24);
+}
+
+.store-pos-cash-strip.is-locked {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: #fffaf4;
+}
+
+.store-pos-cash-strip > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-pos-cash-strip span,
+.store-pos-cash-strip small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-cash-strip strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-cash-strip-actions {
+  display: flex !important;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.store-pos-cash-strip-actions button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.store-pos-cash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.store-pos-cash-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(960px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.store-pos-cash-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-pos-cash-dialog-head h3,
+.store-pos-cash-dialog-head p {
+  margin: 0;
+}
+
+.store-pos-cash-dialog-head span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .store-pos-cash-title,
 .store-pos-cash-start,
 .store-pos-cash-actions,
@@ -16108,6 +16208,18 @@ body :where(
   .store-pos-menu-panel,
   .store-pos-filter-panel {
     grid-template-columns: 1fr;
+  }
+
+  .store-pos-cash-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .store-pos-cash-strip-actions {
+    justify-content: stretch;
+  }
+
+  .store-pos-cash-strip-actions button {
+    flex: 1 1 0;
   }
 
   .store-pos-filter-panel {
