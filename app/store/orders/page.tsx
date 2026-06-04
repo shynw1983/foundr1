@@ -66,16 +66,16 @@ const statusLabels: Record<string, string> = {
   completed: "完了",
   cancelled: "キャンセル",
   refund_pending: "返金処理中",
-  pending_payment: "決済待ち",
+  pending_payment: "注文待ち",
   checkout_failed: "決済作成失敗",
   payment_failed: "決済失敗"
 };
 
 const paymentLabels: Record<string, string> = {
   pending: "未決済",
-  paid: "支払済み",
-  failed: "失敗",
-  canceled: "キャンセル",
+  paid: "決済済み",
+  failed: "未決済",
+  canceled: "未決済",
   refunded: "返金済み"
 };
 
@@ -93,6 +93,12 @@ function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: 
 
 function splitLines(value = "") {
   return String(value).split(/\n+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function getPaymentPillClass(paymentStatus: string) {
+  if (paymentStatus === "paid") return "status-pill is-payment-paid";
+  if (paymentStatus === "refunded") return "status-pill is-muted";
+  return "status-pill is-payment-unpaid";
 }
 
 export default function StoreOrdersPage() {
@@ -595,7 +601,7 @@ export default function StoreOrdersPage() {
             />
             <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="表示状態">
               <option value="active">対応中</option>
-              <option value="pending_payment">決済待ち</option>
+              <option value="pending_payment">未決済</option>
               <option value="new">新規</option>
               <option value="preparing">制作中</option>
               <option value="ready">受け取り可</option>
@@ -658,7 +664,9 @@ export default function StoreOrdersPage() {
                 </div>
                 <div className="store-order-status-stack">
                   <span className="status-pill is-active">{statusLabels[selectedOrder.status] ?? selectedOrder.status}</span>
-                  <span className="status-pill">{paymentLabels[selectedOrder.paymentStatus] ?? selectedOrder.paymentStatus}</span>
+                  <span className={getPaymentPillClass(selectedOrder.paymentStatus)}>
+                    {paymentLabels[selectedOrder.paymentStatus] ?? (selectedOrder.paymentStatus === "paid" ? "決済済み" : "未決済")}
+                  </span>
                 </div>
               </div>
 
