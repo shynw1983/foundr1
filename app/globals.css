@@ -12274,7 +12274,17 @@ body :where(
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+  }
+
+  .store-workbench-topbar .brand-block {
+    overflow: hidden;
+  }
+
+  .store-workbench-topbar .brand-block h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .store-nav-cluster {
@@ -12286,11 +12296,11 @@ body :where(
     grid-row: 2;
     justify-content: center;
     justify-self: stretch;
-    gap: 5px;
+    gap: 4px;
     width: auto;
     min-width: 0;
     min-height: 46px;
-    padding: 0 9px;
+    padding: 0 7px;
   }
 
   .store-live-clock svg {
@@ -12308,8 +12318,8 @@ body :where(
   }
 
   .store-live-clock strong {
-    min-width: 58px;
-    font-size: 18px;
+    min-width: 42px;
+    font-size: 17px;
   }
 
   .store-user-tools {
@@ -12321,21 +12331,22 @@ body :where(
 
   .store-user-tools .user-panel {
     display: grid;
-    grid-template-columns: 46px 46px minmax(94px, 130px);
-    width: auto;
+    grid-template-columns: 44px 44px minmax(104px, 1fr);
+    gap: 6px;
+    width: min(100%, 206px);
     max-width: 100%;
   }
 
   .store-user-tools .user-badge {
     min-width: 0;
-    width: 46px;
-    min-height: 46px;
+    width: 44px;
+    min-height: 44px;
   }
 
   .store-user-tools .notification-menu summary,
   .store-user-tools .notification-placeholder {
-    width: 46px;
-    min-height: 46px;
+    width: 44px;
+    min-height: 44px;
   }
 
   .store-user-tools .os-language-picker {
@@ -12345,9 +12356,9 @@ body :where(
 
   .store-user-tools .os-language-picker select {
     width: 100%;
-    min-height: 46px;
-    padding-right: 28px;
-    padding-left: 10px;
+    min-height: 44px;
+    padding-right: 24px;
+    padding-left: 8px;
   }
 
   .store-user-tools .account-menu-panel,
@@ -12382,6 +12393,11 @@ body :where(
     grid-row: 1;
     justify-self: end;
     display: block;
+  }
+
+  .store-nav-menu summary {
+    min-width: 118px;
+    padding-inline: 10px;
   }
 
   .procedure-reader-layout {
