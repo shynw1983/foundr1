@@ -140,10 +140,18 @@ export default function StoresPage() {
   const [editingWeatherLatitude, setEditingWeatherLatitude] = useState("");
   const [editingWeatherLongitude, setEditingWeatherLongitude] = useState("");
   const [editingAttendanceLocationEnabled, setEditingAttendanceLocationEnabled] = useState(false);
+  const [newAttendanceAddress, setNewAttendanceAddress] = useState("");
+  const [newAttendanceLatitude, setNewAttendanceLatitude] = useState("");
+  const [newAttendanceLongitude, setNewAttendanceLongitude] = useState("");
+  const [newGeocodeMessage, setNewGeocodeMessage] = useState("");
+  const [isNewGeocoding, setIsNewGeocoding] = useState(false);
+  const [editingAttendanceAddress, setEditingAttendanceAddress] = useState("");
   const [editingAttendanceLatitude, setEditingAttendanceLatitude] = useState("");
   const [editingAttendanceLongitude, setEditingAttendanceLongitude] = useState("");
   const [editingAttendanceRadiusMeters, setEditingAttendanceRadiusMeters] = useState("100");
   const [editingAttendanceAccuracyThresholdMeters, setEditingAttendanceAccuracyThresholdMeters] = useState("100");
+  const [editingGeocodeMessage, setEditingGeocodeMessage] = useState("");
+  const [isEditingGeocoding, setIsEditingGeocoding] = useState(false);
   const [editingStoreTab, setEditingStoreTab] = useState<StoreEditTab>("basic");
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
@@ -173,6 +181,52 @@ export default function StoresPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  async function geocodeAddress(address: string) {
+    const trimmedAddress = address.trim();
+    if (!trimmedAddress) throw new Error("住所を入力してください。");
+
+    const params = new URLSearchParams({ address: trimmedAddress });
+    const response = await fetch(`/api/stores/geocode?${params.toString()}`, { cache: "no-store" });
+    const body = await response.json().catch(() => ({})) as { error?: string; latitude?: number; longitude?: number; label?: string };
+    if (!response.ok || typeof body.latitude !== "number" || typeof body.longitude !== "number") {
+      throw new Error(body.error ?? "住所から座標を取得できませんでした。");
+    }
+    return body;
+  }
+
+  async function applyNewAttendanceGeocode() {
+    setIsNewGeocoding(true);
+    setNewGeocodeMessage("");
+    try {
+      const result = await geocodeAddress(newAttendanceAddress);
+      setNewAttendanceLatitude(String(result.latitude));
+      setNewAttendanceLongitude(String(result.longitude));
+      setNewAttendanceAddress(result.label ?? newAttendanceAddress);
+      setNewGeocodeMessage("座標を入力しました。");
+    } catch (error) {
+      setNewGeocodeMessage(error instanceof Error ? error.message : "住所から座標を取得できませんでした。");
+    } finally {
+      setIsNewGeocoding(false);
+    }
+  }
+
+  async function applyEditingAttendanceGeocode() {
+    setIsEditingGeocoding(true);
+    setEditingGeocodeMessage("");
+    try {
+      const result = await geocodeAddress(editingAttendanceAddress || editingCompanyAddress || editingStoreName);
+      setEditingAttendanceLatitude(String(result.latitude));
+      setEditingAttendanceLongitude(String(result.longitude));
+      setEditingAttendanceAddress(result.label ?? editingAttendanceAddress);
+      setEditingWeatherLocationName((current) => current || result.label || editingAttendanceAddress);
+      setEditingGeocodeMessage("座標を入力しました。");
+    } catch (error) {
+      setEditingGeocodeMessage(error instanceof Error ? error.message : "住所から座標を取得できませんでした。");
+    } finally {
+      setIsEditingGeocoding(false);
+    }
+  }
 
   async function createStore(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -238,6 +292,10 @@ export default function StoresPage() {
     setSelectedStoreBrands([]);
     setSelectedSalesSourceKeys([salesSourceKey("smaregi")]);
     setNewBusinessHours(defaultBusinessHours);
+    setNewAttendanceAddress("");
+    setNewAttendanceLatitude("");
+    setNewAttendanceLongitude("");
+    setNewGeocodeMessage("");
     form.reset();
     void loadData();
     showNotice("店舗を追加しました。");
@@ -439,10 +497,12 @@ export default function StoresPage() {
     setEditingWeatherLatitude("");
     setEditingWeatherLongitude("");
     setEditingAttendanceLocationEnabled(false);
+    setEditingAttendanceAddress("");
     setEditingAttendanceLatitude("");
     setEditingAttendanceLongitude("");
     setEditingAttendanceRadiusMeters("100");
     setEditingAttendanceAccuracyThresholdMeters("100");
+    setEditingGeocodeMessage("");
     setEditingStoreTab("basic");
     void loadData();
     showNotice("店舗を更新しました。");
@@ -464,10 +524,12 @@ export default function StoresPage() {
     setEditingWeatherLatitude(store.weatherLatitude === null || store.weatherLatitude === undefined ? "" : String(store.weatherLatitude));
     setEditingWeatherLongitude(store.weatherLongitude === null || store.weatherLongitude === undefined ? "" : String(store.weatherLongitude));
     setEditingAttendanceLocationEnabled(store.attendanceLocationEnabled === true);
+    setEditingAttendanceAddress(store.companyAddress || store.weatherLocationName || store.name);
     setEditingAttendanceLatitude(store.attendanceLatitude === null || store.attendanceLatitude === undefined ? "" : String(store.attendanceLatitude));
     setEditingAttendanceLongitude(store.attendanceLongitude === null || store.attendanceLongitude === undefined ? "" : String(store.attendanceLongitude));
     setEditingAttendanceRadiusMeters(String(store.attendanceRadiusMeters ?? 100));
     setEditingAttendanceAccuracyThresholdMeters(String(store.attendanceAccuracyThresholdMeters ?? 100));
+    setEditingGeocodeMessage("");
     setEditingStoreTab("basic");
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
@@ -638,13 +700,25 @@ export default function StoresPage() {
                   <input type="checkbox" name="attendanceLocationEnabled" />
                   位置範囲内のみ打刻を許可
                 </label>
+                <label className="store-geocode-address">
+                  <span>住所から座標を取得</span>
+                  <input
+                    value={newAttendanceAddress}
+                    onChange={(event) => setNewAttendanceAddress(event.target.value)}
+                    placeholder="例: 福岡県福岡市中央区..."
+                  />
+                </label>
+                <button className="secondary-button store-geocode-button" type="button" onClick={applyNewAttendanceGeocode} disabled={isNewGeocoding}>
+                  {isNewGeocoding ? "取得中" : "座標を取得"}
+                </button>
+                {newGeocodeMessage ? <p className="store-geocode-message">{newGeocodeMessage}</p> : null}
                 <label>
                   <span>緯度</span>
-                  <input name="attendanceLatitude" inputMode="decimal" placeholder="例: 33.5902" />
+                  <input name="attendanceLatitude" inputMode="decimal" value={newAttendanceLatitude} onChange={(event) => setNewAttendanceLatitude(event.target.value)} placeholder="例: 33.5902" />
                 </label>
                 <label>
                   <span>経度</span>
-                  <input name="attendanceLongitude" inputMode="decimal" placeholder="例: 130.4017" />
+                  <input name="attendanceLongitude" inputMode="decimal" value={newAttendanceLongitude} onChange={(event) => setNewAttendanceLongitude(event.target.value)} placeholder="例: 130.4017" />
                 </label>
                 <label>
                   <span>許可範囲（m）</span>
@@ -789,6 +863,18 @@ export default function StoresPage() {
                       />
                       位置範囲内のみ打刻を許可
                     </label>
+                    <label className="store-geocode-address">
+                      <span>住所から座標を取得</span>
+                      <input
+                        value={editingAttendanceAddress}
+                        onChange={(event) => setEditingAttendanceAddress(event.target.value)}
+                        placeholder="例: 福岡県福岡市中央区..."
+                      />
+                    </label>
+                    <button className="secondary-button store-geocode-button" type="button" onClick={applyEditingAttendanceGeocode} disabled={isEditingGeocoding}>
+                      {isEditingGeocoding ? "取得中" : "座標を取得"}
+                    </button>
+                    {editingGeocodeMessage ? <p className="store-geocode-message">{editingGeocodeMessage}</p> : null}
                     <label>
                       <span>緯度</span>
                       <input name="attendanceLatitude" inputMode="decimal" value={editingAttendanceLatitude} onChange={(event) => setEditingAttendanceLatitude(event.target.value)} placeholder="例: 33.5902" />
