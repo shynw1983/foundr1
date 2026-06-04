@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { getCashBreakdownTotal, normalizeCashBreakdown, type CashBreakdown } from "../../../../../lib/pos-cash-denominations";
 import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
@@ -17,9 +18,11 @@ type CashSessionRow = {
   registerName: string;
   status: string;
   openingAmount: number;
+  openingCashBreakdown: CashBreakdown;
   openingNote: string;
   expectedCashAmount: number;
   countedCashAmount: number | null;
+  countedCashBreakdown: CashBreakdown;
   differenceAmount: number | null;
   closingNote: string;
   openedByName: string;
@@ -45,6 +48,11 @@ function toMoney(value: unknown) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 0;
   return Math.max(0, Math.min(99999999, Math.round(amount)));
+}
+
+function getSubmittedCashAmount(breakdown: unknown, fallbackAmount: unknown) {
+  const total = getCashBreakdownTotal(breakdown);
+  return total > 0 ? total : toMoney(fallbackAmount);
 }
 
 function isUuid(value: string) {
@@ -107,8 +115,10 @@ async function enrichSession(row: CashSessionRow) {
   return {
     ...row,
     openingAmount: Number(row.openingAmount ?? 0),
+    openingCashBreakdown: normalizeCashBreakdown(row.openingCashBreakdown),
     expectedCashAmount,
     countedCashAmount,
+    countedCashBreakdown: normalizeCashBreakdown(row.countedCashBreakdown),
     differenceAmount,
     ...financials
   };
@@ -163,9 +173,11 @@ async function getOpenSession(storeId: string) {
       pos_cash_sessions.register_name as "registerName",
       pos_cash_sessions.status,
       pos_cash_sessions.opening_amount as "openingAmount",
+      pos_cash_sessions.opening_cash_breakdown as "openingCashBreakdown",
       pos_cash_sessions.opening_note as "openingNote",
       pos_cash_sessions.expected_cash_amount as "expectedCashAmount",
       pos_cash_sessions.counted_cash_amount as "countedCashAmount",
+      pos_cash_sessions.counted_cash_breakdown as "countedCashBreakdown",
       pos_cash_sessions.difference_amount as "differenceAmount",
       pos_cash_sessions.closing_note as "closingNote",
       coalesce(opened_by.name, '') as "openedByName",
@@ -195,9 +207,11 @@ async function getSessions(storeId: string, businessDate: string) {
       pos_cash_sessions.register_name as "registerName",
       pos_cash_sessions.status,
       pos_cash_sessions.opening_amount as "openingAmount",
+      pos_cash_sessions.opening_cash_breakdown as "openingCashBreakdown",
       pos_cash_sessions.opening_note as "openingNote",
       pos_cash_sessions.expected_cash_amount as "expectedCashAmount",
       pos_cash_sessions.counted_cash_amount as "countedCashAmount",
+      pos_cash_sessions.counted_cash_breakdown as "countedCashBreakdown",
       pos_cash_sessions.difference_amount as "differenceAmount",
       pos_cash_sessions.closing_note as "closingNote",
       coalesce(opened_by.name, '') as "openedByName",
@@ -353,7 +367,9 @@ export async function POST(request: Request) {
     action?: CashAction;
     storeId?: string;
     openingAmount?: number;
+    openingBreakdown?: CashBreakdown;
     countedCashAmount?: number;
+    countedBreakdown?: CashBreakdown;
     amount?: number;
     movementType?: string;
     note?: string;
@@ -378,7 +394,8 @@ export async function POST(request: Request) {
   if (action === "open") {
     const existing = await getOpenSession(storeFilter);
     if (existing) return Response.json({ error: "すでに開いているレジ締めがあります。" }, { status: 400 });
-    const openingAmount = toMoney(body.openingAmount);
+    const openingBreakdown = normalizeCashBreakdown(body.openingBreakdown);
+    const openingAmount = getSubmittedCashAmount(openingBreakdown, body.openingAmount);
     const note = normalizeText(body.note);
     const registerName = normalizeText(body.registerName) || "POS";
     await sql`
@@ -387,6 +404,7 @@ export async function POST(request: Request) {
         business_date,
         register_name,
         opening_amount,
+        opening_cash_breakdown,
         opening_note,
         expected_cash_amount,
         source,
@@ -397,6 +415,7 @@ export async function POST(request: Request) {
         ${businessState.businessDate},
         ${registerName},
         ${openingAmount},
+        ${JSON.stringify(openingBreakdown)},
         ${note},
         ${openingAmount},
         'manual',
@@ -437,7 +456,8 @@ export async function POST(request: Request) {
   } else if (action === "close") {
     const activeSession = await getOpenSession(storeFilter);
     if (!activeSession) return Response.json({ error: "開いているレジ締めがありません。" }, { status: 400 });
-    const countedCashAmount = toMoney(body.countedCashAmount);
+    const countedBreakdown = normalizeCashBreakdown(body.countedBreakdown);
+    const countedCashAmount = getSubmittedCashAmount(countedBreakdown, body.countedCashAmount);
     const latestSession = await enrichSession(activeSession);
     const expectedCashAmount = latestSession.expectedCashAmount;
     const differenceAmount = countedCashAmount - expectedCashAmount;
@@ -459,6 +479,7 @@ export async function POST(request: Request) {
         status = 'closed',
         expected_cash_amount = ${expectedCashAmount},
         counted_cash_amount = ${countedCashAmount},
+        counted_cash_breakdown = ${JSON.stringify(countedBreakdown)},
         difference_amount = ${differenceAmount},
         closing_note = ${note},
         closed_by = ${closingResponsibleEmployeeId},

@@ -1,7 +1,8 @@
 "use client";
 
 import { Banknote, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
+import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -92,8 +93,10 @@ type PosCashSession = {
   registerName: string;
   status: string;
   openingAmount: number;
+  openingCashBreakdown: CashBreakdown;
   expectedCashAmount: number;
   countedCashAmount: number | null;
+  countedCashBreakdown: CashBreakdown;
   differenceAmount: number | null;
   cashSales: number;
   cashIn: number;
@@ -151,6 +154,17 @@ const orderTypeOptions = [
 
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
+}
+
+function createCashBreakdownInput() {
+  return yenDenominations.reduce((result, denomination) => {
+    result[String(denomination)] = "";
+    return result;
+  }, {} as Record<string, string>);
+}
+
+function formatDenominationLabel(value: number) {
+  return value >= 1000 ? `¥${value.toLocaleString("ja-JP")}` : `¥${value}`;
 }
 
 function getItemPrice(item: Pick<PosMenuItem, "basePrice" | "priceOverride">) {
@@ -229,11 +243,11 @@ export default function StorePosPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", businessState: null, activeSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
-  const [cashOpeningAmount, setCashOpeningAmount] = useState("");
+  const [cashOpeningBreakdown, setCashOpeningBreakdown] = useState(() => createCashBreakdownInput());
   const [cashMovementType, setCashMovementType] = useState("cash_out");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
   const [cashMovementReason, setCashMovementReason] = useState("");
-  const [cashCountedAmount, setCashCountedAmount] = useState("");
+  const [cashCountedBreakdown, setCashCountedBreakdown] = useState(() => createCashBreakdownInput());
   const [cashClosingNote, setCashClosingNote] = useState("");
   const [cashClosingResponsibleEmployeeId, setCashClosingResponsibleEmployeeId] = useState("");
   const [cashSaving, setCashSaving] = useState(false);
@@ -314,16 +328,27 @@ export default function StorePosPage() {
   const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const canUseRegister = Boolean(reconciliation.activeSession);
-  const closingCountedAmount = cashCountedAmount.trim() === "" ? null : Number(cashCountedAmount);
-  const closingDifference = closingCountedAmount === null || !Number.isFinite(closingCountedAmount) || !reconciliation.activeSession
+  const openingBreakdownTotal = getCashBreakdownTotal(cashOpeningBreakdown);
+  const countedBreakdownTotal = getCashBreakdownTotal(cashCountedBreakdown);
+  const hasCountedCashInput = Object.values(cashCountedBreakdown).some((value) => value.trim() !== "");
+  const closingDifference = !hasCountedCashInput || !reconciliation.activeSession
     ? null
-    : Math.round(closingCountedAmount) - reconciliation.activeSession.expectedCashAmount;
+    : countedBreakdownTotal - reconciliation.activeSession.expectedCashAmount;
   const canCloseRegister = Boolean(
     reconciliation.activeSession &&
-    cashCountedAmount.trim() !== "" &&
+    hasCountedCashInput &&
     cashClosingResponsibleEmployeeId &&
     (closingDifference === 0 || cashClosingNote.trim())
   );
+
+  function updateCashBreakdown(
+    setter: Dispatch<SetStateAction<Record<string, string>>>,
+    denomination: number,
+    value: string
+  ) {
+    const normalized = value.replace(/[^\d]/g, "").slice(0, 4);
+    setter((current) => ({ ...current, [String(denomination)]: normalized }));
+  }
 
   function getItemOptionGroups(item: PosMenuItem) {
     return optionGroups
@@ -495,7 +520,7 @@ export default function StorePosPage() {
     setMessage("");
     try {
       const payload = action === "open"
-        ? { action, storeId: selectedStoreId, openingAmount: Number(cashOpeningAmount || 0) }
+        ? { action, storeId: selectedStoreId, openingBreakdown: cashOpeningBreakdown }
         : action === "movement"
           ? {
               action,
@@ -507,7 +532,7 @@ export default function StorePosPage() {
           : {
               action,
               storeId: selectedStoreId,
-              countedCashAmount: Number(cashCountedAmount || 0),
+              countedBreakdown: cashCountedBreakdown,
               note: cashClosingNote,
               closingResponsibleEmployeeId: cashClosingResponsibleEmployeeId
             };
@@ -527,14 +552,14 @@ export default function StorePosPage() {
         activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? reconciliation.activeCashResponsibleEmployees
       });
       if (action === "open") {
-        setCashOpeningAmount("");
+        setCashOpeningBreakdown(createCashBreakdownInput());
         setMessage("日次レジ締めを開始しました。");
       } else if (action === "movement") {
         setCashMovementAmount("");
         setCashMovementReason("");
         setMessage(cashMovementType === "cash_in" ? "入金を記録しました。" : "出金を記録しました。");
       } else {
-        setCashCountedAmount("");
+        setCashCountedBreakdown(createCashBreakdownInput());
         setCashClosingNote("");
         setCashClosingResponsibleEmployeeId("");
         setMessage("日次レジ締めを締めました。");
@@ -644,6 +669,25 @@ export default function StorePosPage() {
                     : `差額 ${formatYen(closingDifference)}`}
                 </small>
               </div>
+              <div className="store-pos-denomination-panel">
+                <div className="store-pos-denomination-head">
+                  <span>実際の現金</span>
+                  <strong>{formatYen(countedBreakdownTotal)}</strong>
+                </div>
+                <div className="store-pos-denomination-grid">
+                  {yenDenominations.map((denomination) => (
+                    <label key={denomination}>
+                      <span>{formatDenominationLabel(denomination)}</span>
+                      <input
+                        inputMode="numeric"
+                        value={cashCountedBreakdown[String(denomination)] ?? ""}
+                        onChange={(event) => updateCashBreakdown(setCashCountedBreakdown, denomination, event.target.value)}
+                        placeholder="0"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
               <label>
                 <span>締め責任者</span>
                 <select value={cashClosingResponsibleEmployeeId} onChange={(event) => setCashClosingResponsibleEmployeeId(event.target.value)}>
@@ -655,10 +699,6 @@ export default function StorePosPage() {
                     ))
                   )}
                 </select>
-              </label>
-              <label>
-                <span>実際の現金</span>
-                <input inputMode="numeric" value={cashCountedAmount} onChange={(event) => setCashCountedAmount(event.target.value)} placeholder="点検金額" />
               </label>
               <label>
                 <span>差額理由</span>
@@ -676,7 +716,25 @@ export default function StorePosPage() {
               <strong>今日のレジ締めはまだ開始されていません。</strong>
               <span>POS 会計を始める前に、開店前のレジ金額を確認してください。</span>
             </div>
-            <input inputMode="numeric" value={cashOpeningAmount} onChange={(event) => setCashOpeningAmount(event.target.value)} placeholder="開始金額" />
+            <div className="store-pos-denomination-panel">
+              <div className="store-pos-denomination-head">
+                <span>開始金額</span>
+                <strong>{formatYen(openingBreakdownTotal)}</strong>
+              </div>
+              <div className="store-pos-denomination-grid">
+                {yenDenominations.map((denomination) => (
+                  <label key={denomination}>
+                    <span>{formatDenominationLabel(denomination)}</span>
+                    <input
+                      inputMode="numeric"
+                      value={cashOpeningBreakdown[String(denomination)] ?? ""}
+                      onChange={(event) => updateCashBreakdown(setCashOpeningBreakdown, denomination, event.target.value)}
+                      placeholder="0"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
             <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving}>
               開始
             </button>

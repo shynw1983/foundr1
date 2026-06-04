@@ -1353,9 +1353,11 @@ create table if not exists pos_cash_sessions (
   register_name text not null default 'POS',
   status text not null default 'open',
   opening_amount integer not null default 0,
+  opening_cash_breakdown jsonb not null default '{}'::jsonb,
   opening_note text not null default '',
   expected_cash_amount integer not null default 0,
   counted_cash_amount integer,
+  counted_cash_breakdown jsonb not null default '{}'::jsonb,
   difference_amount integer,
   closing_note text not null default '',
   source text not null default 'manual',
@@ -1368,6 +1370,9 @@ create table if not exists pos_cash_sessions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table pos_cash_sessions add column if not exists opening_cash_breakdown jsonb not null default '{}'::jsonb;
+alter table pos_cash_sessions add column if not exists counted_cash_breakdown jsonb not null default '{}'::jsonb;
 
 create table if not exists pos_cash_movements (
   id uuid primary key default gen_random_uuid(),
