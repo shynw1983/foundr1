@@ -671,7 +671,7 @@ export default function StoreTimecardPage() {
                   download={`foundr1-shifts-${schedulingPeriod?.label ?? "period"}.ics`}
                   onClick={() => markCalendarShiftsAdded(calendarReadyShiftIds)}
                 >
-                  {allCalendarReadyShiftsAdded ? "追加済み（この端末）" : "まとめて追加"}
+                  {allCalendarReadyShiftsAdded ? "カレンダー追加済み（この端末）" : "カレンダーにまとめて追加"}
                 </a>
               ) : null}
             </div>
@@ -687,7 +687,7 @@ export default function StoreTimecardPage() {
                       download={`foundr1-shift-${shift.workDate}.ics`}
                       onClick={() => markCalendarShiftsAdded([shift.id])}
                     >
-                      {calendarAddedShiftIds.has(shift.id) ? "追加済み（この端末）" : "カレンダーに追加"}
+                      {calendarAddedShiftIds.has(shift.id) ? "カレンダー追加済み（この端末）" : "カレンダーに追加"}
                     </a>
                   ) : null}
                 </article>

@@ -5496,7 +5496,7 @@ body :where(
 
 .store-next-shift-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
 }
@@ -5561,8 +5561,8 @@ body :where(
 }
 
 .store-next-shift-calendar-button.is-period {
-  grid-column: auto;
-  justify-self: end;
+  grid-column: 1 / -1;
+  justify-self: stretch;
   white-space: nowrap;
 }
 
