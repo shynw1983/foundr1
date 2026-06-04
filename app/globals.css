@@ -5176,6 +5176,18 @@ body :where(
   font-weight: 800;
 }
 
+.pos-admin-toolbar input[type="date"] {
+  min-height: 42px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .store-pos-search {
   min-width: 0;
 }
@@ -5895,6 +5907,90 @@ body :where(
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.pos-admin-correction-panel {
+  display: grid;
+  gap: 14px;
+  border-color: rgba(226, 76, 76, 0.28);
+}
+
+.pos-admin-correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.danger-text-button {
+  justify-self: start;
+  width: fit-content;
+  border-color: rgba(226, 76, 76, 0.32);
+  color: var(--red);
+}
+
+.pos-reconciliation-table {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.pos-reconciliation-head,
+.pos-reconciliation-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) repeat(5, minmax(112px, 0.7fr));
+  gap: 10px;
+  align-items: center;
+  min-width: 820px;
+}
+
+.pos-reconciliation-head {
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pos-reconciliation-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.pos-reconciliation-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pos-reconciliation-row strong,
+.pos-reconciliation-row small,
+.pos-reconciliation-row em,
+.pos-reconciliation-row span,
+.pos-reconciliation-row b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-reconciliation-row strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.pos-reconciliation-row small,
+.pos-reconciliation-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.pos-reconciliation-row span,
+.pos-reconciliation-row b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .store-placeholder-panel {
@@ -15674,6 +15770,19 @@ body :where(
 
   .pos-admin-order-row {
     align-items: flex-start;
+  }
+
+  .pos-reconciliation-head {
+    display: none;
+  }
+
+  .pos-reconciliation-row {
+    grid-template-columns: 1fr 1fr;
+    min-width: 0;
+  }
+
+  .pos-reconciliation-row > div {
+    grid-column: 1 / -1;
   }
 
   .store-weather-settings {

@@ -207,6 +207,7 @@ export default function PosPage() {
             </label>
             <div className="pos-admin-actions">
               <a href="/os/menus"><MenuSquare size={16} />メニュー管理</a>
+              <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
               <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
               <a href="/os/stores"><Store size={16} />店舗設定</a>
             </div>
@@ -242,6 +243,7 @@ export default function PosPage() {
                 <h3>日次レジ締め</h3>
                 <p>釣銭準備金、現金売上、入出金、点検金額の差額を確認します。</p>
               </div>
+              <a className="text-button" href="/os/pos/reconciliation">明細を見る</a>
             </div>
             <div className="pos-admin-cash-grid">
               <div>

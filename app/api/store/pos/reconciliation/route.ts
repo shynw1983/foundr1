@@ -4,7 +4,9 @@ import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/st
 
 export const dynamic = "force-dynamic";
 
-type CashAction = "open" | "movement" | "close";
+type CashAction = "open" | "movement" | "close" | "delete_movement" | "delete_session" | "clear_date" | "recalculate";
+
+const cashCorrectionRoles = new Set(["owner", "manager"]);
 
 type CashSessionRow = {
   id: string;
@@ -97,6 +99,45 @@ async function enrichSession(row: CashSessionRow) {
   };
 }
 
+async function recalculateSession(sessionId: string) {
+  const rows = await sql`
+    select
+      pos_cash_sessions.id::text,
+      pos_cash_sessions.opening_amount as "openingAmount",
+      pos_cash_sessions.counted_cash_amount as "countedCashAmount",
+      pos_cash_sessions.status
+    from pos_cash_sessions
+    where id::text = ${sessionId}
+    limit 1
+  `;
+  const row = rows[0] as { id: string; openingAmount: number; countedCashAmount: number | null; status: string } | undefined;
+  if (!row) return;
+  const financials = await getSessionFinancials(sessionId);
+  const expectedCashAmount = Number(row.openingAmount ?? 0) + financials.cashSales + financials.cashIn - financials.cashOut;
+  const countedCashAmount = row.countedCashAmount === null ? null : Number(row.countedCashAmount);
+  const differenceAmount = countedCashAmount === null ? null : countedCashAmount - expectedCashAmount;
+  await sql`
+    update pos_cash_sessions
+    set
+      expected_cash_amount = ${expectedCashAmount},
+      difference_amount = ${differenceAmount},
+      updated_at = now()
+    where id::text = ${sessionId}
+  `;
+}
+
+async function recalculateDateSessions(storeId: string, businessDate: string) {
+  const rows = await sql`
+    select id::text
+    from pos_cash_sessions
+    where store_id::text = ${storeId}
+      and business_date = ${businessDate}
+  `;
+  for (const row of rows as Array<{ id: string }>) {
+    await recalculateSession(row.id);
+  }
+}
+
 async function getOpenSession(storeId: string) {
   const rows = await sql`
     select
@@ -159,7 +200,7 @@ async function getSessions(storeId: string, businessDate: string) {
   return Promise.all((rows as CashSessionRow[]).map(enrichSession));
 }
 
-async function getRecentMovements(storeId: string, sessionId?: string) {
+async function getMovements(storeId: string, businessDate: string, sessionId?: string) {
   return sql`
     select
       pos_cash_movements.id::text,
@@ -172,11 +213,49 @@ async function getRecentMovements(storeId: string, sessionId?: string) {
       to_char(pos_cash_movements.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
       pos_cash_movements.created_at::text as "createdAt"
     from pos_cash_movements
+    join pos_cash_sessions on pos_cash_sessions.id = pos_cash_movements.session_id
     left join employees on employees.id = pos_cash_movements.created_by
     where pos_cash_movements.store_id::text = ${storeId}
+      and pos_cash_sessions.business_date = ${businessDate}
       and (${sessionId ?? ""} = '' or pos_cash_movements.session_id::text = ${sessionId ?? ""})
     order by pos_cash_movements.created_at desc
-    limit 12
+    limit 200
+  `;
+}
+
+async function getOrders(storeId: string, businessDate: string) {
+  return sql`
+    select
+      id::text,
+      pickup_code as "pickupCode",
+      amount,
+      payment_provider as "paymentMethod",
+      coalesce(customer_summary ->> 'cashierName', '') as "cashierName",
+      to_char(created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
+      created_at::text as "createdAt"
+    from store_customer_orders
+    where store_id::text = ${storeId}
+      and order_source = 'store_pos'
+      and status <> 'cancelled'
+      and (created_at at time zone 'Asia/Tokyo')::date = ${businessDate}
+    order by created_at desc
+    limit 200
+  `;
+}
+
+async function getPaymentTotals(storeId: string, businessDate: string) {
+  return sql`
+    select
+      payment_provider as "paymentMethod",
+      count(*)::int as count,
+      coalesce(sum(amount), 0)::int as amount
+    from store_customer_orders
+    where store_id::text = ${storeId}
+      and order_source = 'store_pos'
+      and status <> 'cancelled'
+      and (created_at at time zone 'Asia/Tokyo')::date = ${businessDate}
+    group by payment_provider
+    order by payment_provider
   `;
 }
 
@@ -192,7 +271,11 @@ export async function GET(request: Request) {
     getOpenSession(selectedStoreId),
     getSessions(selectedStoreId, businessDate)
   ]);
-  const movements = await getRecentMovements(selectedStoreId, activeSession?.id);
+  const [movements, orders, paymentTotals] = await Promise.all([
+    getMovements(selectedStoreId, businessDate),
+    getOrders(selectedStoreId, businessDate),
+    getPaymentTotals(selectedStoreId, businessDate)
+  ]);
   const totals = sessions.reduce((sum, item) => ({
     openingAmount: sum.openingAmount + item.openingAmount,
     expectedCashAmount: sum.expectedCashAmount + item.expectedCashAmount,
@@ -204,12 +287,14 @@ export async function GET(request: Request) {
   }), { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 });
 
   return Response.json({
-    access,
+    access: { ...access, canManageCashReconciliation: cashCorrectionRoles.has(session.role) },
     selectedStoreId,
     businessDate,
     activeSession,
     sessions,
     movements,
+    orders,
+    paymentTotals,
     totals
   });
 }
@@ -228,6 +313,9 @@ export async function POST(request: Request) {
     note?: string;
     reason?: string;
     registerName?: string;
+    movementId?: string;
+    sessionId?: string;
+    businessDate?: string;
   };
   const storeId = normalizeText(body.storeId);
   const action = normalizeText(body.action) as CashAction;
@@ -236,6 +324,8 @@ export async function POST(request: Request) {
   if (storeFilter === "__forbidden__" || !storeFilter) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
+
+  const canManageCashReconciliation = cashCorrectionRoles.has(session.role);
 
   if (action === "open") {
     const existing = await getOpenSession(storeFilter);
@@ -321,15 +411,55 @@ export async function POST(request: Request) {
       where id::text = ${activeSession.id}
         and status = 'open'
     `;
+  } else if (action === "delete_movement") {
+    if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
+    const movementId = normalizeText(body.movementId);
+    if (!movementId) return Response.json({ error: "入出金記録を選択してください。" }, { status: 400 });
+    const rows = await sql`
+      delete from pos_cash_movements
+      where id::text = ${movementId}
+        and store_id::text = ${storeFilter}
+      returning session_id::text as "sessionId"
+    `;
+    const deleted = rows[0] as { sessionId: string } | undefined;
+    if (!deleted) return Response.json({ error: "入出金記録が見つかりません。" }, { status: 404 });
+    await recalculateSession(deleted.sessionId);
+  } else if (action === "delete_session") {
+    if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
+    const targetSessionId = normalizeText(body.sessionId);
+    if (!targetSessionId) return Response.json({ error: "レジ締め記録を選択してください。" }, { status: 400 });
+    const rows = await sql`
+      delete from pos_cash_sessions
+      where id::text = ${targetSessionId}
+        and store_id::text = ${storeFilter}
+      returning id::text
+    `;
+    if (!rows[0]) return Response.json({ error: "レジ締め記録が見つかりません。" }, { status: 404 });
+  } else if (action === "clear_date") {
+    if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
+    const targetDate = normalizeText(body.businessDate) || getJstDate();
+    await sql`
+      delete from pos_cash_sessions
+      where store_id::text = ${storeFilter}
+        and business_date = ${targetDate}
+    `;
+  } else if (action === "recalculate") {
+    if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
+    const targetDate = normalizeText(body.businessDate) || getJstDate();
+    await recalculateDateSessions(storeFilter, targetDate);
   } else {
     return Response.json({ error: "操作を選択してください。" }, { status: 400 });
   }
 
-  const businessDate = getJstDate();
+  const businessDate = normalizeText(body.businessDate) || getJstDate();
   const [activeSession, sessions] = await Promise.all([
     getOpenSession(storeFilter),
     getSessions(storeFilter, businessDate)
   ]);
-  const movements = await getRecentMovements(storeFilter, activeSession?.id);
-  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, activeSession, sessions, movements });
+  const [movements, orders, paymentTotals] = await Promise.all([
+    getMovements(storeFilter, businessDate),
+    getOrders(storeFilter, businessDate),
+    getPaymentTotals(storeFilter, businessDate)
+  ]);
+  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, activeSession, sessions, movements, orders, paymentTotals });
 }
