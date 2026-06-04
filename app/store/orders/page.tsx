@@ -85,6 +85,8 @@ const nextActions: Record<string, Array<{ status: string; label: string }>> = {
   ready: [{ status: "completed", label: "受け渡し完了" }]
 };
 
+const pendingPaymentVisibleMinutes = 30;
+
 function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
   return nextOrder.paymentStatus === "paid" &&
     nextOrder.status === "new" &&
@@ -103,6 +105,39 @@ function getPaymentPillClass(paymentStatus: string) {
 
 function isPaidOrder(order?: StoreOrder | null) {
   return order?.paymentStatus === "paid";
+}
+
+function isPendingPaymentOrder(order: StoreOrder) {
+  return order.status === "pending_payment" || order.paymentStatus !== "paid";
+}
+
+function isRecentPendingPaymentOrder(order: StoreOrder) {
+  if (!isPendingPaymentOrder(order)) return false;
+  const createdAt = new Date(order.createdAt).getTime();
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt < pendingPaymentVisibleMinutes * 60 * 1000;
+}
+
+const storeOrderStatusPriority: Record<string, number> = {
+  new: 0,
+  preparing: 1,
+  ready: 2,
+  pending_payment: 3,
+  completed: 4,
+  cancelled: 5
+};
+
+function getStoreOrderSortTime(order: StoreOrder) {
+  const pickupTime = new Date(`${order.pickupDate}T${order.pickupTime || "00:00"}`).getTime();
+  if (Number.isFinite(pickupTime)) return pickupTime;
+  const createdAt = new Date(order.createdAt).getTime();
+  return Number.isFinite(createdAt) ? createdAt : 0;
+}
+
+function sortStoreOrders(a: StoreOrder, b: StoreOrder) {
+  const priorityDiff = (storeOrderStatusPriority[a.status] ?? 9) - (storeOrderStatusPriority[b.status] ?? 9);
+  if (priorityDiff !== 0) return priorityDiff;
+  return getStoreOrderSortTime(b) - getStoreOrderSortTime(a);
 }
 
 export default function StoreOrdersPage() {
@@ -428,14 +463,19 @@ export default function StoreOrdersPage() {
     };
   }, [soundEnabled, selectedStoreId]);
 
-  const visibleOrders = useMemo(() => orders.filter((order) => {
-    const matchesQuery = `${order.pickupCode} ${order.drink} ${order.customerName} ${order.customerPhone}`.toLowerCase().includes(query.toLowerCase());
-    if (status === "all") return matchesQuery;
-    const matchesStatus = status === "active"
-      ? ["pending_payment", "new", "preparing", "ready"].includes(order.status)
-      : order.status === status;
-    return matchesQuery && matchesStatus;
-  }), [orders, query, status]);
+  const visibleOrders = useMemo(() => orders
+    .filter((order) => {
+      const matchesQuery = `${order.pickupCode} ${order.drink} ${order.customerName} ${order.customerPhone}`.toLowerCase().includes(query.toLowerCase());
+      if (!matchesQuery) return false;
+      if (status === "all") return true;
+      if (status === "pending_payment") return isPendingPaymentOrder(order);
+      if (status === "active") {
+        if (order.status === "pending_payment") return isRecentPendingPaymentOrder(order);
+        return ["new", "preparing", "ready"].includes(order.status);
+      }
+      return order.status === status;
+    })
+    .sort(sortStoreOrders), [orders, query, status]);
   const selectedOrder = visibleOrders.find((order) => order.id === selectedId && isPaidOrder(order)) ?? visibleOrders.find(isPaidOrder);
   const counters = {
     new: orders.filter((order) => order.status === "new").length,
@@ -648,7 +688,12 @@ export default function StoreOrdersPage() {
                   if (isPaidOrder(order)) setSelectedId(order.id);
                 }}
               >
-                {!isPaidOrder(order) ? <span className="store-order-payment-badge">決済待ち</span> : null}
+                {!isPaidOrder(order) ? (
+                  <span className="store-order-payment-badge">
+                    決済待ち
+                    <small>30分後に対応中から非表示</small>
+                  </span>
+                ) : null}
                 <span className="store-order-code">{order.pickupCode}</span>
                 <strong>{splitLines(order.drink).join(" / ")}</strong>
                 <span className="store-order-customer">
