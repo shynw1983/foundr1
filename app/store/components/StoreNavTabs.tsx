@@ -265,7 +265,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />
           </span>
-          <span>メニュー</span>
+          <span className="mobile-nav-menu-label">メニュー</span>
         </summary>
         <nav className="mobile-nav-list store-nav-list" aria-label="店舗ワークベンチメニュー">
           {visibleTabs.map((tab) => {

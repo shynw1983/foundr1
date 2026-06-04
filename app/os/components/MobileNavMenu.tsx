@@ -26,7 +26,7 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
           <span className="hamburger-button" aria-hidden="true">
             <Menu size={18} />
           </span>
-          <span>メニュー</span>
+          <span className="mobile-nav-menu-label">メニュー</span>
         </summary>
         <nav className="mobile-nav-list" aria-label="モバイルナビゲーション">
           {permittedNavModules.map((module) => {

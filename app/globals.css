@@ -13859,6 +13859,7 @@ body :where(
     padding: 0;
   }
 
+  .mobile-nav-menu-label,
   .mobile-nav-menu summary > span:not(.hamburger-button) {
     display: none;
   }
