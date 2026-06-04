@@ -38,6 +38,14 @@ type ActiveCashResponsibleEmployee = {
   punchedAt: string;
 };
 
+type PreviousClosedCashSession = {
+  id: string;
+  businessDate: string;
+  countedCashAmount: number;
+  closedByName: string;
+  closedAt: string;
+};
+
 type CashBusinessState = ReturnType<typeof getStoreCashBusinessDayState>;
 
 function normalizeText(value: unknown) {
@@ -229,6 +237,26 @@ async function getSessions(storeId: string, businessDate: string) {
   return Promise.all((rows as CashSessionRow[]).map(enrichSession));
 }
 
+async function getPreviousClosedSession(storeId: string, businessDate: string) {
+  const rows = await sql`
+    select
+      pos_cash_sessions.id::text,
+      pos_cash_sessions.business_date::text as "businessDate",
+      coalesce(pos_cash_sessions.counted_cash_amount, 0)::int as "countedCashAmount",
+      coalesce(closed_by.name, '') as "closedByName",
+      coalesce(pos_cash_sessions.closed_at::text, '') as "closedAt"
+    from pos_cash_sessions
+    left join employees closed_by on closed_by.id = pos_cash_sessions.closed_by
+    where pos_cash_sessions.store_id::text = ${storeId}
+      and pos_cash_sessions.status = 'closed'
+      and pos_cash_sessions.business_date < ${businessDate}
+      and pos_cash_sessions.counted_cash_amount is not null
+    order by pos_cash_sessions.business_date desc, pos_cash_sessions.closed_at desc
+    limit 1
+  `;
+  return rows[0] as PreviousClosedCashSession | undefined ?? null;
+}
+
 async function getMovements(storeId: string, businessDate: string, sessionId?: string) {
   return sql`
     select
@@ -324,9 +352,10 @@ export async function GET(request: Request) {
   const businessState = await getCashBusinessState(selectedStoreId);
   const businessDate = normalizeText(new URL(request.url).searchParams.get("date")) || businessState.businessDate;
 
-  const [activeSession, sessions] = await Promise.all([
+  const [activeSession, sessions, previousClosedSession] = await Promise.all([
     getOpenSession(selectedStoreId),
-    getSessions(selectedStoreId, businessDate)
+    getSessions(selectedStoreId, businessDate),
+    getPreviousClosedSession(selectedStoreId, businessDate)
   ]);
   const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(selectedStoreId, businessDate),
@@ -350,6 +379,7 @@ export async function GET(request: Request) {
     businessDate,
     businessState,
     activeSession,
+    previousClosedSession,
     sessions,
     movements,
     orders,
@@ -397,6 +427,10 @@ export async function POST(request: Request) {
     const openingBreakdown = normalizeCashBreakdown(body.openingBreakdown);
     const openingAmount = getSubmittedCashAmount(openingBreakdown, body.openingAmount);
     const note = normalizeText(body.note);
+    const previousClosedSession = await getPreviousClosedSession(storeFilter, businessState.businessDate);
+    if (previousClosedSession && openingAmount !== Number(previousClosedSession.countedCashAmount ?? 0) && !note) {
+      return Response.json({ error: "前回閉店金額と開始金額が違うため理由を入力してください。" }, { status: 400 });
+    }
     const registerName = normalizeText(body.registerName) || "POS";
     await sql`
       insert into pos_cash_sessions (
@@ -529,9 +563,10 @@ export async function POST(request: Request) {
   }
 
   const businessDate = normalizeText(body.businessDate) || businessState.businessDate;
-  const [activeSession, sessions] = await Promise.all([
+  const [activeSession, sessions, previousClosedSession] = await Promise.all([
     getOpenSession(storeFilter),
-    getSessions(storeFilter, businessDate)
+    getSessions(storeFilter, businessDate),
+    getPreviousClosedSession(storeFilter, businessDate)
   ]);
   const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(storeFilter, businessDate),
@@ -539,5 +574,5 @@ export async function POST(request: Request) {
     getPaymentTotals(storeFilter, businessDate),
     getActiveCashResponsibleEmployees(storeFilter)
   ]);
-  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
+  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, previousClosedSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
 }

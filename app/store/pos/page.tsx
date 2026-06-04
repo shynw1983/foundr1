@@ -122,6 +122,14 @@ type PosCashResponsibleEmployee = {
   punchedAt: string;
 };
 
+type PosPreviousClosedSession = {
+  id: string;
+  businessDate: string;
+  countedCashAmount: number;
+  closedByName: string;
+  closedAt: string;
+};
+
 type PosBusinessState = {
   businessDate: string;
   openLabel: string;
@@ -136,6 +144,7 @@ type PosReconciliation = {
   businessDate: string;
   businessState: PosBusinessState | null;
   activeSession: PosCashSession | null;
+  previousClosedSession: PosPreviousClosedSession | null;
   sessions: PosCashSession[];
   movements: PosCashMovement[];
   activeCashResponsibleEmployees: PosCashResponsibleEmployee[];
@@ -250,8 +259,9 @@ export default function StorePosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", businessState: null, activeSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
+  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", businessState: null, activeSession: null, previousClosedSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
   const [cashOpeningBreakdown, setCashOpeningBreakdown] = useState(() => createCashBreakdownInput());
+  const [cashOpeningNote, setCashOpeningNote] = useState("");
   const [cashMovementType, setCashMovementType] = useState("cash_out");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
   const [cashMovementReason, setCashMovementReason] = useState("");
@@ -270,6 +280,7 @@ export default function StorePosPage() {
       businessDate: body.businessDate ?? "",
       businessState: body.businessState ?? null,
       activeSession: body.activeSession ?? null,
+      previousClosedSession: body.previousClosedSession ?? null,
       sessions: body.sessions ?? [],
       movements: body.movements ?? [],
       activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? []
@@ -338,6 +349,11 @@ export default function StorePosPage() {
   const canUseRegister = Boolean(reconciliation.activeSession);
   const openingBreakdownTotal = getCashBreakdownTotal(cashOpeningBreakdown);
   const countedBreakdownTotal = getCashBreakdownTotal(cashCountedBreakdown);
+  const openingHandoverDifference = reconciliation.previousClosedSession
+    ? openingBreakdownTotal - Number(reconciliation.previousClosedSession.countedCashAmount ?? 0)
+    : null;
+  const hasOpeningHandoverDifference = openingHandoverDifference !== null && openingHandoverDifference !== 0;
+  const canOpenRegister = !hasOpeningHandoverDifference || Boolean(cashOpeningNote.trim());
   const hasCountedCashInput = Object.values(cashCountedBreakdown).some((value) => value.trim() !== "");
   const closingDifference = !hasCountedCashInput || !reconciliation.activeSession
     ? null
@@ -363,6 +379,7 @@ export default function StorePosPage() {
     setStoredStoreSelection(storeId);
     setCart([]);
     setCashOpeningBreakdown(createCashBreakdownInput());
+    setCashOpeningNote("");
     setCashCountedBreakdown(createCashBreakdownInput());
     setCashClosingNote("");
     setCashClosingResponsibleEmployeeId("");
@@ -539,7 +556,7 @@ export default function StorePosPage() {
     setMessage("");
     try {
       const payload = action === "open"
-        ? { action, storeId: selectedStoreId, openingBreakdown: cashOpeningBreakdown }
+        ? { action, storeId: selectedStoreId, openingBreakdown: cashOpeningBreakdown, note: cashOpeningNote }
         : action === "movement"
           ? {
               action,
@@ -566,12 +583,14 @@ export default function StorePosPage() {
         businessDate: body.businessDate ?? reconciliation.businessDate,
         businessState: body.businessState ?? reconciliation.businessState,
         activeSession: body.activeSession ?? null,
+        previousClosedSession: body.previousClosedSession ?? reconciliation.previousClosedSession,
         sessions: body.sessions ?? [],
         movements: body.movements ?? [],
         activeCashResponsibleEmployees: body.activeCashResponsibleEmployees ?? reconciliation.activeCashResponsibleEmployees
       });
       if (action === "open") {
         setCashOpeningBreakdown(createCashBreakdownInput());
+        setCashOpeningNote("");
         setMessage("日次レジ締めを開始しました。");
       } else if (action === "movement") {
         setCashMovementAmount("");
@@ -747,6 +766,17 @@ export default function StorePosPage() {
               <strong>今日のレジ締めはまだ開始されていません。</strong>
               <span>POS 会計を始める前に、開店前のレジ金額を確認してください。</span>
             </div>
+            {reconciliation.previousClosedSession ? (
+              <div className={`store-pos-handover-summary ${hasOpeningHandoverDifference ? "is-warning" : ""}`}>
+                <span>前回閉店 {reconciliation.previousClosedSession.businessDate}</span>
+                <strong>{formatYen(reconciliation.previousClosedSession.countedCashAmount)}</strong>
+                <small>
+                  {hasOpeningHandoverDifference
+                    ? `引継ぎ差額 ${formatYen(openingHandoverDifference ?? 0)}`
+                    : "前回閉店金額と一致しています。"}
+                </small>
+              </div>
+            ) : null}
             <div className="store-pos-denomination-panel">
               <div className="store-pos-denomination-head">
                 <span>開始金額</span>
@@ -766,7 +796,13 @@ export default function StorePosPage() {
                 ))}
               </div>
             </div>
-            <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving}>
+            {hasOpeningHandoverDifference ? (
+              <label className="store-pos-handover-note">
+                <span>引継ぎ差額理由</span>
+                <input value={cashOpeningNote} onChange={(event) => setCashOpeningNote(event.target.value)} placeholder="例: 両替済み、前日回収、確認差額" />
+              </label>
+            ) : null}
+            <button className="primary-button" type="button" onClick={() => submitCashAction("open")} disabled={cashSaving || !canOpenRegister}>
               開始
             </button>
           </div>

@@ -5534,6 +5534,54 @@ body :where(
   font-weight: 900;
 }
 
+.store-pos-handover-summary {
+  display: grid;
+  gap: 4px;
+  min-width: min(210px, 100%);
+  flex: 1 1 210px;
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--green-soft);
+}
+
+.store-pos-handover-summary.is-warning {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: #fff7ed;
+}
+
+.store-pos-handover-summary span,
+.store-pos-handover-summary small,
+.store-pos-handover-note span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-handover-summary strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.store-pos-handover-note {
+  display: grid;
+  gap: 6px;
+  min-width: min(260px, 100%);
+  flex: 1 1 260px;
+}
+
+.store-pos-handover-note input {
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 850;
+}
+
 .store-pos-close-summary {
   min-width: min(220px, 100%);
   flex: 1 1 220px;
