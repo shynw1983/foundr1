@@ -70,20 +70,32 @@ type ShiftRequestItem = {
   title: string;
   note: string | null;
   employeeId?: string;
+  windows?: Array<{ workDate: string; availableStart: string | null; availableEnd: string | null; preference: string; note: string | null }>;
 };
 
 type ShiftRequestPayload = {
   currentEmployeeId?: string;
   requests?: ShiftRequestItem[];
   myShifts?: ShiftEntry[];
+  submissionPeriod?: {
+    label: string;
+    startDate: string;
+    endDate: string;
+    deadlineAt: string;
+  };
+  submissionDates?: string[];
 };
 
 type ShiftRequestDraft = {
-  requestType: "availability" | "day_off" | "swap";
+  targetShiftId: string;
+  note: string;
+};
+
+type AvailabilityDayDraft = {
   workDate: string;
+  preference: "" | "available" | "unavailable";
   availableStart: string;
   availableEnd: string;
-  targetShiftId: string;
   note: string;
 };
 
@@ -120,13 +132,11 @@ export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
   const [myShifts, setMyShifts] = useState<ShiftEntry[]>([]);
+  const [submissionPeriod, setSubmissionPeriod] = useState<ShiftRequestPayload["submissionPeriod"] | null>(null);
+  const [availabilityDrafts, setAvailabilityDrafts] = useState<AvailabilityDayDraft[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [shiftRequestDraft, setShiftRequestDraft] = useState<ShiftRequestDraft>({
-    requestType: "availability",
-    workDate: "",
-    availableStart: "17:00",
-    availableEnd: "22:00",
     targetShiftId: "",
     note: ""
   });
@@ -180,11 +190,12 @@ export default function StoreTimecardPage() {
       const body = await response.json() as ShiftRequestPayload;
       setShiftRequests(body.requests ?? []);
       setMyShifts(body.myShifts ?? []);
+      setSubmissionPeriod(body.submissionPeriod ?? null);
+      setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
       setShiftRequestDraft((current) => {
         const firstShift = body.myShifts?.[0];
         return {
           ...current,
-          workDate: current.workDate || firstShift?.workDate || "",
           targetShiftId: current.targetShiftId || firstShift?.id || ""
         };
       });
@@ -296,25 +307,28 @@ export default function StoreTimecardPage() {
     setIsPunching("");
   }
 
-  async function submitShiftRequest() {
+  function updateAvailabilityDraft(workDate: string, patch: Partial<AvailabilityDayDraft>) {
+    setAvailabilityDrafts((items) => items.map((item) => item.workDate === workDate ? { ...item, ...patch } : item));
+  }
+
+  async function submitAvailabilityPeriod() {
     if (!selectedStoreId) return;
     setShiftRequestMessage("");
-    const selectedShift = myShifts.find((shift) => shift.id === shiftRequestDraft.targetShiftId) ?? null;
-    const requestWorkDate = shiftRequestDraft.requestType === "swap"
-      ? selectedShift?.workDate ?? shiftRequestDraft.workDate
-      : shiftRequestDraft.workDate;
     const response = await fetch("/api/timecard/shift-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "create_shift_request",
+        action: "create_availability_period",
         storeId: selectedStoreId,
-        requestType: shiftRequestDraft.requestType,
-        workDate: requestWorkDate,
-        availableStart: shiftRequestDraft.requestType === "availability" ? shiftRequestDraft.availableStart : "",
-        availableEnd: shiftRequestDraft.requestType === "availability" ? shiftRequestDraft.availableEnd : "",
-        targetShiftId: shiftRequestDraft.requestType === "swap" ? shiftRequestDraft.targetShiftId : "",
-        note: shiftRequestDraft.note
+        entries: availabilityDrafts
+          .filter((draft) => draft.preference)
+          .map((draft) => ({
+            workDate: draft.workDate,
+            preference: draft.preference,
+            availableStart: draft.preference === "available" ? draft.availableStart : "",
+            availableEnd: draft.preference === "available" ? draft.availableEnd : "",
+            note: draft.note
+          }))
       })
     });
     const body = await response.json().catch(() => ({})) as { error?: string };
@@ -322,7 +336,36 @@ export default function StoreTimecardPage() {
       setShiftRequestMessage(body.error ?? "シフト申請を送信できませんでした。");
       return;
     }
-    setShiftRequestMessage("シフト申請を送信しました。");
+    setShiftRequestMessage("希望シフトを提出しました。");
+    await loadShiftRequests(selectedStoreId);
+  }
+
+  async function submitSwapRequest() {
+    if (!selectedStoreId) return;
+    setShiftRequestMessage("");
+    const selectedShift = myShifts.find((shift) => shift.id === shiftRequestDraft.targetShiftId) ?? null;
+    if (!selectedShift) {
+      setShiftRequestMessage("交代募集するシフトを選択してください。");
+      return;
+    }
+    const response = await fetch("/api/timecard/shift-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_shift_request",
+        storeId: selectedStoreId,
+        requestType: "swap",
+        workDate: selectedShift.workDate,
+        targetShiftId: shiftRequestDraft.targetShiftId,
+        note: shiftRequestDraft.note
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setShiftRequestMessage(body.error ?? "交代募集を送信できませんでした。");
+      return;
+    }
+    setShiftRequestMessage("交代募集を送信しました。");
     setShiftRequestDraft((current) => ({ ...current, note: "" }));
     await loadShiftRequests(selectedStoreId);
   }
@@ -480,56 +523,54 @@ export default function StoreTimecardPage() {
             <CalendarDays />
             <div>
               <h2>シフト連絡</h2>
-              <p>希望シフト、休み希望、交代募集を店長へ送ります。</p>
+              <p>{submissionPeriod ? `${submissionPeriod.label} / 締切 ${submissionPeriod.deadlineAt}` : "提出できる期間を確認しています。"}</p>
             </div>
           </div>
 
-          <div className="store-shift-request-form">
-            <div className="timecard-subtabs" aria-label="申請種別">
-              <button className={shiftRequestDraft.requestType === "availability" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "availability" })}>希望</button>
-              <button className={shiftRequestDraft.requestType === "day_off" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "day_off" })}>休み</button>
-              <button className={shiftRequestDraft.requestType === "swap" ? "is-active" : ""} type="button" onClick={() => setShiftRequestDraft({ ...shiftRequestDraft, requestType: "swap" })}>交代</button>
-            </div>
+          <div className="store-shift-period-list">
+            {availabilityDrafts.map((draft) => (
+              <article className="store-shift-period-row" key={draft.workDate}>
+                <strong>{formatShiftDate(draft.workDate)}</strong>
+                <div className="store-shift-choice-group">
+                  <label className={draft.preference === "available" ? "is-selected" : ""}>
+                    <input type="radio" name={`shift-${draft.workDate}`} checked={draft.preference === "available"} onChange={() => updateAvailabilityDraft(draft.workDate, { preference: "available" })} />
+                    希望上班
+                  </label>
+                  <label className={draft.preference === "unavailable" ? "is-selected" : ""}>
+                    <input type="radio" name={`shift-${draft.workDate}`} checked={draft.preference === "unavailable"} onChange={() => updateAvailabilityDraft(draft.workDate, { preference: "unavailable" })} />
+                    不希望上班
+                  </label>
+                </div>
+                <div className="store-shift-request-times">
+                  <input type="time" value={draft.availableStart} disabled={draft.preference !== "available"} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableStart: event.target.value })} />
+                  <input type="time" value={draft.availableEnd} disabled={draft.preference !== "available"} onChange={(event) => updateAvailabilityDraft(draft.workDate, { availableEnd: event.target.value })} />
+                </div>
+                <input value={draft.note} placeholder="メモ" onChange={(event) => updateAvailabilityDraft(draft.workDate, { note: event.target.value })} />
+              </article>
+            ))}
+            {availabilityDrafts.length === 0 ? <p className="empty-state-text">提出できる希望シフト期間がありません。</p> : null}
+          </div>
 
-            {shiftRequestDraft.requestType === "swap" ? (
-              <label>
-                <span>対象シフト</span>
-                <select value={shiftRequestDraft.targetShiftId} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, targetShiftId: event.target.value })}>
-                  {myShifts.map((shift) => (
-                    <option value={shift.id} key={shift.id}>{shift.workDate} {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label>
-                <span>日付</span>
-                <input type="date" value={shiftRequestDraft.workDate} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, workDate: event.target.value })} />
-              </label>
-            )}
-
-            {shiftRequestDraft.requestType === "availability" ? (
-              <div className="store-shift-request-times">
-                <label>
-                  <span>開始</span>
-                  <input type="time" value={shiftRequestDraft.availableStart} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, availableStart: event.target.value })} />
-                </label>
-                <label>
-                  <span>終了</span>
-                  <input type="time" value={shiftRequestDraft.availableEnd} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, availableEnd: event.target.value })} />
-                </label>
-              </div>
-            ) : null}
-
+          <div className="store-shift-request-form is-swap">
             <label>
-              <span>メモ</span>
+              <span>交代募集するシフト</span>
+              <select value={shiftRequestDraft.targetShiftId} onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, targetShiftId: event.target.value })}>
+                {myShifts.map((shift) => (
+                  <option value={shift.id} key={shift.id}>{shift.workDate} {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>交代メモ</span>
               <input value={shiftRequestDraft.note} placeholder="任意" onChange={(event) => setShiftRequestDraft({ ...shiftRequestDraft, note: event.target.value })} />
             </label>
-            {shiftRequestMessage ? <div className="timecard-message">{shiftRequestMessage}</div> : null}
-            <button className="primary-button" type="button" onClick={submitShiftRequest}>
-              <Send size={16} />
-              申請を送信
-            </button>
+            <button className="secondary-button" type="button" onClick={submitSwapRequest}>交代募集</button>
           </div>
+          {shiftRequestMessage ? <div className="timecard-message">{shiftRequestMessage}</div> : null}
+          <button className="primary-button store-shift-submit-button" type="button" onClick={submitAvailabilityPeriod}>
+            <Send size={16} />
+            希望シフトを提出
+          </button>
 
           <div className="store-shift-request-list">
             <h3>最近のシフト連絡</h3>
@@ -561,4 +602,34 @@ function requestStatusLabel(status: ShiftRequestItem["status"]) {
   if (status === "approved") return "承認済み";
   if (status === "rejected") return "却下";
   return "未確認";
+}
+
+function createAvailabilityDrafts(dates: string[], requests: ShiftRequestItem[]) {
+  const requestByDate = new Map<string, ShiftRequestItem>();
+  for (const request of requests) {
+    if ((request.requestType === "availability" || request.requestType === "day_off") && request.workDate) {
+      requestByDate.set(request.workDate, request);
+    }
+  }
+  return dates.map((workDate) => {
+    const request = requestByDate.get(workDate);
+    const window = request?.windows?.find((item) => item.workDate === workDate);
+    return {
+      workDate,
+      preference: request?.requestType === "availability" ? "available" : request?.requestType === "day_off" ? "unavailable" : "",
+      availableStart: window?.availableStart ?? "17:00",
+      availableEnd: window?.availableEnd ?? "22:00",
+      note: request?.note ?? window?.note ?? ""
+    } satisfies AvailabilityDayDraft;
+  });
+}
+
+function formatShiftDate(value: string) {
+  const date = new Date(`${value}T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short"
+  }).format(date);
 }

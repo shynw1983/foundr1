@@ -5389,6 +5389,11 @@ body :where(
   background: #fbfcfe;
 }
 
+.store-shift-request-form.is-swap {
+  grid-template-columns: minmax(220px, 0.9fr) minmax(220px, 1fr) auto;
+  margin-top: 14px;
+}
+
 .store-shift-request-form .timecard-subtabs {
   margin: 0;
 }
@@ -5414,7 +5419,9 @@ body :where(
 
 .store-shift-request-form input,
 .store-shift-request-form select,
-.shift-request-publish-actions input {
+.shift-request-publish-actions input,
+.store-shift-period-row input[type="time"],
+.store-shift-period-row > input {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--line);
@@ -5425,15 +5432,77 @@ body :where(
   font-weight: 800;
 }
 
+.store-shift-period-row input:disabled {
+  background: #eef2f6;
+  color: #9aa5b1;
+}
+
 .store-shift-request-form .timecard-message {
   grid-column: 1 / -1;
   margin: 0;
 }
 
 .store-shift-request-list,
-.shift-request-list {
+.shift-request-list,
+.store-shift-period-list {
   display: grid;
   gap: 10px;
+}
+
+.store-shift-period-list {
+  margin-top: 14px;
+}
+
+.store-shift-period-row {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.35fr) minmax(190px, 0.85fr) minmax(170px, 0.7fr) minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.store-shift-period-row > strong {
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.store-shift-choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.store-shift-choice-group label {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: white;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-shift-choice-group label.is-selected {
+  border-color: rgba(33, 116, 91, 0.4);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-shift-choice-group input {
+  width: 14px;
+  min-height: 14px;
+}
+
+.store-shift-submit-button {
+  margin-top: 12px;
 }
 
 .store-shift-request-list h3 {
@@ -12770,6 +12839,20 @@ body :where(
 
   .timecard-punch-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-shift-period-row,
+  .store-shift-request-form.is-swap {
+    grid-template-columns: 1fr;
+  }
+
+  .store-shift-choice-group,
+  .store-shift-request-times {
+    grid-template-columns: 1fr;
+  }
+
+  .store-shift-choice-group label {
+    min-height: 42px;
   }
 
   .timecard-status {

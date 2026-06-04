@@ -32,6 +32,9 @@ alter table stores add column if not exists attendance_latitude numeric(10, 6);
 alter table stores add column if not exists attendance_longitude numeric(10, 6);
 alter table stores add column if not exists attendance_radius_meters integer not null default 100;
 alter table stores add column if not exists attendance_accuracy_threshold_meters integer not null default 100;
+alter table stores add column if not exists shift_first_half_submission_deadline_day integer not null default 25;
+alter table stores add column if not exists shift_second_half_submission_deadline_day integer not null default 10;
+alter table stores add column if not exists shift_submission_deadline_time time not null default '23:59';
 
 create table if not exists companies (
   id uuid primary key default gen_random_uuid(),

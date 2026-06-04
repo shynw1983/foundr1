@@ -82,6 +82,16 @@ function normalizeMeters(value: string, fallback: number) {
   return Number.isFinite(meters) ? Math.max(10, Math.min(2000, meters)) : fallback;
 }
 
+function normalizeDayOfMonth(value: string, fallback: number) {
+  const day = Math.round(Number(value));
+  return Number.isFinite(day) ? Math.max(1, Math.min(28, day)) : fallback;
+}
+
+function normalizeTimeText(value: string, fallback = "23:59") {
+  const text = value.trim();
+  return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
+}
+
 function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
 
@@ -236,6 +246,9 @@ export async function POST(request: Request) {
   const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
   const attendanceRadiusMeters = normalizeMeters(String(formData.get("attendanceRadiusMeters") ?? ""), 100);
   const attendanceAccuracyThresholdMeters = normalizeMeters(String(formData.get("attendanceAccuracyThresholdMeters") ?? ""), 100);
+  const shiftFirstHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? ""), 25);
+  const shiftSecondHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? ""), 10);
+  const shiftSubmissionDeadlineTime = normalizeTimeText(String(formData.get("shiftSubmissionDeadlineTime") ?? ""));
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -267,6 +280,9 @@ export async function POST(request: Request) {
       attendance_longitude,
       attendance_radius_meters,
       attendance_accuracy_threshold_meters,
+      shift_first_half_submission_deadline_day,
+      shift_second_half_submission_deadline_day,
+      shift_submission_deadline_time,
       updated_at
     )
     values (
@@ -286,6 +302,9 @@ export async function POST(request: Request) {
       ${attendanceLongitude},
       ${attendanceRadiusMeters},
       ${attendanceAccuracyThresholdMeters},
+      ${shiftFirstHalfSubmissionDeadlineDay},
+      ${shiftSecondHalfSubmissionDeadlineDay},
+      ${shiftSubmissionDeadlineTime}::time,
       now()
     )
     on conflict (name)
@@ -305,6 +324,9 @@ export async function POST(request: Request) {
       attendance_longitude = excluded.attendance_longitude,
       attendance_radius_meters = excluded.attendance_radius_meters,
       attendance_accuracy_threshold_meters = excluded.attendance_accuracy_threshold_meters,
+      shift_first_half_submission_deadline_day = excluded.shift_first_half_submission_deadline_day,
+      shift_second_half_submission_deadline_day = excluded.shift_second_half_submission_deadline_day,
+      shift_submission_deadline_time = excluded.shift_submission_deadline_time,
       updated_at = now()
     returning id
   `;
@@ -355,6 +377,9 @@ export async function PUT(request: Request) {
   const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
   const attendanceRadiusMeters = normalizeMeters(String(formData.get("attendanceRadiusMeters") ?? ""), 100);
   const attendanceAccuracyThresholdMeters = normalizeMeters(String(formData.get("attendanceAccuracyThresholdMeters") ?? ""), 100);
+  const shiftFirstHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? ""), 25);
+  const shiftSecondHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? ""), 10);
+  const shiftSubmissionDeadlineTime = normalizeTimeText(String(formData.get("shiftSubmissionDeadlineTime") ?? ""));
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -401,6 +426,9 @@ export async function PUT(request: Request) {
       attendance_longitude = ${attendanceLongitude},
       attendance_radius_meters = ${attendanceRadiusMeters},
       attendance_accuracy_threshold_meters = ${attendanceAccuracyThresholdMeters},
+      shift_first_half_submission_deadline_day = ${shiftFirstHalfSubmissionDeadlineDay},
+      shift_second_half_submission_deadline_day = ${shiftSecondHalfSubmissionDeadlineDay},
+      shift_submission_deadline_time = ${shiftSubmissionDeadlineTime}::time,
       updated_at = now()
     where name = ${currentName}
     returning id

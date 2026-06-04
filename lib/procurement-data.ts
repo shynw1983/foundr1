@@ -131,6 +131,9 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           stores.attendance_longitude::float as "attendanceLongitude",
           coalesce(stores.attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
           coalesce(stores.attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters",
+          coalesce(stores.shift_first_half_submission_deadline_day, 25)::int as "shiftFirstHalfSubmissionDeadlineDay",
+          coalesce(stores.shift_second_half_submission_deadline_day, 10)::int as "shiftSecondHalfSubmissionDeadlineDay",
+          to_char(coalesce(stores.shift_submission_deadline_time, '23:59'::time), 'HH24:MI') as "shiftSubmissionDeadlineTime",
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', store_sales_sources.id::text,

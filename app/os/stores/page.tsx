@@ -43,6 +43,9 @@ type StoreItem = {
   attendanceLongitude?: number | null;
   attendanceRadiusMeters?: number;
   attendanceAccuracyThresholdMeters?: number;
+  shiftFirstHalfSubmissionDeadlineDay?: number;
+  shiftSecondHalfSubmissionDeadlineDay?: number;
+  shiftSubmissionDeadlineTime?: string;
   salesSources?: SalesSourceItem[];
   paymentAccount?: PaymentAccountItem | null;
 };
@@ -156,6 +159,9 @@ export default function StoresPage() {
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
+  const [editingShiftFirstHalfDeadlineDay, setEditingShiftFirstHalfDeadlineDay] = useState(25);
+  const [editingShiftSecondHalfDeadlineDay, setEditingShiftSecondHalfDeadlineDay] = useState(10);
+  const [editingShiftDeadlineTime, setEditingShiftDeadlineTime] = useState("23:59");
   const [selectedSalesSourceKeys, setSelectedSalesSourceKeys] = useState<string[]>([salesSourceKey("smaregi")]);
   const [editingSalesSourceKeys, setEditingSalesSourceKeys] = useState<string[]>([]);
   const [editingKomojuEnabled, setEditingKomojuEnabled] = useState(false);
@@ -429,6 +435,9 @@ export default function StoresPage() {
     const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
     const payrollClosingDay = payrollCycleType === "month_end" ? 31 : Math.max(1, Math.min(30, Math.round(Number(formData.get("payrollClosingDay") ?? editingPayrollClosingDay) || editingPayrollClosingDay)));
     const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
+    const shiftFirstHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? editingShiftFirstHalfDeadlineDay) || editingShiftFirstHalfDeadlineDay)));
+    const shiftSecondHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? editingShiftSecondHalfDeadlineDay) || editingShiftSecondHalfDeadlineDay)));
+    const shiftSubmissionDeadlineTime = String(formData.get("shiftSubmissionDeadlineTime") ?? editingShiftDeadlineTime);
 
     if (!nextName) return;
 
@@ -480,7 +489,10 @@ export default function StoresPage() {
         attendanceLatitude,
         attendanceLongitude,
         attendanceRadiusMeters,
-        attendanceAccuracyThresholdMeters
+        attendanceAccuracyThresholdMeters,
+        shiftFirstHalfSubmissionDeadlineDay,
+        shiftSecondHalfSubmissionDeadlineDay,
+        shiftSubmissionDeadlineTime
       } : item)
     );
     setEditingStore(null);
@@ -502,6 +514,9 @@ export default function StoresPage() {
     setEditingAttendanceLongitude("");
     setEditingAttendanceRadiusMeters("100");
     setEditingAttendanceAccuracyThresholdMeters("100");
+    setEditingShiftFirstHalfDeadlineDay(25);
+    setEditingShiftSecondHalfDeadlineDay(10);
+    setEditingShiftDeadlineTime("23:59");
     setEditingGeocodeMessage("");
     setEditingStoreTab("basic");
     void loadData();
@@ -534,6 +549,9 @@ export default function StoresPage() {
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
+    setEditingShiftFirstHalfDeadlineDay(store.shiftFirstHalfSubmissionDeadlineDay ?? 25);
+    setEditingShiftSecondHalfDeadlineDay(store.shiftSecondHalfSubmissionDeadlineDay ?? 10);
+    setEditingShiftDeadlineTime(store.shiftSubmissionDeadlineTime ?? "23:59");
     setEditingSalesSourceKeys(Array.from(new Set((store.salesSources ?? []).filter((source) => source.isEnabled).map((source) => salesSourceKey(source.platform, source.brandName)))));
     setEditingKomojuEnabled(store.paymentAccount?.isActive === true);
     setEditingKomojuAccountName(store.paymentAccount?.accountName ?? "");
@@ -1050,12 +1068,50 @@ export default function StoresPage() {
                     <strong>社会保険料率</strong>
                     <p>健康保険・厚生年金などの料率を地区別に参照するための基準地域です。料率表との連携は給与計算の次フェーズで反映します。</p>
                   </div>
+                  <div className="store-payroll-summary">
+                    <strong>希望シフト提出期限</strong>
+                    <p>スタッフ画面では、今日提出できる前半・後半の対象期間だけを自動表示します。</p>
+                  </div>
+                  <label>
+                    <span>前半シフト締切日</span>
+                    <input
+                      name="shiftFirstHalfSubmissionDeadlineDay"
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={editingShiftFirstHalfDeadlineDay}
+                      onChange={(event) => setEditingShiftFirstHalfDeadlineDay(Math.max(1, Math.min(28, Math.round(Number(event.target.value) || 25))))}
+                    />
+                  </label>
+                  <label>
+                    <span>後半シフト締切日</span>
+                    <input
+                      name="shiftSecondHalfSubmissionDeadlineDay"
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={editingShiftSecondHalfDeadlineDay}
+                      onChange={(event) => setEditingShiftSecondHalfDeadlineDay(Math.max(1, Math.min(28, Math.round(Number(event.target.value) || 10))))}
+                    />
+                  </label>
+                  <label>
+                    <span>締切時刻</span>
+                    <input
+                      name="shiftSubmissionDeadlineTime"
+                      type="time"
+                      value={editingShiftDeadlineTime}
+                      onChange={(event) => setEditingShiftDeadlineTime(event.target.value)}
+                    />
+                  </label>
                 </div>
               ) : (
                 <>
                   <input type="hidden" name="payrollCycleType" value={editingPayrollCycleType} />
                   <input type="hidden" name="payrollClosingDay" value={editingPayrollClosingDay} />
                   <input type="hidden" name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} />
+                  <input type="hidden" name="shiftFirstHalfSubmissionDeadlineDay" value={editingShiftFirstHalfDeadlineDay} />
+                  <input type="hidden" name="shiftSecondHalfSubmissionDeadlineDay" value={editingShiftSecondHalfDeadlineDay} />
+                  <input type="hidden" name="shiftSubmissionDeadlineTime" value={editingShiftDeadlineTime} />
                 </>
               )}
             </div>

@@ -20,6 +20,13 @@ type ShiftRequestBody = {
   candidateId?: string;
   message?: string;
   reviewNote?: string;
+  entries?: Array<{
+    workDate?: string;
+    preference?: string;
+    availableStart?: string;
+    availableEnd?: string;
+    note?: string;
+  }>;
 };
 
 const managerRoles = new Set(["owner", "manager", "store_owner"]);
@@ -44,6 +51,102 @@ function getMonthRange(month: string) {
     startDate: `${normalized}-01`,
     endDate: `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, "0")}-01`
   };
+}
+
+function formatDateKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getJstNowParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    minute: Number(get("minute"))
+  };
+}
+
+function clampDeadlineDay(value: unknown, fallback: number) {
+  const day = Math.round(Number(value));
+  return Number.isFinite(day) ? Math.max(1, Math.min(28, day)) : fallback;
+}
+
+function normalizeDeadlineTime(value: unknown) {
+  const text = String(value ?? "23:59").slice(0, 5);
+  return /^\d{2}:\d{2}$/.test(text) ? text : "23:59";
+}
+
+function getShiftSubmissionPeriod(store: { firstHalfDeadlineDay?: unknown; secondHalfDeadlineDay?: unknown; deadlineTime?: unknown } | null) {
+  const now = getJstNowParts();
+  const firstHalfDeadlineDay = clampDeadlineDay(store?.firstHalfDeadlineDay, 25);
+  const secondHalfDeadlineDay = clampDeadlineDay(store?.secondHalfDeadlineDay, 10);
+  const deadlineTime = normalizeDeadlineTime(store?.deadlineTime);
+  const [deadlineHour, deadlineMinute] = deadlineTime.split(":").map(Number);
+  const nowComparable = Date.UTC(now.year, now.month - 1, now.day, now.hour, now.minute);
+  const candidates: Array<{
+    periodType: "first_half" | "second_half";
+    startDate: string;
+    endDate: string;
+    deadlineDate: string;
+    deadlineAt: string;
+    comparable: number;
+    label: string;
+  }> = [];
+
+  for (let offset = 0; offset < 4; offset += 1) {
+    const targetMonthStart = new Date(Date.UTC(now.year, now.month - 1 + offset, 1));
+    const targetYear = targetMonthStart.getUTCFullYear();
+    const targetMonth = targetMonthStart.getUTCMonth();
+    const monthLabel = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}`;
+    const firstDeadlineDate = new Date(Date.UTC(targetYear, targetMonth - 1, firstHalfDeadlineDay, deadlineHour, deadlineMinute));
+    const secondDeadlineDate = new Date(Date.UTC(targetYear, targetMonth, secondHalfDeadlineDay, deadlineHour, deadlineMinute));
+    const nextMonthStart = new Date(Date.UTC(targetYear, targetMonth + 1, 1));
+
+    candidates.push({
+      periodType: "first_half",
+      startDate: `${monthLabel}-01`,
+      endDate: `${monthLabel}-15`,
+      deadlineDate: formatDateKey(firstDeadlineDate),
+      deadlineAt: `${formatDateKey(firstDeadlineDate)} ${deadlineTime}`,
+      comparable: firstDeadlineDate.getTime(),
+      label: `${monthLabel} 前半`
+    });
+    candidates.push({
+      periodType: "second_half",
+      startDate: `${monthLabel}-16`,
+      endDate: formatDateKey(new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000)),
+      deadlineDate: formatDateKey(secondDeadlineDate),
+      deadlineAt: `${formatDateKey(secondDeadlineDate)} ${deadlineTime}`,
+      comparable: secondDeadlineDate.getTime(),
+      label: `${monthLabel} 後半`
+    });
+  }
+
+  return candidates
+    .filter((candidate) => candidate.comparable >= nowComparable)
+    .sort((left, right) => left.comparable - right.comparable)[0] ?? candidates[candidates.length - 1];
+}
+
+function enumerateDates(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  const current = new Date(`${startDate}T00:00:00+09:00`);
+  const end = new Date(`${endDate}T00:00:00+09:00`);
+  while (current.getTime() <= end.getTime()) {
+    dates.push(formatDateKey(current));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
 }
 
 async function getEmployeeWorkStoreIds(employeeId: string) {
@@ -158,6 +261,18 @@ export async function GET(request: Request) {
     order by employees.name
   ` : [];
 
+  const shiftSettingsRows = selectedStoreId ? await sql`
+    select
+      coalesce(shift_first_half_submission_deadline_day, 25)::int as "firstHalfDeadlineDay",
+      coalesce(shift_second_half_submission_deadline_day, 10)::int as "secondHalfDeadlineDay",
+      to_char(coalesce(shift_submission_deadline_time, '23:59'::time), 'HH24:MI') as "deadlineTime"
+    from stores
+    where id::text = ${selectedStoreId}
+    limit 1
+  ` : [];
+  const submissionPeriod = getShiftSubmissionPeriod(shiftSettingsRows[0] ?? null);
+  const submissionDates = enumerateDates(submissionPeriod.startDate, submissionPeriod.endDate);
+
   const requests = selectedStoreId ? await sql`
     select
       timecard_shift_requests.id::text,
@@ -269,6 +384,8 @@ export async function GET(request: Request) {
     currentEmployeeRole: session.role,
     canManageRequests: managerRoles.has(session.role),
     employees,
+    submissionPeriod,
+    submissionDates,
     requests,
     myShifts,
     publications
@@ -361,6 +478,110 @@ export async function POST(request: Request) {
       request
     });
     return Response.json({ ok: true, id: requestId });
+  }
+
+  if (action === "create_availability_period") {
+    const employeeId = session.id;
+    if (!await canWorkAtStore(employeeId, storeId)) {
+      return Response.json({ error: "この店舗のシフト対象ではありません。" }, { status: 403 });
+    }
+    const settingsRows = await sql`
+      select
+        coalesce(shift_first_half_submission_deadline_day, 25)::int as "firstHalfDeadlineDay",
+        coalesce(shift_second_half_submission_deadline_day, 10)::int as "secondHalfDeadlineDay",
+        to_char(coalesce(shift_submission_deadline_time, '23:59'::time), 'HH24:MI') as "deadlineTime"
+      from stores
+      where id::text = ${storeId}
+      limit 1
+    `;
+    const submissionPeriod = getShiftSubmissionPeriod(settingsRows[0] ?? null);
+    const allowedDates = new Set(enumerateDates(submissionPeriod.startDate, submissionPeriod.endDate));
+    const entries = (Array.isArray(body.entries) ? body.entries : [])
+      .map((entry) => ({
+        workDate: String(entry.workDate ?? ""),
+        preference: String(entry.preference ?? ""),
+        availableStart: normalizeTimeValue(entry.availableStart),
+        availableEnd: normalizeTimeValue(entry.availableEnd),
+        note: String(entry.note ?? "").trim()
+      }))
+      .filter((entry) => allowedDates.has(entry.workDate) && (entry.preference === "available" || entry.preference === "unavailable"));
+
+    if (!entries.length) {
+      return Response.json({ error: "提出する日付を選択してください。" }, { status: 400 });
+    }
+    for (const entry of entries) {
+      if (entry.preference === "available" && (!entry.availableStart || !entry.availableEnd)) {
+        return Response.json({ error: `${entry.workDate} の希望時間を入力してください。` }, { status: 400 });
+      }
+    }
+
+    const dateList = entries.map((entry) => entry.workDate);
+    await sql`
+      delete from timecard_shift_requests
+      where store_id::text = ${storeId}
+        and employee_id::text = ${employeeId}
+        and request_type in ('availability', 'day_off')
+        and work_date::text = any(${dateList})
+    `;
+
+    const insertedIds: string[] = [];
+    for (const entry of entries) {
+      const requestType = entry.preference === "available" ? "availability" : "day_off";
+      const inserted = await sql`
+        insert into timecard_shift_requests (
+          store_id,
+          employee_id,
+          request_type,
+          work_date,
+          title,
+          note,
+          created_by,
+          updated_at
+        )
+        values (
+          ${storeId},
+          ${employeeId},
+          ${requestType},
+          ${entry.workDate}::date,
+          ${requestType === "availability" ? "希望シフト" : "休み希望"},
+          ${entry.note || null},
+          ${session.id},
+          now()
+        )
+        returning id::text
+      `;
+      const requestId = String(inserted[0]?.id ?? "");
+      insertedIds.push(requestId);
+      await sql`
+        insert into timecard_shift_request_windows (
+          request_id,
+          work_date,
+          available_start,
+          available_end,
+          preference,
+          note
+        )
+        values (
+          ${requestId},
+          ${entry.workDate}::date,
+          ${entry.availableStart ? `${entry.availableStart}:00` : null}::time,
+          ${entry.availableEnd ? `${entry.availableEnd}:00` : null}::time,
+          ${entry.preference},
+          ${entry.note || null}
+        )
+      `;
+    }
+
+    await notifyStoreManagers(storeId, "希望シフトが提出されました", `${session.name} が ${submissionPeriod.label} の希望シフトを提出しました。`, "/os/timecard/requests");
+    await writeAuditLog({
+      actorEmployeeId: session.id,
+      action: "timecard.shift_request.period_created",
+      targetType: "timecard_shift_request",
+      targetId: storeId,
+      metadata: { storeId, employeeId, period: submissionPeriod, count: insertedIds.length },
+      request
+    });
+    return Response.json({ ok: true, count: insertedIds.length, ids: insertedIds.filter(Boolean) });
   }
 
   if (action === "publish_schedule") {
