@@ -21,6 +21,11 @@ function urlBase64ToUint8Array(value: string) {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
+async function getPushServiceWorkerRegistration() {
+  const existing = await navigator.serviceWorker.getRegistration("/");
+  return existing ?? navigator.serviceWorker.register("/sw.js");
+}
+
 export function NotificationMenu({ className = "" }: { className?: string }) {
   const [notifications, setNotifications] = useState<OsNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -75,7 +80,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
       setPushState("ready");
       return;
     }
-    void navigator.serviceWorker.ready
+    void getPushServiceWorkerRegistration()
       .then((registration) => registration.pushManager.getSubscription())
       .then(async (subscription) => {
         if (!subscription) {
@@ -119,7 +124,7 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     setPushState("saving");
     let subscription: PushSubscription;
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await getPushServiceWorkerRegistration();
       const existing = await registration.pushManager.getSubscription();
       subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,

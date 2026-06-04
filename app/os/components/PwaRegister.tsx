@@ -9,11 +9,18 @@ export function PwaRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    window.addEventListener("load", () => {
+    const registerServiceWorker = () => {
       void navigator.serviceWorker.register("/sw.js").catch(() => {
         // The app still works as a normal website if registration is blocked.
       });
-    });
+    };
+
+    if (document.readyState === "complete") {
+      registerServiceWorker();
+      return;
+    }
+    window.addEventListener("load", registerServiceWorker, { once: true });
+    return () => window.removeEventListener("load", registerServiceWorker);
   }, []);
 
   useEffect(() => {
