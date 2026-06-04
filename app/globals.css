@@ -15629,6 +15629,116 @@ body :where(
 }
 
 @media (max-width: 760px) {
+  .os-home-shell {
+    padding: 14px;
+    overflow-x: hidden;
+  }
+
+  .os-home-shell .os-home-topbar {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .os-home-shell .os-home-topbar .brand-block {
+    width: auto;
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .os-home-shell .topbar-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: start;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 48px;
+  }
+
+  .os-home-shell .topbar-actions .user-badge {
+    display: none;
+  }
+
+  .os-home-shell .mobile-nav-menu {
+    position: relative;
+    flex: 0 0 48px;
+    width: 48px;
+    display: block;
+  }
+
+  .os-home-shell .mobile-nav-menu summary {
+    width: 48px;
+    min-height: 48px;
+    border-color: var(--line);
+    background: white;
+    color: var(--ink);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .os-home-shell .mobile-nav-menu[open] .mobile-nav-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    left: auto;
+    width: min(320px, calc(100vw - 28px));
+    max-height: min(72vh, 560px);
+    overflow-y: auto;
+    z-index: 30;
+  }
+
+  .os-home-shell .os-layout,
+  .os-home-shell .os-main-content,
+  .os-home-shell .management-header,
+  .os-home-shell .panel,
+  .os-home-shell .panel-title,
+  .os-home-shell .pos-admin-toolbar,
+  .os-home-shell .pos-admin-actions,
+  .os-home-shell .pos-admin-order-row {
+    min-width: 0;
+  }
+
+  .os-home-shell .os-layout,
+  .os-home-shell .management-header,
+  .os-home-shell .pos-admin-toolbar,
+  .os-home-shell .pos-admin-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .os-home-shell .management-header {
+    gap: 12px;
+  }
+
+  .os-home-shell .management-header .secondary-button,
+  .os-home-shell .pos-admin-actions a {
+    width: 100%;
+  }
+
+  .os-home-shell .panel-title {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+
+  .os-home-shell .panel-title .text-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .pos-admin-page .pos-admin-cash-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-admin-page .pos-admin-history,
+  .pos-admin-page .pos-admin-reconciliation,
+  .pos-admin-page .pos-admin-correction-panel {
+    padding: 14px;
+  }
+
   .mobile-nav-menu {
     flex-basis: 48px;
   }
