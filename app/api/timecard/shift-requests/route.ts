@@ -370,10 +370,16 @@ export async function GET(request: Request) {
     left join employees message_employees on message_employees.id = timecard_shift_request_messages.employee_id
     where timecard_shift_requests.store_id::text = ${selectedStoreId}
       and (
-        timecard_shift_requests.work_date is null
-        or (
+        (
           timecard_shift_requests.work_date >= ${queryStartDate}::date
           and timecard_shift_requests.work_date < ${queryEndDate}::date
+        )
+        or exists (
+          select 1
+          from timecard_shift_request_windows period_windows
+          where period_windows.request_id = timecard_shift_requests.id
+            and period_windows.work_date >= ${queryStartDate}::date
+            and period_windows.work_date < ${queryEndDate}::date
         )
       )
       and (
@@ -554,16 +560,23 @@ export async function POST(request: Request) {
       }
     }
 
-    const dateList = Array.from(allowedDates);
-    await sql`
-      delete from timecard_shift_requests
-      where store_id::text = ${storeId}
-        and employee_id::text = ${employeeId}
-        and request_type in ('availability', 'day_off')
-        and work_date::text = any(${dateList})
-    `;
-
     if (!entries.length) {
+      const dateList = Array.from(allowedDates);
+      await sql`
+        delete from timecard_shift_requests
+        where store_id::text = ${storeId}
+          and employee_id::text = ${employeeId}
+          and request_type in ('availability', 'day_off')
+          and (
+            to_char(work_date, 'YYYY-MM-DD') = any(${dateList})
+            or exists (
+              select 1
+              from timecard_shift_request_windows period_windows
+              where period_windows.request_id = timecard_shift_requests.id
+                and to_char(period_windows.work_date, 'YYYY-MM-DD') = any(${dateList})
+            )
+          )
+      `;
       await notifyStoreManagers(storeId, "希望シフトが更新されました", `${session.name} が ${submissionPeriod.label} の希望シフトを空で保存しました。`, "/os/timecard/requests");
       await writeAuditLog({
         actorEmployeeId: session.id,
@@ -576,8 +589,88 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, count: 0, ids: [] });
     }
 
+    const dateList = Array.from(allowedDates);
+    const existingRows = await sql`
+      select distinct on (coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')))
+        timecard_shift_requests.id::text,
+        coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')) as "workDate"
+      from timecard_shift_requests
+      left join timecard_shift_request_windows on timecard_shift_request_windows.request_id = timecard_shift_requests.id
+      where timecard_shift_requests.store_id::text = ${storeId}
+        and timecard_shift_requests.employee_id::text = ${employeeId}
+        and timecard_shift_requests.request_type in ('availability', 'day_off')
+        and (
+          to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD') = any(${dateList})
+          or to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD') = any(${dateList})
+        )
+      order by coalesce(to_char(timecard_shift_requests.work_date, 'YYYY-MM-DD'), to_char(timecard_shift_request_windows.work_date, 'YYYY-MM-DD')), timecard_shift_requests.created_at desc
+    `;
+    const existingByDate = new Map(existingRows.map((row) => [String(row.workDate), String(row.id)]));
+    const retainedRequestIds = entries
+      .map((entry) => existingByDate.get(entry.workDate))
+      .filter((id): id is string => Boolean(id));
+    await sql`
+      delete from timecard_shift_requests
+      where store_id::text = ${storeId}
+        and employee_id::text = ${employeeId}
+        and request_type in ('availability', 'day_off')
+        and (
+          to_char(work_date, 'YYYY-MM-DD') = any(${dateList})
+          or exists (
+            select 1
+            from timecard_shift_request_windows period_windows
+            where period_windows.request_id = timecard_shift_requests.id
+              and to_char(period_windows.work_date, 'YYYY-MM-DD') = any(${dateList})
+          )
+        )
+        and (
+          coalesce(array_length(${retainedRequestIds}::text[], 1), 0) = 0
+          or id::text <> all(${retainedRequestIds}::text[])
+        )
+    `;
+
     const insertedIds: string[] = [];
     for (const entry of entries) {
+      const existingRequestId = existingByDate.get(entry.workDate);
+      if (existingRequestId) {
+        await sql`
+          update timecard_shift_requests
+          set
+            request_type = 'availability',
+            work_date = ${entry.workDate}::date,
+            title = '希望シフト',
+            note = ${entry.note || null},
+            updated_at = now()
+          where id::text = ${existingRequestId}
+            and store_id::text = ${storeId}
+            and employee_id::text = ${employeeId}
+        `;
+        await sql`
+          delete from timecard_shift_request_windows
+          where request_id::text = ${existingRequestId}
+        `;
+        await sql`
+          insert into timecard_shift_request_windows (
+            request_id,
+            work_date,
+            available_start,
+            available_end,
+            preference,
+            note
+          )
+          values (
+            ${existingRequestId},
+            ${entry.workDate}::date,
+            ${entry.availableStart ? `${entry.availableStart}:00` : null}::time,
+            ${entry.availableEnd ? `${entry.availableEnd}:00` : null}::time,
+            'available',
+            ${entry.note || null}
+          )
+        `;
+        insertedIds.push(existingRequestId);
+        continue;
+      }
+
       const inserted = await sql`
         insert into timecard_shift_requests (
           store_id,
