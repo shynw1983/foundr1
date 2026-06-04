@@ -5289,6 +5289,65 @@ body :where(
   font-weight: 900;
 }
 
+.store-pos-business-state {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.store-pos-business-state div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.store-pos-business-state span,
+.store-pos-business-state p,
+.store-pos-business-state small {
+  margin: 0;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-business-state strong {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.store-pos-business-state.is-active {
+  border-color: rgba(31, 111, 85, 0.26);
+  background: var(--green-soft);
+}
+
+.store-pos-business-state.is-active strong {
+  color: #1f6f55;
+}
+
+.store-pos-business-state.is-warning {
+  border-color: rgba(180, 83, 9, 0.24);
+  background: #fff7ed;
+}
+
+.store-pos-business-state.is-warning strong {
+  color: #9a3412;
+}
+
+.store-pos-business-state.is-off {
+  background: #f8fafc;
+}
+
 .store-pos-cash-active {
   display: grid;
   gap: 12px;

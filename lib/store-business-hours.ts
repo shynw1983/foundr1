@@ -164,6 +164,112 @@ export type StoreReceptionState = {
   tone: "active" | "warning" | "off";
 };
 
+export type StoreCashBusinessDayState = {
+  businessDate: string;
+  openAt: string;
+  closeAt: string;
+  openLabel: string;
+  closeLabel: string;
+  status: "before_open" | "business_open" | "after_close" | "closed_day";
+  statusLabel: string;
+  detailLabel: string;
+  tone: "active" | "warning" | "off";
+};
+
+function formatBusinessDateTimeLabel(dateString: string, timeString: string) {
+  return `${dateString} ${timeString}`;
+}
+
+export function getStoreCashBusinessDayState(value: unknown, now = new Date()): StoreCashBusinessDayState {
+  const hours = normalizeBusinessHours(value);
+  const current = getTokyoDateTimeParts(now);
+  const currentKey = getWeekdayKey(current.date);
+  const currentTimeMinutes = toMinutes(current.time);
+  const fallback = {
+    businessDate: current.date,
+    openAt: `${current.date}T00:00`,
+    closeAt: `${current.date}T23:59`,
+    openLabel: formatBusinessDateTimeLabel(current.date, "00:00"),
+    closeLabel: formatBusinessDateTimeLabel(current.date, "23:59"),
+    status: "business_open" as const,
+    statusLabel: "営業時間内",
+    detailLabel: "営業時間設定を確認できませんでした。",
+    tone: "active" as const
+  };
+  if (!currentKey) return fallback;
+
+  const previousDate = addDays(current.date, -1);
+  const previousKey = getPreviousWeekdayKey(currentKey);
+  const previousDay = hours[previousKey];
+  if (!previousDay.closed && crossesMidnight(previousDay) && currentTimeMinutes <= toMinutes(previousDay.close)) {
+    return {
+      businessDate: previousDate,
+      openAt: `${previousDate}T${previousDay.open}`,
+      closeAt: `${current.date}T${previousDay.close}`,
+      openLabel: formatBusinessDateTimeLabel(previousDate, previousDay.open),
+      closeLabel: formatBusinessDateTimeLabel(current.date, previousDay.close),
+      status: "business_open",
+      statusLabel: "営業時間内",
+      detailLabel: "前営業日の深夜営業時間です。",
+      tone: "active"
+    };
+  }
+
+  const currentDay = hours[currentKey];
+  if (currentDay.closed) {
+    return {
+      businessDate: current.date,
+      openAt: "",
+      closeAt: "",
+      openLabel: "休業",
+      closeLabel: "休業",
+      status: "closed_day",
+      statusLabel: "休業日",
+      detailLabel: "本日は営業時間が設定されていません。責任者のみ例外対応してください。",
+      tone: "off"
+    };
+  }
+
+  const closeDate = crossesMidnight(currentDay) ? addDays(current.date, 1) : current.date;
+  const openCompare = compareDateTime(current.date, current.time, current.date, currentDay.open);
+  const closeCompare = compareDateTime(current.date, current.time, closeDate, currentDay.close);
+  const base = {
+    businessDate: current.date,
+    openAt: `${current.date}T${currentDay.open}`,
+    closeAt: `${closeDate}T${currentDay.close}`,
+    openLabel: formatBusinessDateTimeLabel(current.date, currentDay.open),
+    closeLabel: formatBusinessDateTimeLabel(closeDate, currentDay.close)
+  };
+
+  if (openCompare < 0) {
+    return {
+      ...base,
+      status: "before_open",
+      statusLabel: "開店前",
+      detailLabel: "開店準備時間です。開始金額を確認してから POS 会計を開始してください。",
+      tone: "warning"
+    };
+  }
+
+  if (closeCompare <= 0) {
+    return {
+      ...base,
+      status: "business_open",
+      statusLabel: "営業時間内",
+      detailLabel: "営業中です。閉店後にレジ締めを行ってください。",
+      tone: "active"
+    };
+  }
+
+  return {
+    ...base,
+    status: "after_close",
+    statusLabel: "閉店後",
+    detailLabel: "営業終了後です。未締めの場合はレジ締めを行ってください。",
+    tone: "warning"
+  };
+}
+
 export function getNextBusinessOpening(value: unknown, now = new Date()) {
   if (!value || (typeof value === "object" && Object.keys(value).length === 0)) return "";
   const hours = normalizeBusinessHours(value);

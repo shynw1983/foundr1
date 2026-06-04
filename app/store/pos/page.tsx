@@ -119,8 +119,19 @@ type PosCashResponsibleEmployee = {
   punchedAt: string;
 };
 
+type PosBusinessState = {
+  businessDate: string;
+  openLabel: string;
+  closeLabel: string;
+  status: string;
+  statusLabel: string;
+  detailLabel: string;
+  tone: "active" | "warning" | "off";
+};
+
 type PosReconciliation = {
   businessDate: string;
+  businessState: PosBusinessState | null;
   activeSession: PosCashSession | null;
   sessions: PosCashSession[];
   movements: PosCashMovement[];
@@ -217,7 +228,7 @@ export default function StorePosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", activeSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
+  const [reconciliation, setReconciliation] = useState<PosReconciliation>({ businessDate: "", businessState: null, activeSession: null, sessions: [], movements: [], activeCashResponsibleEmployees: [] });
   const [cashOpeningAmount, setCashOpeningAmount] = useState("");
   const [cashMovementType, setCashMovementType] = useState("cash_out");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
@@ -235,6 +246,7 @@ export default function StorePosPage() {
     const body = await response.json();
     setReconciliation({
       businessDate: body.businessDate ?? "",
+      businessState: body.businessState ?? null,
       activeSession: body.activeSession ?? null,
       sessions: body.sessions ?? [],
       movements: body.movements ?? [],
@@ -508,6 +520,7 @@ export default function StorePosPage() {
       if (!response.ok) throw new Error(body.error || "レジ締めを保存できませんでした。");
       setReconciliation({
         businessDate: body.businessDate ?? reconciliation.businessDate,
+        businessState: body.businessState ?? reconciliation.businessState,
         activeSession: body.activeSession ?? null,
         sessions: body.sessions ?? [],
         movements: body.movements ?? [],
@@ -568,6 +581,16 @@ export default function StorePosPage() {
           </div>
           <span>{reconciliation.businessDate || "-"}</span>
         </div>
+        {reconciliation.businessState ? (
+          <div className={`store-pos-business-state is-${reconciliation.businessState.tone}`}>
+            <div>
+              <span>営業日 {reconciliation.businessState.businessDate}</span>
+              <strong>{reconciliation.businessState.statusLabel}</strong>
+            </div>
+            <p>{reconciliation.businessState.openLabel} - {reconciliation.businessState.closeLabel}</p>
+            <small>{reconciliation.businessState.detailLabel}</small>
+          </div>
+        ) : null}
 
         {reconciliation.activeSession ? (
           <div className="store-pos-cash-active">

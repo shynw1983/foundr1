@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,8 @@ type ActiveCashResponsibleEmployee = {
   punchedAt: string;
 };
 
+type CashBusinessState = ReturnType<typeof getStoreCashBusinessDayState>;
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -48,15 +51,6 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function getJstDate(date = new Date()) {
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
-}
-
 async function getSelectedStoreId(request: Request, session: Awaited<ReturnType<typeof requireOsSession>>) {
   if (!session) return { access: null, selectedStoreId: "", forbidden: false };
   const access = await getStoreOrderAccess(session);
@@ -64,6 +58,16 @@ async function getSelectedStoreId(request: Request, session: Awaited<ReturnType<
   const storeFilter = getScopedStoreFilter(access, requestedStoreId);
   if (storeFilter === "__forbidden__") return { access, selectedStoreId: "", forbidden: true };
   return { access, selectedStoreId: storeFilter ?? access.stores[0]?.id ?? "", forbidden: false };
+}
+
+async function getCashBusinessState(storeId: string): Promise<CashBusinessState> {
+  const rows = await sql`
+    select business_hours as "businessHours"
+    from stores
+    where id::text = ${storeId}
+    limit 1
+  `;
+  return getStoreCashBusinessDayState(rows[0]?.businessHours ?? {});
 }
 
 async function getSessionFinancials(sessionId: string) {
@@ -262,19 +266,20 @@ async function getActiveCashResponsibleEmployees(storeId: string) {
 async function getOrders(storeId: string, businessDate: string) {
   return sql`
     select
-      id::text,
-      pickup_code as "pickupCode",
-      amount,
-      payment_provider as "paymentMethod",
-      coalesce(customer_summary ->> 'cashierName', '') as "cashierName",
-      to_char(created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
-      created_at::text as "createdAt"
+      store_customer_orders.id::text,
+      store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.amount,
+      store_customer_orders.payment_provider as "paymentMethod",
+      coalesce(store_customer_orders.customer_summary ->> 'cashierName', '') as "cashierName",
+      to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
+      store_customer_orders.created_at::text as "createdAt"
     from store_customer_orders
-    where store_id::text = ${storeId}
-      and order_source = 'store_pos'
-      and status <> 'cancelled'
-      and (created_at at time zone 'Asia/Tokyo')::date = ${businessDate}
-    order by created_at desc
+    left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
+    where store_customer_orders.store_id::text = ${storeId}
+      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.status <> 'cancelled'
+      and coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date) = ${businessDate}
+    order by store_customer_orders.created_at desc
     limit 200
   `;
 }
@@ -282,16 +287,17 @@ async function getOrders(storeId: string, businessDate: string) {
 async function getPaymentTotals(storeId: string, businessDate: string) {
   return sql`
     select
-      payment_provider as "paymentMethod",
+      store_customer_orders.payment_provider as "paymentMethod",
       count(*)::int as count,
-      coalesce(sum(amount), 0)::int as amount
+      coalesce(sum(store_customer_orders.amount), 0)::int as amount
     from store_customer_orders
-    where store_id::text = ${storeId}
-      and order_source = 'store_pos'
-      and status <> 'cancelled'
-      and (created_at at time zone 'Asia/Tokyo')::date = ${businessDate}
-    group by payment_provider
-    order by payment_provider
+    left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
+    where store_customer_orders.store_id::text = ${storeId}
+      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.status <> 'cancelled'
+      and coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date) = ${businessDate}
+    group by store_customer_orders.payment_provider
+    order by store_customer_orders.payment_provider
   `;
 }
 
@@ -301,7 +307,8 @@ export async function GET(request: Request) {
 
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
-  const businessDate = normalizeText(new URL(request.url).searchParams.get("date")) || getJstDate();
+  const businessState = await getCashBusinessState(selectedStoreId);
+  const businessDate = normalizeText(new URL(request.url).searchParams.get("date")) || businessState.businessDate;
 
   const [activeSession, sessions] = await Promise.all([
     getOpenSession(selectedStoreId),
@@ -327,6 +334,7 @@ export async function GET(request: Request) {
     access: { ...access, canManageCashReconciliation: cashCorrectionRoles.has(session.role) },
     selectedStoreId,
     businessDate,
+    businessState,
     activeSession,
     sessions,
     movements,
@@ -365,6 +373,7 @@ export async function POST(request: Request) {
   }
 
   const canManageCashReconciliation = cashCorrectionRoles.has(session.role);
+  const businessState = await getCashBusinessState(storeFilter);
 
   if (action === "open") {
     const existing = await getOpenSession(storeFilter);
@@ -385,7 +394,7 @@ export async function POST(request: Request) {
       )
       values (
         ${storeFilter},
-        ${getJstDate()},
+        ${businessState.businessDate},
         ${registerName},
         ${openingAmount},
         ${note},
@@ -484,7 +493,7 @@ export async function POST(request: Request) {
     if (!rows[0]) return Response.json({ error: "レジ締め記録が見つかりません。" }, { status: 404 });
   } else if (action === "clear_date") {
     if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
-    const targetDate = normalizeText(body.businessDate) || getJstDate();
+    const targetDate = normalizeText(body.businessDate) || businessState.businessDate;
     await sql`
       delete from pos_cash_sessions
       where store_id::text = ${storeFilter}
@@ -492,13 +501,13 @@ export async function POST(request: Request) {
     `;
   } else if (action === "recalculate") {
     if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
-    const targetDate = normalizeText(body.businessDate) || getJstDate();
+    const targetDate = normalizeText(body.businessDate) || businessState.businessDate;
     await recalculateDateSessions(storeFilter, targetDate);
   } else {
     return Response.json({ error: "操作を選択してください。" }, { status: 400 });
   }
 
-  const businessDate = normalizeText(body.businessDate) || getJstDate();
+  const businessDate = normalizeText(body.businessDate) || businessState.businessDate;
   const [activeSession, sessions] = await Promise.all([
     getOpenSession(storeFilter),
     getSessions(storeFilter, businessDate)
@@ -509,5 +518,5 @@ export async function POST(request: Request) {
     getPaymentTotals(storeFilter, businessDate),
     getActiveCashResponsibleEmployees(storeFilter)
   ]);
-  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, activeSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
+  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
 }
