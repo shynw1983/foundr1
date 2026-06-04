@@ -29,6 +29,22 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const notificationMenuRef = useRef<HTMLDetailsElement | null>(null);
 
+  async function saveSubscription(subscription: PushSubscription) {
+    const response = await fetch("/api/notifications/web-push-subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription })
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setPushState("granted");
+      setPushMessage(body.error ?? "通知端末を保存できませんでした。");
+      return false;
+    }
+    setPushState("enabled");
+    return true;
+  }
+
   async function loadNotifications() {
     const response = await fetch("/api/notifications", { cache: "no-store" });
     if (!response.ok) return;
@@ -61,7 +77,14 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     }
     void navigator.serviceWorker.ready
       .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setPushState(subscription ? "enabled" : "granted"))
+      .then(async (subscription) => {
+        if (!subscription) {
+          setPushState("granted");
+          return;
+        }
+        setPushState("saving");
+        await saveSubscription(subscription);
+      })
       .catch(() => setPushState("granted"));
   }, []);
 
@@ -107,20 +130,11 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
       setPushMessage("通知は許可済みですが、この端末の登録に失敗しました。");
       return;
     }
-    const response = await fetch("/api/notifications/web-push-subscriptions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription })
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      setPushState("granted");
-      setPushMessage(body.error ?? "通知端末を保存できませんでした。");
-      return;
+    const saved = await saveSubscription(subscription);
+    if (saved) {
+      setPushMessage("この端末へのプッシュ通知を有効にしました。");
+      window.setTimeout(() => setIsOpen(false), 700);
     }
-    setPushState("enabled");
-    setPushMessage("この端末へのプッシュ通知を有効にしました。");
-    window.setTimeout(() => setIsOpen(false), 700);
   }
 
   return (
