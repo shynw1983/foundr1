@@ -116,6 +116,18 @@ export default function StoreOrdersPage() {
   const [soundReady, setSoundReady] = useState(false);
   const [error, setError] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
+  const selectedStoreIdRef = useRef("");
+
+  useEffect(() => {
+    selectedStoreIdRef.current = selectedStoreId;
+  }, [selectedStoreId]);
+
+  const selectStore = (storeId: string) => {
+    selectedStoreIdRef.current = storeId;
+    setSelectedStoreId(storeId);
+    setSelectedId("");
+    setOrders([]);
+  };
 
   const loadOperation = async (storeId = selectedStoreId) => {
     if (!storeId) {
@@ -205,7 +217,8 @@ export default function StoreOrdersPage() {
   const refresh = async () => {
     setIsRefreshing(true);
     const params = new URLSearchParams();
-    if (selectedStoreId) params.set("storeId", selectedStoreId);
+    const requestedStoreId = selectedStoreIdRef.current;
+    if (requestedStoreId) params.set("storeId", requestedStoreId);
     const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
       setError("注文を読み込めませんでした。");
@@ -215,16 +228,23 @@ export default function StoreOrdersPage() {
     }
     const body = await response.json();
     const nextAccess = body.access as StoreOrderAccess | undefined;
-    const nextSelectedStoreId = String(body.selectedStoreId || selectedStoreId || nextAccess?.stores[0]?.id || "");
+    const responseStoreId = String(body.selectedStoreId || requestedStoreId || nextAccess?.stores[0]?.id || "");
+    const currentStoreId = selectedStoreIdRef.current;
+    if (currentStoreId && responseStoreId && currentStoreId !== responseStoreId) {
+      setIsRefreshing(false);
+      return;
+    }
     if (nextAccess) {
       setAccess(nextAccess);
-      if (!selectedStoreId && nextSelectedStoreId) {
-        setSelectedStoreId(nextSelectedStoreId);
+      if (!selectedStoreIdRef.current && responseStoreId) {
+        selectedStoreIdRef.current = responseStoreId;
+        setSelectedStoreId(responseStoreId);
       }
     }
     if (nextAccess?.canViewSalesStats) {
       const statsParams = new URLSearchParams({ days: String(statsDays) });
-      if (nextSelectedStoreId) statsParams.set("storeId", nextSelectedStoreId);
+      const statsStoreId = selectedStoreIdRef.current || responseStoreId;
+      if (statsStoreId) statsParams.set("storeId", statsStoreId);
       const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, { cache: "no-store" });
       if (statsResponse.ok) setStats(await statsResponse.json());
     } else {
@@ -421,7 +441,7 @@ export default function StoreOrdersPage() {
           <div className="store-stats-heading">
             <h2>{access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗"}</h2>
             {access && access.stores.length > 1 ? (
-              <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} aria-label="店舗">
+              <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} aria-label="店舗">
                 {access.stores.map((store) => (
                   <option value={store.id} key={store.id}>{store.name}</option>
                 ))}
