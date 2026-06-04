@@ -5801,29 +5801,6 @@ body :where(
   min-height: 48px;
 }
 
-.pos-admin-page .os-main-content {
-  display: grid;
-  gap: 18px;
-  min-width: 0;
-}
-
-.pos-admin-page .os-layout {
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-  min-width: 0;
-}
-
-.pos-admin-page .sidebar {
-  width: 78px;
-  padding: 14px 8px;
-}
-
-.pos-admin-page .sidebar:has(.nav-shell.is-expanded) {
-  width: 268px;
-}
-
 .pos-admin-toolbar {
   justify-content: space-between;
   flex-wrap: wrap;
@@ -15540,14 +15517,6 @@ body :where(
 }
 
 @media (max-width: 1180px) {
-  .pos-admin-page .os-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .pos-admin-page .sidebar {
-    display: none;
-  }
-
   .store-pos-layout {
     grid-template-columns: 1fr;
   }
@@ -15693,17 +15662,12 @@ body :where(
   .os-home-shell .os-main-content,
   .os-home-shell .management-header,
   .os-home-shell .panel,
-  .os-home-shell .panel-title,
-  .os-home-shell .pos-admin-toolbar,
-  .os-home-shell .pos-admin-actions,
-  .os-home-shell .pos-admin-order-row {
+  .os-home-shell .panel-title {
     min-width: 0;
   }
 
   .os-home-shell .os-layout,
-  .os-home-shell .management-header,
-  .os-home-shell .pos-admin-toolbar,
-  .os-home-shell .pos-admin-actions {
+  .os-home-shell .management-header {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -15712,8 +15676,7 @@ body :where(
     gap: 12px;
   }
 
-  .os-home-shell .management-header .secondary-button,
-  .os-home-shell .pos-admin-actions a {
+  .os-home-shell .management-header .secondary-button {
     width: 100%;
   }
 
