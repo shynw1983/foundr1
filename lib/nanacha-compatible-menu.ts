@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
 
 export type NanachaPricedOption = {
   id: string;
@@ -345,7 +346,16 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         limit 1
       `
     : [];
-  const storeOperation = operationRows[0] as NanachaCompatibleMenu["storeOperation"] | undefined;
+  const storeOperation = await applyStaffPresenceGateToPublicOperation(
+    selectedStore?.osStoreId,
+    (operationRows[0] as StoreOperationForPublicMenu | undefined) ?? {
+      reservationsEnabled: true,
+      statusNote: "",
+      businessHours: {},
+      reservationNote: "",
+      minimumPickupMinutes: null
+    }
+  );
 
   const drinksWithStoreSettings = drinks.map((drink) => {
     const setting = settingsByItemId.get(drink.menuCatalogItemId);
@@ -373,13 +383,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
       whippedCategories: publicCategories.filter((category) => category.hasWhipByDefault).map((category) => category.id),
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",
-      storeOperation: storeOperation ?? {
-        reservationsEnabled: true,
-        statusNote: "",
-        businessHours: {},
-        reservationNote: "",
-        minimumPickupMinutes: null
-      }
+      storeOperation
     }
   };
 }

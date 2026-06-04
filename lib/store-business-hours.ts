@@ -51,7 +51,7 @@ function getPreviousWeekdayKey(key: WeekdayKey) {
   return weekdayKeys[(index + weekdayKeys.length - 1) % weekdayKeys.length];
 }
 
-function getTokyoDateTimeParts(date = new Date()) {
+export function getTokyoDateTimeParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
     year: "numeric",

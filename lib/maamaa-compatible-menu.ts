@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
 
 export type MaamaaPricedOption = {
   id: string;
@@ -242,6 +243,16 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         limit 1
       `
     : [];
+  const storeOperation = await applyStaffPresenceGateToPublicOperation(
+    selectedStore?.osStoreId,
+    (operationRows[0] as StoreOperationForPublicMenu | undefined) ?? {
+      reservationsEnabled: true,
+      statusNote: "",
+      businessHours: {},
+      reservationNote: "",
+      minimumPickupMinutes: null
+    }
+  );
 
   return {
     brandId: brand.id,
@@ -262,13 +273,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       menuSections,
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",
-      storeOperation: operationRows[0] as MaamaaCompatibleMenu["storeOperation"] | undefined ?? {
-        reservationsEnabled: true,
-        statusNote: "",
-        businessHours: {},
-        reservationNote: "",
-        minimumPickupMinutes: null
-      }
+      storeOperation
     }
   };
 }

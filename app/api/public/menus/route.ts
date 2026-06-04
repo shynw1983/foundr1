@@ -1,4 +1,5 @@
 import { sql } from "../../../../lib/db";
+import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
 
 const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
 const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
@@ -236,16 +237,21 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({
-    brand,
-    store,
-    storeOperation: operationRows[0] ?? {
+  const storeOperation = await applyStaffPresenceGateToPublicOperation(
+    store?.id,
+    (operationRows[0] as StoreOperationForPublicMenu | undefined) ?? {
       reservationsEnabled: true,
       statusNote: "",
       businessHours: {},
       reservationNote: "",
       minimumPickupMinutes: null
-    },
+    }
+  );
+
+  return Response.json({
+    brand,
+    store,
+    storeOperation,
     categories,
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
