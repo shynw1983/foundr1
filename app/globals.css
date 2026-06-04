@@ -5619,6 +5619,24 @@ body :where(
 .pos-admin-page .os-main-content {
   display: grid;
   gap: 18px;
+  min-width: 0;
+}
+
+.pos-admin-page .os-layout {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.pos-admin-page .sidebar {
+  width: 78px;
+  padding: 14px 8px;
+}
+
+.pos-admin-page .sidebar:has(.nav-shell.is-expanded) {
+  width: 268px;
 }
 
 .pos-admin-toolbar {
@@ -15253,6 +15271,14 @@ body :where(
 }
 
 @media (max-width: 1180px) {
+  .pos-admin-page .os-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-admin-page .sidebar {
+    display: none;
+  }
+
   .store-pos-layout {
     grid-template-columns: 1fr;
   }
