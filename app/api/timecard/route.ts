@@ -1,6 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { sql } from "../../../lib/db";
+import type { EmployeeSession } from "../../../lib/auth";
 import {
   getJstDateLabel,
   getJstMonthLabel,
@@ -123,6 +124,26 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
       and id::text = any(${storeIds})
     order by name
   `;
+}
+
+async function getEmployeeWorkStoreIds(employeeId: string) {
+  const rows = await sql`
+    select employee_work_stores.store_id::text as "storeId"
+    from employee_work_stores
+    join stores on stores.id = employee_work_stores.store_id
+    where employee_work_stores.employee_id = ${employeeId}
+      and stores.status = 'active'
+    order by stores.name
+  `;
+  return rows.map((row) => String(row.storeId));
+}
+
+async function getTimecardStoreScope(session: EmployeeSession) {
+  if (session.role === "staff") {
+    return { allStores: false, storeIds: await getEmployeeWorkStoreIds(session.id) };
+  }
+
+  return getSessionStoreScope(session);
 }
 
 async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
@@ -739,7 +760,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const monthParam = url.searchParams.get("month") || getJstMonthLabel();
   const month = /^(\d{4})-(\d{2})$/.test(monthParam) ? monthParam : getJstMonthLabel();
-  const scope = await getSessionStoreScope(session);
+  const scope = await getTimecardStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
   const requestedStoreId = url.searchParams.get("storeId");
@@ -917,7 +938,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "店舗を選択してください。" }, { status: 400 });
   }
 
-  if (!await canAccessStore(session, storeId)) {
+  const hasStoreAccess = session.role === "staff"
+    ? await canPunchForEmployee(storeId, session.id)
+    : await canAccessStore(session, storeId);
+  if (!hasStoreAccess) {
     return Response.json({ error: "この店舗を操作する権限がありません。" }, { status: 403 });
   }
 
@@ -1071,7 +1095,7 @@ export async function POST(request: Request) {
     }
     const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
     const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
-    const scope = await getSessionStoreScope(session);
+    const scope = await getTimecardStoreScope(session);
     const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
     const withholdingTaxRows = await getWithholdingTaxRowsForMonth(month);
     const socialInsuranceRows = await getSocialInsuranceRowsForMonth(month);
@@ -1473,7 +1497,7 @@ export async function POST(request: Request) {
 
   const source = String(body.source ?? "").trim();
   const isMobilePunch = source === "mobile";
-  const employeeId = isMobilePunch && mobilePunchRoles.has(session.role)
+  const employeeId = session.role === "staff"
     ? session.id
     : String(body.employeeId ?? "");
   if (!employeeId) {
