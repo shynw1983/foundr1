@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const access = await getStoreOrderAccess(session);
-  const storeFilter = getScopedStoreFilter(access, params.get("storeId"));
+  const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const orders = await sql`
@@ -60,7 +60,11 @@ export async function GET(request: Request) {
     order by store_customer_orders.pickup_date desc, store_customer_orders.pickup_time desc, store_customer_orders.created_at desc
   `;
 
-  return Response.json({ orders, access }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({
+    orders,
+    access: { ...access, canUseAllStoreView: false },
+    selectedStoreId: storeFilter
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {

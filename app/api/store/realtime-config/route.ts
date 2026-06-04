@@ -1,20 +1,22 @@
-import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
-import { sql } from "../../../../lib/db";
+import { requireOsSession } from "../../../../lib/api-auth";
+import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const scope = await getSessionStoreScope(session);
-  const storeIds = scope.allStores
-    ? (await sql`select id::text from stores where status = 'active'`).map((row) => String(row.id))
-    : scope.storeIds;
+  const requestedStoreId = new URL(request.url).searchParams.get("storeId");
+  const access = await getStoreOrderAccess(session);
+  const selectedStoreId = getScopedStoreFilter(access, requestedStoreId) ?? access.stores[0]?.id ?? "";
+  if (!selectedStoreId || selectedStoreId === "__forbidden__") {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
 
   return Response.json({
     key: process.env.PUSHER_KEY || "",
     cluster: process.env.PUSHER_CLUSTER || "",
-    channels: storeIds.map((storeId) => `private-store-orders-${storeId}`)
+    channels: [`private-store-orders-${selectedStoreId}`]
   }, { headers: { "Cache-Control": "no-store" } });
 }

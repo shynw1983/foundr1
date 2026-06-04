@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const days = clampDays(params.get("days"));
   const access = await getStoreOrderAccess(session);
   if (!access.canViewSalesStats) return Response.json({ error: "権限がありません。" }, { status: 403 });
-  const storeFilter = getScopedStoreFilter(access, params.get("storeId"));
+  const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const [summaryRows, statusRows, productRows, storeRows] = await Promise.all([

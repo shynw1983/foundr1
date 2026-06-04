@@ -215,15 +215,16 @@ export default function StoreOrdersPage() {
     }
     const body = await response.json();
     const nextAccess = body.access as StoreOrderAccess | undefined;
+    const nextSelectedStoreId = String(body.selectedStoreId || selectedStoreId || nextAccess?.stores[0]?.id || "");
     if (nextAccess) {
       setAccess(nextAccess);
-      if (!selectedStoreId && !nextAccess.canUseAllStoreView && nextAccess.stores.length >= 1) {
-        setSelectedStoreId(nextAccess.stores[0].id);
+      if (!selectedStoreId && nextSelectedStoreId) {
+        setSelectedStoreId(nextSelectedStoreId);
       }
     }
     if (nextAccess?.canViewSalesStats) {
       const statsParams = new URLSearchParams({ days: String(statsDays) });
-      if (selectedStoreId) statsParams.set("storeId", selectedStoreId);
+      if (nextSelectedStoreId) statsParams.set("storeId", nextSelectedStoreId);
       const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, { cache: "no-store" });
       if (statsResponse.ok) setStats(await statsResponse.json());
     } else {
@@ -288,6 +289,12 @@ export default function StoreOrdersPage() {
     let pusher: any;
     let channels: any[] = [];
     let active = true;
+    if (!selectedStoreId) {
+      setRealtimeStatus("polling");
+      return () => {
+        active = false;
+      };
+    }
     const upsertOrder = ({ order }: { order: StoreOrder }) => {
       setOrders((current) => {
         if (selectedStoreId && order.storeId !== selectedStoreId) return current;
@@ -316,7 +323,7 @@ export default function StoreOrdersPage() {
     };
 
     setRealtimeStatus("connecting");
-    fetch("/api/store/realtime-config", { cache: "no-store" })
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(selectedStoreId)}`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!active) return;
@@ -412,10 +419,9 @@ export default function StoreOrdersPage() {
       <section className="store-orders-layout">
         <aside className="panel store-orders-list">
           <div className="store-stats-heading">
-            <h2>{selectedStoreId ? access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗" : "すべての店舗"}</h2>
+            <h2>{access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗"}</h2>
             {access && access.stores.length > 1 ? (
               <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} aria-label="店舗">
-                {access.canUseAllStoreView ? <option value="">すべて</option> : null}
                 {access.stores.map((store) => (
                   <option value={store.id} key={store.id}>{store.name}</option>
                 ))}
@@ -481,9 +487,9 @@ export default function StoreOrdersPage() {
             <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
               <div>
                 <span>最短受け取り準備時間</span>
-                <small>{selectedStoreId ? "空欄でブランド初期値" : "店舗を選択して設定"}</small>
+                <small>空欄でブランド初期値</small>
               </div>
-              {selectedStoreId && operation ? (
+              {operation ? (
                 <>
                   <label>
                     <input
@@ -502,12 +508,7 @@ export default function StoreOrdersPage() {
                   </button>
                 </>
               ) : (
-                <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} aria-label="最短受け取り準備時間を設定する店舗">
-                  <option value="">店舗を選択</option>
-                  {access.stores.map((store) => (
-                    <option value={store.id} key={store.id}>{store.name}</option>
-                  ))}
-                </select>
+                <p>店舗設定を読み込み中です。</p>
               )}
               {operationMessage ? <p>{operationMessage}</p> : null}
             </section>
