@@ -14,7 +14,7 @@ type StaffPresenceRow = {
   recent_count: number | string | null;
 };
 
-const staffNotClockedInStatusNote = "スタッフ未出勤";
+const staffNotClockedInStatusNote = "一時休止";
 
 function toCount(value: unknown) {
   const count = Number(value ?? 0);
