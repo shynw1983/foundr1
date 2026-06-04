@@ -293,8 +293,9 @@ export default function StoreTimecardPage() {
     if (!selectedStoreId || !selectedEmployee) return;
     setIsPunching(punchType);
     setMessage("");
+    const requiresMobileLocation = punchType === "clock_in" || punchType === "clock_out";
     const location = isMobileStaffPunch ? await requestMobileLocation() : null;
-    if (isMobileStaffPunch && !location) {
+    if (isMobileStaffPunch && requiresMobileLocation && !location) {
       setIsPunching("");
       return;
     }
@@ -625,7 +626,8 @@ export default function StoreTimecardPage() {
               <article className="store-shift-request-row" key={request.id}>
                 <div>
                   <strong>{request.title}</strong>
-                  <span>{request.workDate ?? "日付未設定"}・{requestStatusLabel(request.status)}</span>
+                  <span>{formatShiftRequestSummary(request)}</span>
+                  {request.note ? <small>{request.note}</small> : null}
                 </div>
                 {request.requestType === "swap" && request.status === "open" && request.employeeId !== data?.currentEmployeeId ? (
                   <button className="secondary-button" type="button" onClick={() => applyForSwap(request.id)}>応募</button>
@@ -649,6 +651,17 @@ function requestStatusLabel(status: ShiftRequestItem["status"]) {
   if (status === "approved") return "承認済み";
   if (status === "rejected") return "却下";
   return "未確認";
+}
+
+function formatShiftRequestSummary(request: ShiftRequestItem) {
+  const status = requestStatusLabel(request.status);
+  const windows = request.windows ?? [];
+  if (request.requestType === "availability" && windows.length) {
+    return windows
+      .map((window) => `${formatShiftDate(window.workDate)} ${window.availableStart ?? "--:--"}-${window.availableEnd ?? "--:--"}`)
+      .join("、") + `・${status}`;
+  }
+  return `${request.workDate ? formatShiftDate(request.workDate) : "日付未設定"}・${status}`;
 }
 
 function createAvailabilityDrafts(dates: string[], requests: ShiftRequestItem[]) {

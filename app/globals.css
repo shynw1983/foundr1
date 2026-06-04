@@ -5585,6 +5585,9 @@ body :where(
 }
 
 .store-shift-submit-button {
+  display: flex;
+  width: 100%;
+  justify-content: center;
   margin-top: 12px;
 }
 
@@ -5605,17 +5608,23 @@ body :where(
 
 .store-shift-request-row div,
 .store-shift-request-row strong,
-.store-shift-request-row span {
+.store-shift-request-row span,
+.store-shift-request-row small {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.store-shift-request-row span {
+.store-shift-request-row span,
+.store-shift-request-row small {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.store-shift-request-row small {
+  color: var(--ink);
 }
 
 .shift-request-publish-panel {

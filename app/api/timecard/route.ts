@@ -671,7 +671,7 @@ async function getAttendanceStoreLocation(storeId: string) {
   return rows[0] ?? null;
 }
 
-async function validateMobilePunchLocation(storeId: string, body: TimecardPostBody) {
+async function validateMobilePunchLocation(storeId: string, body: TimecardPostBody, options: { enforce: boolean }) {
   const store = await getAttendanceStoreLocation(storeId);
   if (!store) {
     return { ok: false, status: 404, error: "店舗が見つかりません。" };
@@ -704,6 +704,18 @@ async function validateMobilePunchLocation(storeId: string, body: TimecardPostBo
   }
 
   if (mobileLatitude === null || mobileLongitude === null) {
+    if (!options.enforce) {
+      return {
+        ok: true,
+        verdict: "not_available",
+        mobileLatitude,
+        mobileLongitude,
+        mobileAccuracyMeters,
+        storeLatitude,
+        storeLongitude,
+        distanceMeters: null
+      };
+    }
     return { ok: false, status: 400, error: "位置情報を取得してから打刻してください。" };
   }
 
@@ -712,6 +724,18 @@ async function validateMobilePunchLocation(storeId: string, body: TimecardPostBo
     { latitude: storeLatitude, longitude: storeLongitude }
   );
   if (mobileAccuracyMeters !== null && mobileAccuracyMeters > accuracyThresholdMeters) {
+    if (!options.enforce) {
+      return {
+        ok: true,
+        verdict: "low_accuracy",
+        mobileLatitude,
+        mobileLongitude,
+        mobileAccuracyMeters,
+        storeLatitude,
+        storeLongitude,
+        distanceMeters
+      };
+    }
     return {
       ok: false,
       status: 409,
@@ -727,6 +751,18 @@ async function validateMobilePunchLocation(storeId: string, body: TimecardPostBo
   }
 
   if (distanceMeters > radiusMeters) {
+    if (!options.enforce) {
+      return {
+        ok: true,
+        verdict: "outside_radius",
+        mobileLatitude,
+        mobileLongitude,
+        mobileAccuracyMeters,
+        storeLatitude,
+        storeLongitude,
+        distanceMeters
+      };
+    }
     return {
       ok: false,
       status: 409,
@@ -1512,7 +1548,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "この従業員は選択した店舗で打刻できません。" }, { status: 403 });
   }
 
-  const locationCheck = isMobilePunch ? await validateMobilePunchLocation(storeId, body) : null;
+  const requiresLocation = punchType === "clock_in" || punchType === "clock_out";
+  const locationCheck = isMobilePunch ? await validateMobilePunchLocation(storeId, body, { enforce: requiresLocation }) : null;
   if (locationCheck && !locationCheck.ok) {
     await writeAuditLog({
       actorEmployeeId: session.id,
