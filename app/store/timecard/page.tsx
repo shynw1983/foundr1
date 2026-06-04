@@ -255,6 +255,8 @@ export default function StoreTimecardPage() {
     { key: "availability", label: "希望シフト", detail: submissionPeriod?.label ?? "提出期間", icon: Send },
     { key: "swap", label: "交代募集", detail: myShifts.length ? "募集作成" : "確定待ち", icon: RefreshCw }
   ];
+  const activeMobilePanelItem = mobilePanelItems.find((item) => item.key === activeMobilePanel);
+  const ShiftPanelIcon = activeMobilePanelItem?.icon ?? CalendarDays;
   const shiftPanelHeading = (() => {
     if (!isMobileStaffPunch) {
       return {
@@ -598,7 +600,7 @@ export default function StoreTimecardPage() {
 
         <section className={`panel store-shift-request-panel${isMobileStaffPunch && (activeMobilePanel === "" || activeMobilePanel === "history") ? " is-mobile-collapsed" : ""} is-mobile-panel-${activeMobilePanel}`}>
           <div className="panel-title">
-            <CalendarDays />
+            <ShiftPanelIcon />
             <div>
               <h2>{shiftPanelHeading.title}</h2>
               <p>{shiftPanelHeading.description}</p>
