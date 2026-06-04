@@ -4928,7 +4928,7 @@ body :where(
 .timecard-store-select {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
