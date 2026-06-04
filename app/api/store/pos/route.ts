@@ -37,6 +37,12 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
 }
 
+function getOptionGroupLimit(ruleJson: Record<string, unknown>, fallback: number) {
+  const limit = Number(ruleJson?.limit);
+  if (!Number.isFinite(limit)) return fallback;
+  return Math.max(0, Math.floor(limit));
+}
+
 function getAllowedRuleKey(groupKey: string) {
   const ruleKeys: Record<string, string> = {
     size: "allowedSizes",
@@ -141,6 +147,7 @@ async function getPosMenu(selectedStoreId: string) {
         menu_option_groups.group_key as "groupKey",
         menu_option_groups.name,
         menu_option_groups.selection_type as "selectionType",
+        menu_option_groups.rule_json as "ruleJson",
         menu_option_groups.sort_order as "sortOrder",
         coalesce(
           json_agg(
@@ -296,7 +303,8 @@ export async function POST(request: Request) {
       coalesce(menu_option_groups.menu_catalog_item_id::text, '') as "menuCatalogItemId",
       menu_option_groups.group_key as "groupKey",
       menu_option_groups.name as "groupName",
-      menu_option_groups.selection_type as "selectionType"
+      menu_option_groups.selection_type as "selectionType",
+      menu_option_groups.rule_json as "ruleJson"
     from menu_options
     join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
     join store_brands
@@ -324,25 +332,55 @@ export async function POST(request: Request) {
     groupKey: string;
     groupName: string;
     selectionType: string;
+    ruleJson: Record<string, unknown>;
   }>).map((option) => [option.id, option]));
 
-  const normalizedItems = cartItems.map((item) => {
-    const menuItem = menuById.get(normalizeText(item.menuCatalogItemId));
-    if (!menuItem) return null;
-    const quantity = toPositiveInt(item.quantity);
-    const unitPrice = Number(menuItem.price ?? 0);
-    const selectedOptions = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
-    const selected = selectedOptions.flatMap((group) => asStringArray(group.optionIds).map((optionId) => optionsById.get(optionId)).filter(Boolean)) as Array<NonNullable<ReturnType<typeof optionsById.get>>>;
-    const validSelected = selected.filter((option) => {
-      if (option.brandId !== menuItem.brandId) return false;
-      if (option.menuCatalogItemId && option.menuCatalogItemId !== menuItem.id) return false;
-      const allowedKeys = asStringArray(menuItem.variableSchema?.[getAllowedRuleKey(option.groupKey)]);
-      if (!allowedKeys.length) return true;
-      return allowedKeys.includes(option.optionKey) || allowedKeys.includes(option.name);
-    });
-    const optionTotal = validSelected.reduce((sum, option) => sum + Number(option.priceDelta ?? 0), 0);
-    return { ...menuItem, quantity, unitPrice, selectedOptions: validSelected, amount: (unitPrice + optionTotal) * quantity };
-  }).filter(Boolean) as Array<{ id: string; brandId: string; name: string; quantity: number; unitPrice: number; amount: number }>;
+  let normalizedItems: Array<{ id: string; brandId: string; name: string; quantity: number; unitPrice: number; amount: number; selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>> }> = [];
+  try {
+    normalizedItems = cartItems.map((item) => {
+      const menuItem = menuById.get(normalizeText(item.menuCatalogItemId));
+      if (!menuItem) return null;
+      const quantity = toPositiveInt(item.quantity);
+      const unitPrice = Number(menuItem.price ?? 0);
+      const selectedOptions = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
+      const selected = selectedOptions.flatMap((group) => asStringArray(group.optionIds).map((optionId) => optionsById.get(optionId)).filter(Boolean)) as Array<NonNullable<ReturnType<typeof optionsById.get>>>;
+      const validSelected = selected.filter((option) => {
+        if (option.brandId !== menuItem.brandId) return false;
+        if (option.menuCatalogItemId && option.menuCatalogItemId !== menuItem.id) return false;
+        const allowedKeys = asStringArray(menuItem.variableSchema?.[getAllowedRuleKey(option.groupKey)]);
+        if (!allowedKeys.length) return true;
+        return allowedKeys.includes(option.optionKey) || allowedKeys.includes(option.name);
+      });
+      const groupedCounts = new Map<string, { count: number; optionIds: Set<string>; selectionType: string; limit: number; groupName: string }>();
+      for (const option of validSelected) {
+        const current = groupedCounts.get(option.groupId) ?? {
+          count: 0,
+          optionIds: new Set<string>(),
+          selectionType: option.selectionType,
+          limit: getOptionGroupLimit(option.ruleJson, option.selectionType === "single" ? 1 : 99),
+          groupName: option.groupName
+        };
+        current.count += 1;
+        current.optionIds.add(option.id);
+        groupedCounts.set(option.groupId, current);
+      }
+      for (const group of groupedCounts.values()) {
+        if (group.selectionType === "single" && group.count > 1) {
+          throw new Error(`${group.groupName} は1つだけ選択できます。`);
+        }
+        if (group.selectionType === "multiple" && group.optionIds.size !== group.count) {
+          throw new Error(`${group.groupName} は同じ選択肢を重複して選べません。`);
+        }
+        if (group.count > group.limit) {
+          throw new Error(`${group.groupName} は最大${group.limit}点までです。`);
+        }
+      }
+      const optionTotal = validSelected.reduce((sum, option) => sum + Number(option.priceDelta ?? 0), 0);
+      return { ...menuItem, quantity, unitPrice, selectedOptions: validSelected, amount: (unitPrice + optionTotal) * quantity };
+    }).filter(Boolean) as Array<{ id: string; brandId: string; name: string; quantity: number; unitPrice: number; amount: number; selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>> }>;
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "選択数が正しくありません。" }, { status: 400 });
+  }
 
   if (normalizedItems.length === 0) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });

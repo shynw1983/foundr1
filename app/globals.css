@@ -5577,38 +5577,77 @@ body :where(
   gap: 8px;
 }
 
-.store-pos-option-choice-grid button {
+.store-pos-option-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  background: white;
+}
+
+.store-pos-option-choice.is-active {
+  border-color: rgba(31, 111, 85, 0.35);
+  background: var(--green-soft);
+}
+
+.store-pos-option-choice > button {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 42px;
+  min-height: 36px;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  background: white;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 8px;
+  background: transparent;
   color: var(--ink);
   font-weight: 900;
 }
 
-.store-pos-option-choice-grid button.is-active {
-  border-color: rgba(31, 111, 85, 0.35);
-  background: var(--green-soft);
+.store-pos-option-choice.is-active > button {
   color: #1f6f55;
 }
 
-.store-pos-option-choice-grid button span,
-.store-pos-option-choice-grid button small {
+.store-pos-option-choice > button span,
+.store-pos-option-choice > button small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.store-pos-option-choice-grid button small {
+.store-pos-option-choice > button small {
   flex: 0 0 auto;
   color: inherit;
   font-size: 12px;
   font-weight: 900;
+}
+
+.store-pos-option-stepper {
+  display: inline-grid;
+  grid-template-columns: 28px 26px 28px;
+  align-items: center;
+  gap: 3px;
+}
+
+.store-pos-option-stepper button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+}
+
+.store-pos-option-stepper span {
+  color: var(--ink);
+  text-align: center;
+  font-weight: 950;
 }
 
 .store-pos-option-add {

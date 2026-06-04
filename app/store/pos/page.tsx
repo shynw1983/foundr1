@@ -50,6 +50,7 @@ type PosOptionGroup = {
   groupKey: string;
   name: string;
   selectionType: string;
+  ruleJson: Record<string, unknown>;
   sortOrder: number;
   options: PosMenuOption[];
 };
@@ -122,6 +123,12 @@ function asStringArray(value: unknown) {
 
 function getOptionPrice(option: Pick<PosMenuOption, "priceDelta">) {
   return Math.round(Number(option.priceDelta ?? 0));
+}
+
+function getOptionGroupLimit(group: Pick<PosOptionGroup, "selectionType" | "ruleJson">) {
+  const limit = Number(group.ruleJson?.limit);
+  if (Number.isFinite(limit)) return Math.max(0, Math.floor(limit));
+  return group.selectionType === "single" ? 1 : 99;
 }
 
 function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], brandId: string) {
@@ -230,9 +237,17 @@ export default function StorePosPage() {
   }
 
   function getOptionLabel(options: PosSelectedOption[]) {
-    return options.length
-      ? options.map((option) => `${option.groupName}: ${option.name}`).join(" / ")
-      : "";
+    if (!options.length) return "";
+    const counts = new Map<string, { option: PosSelectedOption; count: number }>();
+    for (const option of options) {
+      const key = `${option.groupId}:${option.id}`;
+      const current = counts.get(key) ?? { option, count: 0 };
+      current.count += 1;
+      counts.set(key, current);
+    }
+    return Array.from(counts.values())
+      .map(({ option, count }) => `${option.groupName}: ${option.name}${count > 1 ? ` x${count}` : ""}`)
+      .join(" / ");
   }
 
   function getCartKey(item: PosMenuItem, options: PosSelectedOption[]) {
@@ -276,9 +291,29 @@ export default function StorePosPage() {
       if (group.selectionType === "single") {
         return { ...current, [group.id]: [optionId] };
       }
+      if (group.selectionType === "quantity") {
+        const limit = getOptionGroupLimit(group);
+        if (selected.length >= limit) {
+          setMessage(`${group.name} は最大${limit}点までです。`);
+          return current;
+        }
+        return { ...current, [group.id]: [...selected, optionId] };
+      }
       return selected.includes(optionId)
         ? { ...current, [group.id]: selected.filter((id) => id !== optionId) }
         : { ...current, [group.id]: [...selected, optionId] };
+    });
+  }
+
+  function decrementOption(group: PosOptionGroup, optionId: string) {
+    setOptionDraft((current) => {
+      const selected = current[group.id] ?? [];
+      const index = selected.lastIndexOf(optionId);
+      if (index < 0) return current;
+      return {
+        ...current,
+        [group.id]: selected.filter((_, selectedIndex) => selectedIndex !== index)
+      };
     });
   }
 
@@ -543,21 +578,36 @@ export default function StorePosPage() {
                 <section className="store-pos-option-group" key={group.id}>
                   <div>
                     <strong>{group.name}</strong>
-                    <span>{group.selectionType === "single" ? "1つ選択" : "複数選択可"}</span>
+                    <span>
+                      {group.selectionType === "single"
+                        ? "1つ選択"
+                        : group.selectionType === "quantity"
+                          ? `数量で選択 / 最大${getOptionGroupLimit(group)}点`
+                          : `複数選択可 / 最大${getOptionGroupLimit(group)}点`}
+                    </span>
                   </div>
                   <div className="store-pos-option-choice-grid">
                     {group.options.map((option) => {
-                      const selected = (optionDraft[group.id] ?? []).includes(option.id);
+                      const selectedIds = optionDraft[group.id] ?? [];
+                      const count = selectedIds.filter((id) => id === option.id).length;
+                      const selected = count > 0;
                       return (
-                        <button
-                          key={option.id}
-                          className={selected ? "is-active" : ""}
-                          type="button"
-                          onClick={() => toggleOption(group, option.id)}
-                        >
-                          <span>{option.name}</span>
-                          {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
-                        </button>
+                        <div className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"} key={option.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleOption(group, option.id)}
+                          >
+                            <span>{option.name}</span>
+                            {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
+                          </button>
+                          {group.selectionType === "quantity" ? (
+                            <div className="store-pos-option-stepper">
+                              <button type="button" onClick={() => decrementOption(group, option.id)} aria-label="数量を減らす"><Minus size={14} /></button>
+                              <span>{count}</span>
+                              <button type="button" onClick={() => toggleOption(group, option.id)} aria-label="数量を増やす"><Plus size={14} /></button>
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
