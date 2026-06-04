@@ -13,7 +13,10 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const access = await getStoreOrderAccess(session);
-  const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
+  const isWatchRequest = params.get("watch") === "1";
+  const storeFilter = isWatchRequest
+    ? getScopedStoreFilter(access, params.get("storeId"))
+    : getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const orders = await sql`

@@ -52,12 +52,23 @@ function isNewPaidOrder(order: StoreOrderRealtimePayload["order"]) {
   return order?.paymentStatus === "paid" && order.status === "new" && Boolean(order.id);
 }
 
+function shouldAlertOrder(order: StoreOrderRealtimePayload["order"]) {
+  if (!order?.id) return false;
+  if (order.status === "pending_payment") return true;
+  return isNewPaidOrder(order);
+}
+
+function getAlertOrderKey(order: { id: string; status: string; paymentStatus: string }) {
+  return `${order.id}:${order.status}:${order.paymentStatus}`;
+}
+
 export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | "procedures" | "timecard" | "pos" }) {
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
-  const knownActiveOrderIdsRef = useRef<Set<string>>(new Set());
+  const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
+  const hasInitializedOrderWatchRef = useRef(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
@@ -108,6 +119,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
   useEffect(() => {
     if (active === "orders") return;
 
+    hasInitializedOrderWatchRef.current = false;
     let pusher: any;
     let channels: any[] = [];
     let activeListener = true;
@@ -115,17 +127,22 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
 
     const checkOrdersByPolling = async () => {
       try {
-        const response = await fetch("/api/store/orders", { cache: "no-store" });
+        const response = await fetch("/api/store/orders?watch=1", { cache: "no-store" });
         if (!response.ok || !activeListener) return;
         const body = await response.json() as StoreOrdersResponse;
         const activeOrderIds = new Set(
           (body.orders ?? [])
-            .filter((order) => order.paymentStatus === "paid" && order.status === "new")
-            .map((order) => order.id)
+            .filter(shouldAlertOrder)
+            .map(getAlertOrderKey)
         );
-        const hasIncomingOrder = Array.from(activeOrderIds).some((orderId) => !knownActiveOrderIdsRef.current.has(orderId));
+        if (!hasInitializedOrderWatchRef.current) {
+          knownActiveOrderKeysRef.current = activeOrderIds;
+          hasInitializedOrderWatchRef.current = true;
+          return;
+        }
+        const hasIncomingOrder = Array.from(activeOrderIds).some((orderId) => !knownActiveOrderKeysRef.current.has(orderId));
         if (hasIncomingOrder) markOrderAlert();
-        knownActiveOrderIdsRef.current = activeOrderIds;
+        knownActiveOrderKeysRef.current = activeOrderIds;
       } catch {
         // Keep the navigation usable even if the fallback poll fails.
       }
@@ -138,17 +155,18 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | 
     };
 
     const handleOrderCreated = ({ order }: StoreOrderRealtimePayload) => {
-      if (!isNewPaidOrder(order)) return;
-      knownActiveOrderIdsRef.current.add(String(order?.id));
+      if (!shouldAlertOrder(order) || !order?.id || !order.status || !order.paymentStatus) return;
+      knownActiveOrderKeysRef.current.add(getAlertOrderKey({ id: order.id, status: order.status, paymentStatus: order.paymentStatus }));
+      hasInitializedOrderWatchRef.current = true;
       markOrderAlert();
     };
 
+    startPolling();
     fetch("/api/store/realtime-config", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (config) => {
         if (!activeListener) return;
         if (!config?.key || !config?.cluster || !config?.channels?.length) {
-          startPolling();
           return;
         }
         const { default: Pusher } = await import("pusher-js");
