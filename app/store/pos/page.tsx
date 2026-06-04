@@ -350,6 +350,17 @@ export default function StorePosPage() {
     setter((current) => ({ ...current, [String(denomination)]: normalized }));
   }
 
+  function handleStoreChange(storeId: string) {
+    setSelectedStoreId(storeId);
+    setStoredStoreSelection(storeId);
+    setCart([]);
+    setCashOpeningBreakdown(createCashBreakdownInput());
+    setCashCountedBreakdown(createCashBreakdownInput());
+    setCashClosingNote("");
+    setCashClosingResponsibleEmployeeId("");
+    void load(storeId);
+  }
+
   function getItemOptionGroups(item: PosMenuItem) {
     return optionGroups
       .filter((group) => group.brandId === item.brandId && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id))
@@ -589,10 +600,22 @@ export default function StorePosPage() {
           <p className="eyebrow">レジ</p>
           <h2>店頭会計</h2>
         </div>
-        <div className="store-pos-summary">
-          <span>本日 {summary.orderCount} 件</span>
-          <strong>{formatYen(summary.total)}</strong>
-          <small>平均 {formatYen(summary.average)}</small>
+        <div className="store-pos-head-actions">
+          <label className="store-pos-store-select">
+            <span>店舗</span>
+            <select
+              value={selectedStoreId}
+              onChange={(event) => handleStoreChange(event.target.value)}
+              disabled={!access?.canUseAllStoreView && stores.length <= 1}
+            >
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          </label>
+          <div className="store-pos-summary">
+            <span>本日 {summary.orderCount} 件</span>
+            <strong>{formatYen(summary.total)}</strong>
+            <small>平均 {formatYen(summary.average)}</small>
+          </div>
         </div>
       </section>
 
@@ -745,23 +768,6 @@ export default function StorePosPage() {
       <section className="store-pos-layout">
         <div className="store-pos-menu-panel">
           <aside className="store-pos-filter-panel">
-            <label>
-              <span>店舗</span>
-              <select
-                value={selectedStoreId}
-                onChange={(event) => {
-                  const storeId = event.target.value;
-                  setSelectedStoreId(storeId);
-                  setStoredStoreSelection(storeId);
-                  setCart([]);
-                  void load(storeId);
-                }}
-                disabled={!access?.canUseAllStoreView && stores.length <= 1}
-              >
-                {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-
             <div className="store-pos-filter-group">
               <span>ブランド</span>
               <div className="store-pos-filter-list">

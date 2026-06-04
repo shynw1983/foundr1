@@ -5050,6 +5050,7 @@ body :where(
 
 .store-pos-head,
 .store-pos-summary,
+.store-pos-head-actions,
 .store-pos-cart-head,
 .store-pos-controls,
 .store-pos-quantity,
@@ -5066,10 +5067,39 @@ body :where(
   justify-content: space-between;
 }
 
+.store-pos-head-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .store-pos-head h2,
 .store-pos-cart-head h3 {
   margin: 0;
   letter-spacing: 0;
+}
+
+.store-pos-store-select {
+  display: grid;
+  gap: 6px;
+  min-width: min(260px, 100%);
+}
+
+.store-pos-store-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-store-select select {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.28);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--green-soft);
+  color: #1f6f55;
+  font-weight: 950;
 }
 
 .store-pos-summary {
@@ -15921,6 +15951,7 @@ body :where(
 
   .store-pos-head,
   .store-pos-summary,
+  .store-pos-head-actions,
   .pos-admin-toolbar,
   .pos-admin-actions {
     align-items: stretch;
@@ -15933,6 +15964,15 @@ body :where(
 
   .store-pos-summary {
     justify-content: space-between;
+  }
+
+  .store-pos-head-actions {
+    display: grid;
+    gap: 8px;
+  }
+
+  .store-pos-store-select {
+    min-width: 0;
   }
 
   .store-pos-notice {
