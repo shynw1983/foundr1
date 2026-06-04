@@ -3,6 +3,7 @@
 import { BriefcaseBusiness, Clock3, Coffee, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
+import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 
 type StoreOption = {
@@ -71,7 +72,7 @@ function canUsePunch(type: string, state: string) {
 
 export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState("");
@@ -92,6 +93,7 @@ export default function StoreTimecardPage() {
       const body = await response.json() as TimecardPayload;
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
+      if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
       const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
       setSelectedEmployeeId((current) => storeEmployees.some((employee) => employee.id === current) ? current : storeEmployees[0]?.id ?? "");
     } catch {
@@ -102,7 +104,7 @@ export default function StoreTimecardPage() {
   }
 
   useEffect(() => {
-    void loadTimecard("");
+    void loadTimecard(getStoredStoreSelection());
   }, []);
 
   const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
@@ -165,6 +167,7 @@ export default function StoreTimecardPage() {
               <span>打刻店舗</span>
               <select value={selectedStoreId} onChange={(event) => {
                 setSelectedStoreId(event.target.value);
+                setStoredStoreSelection(event.target.value);
                 void loadTimecard(event.target.value);
               }}>
                 {data?.stores.map((store) => (

@@ -3,6 +3,7 @@
 import { CheckCircle2, RotateCcw, Search, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
+import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type StoreOption = {
   id: string;
@@ -106,7 +107,7 @@ export default function StoreMenuPage() {
   const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
   const [options, setOptions] = useState<StoreMenuOption[]>([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [settings, setSettings] = useState<StoreMenuSettings>({
@@ -128,6 +129,12 @@ export default function StoreMenuPage() {
     if (nextStoreId) params.set("storeId", nextStoreId);
     const response = await fetch(`/api/store/menu-settings${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
+      if (response.status === 403 && nextStoreId) {
+        clearStoredStoreSelection();
+        setSelectedStoreId("");
+        void load("", true);
+        return;
+      }
       setMessage("販売状態を読み込めませんでした。");
       setLoading(false);
       return;
@@ -146,7 +153,9 @@ export default function StoreMenuPage() {
     setCategories(nextCategories ?? []);
     setItems(nextItems ?? []);
     setOptions(nextOptions ?? []);
-    setSelectedStoreId(body.selectedStoreId || nextAccess.stores?.[0]?.id || "");
+    const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
+    setSelectedStoreId(responseStoreId);
+    if (responseStoreId) setStoredStoreSelection(responseStoreId);
     setSelectedBrandId((current) => resetFilters ? (nextBrands?.[0]?.id || "") : (current || nextBrands?.[0]?.id || ""));
     setSelectedCategory((current) => resetFilters ? (nextItems?.[0]?.category || "未分類") : (current ?? (nextItems?.[0]?.category || "未分類")));
     setMessage("");
@@ -154,7 +163,7 @@ export default function StoreMenuPage() {
   }
 
   useEffect(() => {
-    void load("");
+    void load(getStoredStoreSelection());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -254,6 +263,7 @@ export default function StoreMenuPage() {
 
   function selectStore(storeId: string) {
     setSelectedStoreId(storeId);
+    setStoredStoreSelection(storeId);
     void load(storeId, true);
   }
 

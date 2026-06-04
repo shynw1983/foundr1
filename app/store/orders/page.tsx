@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
+import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type StoreOrder = {
   id: string;
@@ -97,7 +98,7 @@ function splitLines(value = "") {
 export default function StoreOrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [access, setAccess] = useState<StoreOrderAccess | null>(null);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
   const [statsDays, setStatsDays] = useState(1);
   const [operation, setOperation] = useState<StoreOperation | null>(null);
@@ -125,6 +126,7 @@ export default function StoreOrdersPage() {
   const selectStore = (storeId: string) => {
     selectedStoreIdRef.current = storeId;
     setSelectedStoreId(storeId);
+    setStoredStoreSelection(storeId);
     setSelectedId("");
     setOrders([]);
   };
@@ -230,6 +232,14 @@ export default function StoreOrdersPage() {
     if (requestedStoreId) params.set("storeId", requestedStoreId);
     const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
+      if (response.status === 403 && requestedStoreId) {
+        selectedStoreIdRef.current = "";
+        setSelectedStoreId("");
+        clearStoredStoreSelection();
+        setIsRefreshing(false);
+        void refresh();
+        return;
+      }
       setError("注文を読み込めませんでした。");
       setLoading(false);
       setIsRefreshing(false);
@@ -248,8 +258,10 @@ export default function StoreOrdersPage() {
       if (!selectedStoreIdRef.current && responseStoreId) {
         selectedStoreIdRef.current = responseStoreId;
         setSelectedStoreId(responseStoreId);
+        setStoredStoreSelection(responseStoreId);
       }
     }
+    if (responseStoreId && responseStoreId !== "__forbidden__") setStoredStoreSelection(responseStoreId);
     if (nextAccess?.canViewSalesStats) {
       const statsParams = new URLSearchParams({ days: String(statsDays) });
       const statsStoreId = selectedStoreIdRef.current || responseStoreId;
