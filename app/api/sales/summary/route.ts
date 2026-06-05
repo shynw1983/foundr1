@@ -311,9 +311,9 @@ export async function GET(request: Request) {
   const salesAnalysisSettings = selectedStoreId ? await getSalesAnalysisSettings(selectedStoreId) : defaultSalesAnalysisSettings;
   const storeWeatherRows = selectedStoreId ? await sql`
     select
-      coalesce(weather_location_name, '') as "weatherLocationName",
-      weather_latitude::float as "weatherLatitude",
-      weather_longitude::float as "weatherLongitude"
+      coalesce(weather_location_name, name, '') as "weatherLocationName",
+      coalesce(attendance_latitude, weather_latitude)::float as "weatherLatitude",
+      coalesce(attendance_longitude, weather_longitude)::float as "weatherLongitude"
     from stores
     where id::text = ${selectedStoreId}
     limit 1

@@ -139,9 +139,6 @@ export default function StoresPage() {
   const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
   const [editingOwner, setEditingOwner] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
-  const [editingWeatherLocationName, setEditingWeatherLocationName] = useState("");
-  const [editingWeatherLatitude, setEditingWeatherLatitude] = useState("");
-  const [editingWeatherLongitude, setEditingWeatherLongitude] = useState("");
   const [editingAttendanceLocationEnabled, setEditingAttendanceLocationEnabled] = useState(false);
   const [newAttendanceAddress, setNewAttendanceAddress] = useState("");
   const [newAttendanceLatitude, setNewAttendanceLatitude] = useState("");
@@ -225,7 +222,6 @@ export default function StoresPage() {
       setEditingAttendanceLatitude(String(result.latitude));
       setEditingAttendanceLongitude(String(result.longitude));
       setEditingAttendanceAddress(result.label ?? editingAttendanceAddress);
-      setEditingWeatherLocationName((current) => current || result.label || editingAttendanceAddress);
       setEditingGeocodeMessage("座標を入力しました。");
     } catch (error) {
       setEditingGeocodeMessage(error instanceof Error ? error.message : "住所から座標を取得できませんでした。");
@@ -508,9 +504,6 @@ export default function StoresPage() {
     setEditingKomojuPaymentTypesEnvName("");
     setEditingKomojuPaymentTypes("");
     setEditingReservationNote("");
-    setEditingWeatherLocationName("");
-    setEditingWeatherLatitude("");
-    setEditingWeatherLongitude("");
     setEditingAttendanceLocationEnabled(false);
     setEditingAttendanceAddress("");
     setEditingAttendanceLatitude("");
@@ -538,9 +531,6 @@ export default function StoresPage() {
     setEditingCompanyPhone(store.companyPhone ?? "");
     setEditingOwner(store.owner);
     setEditingReservationNote(store.reservationNote ?? "");
-    setEditingWeatherLocationName(store.weatherLocationName ?? "");
-    setEditingWeatherLatitude(store.weatherLatitude === null || store.weatherLatitude === undefined ? "" : String(store.weatherLatitude));
-    setEditingWeatherLongitude(store.weatherLongitude === null || store.weatherLongitude === undefined ? "" : String(store.weatherLongitude));
     setEditingAttendanceLocationEnabled(store.attendanceLocationEnabled === true);
     setEditingAttendanceAddress(store.companyAddress || store.weatherLocationName || store.name);
     setEditingAttendanceLatitude(store.attendanceLatitude === null || store.attendanceLatitude === undefined ? "" : String(store.attendanceLatitude));
@@ -658,7 +648,7 @@ export default function StoresPage() {
                     <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
-                    <small>天気: {store.attendanceLatitude && store.attendanceLongitude ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
+                    <small>天気: {store.attendanceLatitude !== null && store.attendanceLatitude !== undefined && store.attendanceLongitude !== null && store.attendanceLongitude !== undefined ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
                     <small>打刻地点: {store.attendanceLocationEnabled ? `${store.attendanceLatitude ?? "--"}, ${store.attendanceLongitude ?? "--"} / ${store.attendanceRadiusMeters ?? 100}m` : "位置制限なし"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
@@ -908,9 +898,6 @@ export default function StoresPage() {
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
                   <input type="hidden" name="owner" value={editingOwner} />
                   <input type="hidden" name="reservationNote" value={editingReservationNote} />
-                  <input type="hidden" name="weatherLocationName" value={editingWeatherLocationName} />
-                  <input type="hidden" name="weatherLatitude" value={editingWeatherLatitude} />
-                  <input type="hidden" name="weatherLongitude" value={editingWeatherLongitude} />
                   {editingAttendanceLocationEnabled ? <input type="hidden" name="attendanceLocationEnabled" value="on" /> : null}
                   <input type="hidden" name="attendanceLatitude" value={editingAttendanceLatitude} />
                   <input type="hidden" name="attendanceLongitude" value={editingAttendanceLongitude} />
