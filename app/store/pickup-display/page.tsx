@@ -38,6 +38,7 @@ export default function StorePickupDisplayPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const selectedStoreIdRef = useRef(selectedStoreId);
+  const voiceEnabledRef = useRef(false);
   const knownReadyCodesRef = useRef<Set<string>>(new Set());
   const hasInitializedReadyCodesRef = useRef(false);
 
@@ -59,7 +60,7 @@ export default function StorePickupDisplayPage() {
     setPreparing(body.preparing ?? []);
     const nextReady = (body.ready ?? []) as PickupOrder[];
     const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
-    if (hasInitializedReadyCodesRef.current && voiceEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (hasInitializedReadyCodesRef.current && voiceEnabledRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
       const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
       for (const code of newCodes) {
         const utterance = new SpeechSynthesisUtterance(getSpeechText(code));
@@ -80,6 +81,7 @@ export default function StorePickupDisplayPage() {
       return;
     }
     window.localStorage.setItem(voiceSettingKey, "1");
+    voiceEnabledRef.current = true;
     setVoiceEnabled(true);
     const utterance = new SpeechSynthesisUtterance("音声案内を開始します。");
     utterance.lang = "ja-JP";
@@ -90,13 +92,28 @@ export default function StorePickupDisplayPage() {
 
   function disableVoice() {
     window.localStorage.removeItem(voiceSettingKey);
+    voiceEnabledRef.current = false;
     setVoiceEnabled(false);
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }
 
+  function testVoice() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setSpeechSupported(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance("番号 P、1234、準備できました。");
+    utterance.lang = "ja-JP";
+    utterance.rate = 0.92;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }
+
   useEffect(() => {
     setSpeechSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-    setVoiceEnabled(getStoredVoiceEnabled());
+    const storedVoiceEnabled = getStoredVoiceEnabled();
+    voiceEnabledRef.current = storedVoiceEnabled;
+    setVoiceEnabled(storedVoiceEnabled);
   }, []);
 
   useEffect(() => {
@@ -206,6 +223,9 @@ export default function StorePickupDisplayPage() {
             disabled={!speechSupported}
           >
             {voiceEnabled ? "音声 ON" : "音声 OFF"}
+          </button>
+          <button className="secondary-button" type="button" onClick={testVoice} disabled={!speechSupported}>
+            音声テスト
           </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
           {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
