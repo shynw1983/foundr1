@@ -15,6 +15,18 @@ type StoreOption = {
   name: string;
 };
 
+const voiceSettingKey = "store:pickup-display-voice-enabled";
+
+function getStoredVoiceEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(voiceSettingKey) === "1";
+}
+
+function getSpeechText(pickupCode: string) {
+  const readableCode = pickupCode.replace("-", "、");
+  return `番号 ${readableCode}、準備できました。`;
+}
+
 export default function StorePickupDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
@@ -23,7 +35,11 @@ export default function StorePickupDisplayPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
   const selectedStoreIdRef = useRef(selectedStoreId);
+  const knownReadyCodesRef = useRef<Set<string>>(new Set());
+  const hasInitializedReadyCodesRef = useRef(false);
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -41,9 +57,47 @@ export default function StorePickupDisplayPage() {
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setPreparing(body.preparing ?? []);
-    setReady(body.ready ?? []);
+    const nextReady = (body.ready ?? []) as PickupOrder[];
+    const nextReadyCodes = new Set(nextReady.map((order) => order.pickupCode));
+    if (hasInitializedReadyCodesRef.current && voiceEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
+      const newCodes = Array.from(nextReadyCodes).filter((code) => !knownReadyCodesRef.current.has(code));
+      for (const code of newCodes) {
+        const utterance = new SpeechSynthesisUtterance(getSpeechText(code));
+        utterance.lang = "ja-JP";
+        utterance.rate = 0.92;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+    knownReadyCodesRef.current = nextReadyCodes;
+    hasInitializedReadyCodesRef.current = true;
+    setReady(nextReady);
     setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
   }
+
+  function enableVoice() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setSpeechSupported(false);
+      return;
+    }
+    window.localStorage.setItem(voiceSettingKey, "1");
+    setVoiceEnabled(true);
+    const utterance = new SpeechSynthesisUtterance("音声案内を開始します。");
+    utterance.lang = "ja-JP";
+    utterance.rate = 0.92;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function disableVoice() {
+    window.localStorage.removeItem(voiceSettingKey);
+    setVoiceEnabled(false);
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }
+
+  useEffect(() => {
+    setSpeechSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+    setVoiceEnabled(getStoredVoiceEnabled());
+  }, []);
 
   useEffect(() => {
     void load();
@@ -145,7 +199,16 @@ export default function StorePickupDisplayPage() {
             </select>
           ) : null}
           <button className="secondary-button" type="button" onClick={() => void load()}>更新</button>
+          <button
+            className={voiceEnabled ? "secondary-button is-active" : "secondary-button"}
+            type="button"
+            onClick={voiceEnabled ? disableVoice : enableVoice}
+            disabled={!speechSupported}
+          >
+            {voiceEnabled ? "音声 ON" : "音声 OFF"}
+          </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/os/logout">ログアウト</a>
