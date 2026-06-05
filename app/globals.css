@@ -8104,9 +8104,22 @@ body :where(
 }
 
 .store-next-shift-row strong,
+.store-next-shift-row small,
 .store-next-shift-row span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.store-next-shift-date {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-next-shift-date small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .store-next-shift-row span {

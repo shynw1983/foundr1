@@ -281,6 +281,13 @@ export default function StoreTimecardPage() {
   const selectedStoreName = selectedStore?.name ?? "店舗未選択";
   const selectedShiftStore = data?.stores.find((store) => store.id === selectedShiftStoreId) ?? null;
   const selectedShiftStoreName = selectedShiftStore?.name ?? "店舗未選択";
+  const isPersonalShiftView = data?.currentEmployeeRole === "staff";
+  const shiftListTitle = isPersonalShiftView ? "自分の確定シフト" : "店舗スタッフの確定シフト";
+  const shiftListDescription = schedulingPeriod
+    ? `${schedulingPeriod.label} / ${selectedShiftStoreName}`
+    : isPersonalShiftView
+      ? "自分の確定シフトを確認しています。"
+      : "対象店舗のスタッフシフトを確認しています。";
   const mobilePanelItems: Array<{ key: MobileTimecardPanel; label: string; detail: string; icon: typeof CalendarDays }> = [
     { key: "next_shift", label: "次回シフト", detail: `${myShifts.length} 件`, icon: CalendarDays },
     { key: "history", label: "今月の実績", detail: `${selectedEmployeeDays.length} 日`, icon: BriefcaseBusiness },
@@ -298,8 +305,8 @@ export default function StoreTimecardPage() {
     }
     if (activeMobilePanel === "next_shift") {
       return {
-        title: "次回シフト",
-        description: schedulingPeriod ? `${schedulingPeriod.label} / ${selectedShiftStoreName}` : "確定済みシフトを確認しています。"
+        title: "自分のシフト",
+        description: shiftListDescription
       };
     }
     if (activeMobilePanel === "availability") {
@@ -657,11 +664,11 @@ export default function StoreTimecardPage() {
           <div className="store-next-shift-block store-mobile-section-next-shift">
             <div className="store-next-shift-heading">
               <div>
-                <strong>{isMobileStaffPunch && activeMobilePanel === "next_shift" ? "確定済みシフト" : "次回シフト"}</strong>
+                <strong>{shiftListTitle}</strong>
                 <span>
                   {schedulingPeriod
                     ? `${schedulingPeriod.label} / ${schedulingPeriod.startDate} - ${schedulingPeriod.endDate}`
-                    : "確定済みシフトを確認しています。"}
+                    : shiftListDescription}
                 </span>
               </div>
               <span>{selectedShiftStoreName}</span>
@@ -679,7 +686,10 @@ export default function StoreTimecardPage() {
             <div className="store-next-shift-list">
               {myShifts.length ? myShifts.map((shift) => (
                 <article className="store-next-shift-row" key={shift.id}>
-                  <strong>{formatShiftDate(shift.workDate)}</strong>
+                  <div className="store-next-shift-date">
+                    <strong>{formatShiftDate(shift.workDate)}</strong>
+                    {!isPersonalShiftView ? <small>{shift.employeeName}</small> : null}
+                  </div>
                   <span>{shift.scheduledStart ?? "--:--"} - {shift.scheduledEnd ?? "--:--"}</span>
                   {shift.scheduledStart && shift.scheduledEnd ? (
                     <a
@@ -693,7 +703,7 @@ export default function StoreTimecardPage() {
                   ) : null}
                 </article>
               )) : (
-                <p className="empty-state-text">この期間の確定シフトはまだありません。</p>
+                <p className="empty-state-text">{isPersonalShiftView ? "この期間の自分の確定シフトはまだありません。" : "この期間の店舗スタッフの確定シフトはまだありません。"}</p>
               )}
             </div>
           </div>
