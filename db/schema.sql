@@ -1216,6 +1216,7 @@ create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,
   reservations_enabled boolean not null default true,
   minimum_pickup_minutes integer,
+  minimum_pickup_reset_at timestamptz,
   status_note text not null default '',
   temporary_status_until timestamptz,
   updated_by uuid references employees(id) on delete set null,
@@ -1225,6 +1226,7 @@ create table if not exists store_operations (
 
 alter table store_operations add column if not exists temporary_status_until timestamptz;
 alter table store_operations add column if not exists minimum_pickup_minutes integer;
+alter table store_operations add column if not exists minimum_pickup_reset_at timestamptz;
 
 create table if not exists pos_store_settings (
   store_id uuid primary key references stores(id) on delete cascade,
@@ -1846,6 +1848,17 @@ create index if not exists idx_store_customer_order_items_order on store_custome
 create index if not exists idx_order_production_tasks_order on order_production_tasks(order_id, production_area);
 create unique index if not exists idx_order_production_tasks_unique_area on order_production_tasks(order_id, production_area, production_area_label);
 create index if not exists idx_order_production_tasks_store_status on order_production_tasks(store_id, status, created_at desc);
+
+update order_production_tasks
+set production_area_label = 'ドリンク'
+where production_area = 'drink'
+  and production_area_label = '奶茶';
+
+update order_production_tasks
+set production_area = 'cooking',
+  production_area_label = '調理'
+where production_area = 'malatang'
+  and production_area_label = '麻辣烫';
 create index if not exists idx_pos_cash_sessions_store_date on pos_cash_sessions(store_id, business_date desc, status);
 create unique index if not exists idx_pos_cash_sessions_one_open_per_store
   on pos_cash_sessions(store_id)

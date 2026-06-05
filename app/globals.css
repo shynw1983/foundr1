@@ -4636,7 +4636,7 @@ body :where(
 
 .store-pickup-setting {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: center;
   border: 1px solid var(--line);
@@ -4653,7 +4653,8 @@ body :where(
 }
 
 .store-pickup-setting > div:first-child,
-.store-reception-buttons {
+.store-reception-buttons,
+.store-pickup-stepper {
   grid-column: 1 / -1;
 }
 
@@ -4696,6 +4697,46 @@ body :where(
   padding: 0 10px;
   background: white;
   font-weight: 900;
+}
+
+.store-pickup-stepper {
+  gap: 6px;
+}
+
+.store-pickup-stepper-controls {
+  display: grid;
+  grid-template-columns: 48px minmax(128px, 1fr) 48px;
+  gap: 6px;
+  align-items: center;
+}
+
+.store-pickup-stepper-controls button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.store-pickup-stepper-controls button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.store-pickup-stepper-controls strong {
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
 }
 
 .store-pickup-setting select {
@@ -15607,7 +15648,7 @@ body :where(
   }
 
   .store-pickup-setting {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
   }
 
   .store-pickup-setting .secondary-button {

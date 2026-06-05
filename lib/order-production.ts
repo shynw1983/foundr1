@@ -10,10 +10,10 @@ function normalizeText(value: unknown) {
 function getProductionArea(brandName: string) {
   const normalized = brandName.toLowerCase();
   if (normalized.includes("nanacha") || normalized.includes("奶茶")) {
-    return { key: "drink", label: "奶茶" };
+    return { key: "drink", label: "ドリンク" };
   }
   if (normalized.includes("maamaa") || normalized.includes("麻辣")) {
-    return { key: "malatang", label: "麻辣烫" };
+    return { key: "cooking", label: "調理" };
   }
   return { key: normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "general", label: brandName || "制作" };
 }

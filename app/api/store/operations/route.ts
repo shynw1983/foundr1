@@ -10,8 +10,22 @@ type StoreOperationPatch = {
   storeId?: string;
   reservationsEnabled?: boolean;
   minimumPickupMinutes?: number;
+  minimumPickupResetPolicy?: string;
   statusNote?: string;
 };
+
+const brandDefaultPickupMinutes: Record<string, number> = {
+  nanacha: 5,
+  maamaa: 15
+};
+
+function getBrandDefaultPickupMinutes(brand: { brandName: string; brandType: string }) {
+  const normalizedType = brand.brandType.toLowerCase();
+  const normalizedName = brand.brandName.toLowerCase();
+  if (normalizedType.includes("nanacha") || normalizedName.includes("nanacha")) return 5;
+  if (normalizedType.includes("maamaa") || normalizedName.includes("maamaa") || normalizedName.includes("まぁ麻")) return 15;
+  return brandDefaultPickupMinutes[normalizedType];
+}
 
 function normalizeMinimumPickupMinutes(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -38,7 +52,14 @@ export async function GET(request: Request) {
       stores.name,
       stores.business_hours as "businessHours",
       coalesce(stores.reservation_note, '') as "reservationNote",
-      store_operations.minimum_pickup_minutes as "minimumPickupMinutes",
+      case
+        when store_operations.minimum_pickup_reset_at is not null and store_operations.minimum_pickup_reset_at <= now() then null
+        else store_operations.minimum_pickup_minutes
+      end as "minimumPickupMinutes",
+      case
+        when store_operations.minimum_pickup_reset_at is not null and store_operations.minimum_pickup_reset_at <= now() then null
+        else store_operations.minimum_pickup_reset_at
+      end as "minimumPickupResetAt",
       case
         when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
         else coalesce(store_operations.reservations_enabled, true)
@@ -57,10 +78,33 @@ export async function GET(request: Request) {
   const operation = rows[0] as (Record<string, unknown> & {
     businessHours?: unknown;
     minimumPickupMinutes?: number | null;
+    minimumPickupResetAt?: string | Date | null;
     reservationsEnabled?: boolean;
     statusNote?: string;
     temporaryStatusUntil?: string | Date | null;
   }) | undefined;
+
+  const brandRows = await sql`
+    select lower(brands.brand_type) as "brandType", brands.name
+    from store_brands
+    join brands on brands.id = store_brands.brand_id
+    where store_brands.store_id = ${storeId}
+      and brands.status = 'active'
+    order by brands.name
+  `;
+  const brandDefaults = brandRows
+    .map((brand) => {
+      const entry = {
+        brandName: String(brand.name ?? ""),
+        brandType: String(brand.brandType ?? "")
+      };
+      return {
+        ...entry,
+        minimumPickupMinutes: getBrandDefaultPickupMinutes(entry)
+      };
+    })
+    .filter((brand) => Number.isFinite(brand.minimumPickupMinutes));
+  const defaultMinimumPickupMinutes = brandDefaults.length > 0 ? brandDefaults[0].minimumPickupMinutes : 15;
 
   return NextResponse.json({
     access,
@@ -73,7 +117,9 @@ export async function GET(request: Request) {
             reservationsEnabled: operation.reservationsEnabled !== false,
             statusNote: operation.statusNote,
             temporaryStatusUntil: operation.temporaryStatusUntil
-          })
+          }),
+          defaultMinimumPickupMinutes,
+          brandDefaultPickupMinutes: brandDefaults
         }
       : null
   });
@@ -105,16 +151,23 @@ export async function PATCH(request: Request) {
   const temporaryStatusUntil = !reservationsEnabled && statusNote === "本日休業"
     ? getCurrentBusinessDayClosing(businessHours)
     : null;
+  const minimumPickupResetAt = minimumPickupMinutes !== null && body?.minimumPickupResetPolicy === "business_day_end"
+    ? getCurrentBusinessDayClosing(businessHours)
+    : null;
 
   await sql`
-    insert into store_operations (store_id, reservations_enabled, minimum_pickup_minutes, status_note, temporary_status_until, updated_by, updated_at)
-    values (${storeId}, ${reservationsEnabled}, ${minimumPickupMinutes}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
+    insert into store_operations (store_id, reservations_enabled, minimum_pickup_minutes, minimum_pickup_reset_at, status_note, temporary_status_until, updated_by, updated_at)
+    values (${storeId}, ${reservationsEnabled}, ${minimumPickupMinutes}, ${minimumPickupResetAt?.toISOString() ?? null}, ${statusNote}, ${temporaryStatusUntil?.toISOString() ?? null}, ${session.id}, now())
     on conflict (store_id)
     do update set
       reservations_enabled = excluded.reservations_enabled,
       minimum_pickup_minutes = case
         when ${hasMinimumPickupMinutes} then excluded.minimum_pickup_minutes
         else store_operations.minimum_pickup_minutes
+      end,
+      minimum_pickup_reset_at = case
+        when ${hasMinimumPickupMinutes} then excluded.minimum_pickup_reset_at
+        else store_operations.minimum_pickup_reset_at
       end,
       status_note = excluded.status_note,
       temporary_status_until = excluded.temporary_status_until,

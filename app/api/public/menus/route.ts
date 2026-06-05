@@ -196,7 +196,10 @@ export async function GET(request: Request) {
         select
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",
-          store_operations.minimum_pickup_minutes as "minimumPickupMinutes",
+          case
+            when store_operations.minimum_pickup_reset_at is not null and store_operations.minimum_pickup_reset_at <= now() then null
+            else store_operations.minimum_pickup_minutes
+          end as "minimumPickupMinutes",
           case
             when store_operations.temporary_status_until is not null and store_operations.temporary_status_until <= now() then true
             else coalesce(store_operations.reservations_enabled, true)

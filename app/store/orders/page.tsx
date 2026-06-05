@@ -65,6 +65,13 @@ type StoreOrderStats = {
 
 type StoreOperation = {
   minimumPickupMinutes?: number | null;
+  minimumPickupResetAt?: string | null;
+  defaultMinimumPickupMinutes?: number;
+  brandDefaultPickupMinutes?: Array<{
+    brandName: string;
+    brandType: string;
+    minimumPickupMinutes: number;
+  }>;
   reservationsEnabled: boolean;
   statusNote: string;
 };
@@ -179,7 +186,7 @@ export default function StoreOrdersPage() {
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
   const [statsDays, setStatsDays] = useState(1);
   const [operation, setOperation] = useState<StoreOperation | null>(null);
-  const [minimumPickupDraft, setMinimumPickupDraft] = useState("");
+  const [minimumPickupOffsetDraft, setMinimumPickupOffsetDraft] = useState(0);
   const [operationSaving, setOperationSaving] = useState(false);
   const [operationMessage, setOperationMessage] = useState("");
   const [query, setQuery] = useState("");
@@ -211,7 +218,7 @@ export default function StoreOrdersPage() {
   const loadOperation = async (storeId = selectedStoreId) => {
     if (!storeId) {
       setOperation(null);
-      setMinimumPickupDraft("");
+      setMinimumPickupOffsetDraft(0);
       return;
     }
     const params = new URLSearchParams({ storeId });
@@ -220,18 +227,20 @@ export default function StoreOrdersPage() {
     const body = await response.json();
     const nextOperation = body.operation as StoreOperation | null;
     setOperation(nextOperation);
-    setMinimumPickupDraft(
-      nextOperation?.minimumPickupMinutes === null || nextOperation?.minimumPickupMinutes === undefined
-        ? ""
-        : String(nextOperation.minimumPickupMinutes),
-    );
+    const defaultMinutes = nextOperation?.defaultMinimumPickupMinutes ?? 15;
+    const currentMinutes = nextOperation?.minimumPickupMinutes ?? defaultMinutes;
+    setMinimumPickupOffsetDraft(currentMinutes - defaultMinutes);
   };
 
-  const saveOperationSettings = async (patch: Partial<StoreOperation> = {}, successMessage = "受付設定を保存しました。") => {
+  const saveOperationSettings = async (
+    patch: Partial<StoreOperation> = {},
+    successMessage = "受付設定を保存しました。",
+    minimumPickupResetPolicy = "manual",
+  ) => {
     if (!selectedStoreId || !operation) return;
     const nextOperation = { ...operation, ...patch };
-    const rawMinutes = minimumPickupDraft.trim();
-    const minutes = rawMinutes === "" ? null : Math.max(0, Math.min(240, Math.round(Number(rawMinutes) || 0)));
+    const defaultMinutes = nextOperation.defaultMinimumPickupMinutes ?? 15;
+    const minutes = Math.max(0, Math.min(240, defaultMinutes + minimumPickupOffsetDraft));
     setOperationSaving(true);
     setOperationMessage("");
     try {
@@ -242,7 +251,8 @@ export default function StoreOrdersPage() {
           storeId: selectedStoreId,
           reservationsEnabled: nextOperation.reservationsEnabled,
           statusNote: nextOperation.statusNote,
-          minimumPickupMinutes: minutes
+          minimumPickupMinutes: minutes === defaultMinutes ? null : minutes,
+          minimumPickupResetPolicy
         })
       });
       if (!response.ok) throw new Error("save failed");
@@ -255,11 +265,23 @@ export default function StoreOrdersPage() {
     }
   };
 
-  const saveMinimumPickupMinutes = async () => {
-    const rawMinutes = minimumPickupDraft.trim();
+  const changeMinimumPickupOffset = (delta: number) => {
+    if (!operation) return;
+    const defaultMinutes = operation.defaultMinimumPickupMinutes ?? 15;
+    const minOffset = -defaultMinutes;
+    const maxOffset = 240 - defaultMinutes;
+    setMinimumPickupOffsetDraft((current) => Math.max(minOffset, Math.min(maxOffset, current + delta)));
+  };
+
+  const resetMinimumPickupDraft = () => {
+    setMinimumPickupOffsetDraft(0);
+  };
+
+  const saveMinimumPickupMinutes = async (resetPolicy = "manual") => {
     await saveOperationSettings(
       {},
-      rawMinutes === "" ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。",
+      minimumPickupOffsetDraft === 0 ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。",
+      resetPolicy,
     );
   };
 
@@ -640,18 +662,33 @@ export default function StoreOrdersPage() {
                       本日休業
                     </button>
                   </div>
-                  <label>
-                    <input
-                      inputMode="numeric"
-                      min={0}
-                      max={240}
-                      type="number"
-                      value={minimumPickupDraft}
-                      onChange={(event) => setMinimumPickupDraft(event.target.value)}
-                      placeholder="初期値"
-                    />
-                    分後
-                  </label>
+                  <div className="store-pickup-stepper">
+                    <span>
+                      初期値 {operation.defaultMinimumPickupMinutes ?? 15}分
+                      {operation.brandDefaultPickupMinutes && operation.brandDefaultPickupMinutes.length > 1
+                        ? ` / ${operation.brandDefaultPickupMinutes.map((brand) => `${brand.brandName} ${brand.minimumPickupMinutes}分`).join("・")}`
+                        : ""}
+                    </span>
+                    <div className="store-pickup-stepper-controls">
+                      <button type="button" disabled={operationSaving} onClick={() => changeMinimumPickupOffset(-5)} aria-label="最短準備時間を5分短くする">
+                        -5
+                      </button>
+                      <strong>
+                        {minimumPickupOffsetDraft === 0 ? "初期値" : `初期値 ${minimumPickupOffsetDraft > 0 ? "+" : ""}${minimumPickupOffsetDraft}分`}
+                      </strong>
+                      <button type="button" disabled={operationSaving} onClick={() => changeMinimumPickupOffset(5)} aria-label="最短準備時間を5分長くする">
+                        +5
+                      </button>
+                    </div>
+                    <small>現在 {(operation.defaultMinimumPickupMinutes ?? 15) + minimumPickupOffsetDraft}分後から受付</small>
+                    {operation.minimumPickupResetAt ? <small>営業日終了で初期値に戻ります</small> : null}
+                  </div>
+                  <button className="secondary-button" type="button" disabled={operationSaving || minimumPickupOffsetDraft === 0} onClick={resetMinimumPickupDraft}>
+                    初期値に戻す
+                  </button>
+                  <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes("business_day_end")}>
+                    営業日終了で戻す
+                  </button>
                   <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes()}>
                     {operationSaving ? "保存中..." : "保存"}
                   </button>
