@@ -18346,6 +18346,10 @@ a:focus-visible {
   background-image: url("/icons/foundr1-store-512.png");
 }
 
+.brand-block .eyebrow {
+  text-transform: none;
+}
+
 .login-card .brand-mark {
   flex-basis: 52px;
   width: 52px;
