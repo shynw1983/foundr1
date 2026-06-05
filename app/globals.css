@@ -5048,6 +5048,10 @@ body :where(
   gap: 14px;
 }
 
+.store-pos-page button {
+  touch-action: manipulation;
+}
+
 .store-pos-head,
 .store-pos-summary,
 .store-pos-head-actions,
@@ -5352,7 +5356,7 @@ body :where(
 .store-pos-cash-overlay {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 120;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -6022,7 +6026,7 @@ body :where(
 .store-pos-transaction-overlay {
   position: fixed;
   inset: 0;
-  z-index: 95;
+  z-index: 130;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -6290,7 +6294,7 @@ body :where(
 .store-pos-option-overlay {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 120;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -6303,6 +6307,8 @@ body :where(
   width: min(760px, 100%);
   max-height: min(84vh, 760px);
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;

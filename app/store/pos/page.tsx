@@ -405,6 +405,16 @@ export default function StorePosPage() {
     return () => window.clearTimeout(timer);
   }, [message]);
 
+  useEffect(() => {
+    const hasDialog = Boolean(configuringItem) || transactionDialogOpen || Boolean(cashDialog);
+    if (!hasDialog) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [cashDialog, configuringItem, transactionDialogOpen]);
+
   const categorySummaries = useMemo(() => getCategories(items, categories, selectedBrandId), [categories, items, selectedBrandId]);
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
