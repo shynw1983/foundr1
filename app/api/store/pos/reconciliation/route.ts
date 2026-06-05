@@ -1,12 +1,13 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 import { getCashBreakdownTotal, normalizeCashBreakdown, type CashBreakdown } from "../../../../../lib/pos-cash-denominations";
+import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
-type CashAction = "open" | "movement" | "close" | "delete_movement" | "delete_session" | "clear_date" | "recalculate";
+type CashAction = "open" | "movement" | "close" | "delete_movement" | "delete_session" | "clear_date" | "recalculate" | "refund_order";
 
 const cashCorrectionRoles = new Set(["owner", "manager"]);
 
@@ -310,18 +311,43 @@ async function getOrders(storeId: string, businessDate: string) {
     select
       store_customer_orders.id::text,
       store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.status,
+      store_customer_orders.payment_status as "paymentStatus",
       store_customer_orders.amount,
       store_customer_orders.payment_provider as "paymentMethod",
       coalesce(store_customer_orders.customer_summary ->> 'cashierName', '') as "cashierName",
+      coalesce(store_customer_orders.customer_summary ->> 'refundReason', '') as "refundReason",
+      coalesce(store_customer_orders.payment_refund_status, '') as "refundStatus",
+      coalesce(store_customer_orders.payment_refunded_at::text, '') as "refundedAt",
+      coalesce(pos_cash_sessions.status, '') as "cashSessionStatus",
       to_char(store_customer_orders.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
       store_customer_orders.created_at::text as "createdAt"
     from store_customer_orders
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.store_id::text = ${storeId}
       and store_customer_orders.order_source = 'store_pos'
-      and store_customer_orders.status <> 'cancelled'
       and coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date) = ${businessDate}
     order by store_customer_orders.created_at desc
+    limit 200
+  `;
+}
+
+async function getOrderCorrections(storeId: string, businessDate: string) {
+  return sql`
+    select
+      pos_order_corrections.id::text,
+      pos_order_corrections.order_id::text as "orderId",
+      pos_order_corrections.correction_type as "correctionType",
+      pos_order_corrections.amount,
+      pos_order_corrections.reason,
+      coalesce(employees.name, '') as "createdByName",
+      to_char(pos_order_corrections.created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime",
+      pos_order_corrections.created_at::text as "createdAt"
+    from pos_order_corrections
+    left join employees on employees.id = pos_order_corrections.created_by
+    where pos_order_corrections.store_id::text = ${storeId}
+      and pos_order_corrections.business_date = ${businessDate}
+    order by pos_order_corrections.created_at desc
     limit 200
   `;
 }
@@ -357,9 +383,10 @@ export async function GET(request: Request) {
     getSessions(selectedStoreId, businessDate),
     getPreviousClosedSession(selectedStoreId, businessDate)
   ]);
-  const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
+  const [movements, orders, orderCorrections, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(selectedStoreId, businessDate),
     getOrders(selectedStoreId, businessDate),
+    getOrderCorrections(selectedStoreId, businessDate),
     getPaymentTotals(selectedStoreId, businessDate),
     getActiveCashResponsibleEmployees(selectedStoreId)
   ]);
@@ -383,6 +410,7 @@ export async function GET(request: Request) {
     sessions,
     movements,
     orders,
+    orderCorrections,
     paymentTotals,
     activeCashResponsibleEmployees,
     totals
@@ -407,6 +435,7 @@ export async function POST(request: Request) {
     registerName?: string;
     movementId?: string;
     sessionId?: string;
+    orderId?: string;
     businessDate?: string;
     closingResponsibleEmployeeId?: string;
   };
@@ -558,6 +587,93 @@ export async function POST(request: Request) {
     if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
     const targetDate = normalizeText(body.businessDate) || businessState.businessDate;
     await recalculateDateSessions(storeFilter, targetDate);
+  } else if (action === "refund_order") {
+    if (!canManageCashReconciliation) return Response.json({ error: "レジ締めを修正する権限がありません。" }, { status: 403 });
+    const orderId = normalizeText(body.orderId);
+    const reason = normalizeText(body.reason || body.note);
+    if (!orderId) return Response.json({ error: "会計を選択してください。" }, { status: 400 });
+    if (!reason) return Response.json({ error: "返金・取消理由を入力してください。" }, { status: 400 });
+    const targetRows = await sql`
+      select
+        store_customer_orders.id::text,
+        store_customer_orders.store_id::text as "storeId",
+        store_customer_orders.pos_cash_session_id::text as "cashSessionId",
+        store_customer_orders.status,
+        store_customer_orders.payment_status as "paymentStatus",
+        store_customer_orders.amount,
+        coalesce(pos_cash_sessions.status, '') as "cashSessionStatus",
+        coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date)::text as "businessDate"
+      from store_customer_orders
+      left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
+      where store_customer_orders.id::text = ${orderId}
+        and store_customer_orders.store_id::text = ${storeFilter}
+        and store_customer_orders.order_source = 'store_pos'
+      limit 1
+    `;
+    const target = targetRows[0] as {
+      id: string;
+      storeId: string;
+      cashSessionId: string | null;
+      status: string;
+      paymentStatus: string;
+      amount: number;
+      cashSessionStatus: string;
+      businessDate: string;
+    } | undefined;
+    if (!target) return Response.json({ error: "会計が見つかりません。" }, { status: 404 });
+    if (target.status === "cancelled" || target.paymentStatus === "refunded") {
+      return Response.json({ error: "この会計はすでに返金済みです。" }, { status: 400 });
+    }
+    const updatedRows = await sql`
+      update store_customer_orders
+      set
+        status = 'cancelled',
+        payment_status = 'refunded',
+        payment_refund_status = 'succeeded',
+        payment_refunded_at = now(),
+        cancelled_at = coalesce(cancelled_at, now()),
+        customer_summary = customer_summary || ${JSON.stringify({
+          refundReason: reason,
+          refundedById: session.id,
+          refundedByName: session.name,
+          refundSource: "os_reconciliation"
+        })}::jsonb,
+        updated_at = now()
+      where id::text = ${orderId}
+      returning id::text
+    `;
+    if (!updatedRows[0]?.id) return Response.json({ error: "返金・取消を保存できませんでした。" }, { status: 500 });
+    await sql`
+      insert into pos_order_corrections (
+        store_id,
+        order_id,
+        cash_session_id,
+        business_date,
+        correction_type,
+        amount,
+        reason,
+        before_status,
+        before_payment_status,
+        after_status,
+        after_payment_status,
+        created_by
+      )
+      values (
+        ${storeFilter},
+        ${target.id},
+        ${target.cashSessionId},
+        ${target.businessDate},
+        'refund_order',
+        ${Number(target.amount ?? 0)},
+        ${reason},
+        ${target.status},
+        ${target.paymentStatus},
+        'cancelled',
+        'refunded',
+        ${session.id}
+      )
+    `;
+    await syncWebReservationToSalesOrder(orderId);
   } else {
     return Response.json({ error: "操作を選択してください。" }, { status: 400 });
   }
@@ -568,11 +684,21 @@ export async function POST(request: Request) {
     getSessions(storeFilter, businessDate),
     getPreviousClosedSession(storeFilter, businessDate)
   ]);
-  const [movements, orders, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
+  const [movements, orders, orderCorrections, paymentTotals, activeCashResponsibleEmployees] = await Promise.all([
     getMovements(storeFilter, businessDate),
     getOrders(storeFilter, businessDate),
+    getOrderCorrections(storeFilter, businessDate),
     getPaymentTotals(storeFilter, businessDate),
     getActiveCashResponsibleEmployees(storeFilter)
   ]);
-  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, previousClosedSession, sessions, movements, orders, paymentTotals, activeCashResponsibleEmployees });
+  const totals = sessions.reduce((sum, item) => ({
+    openingAmount: sum.openingAmount + item.openingAmount,
+    expectedCashAmount: sum.expectedCashAmount + item.expectedCashAmount,
+    countedCashAmount: sum.countedCashAmount + Number(item.countedCashAmount ?? 0),
+    differenceAmount: sum.differenceAmount + Number(item.differenceAmount ?? 0),
+    cashSales: sum.cashSales + item.cashSales,
+    cashIn: sum.cashIn + item.cashIn,
+    cashOut: sum.cashOut + item.cashOut
+  }), { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 });
+  return Response.json({ ok: true, selectedStoreId: storeFilter, businessDate, businessState, activeSession, previousClosedSession, sessions, movements, orders, orderCorrections, paymentTotals, activeCashResponsibleEmployees, totals });
 }

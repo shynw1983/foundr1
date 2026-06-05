@@ -6569,6 +6569,16 @@ body :where(
   background: #f8fafc;
 }
 
+.pos-admin-order-row.is-refunded {
+  border-color: rgba(100, 116, 139, 0.28);
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.pos-admin-order-row.is-refunded b {
+  text-decoration: line-through;
+}
+
 .pos-admin-order-row div {
   display: grid;
   gap: 3px;
@@ -6586,6 +6596,19 @@ body :where(
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.pos-admin-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.pos-admin-order-actions input {
+  min-width: min(260px, 100%);
+  flex: 1 1 220px;
 }
 
 .pos-admin-correction-panel {

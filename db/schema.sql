@@ -1403,6 +1403,23 @@ create table if not exists pos_cash_movements (
 
 alter table store_customer_orders add column if not exists pos_cash_session_id uuid references pos_cash_sessions(id) on delete set null;
 
+create table if not exists pos_order_corrections (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  cash_session_id uuid references pos_cash_sessions(id) on delete set null,
+  business_date date not null,
+  correction_type text not null,
+  amount integer not null default 0,
+  reason text not null default '',
+  before_status text not null default '',
+  before_payment_status text not null default '',
+  after_status text not null default '',
+  after_payment_status text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists store_customer_order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references store_customer_orders(id) on delete cascade,
@@ -1804,6 +1821,8 @@ create unique index if not exists idx_pos_cash_sessions_one_open_per_store
   on pos_cash_sessions(store_id)
   where status = 'open';
 create index if not exists idx_pos_cash_movements_session on pos_cash_movements(session_id, created_at desc);
+create index if not exists idx_pos_order_corrections_store_date on pos_order_corrections(store_id, business_date, created_at desc);
+create index if not exists idx_pos_order_corrections_order on pos_order_corrections(order_id, created_at desc);
 create index if not exists idx_sales_orders_store_channel_paid on sales_orders(store_id, channel, paid_at desc);
 create index if not exists idx_sales_orders_ordered_at on sales_orders(ordered_at desc);
 create index if not exists idx_sales_orders_channel_status on sales_orders(channel, status);

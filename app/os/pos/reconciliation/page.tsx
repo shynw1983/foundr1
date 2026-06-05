@@ -97,9 +97,25 @@ type PosCashMovement = {
 type PosOrder = {
   id: string;
   pickupCode: string;
+  status: string;
+  paymentStatus: string;
   amount: number;
   paymentMethod: string;
   cashierName: string;
+  refundReason: string;
+  refundStatus: string;
+  refundedAt: string;
+  cashSessionStatus: string;
+  createdTime: string;
+};
+
+type PosOrderCorrection = {
+  id: string;
+  orderId: string;
+  correctionType: string;
+  amount: number;
+  reason: string;
+  createdByName: string;
   createdTime: string;
 };
 
@@ -158,6 +174,10 @@ function getMovementLabel(value: string) {
   return value || "-";
 }
 
+function isRefundedOrder(order: PosOrder) {
+  return order.status === "cancelled" || order.paymentStatus === "refunded" || order.refundStatus === "succeeded";
+}
+
 function getTime(value: string) {
   if (!value) return "-";
   const date = new Date(value);
@@ -178,11 +198,14 @@ export default function PosReconciliationPage() {
   const [previousClosedSession, setPreviousClosedSession] = useState<PreviousClosedSession | null>(null);
   const [movements, setMovements] = useState<PosCashMovement[]>([]);
   const [orders, setOrders] = useState<PosOrder[]>([]);
+  const [orderCorrections, setOrderCorrections] = useState<PosOrderCorrection[]>([]);
   const [paymentTotals, setPaymentTotals] = useState<PaymentTotal[]>([]);
   const [totals, setTotals] = useState<PosCashTotals>({ openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [orderCorrectionReason, setOrderCorrectionReason] = useState("");
 
   async function load(storeId = selectedStoreId, date = businessDate) {
     setLoading(true);
@@ -204,6 +227,7 @@ export default function PosReconciliationPage() {
     setPreviousClosedSession(body.previousClosedSession ?? null);
     setMovements(body.movements ?? []);
     setOrders(body.orders ?? []);
+    setOrderCorrections(body.orderCorrections ?? []);
     setPaymentTotals(body.paymentTotals ?? []);
     setTotals(body.totals ?? { openingAmount: 0, expectedCashAmount: 0, countedCashAmount: 0, differenceAmount: 0, cashSales: 0, cashIn: 0, cashOut: 0 });
     setMessage("");
@@ -231,11 +255,56 @@ export default function PosReconciliationPage() {
       setPreviousClosedSession(body.previousClosedSession ?? previousClosedSession);
       setMovements(body.movements ?? []);
       setOrders(body.orders ?? []);
+      setOrderCorrections(body.orderCorrections ?? []);
       setPaymentTotals(body.paymentTotals ?? []);
+      setTotals(body.totals ?? totals);
       setMessage(successMessage);
       await load(selectedStoreId, businessDate);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "修正を保存できませんでした。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function refundOrder(order: PosOrder) {
+    if (!selectedStoreId || saving) return;
+    const reason = orderCorrectionReason.trim();
+    if (!reason) {
+      setMessage("返金・取消理由を入力してください。");
+      setSelectedOrderId(order.id);
+      return;
+    }
+    if (!window.confirm(`${order.pickupCode} を返金・取消として記録しますか？`)) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/store/pos/reconciliation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "refund_order",
+          storeId: selectedStoreId,
+          businessDate,
+          orderId: order.id,
+          reason
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "返金・取消を保存できませんでした。");
+      setSessions(body.sessions ?? []);
+      setPreviousClosedSession(body.previousClosedSession ?? previousClosedSession);
+      setMovements(body.movements ?? []);
+      setOrders(body.orders ?? []);
+      setOrderCorrections(body.orderCorrections ?? []);
+      setPaymentTotals(body.paymentTotals ?? []);
+      setTotals(body.totals ?? totals);
+      setSelectedOrderId("");
+      setOrderCorrectionReason("");
+      setMessage("返金・取消を修正記録として保存しました。");
+      await load(selectedStoreId, businessDate);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "返金・取消を保存できませんでした。");
     } finally {
       setSaving(false);
     }
@@ -540,15 +609,65 @@ export default function PosReconciliationPage() {
               </div>
             ) : (
               <div className="pos-admin-order-list">
-                {orders.map((order) => (
-                  <div key={order.id} className="pos-admin-order-row">
-                    <div>
-                      <strong>{order.pickupCode} / {order.createdTime}</strong>
-                      <span>{getPaymentLabel(order.paymentMethod)} / {order.cashierName || "-"}</span>
+                {orders.map((order) => {
+                  const refunded = isRefundedOrder(order);
+                  const isSelected = selectedOrderId === order.id;
+                  const corrections = orderCorrections.filter((correction) => correction.orderId === order.id);
+                  return (
+                    <div key={order.id} className={`pos-admin-order-row ${refunded ? "is-refunded" : ""}`}>
+                      <div>
+                        <strong>{order.pickupCode} / {order.createdTime}</strong>
+                        <span>{getPaymentLabel(order.paymentMethod)} / {order.cashierName || "-"} / {refunded ? "返金済み" : "会計済み"}</span>
+                        {order.cashSessionStatus ? <span>レジ締め: {order.cashSessionStatus === "closed" ? "締め済み" : order.cashSessionStatus === "open" ? "進行中" : order.cashSessionStatus}</span> : null}
+                        {order.refundReason ? <span>理由: {order.refundReason}</span> : null}
+                        {corrections.map((correction) => (
+                          <span key={correction.id}>修正: {correction.createdTime} / {correction.createdByName || "-"} / {correction.reason}</span>
+                        ))}
+                        {access?.canManageCashReconciliation && !refunded ? (
+                          <div className="pos-admin-order-actions">
+                            {isSelected ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={orderCorrectionReason}
+                                  onChange={(event) => setOrderCorrectionReason(event.target.value)}
+                                  placeholder="返金・取消理由"
+                                />
+                                <button className="danger-button" type="button" disabled={saving} onClick={() => refundOrder(order)}>
+                                  返金・取消を保存
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => {
+                                    setSelectedOrderId("");
+                                    setOrderCorrectionReason("");
+                                  }}
+                                >
+                                  閉じる
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="text-button"
+                                type="button"
+                                disabled={saving}
+                                onClick={() => {
+                                  setSelectedOrderId(order.id);
+                                  setOrderCorrectionReason("");
+                                }}
+                              >
+                                返金・取消
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      <b>{formatYen(order.amount)}</b>
                     </div>
-                    <b>{formatYen(order.amount)}</b>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
