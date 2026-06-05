@@ -6369,16 +6369,18 @@ body :where(
 
 .store-pos-option-choice-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 8px;
 }
 
 .store-pos-option-choice {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: space-between;
+  align-items: stretch;
   gap: 7px;
   min-width: 0;
+  min-height: 104px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 6px;
@@ -6412,7 +6414,12 @@ body :where(
 .store-pos-option-choice > button span,
 .store-pos-option-choice > button small {
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+
+.store-pos-option-choice > button span {
+  flex: 1 1 auto;
+  overflow-wrap: break-word;
+  text-align: left;
 }
 
 .store-pos-option-choice > button small {
@@ -6426,6 +6433,7 @@ body :where(
   display: inline-grid;
   grid-template-columns: 28px 26px 28px;
   align-items: center;
+  justify-content: end;
   gap: 3px;
 }
 
