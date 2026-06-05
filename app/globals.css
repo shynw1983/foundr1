@@ -4607,7 +4607,7 @@ body :where(
 
 .store-orders-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 0.46fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -4825,6 +4825,10 @@ body :where(
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.store-order-stats span {
+  white-space: nowrap;
 }
 
 .store-order-stats strong {
