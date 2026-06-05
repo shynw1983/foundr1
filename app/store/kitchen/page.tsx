@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type KitchenTask = {
@@ -50,6 +49,7 @@ export default function StoreKitchenPage() {
   const [savingId, setSavingId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
+  const [menuOpen, setMenuOpen] = useState(false);
   const selectedStoreIdRef = useRef(selectedStoreId);
 
   useEffect(() => {
@@ -180,37 +180,33 @@ export default function StoreKitchenPage() {
   const readyTasks = useMemo(() => tasks.filter((task) => task.status === "ready"), [tasks]);
 
   return (
-    <main className="store-workbench-shell store-kitchen-page">
-      <header className="store-workbench-topbar">
-        <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
-          <div className="brand-mark">F1</div>
-          <div>
-            <p className="eyebrow">Kitchen</p>
-            <h1>制作屏</h1>
-          </div>
-        </a>
-        <StoreNavTabs active="kitchen" />
-      </header>
-
-      <section className="store-kitchen-toolbar">
-        {stores.length > 1 ? (
-          <select value={selectedStoreId} onChange={(event) => {
-            const storeId = event.target.value;
-            setSelectedStoreId(storeId);
-            selectedStoreIdRef.current = storeId;
-            setStoredStoreSelection(storeId);
-            void load(storeId, selectedArea);
-          }}>
-            {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+    <main className="store-kitchen-display store-kitchen-page">
+      <button className="store-display-menu-button" type="button" aria-label="メニュー" onClick={() => setMenuOpen((current) => !current)} />
+      {menuOpen ? (
+        <div className="store-display-menu">
+          <strong>制作屏</strong>
+          {stores.length > 1 ? (
+            <select value={selectedStoreId} onChange={(event) => {
+              const storeId = event.target.value;
+              setSelectedStoreId(storeId);
+              selectedStoreIdRef.current = storeId;
+              setStoredStoreSelection(storeId);
+              void load(storeId, selectedArea);
+            }}>
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          ) : null}
+          <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="制作区">
+            <option value="">全部</option>
+            {areas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}
           </select>
-        ) : null}
-        <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="制作区">
-          <option value="">全部</option>
-          {areas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}
-        </select>
-        <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
-        <span>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / 更新 ${lastUpdatedAt}` : ""}</span>
-      </section>
+          <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
+          <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <a className="secondary-button" href="/store/orders">注文ワーク台</a>
+          <a className="secondary-button" href="/store">店舗ホーム</a>
+          <a className="danger-button" href="/os/logout">ログアウト</a>
+        </div>
+      ) : null}
 
       <section className="store-kitchen-board">
         <div>

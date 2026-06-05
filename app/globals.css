@@ -6491,6 +6491,60 @@ body :where(
   gap: 14px;
 }
 
+.store-kitchen-display,
+.store-pickup-display-shell {
+  min-height: 100dvh;
+  padding: 14px;
+  background: #eef2f7;
+}
+
+.store-display-menu-button {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 140;
+  width: 72px;
+  height: 72px;
+  border: 0;
+  background: transparent;
+}
+
+.store-display-menu-button::after {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.18);
+  content: "";
+}
+
+.store-display-menu {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 150;
+  display: grid;
+  gap: 10px;
+  width: min(280px, calc(100vw - 28px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.store-display-menu small {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.store-display-menu a {
+  justify-content: center;
+  text-decoration: none;
+}
+
 .store-kitchen-toolbar,
 .store-pickup-toolbar {
   display: flex;
@@ -6520,6 +6574,10 @@ body :where(
   grid-template-columns: minmax(0, 1fr) minmax(240px, 0.28fr);
   gap: 14px;
   align-items: start;
+}
+
+.store-kitchen-display .store-kitchen-board {
+  min-height: calc(100dvh - 28px);
 }
 
 .store-kitchen-board > div,
@@ -6640,10 +6698,19 @@ body :where(
   min-height: 62vh;
 }
 
+.store-pickup-display-shell .store-pickup-board {
+  min-height: calc(100dvh - 28px);
+}
+
 .store-pickup-column {
   display: grid;
   align-content: start;
   gap: 14px;
+}
+
+.store-pickup-display-shell .store-pickup-column h2 {
+  font-size: 42px;
+  line-height: 1.05;
 }
 
 .store-pickup-column.is-ready {
@@ -6657,6 +6724,11 @@ body :where(
   gap: 12px;
 }
 
+.store-pickup-display-shell .store-pickup-code-grid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
 .store-pickup-code-grid strong {
   display: grid;
   place-items: center;
@@ -6667,6 +6739,11 @@ body :where(
   color: var(--ink);
   font-size: 34px;
   line-height: 1;
+}
+
+.store-pickup-display-shell .store-pickup-code-grid strong {
+  min-height: 126px;
+  font-size: 52px;
 }
 
 .store-pickup-code-grid p {

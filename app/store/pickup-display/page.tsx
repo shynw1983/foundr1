@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
 type PickupOrder = {
@@ -23,6 +22,7 @@ export default function StorePickupDisplayPage() {
   const [ready, setReady] = useState<PickupOrder[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
+  const [menuOpen, setMenuOpen] = useState(false);
   const selectedStoreIdRef = useRef(selectedStoreId);
 
   useEffect(() => {
@@ -128,32 +128,29 @@ export default function StorePickupDisplayPage() {
   }, [selectedStoreId]);
 
   return (
-    <main className="store-workbench-shell store-pickup-display-page">
-      <header className="store-workbench-topbar">
-        <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
-          <div className="brand-mark">F1</div>
-          <div>
-            <p className="eyebrow">Pickup</p>
-            <h1>取餐屏</h1>
-          </div>
-        </a>
-        <StoreNavTabs active="pickup-display" />
-      </header>
-
-      <section className="store-pickup-toolbar">
-        {stores.length > 1 ? (
-          <select value={selectedStoreId} onChange={(event) => {
-            const storeId = event.target.value;
-            setSelectedStoreId(storeId);
-            selectedStoreIdRef.current = storeId;
-            setStoredStoreSelection(storeId);
-            void load(storeId);
-          }}>
-            {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-          </select>
-        ) : null}
-        <span>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / 更新 ${lastUpdatedAt}` : ""}</span>
-      </section>
+    <main className="store-pickup-display-shell store-pickup-display-page">
+      <button className="store-display-menu-button" type="button" aria-label="メニュー" onClick={() => setMenuOpen((current) => !current)} />
+      {menuOpen ? (
+        <div className="store-display-menu">
+          <strong>取餐屏</strong>
+          {stores.length > 1 ? (
+            <select value={selectedStoreId} onChange={(event) => {
+              const storeId = event.target.value;
+              setSelectedStoreId(storeId);
+              selectedStoreIdRef.current = storeId;
+              setStoredStoreSelection(storeId);
+              void load(storeId);
+            }}>
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          ) : null}
+          <button className="secondary-button" type="button" onClick={() => void load()}>更新</button>
+          <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <a className="secondary-button" href="/store/orders">注文ワーク台</a>
+          <a className="secondary-button" href="/store">店舗ホーム</a>
+          <a className="danger-button" href="/os/logout">ログアウト</a>
+        </div>
+      ) : null}
 
       <section className="store-pickup-board">
         <div className="store-pickup-column is-ready">
