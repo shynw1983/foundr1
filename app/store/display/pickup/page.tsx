@@ -227,7 +227,7 @@ export default function StorePickupDisplayPage() {
           ) : null}
           <button className="secondary-button" type="button" onClick={() => void load()}>更新</button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
-            全屏・常亮 ON
+            全画面・常時点灯 ON
           </button>
           <button
             className={voiceEnabled ? "secondary-button is-active" : "secondary-button"}
@@ -241,7 +241,7 @@ export default function StorePickupDisplayPage() {
             音声テスト
           </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
-          <small>全屏 {fullscreenActive ? "ON" : "OFF"} / 常亮 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "不可用"}</small>
+          <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>

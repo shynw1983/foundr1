@@ -241,10 +241,10 @@ export default function StoreKitchenPage() {
           </select>
           <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
-            全屏・常亮 ON
+            全画面・常時点灯 ON
           </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
-          <small>全屏 {fullscreenActive ? "ON" : "OFF"} / 常亮 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "不可用"}</small>
+          <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/os/logout">ログアウト</a>

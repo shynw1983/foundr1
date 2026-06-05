@@ -13,7 +13,7 @@ type OsTranslationContextValue = {
 
 const languageStorageKey = "foundr1-os-language";
 const languagePreferenceStorageKey = "foundr1-os-language-preference";
-const localeCacheVersion = "20260603-os-i18n-v46";
+const localeCacheVersion = "20260606-os-i18n-v47";
 const languageMeta: Record<OsLanguage, { htmlLang: string }> = {
   ja: { htmlLang: "ja" },
   "zh-Hans": { htmlLang: "zh-Hans" },
@@ -32,15 +32,7 @@ const OsTranslationContext = createContext<OsTranslationContextValue>({
 });
 
 function getBrowserDefaultLanguage(): OsLanguage {
-  if (typeof navigator === "undefined") return "ja";
-
-  const browserLanguages = [navigator.language, ...(navigator.languages ?? [])];
-  const normalizedLanguages = browserLanguages.map((value) => value.toLowerCase());
-  if (normalizedLanguages.some((value) => value.startsWith("zh-tw") || value.startsWith("zh-hk") || value.startsWith("zh-mo") || value.includes("hant"))) {
-    return "zh-Hant";
-  }
-
-  return normalizedLanguages.some((value) => value.startsWith("zh")) ? "zh-Hans" : "ja";
+  return "ja";
 }
 
 function normalizeStoredLanguage(value: string | null): OsLanguage | null {
@@ -54,12 +46,7 @@ function translateText(value: string, dictionary: OsDictionary) {
   if (!value || Object.keys(dictionary).length === 0) return value;
 
   const exact = dictionary[value];
-  if (exact) return exact;
-
-  return Object.entries(dictionary)
-    .filter(([source, target]) => source.length > 1 && target && value.includes(source))
-    .sort((a, b) => b[0].length - a[0].length)
-    .reduce((translated, [source, target]) => translated.split(source).join(target), value);
+  return exact || value;
 }
 
 function translateTextNode(node: Text, dictionary: OsDictionary, language: OsLanguage) {
