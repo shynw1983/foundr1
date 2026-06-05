@@ -52,8 +52,9 @@ function buildProductionItemLines(row: {
 }) {
   const optionParts = row.optionLabel.split(",").map((part) => part.trim()).filter(Boolean);
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
+  const sizeParts = row.sizeLabel.includes("\n") && toppingLabels.length ? [] : [row.sizeLabel];
   const details = uniqueTextParts([
-    row.sizeLabel,
+    ...sizeParts,
     row.temperature,
     row.sweetness,
     row.ice,
