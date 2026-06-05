@@ -6642,11 +6642,52 @@ body :where(
   gap: 5px;
 }
 
-.store-kitchen-items span {
+.store-kitchen-item-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
   min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
   overflow-wrap: anywhere;
   color: var(--ink);
+  font: inherit;
   font-weight: 900;
+  cursor: pointer;
+}
+
+.store-kitchen-item-line span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-kitchen-item-line b {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #111827;
+  color: white;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.store-kitchen-item-line.is-checked {
+  outline: 3px solid rgba(31, 111, 85, 0.38);
+  background: #dff4ed;
+  color: #145c48;
+}
+
+.store-kitchen-item-line.is-checked span {
+  text-decoration: line-through;
+  text-decoration-thickness: 3px;
+}
+
+.store-kitchen-item-line.is-checked b {
+  background: #1f6f55;
+  color: white;
 }
 
 .store-kitchen-item-name {

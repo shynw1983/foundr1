@@ -43,6 +43,12 @@ function splitLines(value: string) {
   }));
 }
 
+function splitQuantityLabel(text: string) {
+  const match = text.match(/^(.*?)( x\d+)$/);
+  if (!match) return { label: text, quantity: "" };
+  return { label: match[1], quantity: match[2].trim() };
+}
+
 export default function StoreKitchenPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
@@ -54,6 +60,7 @@ export default function StoreKitchenPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [checkedLineKeys, setCheckedLineKeys] = useState<Set<string>>(() => new Set());
   const selectedStoreIdRef = useRef(selectedStoreId);
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -78,8 +85,27 @@ export default function StoreKitchenPage() {
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setTasks(body.tasks ?? []);
     setAreas(body.areas ?? []);
+    setCheckedLineKeys((current) => {
+      const validKeys = new Set<string>();
+      for (const task of (body.tasks ?? []) as KitchenTask[]) {
+        splitLines(task.itemSummary).forEach((_, index) => validKeys.add(`${task.id}:${index}`));
+      }
+      return new Set(Array.from(current).filter((key) => validKeys.has(key)));
+    });
     setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
     setLoading(false);
+  }
+
+  function toggleLineCheck(key: string) {
+    setCheckedLineKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   }
 
   async function updateTask(task: KitchenTask, status: "preparing" | "ready") {
@@ -237,11 +263,26 @@ export default function StoreKitchenPage() {
                 </div>
                 <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"} / {task.createdTime}</p>
                 <div className="store-kitchen-items">
-                  {splitLines(task.itemSummary).map((line, index) => (
-                    <span className={line.isModifier ? "store-kitchen-item-modifier" : "store-kitchen-item-name"} key={`${task.id}-${index}`}>
-                      {line.text}
-                    </span>
-                  ))}
+                  {splitLines(task.itemSummary).map((line, index) => {
+                    const lineKey = `${task.id}:${index}`;
+                    const quantityParts = splitQuantityLabel(line.text);
+                    return (
+                      <button
+                        className={[
+                          "store-kitchen-item-line",
+                          line.isModifier ? "store-kitchen-item-modifier" : "store-kitchen-item-name",
+                          checkedLineKeys.has(lineKey) ? "is-checked" : ""
+                        ].filter(Boolean).join(" ")}
+                        key={lineKey}
+                        type="button"
+                        aria-pressed={checkedLineKeys.has(lineKey)}
+                        onClick={() => toggleLineCheck(lineKey)}
+                      >
+                        <span>{quantityParts.label}</span>
+                        {quantityParts.quantity ? <b>{quantityParts.quantity}</b> : null}
+                      </button>
+                    );
+                  })}
                 </div>
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">
