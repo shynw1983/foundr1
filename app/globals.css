@@ -17995,8 +17995,8 @@ html:lang(ja) :where(
   --color-brand-soft: #e7f3ee;
   --color-brand-border: #b9d8cb;
   --color-brand-ink: #153b35;
-  --color-accent: #ffffff;
-  --color-accent-soft: #f1f4f7;
+  --color-accent: var(--color-border);
+  --color-accent-soft: var(--color-surface-muted);
   --color-info: #2f6f9f;
   --color-info-soft: #e7f0f7;
   --color-warning: #a96514;
@@ -18073,7 +18073,7 @@ body {
 .nav-sub-list a.is-active {
   color: white;
   background: rgba(31, 111, 91, 0.32);
-  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.9);
+  box-shadow: none;
 }
 
 .nav-item.is-home,
