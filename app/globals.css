@@ -17767,3 +17767,215 @@ html:lang(ja) :where(
 ) {
   font-weight: 400;
 }
+
+/* Foundr1 OS visual refresh: quieter, lighter operational UI. */
+:root {
+  --bg: #f7f8fa;
+  --ink: #202631;
+  --muted: #687487;
+  --line: #e3e8ef;
+  --shadow: 0 10px 28px rgba(31, 42, 58, 0.055);
+  --shadow-soft: 0 8px 22px rgba(31, 42, 58, 0.05);
+}
+
+body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+html:lang(ja) body {
+  letter-spacing: 0;
+}
+
+.workspace {
+  gap: 16px;
+}
+
+.topbar h2 {
+  font-size: clamp(23px, 2.2vw, 28px);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.os-home-hero h2 {
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.panel-title h3,
+.section-heading h3,
+.store-pos-product-head h3,
+.store-pos-cart-head h3 {
+  font-weight: 650;
+}
+
+.eyebrow {
+  color: #7b889b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.primary-button,
+.secondary-button,
+.text-button,
+.danger-button,
+.queue-filter,
+.filter-chip,
+.receipt-upload-button,
+.exception-button,
+.delivery-complete-button,
+.fulfillment-mark-button {
+  min-height: 38px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.primary-button,
+.secondary-button {
+  padding-inline: 14px;
+}
+
+.text-button,
+.danger-button {
+  font-weight: 600;
+}
+
+.metric-card,
+.panel,
+.os-module-card,
+.menu-category-panel,
+.menu-item-panel,
+.menu-detail-panel,
+.menu-sync-panel,
+.store-pos-menu-panel,
+.store-pos-cart-panel {
+  box-shadow: var(--shadow);
+}
+
+.metric-card {
+  min-height: 118px;
+  padding: 16px;
+}
+
+.metric-card strong,
+.analytics-metric-grid .metric-card strong,
+.sales-workspace .metric-card strong,
+.workload-workspace .metric-card strong {
+  font-size: clamp(23px, 2.2vw, 28px);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.metric-card span,
+.metric-card p,
+.panel-title p,
+.source-indicator,
+.status-pill,
+.muted-label {
+  font-weight: 450;
+}
+
+.status-pill,
+.source-indicator {
+  min-height: 22px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.brand-mark {
+  font-weight: 650;
+}
+
+.nav-item,
+.nav-sub-list a,
+.mobile-nav-list a {
+  font-weight: 600;
+}
+
+.product-title-block strong,
+.row-heading strong,
+.management-row strong,
+.module-card strong,
+.supplier-admin-row strong,
+.feedback-topline strong,
+.trend-row strong,
+.procurement-order-heading strong,
+.task-product strong,
+.delivery-batch-row strong,
+.store-pos-item-info strong,
+.store-pos-cart-row strong {
+  font-weight: 650;
+}
+
+html:lang(ja) :where(
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .danger-button,
+  .nav-item,
+  .nav-sub-list a,
+  .mobile-nav-list a,
+  .topbar h2,
+  .panel-title h3,
+  .metric-card strong,
+  .product-title-block strong,
+  .row-heading strong,
+  .management-row strong,
+  .module-card strong,
+  .supplier-admin-row strong,
+  .feedback-topline strong,
+  .trend-row strong,
+  .procurement-order-heading strong,
+  .task-product strong,
+  .delivery-batch-row strong,
+  .store-pos-item-info strong,
+  .store-pos-cart-row strong
+) {
+  font-weight: 600;
+}
+
+html:lang(ja) :where(
+  .eyebrow,
+  .source-indicator,
+  .status-pill,
+  .metric-card span,
+  .metric-card p,
+  .panel-title p,
+  .form-hint,
+  .empty-state,
+  small
+) {
+  font-weight: 400;
+}
+
+@media (max-width: 900px) {
+  .additional-purchase-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .additional-purchase-panel .secondary-button,
+  .additional-purchase-panel small {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar h2 {
+    font-size: 24px;
+  }
+
+  .os-home-hero h2 {
+    font-size: 27px;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .danger-button {
+    min-height: 38px;
+  }
+}
