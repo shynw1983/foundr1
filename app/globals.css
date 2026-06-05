@@ -161,7 +161,7 @@ body :where(
   width: 148px;
 }
 
-.os-home-user .os-language-picker span {
+.os-home-user .os-language-label {
   display: none;
 }
 
@@ -868,7 +868,7 @@ body :where(
   width: 100%;
 }
 
-.os-language-picker span {
+.os-language-label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
@@ -891,8 +891,8 @@ body :where(
   outline: 0;
 }
 
-.sidebar-user .os-language-picker span,
-.mobile-nav-user .os-language-picker span {
+.sidebar-user .os-language-label,
+.mobile-nav-user .os-language-label {
   color: #dce5ee;
 }
 
@@ -1156,7 +1156,7 @@ body :where(
     display: grid;
   }
 
-  .sidebar-user .os-language-picker span {
+  .sidebar-user .os-language-label {
     display: none;
   }
 
@@ -1181,6 +1181,11 @@ body :where(
     font-weight: 900;
     line-height: 1;
     pointer-events: none;
+  }
+
+  .sidebar-user .os-language-current-short svg {
+    width: 18px;
+    height: 18px;
   }
 
   .sidebar-user .user-badge {
@@ -1224,6 +1229,10 @@ body :where(
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-current-short {
     display: none;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-label {
+    display: block;
   }
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .os-language-picker,
@@ -2152,6 +2161,33 @@ body :where(
 
 .store-weather-settings label {
   min-width: 0;
+}
+
+.inline-checkbox {
+  display: inline-flex !important;
+  grid-auto-flow: unset;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.inline-checkbox input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  accent-color: var(--green);
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
 }
 
 .store-geocode-address {
@@ -4201,7 +4237,7 @@ body :where(
   width: 128px;
 }
 
-.store-user-tools .os-language-picker span {
+.store-user-tools .os-language-label {
   display: none;
 }
 
@@ -13546,7 +13582,7 @@ body :where(
     max-width: calc(100vw - 24px);
   }
 
-  .sidebar-user .os-language-picker span {
+  .sidebar-user .os-language-label {
     display: none;
   }
 
@@ -14001,7 +14037,7 @@ body :where(
     min-height: 48px;
   }
 
-  .mobile-nav-user .os-language-picker span {
+  .mobile-nav-user .os-language-label {
     display: none;
   }
 
@@ -14272,7 +14308,7 @@ body :where(
     display: none;
   }
 
-  .mobile-nav-user .os-language-picker span {
+  .mobile-nav-user .os-language-label {
     display: block;
   }
 
@@ -17692,7 +17728,7 @@ html:lang(ja) :where(
   .presence-pill,
   .notification-menu summary span,
   .notification-heading button,
-  .os-language-picker span,
+  .os-language-label,
   .os-language-picker select,
   .account-menu-user strong,
   .account-menu-panel a,

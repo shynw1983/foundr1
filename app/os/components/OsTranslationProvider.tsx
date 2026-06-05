@@ -1,5 +1,6 @@
 "use client";
 
+import { Globe2 } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 type OsLanguage = "ja" | "zh-Hans" | "zh-Hant";
@@ -261,12 +262,13 @@ export function useOsTranslation() {
 
 export function OsLanguagePicker() {
   const { language, setLanguage, t } = useOsTranslation();
-  const shortLabel = language === "zh-Hans" ? "简" : language === "zh-Hant" ? "繁" : "日";
 
   return (
     <label className="os-language-picker" data-i18n-ignore>
-      <span>{t("Language")}</span>
-      <span className="os-language-current-short" aria-hidden="true">{shortLabel}</span>
+      <span className="os-language-label">{t("Language")}</span>
+      <span className="os-language-current-short" aria-hidden="true">
+        <Globe2 size={18} strokeWidth={2} />
+      </span>
       <select
         value={language}
         onChange={(event) => setLanguage(event.target.value as OsLanguage)}
