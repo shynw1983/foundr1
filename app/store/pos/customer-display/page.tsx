@@ -12,6 +12,7 @@ type StoreOption = {
 type DisplayItem = {
   name: string;
   optionLabel: string;
+  weightLabel: string;
   quantity: number;
   unitPrice: number;
   amount: number;
@@ -163,9 +164,10 @@ export default function CustomerDisplayPage() {
                 <div className="customer-display-item" key={`${item.name}-${index}`}>
                   <div>
                     <strong>{item.name}</strong>
+                    {item.weightLabel ? <span>{item.weightLabel}</span> : null}
                     {item.optionLabel ? <span>{item.optionLabel}</span> : null}
                   </div>
-                  <em>x{item.quantity}</em>
+                  <em>{item.weightLabel ? "" : `x${item.quantity}`}</em>
                   <b>{formatYen(item.amount)}</b>
                 </div>
               ))}

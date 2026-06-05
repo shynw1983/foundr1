@@ -1447,12 +1447,18 @@ create table if not exists store_customer_order_items (
   topping_keys text[] not null default '{}',
   topping_labels text[] not null default '{}',
   quantity integer not null default 1,
+  measured_quantity numeric(12, 3),
+  measured_unit text not null default '',
+  measured_unit_price numeric(12, 3),
   amount integer not null default 0,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
 alter table store_customer_order_items add column if not exists quantity integer not null default 1;
+alter table store_customer_order_items add column if not exists measured_quantity numeric(12, 3);
+alter table store_customer_order_items add column if not exists measured_unit text not null default '';
+alter table store_customer_order_items add column if not exists measured_unit_price numeric(12, 3);
 
 create table if not exists order_production_tasks (
   id uuid primary key default gen_random_uuid(),

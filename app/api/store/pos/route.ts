@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 type PosCheckoutItemInput = {
   menuCatalogItemId?: string;
   quantity?: number;
+  measuredQuantity?: number | string;
+  measuredUnit?: string;
   selectedOptions?: Array<{
     groupId?: string;
     optionIds?: string[];
@@ -36,8 +38,55 @@ function toPositiveInt(value: unknown, fallback = 1) {
   return Math.max(1, Math.min(99, Math.floor(nextValue)));
 }
 
+function toPositiveMeasuredQuantity(value: unknown) {
+  const nextValue = Number(value);
+  if (!Number.isFinite(nextValue)) return null;
+  const rounded = Math.round(nextValue * 1000) / 1000;
+  return rounded > 0 ? rounded : null;
+}
+
 function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function getNumberFromSchema(schema: Record<string, unknown> | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = schema?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && Number.isFinite(Number(value))) return Number(value);
+  }
+  return null;
+}
+
+function getNestedNumberFromSchema(schema: Record<string, unknown> | undefined, parentKey: string, keys: string[]) {
+  const parent = schema?.[parentKey];
+  if (!parent || typeof parent !== "object" || Array.isArray(parent)) return null;
+  return getNumberFromSchema(parent as Record<string, unknown>, keys);
+}
+
+function isMalatangBuildableItem(item: { name: string; itemKind?: string; variableSchema?: Record<string, unknown> }) {
+  const schema = item.variableSchema ?? {};
+  return item.itemKind === "buildable_product" && (
+    schema.source === "maamaa-malatang-menu" ||
+    schema.buildable === true ||
+    item.name.includes("麻辣") ||
+    item.name.includes("マーラー")
+  );
+}
+
+function getWeightPricingConfig(item: { name: string; itemKind?: string; variableSchema?: Record<string, unknown> }, orderType: string) {
+  if (orderType !== "eat_in" || !isMalatangBuildableItem(item)) return null;
+  const schema = item.variableSchema ?? {};
+  const explicitMode = String(schema.pricingMode ?? schema.posPricingMode ?? "");
+  const nestedMode = typeof schema.posWeightPricing === "object" && schema.posWeightPricing !== null
+    ? String((schema.posWeightPricing as Record<string, unknown>).mode ?? "")
+    : "";
+  const pricingMode = explicitMode || nestedMode || "weight";
+  if (pricingMode !== "weight") return null;
+  const unit = String(schema.weightUnit ?? schema.measuredUnit ?? (schema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g").trim() || "g";
+  const unitPrice = getNumberFromSchema(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
+    getNestedNumberFromSchema(schema, "posWeightPricing", ["pricePerGram", "unitPrice", "weightUnitPrice"]);
+  return { unit, unitPrice };
 }
 
 function getOptionGroupLimit(ruleJson: Record<string, unknown>, fallback: number) {
@@ -125,6 +174,7 @@ async function getPosMenu(selectedStoreId: string) {
         menu_catalog_items.brand_id::text as "brandId",
         brands.name as "brandName",
         menu_catalog_items.name,
+        menu_catalog_items.item_kind as "itemKind",
         coalesce(menu_catalog_items.category, '未分類') as category,
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
@@ -322,6 +372,7 @@ export async function POST(request: Request) {
       menu_catalog_items.id::text,
       menu_catalog_items.brand_id::text as "brandId",
       menu_catalog_items.name,
+      menu_catalog_items.item_kind as "itemKind",
       coalesce(menu_catalog_items.category, '') as category,
       menu_catalog_items.variable_schema as "variableSchema",
       coalesce(menu_store_settings.price_override, menu_catalog_items.base_price, 0)::int as price
@@ -338,7 +389,7 @@ export async function POST(request: Request) {
       and coalesce(menu_store_settings.pos_enabled, true) = true
       and coalesce(menu_store_settings.is_available, true) = true
   `;
-  const menuById = new Map((menuRows as Array<{ id: string; brandId: string; name: string; price: number; variableSchema: Record<string, unknown> }>).map((item) => [item.id, item]));
+  const menuById = new Map((menuRows as Array<{ id: string; brandId: string; name: string; itemKind: string; price: number; variableSchema: Record<string, unknown> }>).map((item) => [item.id, item]));
   const optionRows = await sql`
     select
       menu_options.id::text,
@@ -382,13 +433,34 @@ export async function POST(request: Request) {
     ruleJson: Record<string, unknown>;
   }>).map((option) => [option.id, option]));
 
-  let normalizedItems: Array<{ id: string; brandId: string; name: string; quantity: number; unitPrice: number; amount: number; selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>> }> = [];
+  let normalizedItems: Array<{
+    id: string;
+    brandId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+    measuredQuantity: number | null;
+    measuredUnit: string;
+    measuredUnitPrice: number | null;
+    selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>>;
+  }> = [];
   try {
     normalizedItems = cartItems.map((item) => {
       const menuItem = menuById.get(normalizeText(item.menuCatalogItemId));
       if (!menuItem) return null;
-      const quantity = toPositiveInt(item.quantity);
-      const unitPrice = Number(menuItem.price ?? 0);
+      const weightPricing = getWeightPricingConfig(menuItem, orderType);
+      const quantity = weightPricing ? 1 : toPositiveInt(item.quantity);
+      const measuredQuantity = weightPricing ? toPositiveMeasuredQuantity(item.measuredQuantity) : null;
+      const measuredUnit = weightPricing?.unit ?? "";
+      const measuredUnitPrice = weightPricing?.unitPrice ?? null;
+      if (weightPricing && (measuredUnitPrice === null || measuredUnitPrice <= 0)) {
+        throw new Error(`${menuItem.name} の重量単価が設定されていません。`);
+      }
+      if (weightPricing && measuredQuantity === null) {
+        throw new Error(`${menuItem.name} は重量を入力してください。`);
+      }
+      const unitPrice = weightPricing ? Math.round((measuredQuantity ?? 0) * (measuredUnitPrice ?? 0)) : Number(menuItem.price ?? 0);
       const selectedOptions = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
       const selected = selectedOptions.flatMap((group) => asStringArray(group.optionIds).map((optionId) => optionsById.get(optionId)).filter(Boolean)) as Array<NonNullable<ReturnType<typeof optionsById.get>>>;
       const validSelected = selected.filter((option) => {
@@ -424,8 +496,17 @@ export async function POST(request: Request) {
         }
       }
       const optionTotal = validSelected.reduce((sum, option) => sum + Number(option.priceDelta ?? 0), 0);
-      return { ...menuItem, quantity, unitPrice, selectedOptions: validSelected, amount: (unitPrice + optionTotal) * quantity };
-    }).filter(Boolean) as Array<{ id: string; brandId: string; name: string; quantity: number; unitPrice: number; amount: number; selectedOptions: Array<NonNullable<ReturnType<typeof optionsById.get>>> }>;
+      return {
+        ...menuItem,
+        quantity,
+        unitPrice,
+        measuredQuantity,
+        measuredUnit,
+        measuredUnitPrice,
+        selectedOptions: validSelected,
+        amount: (unitPrice + optionTotal) * quantity
+      };
+    }).filter(Boolean) as typeof normalizedItems;
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "選択数が正しくありません。" }, { status: 400 });
   }
@@ -496,6 +577,9 @@ export async function POST(request: Request) {
           menuCatalogItemId: item.id,
           name: item.name,
           quantity: item.quantity,
+          measuredQuantity: item.measuredQuantity,
+          measuredUnit: item.measuredUnit,
+          measuredUnitPrice: item.measuredUnitPrice,
           options: "selectedOptions" in item ? item.selectedOptions : []
         }))
       })},
@@ -548,6 +632,9 @@ export async function POST(request: Request) {
         topping_keys,
         topping_labels,
         quantity,
+        measured_quantity,
+        measured_unit,
+        measured_unit_price,
         amount,
         sort_order
       )
@@ -565,6 +652,9 @@ export async function POST(request: Request) {
         ${toppingOptions.map((option) => option.optionKey)},
         ${toppingOptions.map((option) => option.name)},
         ${item.quantity},
+        ${item.measuredQuantity},
+        ${item.measuredUnit},
+        ${item.measuredUnitPrice},
         ${item.amount},
         ${index}
       )

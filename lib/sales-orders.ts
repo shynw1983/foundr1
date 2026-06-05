@@ -142,6 +142,9 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
       store_customer_order_items.topping_keys,
       store_customer_order_items.topping_labels,
       coalesce(store_customer_order_items.quantity, 1) as quantity,
+      store_customer_order_items.measured_quantity::float as measured_quantity,
+      coalesce(store_customer_order_items.measured_unit, '') as measured_unit,
+      store_customer_order_items.measured_unit_price::float as measured_unit_price,
       store_customer_order_items.amount,
       store_customer_order_items.sort_order
     from store_customer_order_items
@@ -171,11 +174,16 @@ export async function syncWebReservationToSalesOrder(orderId: string) {
         ${item.menu_catalog_item_id},
         ${item.item_name},
         ${item.category || null},
-        ${item.quantity ?? 1},
-        ${Math.round(Number(item.amount ?? 0) / Math.max(1, Number(item.quantity ?? 1)))},
+        ${item.measured_quantity ?? item.quantity ?? 1},
+        ${item.measured_unit_price ? Math.round(Number(item.measured_unit_price)) : Math.round(Number(item.amount ?? 0) / Math.max(1, Number(item.quantity ?? 1)))},
         0,
         ${item.amount},
         ${JSON.stringify({
+          measured: {
+            quantity: item.measured_quantity ?? null,
+            unit: item.measured_unit || "",
+            unitPrice: item.measured_unit_price ?? null
+          },
           size: { key: item.size_key, label: item.size_label },
           temperature: item.temperature,
           sweetness: item.sweetness,

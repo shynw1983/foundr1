@@ -106,6 +106,9 @@ async function getTransactionDetail(storeId: string, orderId: string) {
       option_label as option,
       topping_labels as toppings,
       quantity,
+      measured_quantity::float as "measuredQuantity",
+      measured_unit as "measuredUnit",
+      measured_unit_price::float as "measuredUnitPrice",
       amount
     from store_customer_order_items
     where order_id::text = ${orderId}

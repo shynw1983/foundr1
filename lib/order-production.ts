@@ -49,6 +49,8 @@ function buildProductionItemLines(row: {
   ice: string;
   optionLabel: string;
   toppingLabels: string[] | null;
+  measuredQuantity: number | null;
+  measuredUnit: string;
 }) {
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
   const toppingLabelSet = new Set(toppingLabels.map((label) => normalizeText(label)).filter(Boolean));
@@ -58,6 +60,9 @@ function buildProductionItemLines(row: {
     .filter((part) => part && !toppingLabelSet.has(normalizeText(part)));
   const sizeParts = row.sizeLabel.includes("\n") && toppingLabels.length ? [] : [row.sizeLabel];
   const details = uniqueTextParts([
+    row.measuredQuantity && row.measuredUnit
+      ? `${Number(row.measuredQuantity).toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${row.measuredUnit}`
+      : "",
     ...sizeParts,
     row.temperature,
     row.sweetness,
@@ -101,7 +106,9 @@ export async function ensureProductionTasksForOrder(orderId: string) {
       coalesce(store_customer_order_items.sweetness, '') as sweetness,
       coalesce(store_customer_order_items.ice, '') as ice,
       coalesce(store_customer_order_items.option_label, '') as "optionLabel",
-      store_customer_order_items.topping_labels as "toppingLabels"
+      store_customer_order_items.topping_labels as "toppingLabels",
+      store_customer_order_items.measured_quantity::float as "measuredQuantity",
+      coalesce(store_customer_order_items.measured_unit, '') as "measuredUnit"
     from store_customer_order_items
     join store_customer_orders on store_customer_orders.id = store_customer_order_items.order_id
     left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
@@ -122,6 +129,8 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     ice: string;
     optionLabel: string;
     toppingLabels: string[] | null;
+    measuredQuantity: number | null;
+    measuredUnit: string;
   }>) {
     const area = getProductionArea(row.brandName);
     const key = `${row.brandId || ""}:${area.key}`;

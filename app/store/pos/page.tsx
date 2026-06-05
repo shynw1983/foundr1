@@ -28,6 +28,7 @@ type PosMenuItem = {
   brandId: string;
   brandName: string;
   name: string;
+  itemKind: string;
   category: string;
   imageUrl: string;
   basePrice: number | null;
@@ -65,6 +66,9 @@ type PosSelectedOption = PosMenuOption & {
 type PosCartItem = PosMenuItem & {
   cartKey: string;
   quantity: number;
+  measuredQuantity: number | null;
+  measuredUnit: string;
+  measuredUnitPrice: number | null;
   selectedOptions: PosSelectedOption[];
   optionTotal: number;
 };
@@ -92,6 +96,9 @@ type PosTransactionItem = {
   option: string;
   toppings: string[];
   quantity: number;
+  measuredQuantity: number | null;
+  measuredUnit: string;
+  measuredUnitPrice: number | null;
   amount: number;
 };
 
@@ -259,6 +266,53 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+function getSchemaNumber(schema: Record<string, unknown> | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = schema?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && Number.isFinite(Number(value))) return Number(value);
+  }
+  return null;
+}
+
+function getNestedSchemaNumber(schema: Record<string, unknown> | undefined, parentKey: string, keys: string[]) {
+  const parent = schema?.[parentKey];
+  if (!parent || typeof parent !== "object" || Array.isArray(parent)) return null;
+  return getSchemaNumber(parent as Record<string, unknown>, keys);
+}
+
+function isMalatangBuildableItem(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">) {
+  const schema = item.variableSchema ?? {};
+  return item.itemKind === "buildable_product" && (
+    schema.source === "maamaa-malatang-menu" ||
+    schema.buildable === true ||
+    item.name.includes("麻辣") ||
+    item.name.includes("マーラー")
+  );
+}
+
+function getWeightPricingConfig(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">, orderType: string) {
+  if (orderType !== "eat_in" || !isMalatangBuildableItem(item)) return null;
+  const schema = item.variableSchema ?? {};
+  const nested = typeof schema.posWeightPricing === "object" && schema.posWeightPricing !== null
+    ? schema.posWeightPricing as Record<string, unknown>
+    : {};
+  const pricingMode = String(schema.pricingMode ?? schema.posPricingMode ?? nested.mode ?? "weight");
+  if (pricingMode !== "weight") return null;
+  const unit = String(schema.weightUnit ?? schema.measuredUnit ?? nested.unit ?? "g").trim() || "g";
+  const unitPrice = getSchemaNumber(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
+    getNestedSchemaNumber(schema, "posWeightPricing", ["pricePerGram", "unitPrice", "weightUnitPrice"]);
+  return { unit, unitPrice };
+}
+
+function formatWeightPrice(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">, orderType: string) {
+  const config = getWeightPricingConfig(item, orderType);
+  if (!config) return "";
+  return config.unitPrice && config.unitPrice > 0
+    ? `${formatYen(config.unitPrice)}/${config.unit}`
+    : `重量単価未設定`;
+}
+
 function getOptionPrice(option: Pick<PosMenuOption, "priceDelta">) {
   return Math.round(Number(option.priceDelta ?? 0));
 }
@@ -309,6 +363,7 @@ export default function StorePosPage() {
   const [cart, setCart] = useState<PosCartItem[]>([]);
   const [configuringItem, setConfiguringItem] = useState<PosMenuItem | null>(null);
   const [optionDraft, setOptionDraft] = useState<Record<string, string[]>>({});
+  const [weightDraft, setWeightDraft] = useState("");
   const [orderType, setOrderType] = useState("eat_in");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
@@ -433,7 +488,7 @@ export default function StorePosPage() {
     [posSettings.dineInEnabled]
   );
 
-  const subtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) + item.optionTotal) * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal : getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
@@ -538,24 +593,61 @@ export default function StorePosPage() {
     }).catch(() => undefined);
   }
 
-  function getCartKey(item: PosMenuItem, options: PosSelectedOption[]) {
-    const optionKey = options.map((option) => `${option.groupId}:${option.id}`).sort().join("|");
-    return `${item.id}::${optionKey}`;
+  function getLineBasePrice(item: PosCartItem) {
+    if (item.measuredQuantity && item.measuredUnitPrice) return Math.round(item.measuredQuantity * item.measuredUnitPrice);
+    return getItemPrice(item);
   }
 
-  function addItem(item: PosMenuItem, selectedOptions: PosSelectedOption[] = []) {
+  function getLineUnitPrice(item: PosCartItem) {
+    return getLineBasePrice(item) + item.optionTotal;
+  }
+
+  function getWeightLineLabel(item: Pick<PosCartItem, "measuredQuantity" | "measuredUnit" | "measuredUnitPrice">) {
+    if (!item.measuredQuantity || !item.measuredUnitPrice) return "";
+    return `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`;
+  }
+
+  function getCartKey(item: PosMenuItem, options: PosSelectedOption[], measuredQuantity: number | null = null, measuredUnitPrice: number | null = null) {
+    const optionKey = options.map((option) => `${option.groupId}:${option.id}`).sort().join("|");
+    const weightKey = measuredQuantity ? `::${measuredQuantity}:${measuredUnitPrice ?? ""}` : "";
+    return `${item.id}::${optionKey}${weightKey}`;
+  }
+
+  function addItem(item: PosMenuItem, selectedOptions: PosSelectedOption[] = [], weightInput = "") {
     if (!canUseRegister) {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    const weightPricing = getWeightPricingConfig(item, orderType);
+    const measuredQuantity = weightPricing ? Number(weightInput) : 0;
+    if (weightPricing) {
+      if (!weightPricing.unitPrice || weightPricing.unitPrice <= 0) {
+        setMessage(`${item.name} の重量単価が設定されていません。`);
+        return;
+      }
+      if (!Number.isFinite(measuredQuantity) || measuredQuantity <= 0) {
+        setMessage(`${item.name} は重量を入力してください。`);
+        return;
+      }
+    }
     const optionTotal = selectedOptions.reduce((sum, option) => sum + getOptionPrice(option), 0);
-    const cartKey = getCartKey(item, selectedOptions);
+    const measuredQuantityValue = weightPricing ? Math.round(Number(measuredQuantity) * 1000) / 1000 : null;
+    const cartKey = getCartKey(item, selectedOptions, measuredQuantityValue, weightPricing?.unitPrice ?? null);
     setCart((current) => {
       const existing = current.find((entry) => entry.cartKey === cartKey);
       if (existing) {
         return current.map((entry) => entry.cartKey === cartKey ? { ...entry, quantity: entry.quantity + 1 } : entry);
       }
-      return [...current, { ...item, cartKey, quantity: 1, selectedOptions, optionTotal }];
+      return [...current, {
+        ...item,
+        cartKey,
+        quantity: 1,
+        measuredQuantity: measuredQuantityValue,
+        measuredUnit: weightPricing?.unit ?? "",
+        measuredUnitPrice: weightPricing?.unitPrice ?? null,
+        selectedOptions,
+        optionTotal
+      }];
     });
   }
 
@@ -565,7 +657,7 @@ export default function StorePosPage() {
       return;
     }
     const groups = getItemOptionGroups(item);
-    if (!groups.length) {
+    if (!groups.length && !getWeightPricingConfig(item, orderType)) {
       addItem(item);
       return;
     }
@@ -578,6 +670,7 @@ export default function StorePosPage() {
       }
     }
     setConfiguringItem(item);
+    setWeightDraft("");
     setOptionDraft(nextDraft);
   }
 
@@ -624,15 +717,28 @@ export default function StorePosPage() {
         .filter(Boolean)
         .map((option) => ({ ...option, groupId: group.id, groupKey: group.groupKey, groupName: group.name })) as PosSelectedOption[];
     });
-    addItem(configuringItem, selectedOptions);
+    addItem(configuringItem, selectedOptions, weightDraft);
     setConfiguringItem(null);
     setOptionDraft({});
+    setWeightDraft("");
   }
 
   function changeQuantity(cartKey: string, amount: number) {
     setCart((current) => current
       .map((item) => item.cartKey === cartKey ? { ...item, quantity: item.quantity + amount } : item)
       .filter((item) => item.quantity > 0));
+  }
+
+  function changeOrderType(nextOrderType: string) {
+    if (nextOrderType === orderType) return;
+    setOrderType(nextOrderType);
+    setConfiguringItem(null);
+    setOptionDraft({});
+    setWeightDraft("");
+    if (cart.length) {
+      setCart([]);
+      setMessage("注文区分を変更したため、会計内容をクリアしました。");
+    }
   }
 
   async function checkout() {
@@ -660,6 +766,8 @@ export default function StorePosPage() {
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
             quantity: item.quantity,
+            measuredQuantity: item.measuredQuantity,
+            measuredUnit: item.measuredUnit,
             selectedOptions: Object.values(item.selectedOptions.reduce((groups, option) => {
               groups[option.groupId] = groups[option.groupId] ?? { groupId: option.groupId, optionIds: [] };
               groups[option.groupId].optionIds.push(option.id);
@@ -693,8 +801,12 @@ export default function StorePosPage() {
           name: item.name,
           optionLabel: getOptionLabel(item.selectedOptions),
           quantity: item.quantity,
-          unitPrice: getItemPrice(item) + item.optionTotal,
-          amount: (getItemPrice(item) + item.optionTotal) * item.quantity
+          measuredQuantity: item.measuredQuantity,
+          measuredUnit: item.measuredUnit,
+          measuredUnitPrice: item.measuredUnitPrice,
+          weightLabel: getWeightLineLabel(item),
+          unitPrice: getLineUnitPrice(item),
+          amount: getLineUnitPrice(item) * item.quantity
         }))
       });
     } catch (error) {
@@ -734,8 +846,12 @@ export default function StorePosPage() {
           name: item.name,
           optionLabel: getOptionLabel(item.selectedOptions),
           quantity: item.quantity,
-          unitPrice: getItemPrice(item) + item.optionTotal,
-          amount: (getItemPrice(item) + item.optionTotal) * item.quantity
+          measuredQuantity: item.measuredQuantity,
+          measuredUnit: item.measuredUnit,
+          measuredUnitPrice: item.measuredUnitPrice,
+          weightLabel: getWeightLineLabel(item),
+          unitPrice: getLineUnitPrice(item),
+          amount: getLineUnitPrice(item) * item.quantity
         }))
       });
     }, 180);
@@ -861,6 +977,20 @@ export default function StorePosPage() {
       setRefundingTransactionId("");
     }
   }
+
+  const configuringWeightPricing = configuringItem ? getWeightPricingConfig(configuringItem, orderType) : null;
+  const configuringWeightQuantity = Number(weightDraft);
+  const configuringWeightBasePrice = configuringWeightPricing?.unitPrice && Number.isFinite(configuringWeightQuantity) && configuringWeightQuantity > 0
+    ? Math.round(configuringWeightQuantity * configuringWeightPricing.unitPrice)
+    : 0;
+  const selectedOptionPreviewTotal = configuringItem
+    ? getItemOptionGroups(configuringItem).reduce((sum, group) => {
+        const optionsById = new Map(group.options.map((option) => [option.id, option]));
+        return sum + (optionDraft[group.id] ?? []).reduce((groupSum, optionId) => groupSum + getOptionPrice(optionsById.get(optionId) ?? { priceDelta: 0 }), 0);
+      }, 0)
+    : 0;
+  const canAddConfiguredItem = !configuringWeightPricing ||
+    Boolean(configuringWeightPricing.unitPrice && configuringWeightPricing.unitPrice > 0 && Number.isFinite(configuringWeightQuantity) && configuringWeightQuantity > 0);
 
   return (
     <main className="store-workbench-shell store-pos-page">
@@ -1010,7 +1140,7 @@ export default function StorePosPage() {
                     <div className="store-pos-item-info">
                       <span>{item.category || item.brandName}</span>
                       <strong>{item.name}</strong>
-                      <em>{formatYen(getItemPrice(item))}</em>
+                      <em>{formatWeightPrice(item, orderType) || formatYen(getItemPrice(item))}</em>
                     </div>
                   </button>
                 ))}
@@ -1038,7 +1168,7 @@ export default function StorePosPage() {
 
           <div className="store-pos-segmented">
             {visibleOrderTypeOptions.map((option) => (
-              <button key={option.value} className={orderType === option.value ? "is-active" : ""} type="button" onClick={() => setOrderType(option.value)}>
+              <button key={option.value} className={orderType === option.value ? "is-active" : ""} type="button" onClick={() => changeOrderType(option.value)}>
                 {option.label}
               </button>
             ))}
@@ -1051,13 +1181,18 @@ export default function StorePosPage() {
               <div key={item.cartKey} className="store-pos-cart-row">
                 <div>
                   <strong>{item.name}</strong>
+                  {getWeightLineLabel(item) ? <small>{getWeightLineLabel(item)}</small> : null}
                   {item.selectedOptions.length ? <small>{getOptionLabel(item.selectedOptions)}</small> : null}
-                  <span>{formatYen(getItemPrice(item) + item.optionTotal)} x {item.quantity}</span>
+                  <span>{formatYen(getLineUnitPrice(item))}{item.measuredQuantity ? "" : ` x ${item.quantity}`}</span>
                 </div>
                 <div className="store-pos-quantity">
-                  <button type="button" onClick={() => changeQuantity(item.cartKey, -1)} aria-label="数量を減らす"><Minus size={16} /></button>
-                  <span>{item.quantity}</span>
-                  <button type="button" onClick={() => changeQuantity(item.cartKey, 1)} aria-label="数量を増やす"><Plus size={16} /></button>
+                  {!item.measuredQuantity ? (
+                    <>
+                      <button type="button" onClick={() => changeQuantity(item.cartKey, -1)} aria-label="数量を減らす"><Minus size={16} /></button>
+                      <span>{item.quantity}</span>
+                      <button type="button" onClick={() => changeQuantity(item.cartKey, 1)} aria-label="数量を増やす"><Plus size={16} /></button>
+                    </>
+                  ) : null}
                   <button type="button" onClick={() => changeQuantity(item.cartKey, -99)} aria-label="削除"><Trash2 size={16} /></button>
                 </div>
               </div>
@@ -1208,12 +1343,16 @@ export default function StorePosPage() {
                             item.option,
                             ...(item.toppings ?? [])
                           ].filter(Boolean);
+                          const weightLabel = item.measuredQuantity && item.measuredUnitPrice
+                            ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`
+                            : "";
                           return (
                             <div key={item.id}>
                               <div>
                                 <strong>{item.name}</strong>
+                                {weightLabel ? <small>{weightLabel}</small> : null}
                                 {modifiers.length ? <small>{modifiers.join(" / ")}</small> : null}
-                                <span>{formatYen(Math.round(item.amount / Math.max(1, item.quantity)))} x {item.quantity}</span>
+                                <span>{weightLabel ? formatYen(item.amount) : `${formatYen(Math.round(item.amount / Math.max(1, item.quantity)))} x ${item.quantity}`}</span>
                               </div>
                               <b>{formatYen(item.amount)}</b>
                             </div>
@@ -1408,10 +1547,33 @@ export default function StorePosPage() {
               <div>
                 <p className="eyebrow">Options</p>
                 <h3>{configuringItem.name}</h3>
-                <span>基本価格 {formatYen(getItemPrice(configuringItem))}</span>
+                <span>{configuringWeightPricing ? `重量単価 ${formatWeightPrice(configuringItem, orderType)}` : `基本価格 ${formatYen(getItemPrice(configuringItem))}`}</span>
               </div>
               <button className="secondary-button" type="button" onClick={() => setConfiguringItem(null)}>閉じる</button>
             </div>
+
+            {configuringWeightPricing ? (
+              <section className="store-pos-weight-entry">
+                <div>
+                  <strong>自選食材の重量</strong>
+                  <span>{configuringWeightPricing.unitPrice ? `${formatYen(configuringWeightPricing.unitPrice)}/${configuringWeightPricing.unit}` : "重量単価未設定"}</span>
+                </div>
+                <label>
+                  <input
+                    inputMode="decimal"
+                    value={weightDraft}
+                    onChange={(event) => setWeightDraft(event.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
+                    placeholder="0"
+                  />
+                  <span>{configuringWeightPricing.unit}</span>
+                </label>
+                <div>
+                  <span>計算</span>
+                  <strong>{formatYen(configuringWeightBasePrice + selectedOptionPreviewTotal)}</strong>
+                  {selectedOptionPreviewTotal ? <small>追加 {formatYen(selectedOptionPreviewTotal)} を含む</small> : null}
+                </div>
+              </section>
+            ) : null}
 
             <div className="store-pos-option-groups">
               {getItemOptionGroups(configuringItem).map((group) => {
@@ -1458,7 +1620,7 @@ export default function StorePosPage() {
               })}
             </div>
 
-            <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem}>
+            <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem} disabled={!canAddConfiguredItem}>
               この内容で追加
             </button>
           </div>

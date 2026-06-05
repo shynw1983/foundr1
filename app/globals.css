@@ -6796,6 +6796,65 @@ body :where(
   gap: 12px;
 }
 
+.store-pos-weight-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) minmax(130px, auto);
+  align-items: stretch;
+  gap: 10px;
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--green-soft);
+}
+
+.store-pos-weight-entry > div,
+.store-pos-weight-entry label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.store-pos-weight-entry label {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+}
+
+.store-pos-weight-entry input {
+  min-width: 0;
+  border: 0;
+  padding: 12px 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 950;
+  outline: none;
+}
+
+.store-pos-weight-entry strong {
+  color: var(--ink);
+}
+
+.store-pos-weight-entry span,
+.store-pos-weight-entry small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-pos-weight-entry > div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.store-pos-weight-entry > div:last-child strong {
+  color: #1f6f55;
+  font-size: 22px;
+}
+
 .store-pos-option-group {
   display: grid;
   gap: 9px;
@@ -14014,17 +14073,21 @@ body :where(
 
   .mobile-nav-user .user-panel {
     display: grid;
-    grid-template-columns: 48px 48px minmax(112px, 1fr);
+    grid-template-columns: 1fr;
     gap: 8px;
     width: 100%;
   }
 
+  .mobile-nav-user .account-menu {
+    min-width: 0;
+  }
+
   .mobile-nav-user .user-badge {
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     min-width: 0;
     min-height: 48px;
-    padding: 0;
+    padding: 0 10px;
   }
 
   .mobile-nav-user .user-avatar {
@@ -14034,7 +14097,13 @@ body :where(
 
   .mobile-nav-user .user-badge-name,
   .mobile-nav-user .user-badge-role {
-    display: none;
+    display: inline-flex;
+  }
+
+  .mobile-nav-user .user-badge-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobile-nav-user .notification-menu summary,
@@ -14051,7 +14120,7 @@ body :where(
   }
 
   .mobile-nav-user .os-language-label {
-    display: none;
+    display: block;
   }
 
   .mobile-nav-user .account-menu-panel,
@@ -15290,14 +15359,14 @@ body :where(
 
   .store-nav-menu summary {
     min-height: 48px;
-    border-color: var(--line);
-    background: white;
-    color: var(--ink);
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
   }
 
   .store-nav-menu .hamburger-button {
-    background: #edf3f0;
-    color: #1f6f55;
+    background: transparent;
+    color: currentColor;
   }
 
   .store-nav-list {
@@ -17560,6 +17629,15 @@ body :where(
 
   .store-pos-option-head .secondary-button {
     width: 100%;
+  }
+
+  .store-pos-weight-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .store-pos-weight-entry > div:last-child {
+    justify-items: start;
+    text-align: left;
   }
 
   .store-pos-option-choice-grid {

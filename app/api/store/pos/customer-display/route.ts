@@ -46,6 +46,7 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
           return {
             name: normalizeText(row.name),
             optionLabel: normalizeText(row.optionLabel),
+            weightLabel: normalizeText(row.weightLabel),
             quantity: Math.max(1, Math.min(99, toAmount(row.quantity || 1))),
             unitPrice: Math.max(0, toAmount(row.unitPrice)),
             amount: Math.max(0, toAmount(row.amount))

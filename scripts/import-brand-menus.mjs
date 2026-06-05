@@ -501,6 +501,11 @@ async function importMaamaa() {
     variableSchema: {
       source: "maamaa-malatang-menu",
       buildable: true,
+      posWeightPricing: {
+        mode: "weight",
+        unit: "g",
+        unitPrice: menu.baseSoup.posWeightPricing?.unitPrice ?? menu.baseSoup.pricePerGram ?? null
+      },
       baseSoup: menu.baseSoup,
       optionGroupKeys: [
         "medicinal-spice",

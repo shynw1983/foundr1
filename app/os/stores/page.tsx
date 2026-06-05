@@ -242,12 +242,12 @@ export default function StoresPage() {
     const companyName = String(formData.get("companyName") ?? "");
     const owner = String(formData.get("owner") ?? "");
     const reservationNote = String(formData.get("reservationNote") ?? "");
-    const weatherLocationName = String(formData.get("weatherLocationName") ?? "");
-    const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude"));
-    const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude"));
     const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
     const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude"));
     const attendanceLongitude = parseOptionalCoordinate(formData.get("attendanceLongitude"));
+    const weatherLocationName = newAttendanceAddress.trim() || name;
+    const weatherLatitude = attendanceLatitude;
+    const weatherLongitude = attendanceLongitude;
     const attendanceRadiusMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceRadiusMeters") ?? 100) || 100)));
     const attendanceAccuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceAccuracyThresholdMeters") ?? 100) || 100)));
     const selectedBrands = formData.getAll("brand").map((value) => String(value));
@@ -424,12 +424,12 @@ export default function StoresPage() {
     const companyPhone = String(formData.get("companyPhone") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
-    const weatherLocationName = String(formData.get("weatherLocationName") ?? editingWeatherLocationName).trim();
-    const weatherLatitude = parseOptionalCoordinate(formData.get("weatherLatitude") ?? editingWeatherLatitude);
-    const weatherLongitude = parseOptionalCoordinate(formData.get("weatherLongitude") ?? editingWeatherLongitude);
     const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
     const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude") ?? editingAttendanceLatitude);
     const attendanceLongitude = parseOptionalCoordinate(formData.get("attendanceLongitude") ?? editingAttendanceLongitude);
+    const weatherLocationName = editingAttendanceAddress.trim() || companyAddress || nextName;
+    const weatherLatitude = attendanceLatitude;
+    const weatherLongitude = attendanceLongitude;
     const attendanceRadiusMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceRadiusMeters") ?? editingAttendanceRadiusMeters) || 100)));
     const attendanceAccuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceAccuracyThresholdMeters") ?? editingAttendanceAccuracyThresholdMeters) || 100)));
     const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
@@ -443,6 +443,9 @@ export default function StoresPage() {
 
     formData.set("currentName", editingStore.name);
     formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
+    formData.set("weatherLocationName", weatherLocationName);
+    formData.set("weatherLatitude", weatherLatitude === null ? "" : String(weatherLatitude));
+    formData.set("weatherLongitude", weatherLongitude === null ? "" : String(weatherLongitude));
     editingStoreBrands.forEach((brandName) => formData.append("brand", brandName));
     editingSalesSourceKeys.forEach((key) => {
       const [platform, brandName = ""] = key.split("::");
@@ -655,7 +658,7 @@ export default function StoresPage() {
                     <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
-                    <small>天気: {store.weatherLocationName || (store.weatherLatitude && store.weatherLongitude ? `${store.weatherLatitude}, ${store.weatherLongitude}` : "福岡市（既定）")}</small>
+                    <small>天気: {store.attendanceLatitude && store.attendanceLongitude ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
                     <small>打刻地点: {store.attendanceLocationEnabled ? `${store.attendanceLatitude ?? "--"}, ${store.attendanceLongitude ?? "--"} / ${store.attendanceRadiusMeters ?? 100}m` : "位置制限なし"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
                   </div>
@@ -696,24 +699,8 @@ export default function StoresPage() {
                 <input name="reservationNote" placeholder="例: ラストオーダーは閉店30分前" />
               </label>
               <div className="store-weather-settings">
-                <strong>天気分析地点</strong>
-                <p>未入力の場合は福岡市中心部の天気を売上分析の参考値として使用します。</p>
-                <label>
-                  <span>地点名</span>
-                  <input name="weatherLocationName" placeholder="例: 福岡市中央区 清水店" />
-                </label>
-                <label>
-                  <span>緯度</span>
-                  <input name="weatherLatitude" inputMode="decimal" placeholder="例: 33.5902" />
-                </label>
-                <label>
-                  <span>経度</span>
-                  <input name="weatherLongitude" inputMode="decimal" placeholder="例: 130.4017" />
-                </label>
-              </div>
-              <div className="store-weather-settings">
                 <strong>モバイル打刻地点</strong>
-                <p>店舗スタッフ本人のスマホ打刻で使用します。</p>
+                <p>店舗スタッフ本人のスマホ打刻で使用します。座標がある場合、売上分析の天気もこの地点から自動取得します。</p>
                 <label className="inline-checkbox">
                   <input type="checkbox" name="attendanceLocationEnabled" />
                   位置範囲内のみ打刻を許可
@@ -721,6 +708,7 @@ export default function StoresPage() {
                 <label className="store-geocode-address">
                   <span>住所から座標を取得</span>
                   <input
+                    name="attendanceAddress"
                     value={newAttendanceAddress}
                     onChange={(event) => setNewAttendanceAddress(event.target.value)}
                     placeholder="例: 福岡県福岡市中央区..."
@@ -854,24 +842,8 @@ export default function StoresPage() {
                     />
                   </label>
                   <div className="store-weather-settings">
-                    <strong>天気分析地点</strong>
-                    <p>売上分析で日別・曜日別の天気参考値として使います。未入力の場合は福岡市中心部を使用します。</p>
-                    <label>
-                      <span>地点名</span>
-                      <input name="weatherLocationName" value={editingWeatherLocationName} onChange={(event) => setEditingWeatherLocationName(event.target.value)} placeholder="例: 福岡市中央区 清水店" />
-                    </label>
-                    <label>
-                      <span>緯度</span>
-                      <input name="weatherLatitude" inputMode="decimal" value={editingWeatherLatitude} onChange={(event) => setEditingWeatherLatitude(event.target.value)} placeholder="例: 33.5902" />
-                    </label>
-                    <label>
-                      <span>経度</span>
-                      <input name="weatherLongitude" inputMode="decimal" value={editingWeatherLongitude} onChange={(event) => setEditingWeatherLongitude(event.target.value)} placeholder="例: 130.4017" />
-                    </label>
-                  </div>
-                  <div className="store-weather-settings">
                     <strong>モバイル打刻地点</strong>
-                    <p>店舗スタッフ本人のスマホ打刻で、店舗からの距離と位置精度を確認します。</p>
+                    <p>店舗スタッフ本人のスマホ打刻で、店舗からの距離と位置精度を確認します。座標がある場合、売上分析の天気もこの地点から自動取得します。</p>
                     <label className="inline-checkbox">
                       <input
                         type="checkbox"
@@ -884,6 +856,7 @@ export default function StoresPage() {
                     <label className="store-geocode-address">
                       <span>住所から座標を取得</span>
                       <input
+                        name="attendanceAddress"
                         value={editingAttendanceAddress}
                         onChange={(event) => setEditingAttendanceAddress(event.target.value)}
                         placeholder="例: 福岡県福岡市中央区..."
