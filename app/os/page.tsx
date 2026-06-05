@@ -40,7 +40,7 @@ type PayrollStatutoryAlert = {
 const osModules: OsModule[] = [
   {
     title: "店舗ワークベンチ",
-    description: "店舗側の注文、販売状態、手順書、タイムカード、POSへ移動",
+    description: "店舗スタッフが注文、キッチン表示、販売状態、手順書、タイムカード、POSをまとめて操作します。",
     href: "/store",
     icon: Store,
     status: "active",
@@ -48,7 +48,7 @@ const osModules: OsModule[] = [
   },
   {
     title: "発注・購入管理",
-    description: "店舗発注、購入、納品、レシート、発注先を管理",
+    description: "店舗発注から購入、納品、店舗確認、レシート、発注先まで一連の実行を管理します。",
     href: "/os/orders",
     icon: PackageCheck,
     status: "active",
@@ -56,7 +56,7 @@ const osModules: OsModule[] = [
   },
   {
     title: "店舗運営",
-    description: "電子手順書、チェックリスト、清掃・点検、トレーニングを管理",
+    description: "商品・メニューと連動する手順書を中心に、チェックリスト、清掃・点検、トレーニングを管理します。",
     href: "/os/procedures",
     icon: ClipboardCheck,
     status: "active",
@@ -64,7 +64,7 @@ const osModules: OsModule[] = [
   },
   {
     title: "タイムカード",
-    description: "出退勤、休憩、シフト、勤怠を管理",
+    description: "出退勤、休憩、希望シフト、勤務実績、給与、負荷分析を店舗別に確認します。",
     href: "/os/timecard",
     icon: Clock3,
     status: "active",
@@ -72,7 +72,7 @@ const osModules: OsModule[] = [
   },
   {
     title: "経営分析",
-    description: "売上、人件費、原価、月次損益を横断して確認",
+    description: "POS・Web予約・デリバリー売上、人件費、原価、経費、月次損益を横断して確認します。",
     href: "/os/analytics",
     icon: LineChart,
     status: "active",
@@ -80,10 +80,10 @@ const osModules: OsModule[] = [
   },
   {
     title: "POS",
-    description: "販売、会計、メニュー、売上レポートを管理",
+    description: "店舗 POS の会計状況、税率・決済設定、日次レジ締め、取引履歴を管理します。",
     href: "/os/pos",
     icon: ShoppingCart,
-    status: "building",
+    status: "active",
     roles: ["owner", "manager"]
   }
 ];
@@ -91,7 +91,7 @@ const osModules: OsModule[] = [
 const systemModules: OsModule[] = [
   {
     title: "メニュー管理",
-    description: "ブランドサイト、POS、手順書で共有する販売メニューと選択肢を管理",
+    description: "ブランドサイト、POS、キッチン表示、手順書で共有するメニュー、選択肢、販売可否を管理します。",
     href: "/os/menus",
     icon: MenuSquare,
     status: "active",
@@ -99,7 +99,7 @@ const systemModules: OsModule[] = [
   },
   {
     title: "店舗・ブランド",
-    description: "全機能で共有する店舗、ブランド、表示範囲を管理",
+    description: "店舗、ブランド、表示範囲、営業設定を整え、全モジュールの基礎データとして利用します。",
     href: "/os/stores",
     icon: Store,
     status: "active",
@@ -107,7 +107,7 @@ const systemModules: OsModule[] = [
   },
   {
     title: "スタッフ管理",
-    description: "ユーザー、権限、表示範囲、ログインを管理",
+    description: "スタッフアカウント、役割、店舗・ブランド・発注先の表示範囲、ログイン情報を管理します。",
     href: "/os/staff",
     icon: UserCog,
     status: "active",
@@ -115,7 +115,7 @@ const systemModules: OsModule[] = [
   },
   {
     title: "システム設定",
-    description: "会社、Store 表示、販売状態、モジュールごとの動作を設定",
+    description: "会社情報、Store 表示、販売状態、通知、勤怠、POS などモジュールごとの動作を設定します。",
     href: "/os/settings",
     icon: Settings,
     status: "active",

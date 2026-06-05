@@ -7,56 +7,56 @@ import { StoreNavTabs } from "./components/StoreNavTabs";
 const storeModules = [
   {
     title: "注文",
-    description: "Web予約注文を確認し、制作開始から受け渡し完了まで処理します。",
+    description: "Web予約注文を受け取り、制作開始、受け取り可、受け渡し完了まで処理します。",
     href: "/store/orders",
     icon: ClipboardList,
     status: "利用可能"
   },
   {
     title: "キッチン",
-    description: "制作タスクを厨房の表示端末で確認し、制作開始から完成まで処理します。",
+    description: "Web予約と POS の制作タスクを、構造化された商品・オプション情報で確認します。",
     href: "/store/display/kitchen",
     icon: ChefHat,
     status: "利用可能"
   },
   {
     title: "受取表示",
-    description: "準備中と受け取り可能な番号を客席向け表示で案内します。",
+    description: "制作中と受け取り可能な番号を客席向け画面に表示し、受け渡しを案内します。",
     href: "/store/display/pickup",
     icon: Monitor,
     status: "利用可能"
   },
   {
     title: "販売状態",
-    description: "本日の売切、販売再開、現場メモを商品ごとに更新します。",
+    description: "本日の売切、販売再開、Web・POS の販売可否、現場メモを商品ごとに更新します。",
     href: "/store/menu",
     icon: Tags,
     status: "利用可能"
   },
   {
     title: "手順書",
-    description: "公開中の作業手順を確認し、店舗オペレーションを進めます。",
+    description: "店舗・ブランド・メニュー条件に合う公開手順書を確認し、現場作業を進めます。",
     href: "/store/procedures",
     icon: BookOpen,
     status: "利用可能"
   },
   {
     title: "タイムカード",
-    description: "出退勤、休憩、シフト確認を行います。",
+    description: "出退勤、休憩、確定シフト、希望シフト、交代募集をスタッフが確認・申請します。",
     href: "/store/timecard",
     icon: Clock3,
     status: "利用可能"
   },
   {
     title: "POS",
-    description: "会計、販売、メニュー操作を行います。",
+    description: "店頭会計、注文入力、決済、レジ開店・締め、取引履歴、返金を処理します。",
     href: "/store/pos",
     icon: ShoppingCart,
-    status: "準備中"
+    status: "利用可能"
   },
   {
     title: "OS",
-    description: "管理画面で商品、スタッフ、店舗、設定を確認します。",
+    description: "管理画面へ移動し、商品、メニュー、スタッフ、店舗、設定、分析を確認します。",
     href: "/os",
     icon: Settings,
     status: "利用可能"
