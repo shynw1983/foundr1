@@ -49,6 +49,7 @@ export default function StoreKitchenPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const selectedStoreIdRef = useRef(selectedStoreId);
 
   useEffect(() => {
@@ -95,10 +96,85 @@ export default function StoreKitchenPage() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(selectedStoreIdRef.current, selectedArea), 8000);
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "visible") void load(selectedStoreIdRef.current, selectedArea);
+      },
+      realtimeStatus === "connected" ? 60000 : 8000
+    );
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArea]);
+  }, [realtimeStatus, selectedArea]);
+
+  useEffect(() => {
+    let pusher: any;
+    let channels: any[] = [];
+    let active = true;
+    const storeId = selectedStoreIdRef.current;
+    if (!storeId) {
+      setRealtimeStatus("polling");
+      return () => {
+        active = false;
+      };
+    }
+    const refreshFromEvent = () => {
+      void load(selectedStoreIdRef.current, selectedArea);
+    };
+    setRealtimeStatus("connecting");
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active) return;
+        if (!config?.key || !config?.cluster || !config?.channels?.length) {
+          setRealtimeStatus("polling");
+          return;
+        }
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("failed", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("disconnected", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => {
+            if (active) setRealtimeStatus("connected");
+          });
+          channel.bind("pusher:subscription_error", () => {
+            if (active) setRealtimeStatus("polling");
+          });
+          channel.bind("order.created", refreshFromEvent);
+          channel.bind("order.updated", refreshFromEvent);
+          return channel;
+        });
+      })
+      .catch(() => {
+        if (active) setRealtimeStatus("polling");
+      });
+
+    return () => {
+      active = false;
+      channels.forEach((channel) => {
+        channel.unbind("order.created", refreshFromEvent);
+        channel.unbind("order.updated", refreshFromEvent);
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedArea, selectedStoreId]);
 
   const visibleTasks = useMemo(() => tasks.filter((task) => task.status !== "ready"), [tasks]);
   const readyTasks = useMemo(() => tasks.filter((task) => task.status === "ready"), [tasks]);
@@ -133,7 +209,7 @@ export default function StoreKitchenPage() {
           {areas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}
         </select>
         <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
-        <span>{lastUpdatedAt ? `更新 ${lastUpdatedAt}` : ""}</span>
+        <span>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / 更新 ${lastUpdatedAt}` : ""}</span>
       </section>
 
       <section className="store-kitchen-board">
