@@ -119,6 +119,10 @@ function splitLines(value = "") {
   return String(value).split(/\n+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function joinOrderDetailParts(...values: string[]) {
+  return values.map((value) => value.trim()).filter(Boolean).join(" / ");
+}
+
 function getPaymentPillClass(paymentStatus: string) {
   if (paymentStatus === "paid") return "status-pill is-payment-paid";
   if (paymentStatus === "refunded") return "status-pill is-muted";
@@ -765,8 +769,12 @@ export default function StoreOrdersPage() {
                 ) : (
                   <>
                     <h3>{selectedOrder.drink}</h3>
-                    <p>{selectedOrder.size} / {selectedOrder.temperature} / {selectedOrder.sweetness} / {selectedOrder.ice}</p>
-                    <p>{selectedOrder.option} / {selectedOrder.toppings}</p>
+                    {joinOrderDetailParts(selectedOrder.size, selectedOrder.temperature, selectedOrder.sweetness, selectedOrder.ice) ? (
+                      <p>{joinOrderDetailParts(selectedOrder.size, selectedOrder.temperature, selectedOrder.sweetness, selectedOrder.ice)}</p>
+                    ) : null}
+                    {joinOrderDetailParts(selectedOrder.option, selectedOrder.toppings) ? (
+                      <p>{joinOrderDetailParts(selectedOrder.option, selectedOrder.toppings)}</p>
+                    ) : null}
                   </>
                 )}
               </div>
