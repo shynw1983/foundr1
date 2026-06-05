@@ -55,7 +55,7 @@ const storeModules = [
     status: "利用可能"
   },
   {
-    title: "OS",
+    title: "Foundr1 OS",
     description: "管理画面へ移動し、商品、メニュー、スタッフ、店舗、設定、分析を確認します。",
     href: "/os",
     icon: Settings,

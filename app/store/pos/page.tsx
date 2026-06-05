@@ -218,6 +218,31 @@ const denominationCountOptions = [
   })
 ];
 
+const dineInWeightMalatangOptionGroupKeys = new Set([
+  "heat",
+  "numb",
+  "dine-in-customer-ingredient",
+  "dine-in-customer-ingredients",
+  "customer-requested-ingredient",
+  "customer-requested-ingredients",
+  "counter-ingredient",
+  "counter-ingredients",
+  "counter-requested-ingredient",
+  "counter-requested-ingredients"
+]);
+const dineInWeightMalatangOptionGroupNames = new Set([
+  "堂吃客人指定食材",
+  "堂食客人指定食材",
+  "柜台指定食材",
+  "カウンター指定食材",
+  "店内客指定食材",
+  "店内お客様指定食材"
+]);
+
+function isDineInWeightMalatangOptionGroup(group: Pick<PosOptionGroup, "groupKey" | "name">) {
+  return dineInWeightMalatangOptionGroupKeys.has(group.groupKey) || dineInWeightMalatangOptionGroupNames.has(group.name);
+}
+
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
@@ -553,8 +578,10 @@ export default function StorePosPage() {
   }
 
   function getItemOptionGroups(item: PosMenuItem) {
+    const weightPricing = getWeightPricingConfig(item, orderType);
     return optionGroups
       .filter((group) => group.brandId === item.brandId && (!group.menuCatalogItemId || group.menuCatalogItemId === item.id))
+      .filter((group) => !weightPricing || isDineInWeightMalatangOptionGroup(group))
       .map((group) => {
         const allowed = asStringArray(item.variableSchema?.[getAllowedRuleKey(group.groupKey)]);
         const options = group.options.filter((option) => !allowed.length || allowed.includes(option.optionKey) || allowed.includes(option.name));
