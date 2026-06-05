@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
+import { useDisplayMode } from "../components/useDisplayMode";
 
 type KitchenTask = {
   id: string;
@@ -51,6 +52,7 @@ export default function StoreKitchenPage() {
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [menuOpen, setMenuOpen] = useState(false);
   const selectedStoreIdRef = useRef(selectedStoreId);
+  const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -181,7 +183,15 @@ export default function StoreKitchenPage() {
 
   return (
     <main className="store-kitchen-display store-kitchen-page">
-      <button className="store-display-menu-button" type="button" aria-label="メニュー" onClick={() => setMenuOpen((current) => !current)} />
+      <button
+        className="store-display-menu-button"
+        type="button"
+        aria-label="メニュー"
+        onClick={() => {
+          if (!menuOpen) void activateDisplayMode();
+          setMenuOpen((current) => !current);
+        }}
+      />
       {menuOpen ? (
         <div className="store-display-menu">
           <strong>制作屏</strong>
@@ -201,7 +211,11 @@ export default function StoreKitchenPage() {
             {areas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}
           </select>
           <button className="secondary-button" type="button" onClick={() => void load()}>{loading ? "読み込み中" : "更新"}</button>
+          <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
+            全屏・常亮 ON
+          </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <small>全屏 {fullscreenActive ? "ON" : "OFF"} / 常亮 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "不可用"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/os/logout">ログアウト</a>

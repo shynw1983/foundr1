@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
+import { useDisplayMode } from "../components/useDisplayMode";
 
 type PickupOrder = {
   pickupCode: string;
@@ -41,6 +42,7 @@ export default function StorePickupDisplayPage() {
   const voiceEnabledRef = useRef(false);
   const knownReadyCodesRef = useRef<Set<string>>(new Set());
   const hasInitializedReadyCodesRef = useRef(false);
+  const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -200,7 +202,15 @@ export default function StorePickupDisplayPage() {
 
   return (
     <main className="store-pickup-display-shell store-pickup-display-page">
-      <button className="store-display-menu-button" type="button" aria-label="メニュー" onClick={() => setMenuOpen((current) => !current)} />
+      <button
+        className="store-display-menu-button"
+        type="button"
+        aria-label="メニュー"
+        onClick={() => {
+          if (!menuOpen) void activateDisplayMode();
+          setMenuOpen((current) => !current);
+        }}
+      />
       {menuOpen ? (
         <div className="store-display-menu">
           <strong>取餐屏</strong>
@@ -216,6 +226,9 @@ export default function StorePickupDisplayPage() {
             </select>
           ) : null}
           <button className="secondary-button" type="button" onClick={() => void load()}>更新</button>
+          <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
+            全屏・常亮 ON
+          </button>
           <button
             className={voiceEnabled ? "secondary-button is-active" : "secondary-button"}
             type="button"
@@ -228,6 +241,7 @@ export default function StorePickupDisplayPage() {
             音声テスト
           </button>
           <small>{realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}{lastUpdatedAt ? ` / ${lastUpdatedAt}` : ""}</small>
+          <small>全屏 {fullscreenActive ? "ON" : "OFF"} / 常亮 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "不可用"}</small>
           {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
