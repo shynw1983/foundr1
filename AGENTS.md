@@ -177,7 +177,7 @@ The app is heavily used on mobile and half-width/tablet browser windows.
 
 When editing UI:
 
-- Use the Foundr1 theme direction: deep green primary, clean neutral surfaces, and restrained brass accents. Prefer shared tokens over one-off hex colors. Keep neutral surfaces dominant, use green for primary actions/success/brand emphasis, blue only for information/link states, amber for warnings, red for destructive/error states, and violet only when there is a clear module meaning.
+- Use the Foundr1 theme direction: deep green primary with clean neutral surfaces and no decorative accent color. Prefer shared tokens over one-off hex colors. Keep neutral surfaces dominant, use green for primary actions/success/brand emphasis, blue only for information/link states, amber only for warnings, red for destructive/error states, and violet only when there is a clear module meaning.
 - Check mobile, tablet, half-width desktop, and wide desktop behavior.
 - Avoid horizontal overflow.
 - Keep dense operational screens compact.
