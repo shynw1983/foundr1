@@ -17979,3 +17979,298 @@ html:lang(ja) :where(
     min-height: 38px;
   }
 }
+
+/* Foundr1 brand system: deep green, clean neutrals, restrained brass. */
+:root {
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f4f7;
+  --color-surface-subtle: #fbfcfd;
+  --color-border: #e2e7ee;
+  --color-border-strong: #ccd5df;
+  --color-text: #202631;
+  --color-text-muted: #687487;
+  --color-brand: #1f6f5b;
+  --color-brand-hover: #185846;
+  --color-brand-soft: #e7f3ee;
+  --color-brand-border: #b9d8cb;
+  --color-brand-ink: #153b35;
+  --color-accent: #c49a4a;
+  --color-accent-soft: #f6efd9;
+  --color-info: #2f6f9f;
+  --color-info-soft: #e7f0f7;
+  --color-warning: #a96514;
+  --color-warning-soft: #fff2d9;
+  --color-danger: #b33a32;
+  --color-danger-soft: #fdebea;
+  --color-sidebar: #1c2830;
+  --color-sidebar-muted: #9fb0bf;
+  --color-sidebar-line: rgba(255, 255, 255, 0.11);
+  --bg: var(--color-bg);
+  --panel: var(--color-surface);
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --green: var(--color-brand);
+  --green-soft: var(--color-brand-soft);
+  --blue: var(--color-info);
+  --blue-soft: var(--color-info-soft);
+  --amber: var(--color-warning);
+  --amber-soft: var(--color-warning-soft);
+  --red: var(--color-danger);
+  --red-soft: var(--color-danger-soft);
+  --violet: #695b8f;
+  --violet-soft: #efedf7;
+  --surface: var(--color-surface);
+  --surface-muted: var(--color-surface-muted);
+  --text: var(--color-text);
+  --border: var(--color-border);
+  --shadow: 0 8px 24px rgba(31, 42, 58, 0.045);
+  --shadow-soft: 0 6px 18px rgba(31, 42, 58, 0.038);
+  --shadow-focus: 0 0 0 4px rgba(31, 111, 91, 0.14);
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(247, 248, 250, 0) 180px),
+    var(--color-bg);
+}
+
+.sidebar {
+  color: #eef5f3;
+  background:
+    linear-gradient(180deg, rgba(31, 111, 91, 0.12), rgba(31, 111, 91, 0) 180px),
+    var(--color-sidebar);
+  border-right: 1px solid rgba(13, 22, 26, 0.2);
+}
+
+.brand-mark {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, var(--color-brand), #2b826a);
+  color: white;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.sidebar .eyebrow,
+.sidebar-user .user-badge-role,
+.sidebar-user .user-badge-muted,
+.mobile-nav-section-heading {
+  color: var(--color-sidebar-muted);
+}
+
+.nav-item,
+.nav-sub-list a {
+  color: #d8e4e1;
+}
+
+.nav-item:hover,
+.nav-item.is-open:not(.is-active),
+.nav-sub-list a:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.nav-item.is-active,
+.nav-sub-list a.is-active {
+  color: white;
+  background: rgba(31, 111, 91, 0.32);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.nav-item.is-home,
+.mobile-nav-list a.is-home {
+  border-color: var(--color-sidebar-line);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.topbar,
+.os-home-topbar,
+.store-workbench-topbar,
+.procedure-reader-topbar {
+  border-color: rgba(226, 231, 238, 0.8);
+}
+
+.panel,
+.metric-card,
+.os-module-card,
+.menu-category-panel,
+.menu-item-panel,
+.menu-detail-panel,
+.menu-edit-card,
+.menu-source-details,
+.store-pos-menu-panel,
+.store-pos-cart-panel,
+.store-pos-filter-panel,
+.store-pos-product-panel,
+.store-pos-cash-panel,
+.operation-panel,
+.history-panel,
+.product-master-page-panel,
+.procurement-panel {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+}
+
+.metric-card:hover,
+.module-card:hover,
+.os-module-card:hover,
+.menu-category-button.is-active,
+.menu-item-button.is-active {
+  border-color: var(--color-brand-border);
+}
+
+.primary-button,
+.receipt-upload-button,
+.delivery-complete-button,
+.fulfillment-mark-button,
+.store-reception-button.is-on,
+.store-status-button.is-on,
+.store-pos-category-row button.is-active,
+.store-pos-segmented button.is-active,
+.store-pos-payment-grid button.is-active,
+.timecard-view-tabs button.is-active,
+.timecard-view-tabs a.is-active,
+.timecard-subtabs button.is-active {
+  background: var(--color-brand);
+  color: white;
+}
+
+.primary-button:hover:not(:disabled),
+.receipt-upload-button:hover:not(:disabled),
+.delivery-complete-button:hover:not(:disabled),
+.fulfillment-mark-button:hover:not(:disabled) {
+  background: var(--color-brand-hover);
+}
+
+.secondary-button,
+.text-button,
+.icon-button,
+.mobile-nav-menu summary,
+.store-nav-menu summary,
+.menu-category-button,
+.menu-item-button,
+.timecard-view-tabs button,
+.timecard-view-tabs a,
+.timecard-subtabs button,
+.store-pos-filter-list button,
+.store-pos-category-row button,
+.store-pos-segmented button,
+.store-pos-payment-grid button {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.secondary-button:hover:not(:disabled),
+.text-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.menu-category-button:hover,
+.menu-item-button:hover,
+.store-pos-filter-list button:hover {
+  border-color: var(--color-brand-border);
+  background: var(--color-surface-subtle);
+}
+
+.text-button,
+.icon-button,
+.menu-category-button strong,
+.source-indicator,
+.store-pos-filter-list button.is-active,
+.modern-file-button strong {
+  color: var(--color-brand);
+}
+
+.source-indicator,
+.status-pill.is-active,
+.menu-category-button.is-active,
+.menu-item-button.is-active,
+.notification-push-button,
+.modern-file-button {
+  background: var(--color-brand-soft);
+}
+
+.status-pill {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.status-pill.is-muted,
+.queue-filter,
+.filter-chip {
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+}
+
+.status-pill.is-payment-paid,
+.timecard-status.is-working,
+.timecard-status.is-ready,
+.mobile-timecard-location.is-ready {
+  color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
+.status-pill.is-payment-unpaid,
+.timecard-status.is-error,
+.mobile-timecard-location.is-error {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.info-panel,
+.notification-push-status,
+.action-notice.is-info {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+
+.danger-button,
+.danger-text-button,
+.exception-button {
+  border-color: var(--color-danger);
+}
+
+.danger-button {
+  background: var(--color-danger);
+  color: white;
+}
+
+.text-button.danger-button {
+  color: white;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #9f302b;
+  background: #9f302b;
+  color: white;
+}
+
+.action-notice {
+  border-color: rgba(31, 111, 91, 0.38);
+  background: var(--color-brand);
+  box-shadow: 0 18px 42px rgba(24, 42, 36, 0.22);
+}
+
+.action-notice-icon {
+  color: var(--color-brand);
+}
+
+.metric-icon,
+.store-order-payment-badge,
+.comparison-rate-result.rate-down {
+  color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+::selection {
+  color: white;
+  background: var(--color-brand);
+}
