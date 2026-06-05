@@ -8,6 +8,7 @@ const storeTerminalAllowedPaths = [
   "/store/orders",
   "/store/kitchen",
   "/store/pickup-display",
+  "/store/menu",
   "/store/timecard",
   "/store/pos",
   "/store/procedures"

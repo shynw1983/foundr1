@@ -53,6 +53,10 @@ function getEffectiveSelectionType(group: { groupKey: string; selectionType: str
   return group.selectionType || "single";
 }
 
+function getPosPickupCodePrefix(orderType: string) {
+  return orderType === "eat_in" ? "S" : "P";
+}
+
 function getAllowedRuleKey(groupKey: string) {
   const ruleKeys: Record<string, string> = {
     size: "allowedSizes",
@@ -442,7 +446,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
   }
   const { pickupDate, pickupTime } = getJstParts();
-  const pickupCode = createPickupCode("P");
+  const pickupCode = createPickupCode(getPosPickupCodePrefix(orderType));
   const brandId = normalizedItems[0]?.brandId ?? null;
   const firstItemName = normalizedItems[0]?.name ?? "";
 

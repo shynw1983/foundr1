@@ -62,7 +62,7 @@ export type CustomerOrderItemInput = {
   amount: number;
 };
 
-export function createPickupCode(prefix = "N") {
+export function createPickupCode(prefix = "M") {
   return `${prefix}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
 }
 

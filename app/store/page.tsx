@@ -55,7 +55,7 @@ export default function StoreHomePage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
     employeeRole === "store_terminal"
-      ? storeModules.filter((module) => ["/store/orders", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
+      ? storeModules.filter((module) => ["/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
       : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
         ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
         : storeModules

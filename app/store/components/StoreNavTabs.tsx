@@ -77,7 +77,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
-    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/kitchen", "/store/pickup-display", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
+    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/kitchen", "/store/pickup-display", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
     : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
       ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
       : tabs;

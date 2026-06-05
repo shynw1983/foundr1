@@ -212,7 +212,7 @@ export async function POST(request: Request) {
   const iceLabel = itemSummaries.length === 1 ? primarySummary.iceLabel : "商品ごと";
   const optionLabel = itemSummaries.length === 1 ? primarySummary.optionLabel : "商品ごと";
   const toppingLabel = itemSummaries.length === 1 ? primarySummary.toppingLabel : "商品ごと";
-  const pickupCode = createPickupCode("N");
+  const pickupCode = createPickupCode("M");
 
   const localOrder = await createCustomerOrder({
     brandId,
