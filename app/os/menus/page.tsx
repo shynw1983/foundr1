@@ -1414,6 +1414,45 @@ export default function MenuAdminPage() {
                   {photoStatus ? <small>{photoStatus}</small> : null}
                 </div>
               </div>
+              {itemDraft.itemKind === "buildable_product" ? (
+                <div className="menu-pos-pricing-panel">
+                  <div className="section-heading compact-heading">
+                    <div>
+                      <p className="eyebrow">POS</p>
+                      <h3>店内 POS 計価</h3>
+                    </div>
+                  </div>
+                  <div className="menu-form-grid">
+                    <label>
+                      <span>計価方式</span>
+                      <select
+                        value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.mode ?? "weight")}
+                        onChange={(event) => updateItemWeightPricing("mode", event.target.value)}
+                      >
+                        <option value="weight">重量</option>
+                        <option value="fixed">固定価格</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>重量単位</span>
+                      <input
+                        value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g")}
+                        onChange={(event) => updateItemWeightPricing("unit", event.target.value)}
+                        placeholder="g"
+                      />
+                    </label>
+                    <label>
+                      <span>1単位あたり価格</span>
+                      <input
+                        value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.unitPrice ?? "")}
+                        onChange={(event) => updateItemWeightPricing("unitPrice", event.target.value.replace(/[^\d.]/g, ""))}
+                        inputMode="decimal"
+                        placeholder="例: 3.8"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
               <details className="menu-source-details menu-advanced-details">
                 <summary>高度な設定</summary>
                 <div className="menu-form-grid">
@@ -1427,37 +1466,6 @@ export default function MenuAdminPage() {
                     <span>外部 ID</span>
                     <input value={itemDraft.externalId} onChange={(event) => setItemDraft({ ...itemDraft, externalId: event.target.value })} />
                   </label>
-                  {itemDraft.itemKind === "buildable_product" ? (
-                    <>
-                      <label>
-                        <span>堂食 POS 計価</span>
-                        <select
-                          value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.mode ?? "weight")}
-                          onChange={(event) => updateItemWeightPricing("mode", event.target.value)}
-                        >
-                          <option value="weight">重量</option>
-                          <option value="fixed">固定価格</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>重量単位</span>
-                        <input
-                          value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g")}
-                          onChange={(event) => updateItemWeightPricing("unit", event.target.value)}
-                          placeholder="g"
-                        />
-                      </label>
-                      <label>
-                        <span>1単位あたり価格</span>
-                        <input
-                          value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.unitPrice ?? "")}
-                          onChange={(event) => updateItemWeightPricing("unitPrice", event.target.value.replace(/[^\d.]/g, ""))}
-                          inputMode="decimal"
-                          placeholder="例: 3.8"
-                        />
-                      </label>
-                    </>
-                  ) : null}
                 </div>
               </details>
             </div>

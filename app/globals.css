@@ -3504,6 +3504,15 @@ body :where(
   background: white;
 }
 
+.menu-pos-pricing-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(31, 111, 85, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--green-soft);
+}
+
 .menu-full-field textarea {
   min-height: 88px;
   padding-top: 10px;
