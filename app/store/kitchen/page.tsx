@@ -37,7 +37,10 @@ const orderTypeLabels: Record<string, string> = {
 };
 
 function splitLines(value: string) {
-  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => ({
+    text: line,
+    isModifier: line.startsWith("・") || line.startsWith("- ")
+  }));
 }
 
 export default function StoreKitchenPage() {
@@ -234,7 +237,11 @@ export default function StoreKitchenPage() {
                 </div>
                 <p>{(orderTypeLabels[task.orderType] ?? task.orderType) || "受け取り"} / {task.createdTime}</p>
                 <div className="store-kitchen-items">
-                  {splitLines(task.itemSummary).map((line) => <span key={line}>{line}</span>)}
+                  {splitLines(task.itemSummary).map((line, index) => (
+                    <span className={line.isModifier ? "store-kitchen-item-modifier" : "store-kitchen-item-name"} key={`${task.id}-${index}`}>
+                      {line.text}
+                    </span>
+                  ))}
                 </div>
                 {task.note ? <p className="store-kitchen-note">{task.note}</p> : null}
                 <div className="store-kitchen-actions">

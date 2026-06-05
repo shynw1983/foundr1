@@ -28,6 +28,44 @@ function uniqueTextParts(parts: string[]) {
   });
 }
 
+function countLabels(labels: string[]) {
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const label of labels) {
+    const normalized = normalizeText(label);
+    if (!normalized) continue;
+    const current = counts.get(normalized) ?? { label: normalized, count: 0 };
+    current.count += 1;
+    counts.set(normalized, current);
+  }
+  return Array.from(counts.values()).map(({ label, count }) => `${label}${count > 1 ? ` x${count}` : ""}`);
+}
+
+function buildProductionItemLines(row: {
+  itemName: string;
+  quantity: number;
+  sizeLabel: string;
+  temperature: string;
+  sweetness: string;
+  ice: string;
+  optionLabel: string;
+  toppingLabels: string[] | null;
+}) {
+  const optionParts = row.optionLabel.split(",").map((part) => part.trim()).filter(Boolean);
+  const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
+  const details = uniqueTextParts([
+    row.sizeLabel,
+    row.temperature,
+    row.sweetness,
+    row.ice,
+    ...optionParts,
+    ...countLabels(toppingLabels)
+  ]);
+  return [
+    `${row.itemName} x${row.quantity}`,
+    ...details.map((detail) => `・${detail}`)
+  ];
+}
+
 export async function ensureProductionTasksForOrder(orderId: string) {
   const normalizedOrderId = normalizeText(orderId);
   if (!normalizedOrderId) return [];
@@ -58,7 +96,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
       coalesce(store_customer_order_items.sweetness, '') as sweetness,
       coalesce(store_customer_order_items.ice, '') as ice,
       coalesce(store_customer_order_items.option_label, '') as "optionLabel",
-      coalesce(array_to_string(store_customer_order_items.topping_labels, ', '), '') as toppings
+      store_customer_order_items.topping_labels as "toppingLabels"
     from store_customer_order_items
     join store_customer_orders on store_customer_orders.id = store_customer_order_items.order_id
     left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
@@ -78,13 +116,12 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     sweetness: string;
     ice: string;
     optionLabel: string;
-    toppings: string;
+    toppingLabels: string[] | null;
   }>) {
     const area = getProductionArea(row.brandName);
     const key = `${row.brandId || ""}:${area.key}`;
     const current = grouped.get(key) ?? { brandId: row.brandId || "", areaKey: area.key, areaLabel: area.label, lines: [] };
-    const details = uniqueTextParts([row.sizeLabel, row.temperature, row.sweetness, row.ice, row.optionLabel, row.toppings]).join(" / ");
-    current.lines.push(`${row.itemName} x${row.quantity}${details ? ` (${details})` : ""}`);
+    current.lines.push(...buildProductionItemLines(row));
     grouped.set(key, current);
   }
 

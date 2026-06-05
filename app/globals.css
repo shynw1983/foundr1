@@ -6639,15 +6639,36 @@ body :where(
 
 .store-kitchen-items {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .store-kitchen-items span {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 17px;
   font-weight: 900;
+}
+
+.store-kitchen-item-name {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.store-kitchen-item-name:first-child {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.store-kitchen-item-modifier {
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  line-height: 1.25;
 }
 
 .store-kitchen-note {
