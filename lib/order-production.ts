@@ -50,8 +50,12 @@ function buildProductionItemLines(row: {
   optionLabel: string;
   toppingLabels: string[] | null;
 }) {
-  const optionParts = row.optionLabel.split(",").map((part) => part.trim()).filter(Boolean);
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
+  const toppingLabelSet = new Set(toppingLabels.map((label) => normalizeText(label)).filter(Boolean));
+  const optionParts = row.optionLabel
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part && !toppingLabelSet.has(normalizeText(part)));
   const sizeParts = row.sizeLabel.includes("\n") && toppingLabels.length ? [] : [row.sizeLabel];
   const details = uniqueTextParts([
     ...sizeParts,
