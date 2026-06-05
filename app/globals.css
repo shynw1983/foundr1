@@ -482,20 +482,23 @@ body :where(
   right: 18px;
   bottom: 18px;
   z-index: 80;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 30px;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
-  max-width: min(440px, calc(100vw - 32px));
-  min-height: 62px;
-  padding: 12px 13px;
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
+  min-height: 54px;
+  padding: 12px 14px;
   border: 2px solid rgba(47, 136, 119, 0.38);
   border-radius: 8px;
   color: #f8fffc;
   background: #176d57;
   box-shadow: 0 22px 55px rgba(15, 23, 42, 0.34);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: keep-all;
   animation: action-notice-pop 0.18s ease-out;
 }
 
@@ -506,6 +509,7 @@ body :where(
 }
 
 .action-notice-icon {
+  flex: 0 0 auto;
   display: grid;
   width: 34px;
   height: 34px;
@@ -515,6 +519,10 @@ body :where(
   background: white;
   font-size: 18px;
   font-weight: 600;
+}
+
+.action-notice > span:not(.action-notice-icon) {
+  min-width: 0;
 }
 
 .action-notice.is-info .action-notice-icon {
@@ -5209,13 +5217,10 @@ body :where(
 }
 
 .store-pos-notice {
-  display: block;
-  width: min(420px, calc(100vw - 32px));
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
   min-height: 0;
-  padding: 14px 16px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  padding: 12px 14px;
 }
 
 .store-pos-layout {
@@ -7338,7 +7343,22 @@ body :where(
   font-weight: 850;
 }
 
+.pos-admin-page {
+  --pos-admin-section-gap: 18px;
+  display: grid;
+  align-content: start;
+  gap: var(--pos-admin-section-gap);
+}
+
+.pos-admin-page > .topbar,
+.pos-admin-page > .metric-grid {
+  margin-bottom: 0;
+}
+
 .pos-admin-toolbar {
+  display: flex;
+  gap: 14px;
+  align-items: end;
   justify-content: space-between;
   flex-wrap: wrap;
   padding: 14px;
@@ -14184,11 +14204,16 @@ body :where(
   }
 
   .action-notice {
+    top: calc(58px + env(safe-area-inset-top, 0px) + 12px);
     right: 12px;
-    bottom: 18px;
+    bottom: auto;
     left: 12px;
-    min-height: 68px;
-    max-width: none;
+    width: fit-content;
+    max-width: calc(100vw - 24px);
+    min-height: 52px;
+    margin-inline: auto;
+    padding: 11px 13px;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.24);
   }
 
   .feedback-actions {
@@ -14495,7 +14520,8 @@ body :where(
   .operation-panel,
   .history-panel,
   .product-master-page-panel {
-    padding: 0;
+    --mobile-list-panel-inset: 14px;
+    padding: 0 var(--mobile-list-panel-inset);
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -14505,7 +14531,11 @@ body :where(
   .history-panel > .panel-title,
   .product-master-page-panel > .panel-title {
     margin-bottom: 12px;
-    padding: 0 2px;
+    padding: 0;
+  }
+
+  .operation-panel .queue-filter-bar {
+    margin: 0 0 14px;
   }
 
   .product-master-title {
@@ -14685,7 +14715,8 @@ body :where(
   }
 
   .procurement-panel {
-    padding: 0;
+    --mobile-list-panel-inset: 14px;
+    padding: 0 var(--mobile-list-panel-inset);
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -14693,7 +14724,7 @@ body :where(
 
   .procurement-panel > .panel-title {
     margin-bottom: 12px;
-    padding: 0 2px;
+    padding: 0;
   }
 
   .procurement-order-list {
@@ -17530,9 +17561,8 @@ body :where(
   }
 
   .store-pos-notice {
-    right: 12px;
-    left: 12px;
-    width: auto;
+    width: fit-content;
+    max-width: calc(100vw - 24px);
   }
 
   .store-pos-menu-panel,
