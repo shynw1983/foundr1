@@ -1,19 +1,25 @@
 {
   "id": "/store",
-  "name": "Foundr1 Store",
-  "short_name": "F1 Store",
+  "name": "Foundr1 STORE",
+  "short_name": "Foundr1 STORE",
   "description": "飲食店スタッフ向け店舗オペレーションアプリ",
   "start_url": "/store",
-  "scope": "/",
+  "scope": "/store",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#202a36",
-  "theme_color": "#202a36",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "/icons/foundr1-app.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/foundr1-store-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/foundr1-store-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

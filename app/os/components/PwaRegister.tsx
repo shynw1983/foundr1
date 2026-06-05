@@ -26,7 +26,10 @@ export function PwaRegister() {
   useEffect(() => {
     const isStoreApp = pathname.startsWith("/store");
     const manifestHref = isStoreApp ? "/manifest-store.webmanifest" : "/manifest-os.webmanifest";
-    const appleTitle = isStoreApp ? "Foundr1 Store" : "Foundr1 OS";
+    const appleTitle = isStoreApp ? "Foundr1 STORE" : "Foundr1 OS";
+    const appleIconHref = isStoreApp
+      ? "/icons/foundr1-store-apple-touch.png"
+      : "/icons/foundr1-os-apple-touch.png";
     let manifestLink = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
     if (!manifestLink) {
       manifestLink = document.createElement("link");
@@ -42,6 +45,14 @@ export function PwaRegister() {
       document.head.appendChild(appleTitleMeta);
     }
     appleTitleMeta.content = appleTitle;
+
+    let appleIconLink = document.querySelector<HTMLLinkElement>("link[rel='apple-touch-icon']");
+    if (!appleIconLink) {
+      appleIconLink = document.createElement("link");
+      appleIconLink.rel = "apple-touch-icon";
+      document.head.appendChild(appleIconLink);
+    }
+    appleIconLink.href = appleIconHref;
   }, [pathname]);
 
   return null;

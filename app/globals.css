@@ -18323,3 +18323,57 @@ a:focus-visible {
   color: white;
   background: var(--color-brand);
 }
+
+.brand-mark {
+  flex: 0 0 auto;
+  width: 118px;
+  height: 42px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: #000000 url("/icons/foundr1-os-512.png") center / cover no-repeat;
+  box-shadow: none;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  text-indent: -999px;
+}
+
+.store-workbench-shell .brand-mark,
+.procedure-reader-shell .brand-mark {
+  border-color: var(--color-border);
+  background-color: #ffffff;
+  background-image: url("/icons/foundr1-store-512.png");
+}
+
+.login-card .brand-mark {
+  width: 142px;
+  height: 50px;
+}
+
+@media (min-width: 901px) and (max-width: 1120px) {
+  .sidebar:not(:has(.nav-shell.is-expanded)) .brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (max-width: 760px) {
+  .brand-mark,
+  .store-workbench-topbar .brand-mark,
+  .procedure-reader-topbar .brand-mark {
+    flex-basis: 96px;
+    width: 96px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand-mark,
+  .store-workbench-topbar .brand-mark,
+  .procedure-reader-topbar .brand-mark {
+    flex-basis: 74px;
+    width: 74px;
+    height: 34px;
+  }
+}

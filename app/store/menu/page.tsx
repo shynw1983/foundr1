@@ -273,7 +273,7 @@ export default function StoreMenuPage() {
         <a className="brand-block" href="/store" aria-label="Foundr1 店舗">
           <div className="brand-mark">F1</div>
           <div>
-            <p className="eyebrow">Foundr1 Store</p>
+            <p className="eyebrow">Foundr1 STORE</p>
             <h1>販売状態</h1>
           </div>
         </a>

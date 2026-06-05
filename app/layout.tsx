@@ -13,8 +13,11 @@ export const metadata: Metadata = {
     title: "Foundr1 OS"
   },
   icons: {
-    icon: "/icons/foundr1-app.svg",
-    apple: "/icons/foundr1-app.svg"
+    icon: [
+      { url: "/icons/foundr1-os-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/foundr1-os-512.png", sizes: "512x512", type: "image/png" }
+    ],
+    apple: "/icons/foundr1-os-apple-touch.png"
   }
 };
 

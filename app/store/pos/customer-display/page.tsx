@@ -122,7 +122,7 @@ export default function CustomerDisplayPage() {
     <main className="customer-display-page">
       <header className="customer-display-topbar">
         <div>
-          <p>{state.storeName || "Foundr1 Store"}</p>
+          <p>{state.storeName || "Foundr1 STORE"}</p>
           <h1>{getStatusLabel(state)}</h1>
         </div>
         <div className="customer-display-controls">

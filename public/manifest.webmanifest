@@ -4,16 +4,22 @@
   "short_name": "Foundr1 OS",
   "description": "飲食店向けオペレーションバックオフィス",
   "start_url": "/os",
-  "scope": "/",
+  "scope": "/os",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#202a36",
+  "background_color": "#000000",
   "theme_color": "#202a36",
   "icons": [
     {
-      "src": "/icons/foundr1-app.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/foundr1-os-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/foundr1-os-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
