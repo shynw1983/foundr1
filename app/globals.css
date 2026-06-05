@@ -16776,16 +16776,41 @@ body :where(
   .os-home-shell .os-home-topbar {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
     gap: 10px;
     margin-bottom: 16px;
   }
 
   .os-home-shell .os-home-topbar .brand-block {
-    width: auto;
+    width: 100%;
     min-width: 0;
     padding-right: 0;
+  }
+
+  .os-home-shell .os-home-user {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .os-home-shell .os-home-user .user-panel {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    width: 100%;
+  }
+
+  .os-home-shell .os-home-user .account-menu {
+    min-width: 0;
+  }
+
+  .os-home-shell .os-home-user .user-badge {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .os-home-shell .os-home-user .user-badge-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .os-home-shell .topbar-actions {
