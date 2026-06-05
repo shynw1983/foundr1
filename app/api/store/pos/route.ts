@@ -525,7 +525,7 @@ export async function POST(request: Request) {
     const sweetness = groupLabels.get("sweetness")?.join(", ") ?? "";
     const ice = groupLabels.get("ice")?.join(", ") ?? "";
     const optionLabels = selectedOptions
-      .filter((option) => !["size", "temperature", "sweetness", "ice", "topping"].includes(option.groupKey))
+      .filter((option) => option.groupKey === "option")
       .map((option) => option.name);
     const toppingOptions = selectedOptions.filter((option) => option.groupKey === "topping" || !["size", "temperature", "sweetness", "ice", "option"].includes(option.groupKey));
     await sql`

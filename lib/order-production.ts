@@ -18,6 +18,16 @@ function getProductionArea(brandName: string) {
   return { key: normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "general", label: brandName || "制作" };
 }
 
+function uniqueTextParts(parts: string[]) {
+  const seen = new Set<string>();
+  return parts.filter((part) => {
+    const normalized = part.trim();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
 export async function ensureProductionTasksForOrder(orderId: string) {
   const normalizedOrderId = normalizeText(orderId);
   if (!normalizedOrderId) return [];
@@ -73,7 +83,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     const area = getProductionArea(row.brandName);
     const key = `${row.brandId || ""}:${area.key}`;
     const current = grouped.get(key) ?? { brandId: row.brandId || "", areaKey: area.key, areaLabel: area.label, lines: [] };
-    const details = [row.sizeLabel, row.temperature, row.sweetness, row.ice, row.optionLabel, row.toppings].filter(Boolean).join(" / ");
+    const details = uniqueTextParts([row.sizeLabel, row.temperature, row.sweetness, row.ice, row.optionLabel, row.toppings]).join(" / ");
     current.lines.push(`${row.itemName} x${row.quantity}${details ? ` (${details})` : ""}`);
     grouped.set(key, current);
   }
@@ -98,7 +108,11 @@ export async function ensureProductionTasksForOrder(orderId: string) {
         ${task.areaLabel},
         ${task.lines.join('\n')}
       )
-      on conflict do nothing
+      on conflict (order_id, production_area, production_area_label)
+      do update set
+        item_summary = excluded.item_summary,
+        updated_at = now()
+      where order_production_tasks.status <> 'ready'
     `;
   }
 
