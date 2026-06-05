@@ -1,6 +1,8 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { createPickupCode } from "../../../../lib/customer-orders";
+import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
+import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
+import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -470,7 +472,7 @@ export async function POST(request: Request) {
       ${storeId},
       'store_pos',
       ${pickupCode},
-      'completed',
+      'new',
       'paid',
       ${paymentMethod},
       ${pickupDate},
@@ -494,7 +496,7 @@ export async function POST(request: Request) {
       })},
       ${firstItemName},
       now(),
-      now(),
+      null,
       now(),
       ${cashSessionId ?? null},
       now()
@@ -564,7 +566,9 @@ export async function POST(request: Request) {
     `;
   }
 
+  await ensureProductionTasksForOrder(orderId);
   await syncWebReservationToSalesOrder(orderId);
+  await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
   const todaySummary = await getTodaySummary(storeId);
   return Response.json({ ok: true, orderId, pickupCode, amount, cashTenderedAmount, cashChangeAmount, todaySummary });
 }

@@ -8,6 +8,7 @@ type StoreOrder = {
   id: string;
   storeId: string;
   storeName: string;
+  orderSource: string;
   pickupCode: string;
   status: string;
   paymentStatus: string;
@@ -25,6 +26,15 @@ type StoreOrder = {
   customerName: string;
   customerPhone: string;
   customerNote: string;
+  orderType: string;
+  productionTasks: Array<{
+    id: string;
+    productionArea: string;
+    productionAreaLabel: string;
+    status: string;
+    printStatus: string;
+    itemSummary: string;
+  }>;
   createdAt: string;
   squareReceiptUrl: string;
 };
@@ -79,6 +89,18 @@ const paymentLabels: Record<string, string> = {
   refunded: "返金済み"
 };
 
+const sourceLabels: Record<string, string> = {
+  store_pos: "POS",
+  nanacha_web: "Web",
+  maamaa_web: "Web"
+};
+
+const orderTypeLabels: Record<string, string> = {
+  eat_in: "店内",
+  takeout: "持ち帰り",
+  delivery: "外送"
+};
+
 const nextActions: Record<string, Array<{ status: string; label: string }>> = {
   new: [{ status: "preparing", label: "制作開始" }],
   preparing: [{ status: "ready", label: "受け取り可" }],
@@ -116,6 +138,12 @@ function isRecentPendingPaymentOrder(order: StoreOrder) {
   const createdAt = new Date(order.createdAt).getTime();
   if (!Number.isFinite(createdAt)) return false;
   return Date.now() - createdAt < pendingPaymentVisibleMinutes * 60 * 1000;
+}
+
+function getProductionTaskLabel(status: string) {
+  if (status === "ready") return "完成";
+  if (status === "preparing") return "制作中";
+  return "待ち";
 }
 
 const storeOrderStatusPriority: Record<string, number> = {
@@ -631,7 +659,7 @@ export default function StoreOrdersPage() {
             </section>
           ) : null}
           <div className="store-orders-toolbar">
-            <h2>Web予約注文</h2>
+            <h2>注文ワーク台</h2>
             <button type="button" className="secondary-button" onClick={refresh}>
               {isRefreshing ? "更新中..." : "更新"}
             </button>
@@ -697,8 +725,16 @@ export default function StoreOrdersPage() {
                 <span className="store-order-code">{order.pickupCode}</span>
                 <strong>{splitLines(order.drink).join(" / ")}</strong>
                 <span className="store-order-customer">
+                  {(sourceLabels[order.orderSource] ?? order.orderSource) || "注文"} / {(orderTypeLabels[order.orderType] ?? order.orderType) || "受け取り"}
+                </span>
+                <span className="store-order-customer">
                   {order.customerName || "名前未入力"}{order.customerPhone ? ` / ${order.customerPhone}` : ""}
                 </span>
+                {order.productionTasks?.length ? (
+                  <span className="store-order-task-summary">
+                    {order.productionTasks.map((task) => `${task.productionAreaLabel}:${getProductionTaskLabel(task.status)}`).join(" / ")}
+                  </span>
+                ) : null}
                 <small>{order.pickupDate} {order.pickupTime} / {statusLabels[order.status] ?? order.status}</small>
               </button>
             ))}
@@ -713,7 +749,7 @@ export default function StoreOrdersPage() {
                 <div>
                   <p className="eyebrow">{selectedOrder.storeName}</p>
                   <h2>{selectedOrder.pickupCode}</h2>
-                  <p>{selectedOrder.pickupDate} {selectedOrder.pickupTime}</p>
+                  <p>{selectedOrder.pickupDate} {selectedOrder.pickupTime} / {(sourceLabels[selectedOrder.orderSource] ?? selectedOrder.orderSource) || "注文"} / {(orderTypeLabels[selectedOrder.orderType] ?? selectedOrder.orderType) || "受け取り"}</p>
                 </div>
                 <div className="store-order-status-stack">
                   <span className="status-pill is-active">{statusLabels[selectedOrder.status] ?? selectedOrder.status}</span>
@@ -756,6 +792,19 @@ export default function StoreOrdersPage() {
                 <span>合計</span>
                 <strong>¥{Number(selectedOrder.amount).toLocaleString("ja-JP")}</strong>
               </div>
+
+              {selectedOrder.productionTasks?.length ? (
+                <div className="store-order-production-panel">
+                  <span>制作タスク</span>
+                  {selectedOrder.productionTasks.map((task) => (
+                    <div key={task.id}>
+                      <strong>{task.productionAreaLabel}</strong>
+                      <small>{getProductionTaskLabel(task.status)}</small>
+                      <p>{task.itemSummary}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="store-order-actions">
                 {(nextActions[selectedOrder.status] ?? []).map((action) => (

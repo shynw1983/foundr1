@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { getActiveStorePaymentAccount, getStorePaymentAccountById } from "./store-payment-accounts";
 
@@ -286,7 +287,12 @@ export async function updateCustomerOrder(orderId: string, patch: Partial<{
     where id = ${orderId}
     returning id::text
   `;
-  if (rows[0]?.id) await syncWebReservationToSalesOrder(rows[0].id as string);
+  if (rows[0]?.id) {
+    if (patch.paymentStatus === "paid" || patch.status === "new") {
+      await ensureProductionTasksForOrder(rows[0].id as string);
+    }
+    await syncWebReservationToSalesOrder(rows[0].id as string);
+  }
   return rows[0]?.id ? findCustomerOrderById(rows[0].id as string) : null;
 }
 

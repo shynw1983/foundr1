@@ -6451,6 +6451,229 @@ body :where(
   min-height: 48px;
 }
 
+.store-order-task-summary {
+  color: #1f6f55;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-order-production-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.store-order-production-panel > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-order-production-panel div {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.store-order-production-panel p {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.store-kitchen-page,
+.store-pickup-display-page {
+  display: grid;
+  gap: 14px;
+}
+
+.store-kitchen-toolbar,
+.store-pickup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.store-kitchen-toolbar select,
+.store-pickup-toolbar select {
+  min-width: min(240px, 100%);
+}
+
+.store-kitchen-toolbar span,
+.store-pickup-toolbar span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.store-kitchen-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.28fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.store-kitchen-board > div,
+.store-kitchen-board > aside,
+.store-pickup-column {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+}
+
+.store-kitchen-board h2,
+.store-pickup-column h2 {
+  margin: 0 0 12px;
+}
+
+.store-kitchen-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.store-kitchen-task {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.store-kitchen-task.is-preparing {
+  border-color: rgba(31, 111, 85, 0.38);
+  background: var(--green-soft);
+}
+
+.store-kitchen-task-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.store-kitchen-task-head strong {
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.store-kitchen-task-head span,
+.store-kitchen-task p,
+.store-kitchen-ready-list span,
+.store-kitchen-ready-list p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.store-kitchen-items {
+  display: grid;
+  gap: 6px;
+}
+
+.store-kitchen-items span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.store-kitchen-note {
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff7ed;
+}
+
+.store-kitchen-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.store-kitchen-actions button {
+  min-height: 48px;
+}
+
+.store-kitchen-ready-list {
+  display: grid;
+  gap: 8px;
+}
+
+.store-kitchen-ready-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-kitchen-ready-list strong {
+  font-size: 20px;
+}
+
+.store-kitchen-empty {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.store-pickup-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 62vh;
+}
+
+.store-pickup-column {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.store-pickup-column.is-ready {
+  border-color: rgba(31, 111, 85, 0.3);
+  background: var(--green-soft);
+}
+
+.store-pickup-code-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.store-pickup-code-grid strong {
+  display: grid;
+  place-items: center;
+  min-height: 86px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.store-pickup-code-grid p {
+  color: var(--muted);
+  font-weight: 850;
+}
+
 .pos-admin-toolbar {
   justify-content: space-between;
   flex-wrap: wrap;
@@ -16689,6 +16912,20 @@ body :where(
   }
 
   .store-pos-option-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-board,
+  .store-pickup-board {
+    grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-task-grid,
+  .store-pickup-code-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .store-kitchen-actions {
     grid-template-columns: 1fr;
   }
 

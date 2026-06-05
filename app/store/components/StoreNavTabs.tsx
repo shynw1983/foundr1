@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, Home, Menu, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, Monitor, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -25,6 +25,8 @@ type StoreOrdersResponse = {
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
   { label: "注文", href: "/store/orders", icon: ClipboardList },
+  { label: "制作屏", href: "/store/kitchen", icon: ChefHat },
+  { label: "取餐屏", href: "/store/pickup-display", icon: Monitor },
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
@@ -60,7 +62,7 @@ function getAlertOrderKey(order: { id: string; status: string; paymentStatus: st
   return `${order.id}:${order.status}:${order.paymentStatus}`;
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "orders" | "menu" | "procedures" | "timecard" | "pos" }) {
+export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" }) {
   const activeHref = active === "home" ? "/store" : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);

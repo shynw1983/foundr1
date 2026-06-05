@@ -1442,6 +1442,23 @@ create table if not exists store_customer_order_items (
 
 alter table store_customer_order_items add column if not exists quantity integer not null default 1;
 
+create table if not exists order_production_tasks (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references store_customer_orders(id) on delete cascade,
+  store_id uuid references stores(id) on delete cascade,
+  brand_id uuid references brands(id) on delete set null,
+  production_area text not null default 'general',
+  production_area_label text not null default '制作',
+  status text not null default 'new',
+  print_status text not null default 'pending',
+  item_summary text not null default '',
+  started_at timestamptz,
+  ready_at timestamptz,
+  completed_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists sales_orders (
   id uuid primary key default gen_random_uuid(),
   source_order_id uuid unique,
@@ -1816,6 +1833,9 @@ create index if not exists idx_store_customer_orders_payment_session on store_cu
 create index if not exists idx_store_customer_orders_payment_id on store_customer_orders(payment_provider, payment_id);
 create index if not exists idx_store_customer_orders_pos_cash_session on store_customer_orders(pos_cash_session_id, created_at desc);
 create index if not exists idx_store_customer_order_items_order on store_customer_order_items(order_id, sort_order);
+create index if not exists idx_order_production_tasks_order on order_production_tasks(order_id, production_area);
+create unique index if not exists idx_order_production_tasks_unique_area on order_production_tasks(order_id, production_area, production_area_label);
+create index if not exists idx_order_production_tasks_store_status on order_production_tasks(store_id, status, created_at desc);
 create index if not exists idx_pos_cash_sessions_store_date on pos_cash_sessions(store_id, business_date desc, status);
 create unique index if not exists idx_pos_cash_sessions_one_open_per_store
   on pos_cash_sessions(store_id)
