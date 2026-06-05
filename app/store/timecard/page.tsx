@@ -246,6 +246,7 @@ export default function StoreTimecardPage() {
   }, []);
 
   const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
+  const isStoreTerminal = data?.currentEmployeeRole === "store_terminal";
   const isMobileStaffPunch = isMobileViewport && data?.currentEmployeeRole === "staff";
   const selectedEmployee = isMobileStaffPunch
     ? employeesForStore.find((employee) => employee.id === data?.currentEmployeeId) ?? null
@@ -482,7 +483,7 @@ export default function StoreTimecardPage() {
         <StoreNavTabs active="timecard" />
       </header>
 
-      <section className="store-timecard-grid">
+      <section className={`store-timecard-grid${isStoreTerminal ? " is-terminal-only" : ""}`}>
         <section className="panel store-timecard-punch">
           <div className="panel-title">
             <Clock3 />
@@ -578,7 +579,7 @@ export default function StoreTimecardPage() {
           </div>
         </section>
 
-        {isMobileStaffPunch ? (
+        {!isStoreTerminal && isMobileStaffPunch ? (
           <section className="store-timecard-mobile-actions" aria-label="タイムカード機能">
             {mobilePanelItems.map((item) => {
               const Icon = item.icon;
@@ -602,7 +603,7 @@ export default function StoreTimecardPage() {
           </section>
         ) : null}
 
-        <section className={`panel store-timecard-history${isMobileStaffPunch && activeMobilePanel !== "history" ? " is-mobile-collapsed" : ""}`}>
+        {!isStoreTerminal ? <section className={`panel store-timecard-history${isMobileStaffPunch && activeMobilePanel !== "history" ? " is-mobile-collapsed" : ""}`}>
           <div className="panel-title store-mobile-panel-title">
             <BriefcaseBusiness />
             <div>
@@ -627,9 +628,9 @@ export default function StoreTimecardPage() {
               <p className="empty-state-text">選択中の従業員には今月の打刻がまだありません。</p>
             )}
           </div>
-        </section>
+        </section> : null}
 
-        <section className={`panel store-shift-request-panel${isMobileStaffPunch && (activeMobilePanel === "" || activeMobilePanel === "history") ? " is-mobile-collapsed" : ""} is-mobile-panel-${activeMobilePanel}`}>
+        {!isStoreTerminal ? <section className={`panel store-shift-request-panel${isMobileStaffPunch && (activeMobilePanel === "" || activeMobilePanel === "history") ? " is-mobile-collapsed" : ""} is-mobile-panel-${activeMobilePanel}`}>
           <div className="panel-title store-mobile-panel-title">
             <ShiftPanelIcon />
             <div>
@@ -753,7 +754,7 @@ export default function StoreTimecardPage() {
               <p className="empty-state-text">シフト連絡はまだありません。</p>
             )}
           </div>
-        </section>
+        </section> : null}
       </section>
     </main>
   );

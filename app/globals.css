@@ -6606,11 +6606,13 @@ body :where(
 .store-kitchen-task-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .store-kitchen-task {
   display: grid;
+  align-content: start;
   gap: 10px;
   min-width: 0;
   border: 2px solid var(--line);
@@ -7264,6 +7266,14 @@ body :where(
   grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
   gap: 18px;
   align-items: start;
+}
+
+.store-timecard-grid.is-terminal-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.store-timecard-grid.is-terminal-only .store-timecard-punch {
+  max-width: 920px;
 }
 
 .store-timecard-punch,
