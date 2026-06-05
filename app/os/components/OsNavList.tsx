@@ -53,6 +53,7 @@ const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
+  { label: "店舗ワークベンチ", href: "/store", icon: Store },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
@@ -101,6 +102,15 @@ export type OsNavModuleWithChildren = OsNavModule & {
 };
 
 const navModules: OsNavModule[] = [
+  {
+    id: "store-workbench",
+    label: "店舗ワークベンチ",
+    icon: Store,
+    href: "/store",
+    paths: [
+      { href: "/store" }
+    ]
+  },
   {
     id: "orders",
     label: "発注・購入管理",
@@ -207,7 +217,7 @@ function getModuleNavPaths(pathname: string) {
 
 function canShowInCurrentModule(pathname: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
-  if (item.href === "/os") return true;
+  if (item.href === "/os" || item.href === "/store") return true;
   return getModuleNavPaths(pathname).has(item.href);
 }
 

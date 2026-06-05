@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, Monitor, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -30,7 +30,8 @@ const tabs = [
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
-  { label: "POS", href: "/store/pos", icon: ShoppingCart }
+  { label: "POS", href: "/store/pos", icon: ShoppingCart },
+  { label: "OS", href: "/os", icon: Settings }
 ];
 
 function formatStoreClock(date: Date) {
@@ -76,7 +77,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-    ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard")
+    ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
     : tabs;
 
   const clearOrderAlert = () => {

@@ -39,6 +39,14 @@ type PayrollStatutoryAlert = {
 
 const osModules: OsModule[] = [
   {
+    title: "店舗ワークベンチ",
+    description: "店舗側の注文、販売状態、手順書、タイムカード、POSへ移動",
+    href: "/store",
+    icon: Store,
+    status: "active",
+    roles: ["owner", "manager", "buyer", "store_owner", "staff"]
+  },
+  {
     title: "発注・購入管理",
     description: "店舗発注、購入、納品、レシート、発注先を管理",
     href: "/os/orders",

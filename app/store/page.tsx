@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -39,6 +39,13 @@ const storeModules = [
     href: "/store/pos",
     icon: ShoppingCart,
     status: "準備中"
+  },
+  {
+    title: "OS",
+    description: "管理画面で商品、スタッフ、店舗、設定を確認します。",
+    href: "/os",
+    icon: Settings,
+    status: "利用可能"
   }
 ];
 
@@ -48,7 +55,7 @@ export default function StoreHomePage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
     isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-      ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard")
+      ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
       : storeModules
   ), [employeeRole, isMobileViewport, isTimecardEmployee]);
 
