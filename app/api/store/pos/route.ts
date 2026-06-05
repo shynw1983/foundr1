@@ -257,12 +257,13 @@ async function getPosSettings(selectedStoreId: string) {
       coalesce(dine_in_enabled, true) as "dineInEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
+      coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode"
     from pos_store_settings
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
-  return rows[0] ?? { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+  return rows[0] ?? { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included" };
 }
 
 export async function GET(request: Request) {

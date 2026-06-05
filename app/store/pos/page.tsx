@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, CreditCard, ExternalLink, Minus, MonitorSmartphone, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
@@ -125,6 +125,7 @@ type PosSettings = {
   dineInEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
+  externalPaymentTerminalBrand: string;
   priceTaxMode: string;
 };
 
@@ -300,7 +301,7 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included" });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -333,6 +334,7 @@ export default function StorePosPage() {
   const [refundReason, setRefundReason] = useState("");
   const [refundSaving, setRefundSaving] = useState(false);
   const [refundingTransactionId, setRefundingTransactionId] = useState("");
+  const [completedDisplayState, setCompletedDisplayState] = useState<Record<string, unknown> | null>(null);
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
@@ -380,6 +382,7 @@ export default function StorePosPage() {
       dineInEnabled: body.posSettings?.dineInEnabled !== false,
       dineInTaxRate: Number(body.posSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: Number(body.posSettings?.takeoutTaxRate ?? 8),
+      externalPaymentTerminalBrand: body.posSettings?.externalPaymentTerminalBrand ?? "PayCAS",
       priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included"
     };
     setPosSettings(nextPosSettings);
@@ -490,6 +493,7 @@ export default function StorePosPage() {
     setSelectedTransaction(null);
     setRefundReason("");
     setRefundingTransactionId("");
+    setCompletedDisplayState(null);
     void load(storeId);
   }
 
@@ -516,6 +520,22 @@ export default function StorePosPage() {
     return Array.from(counts.values())
       .map(({ option, count }) => `${option.groupName}: ${option.name}${count > 1 ? ` x${count}` : ""}`)
       .join(" / ");
+  }
+
+  function getPaymentDisplayLabel(value: string) {
+    if (value === "cash") return "現金";
+    if (value === "card") return posSettings.externalPaymentTerminalBrand || "外部決済端末";
+    if (value === "other") return "その他";
+    return value || "-";
+  }
+
+  async function publishCustomerDisplayState(state: Record<string, unknown>) {
+    if (!selectedStoreId) return;
+    await fetch("/api/store/pos/customer-display", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: selectedStoreId, state })
+    }).catch(() => undefined);
   }
 
   function getCartKey(item: PosMenuItem, options: PosSelectedOption[]) {
@@ -658,12 +678,70 @@ export default function StorePosPage() {
       await loadReconciliation(selectedStoreId);
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
       setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${changeLabel}`);
+      setCompletedDisplayState({
+        status: "complete",
+        storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
+        orderType,
+        paymentMethod,
+        paymentLabel: getPaymentDisplayLabel(paymentMethod),
+        externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
+        pickupCode: body.pickupCode,
+        subtotal: body.amount,
+        cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
+        cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          optionLabel: getOptionLabel(item.selectedOptions),
+          quantity: item.quantity,
+          unitPrice: getItemPrice(item) + item.optionTotal,
+          amount: (getItemPrice(item) + item.optionTotal) * item.quantity
+        }))
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
     } finally {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (!selectedStoreId || !canUseRegister) return;
+    if (completedDisplayState) {
+      void publishCustomerDisplayState(completedDisplayState);
+      const timer = window.setTimeout(() => setCompletedDisplayState(null), 9000);
+      return () => window.clearTimeout(timer);
+    }
+    const status = cart.length === 0
+      ? "idle"
+      : paymentMethod === "cash"
+        ? cashTenderedAmount.trim() && cashChangeAmount !== null && cashChangeAmount >= 0
+          ? "cash_change"
+          : "editing"
+        : "external_wait";
+    const timer = window.setTimeout(() => {
+      void publishCustomerDisplayState({
+        status,
+        storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
+        orderType,
+        paymentMethod,
+        paymentLabel: getPaymentDisplayLabel(paymentMethod),
+        externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
+        pickupCode: "",
+        subtotal,
+        cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
+        cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          optionLabel: getOptionLabel(item.selectedOptions),
+          quantity: item.quantity,
+          unitPrice: getItemPrice(item) + item.optionTotal,
+          amount: (getItemPrice(item) + item.optionTotal) * item.quantity
+        }))
+      });
+    }, 180);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedStoreId, subtotal, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
@@ -949,6 +1027,11 @@ export default function StorePosPage() {
             </div>
             <div className="store-pos-cart-head-actions">
               <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()}>履歴</button>
+              <a className="secondary-button store-pos-display-link" href={`/store/pos/customer-display${selectedStoreId ? `?storeId=${selectedStoreId}` : ""}`} target="_blank" rel="noreferrer">
+                <MonitorSmartphone size={16} />
+                客席表示
+                <ExternalLink size={14} />
+              </a>
               <strong>{cartCount} 点</strong>
             </div>
           </div>
@@ -997,11 +1080,18 @@ export default function StorePosPage() {
                   onClick={() => setPaymentMethod(option.value)}
                 >
                   <Icon size={18} />
-                  {option.label}
+                  {option.value === "card" ? getPaymentDisplayLabel(option.value) : option.label}
                 </button>
               );
             })}
           </div>
+
+          {paymentMethod !== "cash" ? (
+            <div className="store-pos-external-payment">
+              <span>{getPaymentDisplayLabel(paymentMethod)}</span>
+              <strong>端末の決済完了画面を確認してから会計を確定してください。</strong>
+            </div>
+          ) : null}
 
           {paymentMethod === "cash" ? (
             <div className="store-pos-cash-payment">

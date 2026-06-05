@@ -25,8 +25,8 @@ type StoreOrdersResponse = {
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
   { label: "注文", href: "/store/orders", icon: ClipboardList },
-  { label: "制作屏", href: "/store/kitchen", icon: ChefHat },
-  { label: "取餐屏", href: "/store/pickup-display", icon: Monitor },
+  { label: "キッチン", href: "/store/display/kitchen", icon: ChefHat },
+  { label: "受取表示", href: "/store/display/pickup", icon: Monitor },
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
@@ -64,7 +64,13 @@ function getAlertOrderKey(order: { id: string; status: string; paymentStatus: st
 }
 
 export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" }) {
-  const activeHref = active === "home" ? "/store" : `/store/${active}`;
+  const activeHref = active === "home"
+    ? "/store"
+    : active === "kitchen"
+      ? "/store/display/kitchen"
+      : active === "pickup-display"
+        ? "/store/display/pickup"
+        : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState("");
@@ -77,7 +83,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
-    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/kitchen", "/store/pickup-display", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
+    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
     : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
       ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
       : tabs;

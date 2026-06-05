@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
-import { useDisplayMode } from "../components/useDisplayMode";
+import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
+import { useDisplayMode } from "../../components/useDisplayMode";
 
 type KitchenTask = {
   id: string;
@@ -72,7 +72,7 @@ export default function StoreKitchenPage() {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
-    const response = await fetch(`/api/store/kitchen?${params.toString()}`, { cache: "no-store" });
+    const response = await fetch(`/api/store/display/kitchen?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
       setLoading(false);
       return;
@@ -110,7 +110,7 @@ export default function StoreKitchenPage() {
 
   async function updateTask(task: KitchenTask, status: "preparing" | "ready") {
     setSavingId(task.id);
-    const response = await fetch("/api/store/kitchen", {
+    const response = await fetch("/api/store/display/kitchen", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storeId: selectedStoreId, taskId: task.id, status, area: selectedArea })
@@ -223,7 +223,7 @@ export default function StoreKitchenPage() {
       />
       {menuOpen ? (
         <div className="store-display-menu">
-          <strong>制作屏</strong>
+          <strong>キッチン</strong>
           {stores.length > 1 ? (
             <select value={selectedStoreId} onChange={(event) => {
               const storeId = event.target.value;

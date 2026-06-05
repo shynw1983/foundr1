@@ -33,6 +33,7 @@ async function getSettings(storeId: string) {
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled",
       coalesce(pos_store_settings.dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(pos_store_settings.takeout_tax_rate, 8)::float as "takeoutTaxRate",
+      coalesce(nullif(pos_store_settings.external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(pos_store_settings.updated_at::text, '') as "updatedAt"
     from stores
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     dineInEnabled?: boolean;
     dineInTaxRate?: number | string;
     takeoutTaxRate?: number | string;
+    externalPaymentTerminalBrand?: string;
     priceTaxMode?: string;
   };
   const access = await getStoreOrderAccess(session);
@@ -78,12 +80,14 @@ export async function POST(request: Request) {
 
   const dineInTaxRate = normalizeRate(body.dineInTaxRate, 10);
   const takeoutTaxRate = normalizeRate(body.takeoutTaxRate, 8);
+  const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
   await sql`
     insert into pos_store_settings (
       store_id,
       dine_in_enabled,
       dine_in_tax_rate,
       takeout_tax_rate,
+      external_payment_terminal_brand,
       price_tax_mode,
       updated_by,
       updated_at
@@ -93,6 +97,7 @@ export async function POST(request: Request) {
       ${body.dineInEnabled !== false},
       ${dineInTaxRate},
       ${takeoutTaxRate},
+      ${externalPaymentTerminalBrand},
       ${priceTaxMode},
       ${session.id},
       now()
@@ -102,6 +107,7 @@ export async function POST(request: Request) {
       dine_in_enabled = excluded.dine_in_enabled,
       dine_in_tax_rate = excluded.dine_in_tax_rate,
       takeout_tax_rate = excluded.takeout_tax_rate,
+      external_payment_terminal_brand = excluded.external_payment_terminal_brand,
       price_tax_mode = excluded.price_tax_mode,
       updated_by = excluded.updated_by,
       updated_at = now()

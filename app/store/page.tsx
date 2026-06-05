@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -10,6 +10,20 @@ const storeModules = [
     description: "Web予約注文を確認し、制作開始から受け渡し完了まで処理します。",
     href: "/store/orders",
     icon: ClipboardList,
+    status: "利用可能"
+  },
+  {
+    title: "キッチン",
+    description: "制作タスクを厨房の表示端末で確認し、制作開始から完成まで処理します。",
+    href: "/store/display/kitchen",
+    icon: ChefHat,
+    status: "利用可能"
+  },
+  {
+    title: "受取表示",
+    description: "準備中と受け取り可能な番号を客席向け表示で案内します。",
+    href: "/store/display/pickup",
+    icon: Monitor,
     status: "利用可能"
   },
   {
@@ -55,7 +69,7 @@ export default function StoreHomePage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
     employeeRole === "store_terminal"
-      ? storeModules.filter((module) => ["/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
+      ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
       : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
         ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
         : storeModules

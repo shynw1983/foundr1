@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
-import { useDisplayMode } from "../components/useDisplayMode";
+import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
+import { useDisplayMode } from "../../components/useDisplayMode";
 
 type PickupOrder = {
   pickupCode: string;
@@ -51,7 +51,7 @@ export default function StorePickupDisplayPage() {
   async function load(storeId = selectedStoreIdRef.current) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
-    const response = await fetch(`/api/store/pickup-display?${params.toString()}`, { cache: "no-store" });
+    const response = await fetch(`/api/store/display/pickup?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json();
     const nextStoreId = String(body.selectedStoreId || storeId || "");
@@ -213,7 +213,7 @@ export default function StorePickupDisplayPage() {
       />
       {menuOpen ? (
         <div className="store-display-menu">
-          <strong>取餐屏</strong>
+          <strong>受取表示</strong>
           {stores.length > 1 ? (
             <select value={selectedStoreId} onChange={(event) => {
               const storeId = event.target.value;
