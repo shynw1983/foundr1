@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, CreditCard, ExternalLink, Minus, MonitorSmartphone, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
@@ -1184,11 +1184,6 @@ export default function StorePosPage() {
             </div>
             <div className="store-pos-cart-head-actions">
               <button className="secondary-button" type="button" onClick={() => void openTransactionDialog()}>履歴</button>
-              <a className="secondary-button store-pos-display-link" href={`/store/pos/customer-display${selectedStoreId ? `?storeId=${selectedStoreId}` : ""}`} target="_blank" rel="noreferrer">
-                <MonitorSmartphone size={16} />
-                客席表示
-                <ExternalLink size={14} />
-              </a>
               <strong>{cartCount} 点</strong>
             </div>
           </div>

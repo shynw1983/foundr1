@@ -5958,17 +5958,6 @@ body :where(
   gap: 8px;
 }
 
-.store-pos-display-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 38px;
-  padding: 0 10px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
 .store-pos-cart-head-actions > strong {
   display: inline-flex;
   align-items: center;
