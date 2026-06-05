@@ -6645,7 +6645,7 @@ body :where(
 .store-kitchen-item-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   min-height: 42px;
   min-width: 0;
@@ -6655,7 +6655,7 @@ body :where(
   overflow-wrap: anywhere;
   color: var(--ink);
   font: inherit;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -6668,9 +6668,10 @@ body :where(
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 5px 10px;
-  background: #111827;
+  background: #dc2626;
   color: white;
   font-size: 17px;
+  font-weight: 850;
   line-height: 1;
 }
 
@@ -6686,7 +6687,7 @@ body :where(
 }
 
 .store-kitchen-item-line.is-checked b {
-  background: #1f6f55;
+  background: #b91c1c;
   color: white;
 }
 
