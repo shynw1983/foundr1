@@ -71,7 +71,7 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   const selectedSections = menu.menuSections.map((section) => {
     const ids = selectedIdsForSection(rawItem, section);
     if (ids.length > section.limit) {
-      selectionError = `${section.title} can only select up to ${section.limit}`;
+      selectionError = `${section.title}は${section.limit}個まで選択できます。数量を減らしてから、もう一度お試しください。`;
       return { section, items: [] };
     }
     const items = ids.map((id) => findChoice(section.items, id, true));
