@@ -18248,6 +18248,90 @@ body {
   background: rgba(255, 255, 255, 0.075);
 }
 
+.mobile-nav-menu summary {
+  border-color: rgba(31, 111, 91, 0.28);
+  background: var(--color-brand);
+  color: white;
+  box-shadow: 0 8px 18px rgba(24, 64, 52, 0.18);
+}
+
+.mobile-nav-menu summary:hover,
+.mobile-nav-menu[open] summary {
+  background: var(--color-brand-hover);
+}
+
+.hamburger-button {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.mobile-nav-list {
+  border-color: var(--color-brand-border);
+  background: var(--color-surface);
+  box-shadow: 0 18px 45px rgba(31, 42, 58, 0.16);
+}
+
+.mobile-nav-list a {
+  color: var(--color-text);
+}
+
+.mobile-nav-list a:hover,
+.mobile-nav-list a.is-active,
+.mobile-nav-module-link.is-active {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+
+.mobile-nav-list a.is-home {
+  border-color: var(--color-brand-border);
+  background: var(--color-brand);
+  color: white;
+}
+
+.mobile-nav-list a.follows-home::before {
+  background: var(--color-border);
+}
+
+.mobile-nav-section-heading {
+  border-color: var(--color-brand-border);
+  border-left-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand-ink);
+  box-shadow: none;
+}
+
+.mobile-nav-section-heading::before {
+  background: var(--color-surface);
+}
+
+.mobile-nav-section-heading svg,
+.mobile-nav-list .nav-shortcut-icon {
+  color: var(--color-brand);
+}
+
+.mobile-nav-user {
+  border-top-color: var(--color-border);
+}
+
+.mobile-nav-user .user-badge,
+.mobile-nav-user .notification-menu summary,
+.mobile-nav-user .notification-placeholder,
+.mobile-nav-user .account-menu summary,
+.mobile-nav-user .os-language-picker select {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.mobile-nav-user .os-language-label,
+.mobile-nav-user .user-badge-muted {
+  color: var(--color-text-muted);
+}
+
+.mobile-nav-user .user-badge-role {
+  color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
 .topbar,
 .os-home-topbar,
 .store-workbench-topbar,
