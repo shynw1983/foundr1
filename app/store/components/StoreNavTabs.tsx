@@ -76,9 +76,11 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
-  const visibleTabs = isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-    ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
-    : tabs;
+  const visibleTabs = employeeRole === "store_terminal"
+    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/kitchen", "/store/pickup-display", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
+    : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
+      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
+      : tabs;
 
   const clearOrderAlert = () => {
     setHasPendingOrderAlert(false);

@@ -75,7 +75,7 @@ type StorePayrollConfig = {
 };
 
 function normalizeRole(role?: string) {
-  return ["owner", "manager", "buyer", "store_owner", "staff"].includes(role ?? "") ? role as string : "staff";
+  return ["owner", "manager", "buyer", "store_owner", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
 }
 
 function normalizeStatus(status?: string) {
@@ -204,6 +204,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
+  }
+  if (role === "store_terminal" && visibleStoreIds.length === 0) {
+    return Response.json({ error: "店舗Pad は閲覧可能店舗を1つ以上選択してください。" }, { status: 400 });
   }
   if (password) {
     const passwordError = validatePasswordStrength(password);

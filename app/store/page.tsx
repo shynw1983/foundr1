@@ -54,9 +54,11 @@ export default function StoreHomePage() {
   const [isTimecardEmployee, setIsTimecardEmployee] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
-    isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-      ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
-      : storeModules
+    employeeRole === "store_terminal"
+      ? storeModules.filter((module) => ["/store/orders", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
+      : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
+        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
+        : storeModules
   ), [employeeRole, isMobileViewport, isTimecardEmployee]);
 
   useEffect(() => {

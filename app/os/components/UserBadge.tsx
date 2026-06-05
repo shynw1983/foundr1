@@ -11,6 +11,7 @@ const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   store_owner: "加盟店オーナー",
+  store_terminal: "店舗Pad",
   staff: "Staff",
   buyer: "購入担当"
 };

@@ -381,6 +381,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           and employee_scopes.scope_type = 'store'
         left join stores on stores.id = employee_scopes.store_id
         where employees.status = 'active'
+          and employees.role <> 'store_terminal'
           and (
             ${scope.allStores}
             or employees.id::text = ${session?.id ?? ""}

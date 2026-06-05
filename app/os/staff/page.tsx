@@ -116,6 +116,7 @@ const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   store_owner: "加盟店オーナー",
+  store_terminal: "店舗Pad",
   buyer: "購入担当",
   staff: "店舗スタッフ"
 };
@@ -796,6 +797,7 @@ function StaffFormFields({
           <span>権限</span>
           <select name="role" defaultValue={member?.role ?? "staff"}>
             <option value="staff">店舗スタッフ</option>
+            <option value="store_terminal">店舗Pad</option>
             <option value="store_owner">加盟店オーナー</option>
             <option value="buyer">購入担当</option>
             <option value="manager">Manager</option>

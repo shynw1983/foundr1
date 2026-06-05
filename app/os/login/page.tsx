@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { OsLanguagePicker } from "../components/OsTranslationProvider";
 
 function getDefaultPathForRole(role?: string) {
+  if (role === "store_terminal") return "/store";
   if (role === "buyer") return "/os/procurement";
   if (role === "staff") return "/os/orders";
   if (role === "store_owner") return "/os";

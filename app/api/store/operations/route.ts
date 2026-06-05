@@ -82,6 +82,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
+  if (session.role === "store_terminal") return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
 
   const access = await getStoreOrderAccess(session);
   const body = await request.json().catch(() => null) as StoreOperationPatch | null;

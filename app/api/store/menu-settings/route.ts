@@ -163,6 +163,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role === "store_terminal") return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const storeId = normalizeText(body.storeId);

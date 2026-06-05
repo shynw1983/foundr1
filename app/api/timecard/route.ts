@@ -59,6 +59,7 @@ type PayrollConfirmationRow = {
 const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
 const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner"]);
 const mobilePunchRoles = new Set(["staff"]);
+const storeTerminalRole = "store_terminal";
 
 const emptyPayrollTotals = {
   workDays: 0,
@@ -1536,6 +1537,11 @@ export async function POST(request: Request) {
   const employeeId = session.role === "staff"
     ? session.id
     : String(body.employeeId ?? "");
+  const punchSource = session.role === storeTerminalRole
+    ? "store_terminal"
+    : isMobilePunch
+      ? "mobile"
+      : "store_tablet";
   if (!employeeId) {
     return Response.json({ error: "打刻する従業員を選択してください。" }, { status: 400 });
   }
@@ -1595,7 +1601,7 @@ export async function POST(request: Request) {
       ${employeeId},
       ${storeId},
       ${punchType},
-      ${isMobilePunch ? "mobile" : "store_tablet"},
+      ${punchSource},
       ${String(body.note ?? "").trim() || null},
       ${locationCheck?.mobileLatitude ?? null},
       ${locationCheck?.mobileLongitude ?? null},
@@ -1621,7 +1627,7 @@ export async function POST(request: Request) {
       punchType,
       employeeId,
       createdBy: session.id,
-      source: isMobilePunch ? "mobile" : "store_tablet",
+      source: punchSource,
       locationVerdict: locationCheck?.verdict ?? null,
       distanceMeters: locationCheck?.distanceMeters ?? null,
       mobileAccuracyMeters: locationCheck?.mobileAccuracyMeters ?? null
