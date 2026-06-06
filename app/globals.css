@@ -20129,4 +20129,64 @@ a:focus-visible {
   .os-home-shell .mobile-nav-list .nav-shortcut-icon {
     color: var(--color-brand);
   }
+
+  .shell .sidebar .mobile-nav-user,
+  .os-home-shell .mobile-nav-user {
+    margin-top: 10px;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .shell .sidebar .mobile-nav-user .user-panel,
+  .os-home-shell .mobile-nav-user .user-panel {
+    gap: 10px;
+  }
+
+  .shell .sidebar .mobile-nav-user .user-badge,
+  .os-home-shell .mobile-nav-user .user-badge {
+    min-height: 46px;
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .shell .sidebar .mobile-nav-user .user-badge-name,
+  .os-home-shell .mobile-nav-user .user-badge-name {
+    color: var(--color-text);
+  }
+
+  .shell .sidebar .mobile-nav-user .user-badge-role,
+  .os-home-shell .mobile-nav-user .user-badge-role {
+    background: var(--color-brand-soft);
+    color: var(--color-brand);
+  }
+
+  .shell .sidebar .mobile-nav-user .os-language-label,
+  .os-home-shell .mobile-nav-user .os-language-label {
+    display: block;
+    color: var(--color-muted);
+  }
+
+  .shell .sidebar .mobile-nav-user .os-language-picker,
+  .shell .sidebar .mobile-nav-user .os-language-picker select,
+  .os-home-shell .mobile-nav-user .os-language-picker,
+  .os-home-shell .mobile-nav-user .os-language-picker select {
+    width: 100%;
+  }
+
+  .shell .sidebar .mobile-nav-user .os-language-picker select,
+  .os-home-shell .mobile-nav-user .os-language-picker select {
+    min-height: 42px;
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .shell .sidebar .mobile-nav-user .account-menu-panel,
+  .os-home-shell .mobile-nav-user .account-menu-panel {
+    position: static;
+    margin-top: 8px;
+    border-color: var(--color-border);
+    background: var(--color-surface);
+  }
 }
