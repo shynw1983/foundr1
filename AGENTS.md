@@ -209,7 +209,9 @@ When editing UI:
 - Use normal button heights for mobile action rows.
 - Sidebar/mobile menu must be scrollable when content is long.
 - Product cards and comparison history must wrap before tablet widths overflow.
-- The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation.
+- The OS navigation/sidebar must always keep language switching available near the top of the navigation, including collapsed desktop sidebars and mobile navigation. In collapsed desktop sidebars, show only a globe icon for language switching; when the sidebar is expanded, show the full language selector/name.
+- Keep sidebar active states minimal. Do not add decorative accent lines or extra highlight colors; use only the restrained active background/text treatment.
+- Do not let native form controls fall back to browser/system blue. Checkboxes and compact selectors should use the Foundr1 green theme and stable compact dimensions. Broad input styles must not accidentally stretch checkboxes into large blocks.
 
 ## Translation
 

@@ -135,6 +135,11 @@ alter table employees add column if not exists resignation_reason text;
 alter table employees add column if not exists business_type text;
 alter table employees add column if not exists is_foreign_national boolean not null default false;
 alter table employees add column if not exists employee_type text not null default 'part_time';
+update employees
+set staff_category = 'device',
+    payroll_subject = 'none'
+where role = 'store_terminal'
+  and staff_category <> 'device';
 
 alter table stores add column if not exists default_procurement_staff_id uuid;
 alter table stores drop constraint if exists stores_default_procurement_staff_id_fkey;

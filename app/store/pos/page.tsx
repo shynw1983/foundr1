@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, CreditCard, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
@@ -169,6 +169,19 @@ type PosCashResponsibleEmployee = {
   name: string;
   role: string;
   punchedAt: string;
+};
+
+type PosMember = {
+  id: string;
+  memberNumber: string;
+  publicToken: string;
+  displayName: string;
+  phone: string;
+  email: string;
+  pointBalance: number;
+  lifetimeSpendAmount: number;
+  lifetimeVisitCount: number;
+  currentTierKey: string;
 };
 
 type PosPreviousClosedSession = {
@@ -392,6 +405,9 @@ export default function StorePosPage() {
   const [orderType, setOrderType] = useState("eat_in");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
+  const [memberLookupInput, setMemberLookupInput] = useState("");
+  const [selectedMember, setSelectedMember] = useState<PosMember | null>(null);
+  const [memberLookupLoading, setMemberLookupLoading] = useState(false);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -562,6 +578,8 @@ export default function StorePosPage() {
     setStoredStoreSelection(storeId);
     setCart([]);
     setCashTenderedAmount("");
+    setMemberLookupInput("");
+    setSelectedMember(null);
     setCashOpeningBreakdown(createCashBreakdownInput());
     setCashOpeningNote("");
     setCashCountedBreakdown(createCashBreakdownInput());
@@ -575,6 +593,31 @@ export default function StorePosPage() {
     setRefundingTransactionId("");
     setCompletedDisplayState(null);
     void load(storeId);
+  }
+
+  async function lookupMember() {
+    const code = memberLookupInput.trim();
+    if (!selectedStoreId || !code || memberLookupLoading) return;
+    setMemberLookupLoading(true);
+    setMessage("");
+    try {
+      const params = new URLSearchParams({ storeId: selectedStoreId, code });
+      const response = await fetch(`/api/store/pos/member?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "会員を確認できませんでした。");
+      setSelectedMember(body.member as PosMember);
+      setMessage("会員を会計に紐づけました。");
+    } catch (error) {
+      setSelectedMember(null);
+      setMessage(error instanceof Error ? error.message : "会員を確認できませんでした。");
+    } finally {
+      setMemberLookupLoading(false);
+    }
+  }
+
+  function clearSelectedMember() {
+    setSelectedMember(null);
+    setMemberLookupInput("");
   }
 
   function getItemOptionGroups(item: PosMenuItem) {
@@ -789,6 +832,11 @@ export default function StorePosPage() {
           orderType,
           paymentMethod,
           cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
+          memberToken: selectedMember?.publicToken || undefined,
+          memberId: selectedMember?.id || undefined,
+          memberEmail: selectedMember?.email || undefined,
+          memberPhone: selectedMember?.phone || undefined,
+          memberName: selectedMember?.displayName || undefined,
           note,
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
@@ -808,6 +856,7 @@ export default function StorePosPage() {
       setCart([]);
       setNote("");
       setCashTenderedAmount("");
+      clearSelectedMember();
       setSummary(body.todaySummary as PosSummary);
       if (transactionDialogOpen) await loadTransactions();
       await loadReconciliation(selectedStoreId);
@@ -1219,6 +1268,44 @@ export default function StorePosPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className={selectedMember ? "store-pos-member-panel is-linked" : "store-pos-member-panel"}>
+            <div className="store-pos-member-title">
+              <div>
+                <UserRound size={16} />
+                <span>会員</span>
+              </div>
+              {selectedMember ? (
+                <button type="button" onClick={clearSelectedMember} aria-label="会員を解除">
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+            {selectedMember ? (
+              <div className="store-pos-member-card">
+                <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
+                <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
+              </div>
+            ) : (
+              <div className="store-pos-member-lookup">
+                <ScanLine size={16} />
+                <input
+                  value={memberLookupInput}
+                  onChange={(event) => setMemberLookupInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void lookupMember();
+                    }
+                  }}
+                  placeholder="会員 QR / 会員番号 / メール"
+                />
+                <button className="secondary-button" type="button" onClick={() => void lookupMember()} disabled={!memberLookupInput.trim() || memberLookupLoading}>
+                  {memberLookupLoading ? "確認中" : "確認"}
+                </button>
+              </div>
+            )}
           </div>
 
           <label className="store-pos-note">

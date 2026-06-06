@@ -141,7 +141,8 @@ function getAssignableRoleOptions(currentUserRole: string) {
 const staffCategoryLabels: Record<string, string> = {
   executive: "経営層",
   management: "管理職",
-  working: "実勤務スタッフ"
+  working: "実勤務スタッフ",
+  device: "端末"
 };
 
 const payrollSubjectLabels: Record<string, string> = {
@@ -520,14 +521,18 @@ export default function StaffPage() {
                         </span>
                       </div>
                       <p>
-                        {[
-                          `ID ${member.loginId}`,
-                          roleLabels[member.role] ?? member.role,
-                          staffCategoryLabels[member.staffCategory] ?? member.staffCategory
-                        ].join(" / ")}
+                        {member.role === "store_terminal"
+                          ? [`ID ${member.loginId}`, roleLabels[member.role] ?? member.role].join(" / ")
+                          : [
+                            `ID ${member.loginId}`,
+                            roleLabels[member.role] ?? member.role,
+                            staffCategoryLabels[member.staffCategory] ?? member.staffCategory
+                          ].join(" / ")}
                       </p>
                       <small>
-                        {member.status === "active" ? "有効" : "停止中"} ・ {payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: {getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: {getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ {formatLastSeen(member.lastSeenAt)}
+                        {member.role === "store_terminal"
+                          ? `${member.status === "active" ? "有効" : "停止中"} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
+                          : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: ${getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -857,7 +862,7 @@ function StaffFormFields({
             </select>
           </label>
         ) : (
-          <input name="staffCategory" type="hidden" value="working" readOnly />
+          <input name="staffCategory" type="hidden" value="device" readOnly />
         )}
         <label>
           <span>状態</span>

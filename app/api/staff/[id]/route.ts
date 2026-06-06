@@ -83,7 +83,7 @@ function normalizeStatus(status?: string) {
 }
 
 function normalizeStaffCategory(category?: string) {
-  return ["executive", "management", "working"].includes(category ?? "") ? category as string : "working";
+  return ["executive", "management", "working", "device"].includes(category ?? "") ? category as string : "working";
 }
 
 function normalizePayrollSubject(subject?: string) {
@@ -239,7 +239,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
   const effectiveLarkOpenId = role === "store_terminal" ? "" : larkOpenId;
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
-  const effectiveStaffCategory = role === "store_terminal" ? "working" : staffCategory;
+  const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
   const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
 
   if (!name || !loginId) {

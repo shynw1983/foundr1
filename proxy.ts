@@ -1,3 +1,4 @@
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const authCookieName = "foundr1_os_session";
@@ -60,7 +61,9 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
   }
 }
 
-export async function proxy(request: NextRequest) {
+const clerkKeysConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
+
+async function runFoundr1Proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isOsPath = pathname.startsWith("/os");
   const isStorePath = pathname.startsWith("/store");
@@ -129,6 +132,12 @@ export async function proxy(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+const foundr1Proxy = clerkKeysConfigured
+  ? clerkMiddleware(async (_auth, request) => runFoundr1Proxy(request))
+  : async (request: NextRequest) => runFoundr1Proxy(request);
+
+export default foundr1Proxy;
+
 export const config = {
-  matcher: ["/os/:path*", "/store/:path*", "/api/:path*"]
+  matcher: ["/os/:path*", "/store/:path*", "/member/:path*", "/api/:path*", "/__clerk/:path*"]
 };

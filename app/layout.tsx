@@ -1,3 +1,4 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
 import { PwaRegister } from "./os/components/PwaRegister";
@@ -27,17 +28,27 @@ export const viewport: Viewport = {
   themeColor: "#202a36"
 };
 
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export default function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
+  const body = (
     <html lang="ja">
       <body>
         <PwaRegister />
         <OsTranslationProvider>{children}</OsTranslationProvider>
       </body>
     </html>
+  );
+
+  if (!clerkPublishableKey) return body;
+
+  return (
+    <ClerkProvider publishableKey={clerkPublishableKey}>
+      {body}
+    </ClerkProvider>
   );
 }

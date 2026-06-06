@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { awardLoyaltyForPaidOrder, reverseLoyaltyForRefundedOrder } from "./loyalty";
 import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { getActiveStorePaymentAccount, getStorePaymentAccountById } from "./store-payment-accounts";
@@ -45,6 +46,7 @@ export type CustomerOrderRow = {
   readyAt: string;
   completedAt: string;
   cancelledAt: string;
+  memberId: string;
 };
 
 export type CustomerOrderItemInput = {
@@ -141,6 +143,7 @@ export async function createCustomerOrder(input: {
   orderSource?: string;
   paymentProvider?: string;
   paymentAccountId?: string;
+  memberId?: string;
   pickupCode: string;
   pickupDate: string;
   pickupTime: string;
@@ -163,6 +166,7 @@ export async function createCustomerOrder(input: {
       order_source,
       payment_provider,
       payment_account_id,
+      member_id,
       pickup_code,
       pickup_date,
       pickup_time,
@@ -183,6 +187,7 @@ export async function createCustomerOrder(input: {
       ${input.orderSource ?? "nanacha_web"},
       ${input.paymentProvider ?? "square"},
       ${input.paymentAccountId || null},
+      ${input.memberId || null},
       ${input.pickupCode},
       ${input.pickupDate},
       ${input.pickupTime},
@@ -290,6 +295,10 @@ export async function updateCustomerOrder(orderId: string, patch: Partial<{
   if (rows[0]?.id) {
     if (patch.paymentStatus === "paid" || patch.status === "new") {
       await ensureProductionTasksForOrder(rows[0].id as string);
+      await awardLoyaltyForPaidOrder(rows[0].id as string);
+    }
+    if (patch.paymentStatus === "refunded" || patch.status === "cancelled") {
+      await reverseLoyaltyForRefundedOrder(rows[0].id as string);
     }
     await syncWebReservationToSalesOrder(rows[0].id as string);
   }
@@ -316,6 +325,7 @@ export async function findCustomerOrderById(orderId: string) {
       coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
       coalesce(store_customer_orders.payment_refund_error, '') as "paymentRefundError",
       coalesce(store_customer_orders.payment_refunded_at::text, '') as "paymentRefundedAt",
+      coalesce(store_customer_orders.member_id::text, '') as "memberId",
       coalesce(store_customer_orders.square_order_id, '') as "squareOrderId",
       coalesce(store_customer_orders.square_payment_id, '') as "squarePaymentId",
       coalesce(store_customer_orders.square_receipt_url, '') as "squareReceiptUrl",
@@ -490,6 +500,7 @@ export async function cancelPublicMaamaaCustomerOrder(input: { orderId?: string 
         updated_at = now()
       where id = ${order.id}
     `;
+    await reverseLoyaltyForRefundedOrder(order.id);
   } else {
     await sql`
       update store_customer_orders
@@ -501,6 +512,7 @@ export async function cancelPublicMaamaaCustomerOrder(input: { orderId?: string 
         updated_at = now()
       where id = ${order.id}
     `;
+    await reverseLoyaltyForRefundedOrder(order.id);
   }
 
   await syncWebReservationToSalesOrder(order.id);

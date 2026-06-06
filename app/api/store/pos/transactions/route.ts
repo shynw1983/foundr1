@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { reverseLoyaltyForRefundedOrder } from "../../../../../lib/loyalty";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
@@ -190,6 +191,7 @@ export async function POST(request: Request) {
   if (!rows[0]?.id) return Response.json({ error: "返金を保存できませんでした。" }, { status: 500 });
 
   await syncWebReservationToSalesOrder(orderId);
+  await reverseLoyaltyForRefundedOrder(orderId);
   const [transactions, selectedTransaction, todaySummary] = await Promise.all([
     getTransactions(storeFilter),
     getTransactionDetail(storeFilter, orderId),

@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
+import { resolveMemberForOrder } from "../../../../../../lib/loyalty";
 import { getNanachaCompatibleMenu, type NanachaPricedOption } from "../../../../../../lib/nanacha-compatible-menu";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
 
@@ -213,17 +214,33 @@ export async function POST(request: Request) {
   const optionLabel = itemSummaries.length === 1 ? primarySummary.optionLabel : "商品ごと";
   const toppingLabel = itemSummaries.length === 1 ? primarySummary.toppingLabel : "商品ごと";
   const pickupCode = createPickupCode("M");
+  const member = await resolveMemberForOrder({
+    memberId: body.memberId as string | undefined,
+    memberToken: body.memberToken as string | undefined,
+    phone: (body.memberPhone || completionSummary.phone || body.phone) as string | undefined,
+    email: (body.memberEmail || completionSummary.email || body.email) as string | undefined,
+    displayName: (body.memberName || completionSummary.name || body.name) as string | undefined,
+    identityProvider: body.identityProvider as string | undefined,
+    identitySubject: body.identitySubject as string | undefined,
+    identityLabel: body.identityLabel as string | undefined,
+    metadata: { source: "nanacha_web" }
+  });
 
   const localOrder = await createCustomerOrder({
     brandId,
     storeId: publicStore.osStoreId,
     orderSource: "nanacha_web",
     paymentProvider: "square",
+    memberId: member?.id,
     pickupCode,
     pickupDate,
     pickupTime: pickup,
     amount,
-    customerSummary: completionSummary,
+    customerSummary: {
+      ...completionSummary,
+      memberId: member?.id ?? "",
+      memberNumber: member?.memberNumber ?? ""
+    },
     drink: drinkLabel,
     size: sizeLabel,
     temperature: temperatureLabel,

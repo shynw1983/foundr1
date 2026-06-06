@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
+import { awardLoyaltyForPaidOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
 import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
@@ -24,6 +25,11 @@ type PosCheckoutBody = {
   orderType?: string;
   paymentMethod?: string;
   cashTenderedAmount?: number | string | null;
+  memberId?: string;
+  memberToken?: string;
+  memberPhone?: string;
+  memberEmail?: string;
+  memberName?: string;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -371,6 +377,11 @@ export async function POST(request: Request) {
   const storeId = normalizeText(body.storeId);
   const orderType = normalizeText(body.orderType) || "eat_in";
   const paymentMethod = normalizeText(body.paymentMethod) || "cash";
+  const memberId = normalizeText(body.memberId);
+  const memberToken = normalizeText(body.memberToken);
+  const memberPhone = normalizeText(body.memberPhone);
+  const memberEmail = normalizeText(body.memberEmail);
+  const memberName = normalizeText(body.memberName);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -557,6 +568,14 @@ export async function POST(request: Request) {
   const pickupCode = createPickupCode(getPosPickupCodePrefix(orderType));
   const brandId = normalizedItems[0]?.brandId ?? null;
   const firstItemName = normalizedItems[0]?.name ?? "";
+  const member = await resolveMemberForOrder({
+    memberId,
+    memberToken,
+    phone: memberPhone,
+    email: memberEmail,
+    displayName: memberName,
+    metadata: { source: "store_pos" }
+  });
 
   const orderRows = await sql`
     insert into store_customer_orders (
@@ -567,6 +586,7 @@ export async function POST(request: Request) {
       status,
       payment_status,
       payment_provider,
+      member_id,
       pickup_date,
       pickup_time,
       amount,
@@ -587,6 +607,7 @@ export async function POST(request: Request) {
       'new',
       'paid',
       ${paymentMethod},
+      ${member?.id ?? null},
       ${pickupDate},
       ${pickupTime},
       ${amount},
@@ -596,6 +617,9 @@ export async function POST(request: Request) {
         note,
         cashierId: session.id,
         cashierName: session.name,
+        memberId: member?.id ?? "",
+        memberNumber: member?.memberNumber ?? "",
+        memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
         cashTenderedAmount,
         cashChangeAmount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -688,8 +712,9 @@ export async function POST(request: Request) {
   }
 
   await ensureProductionTasksForOrder(orderId);
+  const loyaltyMember = await awardLoyaltyForPaidOrder(orderId);
   await syncWebReservationToSalesOrder(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
   const todaySummary = await getTodaySummary(storeId);
-  return Response.json({ ok: true, orderId, pickupCode, amount, cashTenderedAmount, cashChangeAmount, todaySummary });
+  return Response.json({ ok: true, orderId, pickupCode, amount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
 }

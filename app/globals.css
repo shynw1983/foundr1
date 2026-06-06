@@ -5993,6 +5993,88 @@ body :where(
   gap: 7px;
 }
 
+.store-pos-member-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.store-pos-member-panel.is-linked {
+  border-color: rgba(31, 111, 85, 0.32);
+  background: var(--green-soft);
+}
+
+.store-pos-member-title,
+.store-pos-member-title > div,
+.store-pos-member-lookup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.store-pos-member-title {
+  justify-content: space-between;
+}
+
+.store-pos-member-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.store-pos-member-title button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.store-pos-member-lookup input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  outline: 0;
+}
+
+.store-pos-member-lookup button {
+  min-width: 62px;
+  height: 38px;
+  padding: 0 10px;
+}
+
+.store-pos-member-card {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-pos-member-card strong,
+.store-pos-member-card span {
+  overflow-wrap: anywhere;
+}
+
+.store-pos-member-card strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.store-pos-member-card span {
+  color: #1f6f55;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .store-pos-cash-payment {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(130px, 0.75fr);
@@ -7521,6 +7603,582 @@ body :where(
 .pos-admin-order-actions input {
   min-width: min(260px, 100%);
   flex: 1 1 220px;
+}
+
+.loyalty-admin-page {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.loyalty-admin-page > .topbar,
+.loyalty-admin-page > .metric-grid {
+  margin-bottom: 0;
+}
+
+.loyalty-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.loyalty-metric-grid .metric-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+}
+
+.loyalty-rule-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.loyalty-rule-panel h3,
+.loyalty-member-form h3,
+.loyalty-member-list h3,
+.loyalty-ledger-panel h3 {
+  margin: 0;
+}
+
+.loyalty-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.loyalty-rule-grid span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-rule-grid svg {
+  flex: 0 0 auto;
+  color: var(--color-brand);
+}
+
+.loyalty-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.36fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.loyalty-member-form,
+.loyalty-member-list,
+.loyalty-ledger-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.loyalty-member-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.loyalty-member-form label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.loyalty-member-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.loyalty-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.loyalty-table-wrap table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.loyalty-table-wrap th,
+.loyalty-table-wrap td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.loyalty-table-wrap th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.loyalty-table-wrap td {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.loyalty-table-wrap td strong,
+.loyalty-table-wrap td small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-table-wrap td small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.loyalty-table-wrap .is-negative {
+  color: #b91c1c;
+}
+
+.member-portal-page {
+  box-sizing: border-box;
+  --member-ink: #111111;
+  --member-muted: #666666;
+  --member-line: #dedede;
+  --member-soft-line: #eeeeee;
+  --member-panel: #ffffff;
+  --member-soft: #f7f7f7;
+  --member-logo-accent: #2f8a72;
+  --member-font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+  width: 100%;
+  overflow-x: hidden;
+  min-height: 100vh;
+  background: #ffffff;
+  color: var(--member-ink);
+  font-family: var(--member-font);
+  font-weight: 400;
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 18px 18px 32px;
+}
+
+.member-portal-page .primary-button,
+.member-portal-page .secondary-button {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--member-ink);
+  box-shadow: none;
+  font-weight: 600;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+.member-portal-page .primary-button {
+  background: var(--member-ink);
+  color: white;
+}
+
+.member-portal-page .secondary-button {
+  background: white;
+  color: var(--member-ink);
+}
+
+.member-portal-page .primary-button:hover,
+.member-portal-page .secondary-button:hover {
+  border-color: var(--member-logo-accent);
+}
+
+.member-portal-page .primary-button:focus-visible,
+.member-portal-page .secondary-button:focus-visible,
+.member-portal-brand:focus-visible {
+  outline: 2px solid var(--member-logo-accent);
+  outline-offset: 3px;
+}
+
+.member-portal-page .eyebrow {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.member-portal-topbar,
+.member-portal-hero,
+.member-portal-grid,
+.member-portal-content-grid,
+.member-portal-toolbar,
+.member-portal-config,
+.member-portal-login-panel {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.member-portal-topbar {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.member-portal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--member-ink);
+  text-decoration: none;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+.member-portal-brand span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--member-soft-line);
+  background: white;
+  overflow: hidden;
+}
+
+.member-portal-brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-portal-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--member-line);
+  padding: 22px 0 18px;
+}
+
+.member-portal-hero h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 46px);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.member-portal-hero span,
+.member-portal-login-panel p,
+.member-portal-config p {
+  color: var(--member-muted);
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.member-portal-auth-actions,
+.member-portal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.member-portal-toolbar span {
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.member-portal-config,
+.member-portal-login-panel,
+.member-card-main,
+.member-stat-card,
+.member-portal-panel {
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  background: var(--member-panel);
+  box-shadow: none;
+}
+
+.member-stat-card,
+.member-portal-panel,
+.member-portal-list-row {
+  transition: border-color 160ms ease;
+}
+
+.member-stat-card:hover,
+.member-portal-panel:hover,
+.member-portal-list-row:hover {
+  border-color: #d2d2d2;
+}
+
+.member-portal-config,
+.member-portal-login-panel {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: center;
+}
+
+.member-portal-config p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.member-portal-config strong,
+.member-portal-login-panel h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.member-portal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(150px, 0.55fr));
+  gap: 14px;
+}
+
+.member-card-main {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  background: var(--member-logo-accent);
+  color: white;
+}
+
+.member-card-main .eyebrow,
+.member-card-main span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.member-card-main h2 {
+  margin: 4px 0;
+  color: white;
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 600;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.member-qr-placeholder {
+  width: min(190px, 42vw);
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: white;
+  color: var(--member-ink);
+  padding: 12px;
+}
+
+.member-qr-placeholder img {
+  width: min(150px, 100%);
+  height: auto;
+  border-radius: 6px;
+}
+
+.member-qr-placeholder small {
+  width: 100%;
+  color: var(--member-muted);
+  font-size: 10px;
+  font-weight: 400;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.member-stat-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.member-stat-card svg,
+.member-portal-panel-title svg {
+  color: var(--member-logo-accent);
+}
+
+.member-stat-card span,
+.member-stat-card p {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.member-stat-card strong {
+  align-self: center;
+  color: var(--member-logo-accent);
+  font-size: 24px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.member-stat-card p {
+  margin: 0;
+}
+
+.member-portal-content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.member-portal-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.member-portal-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-portal-panel-title h3 {
+  margin: 0;
+  font-weight: 500;
+}
+
+.member-portal-list {
+  display: grid;
+  gap: 8px;
+}
+
+.member-portal-list p {
+  margin: 0;
+  color: var(--member-muted);
+  font-weight: 400;
+}
+
+.member-portal-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--member-soft-line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--member-soft);
+}
+
+.member-portal-list-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.member-portal-list-row strong,
+.member-portal-list-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.member-portal-list-row strong {
+  font-weight: 500;
+}
+
+.member-portal-list-row span {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.member-portal-list-row b {
+  flex: 0 0 auto;
+  color: var(--member-logo-accent);
+  font-weight: 600;
+}
+
+.member-portal-list-row b.is-negative {
+  color: #b91c1c;
+}
+
+@media (max-width: 1180px) {
+  .loyalty-metric-grid,
+  .loyalty-rule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loyalty-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .loyalty-metric-grid,
+  .loyalty-rule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .loyalty-member-form,
+  .loyalty-member-list,
+  .loyalty-ledger-panel,
+  .loyalty-rule-panel {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 980px) {
+  .member-portal-grid,
+  .member-portal-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .member-card-main {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .member-portal-page {
+    padding: 14px;
+  }
+
+  .member-portal-hero {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .member-portal-auth-actions,
+  .member-portal-toolbar {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .member-portal-auth-actions button,
+  .member-portal-toolbar button {
+    flex: 1 1 150px;
+  }
+
+  .member-card-main,
+  .member-portal-panel,
+  .member-portal-config,
+  .member-portal-login-panel {
+    padding: 14px;
+  }
+
+  .member-qr-placeholder {
+    width: 100%;
+  }
+
+  .member-portal-list-row {
+    align-items: start;
+    flex-direction: column;
+  }
 }
 
 .pos-admin-correction-panel {

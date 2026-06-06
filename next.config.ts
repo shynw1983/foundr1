@@ -5,11 +5,23 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      [
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        "https://*.clerk.accounts.dev https://*.clerk.com https://clerk.com",
+        "https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
+        "https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/"
+      ].join(" "),
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "connect-src 'self' https:",
+      [
+        "frame-src 'self'",
+        "https://*.clerk.accounts.dev https://*.clerk.com https://clerk.com",
+        "https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
+        "https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/"
+      ].join(" "),
+      "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",

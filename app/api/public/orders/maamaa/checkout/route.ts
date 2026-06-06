@@ -1,4 +1,5 @@
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
+import { resolveMemberForOrder } from "../../../../../../lib/loyalty";
 import { getMaamaaCompatibleMenu, type MaamaaMenuSection, type MaamaaPricedOption } from "../../../../../../lib/maamaa-compatible-menu";
 import { getActiveStorePaymentAccount } from "../../../../../../lib/store-payment-accounts";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
@@ -172,6 +173,17 @@ export async function POST(request: Request) {
   const amount = buildableItems.reduce((sum, item) => sum + item.amount, 0);
 
   const pickupCode = createPickupCode("M");
+  const member = await resolveMemberForOrder({
+    memberId: body.memberId as string | undefined,
+    memberToken: body.memberToken as string | undefined,
+    phone: (body.memberPhone || completionSummary.phone || body.phone) as string | undefined,
+    email: (body.memberEmail || completionSummary.email || body.email) as string | undefined,
+    displayName: (body.memberName || completionSummary.name || body.name) as string | undefined,
+    identityProvider: body.identityProvider as string | undefined,
+    identitySubject: body.identitySubject as string | undefined,
+    identityLabel: body.identityLabel as string | undefined,
+    metadata: { source: "maamaa_web" }
+  });
   const itemSummaries = buildableItems.map((item, index) => ({
     name: `${menu.baseSoup.name}${buildableItems.length > 1 ? ` #${index + 1}` : ""}`,
     detailLabel: item.detailLabel || "カスタマイズなし",
@@ -185,6 +197,7 @@ export async function POST(request: Request) {
     orderSource: "maamaa_web",
     paymentProvider: "komoju",
     paymentAccountId: paymentAccount.id || undefined,
+    memberId: member?.id,
     pickupCode,
     pickupDate,
     pickupTime: pickup,
@@ -194,6 +207,8 @@ export async function POST(request: Request) {
       brand: "maamaa",
       store: publicStore.label,
       paymentAccountName: paymentAccount.accountName,
+      memberId: member?.id ?? "",
+      memberNumber: member?.memberNumber ?? "",
       customer: {
         name: completionSummary.name ?? body.name ?? "",
         phone: completionSummary.phone ?? body.phone ?? "",

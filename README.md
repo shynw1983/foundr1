@@ -164,6 +164,7 @@ Optional:
 - `BLOB_READ_WRITE_TOKEN`: Vercel Blob upload token for product/comparison/receipt photos.
 - `NEXT_PUBLIC_APP_URL`: public app URL used in generated links.
 - `LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_WEBHOOK_URL`, `LARK_ENABLED`.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`: Clerk keys for public customer member login on `/member`. Clerk is used only for customer identity; Foundr1 OS employee login still uses `foundr1_os_session`.
 
 ## Documentation
 

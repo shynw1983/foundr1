@@ -1,0 +1,641 @@
+import { sql } from "./db";
+
+const basePointRateBasis = 100;
+const pointExpiryMonths = 12;
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizePhone(value: unknown) {
+  return normalizeText(value).replace(/[^\d+]/g, "");
+}
+
+function normalizeEmail(value: unknown) {
+  return normalizeText(value).toLowerCase();
+}
+
+export type LoyaltyMemberInput = {
+  memberId?: string | null;
+  memberToken?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  displayName?: string | null;
+  identityProvider?: string | null;
+  identitySubject?: string | null;
+  identityLabel?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type LoyaltyMember = {
+  id: string;
+  memberNumber: string;
+  publicToken: string;
+  displayName: string;
+  phone: string;
+  email: string;
+  status: string;
+  pointBalance: number;
+  lifetimeSpendAmount: number;
+  lifetimeVisitCount: number;
+  currentTierKey: string;
+};
+
+export async function findMember(input: LoyaltyMemberInput) {
+  const memberId = normalizeText(input.memberId);
+  const memberToken = normalizeText(input.memberToken);
+  const phone = normalizePhone(input.phone);
+  const email = normalizeEmail(input.email);
+  const identityProvider = normalizeText(input.identityProvider);
+  const identitySubject = normalizeText(input.identitySubject);
+
+  if (memberId) {
+    const rows = await sql`
+      select id::text
+      from members
+      where id::text = ${memberId}
+      limit 1
+    `;
+    if (rows[0]?.id) return getMemberProfile(rows[0].id as string);
+  }
+
+  if (memberToken) {
+    const rows = await sql`
+      select id::text
+      from members
+      where public_token = ${memberToken}
+        or member_number = ${memberToken}
+      limit 1
+    `;
+    if (rows[0]?.id) return getMemberProfile(rows[0].id as string);
+  }
+
+  if (phone) {
+    const rows = await sql`
+      select id::text
+      from members
+      where phone = ${phone}
+      limit 1
+    `;
+    if (rows[0]?.id) return getMemberProfile(rows[0].id as string);
+  }
+
+  if (email) {
+    const rows = await sql`
+      select id::text
+      from members
+      where lower(email) = ${email}
+      limit 1
+    `;
+    if (rows[0]?.id) return getMemberProfile(rows[0].id as string);
+  }
+
+  if (identityProvider && identitySubject) {
+    const rows = await sql`
+      select member_id::text as id
+      from member_identity_links
+      where identity_provider = ${identityProvider}
+        and identity_subject = ${identitySubject}
+      limit 1
+    `;
+    if (rows[0]?.id) return getMemberProfile(rows[0].id as string);
+  }
+
+  return null;
+}
+
+export async function upsertMember(input: LoyaltyMemberInput) {
+  const existing = await findMember(input);
+  if (existing) {
+    await updateMember(existing.id, input);
+    return getMemberProfile(existing.id);
+  }
+
+  const phone = normalizePhone(input.phone);
+  const email = normalizeEmail(input.email);
+  const rows = await sql`
+    insert into members (
+      display_name,
+      phone,
+      email,
+      metadata,
+      updated_at
+    )
+    values (
+      ${normalizeText(input.displayName)},
+      ${phone},
+      ${email},
+      ${JSON.stringify(input.metadata ?? {})}::jsonb,
+      now()
+    )
+    returning id::text
+  `;
+  const memberId = rows[0]?.id as string | undefined;
+  if (!memberId) return null;
+
+  await sql`
+    insert into member_accounts (member_id)
+    values (${memberId})
+    on conflict (member_id) do nothing
+  `;
+  await upsertIdentityLink(memberId, input);
+  return getMemberProfile(memberId);
+}
+
+export async function updateMember(memberId: string, input: LoyaltyMemberInput) {
+  const phone = normalizePhone(input.phone);
+  const email = normalizeEmail(input.email);
+  await sql`
+    update members
+    set
+      display_name = case when ${normalizeText(input.displayName)} <> '' then ${normalizeText(input.displayName)} else display_name end,
+      phone = case when ${phone} <> '' then ${phone} else phone end,
+      email = case when ${email} <> '' then ${email} else email end,
+      metadata = metadata || ${JSON.stringify(input.metadata ?? {})}::jsonb,
+      updated_at = now()
+    where id::text = ${memberId}
+  `;
+  await sql`
+    insert into member_accounts (member_id)
+    values (${memberId})
+    on conflict (member_id) do nothing
+  `;
+  await upsertIdentityLink(memberId, input);
+}
+
+async function upsertIdentityLink(memberId: string, input: LoyaltyMemberInput) {
+  const identityProvider = normalizeText(input.identityProvider);
+  const identitySubject = normalizeText(input.identitySubject);
+  if (!identityProvider || !identitySubject) return;
+
+  await sql`
+    insert into member_identity_links (
+      member_id,
+      identity_provider,
+      identity_subject,
+      identity_label,
+      metadata,
+      updated_at
+    )
+    values (
+      ${memberId},
+      ${identityProvider},
+      ${identitySubject},
+      ${normalizeText(input.identityLabel)},
+      ${JSON.stringify(input.metadata ?? {})}::jsonb,
+      now()
+    )
+    on conflict (identity_provider, identity_subject)
+    do update set
+      member_id = excluded.member_id,
+      identity_label = excluded.identity_label,
+      metadata = member_identity_links.metadata || excluded.metadata,
+      updated_at = now()
+  `;
+}
+
+export async function getMemberProfile(memberId: string) {
+  const rows = await sql`
+    select
+      members.id::text,
+      members.member_number as "memberNumber",
+      members.public_token as "publicToken",
+      members.display_name as "displayName",
+      members.phone,
+      members.email,
+      members.status,
+      coalesce(member_accounts.point_balance, 0)::int as "pointBalance",
+      coalesce(member_accounts.lifetime_spend_amount, 0)::int as "lifetimeSpendAmount",
+      coalesce(member_accounts.lifetime_visit_count, 0)::int as "lifetimeVisitCount",
+      coalesce(member_accounts.current_tier_key, 'regular') as "currentTierKey"
+    from members
+    left join member_accounts on member_accounts.member_id = members.id
+    where members.id::text = ${memberId}
+    limit 1
+  `;
+  return (rows[0] as LoyaltyMember | undefined) ?? null;
+}
+
+export async function resolveMemberForOrder(input: LoyaltyMemberInput) {
+  if (!input.memberId && !input.memberToken && !input.phone && !input.email && !input.identitySubject) return null;
+  return upsertMember(input);
+}
+
+export async function getMemberAvailableCoupons(memberId: string) {
+  return sql`
+    select
+      id::text,
+      coupon_code as "couponCode",
+      name,
+      discount_type as "discountType",
+      discount_value::int as "discountValue",
+      coalesce(max_discount_amount::int, null) as "maxDiscountAmount",
+      status,
+      coalesce(expires_at::text, '') as "expiresAt",
+      issued_source as "issuedSource",
+      issued_at::text as "issuedAt"
+    from member_coupons
+    where member_id::text = ${memberId}
+      and status = 'available'
+      and (expires_at is null or expires_at > now())
+    order by expires_at nulls last, issued_at desc
+    limit 50
+  `;
+}
+
+export async function getMemberPointHistory(memberId: string) {
+  return sql`
+    select
+      loyalty_point_ledger.id::text,
+      coalesce(brands.name, '') as "brandName",
+      coalesce(stores.name, '') as "storeName",
+      loyalty_point_ledger.movement_type as "movementType",
+      loyalty_point_ledger.points::int,
+      loyalty_point_ledger.eligible_amount::int as "eligibleAmount",
+      loyalty_point_ledger.note,
+      loyalty_point_ledger.created_at::text as "createdAt"
+    from loyalty_point_ledger
+    left join brands on brands.id = loyalty_point_ledger.brand_id
+    left join stores on stores.id = loyalty_point_ledger.store_id
+    where loyalty_point_ledger.member_id::text = ${memberId}
+    order by loyalty_point_ledger.created_at desc
+    limit 30
+  `;
+}
+
+export async function awardLoyaltyForPaidOrder(orderId: string) {
+  const orderRows = await sql`
+    select
+      store_customer_orders.id::text,
+      coalesce(store_customer_orders.member_id::text, '') as "memberId",
+      coalesce(store_customer_orders.brand_id::text, '') as "brandId",
+      coalesce(store_customer_orders.store_id::text, '') as "storeId",
+      coalesce(stores.company_id::text, '') as "companyId",
+      store_customer_orders.amount::int,
+      store_customer_orders.payment_status as "paymentStatus",
+      store_customer_orders.status,
+      store_customer_orders.created_at
+    from store_customer_orders
+    left join stores on stores.id = store_customer_orders.store_id
+    where store_customer_orders.id::text = ${orderId}
+    limit 1
+  `;
+  const order = orderRows[0] as {
+    id: string;
+    memberId: string;
+    brandId: string;
+    storeId: string;
+    companyId: string;
+    amount: number;
+    paymentStatus: string;
+    status: string;
+  } | undefined;
+  if (!order?.memberId || order.amount <= 0 || order.paymentStatus !== "paid" || order.status === "cancelled") return null;
+
+  await sql`
+    insert into member_accounts (member_id)
+    values (${order.memberId})
+    on conflict (member_id) do nothing
+  `;
+  if (order.brandId) {
+    await sql`
+      insert into member_brand_links (member_id, brand_id, first_store_id, last_seen_at)
+      values (${order.memberId}, ${order.brandId}, nullif(${order.storeId}, '')::uuid, now())
+      on conflict (member_id, brand_id)
+      do update set
+        last_seen_at = now(),
+        status = 'active'
+    `;
+  }
+
+  const earnedPoints = Math.floor(order.amount / basePointRateBasis);
+  if (earnedPoints > 0) {
+    const ledgerRows = await sql`
+      insert into loyalty_point_ledger (
+        member_id,
+        order_id,
+        brand_id,
+        store_id,
+        company_id,
+        movement_type,
+        points,
+        eligible_amount,
+        point_rate_basis,
+        source,
+        note,
+        expires_at
+      )
+      values (
+        ${order.memberId},
+        ${order.id},
+        nullif(${order.brandId}, '')::uuid,
+        nullif(${order.storeId}, '')::uuid,
+        nullif(${order.companyId}, '')::uuid,
+        'earn',
+        ${earnedPoints},
+        ${order.amount},
+        ${basePointRateBasis},
+        'order',
+        '会計によるポイント付与',
+        now() + (${pointExpiryMonths} || ' months')::interval
+      )
+      on conflict do nothing
+      returning id::text
+    `;
+    if (ledgerRows[0]?.id) {
+      await sql`
+        update member_accounts
+        set
+          point_balance = point_balance + ${earnedPoints},
+          lifetime_points_earned = lifetime_points_earned + ${earnedPoints},
+          lifetime_spend_amount = lifetime_spend_amount + ${order.amount},
+          lifetime_visit_count = lifetime_visit_count + 1,
+          last_purchase_at = now(),
+          updated_at = now()
+        where member_id::text = ${order.memberId}
+      `;
+      await createPointSettlementEntry(ledgerRows[0].id as string, order, earnedPoints);
+    }
+  }
+
+  await awardStampForOrder(order);
+  await refreshMemberTier(order.memberId);
+  return getMemberProfile(order.memberId);
+}
+
+async function createPointSettlementEntry(
+  ledgerId: string,
+  order: { id: string; memberId: string; storeId: string; companyId: string },
+  earnedPoints: number
+) {
+  await sql`
+    insert into loyalty_settlement_entries (
+      ledger_id,
+      member_id,
+      order_id,
+      issuing_store_id,
+      issuing_company_id,
+      settlement_type,
+      points,
+      amount
+    )
+    values (
+      ${ledgerId},
+      ${order.memberId},
+      ${order.id},
+      nullif(${order.storeId}, '')::uuid,
+      nullif(${order.companyId}, '')::uuid,
+      'point_issued',
+      ${earnedPoints},
+      ${earnedPoints}
+    )
+  `;
+}
+
+async function awardStampForOrder(order: { id: string; memberId: string; brandId: string; storeId: string }) {
+  if (!order.brandId) return;
+  const campaignRows = await sql`
+    select id::text, stamps_required as "stampsRequired", reward_coupon_name as "rewardCouponName", reward_value_amount as "rewardValueAmount"
+    from loyalty_stamp_campaigns
+    where brand_id::text = ${order.brandId}
+      and is_active = true
+      and (valid_from is null or valid_from <= current_date)
+      and (valid_until is null or valid_until >= current_date)
+    order by created_at
+  `;
+  for (const campaign of campaignRows as Array<{ id: string; stampsRequired: number; rewardCouponName: string; rewardValueAmount: number }>) {
+    const itemRows = await sql`
+      select coalesce(sum(quantity), 0)::int as quantity
+      from store_customer_order_items
+      where order_id::text = ${order.id}
+    `;
+    const stamps = Number(itemRows[0]?.quantity ?? 0);
+    if (stamps <= 0) continue;
+    const stampRows = await sql`
+      insert into loyalty_stamp_ledger (
+        campaign_id,
+        member_id,
+        order_id,
+        brand_id,
+        store_id,
+        stamps,
+        note
+      )
+      values (
+        ${campaign.id},
+        ${order.memberId},
+        ${order.id},
+        ${order.brandId},
+        nullif(${order.storeId}, '')::uuid,
+        ${stamps},
+        '会計によるスタンプ付与'
+      )
+      on conflict do nothing
+      returning id::text
+    `;
+    if (!stampRows[0]?.id) continue;
+
+    const totalRows = await sql`
+      select coalesce(sum(stamps), 0)::int as total
+      from loyalty_stamp_ledger
+      where campaign_id::text = ${campaign.id}
+        and member_id::text = ${order.memberId}
+    `;
+    const rewardCount = Math.floor(Number(totalRows[0]?.total ?? 0) / Math.max(1, campaign.stampsRequired));
+    const existingRewards = await sql`
+      select count(*)::int as count
+      from member_coupons
+      where member_id::text = ${order.memberId}
+        and metadata ->> 'stampCampaignId' = ${campaign.id}
+    `;
+    const missingRewards = rewardCount - Number(existingRewards[0]?.count ?? 0);
+    for (let index = 0; index < missingRewards; index += 1) {
+      await sql`
+        insert into member_coupons (
+          member_id,
+          brand_id,
+          name,
+          discount_type,
+          discount_value,
+          max_discount_amount,
+          expires_at,
+          issued_source,
+          metadata
+        )
+        values (
+          ${order.memberId},
+          ${order.brandId},
+          ${campaign.rewardCouponName || "ドリンク無料券"},
+          'amount',
+          ${campaign.rewardValueAmount || 600},
+          ${campaign.rewardValueAmount || 600},
+          now() + interval '60 days',
+          'stamp_campaign',
+          ${JSON.stringify({ stampCampaignId: campaign.id })}::jsonb
+        )
+      `;
+    }
+  }
+}
+
+export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "返金によるポイント取消") {
+  const earnRows = await sql`
+    select
+      loyalty_point_ledger.member_id::text as "memberId",
+      loyalty_point_ledger.order_id::text as "orderId",
+      coalesce(loyalty_point_ledger.brand_id::text, '') as "brandId",
+      coalesce(loyalty_point_ledger.store_id::text, '') as "storeId",
+      coalesce(loyalty_point_ledger.company_id::text, '') as "companyId",
+      loyalty_point_ledger.points::int,
+      loyalty_point_ledger.eligible_amount::int as "eligibleAmount"
+    from loyalty_point_ledger
+    where order_id::text = ${orderId}
+      and movement_type = 'earn'
+    limit 1
+  `;
+  const earn = earnRows[0] as {
+    memberId: string;
+    orderId: string;
+    brandId: string;
+    storeId: string;
+    companyId: string;
+    points: number;
+    eligibleAmount: number;
+  } | undefined;
+  if (!earn?.memberId || earn.points <= 0) return null;
+
+  const reverseRows = await sql`
+    insert into loyalty_point_ledger (
+      member_id,
+      order_id,
+      brand_id,
+      store_id,
+      company_id,
+      movement_type,
+      points,
+      eligible_amount,
+      point_rate_basis,
+      source,
+      note
+    )
+    values (
+      ${earn.memberId},
+      ${earn.orderId},
+      nullif(${earn.brandId}, '')::uuid,
+      nullif(${earn.storeId}, '')::uuid,
+      nullif(${earn.companyId}, '')::uuid,
+      'refund_reversal',
+      ${-earn.points},
+      ${earn.eligibleAmount},
+      ${basePointRateBasis},
+      'refund',
+      ${note}
+    )
+    on conflict do nothing
+    returning id::text
+  `;
+  if (reverseRows[0]?.id) {
+    await sql`
+      update member_accounts
+      set
+        point_balance = greatest(0, point_balance - ${earn.points}),
+        updated_at = now()
+      where member_id::text = ${earn.memberId}
+    `;
+  }
+  return getMemberProfile(earn.memberId);
+}
+
+export async function refreshMemberTier(memberId: string) {
+  const rows = await sql`
+    with member_recent as (
+      select
+        coalesce(sum(eligible_amount), 0)::int as spend,
+        count(distinct order_id)::int as visits
+      from loyalty_point_ledger
+      where member_id::text = ${memberId}
+        and movement_type = 'earn'
+        and created_at >= now() - interval '180 days'
+    )
+    select tier_key
+    from loyalty_tiers, member_recent
+    where is_active = true
+      and member_recent.spend >= required_spend_amount
+      and member_recent.visits >= required_visit_count
+    order by rank desc
+    limit 1
+  `;
+  const tierKey = String(rows[0]?.tier_key ?? "regular");
+  await sql`
+    update member_accounts
+    set current_tier_key = ${tierKey}, updated_at = now()
+    where member_id::text = ${memberId}
+  `;
+  return tierKey;
+}
+
+export async function getLoyaltyDashboard() {
+  const [summaryRows, recentMembers, recentLedger, coupons] = await Promise.all([
+    sql`
+      select
+        count(*)::int as "memberCount",
+        coalesce(sum(member_accounts.point_balance), 0)::int as "pointLiability",
+        coalesce(sum(member_accounts.lifetime_spend_amount), 0)::int as "lifetimeSpend",
+        coalesce(sum(member_accounts.lifetime_visit_count), 0)::int as "lifetimeVisits"
+      from members
+      left join member_accounts on member_accounts.member_id = members.id
+      where members.status = 'active'
+    `,
+    sql`
+      select
+        members.id::text,
+        members.member_number as "memberNumber",
+        members.display_name as "displayName",
+        members.phone,
+        members.email,
+        coalesce(member_accounts.point_balance, 0)::int as "pointBalance",
+        coalesce(member_accounts.lifetime_spend_amount, 0)::int as "lifetimeSpendAmount",
+        coalesce(member_accounts.lifetime_visit_count, 0)::int as "lifetimeVisitCount",
+        coalesce(member_accounts.current_tier_key, 'regular') as "currentTierKey",
+        coalesce(member_accounts.last_purchase_at::text, '') as "lastPurchaseAt",
+        members.created_at::text as "createdAt"
+      from members
+      left join member_accounts on member_accounts.member_id = members.id
+      order by members.created_at desc
+      limit 50
+    `,
+    sql`
+      select
+        loyalty_point_ledger.id::text,
+        members.member_number as "memberNumber",
+        coalesce(nullif(members.display_name, ''), members.phone, members.email, members.member_number) as "memberLabel",
+        coalesce(brands.name, '') as "brandName",
+        coalesce(stores.name, '') as "storeName",
+        loyalty_point_ledger.movement_type as "movementType",
+        loyalty_point_ledger.points::int,
+        loyalty_point_ledger.eligible_amount::int as "eligibleAmount",
+        loyalty_point_ledger.created_at::text as "createdAt"
+      from loyalty_point_ledger
+      join members on members.id = loyalty_point_ledger.member_id
+      left join brands on brands.id = loyalty_point_ledger.brand_id
+      left join stores on stores.id = loyalty_point_ledger.store_id
+      order by loyalty_point_ledger.created_at desc
+      limit 80
+    `,
+    sql`
+      select
+        count(*) filter (where status = 'available')::int as "availableCoupons",
+        count(*) filter (where status = 'used')::int as "usedCoupons"
+      from member_coupons
+    `
+  ]);
+
+  return {
+    summary: {
+      ...(summaryRows[0] ?? { memberCount: 0, pointLiability: 0, lifetimeSpend: 0, lifetimeVisits: 0 }),
+      ...(coupons[0] ?? { availableCoupons: 0, usedCoupons: 0 })
+    },
+    recentMembers,
+    recentLedger
+  };
+}

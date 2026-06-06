@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { reverseLoyaltyForRefundedOrder } from "../../../../../lib/loyalty";
 import { getCashBreakdownTotal, normalizeCashBreakdown, type CashBreakdown } from "../../../../../lib/pos-cash-denominations";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getStoreCashBusinessDayState } from "../../../../../lib/store-business-hours";
@@ -674,6 +675,7 @@ export async function POST(request: Request) {
       )
     `;
     await syncWebReservationToSalesOrder(orderId);
+    await reverseLoyaltyForRefundedOrder(orderId);
   } else {
     return Response.json({ error: "操作を選択してください。" }, { status: 400 });
   }
