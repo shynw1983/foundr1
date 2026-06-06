@@ -216,10 +216,10 @@ export default function MemberPage() {
     return (
       <main className="member-portal-page">
         <header className="member-portal-topbar">
-          <a className="member-portal-brand" href="/">
+          <div className="member-portal-brand" aria-label="Foundr1 Members">
             <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
             <strong>Members</strong>
-          </a>
+          </div>
         </header>
 
         <section className="member-portal-hero">
@@ -431,10 +431,10 @@ function ConfiguredMemberPortal() {
   return (
     <main className="member-portal-page">
       <header className="member-portal-topbar">
-        <a className="member-portal-brand" href="/">
+        <div className="member-portal-brand" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
           <strong>Members</strong>
-        </a>
+        </div>
         {clerkConfigured && isSignedIn ? (
           <details className="member-account-menu">
             <summary aria-label="会員メニュー">
@@ -669,27 +669,6 @@ function ConfiguredMemberPortal() {
                 </div>
               </details>
 
-              <article className="member-portal-panel member-brand-panel">
-                <div className="member-portal-panel-title">
-                  <ExternalLink size={18} />
-                  <h3>ブランド</h3>
-                </div>
-                <div className="member-brand-grid" aria-label="Foundr1 会員ブランド">
-                  {memberBrandLinks.map((brand) => (
-                    <a key={brand.name} className="member-brand-card" href={brand.href} target="_blank" rel="noreferrer">
-                      <span className="member-brand-logo">
-                        <img className={brand.imageClassName} src={brand.image} alt={`${brand.name} ロゴ`} />
-                      </span>
-                      <span className="member-brand-copy">
-                        <strong>{brand.name}</strong>
-                        <small>{brand.description}</small>
-                      </span>
-                      <ExternalLink size={15} aria-hidden="true" />
-                    </a>
-                  ))}
-                </div>
-              </article>
-
               <article className="member-portal-panel">
                 <div className="member-portal-panel-title">
                   <Gift size={18} />
@@ -723,6 +702,27 @@ function ConfiguredMemberPortal() {
                       <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
                     </div>
                   )) : <p>ポイント履歴はまだありません。</p>}
+                </div>
+              </article>
+
+              <article className="member-portal-panel member-brand-panel">
+                <div className="member-portal-panel-title">
+                  <ExternalLink size={18} />
+                  <h3>ブランド</h3>
+                </div>
+                <div className="member-brand-grid" aria-label="Foundr1 会員ブランド">
+                  {memberBrandLinks.map((brand) => (
+                    <a key={brand.name} className="member-brand-card" href={brand.href} target="_blank" rel="noreferrer">
+                      <span className="member-brand-logo">
+                        <img className={brand.imageClassName} src={brand.image} alt={`${brand.name} ロゴ`} />
+                      </span>
+                      <span className="member-brand-copy">
+                        <strong>{brand.name}</strong>
+                        <small>{brand.description}</small>
+                      </span>
+                      <ExternalLink size={15} aria-hidden="true" />
+                    </a>
+                  ))}
                 </div>
               </article>
             </section>

@@ -8749,12 +8749,21 @@ body :where(
 
   .member-brand-grid {
     grid-template-columns: 1fr;
+    gap: 0;
   }
 
   .member-brand-card {
     grid-template-columns: 72px minmax(0, 1fr) auto;
     min-height: 96px;
-    padding: 10px;
+    border: 0;
+    border-top: 1px solid var(--member-soft-line);
+    border-radius: 0;
+    background: transparent;
+    padding: 12px 0;
+  }
+
+  .member-brand-card:hover {
+    background: transparent;
   }
 
   .member-brand-logo {
