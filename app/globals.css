@@ -9189,6 +9189,76 @@ body :where(
   color: var(--color-brand);
 }
 
+.loyalty-settings-grid,
+.loyalty-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.loyalty-settings-grid label,
+.loyalty-tier-card label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.loyalty-settings-grid label span,
+.loyalty-tier-card label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.loyalty-settings-grid input,
+.loyalty-tier-card input {
+  width: 100%;
+  min-width: 0;
+}
+
+.loyalty-toggle-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  align-content: center;
+}
+
+.loyalty-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-brand);
+}
+
+.loyalty-tier-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.loyalty-tier-panel h3 {
+  margin: 0;
+}
+
+.loyalty-tier-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.loyalty-tier-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.loyalty-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .loyalty-workspace-grid {
   display: grid;
   grid-template-columns: minmax(260px, 0.36fr) minmax(0, 1fr);
@@ -10276,7 +10346,9 @@ body :where(
 
 @media (max-width: 1180px) {
   .loyalty-metric-grid,
-  .loyalty-rule-grid {
+  .loyalty-rule-grid,
+  .loyalty-settings-grid,
+  .loyalty-tier-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -10287,14 +10359,18 @@ body :where(
 
 @media (max-width: 640px) {
   .loyalty-metric-grid,
-  .loyalty-rule-grid {
+  .loyalty-rule-grid,
+  .loyalty-settings-grid,
+  .loyalty-tier-grid,
+  .loyalty-tier-card {
     grid-template-columns: 1fr;
   }
 
   .loyalty-member-form,
   .loyalty-member-list,
   .loyalty-ledger-panel,
-  .loyalty-rule-panel {
+  .loyalty-rule-panel,
+  .loyalty-tier-panel {
     padding: 14px;
   }
 }

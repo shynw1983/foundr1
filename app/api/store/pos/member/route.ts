@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
-import { findMember, getMemberAvailableCoupons } from "../../../../../lib/loyalty";
+import { findMember, getMemberAvailableCoupons, issueAutomaticLoyaltyRewardsForMember } from "../../../../../lib/loyalty";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "会員が見つかりません。" }, { status: 404 });
   }
 
+  await issueAutomaticLoyaltyRewardsForMember(member.id);
   const coupons = await getMemberAvailableCoupons(member.id);
   return Response.json({ member, coupons, selectedCouponId: couponId });
 }

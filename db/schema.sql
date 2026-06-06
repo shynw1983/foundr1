@@ -1509,6 +1509,47 @@ values
   ('vip', 'VIP', 30, 180, 50000, 45, 1, '{"description":"特定日のポイント倍率・専用クーポン対象"}'::jsonb)
 on conflict (tier_key) do nothing;
 
+create table if not exists loyalty_reward_settings (
+  scope_key text primary key default 'global',
+  base_point_rate_basis integer not null default 100,
+  birthday_coupon_enabled boolean not null default true,
+  birthday_coupon_name text not null default '誕生日特典 500円OFF',
+  birthday_coupon_discount_type text not null default 'amount',
+  birthday_coupon_discount_value integer not null default 500,
+  birthday_coupon_max_discount_amount integer,
+  birthday_coupon_expires_in_days integer not null default 45,
+  dormant_coupon_enabled boolean not null default true,
+  dormant_days integer not null default 45,
+  dormant_coupon_name text not null default 'お久しぶり 300円OFF',
+  dormant_coupon_discount_type text not null default 'amount',
+  dormant_coupon_discount_value integer not null default 300,
+  dormant_coupon_max_discount_amount integer,
+  dormant_coupon_expires_in_days integer not null default 30,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table loyalty_reward_settings add column if not exists base_point_rate_basis integer not null default 100;
+alter table loyalty_reward_settings add column if not exists birthday_coupon_enabled boolean not null default true;
+alter table loyalty_reward_settings add column if not exists birthday_coupon_name text not null default '誕生日特典 500円OFF';
+alter table loyalty_reward_settings add column if not exists birthday_coupon_discount_type text not null default 'amount';
+alter table loyalty_reward_settings add column if not exists birthday_coupon_discount_value integer not null default 500;
+alter table loyalty_reward_settings add column if not exists birthday_coupon_max_discount_amount integer;
+alter table loyalty_reward_settings add column if not exists birthday_coupon_expires_in_days integer not null default 45;
+alter table loyalty_reward_settings add column if not exists dormant_coupon_enabled boolean not null default true;
+alter table loyalty_reward_settings add column if not exists dormant_days integer not null default 45;
+alter table loyalty_reward_settings add column if not exists dormant_coupon_name text not null default 'お久しぶり 300円OFF';
+alter table loyalty_reward_settings add column if not exists dormant_coupon_discount_type text not null default 'amount';
+alter table loyalty_reward_settings add column if not exists dormant_coupon_discount_value integer not null default 300;
+alter table loyalty_reward_settings add column if not exists dormant_coupon_max_discount_amount integer;
+alter table loyalty_reward_settings add column if not exists dormant_coupon_expires_in_days integer not null default 30;
+alter table loyalty_reward_settings add column if not exists updated_by uuid references employees(id) on delete set null;
+
+insert into loyalty_reward_settings (scope_key)
+values ('global')
+on conflict (scope_key) do nothing;
+
 create table if not exists loyalty_point_ledger (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references members(id) on delete cascade,

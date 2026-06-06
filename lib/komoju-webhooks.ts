@@ -24,6 +24,11 @@ function getSessionId(payment: Record<string, any>) {
   return "";
 }
 
+function getRefundId(payment: Record<string, any>) {
+  const refund = payment.refund ?? payment.refunds?.[0] ?? {};
+  return String(payment.refund_id || refund.id || payment.latest_refund_id || "");
+}
+
 export async function handleKomojuWebhook(request: Request, account?: StorePaymentAccount | null) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-komoju-signature") || "";
@@ -67,6 +72,22 @@ export async function handleKomojuWebhook(request: Request, account?: StorePayme
       paidAt
     });
     await publishCustomerOrderEvent("order.created", updatedOrder);
+  } else if (eventType === "payment.refunded" || payment.status === "refunded") {
+    const updatedOrder = await updateCustomerOrder(order.id, {
+      status: "cancelled",
+      paymentStatus: "refunded",
+      paymentProvider: "komoju",
+      paymentAccountId: account?.id || order.paymentAccountId || undefined,
+      paymentSessionId: sessionId,
+      paymentId,
+      paymentReceiptUrl: receiptUrl,
+      paymentRefundId: getRefundId(payment),
+      paymentRefundStatus: "refunded",
+      paymentRefundError: "",
+      paymentRefundedAt: payment.refunded_at || payment.updated_at || new Date().toISOString(),
+      paymentUpdatedAt: payment.updated_at || new Date().toISOString()
+    });
+    await publishCustomerOrderEvent("order.updated", updatedOrder);
   } else if (
     ["payment.failed", "payment.cancelled", "payment.expired"].includes(eventType) ||
     ["failed", "cancelled", "expired"].includes(String(payment.status))

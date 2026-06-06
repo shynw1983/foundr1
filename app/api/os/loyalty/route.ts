@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { adjustMemberStamps, getLoyaltyDashboard, issueMemberCoupon, upsertMember } from "../../../../lib/loyalty";
+import { adjustMemberStamps, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,12 @@ export async function GET() {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!["owner", "manager"].includes(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const dashboard = await getLoyaltyDashboard();
-  return Response.json(dashboard, { headers: { "Cache-Control": "no-store" } });
+  const [dashboard, rewardSettings, tierSettings] = await Promise.all([
+    getLoyaltyDashboard(),
+    getLoyaltyRewardSettings(),
+    getLoyaltyTierSettings()
+  ]);
+  return Response.json({ ...dashboard, rewardSettings, tierSettings }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -22,6 +26,32 @@ export async function POST(request: Request) {
   if (!["owner", "manager"].includes(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  if (normalizeText(body.action) === "update_reward_settings") {
+    try {
+      const rewardSettings = await updateLoyaltyRewardSettings(body.rewardSettings as Record<string, unknown>, session.id);
+      const [dashboard, tierSettings] = await Promise.all([
+        getLoyaltyDashboard(),
+        getLoyaltyTierSettings()
+      ]);
+      return Response.json({ ok: true, ...dashboard, rewardSettings, tierSettings });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "会員ルールを保存できませんでした。" }, { status: 400 });
+    }
+  }
+
+  if (normalizeText(body.action) === "update_tier_settings") {
+    try {
+      const tierSettings = await updateLoyaltyTierSettings(body.tierSettings);
+      const [dashboard, rewardSettings] = await Promise.all([
+        getLoyaltyDashboard(),
+        getLoyaltyRewardSettings()
+      ]);
+      return Response.json({ ok: true, ...dashboard, rewardSettings, tierSettings });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "会員ランクを保存できませんでした。" }, { status: 400 });
+    }
+  }
+
   if (normalizeText(body.action) === "issue_coupon") {
     try {
       const coupon = await issueMemberCoupon({

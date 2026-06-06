@@ -60,6 +60,74 @@ export type LoyaltyMember = {
   currentTierKey: string;
 };
 
+export type LoyaltyRewardSettings = {
+  basePointRateBasis: number;
+  birthdayCouponEnabled: boolean;
+  birthdayCouponName: string;
+  birthdayCouponDiscountType: string;
+  birthdayCouponDiscountValue: number;
+  birthdayCouponMaxDiscountAmount: number | null;
+  birthdayCouponExpiresInDays: number;
+  dormantCouponEnabled: boolean;
+  dormantDays: number;
+  dormantCouponName: string;
+  dormantCouponDiscountType: string;
+  dormantCouponDiscountValue: number;
+  dormantCouponMaxDiscountAmount: number | null;
+  dormantCouponExpiresInDays: number;
+};
+
+export type LoyaltyTierSetting = {
+  id: string;
+  tierKey: string;
+  name: string;
+  rank: number;
+  evaluationWindowDays: number;
+  requiredSpendAmount: number;
+  requiredVisitCount: number;
+  pointMultiplier: number;
+  isActive: boolean;
+};
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number) {
+  const nextValue = Math.round(Number(value));
+  if (!Number.isFinite(nextValue)) return fallback;
+  return Math.max(min, Math.min(max, nextValue));
+}
+
+function clampMultiplier(value: unknown, fallback = 1) {
+  const nextValue = Math.round(Number(value) * 1000) / 1000;
+  if (!Number.isFinite(nextValue)) return fallback;
+  return Math.max(0, Math.min(10, nextValue));
+}
+
+function normalizeDiscountType(value: unknown) {
+  const text = normalizeText(value);
+  return text === "percent" ? "percent" : "amount";
+}
+
+function currentTokyoYearMonth() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit"
+  }).format(new Date());
+}
+
+function currentTokyoDateParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value ?? 0),
+    month: Number(parts.find((part) => part.type === "month")?.value ?? 0),
+    day: Number(parts.find((part) => part.type === "day")?.value ?? 0)
+  };
+}
+
 export async function findMember(input: LoyaltyMemberInput) {
   const memberId = normalizeText(input.memberId);
   const memberToken = normalizeText(input.memberToken);
@@ -346,6 +414,192 @@ export async function updateMemberSettings(memberId: string, input: LoyaltyMembe
   return getMemberProfile(memberId);
 }
 
+export async function getLoyaltyRewardSettings() {
+  const rows = await sql`
+    select
+      base_point_rate_basis::int as "basePointRateBasis",
+      birthday_coupon_enabled as "birthdayCouponEnabled",
+      birthday_coupon_name as "birthdayCouponName",
+      birthday_coupon_discount_type as "birthdayCouponDiscountType",
+      birthday_coupon_discount_value::int as "birthdayCouponDiscountValue",
+      birthday_coupon_max_discount_amount::int as "birthdayCouponMaxDiscountAmount",
+      birthday_coupon_expires_in_days::int as "birthdayCouponExpiresInDays",
+      dormant_coupon_enabled as "dormantCouponEnabled",
+      dormant_days::int as "dormantDays",
+      dormant_coupon_name as "dormantCouponName",
+      dormant_coupon_discount_type as "dormantCouponDiscountType",
+      dormant_coupon_discount_value::int as "dormantCouponDiscountValue",
+      dormant_coupon_max_discount_amount::int as "dormantCouponMaxDiscountAmount",
+      dormant_coupon_expires_in_days::int as "dormantCouponExpiresInDays"
+    from loyalty_reward_settings
+    where scope_key = 'global'
+    limit 1
+  `;
+  const settings = rows[0] as LoyaltyRewardSettings | undefined;
+  return settings ?? {
+    basePointRateBasis: basePointRateBasis,
+    birthdayCouponEnabled: true,
+    birthdayCouponName: "誕生日特典 500円OFF",
+    birthdayCouponDiscountType: "amount",
+    birthdayCouponDiscountValue: 500,
+    birthdayCouponMaxDiscountAmount: null,
+    birthdayCouponExpiresInDays: 45,
+    dormantCouponEnabled: true,
+    dormantDays: 45,
+    dormantCouponName: "お久しぶり 300円OFF",
+    dormantCouponDiscountType: "amount",
+    dormantCouponDiscountValue: 300,
+    dormantCouponMaxDiscountAmount: null,
+    dormantCouponExpiresInDays: 30
+  };
+}
+
+export async function updateLoyaltyRewardSettings(input: Partial<LoyaltyRewardSettings>, updatedBy?: string) {
+  const settings = {
+    basePointRateBasis: clampInteger(input.basePointRateBasis, basePointRateBasis, 1, 100000),
+    birthdayCouponEnabled: input.birthdayCouponEnabled !== false,
+    birthdayCouponName: normalizeText(input.birthdayCouponName) || "誕生日特典",
+    birthdayCouponDiscountType: normalizeDiscountType(input.birthdayCouponDiscountType),
+    birthdayCouponDiscountValue: clampInteger(input.birthdayCouponDiscountValue, 500, 0, 999999),
+    birthdayCouponMaxDiscountAmount: input.birthdayCouponMaxDiscountAmount == null ? null : clampInteger(input.birthdayCouponMaxDiscountAmount, 0, 0, 999999),
+    birthdayCouponExpiresInDays: clampInteger(input.birthdayCouponExpiresInDays, 45, 1, 365),
+    dormantCouponEnabled: input.dormantCouponEnabled !== false,
+    dormantDays: clampInteger(input.dormantDays, 45, 1, 730),
+    dormantCouponName: normalizeText(input.dormantCouponName) || "お久しぶり特典",
+    dormantCouponDiscountType: normalizeDiscountType(input.dormantCouponDiscountType),
+    dormantCouponDiscountValue: clampInteger(input.dormantCouponDiscountValue, 300, 0, 999999),
+    dormantCouponMaxDiscountAmount: input.dormantCouponMaxDiscountAmount == null ? null : clampInteger(input.dormantCouponMaxDiscountAmount, 0, 0, 999999),
+    dormantCouponExpiresInDays: clampInteger(input.dormantCouponExpiresInDays, 30, 1, 365)
+  };
+
+  await sql`
+    insert into loyalty_reward_settings (
+      scope_key,
+      base_point_rate_basis,
+      birthday_coupon_enabled,
+      birthday_coupon_name,
+      birthday_coupon_discount_type,
+      birthday_coupon_discount_value,
+      birthday_coupon_max_discount_amount,
+      birthday_coupon_expires_in_days,
+      dormant_coupon_enabled,
+      dormant_days,
+      dormant_coupon_name,
+      dormant_coupon_discount_type,
+      dormant_coupon_discount_value,
+      dormant_coupon_max_discount_amount,
+      dormant_coupon_expires_in_days,
+      updated_by,
+      updated_at
+    )
+    values (
+      'global',
+      ${settings.basePointRateBasis},
+      ${settings.birthdayCouponEnabled},
+      ${settings.birthdayCouponName},
+      ${settings.birthdayCouponDiscountType},
+      ${settings.birthdayCouponDiscountValue},
+      ${settings.birthdayCouponMaxDiscountAmount},
+      ${settings.birthdayCouponExpiresInDays},
+      ${settings.dormantCouponEnabled},
+      ${settings.dormantDays},
+      ${settings.dormantCouponName},
+      ${settings.dormantCouponDiscountType},
+      ${settings.dormantCouponDiscountValue},
+      ${settings.dormantCouponMaxDiscountAmount},
+      ${settings.dormantCouponExpiresInDays},
+      nullif(${normalizeText(updatedBy)}, '')::uuid,
+      now()
+    )
+    on conflict (scope_key)
+    do update set
+      base_point_rate_basis = excluded.base_point_rate_basis,
+      birthday_coupon_enabled = excluded.birthday_coupon_enabled,
+      birthday_coupon_name = excluded.birthday_coupon_name,
+      birthday_coupon_discount_type = excluded.birthday_coupon_discount_type,
+      birthday_coupon_discount_value = excluded.birthday_coupon_discount_value,
+      birthday_coupon_max_discount_amount = excluded.birthday_coupon_max_discount_amount,
+      birthday_coupon_expires_in_days = excluded.birthday_coupon_expires_in_days,
+      dormant_coupon_enabled = excluded.dormant_coupon_enabled,
+      dormant_days = excluded.dormant_days,
+      dormant_coupon_name = excluded.dormant_coupon_name,
+      dormant_coupon_discount_type = excluded.dormant_coupon_discount_type,
+      dormant_coupon_discount_value = excluded.dormant_coupon_discount_value,
+      dormant_coupon_max_discount_amount = excluded.dormant_coupon_max_discount_amount,
+      dormant_coupon_expires_in_days = excluded.dormant_coupon_expires_in_days,
+      updated_by = excluded.updated_by,
+      updated_at = now()
+  `;
+  return getLoyaltyRewardSettings();
+}
+
+export async function getLoyaltyTierSettings() {
+  const rows = await sql`
+    select
+      id::text,
+      tier_key as "tierKey",
+      name,
+      rank::int,
+      evaluation_window_days::int as "evaluationWindowDays",
+      required_spend_amount::int as "requiredSpendAmount",
+      required_visit_count::int as "requiredVisitCount",
+      point_multiplier::float as "pointMultiplier",
+      is_active as "isActive"
+    from loyalty_tiers
+    order by rank, required_spend_amount, required_visit_count, tier_key
+  `;
+  return rows as LoyaltyTierSetting[];
+}
+
+export async function updateLoyaltyTierSettings(input: unknown) {
+  const rows = Array.isArray(input) ? input : [];
+  for (const item of rows) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const tierKey = normalizeText(record.tierKey);
+    const name = normalizeText(record.name) || tierKey;
+    if (!tierKey || !name) continue;
+    await sql`
+      insert into loyalty_tiers (
+        tier_key,
+        name,
+        rank,
+        evaluation_window_days,
+        required_spend_amount,
+        required_visit_count,
+        point_multiplier,
+        benefits,
+        is_active,
+        updated_at
+      )
+      values (
+        ${tierKey},
+        ${name},
+        ${clampInteger(record.rank, 10, 0, 1000)},
+        ${clampInteger(record.evaluationWindowDays, 180, 1, 1095)},
+        ${clampInteger(record.requiredSpendAmount, 0, 0, 99999999)},
+        ${clampInteger(record.requiredVisitCount, 0, 0, 9999)},
+        ${clampMultiplier(record.pointMultiplier, 1)},
+        ${JSON.stringify({ description: normalizeText(record.description) })}::jsonb,
+        ${record.isActive !== false},
+        now()
+      )
+      on conflict (tier_key)
+      do update set
+        name = excluded.name,
+        rank = excluded.rank,
+        evaluation_window_days = excluded.evaluation_window_days,
+        required_spend_amount = excluded.required_spend_amount,
+        required_visit_count = excluded.required_visit_count,
+        point_multiplier = excluded.point_multiplier,
+        benefits = loyalty_tiers.benefits || excluded.benefits,
+        is_active = excluded.is_active,
+        updated_at = now()
+    `;
+  }
+  return getLoyaltyTierSettings();
+}
+
 export async function resolveMemberForOrder(input: LoyaltyMemberInput) {
   if (!input.memberId && !input.memberToken && !input.phone && !input.email && !input.identitySubject) return null;
   return upsertMember(input);
@@ -583,6 +837,121 @@ export async function issueMemberCoupon(input: {
   return rows[0] ?? null;
 }
 
+async function issueAutomaticCoupon(input: {
+  memberId: string;
+  name: string;
+  discountType: string;
+  discountValue: number;
+  maxDiscountAmount: number | null;
+  expiresInDays: number;
+  source: string;
+  metadata: Record<string, unknown>;
+}) {
+  const memberId = normalizeText(input.memberId);
+  const source = normalizeText(input.source);
+  const rewardKey = normalizeText(input.metadata.rewardKey);
+  if (!memberId || !source || !rewardKey || input.discountValue <= 0) return null;
+
+  const existingRows = await sql`
+    select id::text
+    from member_coupons
+    where member_id::text = ${memberId}
+      and issued_source = ${source}
+      and metadata ->> 'rewardKey' = ${rewardKey}
+    limit 1
+  `;
+  if (existingRows[0]?.id) return null;
+
+  const rows = await sql`
+    insert into member_coupons (
+      member_id,
+      name,
+      discount_type,
+      discount_value,
+      max_discount_amount,
+      expires_at,
+      issued_source,
+      metadata
+    )
+    values (
+      ${memberId},
+      ${input.name},
+      ${input.discountType},
+      ${input.discountValue},
+      ${input.maxDiscountAmount},
+      now() + (${input.expiresInDays} || ' days')::interval,
+      ${source},
+      ${JSON.stringify(input.metadata)}::jsonb
+    )
+    returning id::text
+  `;
+  return rows[0] ?? null;
+}
+
+export async function issueAutomaticLoyaltyRewardsForMember(memberId: string) {
+  const normalizedMemberId = normalizeText(memberId);
+  if (!normalizedMemberId) return { birthdayIssued: false, dormantIssued: false };
+  const [settings, memberRows] = await Promise.all([
+    getLoyaltyRewardSettings(),
+    sql`
+      select
+        members.id::text,
+        coalesce(members.birthday::text, '') as birthday,
+        coalesce(member_accounts.last_purchase_at::text, '') as "lastPurchaseAt",
+        coalesce(member_accounts.lifetime_visit_count, 0)::int as "lifetimeVisitCount"
+      from members
+      left join member_accounts on member_accounts.member_id = members.id
+      where members.id::text = ${normalizedMemberId}
+        and members.status = 'active'
+      limit 1
+    `
+  ]);
+  const member = memberRows[0] as { id: string; birthday: string; lastPurchaseAt: string; lifetimeVisitCount: number } | undefined;
+  if (!member?.id) return { birthdayIssued: false, dormantIssued: false };
+
+  let birthdayIssued = false;
+  if (settings.birthdayCouponEnabled && /^\d{4}-\d{2}-\d{2}$/.test(member.birthday)) {
+    const [, birthMonth] = member.birthday.split("-");
+    const current = currentTokyoDateParts();
+    if (Number(birthMonth) === current.month) {
+      const rewardKey = `birthday:${current.year}-${String(current.month).padStart(2, "0")}`;
+      const coupon = await issueAutomaticCoupon({
+        memberId: member.id,
+        name: settings.birthdayCouponName,
+        discountType: settings.birthdayCouponDiscountType,
+        discountValue: settings.birthdayCouponDiscountValue,
+        maxDiscountAmount: settings.birthdayCouponMaxDiscountAmount ?? settings.birthdayCouponDiscountValue,
+        expiresInDays: settings.birthdayCouponExpiresInDays,
+        source: "birthday",
+        metadata: { rewardKey, birthday: member.birthday }
+      });
+      birthdayIssued = Boolean(coupon);
+    }
+  }
+
+  let dormantIssued = false;
+  if (settings.dormantCouponEnabled && member.lifetimeVisitCount > 0 && member.lastPurchaseAt) {
+    const lastPurchaseAt = new Date(member.lastPurchaseAt).getTime();
+    const dormantMs = settings.dormantDays * 24 * 60 * 60 * 1000;
+    if (Number.isFinite(lastPurchaseAt) && Date.now() - lastPurchaseAt >= dormantMs) {
+      const rewardKey = `dormant:${settings.dormantDays}:${currentTokyoYearMonth()}`;
+      const coupon = await issueAutomaticCoupon({
+        memberId: member.id,
+        name: settings.dormantCouponName,
+        discountType: settings.dormantCouponDiscountType,
+        discountValue: settings.dormantCouponDiscountValue,
+        maxDiscountAmount: settings.dormantCouponMaxDiscountAmount ?? settings.dormantCouponDiscountValue,
+        expiresInDays: settings.dormantCouponExpiresInDays,
+        source: "dormant_reactivation",
+        metadata: { rewardKey, dormantDays: settings.dormantDays, lastPurchaseAt: member.lastPurchaseAt }
+      });
+      dormantIssued = Boolean(coupon);
+    }
+  }
+
+  return { birthdayIssued, dormantIssued };
+}
+
 async function issueMissingStampRewards(input: {
   memberId: string;
   campaignId: string;
@@ -765,6 +1134,7 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
     status: string;
   } | undefined;
   if (!order?.memberId || order.amount <= 0 || order.paymentStatus !== "paid" || order.status === "cancelled") return null;
+  const settings = await getLoyaltyRewardSettings();
 
   await sql`
     insert into member_accounts (member_id)
@@ -782,7 +1152,18 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
     `;
   }
 
-  const earnedPoints = Math.floor(order.amount / basePointRateBasis);
+  await refreshMemberTier(order.memberId);
+  const multiplierRows = await sql`
+    select coalesce(loyalty_tiers.point_multiplier, 1)::float as multiplier
+    from member_accounts
+    left join loyalty_tiers on loyalty_tiers.tier_key = member_accounts.current_tier_key
+      and loyalty_tiers.is_active = true
+    where member_accounts.member_id::text = ${order.memberId}
+    limit 1
+  `;
+  const pointMultiplier = clampMultiplier(multiplierRows[0]?.multiplier, 1);
+  const pointRateBasis = Math.max(1, settings.basePointRateBasis);
+  const earnedPoints = Math.floor((order.amount / pointRateBasis) * pointMultiplier);
   if (earnedPoints > 0) {
     const ledgerRows = await sql`
       insert into loyalty_point_ledger (
@@ -808,9 +1189,9 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
         'earn',
         ${earnedPoints},
         ${order.amount},
-        ${basePointRateBasis},
+        ${pointRateBasis},
         'order',
-        '会計によるポイント付与',
+        ${pointMultiplier === 1 ? "会計によるポイント付与" : `会計によるポイント付与 x${pointMultiplier}`},
         now() + (${pointExpiryMonths} || ' months')::interval
       )
       on conflict do nothing
@@ -834,6 +1215,7 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
 
   await awardStampForOrder(order);
   await refreshMemberTier(order.memberId);
+  await issueAutomaticLoyaltyRewardsForMember(order.memberId);
   return getMemberProfile(order.memberId);
 }
 
@@ -984,29 +1366,49 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "�
       update member_accounts
       set
         point_balance = greatest(0, point_balance - ${earn.points}),
+        lifetime_points_earned = greatest(0, lifetime_points_earned - ${earn.points}),
+        lifetime_spend_amount = greatest(0, lifetime_spend_amount - ${earn.eligibleAmount}),
+        lifetime_visit_count = greatest(0, lifetime_visit_count - 1),
         updated_at = now()
       where member_id::text = ${earn.memberId}
     `;
+    await refreshMemberTier(earn.memberId);
   }
   return getMemberProfile(earn.memberId);
 }
 
 export async function refreshMemberTier(memberId: string) {
   const rows = await sql`
-    with member_recent as (
+    with tier_candidates as (
       select
-        coalesce(sum(eligible_amount), 0)::int as spend,
-        count(distinct order_id)::int as visits
-      from loyalty_point_ledger
-      where member_id::text = ${memberId}
-        and movement_type = 'earn'
-        and created_at >= now() - interval '180 days'
+        loyalty_tiers.tier_key,
+        loyalty_tiers.rank,
+        coalesce(sum(loyalty_point_ledger.eligible_amount), 0)::int as spend,
+        count(distinct loyalty_point_ledger.order_id)::int as visits,
+        loyalty_tiers.required_spend_amount,
+        loyalty_tiers.required_visit_count
+      from loyalty_tiers
+      left join loyalty_point_ledger on loyalty_point_ledger.member_id::text = ${memberId}
+        and loyalty_point_ledger.movement_type = 'earn'
+        and loyalty_point_ledger.created_at >= now() - (loyalty_tiers.evaluation_window_days || ' days')::interval
+        and not exists (
+          select 1
+          from loyalty_point_ledger refund_entries
+          where refund_entries.order_id = loyalty_point_ledger.order_id
+            and refund_entries.member_id = loyalty_point_ledger.member_id
+            and refund_entries.movement_type = 'refund_reversal'
+        )
+      where loyalty_tiers.is_active = true
+      group by
+        loyalty_tiers.tier_key,
+        loyalty_tiers.rank,
+        loyalty_tiers.required_spend_amount,
+        loyalty_tiers.required_visit_count
     )
     select tier_key
-    from loyalty_tiers, member_recent
-    where is_active = true
-      and member_recent.spend >= required_spend_amount
-      and member_recent.visits >= required_visit_count
+    from tier_candidates
+    where spend >= required_spend_amount
+      and visits >= required_visit_count
     order by rank desc
     limit 1
   `;

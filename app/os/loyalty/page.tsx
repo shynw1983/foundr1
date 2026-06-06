@@ -104,12 +104,43 @@ type LoyaltyStampCampaign = {
   rewardValueAmount: number;
 };
 
+type LoyaltyRewardSettings = {
+  basePointRateBasis: number;
+  birthdayCouponEnabled: boolean;
+  birthdayCouponName: string;
+  birthdayCouponDiscountType: string;
+  birthdayCouponDiscountValue: number;
+  birthdayCouponMaxDiscountAmount: number | null;
+  birthdayCouponExpiresInDays: number;
+  dormantCouponEnabled: boolean;
+  dormantDays: number;
+  dormantCouponName: string;
+  dormantCouponDiscountType: string;
+  dormantCouponDiscountValue: number;
+  dormantCouponMaxDiscountAmount: number | null;
+  dormantCouponExpiresInDays: number;
+};
+
+type LoyaltyTierSetting = {
+  id: string;
+  tierKey: string;
+  name: string;
+  rank: number;
+  evaluationWindowDays: number;
+  requiredSpendAmount: number;
+  requiredVisitCount: number;
+  pointMultiplier: number;
+  isActive: boolean;
+};
+
 type LoyaltyDashboard = {
   summary: LoyaltySummary;
   recentMembers: LoyaltyMember[];
   recentLedger: LoyaltyLedger[];
   recentCoupons: LoyaltyCoupon[];
   stampCampaigns: LoyaltyStampCampaign[];
+  rewardSettings: LoyaltyRewardSettings;
+  tierSettings: LoyaltyTierSetting[];
 };
 
 const emptySummary: LoyaltySummary = {
@@ -120,6 +151,29 @@ const emptySummary: LoyaltySummary = {
   availableCoupons: 0,
   usedCoupons: 0
 };
+
+const defaultRewardSettings: LoyaltyRewardSettings = {
+  basePointRateBasis: 100,
+  birthdayCouponEnabled: true,
+  birthdayCouponName: "誕生日特典 500円OFF",
+  birthdayCouponDiscountType: "amount",
+  birthdayCouponDiscountValue: 500,
+  birthdayCouponMaxDiscountAmount: null,
+  birthdayCouponExpiresInDays: 45,
+  dormantCouponEnabled: true,
+  dormantDays: 45,
+  dormantCouponName: "お久しぶり 300円OFF",
+  dormantCouponDiscountType: "amount",
+  dormantCouponDiscountValue: 300,
+  dormantCouponMaxDiscountAmount: null,
+  dormantCouponExpiresInDays: 30
+};
+
+const defaultTierSettings: LoyaltyTierSetting[] = [
+  { id: "regular", tierKey: "regular", name: "Regular", rank: 10, evaluationWindowDays: 180, requiredSpendAmount: 0, requiredVisitCount: 0, pointMultiplier: 1, isActive: true },
+  { id: "gold", tierKey: "gold", name: "Gold", rank: 20, evaluationWindowDays: 180, requiredSpendAmount: 20000, requiredVisitCount: 20, pointMultiplier: 1, isActive: true },
+  { id: "vip", tierKey: "vip", name: "VIP", rank: 30, evaluationWindowDays: 180, requiredSpendAmount: 50000, requiredVisitCount: 45, pointMultiplier: 1, isActive: true }
+];
 
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
@@ -162,11 +216,21 @@ function getCouponValueLabel(coupon: LoyaltyCoupon) {
 }
 
 export default function LoyaltyPage() {
-  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [], recentCoupons: [], stampCampaigns: [] });
+  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({
+    summary: emptySummary,
+    recentMembers: [],
+    recentLedger: [],
+    recentCoupons: [],
+    stampCampaigns: [],
+    rewardSettings: defaultRewardSettings,
+    tierSettings: defaultTierSettings
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [couponSaving, setCouponSaving] = useState(false);
   const [stampSaving, setStampSaving] = useState(false);
+  const [ruleSaving, setRuleSaving] = useState(false);
+  const [tierSaving, setTierSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ displayName: "", phone: "", email: "" });
   const [couponForm, setCouponForm] = useState({
@@ -182,6 +246,8 @@ export default function LoyaltyPage() {
     stamps: "0",
     note: ""
   });
+  const [rewardSettings, setRewardSettings] = useState<LoyaltyRewardSettings>(defaultRewardSettings);
+  const [tierSettings, setTierSettings] = useState<LoyaltyTierSetting[]>(defaultTierSettings);
 
   const averageSpend = useMemo(() => {
     const visits = dashboard.summary.lifetimeVisits || 0;
@@ -197,15 +263,27 @@ export default function LoyaltyPage() {
       return;
     }
     const body = await response.json();
+    syncDashboard(body);
+    setMessage("");
+    setLoading(false);
+  }
+
+  function syncDashboard(body: Partial<LoyaltyDashboard>) {
+    const nextRewardSettings = body.rewardSettings
+      ? { ...defaultRewardSettings, ...body.rewardSettings }
+      : rewardSettings;
+    const nextTierSettings = body.tierSettings?.length ? body.tierSettings : tierSettings;
     setDashboard({
       summary: { ...emptySummary, ...(body.summary ?? {}) },
       recentMembers: body.recentMembers ?? [],
       recentLedger: body.recentLedger ?? [],
       recentCoupons: body.recentCoupons ?? [],
-      stampCampaigns: body.stampCampaigns ?? []
+      stampCampaigns: body.stampCampaigns ?? [],
+      rewardSettings: nextRewardSettings,
+      tierSettings: nextTierSettings
     });
-    setMessage("");
-    setLoading(false);
+    setRewardSettings(nextRewardSettings);
+    setTierSettings(nextTierSettings);
   }
 
   async function saveMember() {
@@ -223,13 +301,7 @@ export default function LoyaltyPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "会員を保存できませんでした。");
-      setDashboard({
-        summary: { ...emptySummary, ...(body.summary ?? {}) },
-        recentMembers: body.recentMembers ?? [],
-        recentLedger: body.recentLedger ?? [],
-        recentCoupons: body.recentCoupons ?? [],
-        stampCampaigns: body.stampCampaigns ?? []
-      });
+      syncDashboard(body);
       setForm({ displayName: "", phone: "", email: "" });
       setMessage("会員を保存しました。");
     } catch (error) {
@@ -263,13 +335,7 @@ export default function LoyaltyPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "クーポンを発行できませんでした。");
-      setDashboard({
-        summary: { ...emptySummary, ...(body.summary ?? {}) },
-        recentMembers: body.recentMembers ?? [],
-        recentLedger: body.recentLedger ?? [],
-        recentCoupons: body.recentCoupons ?? [],
-        stampCampaigns: body.stampCampaigns ?? []
-      });
+      syncDashboard(body);
       setCouponForm((current) => ({ ...current, name: "会員登録特典 500円OFF", discountValue: "500", expiresAt: "", note: "" }));
       setMessage("クーポンを発行しました。");
     } catch (error) {
@@ -300,13 +366,7 @@ export default function LoyaltyPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "スタンプを補録できませんでした。");
-      setDashboard({
-        summary: { ...emptySummary, ...(body.summary ?? {}) },
-        recentMembers: body.recentMembers ?? [],
-        recentLedger: body.recentLedger ?? [],
-        recentCoupons: body.recentCoupons ?? [],
-        stampCampaigns: body.stampCampaigns ?? []
-      });
+      syncDashboard(body);
       setStampForm((current) => ({ ...current, stamps: "0", note: "" }));
       const issuedRewards = Number(body.adjustment?.issuedRewards ?? 0);
       setMessage(issuedRewards > 0 ? `スタンプを補録し、特典クーポンを${formatNumber(issuedRewards)}件発行しました。` : "スタンプを補録しました。");
@@ -315,6 +375,58 @@ export default function LoyaltyPage() {
     } finally {
       setStampSaving(false);
     }
+  }
+
+  async function saveRewardSettings() {
+    if (ruleSaving) return;
+    setRuleSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_reward_settings",
+          rewardSettings
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "会員ルールを保存できませんでした。");
+      syncDashboard(body);
+      setMessage("会員ルールを保存しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "会員ルールを保存できませんでした。");
+    } finally {
+      setRuleSaving(false);
+    }
+  }
+
+  async function saveTierSettings() {
+    if (tierSaving) return;
+    setTierSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_tier_settings",
+          tierSettings
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "会員ランクを保存できませんでした。");
+      syncDashboard(body);
+      setMessage("会員ランクを保存しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "会員ランクを保存できませんでした。");
+    } finally {
+      setTierSaving(false);
+    }
+  }
+
+  function updateTier(index: number, patch: Partial<LoyaltyTierSetting>) {
+    setTierSettings((current) => current.map((tier, tierIndex) => tierIndex === index ? { ...tier, ...patch } : tier));
   }
 
   useEffect(() => {
@@ -380,13 +492,117 @@ export default function LoyaltyPage() {
         <section className="panel loyalty-rule-panel">
           <div>
             <p className="eyebrow">Rule</p>
-            <h3>初期ルール</h3>
+            <h3>会員ルール設定</h3>
           </div>
           <div className="loyalty-rule-grid">
-            <span><BadgePercent size={18} /> 100円で1ポイント</span>
-            <span><WalletCards size={18} /> 1ポイント=1円</span>
+            <span><BadgePercent size={18} /> {formatNumber(rewardSettings.basePointRateBasis)}円で1ポイント</span>
+            <span><WalletCards size={18} /> ランク倍率を自動反映</span>
             <span><Users size={18} /> ブランド共通会員</span>
-            <span><Gift size={18} /> スタンプ・クーポンはブランド別に拡張</span>
+            <span><Gift size={18} /> 誕生日・再来店クーポンを自動発行</span>
+          </div>
+          <div className="loyalty-settings-grid">
+            <label>
+              <span>ポイント基準</span>
+              <input value={rewardSettings.basePointRateBasis} onChange={(event) => setRewardSettings((current) => ({ ...current, basePointRateBasis: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+            <label className="loyalty-toggle-row">
+              <input type="checkbox" checked={rewardSettings.birthdayCouponEnabled} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponEnabled: event.target.checked }))} />
+              <span>誕生日月クーポン</span>
+            </label>
+            <label>
+              <span>誕生日クーポン名</span>
+              <input value={rewardSettings.birthdayCouponName} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponName: event.target.value }))} />
+            </label>
+            <label>
+              <span>誕生日割引</span>
+              <input value={rewardSettings.birthdayCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponDiscountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+            <label>
+              <span>誕生日有効日数</span>
+              <input value={rewardSettings.birthdayCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponExpiresInDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+            <label className="loyalty-toggle-row">
+              <input type="checkbox" checked={rewardSettings.dormantCouponEnabled} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponEnabled: event.target.checked }))} />
+              <span>再来店クーポン</span>
+            </label>
+            <label>
+              <span>未購入日数</span>
+              <input value={rewardSettings.dormantDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+            <label>
+              <span>再来店クーポン名</span>
+              <input value={rewardSettings.dormantCouponName} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponName: event.target.value }))} />
+            </label>
+            <label>
+              <span>再来店割引</span>
+              <input value={rewardSettings.dormantCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponDiscountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+            <label>
+              <span>再来店有効日数</span>
+              <input value={rewardSettings.dormantCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponExpiresInDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+            </label>
+          </div>
+          <button className="primary-button" type="button" onClick={() => void saveRewardSettings()} disabled={ruleSaving}>
+            {ruleSaving ? "保存中..." : "会員ルールを保存"}
+          </button>
+        </section>
+
+        <section className="panel loyalty-tier-panel">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">Tier</p>
+              <h3>ランク設定</h3>
+            </div>
+          </div>
+          <div className="loyalty-tier-grid">
+            {tierSettings.map((tier, index) => (
+              <article className="loyalty-tier-card" key={tier.tierKey || index}>
+                <label>
+                  <span>ランクキー</span>
+                  <input value={tier.tierKey} onChange={(event) => updateTier(index, { tierKey: event.target.value.trim() })} />
+                </label>
+                <label>
+                  <span>表示名</span>
+                  <input value={tier.name} onChange={(event) => updateTier(index, { name: event.target.value })} />
+                </label>
+                <label>
+                  <span>順位</span>
+                  <input value={tier.rank} onChange={(event) => updateTier(index, { rank: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                </label>
+                <label>
+                  <span>判定日数</span>
+                  <input value={tier.evaluationWindowDays} onChange={(event) => updateTier(index, { evaluationWindowDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                </label>
+                <label>
+                  <span>必要購入額</span>
+                  <input value={tier.requiredSpendAmount} onChange={(event) => updateTier(index, { requiredSpendAmount: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                </label>
+                <label>
+                  <span>必要来店数</span>
+                  <input value={tier.requiredVisitCount} onChange={(event) => updateTier(index, { requiredVisitCount: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                </label>
+                <label>
+                  <span>ポイント倍率</span>
+                  <input value={tier.pointMultiplier} onChange={(event) => updateTier(index, { pointMultiplier: Number(event.target.value.replace(/[^\d.]/g, "")) || 0 })} inputMode="decimal" />
+                </label>
+                <label className="loyalty-toggle-row">
+                  <input type="checkbox" checked={tier.isActive} onChange={(event) => updateTier(index, { isActive: event.target.checked })} />
+                  <span>有効</span>
+                </label>
+              </article>
+            ))}
+          </div>
+          <div className="loyalty-settings-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setTierSettings((current) => [...current, { id: `new-${Date.now()}`, tierKey: "", name: "", rank: 40, evaluationWindowDays: 180, requiredSpendAmount: 0, requiredVisitCount: 0, pointMultiplier: 1, isActive: true }])}
+            >
+              ランクを追加
+            </button>
+            <button className="primary-button" type="button" onClick={() => void saveTierSettings()} disabled={tierSaving}>
+              {tierSaving ? "保存中..." : "ランクを保存"}
+            </button>
           </div>
         </section>
 

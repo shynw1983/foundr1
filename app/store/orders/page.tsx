@@ -200,6 +200,7 @@ export default function StoreOrdersPage() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
   const [error, setError] = useState("");
+  const [cancelNotice, setCancelNotice] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const selectedStoreIdRef = useRef("");
 
@@ -545,7 +546,31 @@ export default function StoreOrdersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderId, status: nextStatus })
     });
-    if (response.ok) await refresh();
+    if (response.ok) {
+      await refresh();
+      return true;
+    }
+    return false;
+  };
+
+  const cancelOrder = async (order: StoreOrder) => {
+    if (order.paymentStatus === "paid") {
+      const confirmed = window.confirm([
+        "この注文は決済済みです。",
+        "",
+        "ここでキャンセルしても、決済サービス側の返金は自動実行されません。",
+        "KOMOJU / Square などの決済管理画面で返金処理を確認してください。",
+        "",
+        "会員ポイントは返金または正式な返金連動後に取り消されます。",
+        "",
+        "注文をキャンセルしますか？"
+      ].join("\n"));
+      if (!confirmed) return;
+    }
+    const ok = await updateStatus(order.id, "cancelled");
+    if (ok && order.paymentStatus === "paid") {
+      setCancelNotice(`${order.pickupCode} をキャンセルしました。決済済み注文のため、決済サービス側で返金処理を確認してください。`);
+    }
   };
 
   return (
@@ -742,6 +767,7 @@ export default function StoreOrdersPage() {
           </p>
           {loading ? <p className="muted-text">読み込み中...</p> : null}
           {error ? <p className="form-error">{error}</p> : null}
+          {cancelNotice ? <p className="store-order-payment-note">{cancelNotice}</p> : null}
           <div className="store-order-cards">
             {visibleOrders.map((order) => (
               <button
@@ -861,7 +887,7 @@ export default function StoreOrdersPage() {
                     </button>
                   ))}
                   {access?.canCancelOrders && selectedOrder.status !== "completed" && selectedOrder.status !== "cancelled" ? (
-                    <button type="button" className="secondary-button" onClick={() => updateStatus(selectedOrder.id, "cancelled")}>キャンセル</button>
+                    <button type="button" className="secondary-button" onClick={() => void cancelOrder(selectedOrder)}>キャンセル</button>
                   ) : null}
                 </div>
               ) : null}

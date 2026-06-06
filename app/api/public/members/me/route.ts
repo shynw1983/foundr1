@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { getMemberAvailableCoupons, getMemberPointHistory, getMemberStampCards, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
+import { getMemberAvailableCoupons, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,7 @@ export async function GET() {
     }
   });
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
+  await issueAutomaticLoyaltyRewardsForMember(member.id);
 
   const [coupons, pointHistory, stampCards] = await Promise.all([
     getMemberAvailableCoupons(member.id),
@@ -130,6 +131,7 @@ export async function PATCH(request: Request) {
       marketingOptIn: Boolean(body.marketingOptIn),
       lineLinked: Boolean(body.lineLinked)
     });
+    if (member?.id) await issueAutomaticLoyaltyRewardsForMember(member.id);
     return Response.json({ configured: true, authenticated: true, member }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error && error.message.includes("duplicate key")
