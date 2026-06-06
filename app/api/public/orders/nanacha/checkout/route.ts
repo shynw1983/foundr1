@@ -232,7 +232,7 @@ export async function POST(request: Request) {
     metadata: { source: "nanacha_web" }
   }) : null;
   const couponId = String(body.couponId || "");
-  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId) : null;
+  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId, { brandId }) : null;
   if (couponId && !coupon) return Response.json({ error: "Selected coupon is not available" }, { status: 400 });
   const exchangeEligibleAmounts = validatedItems.map((item) => item.drink.price).filter((amount) => amount > 0);
   const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts), Math.max(0, subtotalAmount - 1)) : 0;

@@ -31,6 +31,8 @@ Foundr1 OS is connected to two separate brand website projects on this machine. 
 
 Foundr1 OS already owns shared menu/catalog data, store operations status, public checkout APIs, order records, kitchen/production data, POS linkage, and member/loyalty records. The brand sites are the customer-facing frontends and should pass structured order and member fields to Foundr1 OS rather than duplicating backend business logic.
 
+When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either nanacha or maamaa, check and update the other brand site in the same pass unless the business owner explicitly scopes the change to one brand only. Keep customer-facing flow behavior aligned across both websites.
+
 ## Commands
 
 Use these commands from the repository root:

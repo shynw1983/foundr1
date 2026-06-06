@@ -105,8 +105,20 @@ function pickupCodeCandidates(pickupCode: string) {
   return Array.from(candidates);
 }
 
-export function toPublicCustomerOrder(order: CustomerOrderRow) {
+function withPublicBaseUrl(path: string, baseUrl = "") {
+  const cleanBase = String(baseUrl || "").replace(/\/$/, "");
+  return cleanBase ? `${cleanBase}${path}` : path;
+}
+
+export function toPublicCustomerOrder(order: CustomerOrderRow, baseUrl = "") {
   const cancelInfo = getCustomerOrderCancelInfo(order);
+  const receiptParams = new URLSearchParams({
+    orderId: order.id,
+    pickupCode: order.pickupCode
+  }).toString();
+  const canShowReceipt = order.paymentStatus === "paid";
+  const receiptPreviewPath = `/public/orders/receipt/preview?${receiptParams}`;
+  const receiptPdfPath = `/api/public/orders/receipt?${receiptParams}`;
   return {
     orderId: order.id,
     pickupCode: order.pickupCode,
@@ -118,6 +130,8 @@ export function toPublicCustomerOrder(order: CustomerOrderRow) {
     refundError: order.paymentRefundError,
     refundedAt: order.paymentRefundedAt,
     squareReceiptUrl: order.squareReceiptUrl,
+    receiptPreviewUrl: canShowReceipt ? withPublicBaseUrl(receiptPreviewPath, baseUrl) : "",
+    receiptPdfUrl: canShowReceipt ? withPublicBaseUrl(receiptPdfPath, baseUrl) : "",
     drink: order.drink,
     size: order.size,
     temperature: order.temperature,

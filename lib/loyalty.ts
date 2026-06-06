@@ -351,7 +351,36 @@ export async function resolveMemberForOrder(input: LoyaltyMemberInput) {
   return upsertMember(input);
 }
 
-export async function getMemberAvailableCoupons(memberId: string) {
+export async function resolveBrandId(value: unknown) {
+  const brand = normalizeText(value);
+  if (!brand) return "";
+  const normalizedBrand = brand.toLowerCase();
+  const aliases = Array.from(new Set([
+    brand,
+    normalizedBrand === "maamaa" ? "まぁ麻" : "",
+    normalizedBrand === "maamaa" ? "maaamaa" : "",
+    normalizedBrand === "nanacha" ? "nanacha" : "",
+    normalizedBrand === "nanacha" ? "奈奈茶" : ""
+  ].filter(Boolean)));
+  const rows = await sql`
+    select id::text
+    from brands
+    where id::text = ${brand}
+      or lower(name) = any(${aliases.map((alias) => alias.toLowerCase())})
+      or lower(brand_type) = any(${aliases.map((alias) => alias.toLowerCase())})
+    order by
+      case
+        when id::text = ${brand} then 0
+        when lower(name) = lower(${brand}) then 1
+        else 2
+      end
+    limit 1
+  `;
+  return normalizeText(rows[0]?.id);
+}
+
+export async function getMemberAvailableCoupons(memberId: string, input: { brandId?: string | null; brand?: string | null } = {}) {
+  const brandId = normalizeText(input.brandId) || await resolveBrandId(input.brand);
   return sql`
     select
       member_coupons.id::text,
@@ -371,6 +400,7 @@ export async function getMemberAvailableCoupons(memberId: string) {
     where member_coupons.member_id::text = ${memberId}
       and member_coupons.status = 'available'
       and (member_coupons.expires_at is null or member_coupons.expires_at > now())
+      and (${brandId} = '' or member_coupons.brand_id is null or member_coupons.brand_id::text = ${brandId})
     order by member_coupons.expires_at nulls last, member_coupons.issued_at desc
     limit 50
   `;
@@ -446,7 +476,8 @@ export function isMemberExchangeCoupon(coupon: { issuedSource?: string; name?: s
   return coupon.issuedSource === "stamp_campaign" || Boolean(coupon.name?.includes("無料券"));
 }
 
-export async function getUsableMemberCoupon(memberId: string, couponId: string) {
+export async function getUsableMemberCoupon(memberId: string, couponId: string, input: { brandId?: string | null; brand?: string | null } = {}) {
+  const brandId = normalizeText(input.brandId) || await resolveBrandId(input.brand);
   const rows = await sql`
     select
       member_coupons.id::text,
@@ -467,6 +498,7 @@ export async function getUsableMemberCoupon(memberId: string, couponId: string) 
       and member_coupons.member_id::text = ${memberId}
       and member_coupons.status = 'available'
       and (member_coupons.expires_at is null or member_coupons.expires_at > now())
+      and (${brandId} = '' or member_coupons.brand_id is null or member_coupons.brand_id::text = ${brandId})
     limit 1
   `;
   return rows[0] ?? null;

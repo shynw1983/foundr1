@@ -174,13 +174,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const brand = request.nextUrl.searchParams.get("brand") || "";
   const memberToken = request.nextUrl.searchParams.get("memberToken") || "";
   if (memberToken) {
     const member = await findMember({ memberToken });
     if (!member) {
       return Response.json({ error: "会員情報を読み込めませんでした。" }, { status: 404, headers: corsHeaders(request) });
     }
-    const coupons = await getMemberAvailableCoupons(member.id);
+    const coupons = await getMemberAvailableCoupons(member.id, { brand });
     return Response.json({
       authenticated: true,
       member: serializeMember(member),
@@ -198,7 +199,7 @@ export async function GET(request: NextRequest) {
   if (!member) {
     return Response.json({ error: "会員情報を読み込めませんでした。" }, { status: 404, headers: corsHeaders(request) });
   }
-  const coupons = await getMemberAvailableCoupons(member.id);
+  const coupons = await getMemberAvailableCoupons(member.id, { brand });
 
   return Response.json({
     authenticated: true,

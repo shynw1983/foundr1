@@ -402,6 +402,16 @@ input[type="file"] {
   color: var(--muted);
 }
 
+.online-receipt-empty-example {
+  margin-top: 14px !important;
+  padding: 12px;
+  overflow-wrap: anywhere;
+  color: var(--ink) !important;
+  font-size: 13px;
+  background: var(--green-soft);
+  border: 1px solid rgba(33, 116, 91, 0.16);
+}
+
 @media (max-width: 760px) {
   .online-receipt-preview-shell {
     padding: 16px;

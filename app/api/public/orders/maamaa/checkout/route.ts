@@ -230,7 +230,7 @@ export async function POST(request: Request) {
     metadata: { source: "maamaa_web" }
   }) : null;
   const couponId = String(body.couponId || "");
-  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId) : null;
+  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId, { brandId }) : null;
   if (couponId && !coupon) return Response.json({ error: "Selected coupon is not available" }, { status: 400 });
   const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
   if (coupon && couponDiscountAmount <= 0) return Response.json({ error: "Selected coupon cannot be applied to this order" }, { status: 400 });
