@@ -89,13 +89,59 @@ input[type="file"] {
 }
 
 .online-receipt-actions button {
-  min-height: 42px;
-  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 6px 16px 6px 8px;
   color: #fff;
   font-size: 14px;
   font-weight: 800;
   background: var(--green);
   border: 1px solid var(--green);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(33, 116, 91, 0.24);
+}
+
+.online-receipt-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  color: var(--green);
+  font-size: 11px;
+  letter-spacing: 0;
+  background: #fff;
+  border-radius: 999px;
+}
+
+.online-receipt-action-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  text-align: left;
+}
+
+.online-receipt-action-text strong,
+.online-receipt-action-text small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-receipt-action-text strong {
+  line-height: 1.2;
+}
+
+.online-receipt-action-text small {
+  max-width: 320px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .online-receipt-sheet {
@@ -448,12 +494,18 @@ input[type="file"] {
     padding: 10px;
     background: rgba(255, 255, 255, 0.94);
     border: 1px solid rgba(223, 228, 236, 0.92);
+    border-radius: 24px;
     box-shadow: 0 16px 42px rgba(29, 36, 48, 0.22);
   }
 
   .online-receipt-actions button {
     width: 100%;
-    min-height: 48px;
+    min-height: 56px;
+    padding-right: 14px;
+  }
+
+  .online-receipt-action-text small {
+    max-width: none;
   }
 
   .online-receipt-sheet {

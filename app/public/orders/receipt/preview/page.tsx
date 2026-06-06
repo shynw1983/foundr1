@@ -1,6 +1,7 @@
 import { OnlineOrderReceipt } from "../../../../../components/receipts/OnlineOrderReceipt";
 import { ReceiptPreviewActions } from "../../../../../components/receipts/ReceiptPreviewActions";
 import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../lib/receipt-data";
+import type { OnlineReceiptViewModel } from "../../../../../lib/receipt-data";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ type ReceiptPreviewPageProps = {
 function getParam(params: Record<string, string | string[] | undefined>, key: string) {
   const value = params[key];
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function getReceiptFileName(receipt: OnlineReceiptViewModel) {
+  return `領収書-${receipt.brandName}-${receipt.pickupCode}`.replace(/[\\/:*?"<>|]+/g, "-");
 }
 
 export default async function ReceiptPreviewPage({ searchParams }: ReceiptPreviewPageProps) {
@@ -38,7 +43,7 @@ export default async function ReceiptPreviewPage({ searchParams }: ReceiptPrevie
 
   return (
     <main className="online-receipt-preview-shell">
-      <ReceiptPreviewActions />
+      <ReceiptPreviewActions fileName={getReceiptFileName(receipt)} />
       <OnlineOrderReceipt receipt={receipt} />
     </main>
   );
