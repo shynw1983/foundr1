@@ -176,6 +176,9 @@ export async function GET(request: NextRequest) {
       memberNumber: member.memberNumber,
       publicToken: member.publicToken,
       displayName: member.displayName,
+      lastName: member.lastName,
+      firstName: member.firstName,
+      fullName: member.fullName,
       phone: member.phone,
       email: member.email,
       pointBalance: member.pointBalance
