@@ -8703,13 +8703,48 @@ body :where(
   border: 1px solid var(--member-line);
   border-radius: 999px;
   background: white;
-  color: #b7b7b7;
 }
 
 .member-stamp-slots span.is-filled {
   border-color: var(--member-logo-accent);
-  background: var(--member-logo-accent);
-  color: white;
+  background: white;
+}
+
+.member-stamp-mark {
+  position: relative;
+  display: block;
+  width: min(30px, 62%);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: #d6d6d6;
+}
+
+.member-stamp-mark::before,
+.member-stamp-mark::after {
+  content: "";
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: white;
+  transform: rotate(28deg);
+}
+
+.member-stamp-mark::before {
+  top: 19%;
+  left: 24%;
+  width: 19%;
+  height: 10%;
+}
+
+.member-stamp-mark::after {
+  top: 23%;
+  left: 42%;
+  width: 26%;
+  height: 11%;
+}
+
+.member-stamp-slots span.is-filled .member-stamp-mark {
+  background: #241916;
 }
 
 .member-stamp-card-foot {

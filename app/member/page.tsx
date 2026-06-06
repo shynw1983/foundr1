@@ -28,6 +28,7 @@ type MemberProfile = {
 
 type MemberCoupon = {
   id: string;
+  brandName: string;
   couponCode: string;
   name: string;
   discountType: string;
@@ -166,6 +167,10 @@ function stampCardProgressLabel(card: MemberStampCard) {
   const required = Math.max(1, Number(card.stampsRequired) || 1);
   const current = Math.max(0, Math.min(required, Number(card.currentStamps) || 0));
   return `${current} / ${required}`;
+}
+
+function couponScopeLabel(coupon: { brandName?: string }) {
+  return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
 }
 
 function splitJapanesePhone(value: string) {
@@ -661,7 +666,7 @@ function ConfiguredMemberPortal() {
                       <div className="member-stamp-slots" aria-label={`${card.name} ${stampCardProgressLabel(card)}`}>
                         {Array.from({ length: required }).map((_, index) => (
                           <span key={`${card.id}-${index}`} className={index < current ? "is-filled" : ""}>
-                            <Stamp size={18} />
+                            <i className="member-stamp-mark" aria-hidden="true" />
                           </span>
                         ))}
                       </div>
@@ -686,7 +691,7 @@ function ConfiguredMemberPortal() {
                     <div key={coupon.id} id={`member-coupon-${coupon.id}`} className="member-portal-list-row">
                       <div>
                         <strong>{coupon.name}</strong>
-                        <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}{selectedCouponId === coupon.id ? " / 使用予定" : ""}</span>
+                        <span>{couponScopeLabel(coupon)} / {coupon.couponCode} / {formatDate(coupon.expiresAt)}{selectedCouponId === coupon.id ? " / 使用予定" : ""}</span>
                       </div>
                       <b>{coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`}</b>
                       <button

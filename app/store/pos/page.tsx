@@ -187,6 +187,7 @@ type PosMember = {
 
 type PosCoupon = {
   id: string;
+  brandName: string;
   couponCode: string;
   name: string;
   discountType: string;
@@ -240,6 +241,10 @@ function getCouponDiscountAmount(coupon: PosCoupon | undefined, amount: number) 
 
 function getCouponValueLabel(coupon: PosCoupon) {
   return coupon.discountType === "percent" ? `${coupon.discountValue}%` : formatYen(coupon.discountValue);
+}
+
+function getCouponScopeLabel(coupon: { brandName?: string }) {
+  return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
 }
 
 function getCouponPosStatusLabel(discount: number, subtotal: number) {
@@ -1502,7 +1507,7 @@ export default function StorePosPage() {
                           >
                             <span>
                               <strong>{coupon.name}</strong>
-                              <small>{coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
+                              <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
                             </span>
                             <b>{getCouponPosStatusLabel(discount, subtotal)}</b>
                           </button>

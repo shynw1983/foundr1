@@ -83,6 +83,7 @@ type LoyaltyCoupon = {
   id: string;
   couponCode: string;
   name: string;
+  brandName: string;
   discountType: string;
   discountValue: number;
   status: string;
@@ -146,6 +147,10 @@ function getMovementLabel(value: string) {
   if (value === "redeem") return "利用";
   if (value === "manual_adjustment") return "調整";
   return value || "-";
+}
+
+function getCouponScopeLabel(coupon: { brandName?: string }) {
+  return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
 }
 
 export default function LoyaltyPage() {
@@ -554,7 +559,7 @@ export default function LoyaltyPage() {
                     </td>
                     <td>
                       <strong>{coupon.name}</strong>
-                      <small>{coupon.couponCode} / {formatYen(coupon.discountValue)}</small>
+                      <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {formatYen(coupon.discountValue)}</small>
                     </td>
                     <td>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "期限なし"}</td>
                     <td>{coupon.status === "available" ? "利用可" : coupon.status === "used" ? "使用済み" : coupon.status}</td>

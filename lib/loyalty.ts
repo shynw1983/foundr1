@@ -354,21 +354,24 @@ export async function resolveMemberForOrder(input: LoyaltyMemberInput) {
 export async function getMemberAvailableCoupons(memberId: string) {
   return sql`
     select
-      id::text,
-      coupon_code as "couponCode",
-      name,
-      discount_type as "discountType",
-      discount_value::int as "discountValue",
-      coalesce(max_discount_amount::int, null) as "maxDiscountAmount",
-      status,
-      coalesce(expires_at::text, '') as "expiresAt",
-      issued_source as "issuedSource",
-      issued_at::text as "issuedAt"
+      member_coupons.id::text,
+      coalesce(member_coupons.brand_id::text, '') as "brandId",
+      coalesce(brands.name, '') as "brandName",
+      member_coupons.coupon_code as "couponCode",
+      member_coupons.name,
+      member_coupons.discount_type as "discountType",
+      member_coupons.discount_value::int as "discountValue",
+      coalesce(member_coupons.max_discount_amount::int, null) as "maxDiscountAmount",
+      member_coupons.status,
+      coalesce(member_coupons.expires_at::text, '') as "expiresAt",
+      member_coupons.issued_source as "issuedSource",
+      member_coupons.issued_at::text as "issuedAt"
     from member_coupons
-    where member_id::text = ${memberId}
-      and status = 'available'
-      and (expires_at is null or expires_at > now())
-    order by expires_at nulls last, issued_at desc
+    left join brands on brands.id = member_coupons.brand_id
+    where member_coupons.member_id::text = ${memberId}
+      and member_coupons.status = 'available'
+      and (member_coupons.expires_at is null or member_coupons.expires_at > now())
+    order by member_coupons.expires_at nulls last, member_coupons.issued_at desc
     limit 50
   `;
 }
@@ -433,20 +436,23 @@ export function calculateCouponDiscount(coupon: { discountType?: string; discoun
 export async function getUsableMemberCoupon(memberId: string, couponId: string) {
   const rows = await sql`
     select
-      id::text,
-      member_id::text as "memberId",
-      coupon_code as "couponCode",
-      name,
-      discount_type as "discountType",
-      discount_value::int as "discountValue",
-      coalesce(max_discount_amount::int, null) as "maxDiscountAmount",
-      status,
-      coalesce(expires_at::text, '') as "expiresAt"
+      member_coupons.id::text,
+      member_coupons.member_id::text as "memberId",
+      coalesce(member_coupons.brand_id::text, '') as "brandId",
+      coalesce(brands.name, '') as "brandName",
+      member_coupons.coupon_code as "couponCode",
+      member_coupons.name,
+      member_coupons.discount_type as "discountType",
+      member_coupons.discount_value::int as "discountValue",
+      coalesce(member_coupons.max_discount_amount::int, null) as "maxDiscountAmount",
+      member_coupons.status,
+      coalesce(member_coupons.expires_at::text, '') as "expiresAt"
     from member_coupons
-    where id::text = ${couponId}
-      and member_id::text = ${memberId}
-      and status = 'available'
-      and (expires_at is null or expires_at > now())
+    left join brands on brands.id = member_coupons.brand_id
+    where member_coupons.id::text = ${couponId}
+      and member_coupons.member_id::text = ${memberId}
+      and member_coupons.status = 'available'
+      and (member_coupons.expires_at is null or member_coupons.expires_at > now())
     limit 1
   `;
   return rows[0] ?? null;
@@ -1022,6 +1028,7 @@ export async function getLoyaltyDashboard() {
         member_coupons.name,
         member_coupons.discount_type as "discountType",
         member_coupons.discount_value::int as "discountValue",
+        coalesce(brands.name, '') as "brandName",
         member_coupons.status,
         coalesce(member_coupons.expires_at::text, '') as "expiresAt",
         member_coupons.issued_source as "issuedSource",
@@ -1030,6 +1037,7 @@ export async function getLoyaltyDashboard() {
         coalesce(nullif(members.display_name, ''), members.phone, members.email, members.member_number) as "memberLabel"
       from member_coupons
       join members on members.id = member_coupons.member_id
+      left join brands on brands.id = member_coupons.brand_id
       order by member_coupons.issued_at desc
       limit 50
     `,
