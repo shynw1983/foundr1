@@ -88,7 +88,7 @@ input[type="file"] {
   z-index: 10;
 }
 
-.online-receipt-actions button {
+.online-receipt-actions a {
   display: inline-flex;
   align-items: center;
   gap: 12px;
@@ -98,6 +98,7 @@ input[type="file"] {
   color: #fff;
   font-size: 14px;
   font-weight: 800;
+  text-decoration: none;
   background: var(--green);
   border: 1px solid var(--green);
   border-radius: 999px;
@@ -501,7 +502,7 @@ input[type="file"] {
     transform: translateX(-50%);
   }
 
-  .online-receipt-actions button {
+  .online-receipt-actions a {
     width: 142px;
     min-height: 46px;
     max-width: calc(100vw - 24px);

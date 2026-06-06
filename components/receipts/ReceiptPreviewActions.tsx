@@ -4,27 +4,27 @@ import { useEffect } from "react";
 
 type ReceiptPreviewActionsProps = {
   fileName: string;
+  pdfUrl: string;
 };
 
-export function ReceiptPreviewActions({ fileName }: ReceiptPreviewActionsProps) {
+export function ReceiptPreviewActions({ fileName, pdfUrl }: ReceiptPreviewActionsProps) {
   useEffect(() => {
     document.title = fileName;
   }, [fileName]);
 
-  const savePdf = () => {
+  const openPdf = () => {
     document.title = fileName;
-    window.requestAnimationFrame(() => window.print());
   };
 
   return (
     <div className="online-receipt-actions" aria-label="領収書操作">
-      <button type="button" onClick={savePdf}>
+      <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={openPdf}>
         <span className="online-receipt-action-icon" aria-hidden="true">PDF</span>
         <span className="online-receipt-action-text">
-          <strong>PDFを保存</strong>
+          <strong>PDFを開く</strong>
           <small>{fileName}</small>
         </span>
-      </button>
+      </a>
     </div>
   );
 }

@@ -18,6 +18,21 @@ function getReceiptFileName(receipt: OnlineReceiptViewModel) {
   return `領収書-${receipt.brandName}-${receipt.pickupCode}`.replace(/[\\/:*?"<>|]+/g, "-");
 }
 
+function getReceiptPdfUrl(params: {
+  orderId: string;
+  pickupCode: string;
+  demo: string;
+}) {
+  const search = new URLSearchParams();
+  if (params.demo) {
+    search.set("demo", params.demo);
+  } else {
+    search.set("orderId", params.orderId);
+    search.set("pickupCode", params.pickupCode);
+  }
+  return `/api/public/orders/receipt/preview-pdf?${search.toString()}`;
+}
+
 export default async function ReceiptPreviewPage({ searchParams }: ReceiptPreviewPageProps) {
   const params = await searchParams;
   const orderId = getParam(params, "orderId").trim();
@@ -43,7 +58,7 @@ export default async function ReceiptPreviewPage({ searchParams }: ReceiptPrevie
 
   return (
     <main className="online-receipt-preview-shell">
-      <ReceiptPreviewActions fileName={getReceiptFileName(receipt)} />
+      <ReceiptPreviewActions fileName={getReceiptFileName(receipt)} pdfUrl={getReceiptPdfUrl({ orderId, pickupCode, demo })} />
       <OnlineOrderReceipt receipt={receipt} />
     </main>
   );
