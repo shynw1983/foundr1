@@ -8522,6 +8522,7 @@ body :where(
   justify-content: center;
   gap: 5px;
   width: 100%;
+  border: 0;
   border-radius: 999px;
   background: var(--member-logo-accent);
   color: white;
@@ -8529,10 +8530,17 @@ body :where(
   font-weight: 600;
   line-height: 1.2;
   padding: 7px 9px;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .member-card-coupon-badge svg {
   flex: 0 0 auto;
+}
+
+.member-card-coupon-badge:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }
 
 .member-stat-card {
@@ -8578,6 +8586,7 @@ body :where(
   align-content: start;
   gap: 12px;
   padding: 16px;
+  scroll-margin-top: 18px;
 }
 
 .member-settings-panel {

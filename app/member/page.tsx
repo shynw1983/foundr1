@@ -244,6 +244,7 @@ export default function MemberPage() {
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn, user } = useUser();
   const settingsPanelRef = useRef<HTMLDetailsElement | null>(null);
+  const couponPanelRef = useRef<HTMLElement | null>(null);
   const profilePromptShownRef = useRef(false);
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
@@ -283,6 +284,10 @@ function ConfiguredMemberPortal() {
   const profileStatusLabel = missingRequiredProfile ? "必須項目が未入力です" : "必須項目は入力済みです";
   const returningToSite = Boolean(returnTo && handoffEnabled && isLoaded && isSignedIn && !handoffFailed && (!data.member || hasRequiredProfileDetails(data.member)));
   const readyToReturnToSite = Boolean(returningToSite && data.member && hasRequiredProfileDetails(data.member));
+
+  const scrollToCoupons = () => {
+    couponPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -550,10 +555,10 @@ function ConfiguredMemberPortal() {
                     {qrDataUrl ? <img src={qrDataUrl} alt="会員 QR" /> : <QrCode size={64} />}
                     <small>店頭で提示してください</small>
                     {data.coupons?.length ? (
-                      <span className="member-card-coupon-badge">
+                      <button className="member-card-coupon-badge" type="button" onClick={scrollToCoupons}>
                         <Gift size={13} />
                         利用可能クーポン {data.coupons.length}件
-                      </span>
+                      </button>
                     ) : null}
                   </div>
                 </article>
@@ -588,7 +593,7 @@ function ConfiguredMemberPortal() {
             )}
 
             <section className="member-portal-content-grid">
-              <article className="member-portal-panel">
+              <article className="member-portal-panel" ref={couponPanelRef}>
                 <div className="member-portal-panel-title">
                   <Gift size={18} />
                   <h3>クーポン</h3>
