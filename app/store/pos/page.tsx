@@ -1,7 +1,8 @@
 "use client";
 
-import { Banknote, CreditCard, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
+import { Banknote, Camera, CreditCard, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
+import jsQR from "jsqr";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -386,6 +387,10 @@ function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], bran
 }
 
 export default function StorePosPage() {
+  const memberScannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const memberScannerStreamRef = useRef<MediaStream | null>(null);
+  const memberScannerActiveRef = useRef(false);
   const [access, setAccess] = useState<PosAccess | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -408,6 +413,8 @@ export default function StorePosPage() {
   const [memberLookupInput, setMemberLookupInput] = useState("");
   const [selectedMember, setSelectedMember] = useState<PosMember | null>(null);
   const [memberLookupLoading, setMemberLookupLoading] = useState(false);
+  const [memberScannerOpen, setMemberScannerOpen] = useState(false);
+  const [memberScannerMessage, setMemberScannerMessage] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -505,14 +512,94 @@ export default function StorePosPage() {
   }, [message]);
 
   useEffect(() => {
-    const hasDialog = Boolean(configuringItem) || transactionDialogOpen || Boolean(cashDialog);
+    const hasDialog = Boolean(configuringItem) || transactionDialogOpen || Boolean(cashDialog) || memberScannerOpen;
     if (!hasDialog) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [cashDialog, configuringItem, transactionDialogOpen]);
+  }, [cashDialog, configuringItem, memberScannerOpen, transactionDialogOpen]);
+
+  useEffect(() => {
+    if (!memberScannerOpen) return;
+    let cancelled = false;
+    let frameId = 0;
+
+    async function startScanner() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMemberScannerMessage("カメラを利用できません。会員番号または電話番号を入力してください。");
+        return;
+      }
+
+      try {
+        setMemberScannerMessage("会員証の QR をカメラにかざしてください。");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        memberScannerStreamRef.current = stream;
+        const video = memberScannerVideoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
+
+        memberScannerActiveRef.current = true;
+        const scan = () => {
+          if (cancelled || !memberScannerActiveRef.current) return;
+          try {
+            const canvas = memberScannerCanvasRef.current;
+            const context = canvas?.getContext("2d", { willReadFrequently: true });
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            if (!canvas || !context || !width || !height) {
+              frameId = window.requestAnimationFrame(scan);
+              return;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(video, 0, 0, width, height);
+            const imageData = context.getImageData(0, 0, width, height);
+            const result = jsQR(imageData.data, width, height);
+            const code = result?.data?.trim();
+            if (code) {
+              memberScannerActiveRef.current = false;
+              setMemberScannerMessage("会員 QR を読み取りました。");
+              setMemberScannerOpen(false);
+              void lookupMember(code);
+              return;
+            }
+          } catch {
+            setMemberScannerMessage("QR を読み取れません。角度を変えてもう一度かざしてください。");
+          }
+          frameId = window.requestAnimationFrame(scan);
+        };
+        frameId = window.requestAnimationFrame(scan);
+      } catch {
+        setMemberScannerMessage("カメラを起動できません。権限を確認するか、会員番号または電話番号を入力してください。");
+      }
+    }
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      memberScannerActiveRef.current = false;
+      if (frameId) window.cancelAnimationFrame(frameId);
+      memberScannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+      memberScannerStreamRef.current = null;
+      if (memberScannerVideoRef.current) memberScannerVideoRef.current.srcObject = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberScannerOpen]);
 
   const categorySummaries = useMemo(() => getCategories(items, categories, selectedBrandId), [categories, items, selectedBrandId]);
   const visibleItems = useMemo(() => {
@@ -595,11 +682,12 @@ export default function StorePosPage() {
     void load(storeId);
   }
 
-  async function lookupMember() {
-    const code = memberLookupInput.trim();
+  async function lookupMember(scannedCode?: string) {
+    const code = (scannedCode ?? memberLookupInput).trim();
     if (!selectedStoreId || !code || memberLookupLoading) return;
     setMemberLookupLoading(true);
     setMessage("");
+    setMemberLookupInput(code);
     try {
       const params = new URLSearchParams({ storeId: selectedStoreId, code });
       const response = await fetch(`/api/store/pos/member?${params.toString()}`, { cache: "no-store" });
@@ -1288,22 +1376,30 @@ export default function StorePosPage() {
                 <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
               </div>
             ) : (
-              <div className="store-pos-member-lookup">
-                <ScanLine size={16} />
-                <input
-                  value={memberLookupInput}
-                  onChange={(event) => setMemberLookupInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void lookupMember();
-                    }
-                  }}
-                  placeholder="会員 QR / 会員番号 / メール"
-                />
-                <button className="secondary-button" type="button" onClick={() => void lookupMember()} disabled={!memberLookupInput.trim() || memberLookupLoading}>
-                  {memberLookupLoading ? "確認中" : "確認"}
-                </button>
+              <div className="store-pos-member-lookup-wrap">
+                <div className="store-pos-member-lookup">
+                  <ScanLine size={16} />
+                  <input
+                    value={memberLookupInput}
+                    onChange={(event) => setMemberLookupInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void lookupMember();
+                      }
+                    }}
+                    placeholder="会員番号 / 電話番号 / メール / QR"
+                    inputMode="text"
+                  />
+                  <button className="secondary-button" type="button" onClick={() => void lookupMember()} disabled={!memberLookupInput.trim() || memberLookupLoading}>
+                    {memberLookupLoading ? "確認中" : "確認"}
+                  </button>
+                  <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => setMemberScannerOpen(true)}>
+                    <Camera size={15} />
+                    読取
+                  </button>
+                </div>
+                <small>会員証 QR を読むか、電話番号を入力して確認できます。</small>
               </div>
             )}
           </div>
@@ -1365,6 +1461,31 @@ export default function StorePosPage() {
           </button>
         </aside>
       </section>
+
+      {memberScannerOpen ? (
+        <div className="store-pos-scanner-overlay" role="dialog" aria-modal="true" aria-label="会員 QR 読取">
+          <div className="store-pos-scanner-dialog">
+            <div className="store-pos-scanner-head">
+              <div>
+                <p className="eyebrow">Member QR</p>
+                <h3>会員 QR 読取</h3>
+                <span>客さまの会員証 QR をカメラにかざしてください。</span>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setMemberScannerOpen(false)}>閉じる</button>
+            </div>
+            <div className="store-pos-scanner-video">
+              <video ref={memberScannerVideoRef} playsInline muted />
+              <canvas ref={memberScannerCanvasRef} aria-hidden="true" />
+              <div className="store-pos-scanner-frame" aria-hidden="true" />
+            </div>
+            <p className="store-pos-scanner-message">{memberScannerMessage || "カメラを準備しています。"}</p>
+            <div className="store-pos-scanner-fallback">
+              <ScanLine size={16} />
+              <span>読み取れない場合は、会員番号または電話番号を入力してください。</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {transactionDialogOpen ? (
         <div className="store-pos-transaction-overlay" role="dialog" aria-modal="true" aria-label="取引履歴">
