@@ -210,7 +210,7 @@ export default function MemberPage() {
 
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn } = useUser();
-  const settingsPanelRef = useRef<HTMLElement | null>(null);
+  const settingsPanelRef = useRef<HTMLDetailsElement | null>(null);
   const profilePromptShownRef = useRef(false);
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
@@ -223,6 +223,8 @@ function ConfiguredMemberPortal() {
   const [handoffStarted, setHandoffStarted] = useState(false);
   const [settingsForm, setSettingsForm] = useState<MemberSettingsForm>(emptyMemberSettings);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
 
   const qrValue = useMemo(() => {
     if (!data.member?.publicToken) return "";
@@ -243,6 +245,7 @@ function ConfiguredMemberPortal() {
   }, [handoffEnabled, returnTo]);
 
   const missingRequiredProfile = Boolean(data.member && !hasRequiredProfileDetails(data.member));
+  const profileStatusLabel = missingRequiredProfile ? "必須項目が未入力です" : "必須項目は入力済みです";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -280,6 +283,7 @@ function ConfiguredMemberPortal() {
       if (!response.ok) throw new Error(body.error || "会員情報を読み込めませんでした。");
       setData(body);
       setSettingsForm(toSettingsForm(body.member));
+      setSettingsMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会員情報を読み込めませんでした。");
     } finally {
@@ -294,15 +298,28 @@ function ConfiguredMemberPortal() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !data.member || !missingRequiredProfile || profilePromptShownRef.current) return;
     profilePromptShownRef.current = true;
-    setMessage("会員登録を完了するため、氏名と電話番号を入力してください。");
     window.setTimeout(() => {
       settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   }, [data.member, isLoaded, isSignedIn, missingRequiredProfile]);
 
   async function saveSettings() {
+    const requiredMissing = [
+      !settingsForm.lastName.trim() ? "姓" : "",
+      !settingsForm.firstName.trim() ? "名" : "",
+      !settingsForm.phone.trim() ? "電話番号" : ""
+    ].filter(Boolean);
+    if (requiredMissing.length) {
+      setSettingsOpen(true);
+      setSettingsMessage(`${requiredMissing.join("、")}を入力してください。`);
+      window.setTimeout(() => {
+        settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+      return;
+    }
+
     setSettingsSaving(true);
-    setMessage("");
+    setSettingsMessage("");
     try {
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
@@ -314,9 +331,11 @@ function ConfiguredMemberPortal() {
       setData((current) => ({ ...current, member: body.member ?? current.member }));
       setSettingsForm(toSettingsForm(body.member));
       if (hasRequiredProfileDetails(body.member)) setCompleteProfileRequested(false);
-      setMessage("会員情報を保存しました。");
+      setSettingsMessage("会員情報を保存しました。");
+      if (hasRequiredProfileDetails(body.member)) setSettingsOpen(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "会員情報を保存できませんでした。");
+      setSettingsOpen(true);
+      setSettingsMessage(error instanceof Error ? error.message : "会員情報を保存できませんでした。");
     } finally {
       setSettingsSaving(false);
     }
@@ -468,70 +487,84 @@ function ConfiguredMemberPortal() {
             )}
 
             <section className="member-portal-content-grid">
-              <article ref={settingsPanelRef} className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}>
-                <div className="member-portal-panel-title">
-                  <Settings size={18} />
-                  <h3>会員情報</h3>
-                </div>
-                {missingRequiredProfile ? (
-                  <div className="member-settings-required-alert">
-                    <strong>会員登録を完了してください</strong>
-                    <span>ポイント利用と予約時の自動入力には、氏名と電話番号が必要です。</span>
+              <details
+                ref={settingsPanelRef}
+                className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}
+                open={settingsOpen}
+                onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
+              >
+                <summary className="member-settings-summary">
+                  <div className="member-portal-panel-title">
+                    <Settings size={18} />
+                    <h3>会員情報</h3>
                   </div>
-                ) : null}
-                <p className="member-settings-note">氏名と電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
-                <div className="member-settings-grid">
-                  <label>
-                    <span>表示名・ニックネーム</span>
-                    <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
-                  </label>
-                  <label>
-                    <span>姓</span>
-                    <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
-                  </label>
-                  <label>
-                    <span>名</span>
-                    <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
-                  </label>
-                  <label>
-                    <span>フリガナ（任意）</span>
-                    <input value={settingsForm.nameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, nameKana: event.target.value }))} placeholder="例: ヤマダ タロウ" />
-                  </label>
-                  <label>
-                    <span>電話番号</span>
-                    <input value={settingsForm.phone} onChange={(event) => setSettingsForm((current) => ({ ...current, phone: formatJapanesePhoneInput(event.target.value) }))} placeholder="090-1234-5678" inputMode="tel" autoComplete="tel" required />
-                  </label>
-                  <label>
-                    <span>生年月日（任意）</span>
-                    <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
-                  </label>
-                  <label>
-                    <span>常用店（任意）</span>
-                    <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
-                      {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>表示言語（任意）</span>
-                    <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))}>
-                      {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </label>
+                  <div className="member-settings-summary-status">
+                    <span className={missingRequiredProfile ? "is-required" : "is-complete"}>{profileStatusLabel}</span>
+                    <b>{settingsOpen ? "閉じる" : "編集"}</b>
+                  </div>
+                </summary>
+                <div className="member-settings-body">
+                  {missingRequiredProfile ? (
+                    <div className="member-settings-required-alert">
+                      <strong>会員登録を完了してください</strong>
+                      <span>ポイント利用と予約時の自動入力には、氏名と電話番号が必要です。</span>
+                    </div>
+                  ) : null}
+                  {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
+                  <p className="member-settings-note">氏名と電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
+                  <div className="member-settings-grid">
+                    <label>
+                      <span>表示名・ニックネーム</span>
+                      <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
+                    </label>
+                    <label>
+                      <span>姓</span>
+                      <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
+                    </label>
+                    <label>
+                      <span>名</span>
+                      <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
+                    </label>
+                    <label>
+                      <span>フリガナ（任意）</span>
+                      <input value={settingsForm.nameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, nameKana: event.target.value }))} placeholder="例: ヤマダ タロウ" />
+                    </label>
+                    <label>
+                      <span>電話番号</span>
+                      <input value={settingsForm.phone} onChange={(event) => setSettingsForm((current) => ({ ...current, phone: formatJapanesePhoneInput(event.target.value) }))} placeholder="090-1234-5678" inputMode="tel" autoComplete="tel" required />
+                    </label>
+                    <label>
+                      <span>生年月日（任意）</span>
+                      <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
+                    </label>
+                    <label>
+                      <span>常用店（任意）</span>
+                      <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
+                        {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span>表示言語（任意）</span>
+                      <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))}>
+                        {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="member-settings-checks">
+                    <label>
+                      <input type="checkbox" checked={settingsForm.marketingOptIn} onChange={(event) => setSettingsForm((current) => ({ ...current, marketingOptIn: event.target.checked }))} />
+                      <span>クーポンやキャンペーンのお知らせを受け取る</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={settingsForm.lineLinked} onChange={(event) => setSettingsForm((current) => ({ ...current, lineLinked: event.target.checked }))} />
+                      <span>LINE連携済みとして記録する（本連携機能は準備中）</span>
+                    </label>
+                  </div>
+                  <button className="primary-button" type="button" onClick={() => void saveSettings()} disabled={settingsSaving}>
+                    {settingsSaving ? "保存中..." : "会員情報を保存"}
+                  </button>
                 </div>
-                <div className="member-settings-checks">
-                  <label>
-                    <input type="checkbox" checked={settingsForm.marketingOptIn} onChange={(event) => setSettingsForm((current) => ({ ...current, marketingOptIn: event.target.checked }))} />
-                    <span>クーポンやキャンペーンのお知らせを受け取る</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" checked={settingsForm.lineLinked} onChange={(event) => setSettingsForm((current) => ({ ...current, lineLinked: event.target.checked }))} />
-                    <span>LINE連携済みとして記録する（本連携機能は準備中）</span>
-                  </label>
-                </div>
-                <button className="primary-button" type="button" onClick={() => void saveSettings()} disabled={settingsSaving}>
-                  {settingsSaving ? "保存中..." : "会員情報を保存"}
-                </button>
-              </article>
+              </details>
 
               <article className="member-portal-panel">
                 <div className="member-portal-panel-title">

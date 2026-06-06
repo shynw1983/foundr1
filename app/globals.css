@@ -8043,10 +8043,69 @@ body :where(
 
 .member-settings-panel {
   grid-column: 1 / -1;
+  padding: 0;
+  overflow: hidden;
 }
 
 .member-settings-panel.is-profile-task {
   border-color: var(--member-logo-accent);
+}
+
+.member-settings-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.member-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.member-settings-summary-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.member-settings-summary-status span,
+.member-settings-summary-status b {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.member-settings-summary-status span {
+  border: 1px solid var(--member-line);
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
+.member-settings-summary-status span.is-required {
+  border-color: rgba(47, 138, 114, 0.28);
+  background: #f3faf7;
+  color: var(--member-logo-accent);
+}
+
+.member-settings-summary-status span.is-complete {
+  color: var(--member-muted);
+}
+
+.member-settings-summary-status b {
+  color: var(--member-ink);
+}
+
+.member-settings-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--member-soft-line);
+  padding: 16px;
 }
 
 .member-settings-required-alert {
@@ -8068,6 +8127,18 @@ body :where(
   color: var(--member-muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.member-settings-inline-message {
+  margin: 0;
+  border: 1px solid rgba(47, 138, 114, 0.28);
+  border-radius: 8px;
+  background: #f3faf7;
+  color: var(--member-logo-accent);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+  padding: 10px 12px;
 }
 
 .member-settings-note {
@@ -8260,6 +8331,24 @@ body :where(
   .member-portal-config,
   .member-portal-login-panel {
     padding: 14px;
+  }
+
+  .member-settings-panel {
+    padding: 0;
+  }
+
+  .member-settings-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .member-settings-summary-status {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .member-settings-summary-status span {
+    white-space: normal;
   }
 
   .member-settings-grid {
