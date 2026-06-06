@@ -184,7 +184,7 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
 }
 
 function hasRequiredProfileDetails(member?: MemberProfile | null) {
-  return Boolean((member?.fullName?.trim() || (member?.lastName?.trim() && member?.firstName?.trim())) && member?.phone?.trim());
+  return Boolean(member?.displayName?.trim() && (member?.fullName?.trim() || (member?.lastName?.trim() && member?.firstName?.trim())) && member?.phone?.trim());
 }
 
 export default function MemberPage() {
@@ -314,6 +314,7 @@ function ConfiguredMemberPortal() {
 
   async function saveSettings() {
     const requiredMissing = [
+      !settingsForm.displayName.trim() ? "表示名・ニックネーム" : "",
       !settingsForm.lastName.trim() ? "姓" : "",
       !settingsForm.firstName.trim() ? "名" : "",
       !(settingsForm.phonePart1.trim() && settingsForm.phonePart2.trim() && settingsForm.phonePart3.trim()) ? "電話番号" : ""
@@ -517,11 +518,11 @@ function ConfiguredMemberPortal() {
                   {missingRequiredProfile ? (
                     <div className="member-settings-required-alert">
                       <strong>会員登録を完了してください</strong>
-                      <span>ポイント利用と予約時の自動入力には、氏名と電話番号が必要です。</span>
+                      <span>ポイント利用と予約時の自動入力には、表示名・氏名・電話番号が必要です。</span>
                     </div>
                   ) : null}
                   {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
-                  <p className="member-settings-note">氏名と電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
+                  <p className="member-settings-note">表示名、氏名、電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
                   <div className="member-settings-grid">
                     <label>
                       <span>表示名・ニックネーム</span>
