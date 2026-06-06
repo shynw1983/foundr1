@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { sendBirthdayCouponEmail } from "./email";
 
 const basePointRateBasis = 100;
 const pointExpiryMonths = 12;
@@ -883,7 +884,11 @@ async function issueAutomaticCoupon(input: {
       ${source},
       ${JSON.stringify(input.metadata)}::jsonb
     )
-    returning id::text
+    returning
+      id::text,
+      coupon_code as "couponCode",
+      name,
+      coalesce(expires_at::text, '') as "expiresAt"
   `;
   return rows[0] ?? null;
 }
@@ -950,6 +955,108 @@ export async function issueAutomaticLoyaltyRewardsForMember(memberId: string) {
   }
 
   return { birthdayIssued, dormantIssued };
+}
+
+async function updateCouponEmailStatus(input: { couponId: string; status: string; messageId?: string; error?: string }) {
+  await sql`
+    update member_coupons
+    set metadata = metadata || ${JSON.stringify({
+      emailStatus: input.status,
+      emailMessageId: input.messageId ?? "",
+      emailError: input.error ?? "",
+      emailSentAt: input.status === "sent" ? new Date().toISOString() : undefined,
+      emailCheckedAt: new Date().toISOString()
+    })}::jsonb
+    where id::text = ${input.couponId}
+  `;
+}
+
+export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; sendEmails?: boolean } = {}) {
+  const settings = await getLoyaltyRewardSettings();
+  if (!settings.birthdayCouponEnabled || settings.birthdayCouponDiscountValue <= 0) {
+    return { ok: true, enabled: false, targetMonth: currentTokyoYearMonth(), issuedCount: 0, checkedCount: 0, emailSentCount: 0, emailSkippedCount: 0, emailFailedCount: 0 };
+  }
+
+  const current = currentTokyoDateParts();
+  const targetMonth = `${current.year}-${String(current.month).padStart(2, "0")}`;
+  const rewardKey = `birthday:${targetMonth}`;
+  const batchLimit = clampInteger(input.batchLimit, 2000, 1, 10000);
+  const shouldSendEmails = input.sendEmails !== false;
+  const memberRows = await sql`
+    select
+      id::text,
+      birthday::text,
+      coalesce(nullif(display_name, ''), nullif(metadata->>'fullName', ''), nullif(email, ''), member_number) as "memberName",
+      coalesce(email, '') as email,
+      coalesce((metadata->>'marketingOptIn')::boolean, false) as "marketingOptIn"
+    from members
+    where status = 'active'
+      and birthday is not null
+      and extract(month from birthday)::int = ${current.month}
+    order by created_at
+    limit ${batchLimit}
+  `;
+
+  let issuedCount = 0;
+  let emailSentCount = 0;
+  let emailSkippedCount = 0;
+  let emailFailedCount = 0;
+  for (const member of memberRows as Array<{ id: string; birthday: string; memberName: string; email: string; marketingOptIn: boolean }>) {
+    const coupon = await issueAutomaticCoupon({
+      memberId: member.id,
+      name: settings.birthdayCouponName,
+      discountType: settings.birthdayCouponDiscountType,
+      discountValue: settings.birthdayCouponDiscountValue,
+      maxDiscountAmount: settings.birthdayCouponMaxDiscountAmount ?? settings.birthdayCouponDiscountValue,
+      expiresInDays: settings.birthdayCouponExpiresInDays,
+      source: "birthday",
+      metadata: {
+        rewardKey,
+        birthday: member.birthday,
+        issuedBy: "monthly_birthday_cron"
+      }
+    });
+    if (!coupon) continue;
+    issuedCount += 1;
+
+    if (!shouldSendEmails || !member.marketingOptIn || !member.email) {
+      emailSkippedCount += 1;
+      await updateCouponEmailStatus({
+        couponId: String(coupon.id),
+        status: shouldSendEmails ? "skipped" : "disabled",
+        error: !shouldSendEmails ? "Email sending disabled." : !member.marketingOptIn ? "marketingOptIn is false." : "Member email is missing."
+      });
+      continue;
+    }
+
+    const emailResult = await sendBirthdayCouponEmail({
+      to: member.email,
+      memberName: member.memberName,
+      couponName: String(coupon.name),
+      couponCode: String(coupon.couponCode),
+      expiresAt: String(coupon.expiresAt)
+    });
+    if (emailResult.status === "sent") emailSentCount += 1;
+    else if (emailResult.status === "failed") emailFailedCount += 1;
+    else emailSkippedCount += 1;
+    await updateCouponEmailStatus({
+      couponId: String(coupon.id),
+      status: emailResult.status,
+      messageId: emailResult.id,
+      error: emailResult.error
+    });
+  }
+
+  return {
+    ok: true,
+    enabled: true,
+    targetMonth,
+    issuedCount,
+    checkedCount: memberRows.length,
+    emailSentCount,
+    emailSkippedCount,
+    emailFailedCount
+  };
 }
 
 async function issueMissingStampRewards(input: {
