@@ -159,7 +159,10 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
 
       <section class="online-receipt-hero" aria-label="金額">
         <div>
-          <p class="online-receipt-recipient">${escapeHtml(receiptWithAssets.recipientName || "\u00a0")} 様</p>
+          <p class="online-receipt-recipient${receiptWithAssets.recipientName ? "" : " is-blank"}">
+            <span>${escapeHtml(receiptWithAssets.recipientName || "\u00a0")}</span>
+            <em>様</em>
+          </p>
           <span>但し ${escapeHtml(receiptWithAssets.purposeText)}として</span>
         </div>
         <strong>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</strong>

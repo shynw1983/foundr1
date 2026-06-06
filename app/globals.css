@@ -339,11 +339,30 @@ input[type="file"] {
 }
 
 .online-receipt-recipient {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
   max-width: 108mm;
   padding-bottom: 8px;
   font-size: 18px;
   font-weight: 800;
   border-bottom: 1px solid rgba(24, 35, 31, 0.45);
+}
+
+.online-receipt-recipient span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.online-receipt-recipient.is-blank span {
+  display: inline-block;
+  min-width: 34mm;
+}
+
+.online-receipt-recipient em {
+  flex: 0 0 auto;
+  font: inherit;
 }
 
 .online-receipt-hero strong {
@@ -708,6 +727,10 @@ input[type="file"] {
     max-width: 112mm;
     padding-bottom: 5px;
     font-size: 15px;
+  }
+
+  .online-receipt-recipient.is-blank span {
+    min-width: 42mm;
   }
 
   .online-receipt-hero strong {
