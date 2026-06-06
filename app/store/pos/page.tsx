@@ -242,6 +242,12 @@ function getCouponValueLabel(coupon: PosCoupon) {
   return coupon.discountType === "percent" ? `${coupon.discountValue}%` : formatYen(coupon.discountValue);
 }
 
+function getCouponPosStatusLabel(discount: number, subtotal: number) {
+  if (discount > 0) return `-${formatYen(discount)}`;
+  if (subtotal <= 0) return "商品追加後に適用";
+  return "対象外";
+}
+
 const orderTypeOptions = [
   { value: "eat_in", label: "店内" },
   { value: "takeout", label: "持ち帰り" }
@@ -1467,6 +1473,7 @@ export default function StorePosPage() {
                         const discount = getCouponDiscountAmount(coupon, subtotal);
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
+                        const isUnavailable = subtotal > 0 && discount <= 0;
                         return (
                           <button
                             key={coupon.id}
@@ -1476,14 +1483,14 @@ export default function StorePosPage() {
                               isRecommended ? "is-recommended" : ""
                             ].filter(Boolean).join(" ")}
                             type="button"
-                            disabled={discount <= 0}
+                            disabled={isUnavailable}
                             onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
                           >
                             <span>
                               <strong>{coupon.name}</strong>
                               <small>{coupon.couponCode} / {getCouponValueLabel(coupon)}{isRecommended ? " / おすすめ" : ""}</small>
                             </span>
-                            <b>{discount ? `-${formatYen(discount)}` : "対象外"}</b>
+                            <b>{getCouponPosStatusLabel(discount, subtotal)}</b>
                           </button>
                         );
                       })}
