@@ -62,6 +62,9 @@ type MemberSettingsForm = {
   fullName: string;
   nameKana: string;
   phone: string;
+  phonePart1: string;
+  phonePart2: string;
+  phonePart3: string;
   birthday: string;
   preferredLanguage: string;
   preferredStoreId: string;
@@ -79,6 +82,9 @@ const emptyMemberSettings: MemberSettingsForm = {
   fullName: "",
   nameKana: "",
   phone: "",
+  phonePart1: "",
+  phonePart2: "",
+  phonePart3: "",
   birthday: "",
   preferredLanguage: "ja",
   preferredStoreId: "",
@@ -118,21 +124,20 @@ function movementLabel(value: string) {
   return value || "-";
 }
 
-function formatJapanesePhoneInput(value: string) {
-  const digits = value.replace(/[^\d]/g, "").slice(0, 11);
-  if (/^0[789]0/.test(digits)) {
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-  }
-  if (/^(0120|0800)/.test(digits)) {
-    if (digits.length <= 4) return digits;
-    if (digits.length <= 7) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+function splitJapanesePhone(value: string) {
+  const hyphenParts = value.split("-").map((part) => part.replace(/[^\d]/g, "")).filter(Boolean);
+  if (hyphenParts.length === 3) return hyphenParts as [string, string, string];
+
+  const digits = value.replace(/[^\d]/g, "");
+  if (/^0[789]0\d{8}$/.test(digits)) return [digits.slice(0, 3), digits.slice(3, 7), digits.slice(7)];
+  if (/^(0120\d{6}|0800\d{7})$/.test(digits)) return [digits.slice(0, 4), digits.slice(4, 7), digits.slice(7)];
+  if (/^0\d{9}$/.test(digits)) return [digits.slice(0, 2), digits.slice(2, 6), digits.slice(6)];
+  if (/^0\d{8}$/.test(digits)) return [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5)];
+  return [digits, "", ""];
+}
+
+function composeJapanesePhone(part1: string, part2: string, part3: string) {
+  return [part1, part2, part3].map((part) => part.replace(/[^\d]/g, "")).filter(Boolean).join("-");
 }
 
 function safeReturnTo(value: string) {
@@ -159,6 +164,7 @@ function withSignedOutMarker(value: string) {
 function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   if (!member) return emptyMemberSettings;
   const [fallbackLastName = "", fallbackFirstName = ""] = (member.fullName || "").trim().split(/\s+/, 2);
+  const [phonePart1, phonePart2, phonePart3] = splitJapanesePhone(member.phone || "");
   return {
     displayName: member.displayName || "",
     lastName: member.lastName || fallbackLastName,
@@ -166,6 +172,9 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
     fullName: member.fullName || "",
     nameKana: member.nameKana || "",
     phone: member.phone || "",
+    phonePart1,
+    phonePart2,
+    phonePart3,
     birthday: member.birthday || "",
     preferredLanguage: member.preferredLanguage || "ja",
     preferredStoreId: member.preferredStoreId || "",
@@ -307,7 +316,7 @@ function ConfiguredMemberPortal() {
     const requiredMissing = [
       !settingsForm.lastName.trim() ? "姓" : "",
       !settingsForm.firstName.trim() ? "名" : "",
-      !settingsForm.phone.trim() ? "電話番号" : ""
+      !(settingsForm.phonePart1.trim() && settingsForm.phonePart2.trim() && settingsForm.phonePart3.trim()) ? "電話番号" : ""
     ].filter(Boolean);
     if (requiredMissing.length) {
       setSettingsOpen(true);
@@ -321,10 +330,11 @@ function ConfiguredMemberPortal() {
     setSettingsSaving(true);
     setSettingsMessage("");
     try {
+      const phone = composeJapanesePhone(settingsForm.phonePart1, settingsForm.phonePart2, settingsForm.phonePart3);
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settingsForm)
+        body: JSON.stringify({ ...settingsForm, phone })
       });
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || "会員情報を保存できませんでした。");
@@ -531,7 +541,13 @@ function ConfiguredMemberPortal() {
                     </label>
                     <label>
                       <span>電話番号</span>
-                      <input value={settingsForm.phone} onChange={(event) => setSettingsForm((current) => ({ ...current, phone: formatJapanesePhoneInput(event.target.value) }))} placeholder="090-1234-5678" inputMode="tel" autoComplete="tel" required />
+                      <div className="member-phone-segments">
+                        <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label="電話番号 1" required />
+                        <span>-</span>
+                        <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label="電話番号 2" required />
+                        <span>-</span>
+                        <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label="電話番号 3" required />
+                      </div>
                     </label>
                     <label>
                       <span>生年月日（任意）</span>

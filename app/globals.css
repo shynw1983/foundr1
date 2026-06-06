@@ -8187,6 +8187,26 @@ body :where(
   outline: 0;
 }
 
+.member-phone-segments {
+  display: grid;
+  grid-template-columns: minmax(48px, 0.85fr) auto minmax(54px, 1fr) auto minmax(54px, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.member-phone-segments input {
+  min-width: 0;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.member-phone-segments span {
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .member-settings-checks {
   display: grid;
   gap: 8px;
