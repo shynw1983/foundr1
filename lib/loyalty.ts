@@ -11,6 +11,15 @@ function normalizePhone(value: unknown) {
   return normalizeText(value).replace(/[^\d+]/g, "");
 }
 
+function formatJapanesePhone(value: unknown) {
+  const phone = normalizePhone(value);
+  if (/^0[789]0\d{8}$/.test(phone)) return `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}`;
+  if (/^0120\d{6}$/.test(phone) || /^0800\d{7}$/.test(phone)) return `${phone.slice(0, 4)}-${phone.slice(4, 7)}-${phone.slice(7)}`;
+  if (/^0\d{9}$/.test(phone)) return `${phone.slice(0, 2)}-${phone.slice(2, 6)}-${phone.slice(6)}`;
+  if (/^0\d{8}$/.test(phone)) return `${phone.slice(0, 2)}-${phone.slice(2, 5)}-${phone.slice(5)}`;
+  return phone;
+}
+
 function normalizeEmail(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
@@ -231,7 +240,12 @@ export async function getMemberProfile(memberId: string) {
     where members.id::text = ${memberId}
     limit 1
   `;
-  return (rows[0] as LoyaltyMember | undefined) ?? null;
+  const member = rows[0] as LoyaltyMember | undefined;
+  if (!member) return null;
+  return {
+    ...member,
+    phone: formatJapanesePhone(member.phone)
+  };
 }
 
 export type LoyaltyMemberSettingsInput = {

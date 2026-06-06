@@ -118,6 +118,23 @@ function movementLabel(value: string) {
   return value || "-";
 }
 
+function formatJapanesePhoneInput(value: string) {
+  const digits = value.replace(/[^\d]/g, "").slice(0, 11);
+  if (/^0[789]0/.test(digits)) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+  if (/^(0120|0800)/.test(digits)) {
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+}
+
 function safeReturnTo(value: string) {
   try {
     const url = new URL(value);
@@ -482,7 +499,7 @@ function ConfiguredMemberPortal() {
                   </label>
                   <label>
                     <span>電話番号</span>
-                    <input value={settingsForm.phone} onChange={(event) => setSettingsForm((current) => ({ ...current, phone: event.target.value }))} placeholder="090..." inputMode="tel" autoComplete="tel" required />
+                    <input value={settingsForm.phone} onChange={(event) => setSettingsForm((current) => ({ ...current, phone: formatJapanesePhoneInput(event.target.value) }))} placeholder="090-1234-5678" inputMode="tel" autoComplete="tel" required />
                   </label>
                   <label>
                     <span>生年月日（任意）</span>
