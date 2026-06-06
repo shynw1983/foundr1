@@ -1,7 +1,7 @@
 "use client";
 
 import { SignInButton, SignOutButton, SignUpButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, ChevronDown, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, Ticket, UserPlus, UserRound } from "lucide-react";
+import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, Ticket, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type MemberProfile = {
@@ -108,6 +108,23 @@ const languageOptions = [
   { value: "zh-Hant", label: "繁體中文" },
   { value: "en", label: "English" },
   { value: "ko", label: "한국어" }
+];
+
+const memberBrandLinks = [
+  {
+    name: "nanacha",
+    description: "タピオカ、ミルクティー、フルーツティーを気軽に楽しめるティースタンド。",
+    href: "https://www.nanacha.jp/",
+    image: "/brands/nanacha-logo.png",
+    imageClassName: "is-wide"
+  },
+  {
+    name: "まぁ麻",
+    description: "出来立てで楽しむ、辛さと痺れを選べる麻辣湯。",
+    href: "https://maamaa.jp/",
+    image: "/brands/maamaa-logo.png",
+    imageClassName: "is-mark"
+  }
 ];
 
 function formatYen(value: number) {
@@ -651,6 +668,27 @@ function ConfiguredMemberPortal() {
                   </button>
                 </div>
               </details>
+
+              <article className="member-portal-panel member-brand-panel">
+                <div className="member-portal-panel-title">
+                  <ExternalLink size={18} />
+                  <h3>ブランド</h3>
+                </div>
+                <div className="member-brand-grid" aria-label="Foundr1 会員ブランド">
+                  {memberBrandLinks.map((brand) => (
+                    <a key={brand.name} className="member-brand-card" href={brand.href} target="_blank" rel="noreferrer">
+                      <span className="member-brand-logo">
+                        <img className={brand.imageClassName} src={brand.image} alt={`${brand.name} ロゴ`} />
+                      </span>
+                      <span className="member-brand-copy">
+                        <strong>{brand.name}</strong>
+                        <small>{brand.description}</small>
+                      </span>
+                      <ExternalLink size={15} aria-hidden="true" />
+                    </a>
+                  ))}
+                </div>
+              </article>
 
               <article className="member-portal-panel">
                 <div className="member-portal-panel-title">
