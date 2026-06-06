@@ -722,7 +722,7 @@ function ConfiguredMemberPortal() {
                       <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
                     </label>
                     <label>
-                      <span>常用店（任意）</span>
+                      <span>よく利用する店舗（任意）</span>
                       <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
                         {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
