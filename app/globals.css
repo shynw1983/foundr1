@@ -7818,6 +7818,15 @@ body :where(
   min-width: 0;
 }
 
+.loyalty-member-form select {
+  width: 100%;
+  min-width: 0;
+}
+
+.loyalty-member-list {
+  grid-column: 1 / -1;
+}
+
 .loyalty-table-wrap {
   width: 100%;
   overflow-x: auto;

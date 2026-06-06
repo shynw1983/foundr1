@@ -78,10 +78,25 @@ type LoyaltyLedger = {
   createdAt: string;
 };
 
+type LoyaltyCoupon = {
+  id: string;
+  couponCode: string;
+  name: string;
+  discountType: string;
+  discountValue: number;
+  status: string;
+  expiresAt: string;
+  issuedSource: string;
+  issuedAt: string;
+  memberNumber: string;
+  memberLabel: string;
+};
+
 type LoyaltyDashboard = {
   summary: LoyaltySummary;
   recentMembers: LoyaltyMember[];
   recentLedger: LoyaltyLedger[];
+  recentCoupons: LoyaltyCoupon[];
 };
 
 const emptySummary: LoyaltySummary = {
@@ -122,11 +137,19 @@ function getMovementLabel(value: string) {
 }
 
 export default function LoyaltyPage() {
-  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [] });
+  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [], recentCoupons: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [couponSaving, setCouponSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ displayName: "", phone: "", email: "" });
+  const [couponForm, setCouponForm] = useState({
+    memberId: "",
+    name: "会員登録特典 500円OFF",
+    discountValue: "500",
+    expiresAt: "",
+    note: ""
+  });
 
   const averageSpend = useMemo(() => {
     const visits = dashboard.summary.lifetimeVisits || 0;
@@ -145,7 +168,8 @@ export default function LoyaltyPage() {
     setDashboard({
       summary: { ...emptySummary, ...(body.summary ?? {}) },
       recentMembers: body.recentMembers ?? [],
-      recentLedger: body.recentLedger ?? []
+      recentLedger: body.recentLedger ?? [],
+      recentCoupons: body.recentCoupons ?? []
     });
     setMessage("");
     setLoading(false);
@@ -169,7 +193,8 @@ export default function LoyaltyPage() {
       setDashboard({
         summary: { ...emptySummary, ...(body.summary ?? {}) },
         recentMembers: body.recentMembers ?? [],
-        recentLedger: body.recentLedger ?? []
+        recentLedger: body.recentLedger ?? [],
+        recentCoupons: body.recentCoupons ?? []
       });
       setForm({ displayName: "", phone: "", email: "" });
       setMessage("会員を保存しました。");
@@ -177,6 +202,45 @@ export default function LoyaltyPage() {
       setMessage(error instanceof Error ? error.message : "会員を保存できませんでした。");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function issueCoupon() {
+    if (couponSaving || !couponForm.memberId || !couponForm.name.trim() || Number(couponForm.discountValue) <= 0) {
+      setMessage("会員、クーポン名、割引金額を入力してください。");
+      return;
+    }
+    setCouponSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "issue_coupon",
+          memberId: couponForm.memberId,
+          name: couponForm.name,
+          discountType: "amount",
+          discountValue: Number(couponForm.discountValue),
+          maxDiscountAmount: Number(couponForm.discountValue),
+          expiresAt: couponForm.expiresAt,
+          note: couponForm.note
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "クーポンを発行できませんでした。");
+      setDashboard({
+        summary: { ...emptySummary, ...(body.summary ?? {}) },
+        recentMembers: body.recentMembers ?? [],
+        recentLedger: body.recentLedger ?? [],
+        recentCoupons: body.recentCoupons ?? []
+      });
+      setCouponForm((current) => ({ ...current, name: "会員登録特典 500円OFF", discountValue: "500", expiresAt: "", note: "" }));
+      setMessage("クーポンを発行しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "クーポンを発行できませんでした。");
+    } finally {
+      setCouponSaving(false);
     }
   }
 
@@ -278,6 +342,45 @@ export default function LoyaltyPage() {
             </button>
           </article>
 
+          <article className="panel loyalty-member-form">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Coupon</p>
+                <h3>クーポンを発行</h3>
+              </div>
+            </div>
+            <label>
+              <span>会員</span>
+              <select value={couponForm.memberId} onChange={(event) => setCouponForm((current) => ({ ...current, memberId: event.target.value }))}>
+                <option value="">選択してください</option>
+                {dashboard.recentMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName || member.phone || member.email || member.memberNumber} / {member.memberNumber}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>クーポン名</span>
+              <input value={couponForm.name} onChange={(event) => setCouponForm((current) => ({ ...current, name: event.target.value }))} placeholder="例: 会員登録特典 500円OFF" />
+            </label>
+            <label>
+              <span>割引金額</span>
+              <input value={couponForm.discountValue} onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: event.target.value.replace(/[^\d]/g, "") }))} placeholder="500" inputMode="numeric" />
+            </label>
+            <label>
+              <span>有効期限</span>
+              <input type="date" value={couponForm.expiresAt} onChange={(event) => setCouponForm((current) => ({ ...current, expiresAt: event.target.value }))} />
+            </label>
+            <label>
+              <span>メモ</span>
+              <input value={couponForm.note} onChange={(event) => setCouponForm((current) => ({ ...current, note: event.target.value }))} placeholder="任意" />
+            </label>
+            <button className="primary-button" type="button" onClick={() => void issueCoupon()} disabled={couponSaving}>
+              {couponSaving ? "発行中..." : "クーポンを発行"}
+            </button>
+          </article>
+
           <article className="panel loyalty-member-list">
             <div className="panel-title">
               <div>
@@ -315,6 +418,49 @@ export default function LoyaltyPage() {
               </table>
             </div>
           </article>
+        </section>
+
+        <section className="panel loyalty-ledger-panel">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">Coupon</p>
+              <h3>最近のクーポン</h3>
+            </div>
+          </div>
+          <div className="loyalty-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>発行日</th>
+                  <th>会員</th>
+                  <th>クーポン</th>
+                  <th>期限</th>
+                  <th>状態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.recentCoupons.length ? dashboard.recentCoupons.map((coupon) => (
+                  <tr key={coupon.id}>
+                    <td>{formatDateTime(coupon.issuedAt)}</td>
+                    <td>
+                      <strong>{coupon.memberLabel}</strong>
+                      <small>{coupon.memberNumber}</small>
+                    </td>
+                    <td>
+                      <strong>{coupon.name}</strong>
+                      <small>{coupon.couponCode} / {formatYen(coupon.discountValue)}</small>
+                    </td>
+                    <td>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "期限なし"}</td>
+                    <td>{coupon.status === "available" ? "利用可" : coupon.status === "used" ? "使用済み" : coupon.status}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={5}>クーポン履歴はまだありません。</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className="panel loyalty-ledger-panel">

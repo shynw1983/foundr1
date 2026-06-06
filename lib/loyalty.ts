@@ -157,6 +157,7 @@ export async function upsertMember(input: LoyaltyMemberInput) {
     on conflict (member_id) do nothing
   `;
   await upsertIdentityLink(memberId, input);
+  await issueSignupCoupon(memberId);
   return getMemberProfile(memberId);
 }
 
@@ -209,6 +210,41 @@ async function upsertIdentityLink(memberId: string, input: LoyaltyMemberInput) {
       identity_label = excluded.identity_label,
       metadata = member_identity_links.metadata || excluded.metadata,
       updated_at = now()
+  `;
+}
+
+async function issueSignupCoupon(memberId: string) {
+  const existingRows = await sql`
+    select id::text
+    from member_coupons
+    where member_id::text = ${memberId}
+      and issued_source = 'signup_bonus'
+      and metadata ->> 'rewardType' = 'signup_500_yen'
+    limit 1
+  `;
+  if (existingRows[0]?.id) return;
+
+  await sql`
+    insert into member_coupons (
+      member_id,
+      name,
+      discount_type,
+      discount_value,
+      max_discount_amount,
+      expires_at,
+      issued_source,
+      metadata
+    )
+    values (
+      ${memberId},
+      '会員登録特典 500円OFF',
+      'amount',
+      500,
+      500,
+      now() + interval '60 days',
+      'signup_bonus',
+      '{"rewardType":"signup_500_yen"}'::jsonb
+    )
   `;
 }
 
@@ -327,6 +363,52 @@ export async function getMemberAvailableCoupons(memberId: string) {
     order by expires_at nulls last, issued_at desc
     limit 50
   `;
+}
+
+export async function issueMemberCoupon(input: {
+  memberId: string;
+  name: string;
+  discountType?: string;
+  discountValue: number;
+  maxDiscountAmount?: number | null;
+  expiresAt?: string | null;
+  source?: string;
+  note?: string;
+  issuedBy?: string;
+}) {
+  const memberId = normalizeText(input.memberId);
+  const name = normalizeText(input.name) || "クーポン";
+  const discountType = normalizeText(input.discountType) || "amount";
+  const discountValue = Math.max(0, Math.round(Number(input.discountValue) || 0));
+  const maxDiscountAmount = input.maxDiscountAmount == null ? discountValue : Math.max(0, Math.round(Number(input.maxDiscountAmount) || 0));
+  const expiresAt = normalizeText(input.expiresAt);
+  const source = normalizeText(input.source) || "manual";
+  if (!memberId || discountValue <= 0) throw new Error("会員と割引金額を指定してください。");
+
+  const rows = await sql`
+    insert into member_coupons (
+      member_id,
+      name,
+      discount_type,
+      discount_value,
+      max_discount_amount,
+      expires_at,
+      issued_source,
+      metadata
+    )
+    values (
+      ${memberId},
+      ${name},
+      ${discountType},
+      ${discountValue},
+      ${maxDiscountAmount},
+      nullif(${expiresAt}, '')::timestamptz,
+      ${source},
+      ${JSON.stringify({ note: normalizeText(input.note), issuedBy: normalizeText(input.issuedBy) })}::jsonb
+    )
+    returning id::text
+  `;
+  return rows[0] ?? null;
 }
 
 export async function getMemberPointHistory(memberId: string) {
@@ -661,7 +743,7 @@ export async function refreshMemberTier(memberId: string) {
 }
 
 export async function getLoyaltyDashboard() {
-  const [summaryRows, recentMembers, recentLedger, coupons] = await Promise.all([
+  const [summaryRows, recentMembers, recentLedger, coupons, recentCoupons] = await Promise.all([
     sql`
       select
         count(*)::int as "memberCount",
@@ -713,6 +795,24 @@ export async function getLoyaltyDashboard() {
         count(*) filter (where status = 'available')::int as "availableCoupons",
         count(*) filter (where status = 'used')::int as "usedCoupons"
       from member_coupons
+    `,
+    sql`
+      select
+        member_coupons.id::text,
+        member_coupons.coupon_code as "couponCode",
+        member_coupons.name,
+        member_coupons.discount_type as "discountType",
+        member_coupons.discount_value::int as "discountValue",
+        member_coupons.status,
+        coalesce(member_coupons.expires_at::text, '') as "expiresAt",
+        member_coupons.issued_source as "issuedSource",
+        member_coupons.issued_at::text as "issuedAt",
+        members.member_number as "memberNumber",
+        coalesce(nullif(members.display_name, ''), members.phone, members.email, members.member_number) as "memberLabel"
+      from member_coupons
+      join members on members.id = member_coupons.member_id
+      order by member_coupons.issued_at desc
+      limit 50
     `
   ]);
 
@@ -722,6 +822,7 @@ export async function getLoyaltyDashboard() {
       ...(coupons[0] ?? { availableCoupons: 0, usedCoupons: 0 })
     },
     recentMembers,
-    recentLedger
+    recentLedger,
+    recentCoupons
   };
 }

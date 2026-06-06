@@ -580,6 +580,42 @@ function ConfiguredMemberPortal() {
             )}
 
             <section className="member-portal-content-grid">
+              <article className="member-portal-panel">
+                <div className="member-portal-panel-title">
+                  <Gift size={18} />
+                  <h3>クーポン</h3>
+                </div>
+                <div className="member-portal-list">
+                  {data.coupons?.length ? data.coupons.map((coupon) => (
+                    <div key={coupon.id} className="member-portal-list-row">
+                      <div>
+                        <strong>{coupon.name}</strong>
+                        <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}</span>
+                      </div>
+                      <b>{coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`}</b>
+                    </div>
+                  )) : <p>利用できるクーポンはありません。</p>}
+                </div>
+              </article>
+
+              <article className="member-portal-panel">
+                <div className="member-portal-panel-title">
+                  <BadgePercent size={18} />
+                  <h3>ポイント履歴</h3>
+                </div>
+                <div className="member-portal-list">
+                  {data.pointHistory?.length ? data.pointHistory.map((entry) => (
+                    <div key={entry.id} className="member-portal-list-row">
+                      <div>
+                        <strong>{movementLabel(entry.movementType)} / {entry.storeName || entry.brandName || "-"}</strong>
+                        <span>{formatDate(entry.createdAt)} / {formatYen(entry.eligibleAmount)}</span>
+                      </div>
+                      <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
+                    </div>
+                  )) : <p>ポイント履歴はまだありません。</p>}
+                </div>
+              </article>
+
               <details
                 ref={settingsPanelRef}
                 className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}
@@ -668,42 +704,6 @@ function ConfiguredMemberPortal() {
                   </button>
                 </div>
               </details>
-
-              <article className="member-portal-panel">
-                <div className="member-portal-panel-title">
-                  <Gift size={18} />
-                  <h3>クーポン</h3>
-                </div>
-                <div className="member-portal-list">
-                  {data.coupons?.length ? data.coupons.map((coupon) => (
-                    <div key={coupon.id} className="member-portal-list-row">
-                      <div>
-                        <strong>{coupon.name}</strong>
-                        <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}</span>
-                      </div>
-                      <b>{coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`}</b>
-                    </div>
-                  )) : <p>利用できるクーポンはありません。</p>}
-                </div>
-              </article>
-
-              <article className="member-portal-panel">
-                <div className="member-portal-panel-title">
-                  <BadgePercent size={18} />
-                  <h3>ポイント履歴</h3>
-                </div>
-                <div className="member-portal-list">
-                  {data.pointHistory?.length ? data.pointHistory.map((entry) => (
-                    <div key={entry.id} className="member-portal-list-row">
-                      <div>
-                        <strong>{movementLabel(entry.movementType)} / {entry.storeName || entry.brandName || "-"}</strong>
-                        <span>{formatDate(entry.createdAt)} / {formatYen(entry.eligibleAmount)}</span>
-                      </div>
-                      <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
-                    </div>
-                  )) : <p>ポイント履歴はまだありません。</p>}
-                </div>
-              </article>
 
               <article className="member-portal-panel member-brand-panel">
                 <div className="member-portal-panel-title">

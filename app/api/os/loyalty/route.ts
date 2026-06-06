@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { getLoyaltyDashboard, upsertMember } from "../../../../lib/loyalty";
+import { getLoyaltyDashboard, issueMemberCoupon, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,26 @@ export async function POST(request: Request) {
   if (!["owner", "manager"].includes(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  if (normalizeText(body.action) === "issue_coupon") {
+    try {
+      const coupon = await issueMemberCoupon({
+        memberId: normalizeText(body.memberId),
+        name: normalizeText(body.name) || "手動発行クーポン",
+        discountType: normalizeText(body.discountType) || "amount",
+        discountValue: Number(body.discountValue),
+        maxDiscountAmount: body.maxDiscountAmount == null || normalizeText(body.maxDiscountAmount) === "" ? null : Number(body.maxDiscountAmount),
+        expiresAt: normalizeText(body.expiresAt),
+        source: "manual",
+        note: normalizeText(body.note),
+        issuedBy: session.id
+      });
+      const dashboard = await getLoyaltyDashboard();
+      return Response.json({ ok: true, coupon, ...dashboard });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "クーポンを発行できませんでした。" }, { status: 400 });
+    }
+  }
+
   const member = await upsertMember({
     phone: normalizeText(body.phone),
     email: normalizeText(body.email),
