@@ -230,6 +230,7 @@ function ConfiguredMemberPortal() {
   const [message, setMessage] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [handoffStarted, setHandoffStarted] = useState(false);
+  const [handoffFailed, setHandoffFailed] = useState(false);
   const [settingsForm, setSettingsForm] = useState<MemberSettingsForm>(emptyMemberSettings);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -255,6 +256,8 @@ function ConfiguredMemberPortal() {
 
   const missingRequiredProfile = Boolean(data.member && !hasRequiredProfileDetails(data.member));
   const profileStatusLabel = missingRequiredProfile ? "必須項目が未入力です" : "必須項目は入力済みです";
+  const returningToSite = Boolean(returnTo && handoffEnabled && isLoaded && isSignedIn && !handoffFailed && (!data.member || hasRequiredProfileDetails(data.member)));
+  const readyToReturnToSite = Boolean(returningToSite && data.member && hasRequiredProfileDetails(data.member));
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -356,6 +359,7 @@ function ConfiguredMemberPortal() {
     if (!isLoaded || !isSignedIn || !returnTo || !handoffEnabled || handoffStarted) return;
     if (!data.member || !hasRequiredProfileDetails(data.member)) return;
     setHandoffStarted(true);
+    setHandoffFailed(false);
     void fetch("/api/public/members/handoff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -367,9 +371,13 @@ function ConfiguredMemberPortal() {
           window.location.href = body.redirectUrl;
           return;
         }
+        setHandoffFailed(true);
         setMessage(body?.error || "ログイン後の戻り先を準備できませんでした。");
       })
-      .catch(() => setMessage("ログイン後の戻り先を準備できませんでした。"));
+      .catch(() => {
+        setHandoffFailed(true);
+        setMessage("ログイン後の戻り先を準備できませんでした。");
+      });
   }, [data.member, handoffEnabled, handoffStarted, isLoaded, isSignedIn, returnTo]);
 
   useEffect(() => {
@@ -474,11 +482,11 @@ function ConfiguredMemberPortal() {
 
       {
         <>
-          {returnTo && handoffEnabled && isLoaded && isSignedIn ? (
-            <section className="member-portal-login-panel">
-              <Loader2 size={32} />
-              <h2>ログイン済みです</h2>
-              <p>予約ページへ戻っています。</p>
+          {returningToSite ? (
+            <section className="member-portal-login-panel member-return-panel" aria-live="polite">
+              <Loader2 size={34} />
+              <h2>{readyToReturnToSite ? "サイトへ戻っています" : "会員情報を確認中です"}</h2>
+              <p>{readyToReturnToSite ? "予約ページへ自動で戻ります。" : "戻り先のサイトへ連携する準備をしています。"}</p>
             </section>
           ) : null}
 
@@ -490,7 +498,7 @@ function ConfiguredMemberPortal() {
             </section>
           ) : null}
 
-          {isLoaded && isSignedIn ? (
+          {isLoaded && isSignedIn && !returningToSite ? (
             <>
             <section className="member-portal-toolbar">
               {returnWithHandoffUrl ? (

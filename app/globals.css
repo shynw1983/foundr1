@@ -8079,6 +8079,21 @@ body :where(
   font-weight: 500;
 }
 
+.member-return-panel {
+  min-height: 220px;
+}
+
+.member-return-panel svg {
+  color: var(--member-logo-accent);
+  animation: member-return-spin 900ms linear infinite;
+}
+
+@keyframes member-return-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .member-portal-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(150px, 0.55fr));
