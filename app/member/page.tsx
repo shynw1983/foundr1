@@ -61,6 +61,8 @@ type MemberSettingsForm = {
   firstName: string;
   fullName: string;
   nameKana: string;
+  lastNameKana: string;
+  firstNameKana: string;
   phone: string;
   phonePart1: string;
   phonePart2: string;
@@ -81,6 +83,8 @@ const emptyMemberSettings: MemberSettingsForm = {
   firstName: "",
   fullName: "",
   nameKana: "",
+  lastNameKana: "",
+  firstNameKana: "",
   phone: "",
   phonePart1: "",
   phonePart2: "",
@@ -164,6 +168,7 @@ function withSignedOutMarker(value: string) {
 function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   if (!member) return emptyMemberSettings;
   const [fallbackLastName = "", fallbackFirstName = ""] = (member.fullName || "").trim().split(/\s+/, 2);
+  const [fallbackLastNameKana = "", fallbackFirstNameKana = ""] = (member.nameKana || "").trim().split(/\s+/, 2);
   const [phonePart1, phonePart2, phonePart3] = splitJapanesePhone(member.phone || "");
   return {
     displayName: member.displayName || "",
@@ -171,6 +176,8 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
     firstName: member.firstName || fallbackFirstName,
     fullName: member.fullName || "",
     nameKana: member.nameKana || "",
+    lastNameKana: fallbackLastNameKana,
+    firstNameKana: fallbackFirstNameKana,
     phone: member.phone || "",
     phonePart1,
     phonePart2,
@@ -334,11 +341,12 @@ function ConfiguredMemberPortal() {
     setSettingsSaving(true);
     setSettingsMessage("");
     try {
+      const nameKana = [settingsForm.lastNameKana, settingsForm.firstNameKana].map((part) => part.trim()).filter(Boolean).join(" ");
       const phone = composeJapanesePhone(settingsForm.phonePart1, settingsForm.phonePart2, settingsForm.phonePart3);
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settingsForm, phone })
+        body: JSON.stringify({ ...settingsForm, nameKana, phone })
       });
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || "会員情報を保存できませんでした。");
@@ -594,8 +602,12 @@ function ConfiguredMemberPortal() {
                       <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
                     </label>
                     <label>
-                      <span>フリガナ（任意）</span>
-                      <input value={settingsForm.nameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, nameKana: event.target.value }))} placeholder="例: ヤマダ タロウ" />
+                      <span>セイ（任意）</span>
+                      <input value={settingsForm.lastNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, lastNameKana: event.target.value, nameKana: [event.target.value, current.firstNameKana].filter(Boolean).join(" ") }))} placeholder="例: ヤマダ" autoComplete="section-kana family-name" />
+                    </label>
+                    <label>
+                      <span>メイ（任意）</span>
+                      <input value={settingsForm.firstNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, firstNameKana: event.target.value, nameKana: [current.lastNameKana, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: タロウ" autoComplete="section-kana given-name" />
                     </label>
                     <label>
                       <span>電話番号</span>
