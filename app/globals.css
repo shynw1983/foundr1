@@ -8523,12 +8523,13 @@ body :where(
   gap: 5px;
   width: 100%;
   border-radius: 999px;
-  background: #f3faf7;
-  color: var(--member-logo-accent);
+  background: var(--member-logo-accent);
+  color: white;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
   padding: 7px 9px;
+  box-shadow: 0 8px 18px rgba(47, 150, 120, 0.22);
 }
 
 .member-card-coupon-badge svg {
