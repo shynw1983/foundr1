@@ -31,6 +31,7 @@ type PosCheckoutBody = {
   memberEmail?: string;
   memberName?: string;
   couponId?: string;
+  discountPresetKey?: string;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -384,6 +385,7 @@ export async function POST(request: Request) {
   const memberEmail = normalizeText(body.memberEmail);
   const memberName = normalizeText(body.memberName);
   const couponId = normalizeText(body.couponId);
+  const discountPresetKey = normalizeText(body.discountPresetKey);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -555,6 +557,13 @@ export async function POST(request: Request) {
   }
 
   const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+  if (discountPresetKey && discountPresetKey !== "student_20") {
+    return Response.json({ error: "利用できない割引です。" }, { status: 400 });
+  }
+  if (discountPresetKey && couponId) {
+    return Response.json({ error: "割引とクーポンは同時に利用できません。" }, { status: 400 });
+  }
+  const posDiscountAmount = discountPresetKey === "student_20" ? Math.floor(subtotalAmount * 0.2) : 0;
   const cashSessionId = await getOpenCashSessionId(storeId);
   if (!cashSessionId) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
@@ -585,7 +594,7 @@ export async function POST(request: Request) {
     couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts);
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
   }
-  const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
+  const amount = Math.max(0, subtotalAmount - posDiscountAmount - couponDiscountAmount);
   if (
     paymentMethod === "cash" &&
     (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
@@ -638,6 +647,10 @@ export async function POST(request: Request) {
         memberNumber: member?.memberNumber ?? "",
         memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
         subtotalAmount,
+        discountPresetKey,
+        discountPresetName: discountPresetKey === "student_20" ? "学割 20%OFF" : "",
+        discountAmount: posDiscountAmount,
+        stampEligible: !discountPresetKey,
         couponId: coupon?.id ?? "",
         couponCode: coupon?.couponCode ?? "",
         couponName: coupon?.name ?? "",
@@ -742,5 +755,5 @@ export async function POST(request: Request) {
   await syncWebReservationToSalesOrder(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
   const todaySummary = await getTodaySummary(storeId);
-  return Response.json({ ok: true, orderId, pickupCode, amount, subtotalAmount, couponDiscountAmount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
+  return Response.json({ ok: true, orderId, pickupCode, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
 }

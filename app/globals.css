@@ -6357,6 +6357,39 @@ body :where(
   font-weight: 950;
 }
 
+.store-pos-discount-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 10px;
+}
+
+.store-pos-discount-panel > span,
+.store-pos-discount-panel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.store-pos-discount-panel button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.store-pos-discount-panel button.is-active {
+  border-color: rgba(47, 138, 114, 0.35);
+  background: #f3faf7;
+  color: var(--success);
+}
+
 .store-pos-scanner-overlay {
   position: fixed;
   inset: 0;

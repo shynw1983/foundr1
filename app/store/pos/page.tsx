@@ -473,6 +473,7 @@ export default function StorePosPage() {
   const [memberCoupons, setMemberCoupons] = useState<PosCoupon[]>([]);
   const [selectedCouponId, setSelectedCouponId] = useState("");
   const [customerSelectedCouponId, setCustomerSelectedCouponId] = useState("");
+  const [discountPresetKey, setDiscountPresetKey] = useState("");
   const [memberLookupLoading, setMemberLookupLoading] = useState(false);
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
@@ -679,13 +680,14 @@ export default function StorePosPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + (item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal : getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const posDiscountAmount = discountPresetKey === "student_20" ? Math.floor(subtotal * 0.2) : 0;
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
-  const couponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
-  const payableAmount = Math.max(0, subtotal - couponDiscountAmount);
+  const couponDiscountAmount = discountPresetKey ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
+  const payableAmount = Math.max(0, subtotal - posDiscountAmount - couponDiscountAmount);
   const recommendedCoupon = useMemo(() => {
-    if (!memberCoupons.length || subtotal <= 0) return undefined;
+    if (discountPresetKey || !memberCoupons.length || subtotal <= 0) return undefined;
     return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBaseAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBaseAmounts(left)))[0];
-  }, [cart, memberCoupons, subtotal]);
+  }, [cart, discountPresetKey, memberCoupons, subtotal]);
   const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBaseAmounts(recommendedCoupon));
   const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
   const canUseRegister = Boolean(reconciliation.activeSession);
@@ -1019,7 +1021,8 @@ export default function StorePosPage() {
           memberEmail: selectedMember?.email || undefined,
           memberPhone: selectedMember?.phone || undefined,
           memberName: selectedMember?.displayName || undefined,
-          couponId: selectedCouponId || undefined,
+          couponId: discountPresetKey ? undefined : selectedCouponId || undefined,
+          discountPresetKey: discountPresetKey || undefined,
           note,
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
@@ -1039,13 +1042,15 @@ export default function StorePosPage() {
       setCart([]);
       setNote("");
       setCashTenderedAmount("");
+      setDiscountPresetKey("");
       clearSelectedMember();
       setSummary(body.todaySummary as PosSummary);
       if (transactionDialogOpen) await loadTransactions();
       await loadReconciliation(selectedStoreId);
+      const discountLabel = body.discountAmount ? ` / 学割 -${formatYen(body.discountAmount)}` : "";
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${couponLabel}${changeLabel}`);
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -1508,8 +1513,9 @@ export default function StorePosPage() {
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
                         const isCustomerSelected = customerSelectedCouponId === coupon.id;
-                        const isUnavailable = subtotal > 0 && discount <= 0;
+                        const isUnavailable = Boolean(discountPresetKey) || (subtotal > 0 && discount <= 0);
                         const couponBadges = [
+                          discountPresetKey ? "割引中は併用不可" : "",
                           isCustomerSelected ? "客さま選択済み" : "",
                           isRecommended ? "おすすめ" : ""
                         ].filter(Boolean);
@@ -1574,6 +1580,21 @@ export default function StorePosPage() {
             <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="任意" />
           </label>
 
+          <div className="store-pos-discount-panel">
+            <span>割引</span>
+            <button
+              className={discountPresetKey === "student_20" ? "is-active" : ""}
+              type="button"
+              onClick={() => {
+                setDiscountPresetKey((current) => current === "student_20" ? "" : "student_20");
+                setSelectedCouponId("");
+              }}
+            >
+              学割 20%OFF
+            </button>
+            {discountPresetKey ? <small>割引適用のため、スタンプ対象外です。</small> : null}
+          </div>
+
           <div className="store-pos-payment-grid">
             {paymentOptions.map((option) => {
               const Icon = option.icon;
@@ -1620,10 +1641,20 @@ export default function StorePosPage() {
           <div className="store-pos-total">
             <span>合計</span>
             <strong>{formatYen(subtotal)}</strong>
+            {posDiscountAmount ? (
+              <>
+                <span>学割</span>
+                <strong className="is-discount">-{formatYen(posDiscountAmount)}</strong>
+              </>
+            ) : null}
             {couponDiscountAmount ? (
               <>
                 <span>クーポン</span>
                 <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
+              </>
+            ) : null}
+            {posDiscountAmount || couponDiscountAmount ? (
+              <>
                 <span>お会計</span>
                 <strong>{formatYen(payableAmount)}</strong>
               </>

@@ -1583,7 +1583,7 @@ insert into loyalty_stamp_campaigns (
 select
   brands.id,
   'nanacha_buy_5_get_1',
-  'nanacha ドリンクスタンプカード',
+  'nanachaスタンプカード',
   'per_item',
   5,
   'ドリンク無料券',

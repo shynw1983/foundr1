@@ -385,6 +385,7 @@ export async function getMemberStampCards(memberId: string) {
         max(created_at)::text as last_stamped_at
       from loyalty_stamp_ledger
       where member_id::text = ${memberId}
+        and created_at >= now() - interval '3 months'
       group by campaign_id
     ),
     reward_totals as (
@@ -563,6 +564,7 @@ async function issueMissingStampRewards(input: {
     from loyalty_stamp_ledger
     where campaign_id::text = ${input.campaignId}
       and member_id::text = ${input.memberId}
+      and created_at >= now() - interval '3 months'
   `;
   const rewardCount = Math.floor(Number(totalRows[0]?.total ?? 0) / Math.max(1, input.stampsRequired));
   const existingRewards = await sql`
@@ -710,6 +712,7 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
       coalesce(store_customer_orders.store_id::text, '') as "storeId",
       coalesce(stores.company_id::text, '') as "companyId",
       store_customer_orders.amount::int,
+      store_customer_orders.customer_summary as "customerSummary",
       store_customer_orders.payment_status as "paymentStatus",
       store_customer_orders.status,
       store_customer_orders.created_at
@@ -725,6 +728,7 @@ export async function awardLoyaltyForPaidOrder(orderId: string) {
     storeId: string;
     companyId: string;
     amount: number;
+    customerSummary?: Record<string, unknown>;
     paymentStatus: string;
     status: string;
   } | undefined;
@@ -830,8 +834,9 @@ async function createPointSettlementEntry(
   `;
 }
 
-async function awardStampForOrder(order: { id: string; memberId: string; brandId: string; storeId: string }) {
+async function awardStampForOrder(order: { id: string; memberId: string; brandId: string; storeId: string; customerSummary?: Record<string, unknown> }) {
   if (!order.brandId) return;
+  if (order.customerSummary?.stampEligible === false || order.customerSummary?.discountPresetKey) return;
   const campaignRows = await sql`
     select id::text, stamps_required as "stampsRequired", reward_coupon_name as "rewardCouponName", reward_value_amount as "rewardValueAmount"
     from loyalty_stamp_campaigns
@@ -846,6 +851,8 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
       select coalesce(sum(quantity), 0)::int as quantity
       from store_customer_order_items
       where order_id::text = ${order.id}
+        and coalesce(nullif(lower(size_key), ''), lower(size_label), '') not in ('s', 'small')
+        and lower(coalesce(size_label, '')) not like 's%'
     `;
     const stamps = Number(itemRows[0]?.quantity ?? 0);
     if (stamps <= 0) continue;
