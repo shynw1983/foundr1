@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
-import { awardLoyaltyForPaidOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
+import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, redeemMemberCouponForOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
 import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
@@ -30,6 +30,7 @@ type PosCheckoutBody = {
   memberPhone?: string;
   memberEmail?: string;
   memberName?: string;
+  couponId?: string;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -382,6 +383,7 @@ export async function POST(request: Request) {
   const memberPhone = normalizeText(body.memberPhone);
   const memberEmail = normalizeText(body.memberEmail);
   const memberName = normalizeText(body.memberName);
+  const couponId = normalizeText(body.couponId);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -552,14 +554,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });
   }
 
-  const amount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
-  if (
-    paymentMethod === "cash" &&
-    (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
-  ) {
-    return Response.json({ error: "現金会計はお預かり金額を合計以上で入力してください。" }, { status: 400 });
-  }
-  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount !== null ? cashTenderedAmount - amount : null;
+  const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
   const cashSessionId = await getOpenCashSessionId(storeId);
   if (!cashSessionId) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
@@ -576,6 +571,23 @@ export async function POST(request: Request) {
     displayName: memberName,
     metadata: { source: "store_pos" }
   });
+  let coupon: Awaited<ReturnType<typeof getUsableMemberCoupon>> | null = null;
+  let couponDiscountAmount = 0;
+  if (couponId) {
+    if (!member?.id) return Response.json({ error: "クーポン利用には会員確認が必要です。" }, { status: 400 });
+    coupon = await getUsableMemberCoupon(member.id, couponId);
+    if (!coupon) return Response.json({ error: "利用できないクーポンです。" }, { status: 400 });
+    couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount);
+    if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
+  }
+  const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
+  if (
+    paymentMethod === "cash" &&
+    (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
+  ) {
+    return Response.json({ error: "現金会計はお預かり金額を合計以上で入力してください。" }, { status: 400 });
+  }
+  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount !== null ? cashTenderedAmount - amount : null;
 
   const orderRows = await sql`
     insert into store_customer_orders (
@@ -620,6 +632,11 @@ export async function POST(request: Request) {
         memberId: member?.id ?? "",
         memberNumber: member?.memberNumber ?? "",
         memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
+        subtotalAmount,
+        couponId: coupon?.id ?? "",
+        couponCode: coupon?.couponCode ?? "",
+        couponName: coupon?.name ?? "",
+        couponDiscountAmount,
         cashTenderedAmount,
         cashChangeAmount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -644,6 +661,10 @@ export async function POST(request: Request) {
   `;
   const orderId = orderRows[0]?.id as string | undefined;
   if (!orderId) return Response.json({ error: "会計を保存できませんでした。" }, { status: 500 });
+  if (coupon && member?.id) {
+    const redeemedCoupon = await redeemMemberCouponForOrder({ memberId: member.id, couponId: coupon.id, orderId, storeId });
+    if (!redeemedCoupon) return Response.json({ error: "クーポンを使用処理できませんでした。もう一度会員情報を確認してください。" }, { status: 409 });
+  }
 
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
@@ -716,5 +737,5 @@ export async function POST(request: Request) {
   await syncWebReservationToSalesOrder(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
   const todaySummary = await getTodaySummary(storeId);
-  return Response.json({ ok: true, orderId, pickupCode, amount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
+  return Response.json({ ok: true, orderId, pickupCode, amount, subtotalAmount, couponDiscountAmount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
 }

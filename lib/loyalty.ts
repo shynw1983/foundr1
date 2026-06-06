@@ -365,6 +365,69 @@ export async function getMemberAvailableCoupons(memberId: string) {
   `;
 }
 
+export function calculateCouponDiscount(coupon: { discountType?: string; discountValue?: number; maxDiscountAmount?: number | null }, subtotal: number) {
+  const baseAmount = Math.max(0, Math.round(Number(subtotal) || 0));
+  const value = Math.max(0, Math.round(Number(coupon.discountValue) || 0));
+  const maxAmount = coupon.maxDiscountAmount == null ? null : Math.max(0, Math.round(Number(coupon.maxDiscountAmount) || 0));
+  const rawDiscount = coupon.discountType === "percent" ? Math.floor(baseAmount * value / 100) : value;
+  return Math.min(baseAmount, maxAmount == null ? rawDiscount : Math.min(rawDiscount, maxAmount));
+}
+
+export async function getUsableMemberCoupon(memberId: string, couponId: string) {
+  const rows = await sql`
+    select
+      id::text,
+      member_id::text as "memberId",
+      coupon_code as "couponCode",
+      name,
+      discount_type as "discountType",
+      discount_value::int as "discountValue",
+      coalesce(max_discount_amount::int, null) as "maxDiscountAmount",
+      status,
+      coalesce(expires_at::text, '') as "expiresAt"
+    from member_coupons
+    where id::text = ${couponId}
+      and member_id::text = ${memberId}
+      and status = 'available'
+      and (expires_at is null or expires_at > now())
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+export async function redeemMemberCouponForOrder(input: { memberId: string; couponId: string; orderId: string; storeId: string }) {
+  const rows = await sql`
+    update member_coupons
+    set
+      status = 'used',
+      used_order_id = ${input.orderId},
+      used_store_id = ${input.storeId},
+      used_at = now()
+    where id::text = ${input.couponId}
+      and member_id::text = ${input.memberId}
+      and status = 'available'
+      and (expires_at is null or expires_at > now())
+    returning id::text
+  `;
+  return rows[0] ?? null;
+}
+
+export async function redeemPendingCouponForPaidOrder(orderId: string) {
+  const rows = await sql`
+    select
+      coalesce(member_id::text, '') as "memberId",
+      coalesce(store_id::text, '') as "storeId",
+      coalesce(customer_summary ->> 'couponId', '') as "couponId"
+    from store_customer_orders
+    where id::text = ${orderId}
+      and payment_status = 'paid'
+    limit 1
+  `;
+  const order = rows[0] as { memberId?: string; storeId?: string; couponId?: string } | undefined;
+  if (!order?.memberId || !order.storeId || !order.couponId) return null;
+  return redeemMemberCouponForOrder({ memberId: order.memberId, storeId: order.storeId, couponId: order.couponId, orderId });
+}
+
 export async function issueMemberCoupon(input: {
   memberId: string;
   name: string;

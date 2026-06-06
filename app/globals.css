@@ -4831,6 +4831,104 @@ body :where(
   opacity: 0.62;
 }
 
+.store-temporary-closure-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  min-width: 0;
+}
+
+.store-temporary-closure-form > strong,
+.store-temporary-closure-form .is-wide {
+  grid-column: 1 / -1;
+}
+
+.store-temporary-closure-form > strong,
+.store-temporary-affected-orders > strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-temporary-closure-form label {
+  display: grid;
+  align-items: start;
+  gap: 4px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.store-temporary-closure-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.store-temporary-closure-form .secondary-button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.store-temporary-closure-list,
+.store-temporary-affected-orders {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.store-temporary-closure-list > div,
+.store-temporary-affected-orders > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  border-radius: 8px;
+  background: #fff7ed;
+  padding: 8px;
+}
+
+.store-temporary-closure-list strong,
+.store-temporary-affected-orders span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.store-temporary-closure-list span,
+.store-temporary-closure-list small,
+.store-temporary-affected-orders small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.store-temporary-closure-list small,
+.store-temporary-affected-orders small {
+  grid-column: 1 / -1;
+}
+
+.store-temporary-closure-list button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 32px;
+  border: 1px solid rgba(188, 54, 54, 0.24);
+  border-radius: 8px;
+  background: white;
+  color: #a72f2f;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.store-temporary-closure-list button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .store-stats-heading {
   display: flex;
   align-items: center;
@@ -5134,6 +5232,18 @@ body :where(
 
 .store-order-total strong {
   font-size: 24px;
+}
+
+.store-order-payment-note {
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--muted);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.55;
 }
 
 .store-order-actions {
@@ -6103,6 +6213,121 @@ body :where(
   font-weight: 900;
 }
 
+.store-pos-member-empty-coupon {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.store-pos-coupon-panel {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(31, 111, 85, 0.16);
+  padding-top: 8px;
+}
+
+.store-pos-coupon-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.store-pos-coupon-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #1f6f55;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.store-pos-coupon-head button {
+  min-height: 30px;
+  border: 1px solid rgba(31, 111, 85, 0.24);
+  border-radius: 999px;
+  background: white;
+  color: #1f6f55;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+  padding: 0 10px;
+}
+
+.store-pos-coupon-recommend {
+  margin: 0;
+  border: 1px solid rgba(31, 111, 85, 0.18);
+  border-radius: 8px;
+  background: white;
+  color: #1f6f55;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.45;
+  padding: 8px;
+}
+
+.store-pos-coupon-list {
+  display: grid;
+  gap: 6px;
+}
+
+.store-pos-coupon-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.16);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.store-pos-coupon-choice.is-selected {
+  border-color: rgba(31, 111, 85, 0.42);
+  background: #ecfdf5;
+}
+
+.store-pos-coupon-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.store-pos-coupon-choice span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.store-pos-coupon-choice strong,
+.store-pos-coupon-choice small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-coupon-choice strong {
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.store-pos-coupon-choice small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.store-pos-coupon-choice b {
+  flex: 0 0 auto;
+  color: #1f6f55;
+  font-size: 13px;
+  font-weight: 950;
+}
+
 .store-pos-scanner-overlay {
   position: fixed;
   inset: 0;
@@ -6325,7 +6550,10 @@ body :where(
 }
 
 .store-pos-total {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  align-items: baseline;
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
@@ -6337,6 +6565,11 @@ body :where(
 
 .store-pos-total strong {
   font-size: 30px;
+}
+
+.store-pos-total strong.is-discount {
+  color: #1f6f55;
+  font-size: 18px;
 }
 
 .store-pos-checkout {
@@ -8283,6 +8516,25 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.member-card-coupon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  border-radius: 999px;
+  background: #f3faf7;
+  color: var(--member-logo-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 7px 9px;
+}
+
+.member-card-coupon-badge svg {
+  flex: 0 0 auto;
+}
+
 .member-stat-card {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
@@ -8656,6 +8908,26 @@ body :where(
   flex: 0 0 auto;
   color: var(--member-logo-accent);
   font-weight: 600;
+}
+
+.member-coupon-use-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 1px solid var(--member-line);
+  border-radius: 999px;
+  background: white;
+  color: var(--member-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 12px;
+}
+
+.member-coupon-use-button.is-selected {
+  border-color: rgba(47, 138, 114, 0.34);
+  background: #f3faf7;
+  color: var(--member-logo-accent);
 }
 
 .member-portal-list-row b.is-negative {
@@ -17062,6 +17334,10 @@ body :where(
   }
 
   .store-pickup-setting {
+    grid-template-columns: 1fr;
+  }
+
+  .store-temporary-closure-form {
     grid-template-columns: 1fr;
   }
 

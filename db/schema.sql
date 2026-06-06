@@ -1239,6 +1239,22 @@ alter table store_operations add column if not exists temporary_status_until tim
 alter table store_operations add column if not exists minimum_pickup_minutes integer;
 alter table store_operations add column if not exists minimum_pickup_reset_at timestamptz;
 
+create table if not exists store_temporary_closures (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  reason text not null default '',
+  public_message text not null default '',
+  status text not null default 'active',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_store_temporary_closures_store_time
+  on store_temporary_closures(store_id, status, starts_at, ends_at);
+
 create table if not exists pos_store_settings (
   store_id uuid primary key references stores(id) on delete cascade,
   dine_in_enabled boolean not null default true,

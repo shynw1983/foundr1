@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
-import { resolveMemberForOrder } from "../../../../../../lib/loyalty";
+import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder } from "../../../../../../lib/loyalty";
 import { getNanachaCompatibleMenu, type NanachaPricedOption } from "../../../../../../lib/nanacha-compatible-menu";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
+import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
 
@@ -185,8 +186,12 @@ export async function POST(request: Request) {
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
+  const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
+  if (temporaryClosure) {
+    return Response.json({ error: temporaryClosure.publicMessage || temporaryClosure.reason || "Selected pickup time is temporarily unavailable" }, { status: 409 });
+  }
 
-  const amount = validatedItems.reduce((sum, item) => sum + item.amount, 0);
+  const subtotalAmount = validatedItems.reduce((sum, item) => sum + item.amount, 0);
   const itemSummaries = validatedItems.map((item, index) => {
     const toppingLabel = item.toppings.length ? item.toppings.map((topping) => topping.label).join(", ") : "トッピングなし";
     const optionLabel = item.option.id === "none" ? "オプションなし" : item.option.label;
@@ -226,6 +231,11 @@ export async function POST(request: Request) {
     identityLabel: body.identityLabel as string | undefined,
     metadata: { source: "nanacha_web" }
   }) : null;
+  const couponId = String(body.couponId || "");
+  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId) : null;
+  if (couponId && !coupon) return Response.json({ error: "Selected coupon is not available" }, { status: 400 });
+  const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
+  const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
 
   const localOrder = await createCustomerOrder({
     brandId,
@@ -240,7 +250,12 @@ export async function POST(request: Request) {
     customerSummary: {
       ...completionSummary,
       memberId: member?.id ?? "",
-      memberNumber: member?.memberNumber ?? ""
+      memberNumber: member?.memberNumber ?? "",
+      subtotalAmount,
+      couponId: coupon?.id ?? "",
+      couponCode: coupon?.couponCode ?? "",
+      couponName: coupon?.name ?? "",
+      couponDiscountAmount
     },
     drink: drinkLabel,
     size: sizeLabel,
@@ -289,6 +304,7 @@ export async function POST(request: Request) {
   redirectUrl.searchParams.set("option", String(completionSummary.option || optionLabel));
   redirectUrl.searchParams.set("toppings", Array.isArray(completionSummary.toppings) ? completionSummary.toppings.join(", ") : toppingLabel);
   redirectUrl.searchParams.set("total", String(completionSummary.total || amount));
+  if (couponDiscountAmount) redirectUrl.searchParams.set("couponDiscount", String(couponDiscountAmount));
 
   const squareResponse = await fetch(`${squareHost}/v2/online-checkout/payment-links`, {
     method: "POST",

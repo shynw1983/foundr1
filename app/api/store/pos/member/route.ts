@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
-import { findMember } from "../../../../../lib/loyalty";
+import { findMember, getMemberAvailableCoupons } from "../../../../../lib/loyalty";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +10,17 @@ function normalizeText(value: unknown) {
 
 function normalizeMemberCode(value: unknown) {
   const text = normalizeText(value);
-  const foundr1Match = text.match(/^foundr1:member:(.+)$/i);
-  if (foundr1Match?.[1]) return foundr1Match[1].trim();
+  const foundr1Match = text.match(/^foundr1:member:([^:]+)(?::coupon:([^:]+))?$/i);
+  if (foundr1Match?.[1]) return { code: foundr1Match[1].trim(), couponId: foundr1Match[2]?.trim() ?? "" };
 
   try {
     const url = new URL(text);
-    return url.searchParams.get("member")?.trim() || url.searchParams.get("memberToken")?.trim() || text;
+    return {
+      code: url.searchParams.get("member")?.trim() || url.searchParams.get("memberToken")?.trim() || text,
+      couponId: url.searchParams.get("coupon")?.trim() || url.searchParams.get("couponId")?.trim() || ""
+    };
   } catch {
-    return text;
+    return { code: text, couponId: "" };
   }
 }
 
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const storeId = normalizeText(url.searchParams.get("storeId"));
-  const code = normalizeMemberCode(url.searchParams.get("code"));
+  const { code, couponId } = normalizeMemberCode(url.searchParams.get("code"));
   if (!storeId || !code) {
     return Response.json({ error: "店舗と会員コードを入力してください。" }, { status: 400 });
   }
@@ -43,5 +46,6 @@ export async function GET(request: Request) {
     return Response.json({ error: "会員が見つかりません。" }, { status: 404 });
   }
 
-  return Response.json({ member });
+  const coupons = await getMemberAvailableCoupons(member.id);
+  return Response.json({ member, coupons, selectedCouponId: couponId });
 }

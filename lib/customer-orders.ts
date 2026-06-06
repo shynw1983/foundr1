@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { awardLoyaltyForPaidOrder, reverseLoyaltyForRefundedOrder } from "./loyalty";
+import { awardLoyaltyForPaidOrder, redeemPendingCouponForPaidOrder, reverseLoyaltyForRefundedOrder } from "./loyalty";
 import { ensureProductionTasksForOrder } from "./order-production";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 import { getActiveStorePaymentAccount, getStorePaymentAccountById } from "./store-payment-accounts";
@@ -294,6 +294,7 @@ export async function updateCustomerOrder(orderId: string, patch: Partial<{
   `;
   if (rows[0]?.id) {
     if (patch.paymentStatus === "paid" || patch.status === "new") {
+      await redeemPendingCouponForPaidOrder(rows[0].id as string);
       await ensureProductionTasksForOrder(rows[0].id as string);
       await awardLoyaltyForPaidOrder(rows[0].id as string);
     }

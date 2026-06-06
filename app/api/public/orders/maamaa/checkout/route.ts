@@ -1,8 +1,9 @@
 import { createCustomerOrder, createPickupCode, updateCustomerOrder } from "../../../../../../lib/customer-orders";
-import { resolveMemberForOrder } from "../../../../../../lib/loyalty";
+import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder } from "../../../../../../lib/loyalty";
 import { getMaamaaCompatibleMenu, type MaamaaMenuSection, type MaamaaPricedOption } from "../../../../../../lib/maamaa-compatible-menu";
 import { getActiveStorePaymentAccount } from "../../../../../../lib/store-payment-accounts";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
+import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
 
@@ -157,6 +158,10 @@ export async function POST(request: Request) {
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
   }
+  const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
+  if (temporaryClosure) {
+    return Response.json({ error: temporaryClosure.publicMessage || temporaryClosure.reason || "Selected pickup time is temporarily unavailable" }, { status: 409 });
+  }
 
   const requestedItems = Array.isArray(body.items) && body.items.length
     ? body.items.map((item) => item as Record<string, unknown>)
@@ -170,7 +175,7 @@ export async function POST(request: Request) {
     return Response.json({ error: invalidItem.error }, { status: 400 });
   }
   const buildableItems = validatedItems as Array<Exclude<ReturnType<typeof validateBuildableItem>, { error: string }>>;
-  const amount = buildableItems.reduce((sum, item) => sum + item.amount, 0);
+  const subtotalAmount = buildableItems.reduce((sum, item) => sum + item.amount, 0);
 
   const pickupCode = createPickupCode("M");
   const hasMemberReference = Boolean(body.memberId || body.memberToken || body.memberEmail || body.identitySubject);
@@ -185,6 +190,11 @@ export async function POST(request: Request) {
     identityLabel: body.identityLabel as string | undefined,
     metadata: { source: "maamaa_web" }
   }) : null;
+  const couponId = String(body.couponId || "");
+  const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId) : null;
+  if (couponId && !coupon) return Response.json({ error: "Selected coupon is not available" }, { status: 400 });
+  const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
+  const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
   const itemSummaries = buildableItems.map((item, index) => ({
     name: `${menu.baseSoup.name}${buildableItems.length > 1 ? ` #${index + 1}` : ""}`,
     detailLabel: item.detailLabel || "カスタマイズなし",
@@ -210,6 +220,11 @@ export async function POST(request: Request) {
       paymentAccountName: paymentAccount.accountName,
       memberId: member?.id ?? "",
       memberNumber: member?.memberNumber ?? "",
+      subtotalAmount,
+      couponId: coupon?.id ?? "",
+      couponCode: coupon?.couponCode ?? "",
+      couponName: coupon?.name ?? "",
+      couponDiscountAmount,
       customer: {
         name: completionSummary.name ?? body.name ?? "",
         phone: completionSummary.phone ?? body.phone ?? "",
@@ -257,6 +272,7 @@ export async function POST(request: Request) {
   redirectUrl.searchParams.set("drink", String(completionSummary.drink || menu.baseSoup.name));
   redirectUrl.searchParams.set("size", String(completionSummary.size || detailLabel || "カスタマイズなし"));
   redirectUrl.searchParams.set("total", String(completionSummary.total || amount));
+  if (couponDiscountAmount) redirectUrl.searchParams.set("couponDiscount", String(couponDiscountAmount));
 
   const sessionPayload: Record<string, unknown> = {
     mode: "payment",

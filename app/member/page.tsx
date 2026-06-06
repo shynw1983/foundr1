@@ -259,11 +259,12 @@ function ConfiguredMemberPortal() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [selectedCouponId, setSelectedCouponId] = useState("");
 
   const qrValue = useMemo(() => {
     if (!data.member?.publicToken) return "";
-    return `foundr1:member:${data.member.publicToken}`;
-  }, [data.member?.publicToken]);
+    return selectedCouponId ? `foundr1:member:${data.member.publicToken}:coupon:${selectedCouponId}` : `foundr1:member:${data.member.publicToken}`;
+  }, [data.member?.publicToken, selectedCouponId]);
 
   const returnWithHandoffUrl = useMemo(() => {
     if (!returnTo || handoffEnabled) return "";
@@ -319,6 +320,7 @@ function ConfiguredMemberPortal() {
       if (!response.ok) throw new Error(body.error || "会員情報を読み込めませんでした。");
       setData(body);
       setSettingsForm(toSettingsForm(body.member));
+      setSelectedCouponId((current) => body.coupons?.some((coupon) => coupon.id === current) ? current : "");
       setSettingsMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会員情報を読み込めませんでした。");
@@ -547,6 +549,12 @@ function ConfiguredMemberPortal() {
                   <div className="member-qr-placeholder" aria-label="会員 QR">
                     {qrDataUrl ? <img src={qrDataUrl} alt="会員 QR" /> : <QrCode size={64} />}
                     <small>店頭で提示してください</small>
+                    {data.coupons?.length ? (
+                      <span className="member-card-coupon-badge">
+                        <Gift size={13} />
+                        利用可能クーポン {data.coupons.length}件
+                      </span>
+                    ) : null}
                   </div>
                 </article>
 
@@ -590,9 +598,16 @@ function ConfiguredMemberPortal() {
                     <div key={coupon.id} className="member-portal-list-row">
                       <div>
                         <strong>{coupon.name}</strong>
-                        <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}</span>
+                        <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}{selectedCouponId === coupon.id ? " / 使用予定" : ""}</span>
                       </div>
                       <b>{coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`}</b>
+                      <button
+                        className={selectedCouponId === coupon.id ? "member-coupon-use-button is-selected" : "member-coupon-use-button"}
+                        type="button"
+                        onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
+                      >
+                        {selectedCouponId === coupon.id ? "選択解除" : "使う"}
+                      </button>
                     </div>
                   )) : <p>利用できるクーポンはありません。</p>}
                 </div>

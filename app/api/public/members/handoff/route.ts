@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
-import { upsertMember } from "../../../../../lib/loyalty";
+import { getMemberAvailableCoupons, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -168,6 +168,7 @@ export async function GET(request: NextRequest) {
   if (!member) {
     return Response.json({ error: "会員情報を読み込めませんでした。" }, { status: 404, headers: corsHeaders(request) });
   }
+  const coupons = await getMemberAvailableCoupons(member.id);
 
   return Response.json({
     authenticated: true,
@@ -182,6 +183,7 @@ export async function GET(request: NextRequest) {
       phone: member.phone,
       email: member.email,
       pointBalance: member.pointBalance
-    }
+    },
+    coupons
   }, { headers: { ...corsHeaders(request), "Cache-Control": "no-store" } });
 }

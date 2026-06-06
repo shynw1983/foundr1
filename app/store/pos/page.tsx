@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, Camera, CreditCard, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
+import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
@@ -185,6 +185,16 @@ type PosMember = {
   currentTierKey: string;
 };
 
+type PosCoupon = {
+  id: string;
+  couponCode: string;
+  name: string;
+  discountType: string;
+  discountValue: number;
+  maxDiscountAmount: number | null;
+  expiresAt: string;
+};
+
 type PosPreviousClosedSession = {
   id: string;
   businessDate: string;
@@ -218,6 +228,19 @@ const paymentOptions = [
   { value: "card", label: "カード", icon: CreditCard },
   { value: "other", label: "その他", icon: ShoppingCart }
 ];
+
+function getCouponDiscountAmount(coupon: PosCoupon | undefined, amount: number) {
+  if (!coupon) return 0;
+  const subtotal = Math.max(0, Math.round(amount || 0));
+  const value = Math.max(0, Math.round(Number(coupon.discountValue) || 0));
+  const maxAmount = coupon.maxDiscountAmount == null ? null : Math.max(0, Math.round(Number(coupon.maxDiscountAmount) || 0));
+  const rawDiscount = coupon.discountType === "percent" ? Math.floor(subtotal * value / 100) : value;
+  return Math.min(subtotal, maxAmount == null ? rawDiscount : Math.min(rawDiscount, maxAmount));
+}
+
+function getCouponValueLabel(coupon: PosCoupon) {
+  return coupon.discountType === "percent" ? `${coupon.discountValue}%` : formatYen(coupon.discountValue);
+}
 
 const orderTypeOptions = [
   { value: "eat_in", label: "店内" },
@@ -424,6 +447,8 @@ export default function StorePosPage() {
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [memberLookupInput, setMemberLookupInput] = useState("");
   const [selectedMember, setSelectedMember] = useState<PosMember | null>(null);
+  const [memberCoupons, setMemberCoupons] = useState<PosCoupon[]>([]);
+  const [selectedCouponId, setSelectedCouponId] = useState("");
   const [memberLookupLoading, setMemberLookupLoading] = useState(false);
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
@@ -630,14 +655,23 @@ export default function StorePosPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + (item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal : getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
+  const couponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal);
+  const payableAmount = Math.max(0, subtotal - couponDiscountAmount);
+  const recommendedCoupon = useMemo(() => {
+    if (!memberCoupons.length || subtotal <= 0) return undefined;
+    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal) - getCouponDiscountAmount(left, subtotal))[0];
+  }, [memberCoupons, subtotal]);
+  const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal);
+  const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal);
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
-  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - subtotal : null;
+  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - payableAmount : null;
   const canCheckout = Boolean(
     cart.length > 0 &&
     !saving &&
     canUseRegister &&
-    (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= subtotal))
+    (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= payableAmount))
   );
   const canRefundSelectedTransaction = Boolean(
     selectedTransaction &&
@@ -706,9 +740,15 @@ export default function StorePosPage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "会員を確認できませんでした。");
       setSelectedMember(body.member as PosMember);
+      const coupons = Array.isArray(body.coupons) ? body.coupons as PosCoupon[] : [];
+      setMemberCoupons(coupons);
+      const scannedCouponId = typeof body.selectedCouponId === "string" ? body.selectedCouponId : "";
+      setSelectedCouponId(coupons.some((coupon) => coupon.id === scannedCouponId) ? scannedCouponId : "");
       setMessage("会員を会計に紐づけました。");
     } catch (error) {
       setSelectedMember(null);
+      setMemberCoupons([]);
+      setSelectedCouponId("");
       setMessage(error instanceof Error ? error.message : "会員を確認できませんでした。");
     } finally {
       setMemberLookupLoading(false);
@@ -717,6 +757,8 @@ export default function StorePosPage() {
 
   function clearSelectedMember() {
     setSelectedMember(null);
+    setMemberCoupons([]);
+    setSelectedCouponId("");
     setMemberLookupInput("");
   }
 
@@ -917,7 +959,7 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
-    if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < subtotal)) {
+    if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < payableAmount)) {
       setMessage("現金会計はお預かり金額を合計以上で入力してください。");
       return;
     }
@@ -937,6 +979,7 @@ export default function StorePosPage() {
           memberEmail: selectedMember?.email || undefined,
           memberPhone: selectedMember?.phone || undefined,
           memberName: selectedMember?.displayName || undefined,
+          couponId: selectedCouponId || undefined,
           note,
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
@@ -960,8 +1003,9 @@ export default function StorePosPage() {
       setSummary(body.todaySummary as PosSummary);
       if (transactionDialogOpen) await loadTransactions();
       await loadReconciliation(selectedStoreId);
+      const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${changeLabel}`);
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${couponLabel}${changeLabel}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -1015,7 +1059,7 @@ export default function StorePosPage() {
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: "",
-        subtotal,
+        subtotal: payableAmount,
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
         items: cart.map((item) => ({
@@ -1033,7 +1077,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedStoreId, subtotal, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedStoreId, payableAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
@@ -1398,10 +1442,57 @@ export default function StorePosPage() {
               ) : null}
             </div>
             {selectedMember ? (
-              <div className="store-pos-member-card">
-                <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
-                <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
-              </div>
+              <>
+                <div className="store-pos-member-card">
+                  <strong>{selectedMember.displayName || selectedMember.email || selectedMember.memberNumber}</strong>
+                  <span>{selectedMember.memberNumber} / {selectedMember.pointBalance.toLocaleString("ja-JP")} pt</span>
+                </div>
+                {memberCoupons.length ? (
+                  <div className="store-pos-coupon-panel">
+                    <div className="store-pos-coupon-head">
+                      <span><Gift size={14} /> 利用可能クーポン</span>
+                      {recommendedCoupon && recommendedCoupon.id !== selectedCouponId && recommendedCouponDiscountAmount > selectedCouponDiscountAmount ? (
+                        <button type="button" onClick={() => setSelectedCouponId(recommendedCoupon.id)}>
+                          おすすめを適用
+                        </button>
+                      ) : null}
+                    </div>
+                    {recommendedCoupon && recommendedCoupon.id !== selectedCouponId && recommendedCouponDiscountAmount > selectedCouponDiscountAmount ? (
+                      <p className="store-pos-coupon-recommend">
+                        {recommendedCoupon.name} の方が {formatYen(recommendedCouponDiscountAmount - selectedCouponDiscountAmount)} お得です。
+                      </p>
+                    ) : null}
+                    <div className="store-pos-coupon-list">
+                      {memberCoupons.map((coupon) => {
+                        const discount = getCouponDiscountAmount(coupon, subtotal);
+                        const isSelected = selectedCouponId === coupon.id;
+                        const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
+                        return (
+                          <button
+                            key={coupon.id}
+                            className={[
+                              "store-pos-coupon-choice",
+                              isSelected ? "is-selected" : "",
+                              isRecommended ? "is-recommended" : ""
+                            ].filter(Boolean).join(" ")}
+                            type="button"
+                            disabled={discount <= 0}
+                            onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
+                          >
+                            <span>
+                              <strong>{coupon.name}</strong>
+                              <small>{coupon.couponCode} / {getCouponValueLabel(coupon)}{isRecommended ? " / おすすめ" : ""}</small>
+                            </span>
+                            <b>{discount ? `-${formatYen(discount)}` : "対象外"}</b>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <small className="store-pos-member-empty-coupon">利用可能クーポンはありません。</small>
+                )}
+              </>
             ) : (
               <div className="store-pos-member-lookup-wrap">
                 <div className="store-pos-member-lookup">
@@ -1482,6 +1573,14 @@ export default function StorePosPage() {
           <div className="store-pos-total">
             <span>合計</span>
             <strong>{formatYen(subtotal)}</strong>
+            {couponDiscountAmount ? (
+              <>
+                <span>クーポン</span>
+                <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
+                <span>お会計</span>
+                <strong>{formatYen(payableAmount)}</strong>
+              </>
+            ) : null}
           </div>
           <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={!canCheckout}>
             {saving ? "保存中..." : "会計を確定"}
