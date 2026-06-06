@@ -8311,6 +8311,10 @@ body :where(
   gap: 12px;
 }
 
+.member-settings-field-wide {
+  grid-column: 1 / -1;
+}
+
 .member-settings-grid label,
 .member-settings-checks label {
   display: grid;

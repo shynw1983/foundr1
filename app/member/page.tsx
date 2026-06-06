@@ -589,23 +589,23 @@ function ConfiguredMemberPortal() {
                   {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
                   <p className="member-settings-note">表示名、氏名、電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
                   <div className="member-settings-grid">
-                    <label>
+                    <label className="member-settings-field-wide">
                       <span>表示名・ニックネーム</span>
                       <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
                     </label>
-                    <label>
+                    <label className="member-settings-field-name">
                       <span>姓</span>
                       <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
                     </label>
-                    <label>
+                    <label className="member-settings-field-name">
                       <span>名</span>
                       <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
                     </label>
-                    <label>
+                    <label className="member-settings-field-kana">
                       <span>セイ（任意）</span>
                       <input value={settingsForm.lastNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, lastNameKana: event.target.value, nameKana: [event.target.value, current.firstNameKana].filter(Boolean).join(" ") }))} placeholder="例: ヤマダ" autoComplete="section-kana family-name" />
                     </label>
-                    <label>
+                    <label className="member-settings-field-kana">
                       <span>メイ（任意）</span>
                       <input value={settingsForm.firstNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, firstNameKana: event.target.value, nameKana: [current.lastNameKana, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: タロウ" autoComplete="section-kana given-name" />
                     </label>
