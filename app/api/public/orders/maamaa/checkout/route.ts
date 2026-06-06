@@ -173,17 +173,18 @@ export async function POST(request: Request) {
   const amount = buildableItems.reduce((sum, item) => sum + item.amount, 0);
 
   const pickupCode = createPickupCode("M");
-  const member = await resolveMemberForOrder({
+  const hasMemberReference = Boolean(body.memberId || body.memberToken || body.memberEmail || body.identitySubject);
+  const member = hasMemberReference ? await resolveMemberForOrder({
     memberId: body.memberId as string | undefined,
     memberToken: body.memberToken as string | undefined,
-    phone: (body.memberPhone || completionSummary.phone || body.phone) as string | undefined,
-    email: (body.memberEmail || completionSummary.email || body.email) as string | undefined,
-    displayName: (body.memberName || completionSummary.name || body.name) as string | undefined,
+    phone: body.memberPhone as string | undefined,
+    email: body.memberEmail as string | undefined,
+    displayName: body.memberName as string | undefined,
     identityProvider: body.identityProvider as string | undefined,
     identitySubject: body.identitySubject as string | undefined,
     identityLabel: body.identityLabel as string | undefined,
     metadata: { source: "maamaa_web" }
-  });
+  }) : null;
   const itemSummaries = buildableItems.map((item, index) => ({
     name: `${menu.baseSoup.name}${buildableItems.length > 1 ? ` #${index + 1}` : ""}`,
     detailLabel: item.detailLabel || "カスタマイズなし",

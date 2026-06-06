@@ -214,17 +214,18 @@ export async function POST(request: Request) {
   const optionLabel = itemSummaries.length === 1 ? primarySummary.optionLabel : "商品ごと";
   const toppingLabel = itemSummaries.length === 1 ? primarySummary.toppingLabel : "商品ごと";
   const pickupCode = createPickupCode("M");
-  const member = await resolveMemberForOrder({
+  const hasMemberReference = Boolean(body.memberId || body.memberToken || body.memberEmail || body.identitySubject);
+  const member = hasMemberReference ? await resolveMemberForOrder({
     memberId: body.memberId as string | undefined,
     memberToken: body.memberToken as string | undefined,
-    phone: (body.memberPhone || completionSummary.phone || body.phone) as string | undefined,
-    email: (body.memberEmail || completionSummary.email || body.email) as string | undefined,
-    displayName: (body.memberName || completionSummary.name || body.name) as string | undefined,
+    phone: body.memberPhone as string | undefined,
+    email: body.memberEmail as string | undefined,
+    displayName: body.memberName as string | undefined,
     identityProvider: body.identityProvider as string | undefined,
     identitySubject: body.identitySubject as string | undefined,
     identityLabel: body.identityLabel as string | undefined,
     metadata: { source: "nanacha_web" }
-  });
+  }) : null;
 
   const localOrder = await createCustomerOrder({
     brandId,
