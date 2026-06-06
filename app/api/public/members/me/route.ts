@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { getMemberAvailableCoupons, getMemberPointHistory, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
+import { getMemberAvailableCoupons, getMemberPointHistory, getMemberStampCards, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -47,9 +47,10 @@ export async function GET() {
   });
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
 
-  const [coupons, pointHistory] = await Promise.all([
+  const [coupons, pointHistory, stampCards] = await Promise.all([
     getMemberAvailableCoupons(member.id),
-    getMemberPointHistory(member.id)
+    getMemberPointHistory(member.id),
+    getMemberStampCards(member.id)
   ]);
 
   return Response.json({
@@ -57,7 +58,8 @@ export async function GET() {
     authenticated: true,
     member,
     coupons,
-    pointHistory
+    pointHistory,
+    stampCards
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

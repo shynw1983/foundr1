@@ -373,6 +373,55 @@ export async function getMemberAvailableCoupons(memberId: string) {
   `;
 }
 
+export async function getMemberStampCards(memberId: string) {
+  return sql`
+    with stamp_totals as (
+      select
+        campaign_id,
+        coalesce(sum(stamps), 0)::int as total_stamps,
+        max(created_at)::text as last_stamped_at
+      from loyalty_stamp_ledger
+      where member_id::text = ${memberId}
+      group by campaign_id
+    ),
+    reward_totals as (
+      select
+        metadata ->> 'stampCampaignId' as campaign_id,
+        count(*) filter (where status = 'available' and (expires_at is null or expires_at > now()))::int as available_rewards,
+        count(*)::int as issued_rewards
+      from member_coupons
+      where member_id::text = ${memberId}
+        and metadata ? 'stampCampaignId'
+      group by metadata ->> 'stampCampaignId'
+    )
+    select
+      loyalty_stamp_campaigns.id::text,
+      loyalty_stamp_campaigns.campaign_key as "campaignKey",
+      loyalty_stamp_campaigns.name,
+      coalesce(brands.name, '') as "brandName",
+      coalesce(loyalty_stamp_campaigns.stamps_required, 5)::int as "stampsRequired",
+      loyalty_stamp_campaigns.reward_coupon_name as "rewardCouponName",
+      coalesce(loyalty_stamp_campaigns.reward_value_amount, 0)::int as "rewardValueAmount",
+      coalesce(stamp_totals.total_stamps, 0)::int as "totalStamps",
+      mod(coalesce(stamp_totals.total_stamps, 0), greatest(1, loyalty_stamp_campaigns.stamps_required))::int as "currentStamps",
+      coalesce(reward_totals.available_rewards, 0)::int as "availableRewards",
+      coalesce(reward_totals.issued_rewards, 0)::int as "issuedRewards",
+      coalesce(stamp_totals.last_stamped_at, '') as "lastStampedAt",
+      coalesce(loyalty_stamp_campaigns.valid_until::text, '') as "validUntil"
+    from loyalty_stamp_campaigns
+    left join brands on brands.id = loyalty_stamp_campaigns.brand_id
+    left join stamp_totals on stamp_totals.campaign_id = loyalty_stamp_campaigns.id
+    left join reward_totals on reward_totals.campaign_id = loyalty_stamp_campaigns.id::text
+    where loyalty_stamp_campaigns.is_active = true
+      and (loyalty_stamp_campaigns.valid_from is null or loyalty_stamp_campaigns.valid_from <= current_date)
+      and (loyalty_stamp_campaigns.valid_until is null or loyalty_stamp_campaigns.valid_until >= current_date)
+    order by
+      case when coalesce(stamp_totals.total_stamps, 0) > 0 then 0 else 1 end,
+      loyalty_stamp_campaigns.created_at desc
+    limit 20
+  `;
+}
+
 export function calculateCouponDiscount(coupon: { discountType?: string; discountValue?: number; maxDiscountAmount?: number | null }, subtotal: number) {
   const baseAmount = Math.max(0, Math.round(Number(subtotal) || 0));
   const value = Math.max(0, Math.round(Number(coupon.discountValue) || 0));
@@ -480,6 +529,137 @@ export async function issueMemberCoupon(input: {
     returning id::text
   `;
   return rows[0] ?? null;
+}
+
+async function issueMissingStampRewards(input: {
+  memberId: string;
+  campaignId: string;
+  brandId: string;
+  stampsRequired: number;
+  rewardCouponName: string;
+  rewardValueAmount: number;
+}) {
+  const totalRows = await sql`
+    select coalesce(sum(stamps), 0)::int as total
+    from loyalty_stamp_ledger
+    where campaign_id::text = ${input.campaignId}
+      and member_id::text = ${input.memberId}
+  `;
+  const rewardCount = Math.floor(Number(totalRows[0]?.total ?? 0) / Math.max(1, input.stampsRequired));
+  const existingRewards = await sql`
+    select count(*)::int as count
+    from member_coupons
+    where member_id::text = ${input.memberId}
+      and metadata ->> 'stampCampaignId' = ${input.campaignId}
+  `;
+  const missingRewards = rewardCount - Number(existingRewards[0]?.count ?? 0);
+  for (let index = 0; index < missingRewards; index += 1) {
+    await sql`
+      insert into member_coupons (
+        member_id,
+        brand_id,
+        name,
+        discount_type,
+        discount_value,
+        max_discount_amount,
+        expires_at,
+        issued_source,
+        metadata
+      )
+      values (
+        ${input.memberId},
+        nullif(${input.brandId}, '')::uuid,
+        ${input.rewardCouponName || "ドリンク無料券"},
+        'amount',
+        ${input.rewardValueAmount || 600},
+        ${input.rewardValueAmount || 600},
+        now() + interval '60 days',
+        'stamp_campaign',
+        ${JSON.stringify({ stampCampaignId: input.campaignId })}::jsonb
+      )
+    `;
+  }
+  return Math.max(0, missingRewards);
+}
+
+export async function adjustMemberStamps(input: {
+  memberId: string;
+  campaignId: string;
+  stamps: number;
+  note?: string;
+  adjustedBy?: string;
+}) {
+  const memberId = normalizeText(input.memberId);
+  const campaignId = normalizeText(input.campaignId);
+  const stamps = Math.max(0, Math.min(100, Math.round(Number(input.stamps) || 0)));
+  const note = normalizeText(input.note).slice(0, 240);
+  if (!memberId || !campaignId || stamps <= 0) throw new Error("会員、スタンプカード、杯数を指定してください。");
+
+  const campaignRows = await sql`
+    select
+      id::text,
+      coalesce(brand_id::text, '') as "brandId",
+      stamps_required as "stampsRequired",
+      reward_coupon_name as "rewardCouponName",
+      reward_value_amount as "rewardValueAmount"
+    from loyalty_stamp_campaigns
+    where id::text = ${campaignId}
+      and is_active = true
+      and (valid_from is null or valid_from <= current_date)
+      and (valid_until is null or valid_until >= current_date)
+    limit 1
+  `;
+  const campaign = campaignRows[0] as {
+    id: string;
+    brandId: string;
+    stampsRequired: number;
+    rewardCouponName: string;
+    rewardValueAmount: number;
+  } | undefined;
+  if (!campaign?.id) throw new Error("利用できるスタンプカードが見つかりません。");
+
+  const memberRows = await sql`
+    select id::text
+    from members
+    where id::text = ${memberId}
+      and status = 'active'
+    limit 1
+  `;
+  if (!memberRows[0]?.id) throw new Error("会員が見つかりません。");
+
+  const ledgerRows = await sql`
+    insert into loyalty_stamp_ledger (
+      campaign_id,
+      member_id,
+      brand_id,
+      stamps,
+      note
+    )
+    values (
+      ${campaign.id},
+      ${memberId},
+      nullif(${campaign.brandId}, '')::uuid,
+      ${stamps},
+      ${[
+        "紙レシート確認による初期スタンプ補録",
+        "レシート下部の5杯で1杯無料部分を切り取り確認済み",
+        note,
+        input.adjustedBy ? `担当:${input.adjustedBy}` : ""
+      ].filter(Boolean).join(" / ")}
+    )
+    returning id::text
+  `;
+
+  const issuedRewards = await issueMissingStampRewards({
+    memberId,
+    campaignId: campaign.id,
+    brandId: campaign.brandId,
+    stampsRequired: campaign.stampsRequired,
+    rewardCouponName: campaign.rewardCouponName,
+    rewardValueAmount: campaign.rewardValueAmount
+  });
+
+  return { ledger: ledgerRows[0] ?? null, issuedRewards };
 }
 
 export async function getMemberPointHistory(memberId: string) {
@@ -674,46 +854,14 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
     `;
     if (!stampRows[0]?.id) continue;
 
-    const totalRows = await sql`
-      select coalesce(sum(stamps), 0)::int as total
-      from loyalty_stamp_ledger
-      where campaign_id::text = ${campaign.id}
-        and member_id::text = ${order.memberId}
-    `;
-    const rewardCount = Math.floor(Number(totalRows[0]?.total ?? 0) / Math.max(1, campaign.stampsRequired));
-    const existingRewards = await sql`
-      select count(*)::int as count
-      from member_coupons
-      where member_id::text = ${order.memberId}
-        and metadata ->> 'stampCampaignId' = ${campaign.id}
-    `;
-    const missingRewards = rewardCount - Number(existingRewards[0]?.count ?? 0);
-    for (let index = 0; index < missingRewards; index += 1) {
-      await sql`
-        insert into member_coupons (
-          member_id,
-          brand_id,
-          name,
-          discount_type,
-          discount_value,
-          max_discount_amount,
-          expires_at,
-          issued_source,
-          metadata
-        )
-        values (
-          ${order.memberId},
-          ${order.brandId},
-          ${campaign.rewardCouponName || "ドリンク無料券"},
-          'amount',
-          ${campaign.rewardValueAmount || 600},
-          ${campaign.rewardValueAmount || 600},
-          now() + interval '60 days',
-          'stamp_campaign',
-          ${JSON.stringify({ stampCampaignId: campaign.id })}::jsonb
-        )
-      `;
-    }
+    await issueMissingStampRewards({
+      memberId: order.memberId,
+      campaignId: campaign.id,
+      brandId: order.brandId,
+      stampsRequired: campaign.stampsRequired,
+      rewardCouponName: campaign.rewardCouponName,
+      rewardValueAmount: campaign.rewardValueAmount
+    });
   }
 }
 
@@ -814,7 +962,7 @@ export async function refreshMemberTier(memberId: string) {
 }
 
 export async function getLoyaltyDashboard() {
-  const [summaryRows, recentMembers, recentLedger, coupons, recentCoupons] = await Promise.all([
+  const [summaryRows, recentMembers, recentLedger, coupons, recentCoupons, stampCampaigns] = await Promise.all([
     sql`
       select
         count(*)::int as "memberCount",
@@ -884,6 +1032,22 @@ export async function getLoyaltyDashboard() {
       join members on members.id = member_coupons.member_id
       order by member_coupons.issued_at desc
       limit 50
+    `,
+    sql`
+      select
+        loyalty_stamp_campaigns.id::text,
+        loyalty_stamp_campaigns.campaign_key as "campaignKey",
+        loyalty_stamp_campaigns.name,
+        coalesce(brands.name, '') as "brandName",
+        loyalty_stamp_campaigns.stamps_required::int as "stampsRequired",
+        loyalty_stamp_campaigns.reward_coupon_name as "rewardCouponName",
+        loyalty_stamp_campaigns.reward_value_amount::int as "rewardValueAmount"
+      from loyalty_stamp_campaigns
+      left join brands on brands.id = loyalty_stamp_campaigns.brand_id
+      where loyalty_stamp_campaigns.is_active = true
+        and (loyalty_stamp_campaigns.valid_from is null or loyalty_stamp_campaigns.valid_from <= current_date)
+        and (loyalty_stamp_campaigns.valid_until is null or loyalty_stamp_campaigns.valid_until >= current_date)
+      order by brands.name nulls last, loyalty_stamp_campaigns.created_at desc
     `
   ]);
 
@@ -894,6 +1058,7 @@ export async function getLoyaltyDashboard() {
     },
     recentMembers,
     recentLedger,
-    recentCoupons
+    recentCoupons,
+    stampCampaigns
   };
 }

@@ -8085,6 +8085,24 @@ body :where(
   min-width: 0;
 }
 
+.loyalty-stamp-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid rgba(47, 138, 114, 0.24);
+  border-radius: 8px;
+  background: #f3faf7;
+  color: #2f8a72;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+}
+
+.loyalty-stamp-note svg {
+  margin-top: 1px;
+}
+
 .loyalty-member-list {
   grid-column: 1 / -1;
 }
@@ -8209,6 +8227,7 @@ body :where(
 .member-portal-topbar,
 .member-portal-hero,
 .member-portal-grid,
+.member-stamp-card-grid,
 .member-portal-content-grid,
 .member-portal-toolbar,
 .member-portal-config,
@@ -8603,6 +8622,113 @@ body :where(
 
 .member-stat-card p {
   margin: 0;
+}
+
+.member-stamp-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.member-stamp-card {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  background: #f8fbfa;
+  padding: 16px;
+}
+
+.member-stamp-card-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.member-stamp-card-head > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.member-stamp-card-head h2 {
+  margin: 0;
+  color: var(--member-ink);
+  font-size: 21px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.member-stamp-card-head span,
+.member-stamp-card-foot span {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.member-stamp-card-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(47, 138, 114, 0.24);
+  border-radius: 999px;
+  background: white;
+  color: var(--member-logo-accent);
+  padding: 7px 10px;
+}
+
+.member-stamp-card-count strong {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.member-stamp-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 9px;
+}
+
+.member-stamp-slots span {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 1;
+  border: 1px solid var(--member-line);
+  border-radius: 999px;
+  background: white;
+  color: #b7b7b7;
+}
+
+.member-stamp-slots span.is-filled {
+  border-color: var(--member-logo-accent);
+  background: var(--member-logo-accent);
+  color: white;
+}
+
+.member-stamp-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.member-stamp-card-foot b {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: white;
+  color: var(--member-logo-accent);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 9px;
+  white-space: nowrap;
 }
 
 .member-portal-content-grid {
@@ -9084,6 +9210,17 @@ body :where(
 
   .member-brand-card:hover {
     background: transparent;
+  }
+
+  .member-stamp-card-head,
+  .member-stamp-card-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .member-stamp-card-count,
+  .member-stamp-card-foot b {
+    width: fit-content;
   }
 
   .member-brand-logo {

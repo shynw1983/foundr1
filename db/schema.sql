@@ -1567,6 +1567,45 @@ create table if not exists member_coupons (
 create index if not exists idx_member_coupons_member_status
   on member_coupons(member_id, status, expires_at);
 
+insert into loyalty_stamp_campaigns (
+  brand_id,
+  campaign_key,
+  name,
+  earn_rule,
+  stamps_required,
+  reward_coupon_name,
+  reward_value_amount,
+  valid_from,
+  valid_until,
+  is_active,
+  updated_at
+)
+select
+  brands.id,
+  'nanacha_buy_5_get_1',
+  'nanacha ドリンクスタンプカード',
+  'per_item',
+  5,
+  'ドリンク無料券',
+  600,
+  current_date,
+  null,
+  true,
+  now()
+from brands
+where lower(brands.name) = lower('nanacha')
+on conflict (campaign_key)
+do update set
+  brand_id = excluded.brand_id,
+  name = excluded.name,
+  earn_rule = excluded.earn_rule,
+  stamps_required = excluded.stamps_required,
+  reward_coupon_name = excluded.reward_coupon_name,
+  reward_value_amount = excluded.reward_value_amount,
+  valid_until = excluded.valid_until,
+  is_active = excluded.is_active,
+  updated_at = now();
+
 create table if not exists loyalty_settlement_entries (
   id uuid primary key default gen_random_uuid(),
   ledger_id uuid references loyalty_point_ledger(id) on delete cascade,

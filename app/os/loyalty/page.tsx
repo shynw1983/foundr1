@@ -13,6 +13,7 @@ import {
   PackageCheck,
   Search,
   ShoppingCart,
+  Stamp,
   Store,
   Truck,
   UserCog,
@@ -92,11 +93,22 @@ type LoyaltyCoupon = {
   memberLabel: string;
 };
 
+type LoyaltyStampCampaign = {
+  id: string;
+  campaignKey: string;
+  name: string;
+  brandName: string;
+  stampsRequired: number;
+  rewardCouponName: string;
+  rewardValueAmount: number;
+};
+
 type LoyaltyDashboard = {
   summary: LoyaltySummary;
   recentMembers: LoyaltyMember[];
   recentLedger: LoyaltyLedger[];
   recentCoupons: LoyaltyCoupon[];
+  stampCampaigns: LoyaltyStampCampaign[];
 };
 
 const emptySummary: LoyaltySummary = {
@@ -137,10 +149,11 @@ function getMovementLabel(value: string) {
 }
 
 export default function LoyaltyPage() {
-  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [], recentCoupons: [] });
+  const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [], recentCoupons: [], stampCampaigns: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [couponSaving, setCouponSaving] = useState(false);
+  const [stampSaving, setStampSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ displayName: "", phone: "", email: "" });
   const [couponForm, setCouponForm] = useState({
@@ -148,6 +161,12 @@ export default function LoyaltyPage() {
     name: "会員登録特典 500円OFF",
     discountValue: "500",
     expiresAt: "",
+    note: ""
+  });
+  const [stampForm, setStampForm] = useState({
+    memberId: "",
+    campaignId: "",
+    stamps: "0",
     note: ""
   });
 
@@ -169,7 +188,8 @@ export default function LoyaltyPage() {
       summary: { ...emptySummary, ...(body.summary ?? {}) },
       recentMembers: body.recentMembers ?? [],
       recentLedger: body.recentLedger ?? [],
-      recentCoupons: body.recentCoupons ?? []
+      recentCoupons: body.recentCoupons ?? [],
+      stampCampaigns: body.stampCampaigns ?? []
     });
     setMessage("");
     setLoading(false);
@@ -194,7 +214,8 @@ export default function LoyaltyPage() {
         summary: { ...emptySummary, ...(body.summary ?? {}) },
         recentMembers: body.recentMembers ?? [],
         recentLedger: body.recentLedger ?? [],
-        recentCoupons: body.recentCoupons ?? []
+        recentCoupons: body.recentCoupons ?? [],
+        stampCampaigns: body.stampCampaigns ?? []
       });
       setForm({ displayName: "", phone: "", email: "" });
       setMessage("会員を保存しました。");
@@ -233,7 +254,8 @@ export default function LoyaltyPage() {
         summary: { ...emptySummary, ...(body.summary ?? {}) },
         recentMembers: body.recentMembers ?? [],
         recentLedger: body.recentLedger ?? [],
-        recentCoupons: body.recentCoupons ?? []
+        recentCoupons: body.recentCoupons ?? [],
+        stampCampaigns: body.stampCampaigns ?? []
       });
       setCouponForm((current) => ({ ...current, name: "会員登録特典 500円OFF", discountValue: "500", expiresAt: "", note: "" }));
       setMessage("クーポンを発行しました。");
@@ -241,6 +263,44 @@ export default function LoyaltyPage() {
       setMessage(error instanceof Error ? error.message : "クーポンを発行できませんでした。");
     } finally {
       setCouponSaving(false);
+    }
+  }
+
+  async function adjustStamps() {
+    if (stampSaving || !stampForm.memberId || !stampForm.campaignId || Number(stampForm.stamps) <= 0) {
+      setMessage("会員、スタンプカード、紙レシート分の杯数を入力してください。");
+      return;
+    }
+    setStampSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "adjust_stamps",
+          memberId: stampForm.memberId,
+          campaignId: stampForm.campaignId,
+          stamps: Number(stampForm.stamps),
+          note: stampForm.note
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "スタンプを補録できませんでした。");
+      setDashboard({
+        summary: { ...emptySummary, ...(body.summary ?? {}) },
+        recentMembers: body.recentMembers ?? [],
+        recentLedger: body.recentLedger ?? [],
+        recentCoupons: body.recentCoupons ?? [],
+        stampCampaigns: body.stampCampaigns ?? []
+      });
+      setStampForm((current) => ({ ...current, stamps: "0", note: "" }));
+      const issuedRewards = Number(body.adjustment?.issuedRewards ?? 0);
+      setMessage(issuedRewards > 0 ? `スタンプを補録し、特典クーポンを${formatNumber(issuedRewards)}件発行しました。` : "スタンプを補録しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "スタンプを補録できませんでした。");
+    } finally {
+      setStampSaving(false);
     }
   }
 
@@ -378,6 +438,52 @@ export default function LoyaltyPage() {
             </label>
             <button className="primary-button" type="button" onClick={() => void issueCoupon()} disabled={couponSaving}>
               {couponSaving ? "発行中..." : "クーポンを発行"}
+            </button>
+          </article>
+
+          <article className="panel loyalty-member-form">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Stamp</p>
+                <h3>紙レシート分を補録</h3>
+              </div>
+            </div>
+            <div className="loyalty-stamp-note">
+              <Stamp size={18} />
+              <span>紙レシートを確認し、下部の5杯で1杯無料部分を切り取った後に杯数を補録します。</span>
+            </div>
+            <label>
+              <span>会員</span>
+              <select value={stampForm.memberId} onChange={(event) => setStampForm((current) => ({ ...current, memberId: event.target.value }))}>
+                <option value="">選択してください</option>
+                {dashboard.recentMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName || member.phone || member.email || member.memberNumber} / {member.memberNumber}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>スタンプカード</span>
+              <select value={stampForm.campaignId} onChange={(event) => setStampForm((current) => ({ ...current, campaignId: event.target.value }))}>
+                <option value="">選択してください</option>
+                {dashboard.stampCampaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.brandName ? `${campaign.brandName} / ` : ""}{campaign.name} / {campaign.stampsRequired}杯で特典
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>紙レシート分の杯数</span>
+              <input value={stampForm.stamps} onChange={(event) => setStampForm((current) => ({ ...current, stamps: event.target.value.replace(/[^\d]/g, "").slice(0, 3) }))} placeholder="例: 3" inputMode="numeric" />
+            </label>
+            <label>
+              <span>メモ</span>
+              <input value={stampForm.note} onChange={(event) => setStampForm((current) => ({ ...current, note: event.target.value }))} placeholder="例: レシート2枚確認" />
+            </label>
+            <button className="primary-button" type="button" onClick={() => void adjustStamps()} disabled={stampSaving}>
+              {stampSaving ? "補録中..." : "スタンプを補録"}
             </button>
           </article>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { SignInButton, SignOutButton, SignUpButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, Ticket, UserPlus, UserRound } from "lucide-react";
+import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type MemberProfile = {
@@ -46,12 +46,29 @@ type PointHistory = {
   createdAt: string;
 };
 
+type MemberStampCard = {
+  id: string;
+  campaignKey: string;
+  name: string;
+  brandName: string;
+  stampsRequired: number;
+  rewardCouponName: string;
+  rewardValueAmount: number;
+  totalStamps: number;
+  currentStamps: number;
+  availableRewards: number;
+  issuedRewards: number;
+  lastStampedAt: string;
+  validUntil: string;
+};
+
 type MemberResponse = {
   configured?: boolean;
   authenticated?: boolean;
   member?: MemberProfile | null;
   coupons?: MemberCoupon[];
   pointHistory?: PointHistory[];
+  stampCards?: MemberStampCard[];
   error?: string;
 };
 
@@ -143,6 +160,12 @@ function movementLabel(value: string) {
   if (value === "refund_reversal") return "取消";
   if (value === "redeem") return "利用";
   return value || "-";
+}
+
+function stampCardProgressLabel(card: MemberStampCard) {
+  const required = Math.max(1, Number(card.stampsRequired) || 1);
+  const current = Math.max(0, Math.min(required, Number(card.currentStamps) || 0));
+  return `${current} / ${required}`;
 }
 
 function splitJapanesePhone(value: string) {
@@ -616,6 +639,41 @@ function ConfiguredMemberPortal() {
                 <p>ログイン情報から Foundr1 会員を作成しています。</p>
               </section>
             )}
+
+            {data.stampCards?.length ? (
+              <section className="member-stamp-card-grid" aria-label="スタンプカード">
+                {data.stampCards.map((card) => {
+                  const required = Math.max(1, Number(card.stampsRequired) || 1);
+                  const current = Math.max(0, Math.min(required, Number(card.currentStamps) || 0));
+                  return (
+                    <article key={card.id} className="member-stamp-card">
+                      <div className="member-stamp-card-head">
+                        <div>
+                          <p className="eyebrow">Stamp Card</p>
+                          <h2>{card.name}</h2>
+                          <span>{card.brandName || "Foundr1"} / {card.rewardCouponName || "特典クーポン"}</span>
+                        </div>
+                        <div className="member-stamp-card-count">
+                          <Stamp size={18} />
+                          <strong>{stampCardProgressLabel(card)}</strong>
+                        </div>
+                      </div>
+                      <div className="member-stamp-slots" aria-label={`${card.name} ${stampCardProgressLabel(card)}`}>
+                        {Array.from({ length: required }).map((_, index) => (
+                          <span key={`${card.id}-${index}`} className={index < current ? "is-filled" : ""}>
+                            <Stamp size={18} />
+                          </span>
+                        ))}
+                      </div>
+                      <div className="member-stamp-card-foot">
+                        <span>累計 {card.totalStamps.toLocaleString("ja-JP")} stamp</span>
+                        {card.availableRewards > 0 ? <b>特典 {card.availableRewards.toLocaleString("ja-JP")}件 利用可</b> : <b>あと {Math.max(0, required - current).toLocaleString("ja-JP")} stamp</b>}
+                      </div>
+                    </article>
+                  );
+                })}
+              </section>
+            ) : null}
 
             <section className="member-portal-content-grid">
               <article className="member-portal-panel" id="member-coupons" ref={couponPanelRef}>

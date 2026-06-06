@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { getLoyaltyDashboard, issueMemberCoupon, upsertMember } from "../../../../lib/loyalty";
+import { adjustMemberStamps, getLoyaltyDashboard, issueMemberCoupon, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +39,22 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, coupon, ...dashboard });
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "クーポンを発行できませんでした。" }, { status: 400 });
+    }
+  }
+
+  if (normalizeText(body.action) === "adjust_stamps") {
+    try {
+      const adjustment = await adjustMemberStamps({
+        memberId: normalizeText(body.memberId),
+        campaignId: normalizeText(body.campaignId),
+        stamps: Number(body.stamps),
+        note: normalizeText(body.note),
+        adjustedBy: session.id
+      });
+      const dashboard = await getLoyaltyDashboard();
+      return Response.json({ ok: true, adjustment, ...dashboard });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "スタンプを補録できませんでした。" }, { status: 400 });
     }
   }
 
