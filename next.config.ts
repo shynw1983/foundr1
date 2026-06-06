@@ -35,6 +35,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@sparticuz/chromium"],
   async headers() {
     return [
       {
