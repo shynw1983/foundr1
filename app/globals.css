@@ -8529,7 +8529,6 @@ body :where(
   font-weight: 600;
   line-height: 1.2;
   padding: 7px 9px;
-  box-shadow: 0 8px 18px rgba(47, 150, 120, 0.22);
 }
 
 .member-card-coupon-badge svg {
