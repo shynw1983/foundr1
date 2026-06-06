@@ -98,15 +98,22 @@ export default function MemberPage() {
 
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn } = useUser();
+  const [returnTo, setReturnTo] = useState("");
   const [data, setData] = useState<MemberResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [handoffStarted, setHandoffStarted] = useState(false);
 
   const qrValue = useMemo(() => {
     if (!data.member?.publicToken) return "";
     return `foundr1:member:${data.member.publicToken}`;
   }, [data.member?.publicToken]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setReturnTo(params.get("returnTo") || "");
+  }, []);
 
   async function loadMember() {
     if (!isSignedIn) return;
@@ -127,6 +134,25 @@ function ConfiguredMemberPortal() {
   useEffect(() => {
     if (isLoaded && isSignedIn) void loadMember();
   }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !returnTo || handoffStarted) return;
+    setHandoffStarted(true);
+    void fetch("/api/public/members/handoff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnTo })
+    })
+      .then((response) => response.json().catch(() => ({})))
+      .then((body) => {
+        if (body?.redirectUrl) {
+          window.location.href = body.redirectUrl;
+          return;
+        }
+        setMessage(body?.error || "ログイン後の戻り先を準備できませんでした。");
+      })
+      .catch(() => setMessage("ログイン後の戻り先を準備できませんでした。"));
+  }, [handoffStarted, isLoaded, isSignedIn, returnTo]);
 
   useEffect(() => {
     let active = true;
@@ -181,6 +207,14 @@ function ConfiguredMemberPortal() {
 
       {
         <>
+          {returnTo && isLoaded && isSignedIn ? (
+            <section className="member-portal-login-panel">
+              <Loader2 size={32} />
+              <h2>ログイン済みです</h2>
+              <p>予約ページへ戻っています。</p>
+            </section>
+          ) : null}
+
           {isLoaded && !isSignedIn ? (
             <section className="member-portal-login-panel">
               <UserRound size={32} />
