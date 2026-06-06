@@ -309,7 +309,12 @@ function ConfiguredMemberPortal() {
       : "";
 
   const scrollToCoupons = () => {
-    couponPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.requestAnimationFrame(() => {
+      const target = selectedCouponId
+        ? document.getElementById(`member-coupon-${selectedCouponId}`)
+        : null;
+      (target ?? couponPanelRef.current)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   };
 
   useEffect(() => {
@@ -616,14 +621,14 @@ function ConfiguredMemberPortal() {
             )}
 
             <section className="member-portal-content-grid">
-              <article className="member-portal-panel" ref={couponPanelRef}>
+              <article className="member-portal-panel" id="member-coupons" ref={couponPanelRef}>
                 <div className="member-portal-panel-title">
                   <Gift size={18} />
                   <h3>クーポン</h3>
                 </div>
                 <div className="member-portal-list">
                   {data.coupons?.length ? data.coupons.map((coupon) => (
-                    <div key={coupon.id} className="member-portal-list-row">
+                    <div key={coupon.id} id={`member-coupon-${coupon.id}`} className="member-portal-list-row">
                       <div>
                         <strong>{coupon.name}</strong>
                         <span>{coupon.couponCode} / {formatDate(coupon.expiresAt)}{selectedCouponId === coupon.id ? " / 使用予定" : ""}</span>
