@@ -83,6 +83,9 @@ input[type="file"] {
   margin: 0 auto 18px;
   width: 210mm;
   max-width: 100%;
+  position: sticky;
+  top: 12px;
+  z-index: 10;
 }
 
 .online-receipt-actions button {
@@ -432,7 +435,25 @@ input[type="file"] {
 
 @media (max-width: 760px) {
   .online-receipt-preview-shell {
-    padding: 16px;
+    padding: 16px 16px calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .online-receipt-actions {
+    position: fixed;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    width: auto;
+    margin: 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(223, 228, 236, 0.92);
+    box-shadow: 0 16px 42px rgba(29, 36, 48, 0.22);
+  }
+
+  .online-receipt-actions button {
+    width: 100%;
+    min-height: 48px;
   }
 
   .online-receipt-sheet {
