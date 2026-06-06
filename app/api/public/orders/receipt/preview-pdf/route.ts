@@ -40,11 +40,11 @@ function applyRecipientChoice(receipt: OnlineReceiptViewModel, mode: ReceiptReci
 }
 
 function getReceiptFileName(receipt: OnlineReceiptViewModel) {
-  return `領収書-${receipt.brandName}-${receipt.pickupCode}.pdf`.replace(/[\\/:*?"<>|]+/g, "-");
+  return `receipt-${receipt.brand}-${receipt.pickupCode}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
 function contentDispositionFileName(filename: string) {
-  return `inline; filename="receipt.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return `inline; filename="${filename}"`;
 }
 
 function getFooterBrandText() {

@@ -17,10 +17,11 @@ function getParam(params: Record<string, string | string[] | undefined>, key: st
 }
 
 function getReceiptFileName(receipt: OnlineReceiptViewModel) {
-  return `領収書-${receipt.brandName}-${receipt.pickupCode}`.replace(/[\\/:*?"<>|]+/g, "-");
+  return `receipt-${receipt.brand}-${receipt.pickupCode}`.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
 function getReceiptPdfUrl(params: {
+  fileName: string;
   orderId: string;
   pickupCode: string;
   demo: string;
@@ -36,7 +37,7 @@ function getReceiptPdfUrl(params: {
   }
   search.set("recipientMode", params.recipientMode);
   if (params.recipientName) search.set("recipientName", params.recipientName);
-  return `/api/public/orders/receipt/preview-pdf?${search.toString()}`;
+  return `/api/public/orders/receipt/pdf/${encodeURIComponent(`${params.fileName}.pdf`)}?${search.toString()}`;
 }
 
 function getRecipientMode(value: string): ReceiptRecipientMode {
@@ -86,10 +87,11 @@ export default async function ReceiptPreviewPage({ searchParams }: ReceiptPrevie
 
   const registeredName = getRegisteredRecipientName(receipt);
   const displayReceipt = applyRecipientChoice(receipt, recipientMode, recipientName);
+  const receiptFileName = getReceiptFileName(receipt);
 
   return (
     <main className="online-receipt-preview-shell">
-      <ReceiptPreviewActions fileName={getReceiptFileName(receipt)} pdfUrl={getReceiptPdfUrl({ orderId, pickupCode, demo, recipientMode, recipientName })} />
+      <ReceiptPreviewActions fileName={receiptFileName} pdfUrl={getReceiptPdfUrl({ fileName: receiptFileName, orderId, pickupCode, demo, recipientMode, recipientName })} />
       <ReceiptRecipientControls
         orderId={orderId}
         pickupCode={pickupCode}
