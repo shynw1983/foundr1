@@ -514,6 +514,11 @@ input[type="file"] {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
   html,
   body {
     width: 210mm;
@@ -534,10 +539,137 @@ input[type="file"] {
 
   .online-receipt-sheet {
     width: 210mm;
-    min-height: 297mm;
+    min-height: 0;
     margin: 0;
+    padding: 10mm 12mm;
     border: 0;
     box-shadow: none;
+  }
+
+  .online-receipt-header {
+    padding-bottom: 7mm;
+  }
+
+  .online-receipt-brand img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .online-receipt-title-block h1 {
+    font-size: 27px;
+  }
+
+  .online-receipt-hero {
+    margin-top: 6mm;
+    padding: 5mm;
+  }
+
+  .online-receipt-recipient {
+    max-width: 112mm;
+    padding-bottom: 5px;
+    font-size: 15px;
+  }
+
+  .online-receipt-hero strong {
+    font-size: 26px;
+  }
+
+  .online-receipt-info-grid {
+    margin-top: 6mm;
+    gap: 12px;
+  }
+
+  .online-receipt-info-grid > div {
+    padding-top: 3mm;
+  }
+
+  .online-receipt-info-grid h2,
+  .online-receipt-items h2 {
+    margin-bottom: 7px;
+    font-size: 11px;
+  }
+
+  .online-receipt-info-grid dl > div {
+    grid-template-columns: 20mm minmax(0, 1fr);
+    gap: 7px;
+    padding: 3px 0;
+  }
+
+  .online-receipt-items {
+    margin-top: 6mm;
+  }
+
+  .online-receipt-section-heading {
+    padding-bottom: 6px;
+  }
+
+  .online-receipt-item-list {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .online-receipt-item {
+    padding: 6px 0;
+  }
+
+  .online-receipt-item-main {
+    gap: 10px;
+  }
+
+  .online-receipt-item h3 {
+    font-size: 11px;
+  }
+
+  .online-receipt-item p,
+  .online-receipt-detail-list span,
+  .online-receipt-section-list p {
+    font-size: 9px;
+  }
+
+  .online-receipt-detail-list {
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .online-receipt-detail-list span {
+    padding: 2px 5px;
+  }
+
+  .online-receipt-section-list {
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .online-receipt-section-list > div {
+    padding: 5px 6px;
+  }
+
+  .online-receipt-total-panel {
+    margin-top: 5mm;
+  }
+
+  .online-receipt-total-panel dl {
+    width: 66mm;
+    padding-top: 6px;
+  }
+
+  .online-receipt-total-panel dl > div {
+    padding: 4px 0;
+  }
+
+  .online-receipt-total-panel .is-total {
+    margin: 3px 0;
+    padding: 7px 0;
+  }
+
+  .online-receipt-total-panel .is-total dt,
+  .online-receipt-total-panel .is-total dd {
+    font-size: 14px;
+  }
+
+  .online-receipt-footer {
+    margin-top: 6mm;
+    padding-top: 6px;
   }
 }
 
