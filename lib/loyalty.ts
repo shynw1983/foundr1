@@ -30,6 +30,7 @@ export type LoyaltyMemberInput = {
   phone?: string | null;
   email?: string | null;
   displayName?: string | null;
+  allowDisplayNameUpdate?: boolean;
   identityProvider?: string | null;
   identitySubject?: string | null;
   identityLabel?: string | null;
@@ -164,10 +165,17 @@ export async function upsertMember(input: LoyaltyMemberInput) {
 export async function updateMember(memberId: string, input: LoyaltyMemberInput) {
   const phone = normalizePhone(input.phone);
   const email = normalizeEmail(input.email);
+  const displayName = normalizeText(input.displayName);
+  const allowDisplayNameUpdate = Boolean(input.allowDisplayNameUpdate);
   await sql`
     update members
     set
-      display_name = case when ${normalizeText(input.displayName)} <> '' then ${normalizeText(input.displayName)} else display_name end,
+      display_name = case
+        when ${displayName} = '' then display_name
+        when ${allowDisplayNameUpdate} then ${displayName}
+        when coalesce(display_name, '') = '' then ${displayName}
+        else display_name
+      end,
       phone = case when ${phone} <> '' then ${phone} else phone end,
       email = case when ${email} <> '' then ${email} else email end,
       metadata = metadata || ${JSON.stringify(input.metadata ?? {})}::jsonb,

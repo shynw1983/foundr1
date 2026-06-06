@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     phone: normalizeText(body.phone),
     email: normalizeText(body.email),
     displayName: normalizeText(body.displayName),
+    allowDisplayNameUpdate: true,
     identityProvider: normalizeText(body.identityProvider),
     identitySubject: normalizeText(body.identitySubject),
     identityLabel: normalizeText(body.identityLabel),

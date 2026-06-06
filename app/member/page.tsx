@@ -211,6 +211,20 @@ function hasRequiredProfileDetails(member?: MemberProfile | null) {
   return Boolean(member?.displayName?.trim() && (member?.fullName?.trim() || (member?.lastName?.trim() && member?.firstName?.trim())) && member?.phone?.trim());
 }
 
+function getFormalMemberName(member?: MemberProfile | null) {
+  return (member?.fullName || [member?.lastName, member?.firstName].map((part) => part?.trim()).filter(Boolean).join(" ")).trim();
+}
+
+function getMemberCardDisplayName(member?: MemberProfile | null) {
+  const formalName = getFormalMemberName(member);
+  if (formalName) return `${formalName} 様`;
+  return member?.displayName?.trim() || member?.email?.trim() || "会員";
+}
+
+function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }) {
+  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || "会員";
+}
+
 export default function MemberPage() {
   if (!clerkConfigured) {
     return (
@@ -447,7 +461,7 @@ function ConfiguredMemberPortal() {
             <summary aria-label="会員メニュー">
               <span className="member-account-avatar"><UserRound size={18} /></span>
               <span className="member-account-summary-text">
-                <strong>{data.member?.displayName || user?.fullName || "会員"}</strong>
+                <strong>{getAccountDisplayName(data.member, user)}</strong>
                 <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || "ログイン中"}</small>
               </span>
               <ChevronDown size={16} />
@@ -455,7 +469,7 @@ function ConfiguredMemberPortal() {
             <div className="member-account-popover">
               <div className="member-account-card">
                 <span>ログイン中</span>
-                <strong>{data.member?.displayName || user?.fullName || user?.primaryEmailAddress?.emailAddress || "会員"}</strong>
+                <strong>{getAccountDisplayName(data.member, user)}</strong>
                 {data.member?.memberNumber ? <small>会員番号 {data.member.memberNumber}</small> : null}
               </div>
               <button
@@ -549,7 +563,7 @@ function ConfiguredMemberPortal() {
                   <div>
                     <p className="eyebrow">Member No.</p>
                     <h2>{data.member.memberNumber}</h2>
-                    <span>{data.member.displayName || data.member.email || "会員"}</span>
+                    <span>{getMemberCardDisplayName(data.member)}</span>
                   </div>
                   <div className="member-qr-placeholder" aria-label="会員 QR">
                     {qrDataUrl ? <img src={qrDataUrl} alt="会員 QR" /> : <QrCode size={64} />}
