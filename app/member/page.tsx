@@ -9,6 +9,8 @@ type MemberProfile = {
   memberNumber: string;
   publicToken: string;
   displayName: string;
+  lastName: string;
+  firstName: string;
   fullName: string;
   nameKana: string;
   phone: string;
@@ -55,6 +57,8 @@ type MemberResponse = {
 
 type MemberSettingsForm = {
   displayName: string;
+  lastName: string;
+  firstName: string;
   fullName: string;
   nameKana: string;
   phone: string;
@@ -70,6 +74,8 @@ const memberReturnStorageKey = "foundr1-member-return-to";
 
 const emptyMemberSettings: MemberSettingsForm = {
   displayName: "",
+  lastName: "",
+  firstName: "",
   fullName: "",
   nameKana: "",
   phone: "",
@@ -135,8 +141,11 @@ function withSignedOutMarker(value: string) {
 
 function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   if (!member) return emptyMemberSettings;
+  const [fallbackLastName = "", fallbackFirstName = ""] = (member.fullName || "").trim().split(/\s+/, 2);
   return {
     displayName: member.displayName || "",
+    lastName: member.lastName || fallbackLastName,
+    firstName: member.firstName || fallbackFirstName,
     fullName: member.fullName || "",
     nameKana: member.nameKana || "",
     phone: member.phone || "",
@@ -149,7 +158,7 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
 }
 
 function hasRequiredProfileDetails(member?: MemberProfile | null) {
-  return Boolean(member?.fullName?.trim() && member?.phone?.trim());
+  return Boolean((member?.fullName?.trim() || (member?.lastName?.trim() && member?.firstName?.trim())) && member?.phone?.trim());
 }
 
 export default function MemberPage() {
@@ -460,8 +469,12 @@ function ConfiguredMemberPortal() {
                     <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
                   </label>
                   <label>
-                    <span>氏名</span>
-                    <input value={settingsForm.fullName} onChange={(event) => setSettingsForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="例: 山田 太郎" autoComplete="name" required />
+                    <span>姓</span>
+                    <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
+                  </label>
+                  <label>
+                    <span>名</span>
+                    <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
                   </label>
                   <label>
                     <span>フリガナ（任意）</span>

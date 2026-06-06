@@ -92,10 +92,15 @@ export async function PATCH(request: Request) {
   if (!existing) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const fullName = String(body.fullName || "").trim();
+  const lastName = String(body.lastName || "").trim();
+  const firstName = String(body.firstName || "").trim();
+  const fullName = [lastName, firstName].filter(Boolean).join(" ").trim();
   const phone = String(body.phone || "").trim();
-  if (!fullName) {
-    return Response.json({ error: "氏名を入力してください。" }, { status: 400 });
+  if (!lastName) {
+    return Response.json({ error: "姓を入力してください。" }, { status: 400 });
+  }
+  if (!firstName) {
+    return Response.json({ error: "名を入力してください。" }, { status: 400 });
   }
   if (!phone) {
     return Response.json({ error: "電話番号を入力してください。" }, { status: 400 });
@@ -108,6 +113,8 @@ export async function PATCH(request: Request) {
   try {
     const member = await updateMemberSettings(existing.id, {
       displayName: String(body.displayName || ""),
+      lastName,
+      firstName,
       fullName,
       nameKana: String(body.nameKana || ""),
       phone,

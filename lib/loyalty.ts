@@ -32,6 +32,8 @@ export type LoyaltyMember = {
   memberNumber: string;
   publicToken: string;
   displayName: string;
+  lastName: string;
+  firstName: string;
   fullName: string;
   nameKana: string;
   phone: string;
@@ -208,6 +210,8 @@ export async function getMemberProfile(memberId: string) {
       members.member_number as "memberNumber",
       members.public_token as "publicToken",
       members.display_name as "displayName",
+      coalesce(members.metadata->>'lastName', '') as "lastName",
+      coalesce(members.metadata->>'firstName', '') as "firstName",
       coalesce(members.metadata->>'fullName', '') as "fullName",
       members.name_kana as "nameKana",
       members.phone,
@@ -232,6 +236,8 @@ export async function getMemberProfile(memberId: string) {
 
 export type LoyaltyMemberSettingsInput = {
   displayName?: string;
+  lastName?: string;
+  firstName?: string;
   fullName?: string;
   nameKana?: string;
   phone?: string;
@@ -244,7 +250,9 @@ export type LoyaltyMemberSettingsInput = {
 
 export async function updateMemberSettings(memberId: string, input: LoyaltyMemberSettingsInput) {
   const displayName = normalizeText(input.displayName).slice(0, 80);
-  const fullName = normalizeText(input.fullName).slice(0, 80);
+  const lastName = normalizeText(input.lastName).slice(0, 40);
+  const firstName = normalizeText(input.firstName).slice(0, 40);
+  const fullName = normalizeText(input.fullName || [lastName, firstName].filter(Boolean).join(" ")).slice(0, 80);
   const nameKana = normalizeText(input.nameKana).slice(0, 80);
   const phone = normalizePhone(input.phone).slice(0, 30);
   const birthday = normalizeText(input.birthday);
@@ -256,6 +264,8 @@ export async function updateMemberSettings(memberId: string, input: LoyaltyMembe
   const marketingOptIn = Boolean(input.marketingOptIn);
   const lineLinked = Boolean(input.lineLinked);
   const metadata = {
+    lastName,
+    firstName,
     fullName,
     preferredStoreId,
     marketingOptIn,
