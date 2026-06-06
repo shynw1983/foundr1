@@ -1,7 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
-const expenseEditRoles = new Set(["owner", "manager", "buyer"]);
+const expenseEditRoles = new Set(["owner", "manager"]);
 const expenseCategories = new Set(["fixed", "variable", "misc"]);
 
 function getCurrentMonth() {

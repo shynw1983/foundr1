@@ -22,7 +22,9 @@ type ProductWithCategory = Product & {
   manufacturer?: string;
   packageSpec?: string;
 };
-type StoreItem = typeof stores[number];
+type StoreItem = typeof stores[number] & {
+  defaultProcurementStaffId?: string;
+};
 type PurchaseOrder = typeof orders[number] & {
   note?: string;
   requesterStaffId?: string;
@@ -441,7 +443,7 @@ export default function OrdersPage() {
   const hasRestoredNewOrderDraft = useRef(false);
   const shouldSkipInitialDraftSave = useRef(true);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
-  const [storesData, setStoresData] = useState<typeof stores>([]);
+  const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
@@ -467,7 +469,7 @@ export default function OrdersPage() {
     if (!response.ok) return;
 
     const data = await response.json() as {
-      stores?: typeof stores;
+      stores?: StoreItem[];
       products?: ProductWithCategory[];
       orders?: PurchaseOrder[];
       purchaseOrderItems?: PurchaseOrderItem[];
@@ -543,8 +545,9 @@ export default function OrdersPage() {
   });
   const selectedDraftStore = draftStore || orderableStores[0]?.name || "";
   const draftAssignableStaff = getAssignableStaffOptions(staffOptions, selectedDraftStore, currentUserId);
+  const selectedDraftStoreDefaultBuyerId = orderableStores.find((store) => store.name === selectedDraftStore)?.defaultProcurementStaffId ?? "";
   const selectedDraftRequesterStaffId = getSelectedRequesterStaffId(draftRequesterStaffId, draftAssignableStaff, selectedDraftStore, currentUserId);
-  const selectedDraftBuyerStaffId = getSelectedBuyerStaffId(draftBuyerStaffId, draftAssignableStaff, selectedDraftStore, currentUserId);
+  const selectedDraftBuyerStaffId = getSelectedBuyerStaffId(draftBuyerStaffId, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
   const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
@@ -587,8 +590,8 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setDraftRequesterStaffId((current) => getSelectedRequesterStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
-    setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
-  }, [selectedDraftStore, currentUserId, staffOptions]);
+    setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId));
+  }, [selectedDraftStore, currentUserId, staffOptions, selectedDraftStoreDefaultBuyerId]);
 
   useEffect(() => {
     if (!hasRestoredNewOrderDraft.current || typeof window === "undefined") return;
@@ -1437,9 +1440,12 @@ export default function OrdersPage() {
                   onChange={(event) => {
                     const nextStore = event.target.value;
                     const nextProducts = getProductsForStore(products, orderableStores, nextStore);
+                    const nextAssignableStaff = getAssignableStaffOptions(staffOptions, nextStore, currentUserId);
+                    const nextDefaultBuyerId = orderableStores.find((store) => store.name === nextStore)?.defaultProcurementStaffId ?? "";
                     setEditingOrder((current) => current ? {
                       ...current,
                       store: nextStore,
+                      buyerStaffId: getSelectedBuyerStaffId("", nextAssignableStaff, nextStore, currentUserId, nextDefaultBuyerId),
                       items: current.items.map((item) => syncOrderItemWithProducts(item, nextProducts))
                     } : current);
                   }}
@@ -1649,9 +1655,9 @@ function getStaffStoreRelevance(staff: StaffOption, storeName: string, currentUs
 
   const rolePriority: Record<string, number> = {
     store_owner: 0,
-    staff: 1,
-    manager: 2,
-    buyer: 3,
+    store_manager: 1,
+    staff: 2,
+    manager: 3,
     owner: 4
   };
   const storeMatchPriority = isStaffAssignedToStore(staff, storeName) ? 0 : 10;
@@ -1682,13 +1688,16 @@ function getSelectedRequesterStaffId(currentId: string, staffOptions: StaffOptio
   return staffOptions.find((staff) => staff.role !== "owner")?.id ?? staffOptions[0]?.id ?? "";
 }
 
-function getSelectedBuyerStaffId(currentId: string, staffOptions: StaffOption[], storeName: string, currentUserId?: string) {
+function getSelectedBuyerStaffId(currentId: string, staffOptions: StaffOption[], storeName: string, currentUserId?: string, defaultBuyerStaffId?: string) {
   const currentStaff = staffOptions.find((staff) => staff.id === currentId);
   if (currentStaff && (isStaffAssignedToStore(currentStaff, storeName) || currentStaff.role === "owner")) return currentStaff.id;
 
+  const defaultBuyerStaff = staffOptions.find((staff) => staff.id === defaultBuyerStaffId);
+  if (defaultBuyerStaff) return defaultBuyerStaff.id;
+
   return staffOptions.find((staff) => staff.role === "store_owner" && isStaffAssignedToStore(staff, storeName))?.id ??
+    staffOptions.find((staff) => staff.role === "store_manager" && isStaffAssignedToStore(staff, storeName))?.id ??
     staffOptions.find((staff) => staff.role === "owner")?.id ??
-    staffOptions.find((staff) => staff.role === "buyer")?.id ??
     staffOptions.find((staff) => staff.id === currentUserId)?.id ??
     staffOptions[0]?.id ??
     "";

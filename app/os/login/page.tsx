@@ -7,7 +7,7 @@ function getDefaultPathForRole(role?: string) {
   if (role === "store_terminal") return "/store";
   if (role === "buyer") return "/os/procurement";
   if (role === "staff") return "/os/orders";
-  if (role === "store_owner") return "/os";
+  if (role === "store_owner" || role === "store_manager") return "/os";
 
   return "/os";
 }

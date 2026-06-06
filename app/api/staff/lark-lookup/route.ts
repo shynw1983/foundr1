@@ -1,4 +1,4 @@
-import { requireOwnerOsSession } from "../../../../lib/api-auth";
+import { requireStaffAdminSession, canManageTargetRole } from "../../../../lib/staff-admin-access";
 import { sql } from "../../../../lib/db";
 import { lookupLarkUserByEmail, sendLarkTextMessage } from "../../../../lib/lark";
 
@@ -8,8 +8,8 @@ type LarkLookupPayload = {
 };
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as LarkLookupPayload;
   const employeeId = String(body.employeeId ?? "").trim();
@@ -30,6 +30,33 @@ export async function POST(request: Request) {
     );
 
     if (employeeId) {
+      const targetRows = await sql`
+        select role
+        from employees
+        where id = ${employeeId}
+          and (
+            ${access.allStores}
+            or exists (
+              select 1
+              from employee_scopes
+              where employee_scopes.employee_id = employees.id
+                and employee_scopes.scope_type = 'store'
+                and employee_scopes.store_id::text = any(${access.storeIds})
+            )
+            or exists (
+              select 1
+              from employee_work_stores
+              where employee_work_stores.employee_id = employees.id
+                and employee_work_stores.store_id::text = any(${access.storeIds})
+            )
+          )
+        limit 1
+      `;
+      const targetRole = String(targetRows[0]?.role ?? "");
+      if (!targetRole || !canManageTargetRole(access, targetRole)) {
+        return Response.json({ error: "このスタッフを編集する権限がありません。" }, { status: 403 });
+      }
+
       await sql`
         update employees
         set lark_open_id = ${larkUser.openId},

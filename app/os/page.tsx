@@ -44,7 +44,7 @@ const osModules: OsModule[] = [
     href: "/store",
     icon: Store,
     status: "active",
-    roles: ["owner", "manager", "buyer", "store_owner", "staff"]
+    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
   },
   {
     title: "発注・購入管理",
@@ -52,7 +52,7 @@ const osModules: OsModule[] = [
     href: "/os/orders",
     icon: PackageCheck,
     status: "active",
-    roles: ["owner", "manager", "buyer", "store_owner", "staff"]
+    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
   },
   {
     title: "店舗運営",
@@ -68,7 +68,7 @@ const osModules: OsModule[] = [
     href: "/os/timecard",
     icon: Clock3,
     status: "active",
-    roles: ["owner", "manager", "store_owner", "staff"]
+    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
   },
   {
     title: "経営分析",
@@ -76,7 +76,7 @@ const osModules: OsModule[] = [
     href: "/os/analytics",
     icon: LineChart,
     status: "active",
-    roles: ["owner", "manager", "buyer"]
+    roles: ["owner", "manager"]
   },
   {
     title: "POS",
@@ -103,7 +103,7 @@ const systemModules: OsModule[] = [
     href: "/os/stores",
     icon: Store,
     status: "active",
-    roles: ["owner", "manager", "buyer"]
+    roles: ["owner", "manager"]
   },
   {
     title: "スタッフ管理",
@@ -111,7 +111,7 @@ const systemModules: OsModule[] = [
     href: "/os/staff",
     icon: UserCog,
     status: "active",
-    roles: ["owner"]
+    roles: ["owner", "manager", "store_owner", "store_manager"]
   },
   {
     title: "システム設定",
@@ -119,7 +119,7 @@ const systemModules: OsModule[] = [
     href: "/os/settings",
     icon: Settings,
     status: "active",
-    roles: ["owner", "manager", "buyer"]
+    roles: ["owner", "manager"]
   }
 ];
 
@@ -218,8 +218,8 @@ export default function Foundr1OsHome() {
 
   const permittedModules = useMemo(() => osModules.filter((module) => canAccessModule(role, module)), [role]);
   const permittedSystemModules = useMemo(() => systemModules.filter((module) => canAccessModule(role, module)), [role]);
-  const payrollAlertActionHref = role === "store_owner" ? "/os/timecard/payroll" : "/os/settings";
-  const payrollAlertActionLabel = role === "store_owner" ? "給与へ" : "システム設定へ";
+  const payrollAlertActionHref = ["store_owner", "store_manager"].includes(role) ? "/os/timecard/payroll" : "/os/settings";
+  const payrollAlertActionLabel = ["store_owner", "store_manager"].includes(role) ? "給与へ" : "システム設定へ";
 
   return (
     <main className="os-home-shell">

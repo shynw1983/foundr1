@@ -2,8 +2,8 @@ import { cookies } from "next/headers";
 import { authCookieName, readSessionToken, type EmployeeSession } from "./auth";
 import { sql } from "./db";
 
-const writableRoles = new Set(["owner", "manager", "buyer", "store_owner", "staff"]);
-const allStoreAccessRoles = new Set(["owner", "manager", "buyer"]);
+const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
+const allStoreAccessRoles = new Set(["owner", "manager"]);
 
 export type StoreScope = {
   allStores: boolean;

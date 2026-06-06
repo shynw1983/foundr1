@@ -95,6 +95,7 @@ type StaffMember = {
   stores: StoreOption[];
   visibleStores?: StoreOption[];
   workStores?: WorkStoreOption[];
+  canManage?: boolean;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -116,10 +117,26 @@ const roleLabels: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   store_owner: "加盟店オーナー",
+  store_manager: "店長",
   store_terminal: "店舗Pad",
   buyer: "購入担当",
   staff: "店舗スタッフ"
 };
+
+const roleOptions = [
+  { value: "staff", label: "店舗スタッフ" },
+  { value: "store_terminal", label: "店舗Pad" },
+  { value: "store_owner", label: "加盟店オーナー" },
+  { value: "store_manager", label: "店長" },
+  { value: "manager", label: "Manager" },
+  { value: "owner", label: "Owner" }
+];
+
+function getAssignableRoleOptions(currentUserRole: string) {
+  if (currentUserRole === "owner") return roleOptions;
+  if (currentUserRole === "manager") return roleOptions.filter((option) => option.value !== "owner");
+  return roleOptions.filter((option) => option.value === "staff" || option.value === "store_terminal");
+}
 
 const staffCategoryLabels: Record<string, string> = {
   executive: "経営層",
@@ -217,6 +234,7 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [dataSource, setDataSource] = useState<"loading" | "neon" | "forbidden">("loading");
   const [error, setError] = useState("");
@@ -266,10 +284,12 @@ export default function StaffPage() {
       employees?: StaffMember[];
       stores?: StoreOption[];
       currentUserId?: string;
+      currentUserRole?: string;
     };
     setStaff(body.employees ?? []);
     setStores(body.stores ?? []);
     setCurrentUserId(body.currentUserId ?? "");
+    setCurrentUserRole(body.currentUserRole ?? "");
     setDataSource("neon");
     return body.employees ?? [];
   }
@@ -512,12 +532,16 @@ export default function StaffPage() {
                       </small>
                     </div>
                     <div className="row-actions">
-                      <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
-                        編集
-                      </button>
-                      <button className="danger-button" type="button" disabled={member.id === currentUserId} onClick={() => deleteStaff(member)}>
-                        削除
-                      </button>
+                      {member.canManage !== false ? (
+                        <>
+                          <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
+                            編集
+                          </button>
+                          <button className="danger-button" type="button" disabled={member.id === currentUserId} onClick={() => deleteStaff(member)}>
+                            削除
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </article>
                 )) : (
@@ -530,7 +554,7 @@ export default function StaffPage() {
               <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、店舗権限を設定" />
               {error ? <div className="login-error">{error}</div> : null}
               <form className="management-form staff-form" onSubmit={createStaff}>
-                <StaffFormFields stores={stores} onNotice={showNotice} onError={setError} />
+                <StaffFormFields stores={stores} currentUserRole={currentUserRole} onNotice={showNotice} onError={setError} />
                 <button className="primary-button" type="submit">追加</button>
               </form>
             </section>
@@ -554,6 +578,7 @@ export default function StaffPage() {
                 member={editingStaff}
                 stores={stores}
                 currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
                 onHistoryChanged={reloadStaffKeepingEdit}
                 onNotice={showNotice}
                 onError={setError}
@@ -596,6 +621,7 @@ function StaffFormFields({
   member,
   stores,
   currentUserId,
+  currentUserRole,
   onHistoryChanged,
   onNotice,
   onError
@@ -603,6 +629,7 @@ function StaffFormFields({
   member?: StaffMember;
   stores: StoreOption[];
   currentUserId?: string;
+  currentUserRole?: string;
   onHistoryChanged?: (employeeId: string) => Promise<void> | void;
   onNotice?: (message: string) => void;
   onError?: (message: string) => void;
@@ -612,6 +639,10 @@ function StaffFormFields({
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
   const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "other">("basic");
+  const assignableRoleOptions = getAssignableRoleOptions(currentUserRole ?? "");
+  const shownRoleOptions = member && !assignableRoleOptions.some((option) => option.value === member.role)
+    ? [{ value: member.role, label: roleLabels[member.role] ?? member.role }, ...assignableRoleOptions]
+    : assignableRoleOptions;
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -796,12 +827,9 @@ function StaffFormFields({
         <label>
           <span>権限</span>
           <select name="role" defaultValue={member?.role ?? "staff"}>
-            <option value="staff">店舗スタッフ</option>
-            <option value="store_terminal">店舗Pad</option>
-            <option value="store_owner">加盟店オーナー</option>
-            <option value="buyer">購入担当</option>
-            <option value="manager">Manager</option>
-            <option value="owner">Owner</option>
+            {shownRoleOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
         <label>

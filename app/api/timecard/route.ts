@@ -56,8 +56,8 @@ type PayrollConfirmationRow = {
   payrollTotals: unknown;
 };
 
-const timecardActualEditRoles = new Set(["owner", "manager", "store_owner"]);
-const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner"]);
+const timecardActualEditRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
+const timecardPayrollViewRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const mobilePunchRoles = new Set(["staff"]);
 const storeTerminalRole = "store_terminal";
 

@@ -1,4 +1,4 @@
-import { requireOwnerOsSession } from "../../../../lib/api-auth";
+import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { hashPassword, validatePasswordStrength } from "../../../../lib/auth";
 import { sql } from "../../../../lib/db";
@@ -75,7 +75,7 @@ type StorePayrollConfig = {
 };
 
 function normalizeRole(role?: string) {
-  return ["owner", "manager", "buyer", "store_owner", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
+  return ["owner", "manager", "store_owner", "store_manager", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
 }
 
 function normalizeStatus(status?: string) {
@@ -173,10 +173,38 @@ function getPayrollMonthStartDate(month: string, store?: StorePayrollConfig) {
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const session = access.session;
 
   const { id } = await context.params;
+  const targetRows = await sql`
+    select role
+    from employees
+    where id = ${id}
+      and (
+        ${access.allStores}
+        or exists (
+          select 1
+          from employee_scopes
+          where employee_scopes.employee_id = employees.id
+            and employee_scopes.scope_type = 'store'
+            and employee_scopes.store_id::text = any(${access.storeIds})
+        )
+        or exists (
+          select 1
+          from employee_work_stores
+          where employee_work_stores.employee_id = employees.id
+            and employee_work_stores.store_id::text = any(${access.storeIds})
+        )
+      )
+    limit 1
+  `;
+  const targetRole = String(targetRows[0]?.role ?? "");
+  if (!targetRole || !canManageTargetRole(access, targetRole)) {
+    return Response.json({ error: "このスタッフを編集する権限がありません。" }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({})) as StaffPayload;
   const name = String(body.name ?? "").trim();
   const loginId = String(body.loginId ?? "").trim();
@@ -198,12 +226,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = id === session.id ? "active" : normalizeStatus(body.status);
-  const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
-  const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
+  const workStoreIds = filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
+  }
+  if (!canAssignStaffRole(access, role)) {
+    return Response.json({ error: "この権限に変更できません。" }, { status: 403 });
+  }
+  if (!hasValidScopedStoreSelection(access, requestedVisibleStoreIds, requestedWorkStoreIds)) {
+    return Response.json({ error: "管理できる店舗の範囲内で店舗を選択してください。" }, { status: 403 });
   }
   if (role === "store_terminal" && visibleStoreIds.length === 0) {
     return Response.json({ error: "店舗Pad は閲覧可能店舗を1つ以上選択してください。" }, { status: 400 });
@@ -551,12 +587,39 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const session = access.session;
 
   const { id } = await context.params;
   if (id === session.id) {
     return Response.json({ error: "自分自身は削除できません。" }, { status: 409 });
+  }
+  const targetRows = await sql`
+    select role
+    from employees
+    where id = ${id}
+      and (
+        ${access.allStores}
+        or exists (
+          select 1
+          from employee_scopes
+          where employee_scopes.employee_id = employees.id
+            and employee_scopes.scope_type = 'store'
+            and employee_scopes.store_id::text = any(${access.storeIds})
+        )
+        or exists (
+          select 1
+          from employee_work_stores
+          where employee_work_stores.employee_id = employees.id
+            and employee_work_stores.store_id::text = any(${access.storeIds})
+        )
+      )
+    limit 1
+  `;
+  const targetRole = String(targetRows[0]?.role ?? "");
+  if (!targetRole || !canManageTargetRole(access, targetRole)) {
+    return Response.json({ error: "このスタッフを削除する権限がありません。" }, { status: 403 });
   }
 
   await sql`delete from employees where id = ${id}`;

@@ -8,8 +8,8 @@ import {
   type TimecardPunch
 } from "../../../../lib/timecard";
 
-const workloadSettingsRoles = new Set(["owner", "manager", "store_owner"]);
-const managementRoles = new Set(["owner", "manager", "store_owner"]);
+const workloadSettingsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
+const managementRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const hourMs = 60 * 60 * 1000;
 const workloadSliceMinutes = 15;
 const workloadLevels = [

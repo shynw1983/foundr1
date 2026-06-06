@@ -2,9 +2,9 @@ import type { EmployeeSession } from "./auth";
 import { getSessionStoreScope } from "./api-auth";
 import { sql } from "./db";
 
-const salesStatsRoles = new Set(["owner", "manager", "buyer", "store_owner"]);
-const cancelOrderRoles = new Set(["owner", "manager", "buyer", "store_owner"]);
-const allStoreViewRoles = new Set(["owner", "manager", "buyer"]);
+const salesStatsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
+const cancelOrderRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
+const allStoreViewRoles = new Set(["owner", "manager"]);
 
 export type StoreOrderAccess = {
   role: string;

@@ -92,6 +92,21 @@ function normalizeTimeText(value: string, fallback = "23:59") {
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
 }
 
+async function normalizeDefaultProcurementStaffId(value: FormDataEntryValue | null) {
+  const staffId = String(value ?? "").trim();
+  if (!staffId) return null;
+
+  const rows = await sql`
+    select id::text
+    from employees
+    where id::text = ${staffId}
+      and status = 'active'
+    limit 1
+  `;
+
+  return rows[0]?.id ?? null;
+}
+
 function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
 
@@ -250,6 +265,7 @@ export async function POST(request: Request) {
   const shiftFirstHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? ""), 25);
   const shiftSecondHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? ""), 10);
   const shiftSubmissionDeadlineTime = normalizeTimeText(String(formData.get("shiftSubmissionDeadlineTime") ?? ""));
+  const defaultProcurementStaffId = await normalizeDefaultProcurementStaffId(formData.get("defaultProcurementStaffId"));
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -284,6 +300,7 @@ export async function POST(request: Request) {
       shift_first_half_submission_deadline_day,
       shift_second_half_submission_deadline_day,
       shift_submission_deadline_time,
+      default_procurement_staff_id,
       updated_at
     )
     values (
@@ -306,6 +323,7 @@ export async function POST(request: Request) {
       ${shiftFirstHalfSubmissionDeadlineDay},
       ${shiftSecondHalfSubmissionDeadlineDay},
       ${shiftSubmissionDeadlineTime}::time,
+      ${defaultProcurementStaffId},
       now()
     )
     on conflict (name)
@@ -328,6 +346,7 @@ export async function POST(request: Request) {
       shift_first_half_submission_deadline_day = excluded.shift_first_half_submission_deadline_day,
       shift_second_half_submission_deadline_day = excluded.shift_second_half_submission_deadline_day,
       shift_submission_deadline_time = excluded.shift_submission_deadline_time,
+      default_procurement_staff_id = excluded.default_procurement_staff_id,
       updated_at = now()
     returning id
   `;
@@ -382,6 +401,7 @@ export async function PUT(request: Request) {
   const shiftFirstHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? ""), 25);
   const shiftSecondHalfSubmissionDeadlineDay = normalizeDayOfMonth(String(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? ""), 10);
   const shiftSubmissionDeadlineTime = normalizeTimeText(String(formData.get("shiftSubmissionDeadlineTime") ?? ""));
+  const defaultProcurementStaffId = await normalizeDefaultProcurementStaffId(formData.get("defaultProcurementStaffId"));
   const brandNames = await normalizeStoreBrands(formData.getAll("brand").map((value) => String(value)));
   const companyId = await resolveCompanyId({
     name: companyName,
@@ -431,6 +451,7 @@ export async function PUT(request: Request) {
       shift_first_half_submission_deadline_day = ${shiftFirstHalfSubmissionDeadlineDay},
       shift_second_half_submission_deadline_day = ${shiftSecondHalfSubmissionDeadlineDay},
       shift_submission_deadline_time = ${shiftSubmissionDeadlineTime}::time,
+      default_procurement_staff_id = ${defaultProcurementStaffId},
       updated_at = now()
     where name = ${currentName}
     returning id

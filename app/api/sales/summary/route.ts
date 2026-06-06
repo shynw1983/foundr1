@@ -59,7 +59,7 @@ function getDatesBetween(startDate: string, endDate: string) {
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
 const hourMs = 60 * 60 * 1000;
-const salesAnalysisSettingsRoles = new Set(["owner", "manager", "store_owner"]);
+const salesAnalysisSettingsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const salesAnalysisLevels = [
   { key: "veryIdle", label: "かなり空き", scoreKey: "scoreVeryIdle" },
   { key: "normal", label: "通常", scoreKey: "scoreNormal" },

@@ -32,7 +32,7 @@ type ShiftRequestBody = {
   }>;
 };
 
-const managerRoles = new Set(["owner", "manager", "store_owner"]);
+const managerRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const requestTypes = new Set(["availability", "day_off", "swap"]);
 
 function isValidWorkDate(value: string) {
@@ -247,7 +247,7 @@ async function notifyStoreManagers(storeId: string, title: string, message: stri
       and (
         employees.role in ('owner', 'manager')
         or (
-          employees.role = 'store_owner'
+          employees.role in ('store_owner', 'store_manager')
           and employee_scopes.scope_type = 'store'
           and employee_scopes.store_id::text = ${storeId}
         )

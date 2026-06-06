@@ -3,7 +3,7 @@ import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { validateImageUpload } from "../../../lib/upload-security";
 
-const allowedRoles = new Set(["owner", "manager", "buyer"]);
+const allowedRoles = new Set(["owner", "manager"]);
 const adminRoles = new Set(["owner", "manager"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 

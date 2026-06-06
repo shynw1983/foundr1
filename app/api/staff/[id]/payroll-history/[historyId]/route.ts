@@ -1,4 +1,4 @@
-import { requireOwnerOsSession } from "../../../../../../lib/api-auth";
+import { requireStaffAdminSession, canManageTargetRole } from "../../../../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../../../../lib/audit-log";
 import { sql } from "../../../../../../lib/db";
 
@@ -107,19 +107,27 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string; historyId: string }> }) {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const session = access.session;
 
   const { id, historyId } = await context.params;
   const targetRows = await sql`
-    select store_id::text as "storeId"
+    select
+      employee_work_store_payroll_history.store_id::text as "storeId",
+      employees.role
     from employee_work_store_payroll_history
-    where id = ${historyId}
-      and employee_id = ${id}
+    join employees on employees.id = employee_work_store_payroll_history.employee_id
+    where employee_work_store_payroll_history.id = ${historyId}
+      and employee_work_store_payroll_history.employee_id = ${id}
+      and (
+        ${access.allStores}
+        or employee_work_store_payroll_history.store_id::text = any(${access.storeIds})
+      )
     limit 1
   `;
   const target = targetRows[0];
-  if (!target) {
+  if (!target || !canManageTargetRole(access, String(target.role ?? ""))) {
     return Response.json({ error: "給与変更履歴が見つかりません。" }, { status: 404 });
   }
 

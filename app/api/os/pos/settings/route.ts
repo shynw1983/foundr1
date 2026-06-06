@@ -4,7 +4,7 @@ import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/st
 
 export const dynamic = "force-dynamic";
 
-const writableRoles = new Set(["owner", "manager", "store_owner"]);
+const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const priceTaxModes = new Set(["tax_included", "tax_excluded"]);
 
 function normalizeText(value: unknown) {

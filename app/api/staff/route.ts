@@ -1,4 +1,4 @@
-import { requireOwnerOsSession } from "../../../lib/api-auth";
+import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { hashPassword, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
@@ -75,7 +75,7 @@ type StorePayrollConfig = {
 };
 
 function normalizeRole(role?: string) {
-  return ["owner", "manager", "buyer", "store_owner", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
+  return ["owner", "manager", "store_owner", "store_manager", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
 }
 
 function normalizeStatus(status?: string) {
@@ -173,8 +173,9 @@ function getPayrollMonthStartDate(month: string, store?: StorePayrollConfig) {
 }
 
 export async function GET() {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const session = access.session;
 
   const employees = await sql`
     select
@@ -301,10 +302,26 @@ export async function GET() {
       ) payroll_history on true
       where employee_work_stores.employee_id = employees.id
     ) work_stores on true
+    where (
+      ${access.allStores}
+      or exists (
+        select 1
+        from employee_scopes scoped_employee_stores
+        where scoped_employee_stores.employee_id = employees.id
+          and scoped_employee_stores.scope_type = 'store'
+          and scoped_employee_stores.store_id::text = any(${access.storeIds})
+      )
+      or exists (
+        select 1
+        from employee_work_stores scoped_employee_work_stores
+        where scoped_employee_work_stores.employee_id = employees.id
+          and scoped_employee_work_stores.store_id::text = any(${access.storeIds})
+      )
+    )
     order by employees.created_at desc
   `;
 
-  const stores = await sql`
+  const stores = access.allStores ? await sql`
     select
       stores.id,
       stores.name,
@@ -315,21 +332,36 @@ export async function GET() {
     left join companies on companies.id = stores.company_id
     where stores.status = 'active'
     order by companies.name nulls last, stores.name
+  ` : await sql`
+    select
+      stores.id,
+      stores.name,
+      companies.name as "companyName",
+      coalesce(stores.payroll_cycle_type, 'month_end') as "payrollCycleType",
+      coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay"
+    from stores
+    left join companies on companies.id = stores.company_id
+    where stores.status = 'active'
+      and stores.id::text = any(${access.storeIds})
+    order by companies.name nulls last, stores.name
   `;
 
   return Response.json({
     employees: employees.map((employee) => ({
       ...employee,
-      stores: employee.visibleStores
+      stores: employee.visibleStores,
+      canManage: canManageTargetRole(access, String(employee.role ?? ""))
     })),
     stores,
-    currentUserId: session.id
+    currentUserId: session.id,
+    currentUserRole: session.role
   });
 }
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOsSession();
-  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const access = await requireStaffAdminSession();
+  if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const session = access.session;
 
   const body = await request.json().catch(() => ({})) as StaffPayload;
   const name = String(body.name ?? "").trim();
@@ -352,12 +384,20 @@ export async function POST(request: Request) {
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = normalizeStatus(body.status);
-  const visibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
-  const workStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
+  const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
+  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
+  const workStoreIds = filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
+  }
+  if (!canAssignStaffRole(access, role)) {
+    return Response.json({ error: "この権限のスタッフを作成できません。" }, { status: 403 });
+  }
+  if (!hasValidScopedStoreSelection(access, requestedVisibleStoreIds, requestedWorkStoreIds)) {
+    return Response.json({ error: "管理できる店舗の範囲内で店舗を選択してください。" }, { status: 403 });
   }
   if (role === "store_terminal" && visibleStoreIds.length === 0) {
     return Response.json({ error: "店舗Pad は閲覧可能店舗を1つ以上選択してください。" }, { status: 400 });

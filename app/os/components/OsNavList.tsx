@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Boxes,
   CalendarDays,
+  BadgePercent,
   ClipboardCheck,
   ClipboardList,
   Clock3,
@@ -34,8 +35,8 @@ export type OsNavItem = {
   icon: LucideIcon;
 };
 
-const masterRoles = new Set(["owner", "manager", "buyer"]);
-const productViewerRoles = new Set(["owner", "manager", "buyer", "store_owner"]);
+const masterRoles = new Set(["owner", "manager"]);
+const productViewerRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const orderModulePaths = new Set([
   "/os/orders",
   "/os/procurement",
@@ -48,8 +49,8 @@ const orderModulePaths = new Set([
 const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
-const posModulePaths = new Set(["/os/pos", "/os/menus", "/os/products", "/os/stores"]);
-const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus"]);
+const posModulePaths = new Set(["/os/pos", "/os/loyalty", "/os/menus", "/os/products", "/os/stores"]);
+const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus", "/os/loyalty"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -76,6 +77,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
+  { label: "会員・ポイント", href: "/os/loyalty", icon: BadgePercent },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
   settingsNavItem
 ];
@@ -168,6 +170,7 @@ const navModules: OsNavModule[] = [
     icon: ShoppingCart,
     paths: [
       { href: "/os/pos" },
+      { href: "/os/loyalty", isShortcut: true },
       { href: "/os/menus", isShortcut: true },
       { href: "/os/products", isShortcut: true },
       { href: "/os/stores", isShortcut: true }
@@ -180,6 +183,7 @@ const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/products" },
       { href: "/os/menus" },
+      { href: "/os/loyalty" },
       { href: "/os/stores" },
       { href: "/os/staff" },
       { href: "/os/settings" }
@@ -204,7 +208,7 @@ function getModuleNavPaths(pathname: string) {
     return timecardModulePaths;
   }
 
-  if (pathname === "/os/pos" || pathname.startsWith("/os/pos/")) {
+  if (pathname === "/os/pos" || pathname.startsWith("/os/pos/") || pathname === "/os/loyalty") {
     return posModulePaths;
   }
 
@@ -225,12 +229,12 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
   if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
-  if (item.href === "/os/staff") return role === "owner";
-  if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner"].includes(role);
+  if (item.href === "/os/staff") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
+  if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
   if (item.href === "/os/menus") return ["owner", "manager"].includes(role);
-  if (item.href === "/os/pos") return ["owner", "manager"].includes(role);
+  if (item.href === "/os/pos" || item.href === "/os/loyalty") return ["owner", "manager"].includes(role);
   if (item.href === "/os/products") return productViewerRoles.has(role);
   if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);
 

@@ -1,7 +1,7 @@
 import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 
-const payrollSettingsRoles = new Set(["owner", "manager", "buyer", "store_owner"]);
+const payrollSettingsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const residentTaxAlertKey = "resident-tax";
 const dismissibleAlertKeys = new Set([
   "withholding-tax",

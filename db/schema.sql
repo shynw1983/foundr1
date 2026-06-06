@@ -136,6 +136,12 @@ alter table employees add column if not exists business_type text;
 alter table employees add column if not exists is_foreign_national boolean not null default false;
 alter table employees add column if not exists employee_type text not null default 'part_time';
 
+alter table stores add column if not exists default_procurement_staff_id uuid;
+alter table stores drop constraint if exists stores_default_procurement_staff_id_fkey;
+alter table stores
+  add constraint stores_default_procurement_staff_id_fkey
+  foreign key (default_procurement_staff_id) references employees(id) on delete set null;
+
 create table if not exists os_audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor_employee_id uuid references employees(id) on delete set null,
@@ -1370,6 +1376,200 @@ alter table store_customer_orders add column if not exists payment_refund_id tex
 alter table store_customer_orders add column if not exists payment_refund_status text not null default '';
 alter table store_customer_orders add column if not exists payment_refund_error text not null default '';
 alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
+
+create table if not exists members (
+  id uuid primary key default gen_random_uuid(),
+  member_number text not null unique default ('M' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10))),
+  public_token text not null unique default encode(gen_random_bytes(24), 'hex'),
+  display_name text not null default '',
+  name_kana text not null default '',
+  phone text not null default '',
+  email text not null default '',
+  birthday date,
+  preferred_language text not null default 'ja',
+  status text not null default 'active',
+  note text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_members_phone_unique
+  on members(phone)
+  where phone <> '';
+
+create unique index if not exists idx_members_email_unique
+  on members(lower(email))
+  where email <> '';
+
+create index if not exists idx_members_status_created_at
+  on members(status, created_at desc);
+
+create table if not exists member_identity_links (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  identity_provider text not null,
+  identity_subject text not null,
+  identity_label text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(identity_provider, identity_subject)
+);
+
+create index if not exists idx_member_identity_links_member
+  on member_identity_links(member_id);
+
+create table if not exists member_brand_links (
+  member_id uuid not null references members(id) on delete cascade,
+  brand_id uuid not null references brands(id) on delete cascade,
+  first_store_id uuid references stores(id) on delete set null,
+  status text not null default 'active',
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  primary key (member_id, brand_id)
+);
+
+create table if not exists member_accounts (
+  member_id uuid primary key references members(id) on delete cascade,
+  point_balance integer not null default 0,
+  lifetime_points_earned integer not null default 0,
+  lifetime_points_redeemed integer not null default 0,
+  lifetime_spend_amount integer not null default 0,
+  lifetime_visit_count integer not null default 0,
+  last_purchase_at timestamptz,
+  current_tier_key text not null default 'regular',
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists loyalty_tiers (
+  id uuid primary key default gen_random_uuid(),
+  tier_key text not null unique,
+  name text not null,
+  rank integer not null default 0,
+  evaluation_window_days integer not null default 180,
+  required_spend_amount integer not null default 0,
+  required_visit_count integer not null default 0,
+  point_multiplier numeric(6, 3) not null default 1,
+  benefits jsonb not null default '{}'::jsonb,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into loyalty_tiers (tier_key, name, rank, evaluation_window_days, required_spend_amount, required_visit_count, point_multiplier, benefits)
+values
+  ('regular', 'Regular', 10, 180, 0, 0, 1, '{"description":"100円で1ポイント"}'::jsonb),
+  ('gold', 'Gold', 20, 180, 20000, 20, 1, '{"description":"誕生日券・会員限定キャンペーン対象"}'::jsonb),
+  ('vip', 'VIP', 30, 180, 50000, 45, 1, '{"description":"特定日のポイント倍率・専用クーポン対象"}'::jsonb)
+on conflict (tier_key) do nothing;
+
+create table if not exists loyalty_point_ledger (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  order_id uuid references store_customer_orders(id) on delete set null,
+  brand_id uuid references brands(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  company_id uuid references companies(id) on delete set null,
+  movement_type text not null,
+  points integer not null,
+  eligible_amount integer not null default 0,
+  point_rate_basis integer not null default 100,
+  source text not null default 'system',
+  note text not null default '',
+  expires_at timestamptz,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_loyalty_point_ledger_order_movement
+  on loyalty_point_ledger(order_id, movement_type)
+  where order_id is not null and movement_type in ('earn', 'refund_reversal');
+
+create index if not exists idx_loyalty_point_ledger_member_created
+  on loyalty_point_ledger(member_id, created_at desc);
+
+create table if not exists loyalty_stamp_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid references brands(id) on delete cascade,
+  campaign_key text not null unique,
+  name text not null,
+  earn_rule text not null default 'per_item',
+  stamps_required integer not null default 5,
+  reward_coupon_name text not null default '',
+  reward_value_amount integer not null default 0,
+  valid_from date,
+  valid_until date,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists loyalty_stamp_ledger (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid not null references loyalty_stamp_campaigns(id) on delete cascade,
+  member_id uuid not null references members(id) on delete cascade,
+  order_id uuid references store_customer_orders(id) on delete set null,
+  brand_id uuid references brands(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  stamps integer not null,
+  note text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_loyalty_stamp_ledger_order_campaign
+  on loyalty_stamp_ledger(order_id, campaign_id)
+  where order_id is not null;
+
+create index if not exists idx_loyalty_stamp_ledger_member_created
+  on loyalty_stamp_ledger(member_id, created_at desc);
+
+create table if not exists member_coupons (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  brand_id uuid references brands(id) on delete set null,
+  coupon_code text not null unique default ('C' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10))),
+  name text not null,
+  discount_type text not null default 'amount',
+  discount_value integer not null default 0,
+  max_discount_amount integer,
+  status text not null default 'available',
+  issued_source text not null default 'system',
+  issued_at timestamptz not null default now(),
+  expires_at timestamptz,
+  used_order_id uuid references store_customer_orders(id) on delete set null,
+  used_store_id uuid references stores(id) on delete set null,
+  used_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create index if not exists idx_member_coupons_member_status
+  on member_coupons(member_id, status, expires_at);
+
+create table if not exists loyalty_settlement_entries (
+  id uuid primary key default gen_random_uuid(),
+  ledger_id uuid references loyalty_point_ledger(id) on delete cascade,
+  member_id uuid references members(id) on delete set null,
+  order_id uuid references store_customer_orders(id) on delete set null,
+  issuing_store_id uuid references stores(id) on delete set null,
+  issuing_company_id uuid references companies(id) on delete set null,
+  redeeming_store_id uuid references stores(id) on delete set null,
+  redeeming_company_id uuid references companies(id) on delete set null,
+  settlement_type text not null,
+  points integer not null default 0,
+  amount integer not null default 0,
+  status text not null default 'pending',
+  settlement_month date not null default date_trunc('month', now())::date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_loyalty_settlement_entries_month
+  on loyalty_settlement_entries(settlement_month, status);
+
+alter table store_customer_orders add column if not exists member_id uuid references members(id) on delete set null;
+create index if not exists idx_store_customer_orders_member
+  on store_customer_orders(member_id, created_at desc);
 
 create table if not exists pos_cash_sessions (
   id uuid primary key default gen_random_uuid(),

@@ -104,9 +104,10 @@ Role names currently used:
 
 - `owner`
 - `manager`
-- `buyer`
 - `store_owner`
+- `store_manager`
 - `staff`
+- `store_terminal`
 
 Permission rules are role plus scope.
 
@@ -114,6 +115,8 @@ Permission rules are role plus scope.
 - `employee_scopes` controls store/brand/supplier visibility.
 - Menus should hide inaccessible sections instead of showing dead links.
 - `owner` can delete order history, order items, and contact reports.
+- `manager` can manage staff, except owner-level accounts.
+- `store_owner` and `store_manager` can manage regular staff and store terminal accounts within their scoped stores.
 - Franchise/store owners may view product master but should not receive edit/delete/copy/create controls unless explicitly allowed.
 
 ## Notifications

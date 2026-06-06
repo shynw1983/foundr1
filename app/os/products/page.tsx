@@ -80,7 +80,7 @@ const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "m
 const customUnitOption = "__custom_unit__";
 const unsetSupplierFilterValue = "__unset_supplier__";
 const addSupplierOption = "__add_supplier__";
-const productManagerRoles = new Set(["owner", "manager", "buyer"]);
+const productManagerRoles = new Set(["owner", "manager"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
   { value: "spec", label: "規格未設定" },

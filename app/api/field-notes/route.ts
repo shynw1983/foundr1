@@ -3,9 +3,9 @@ import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { validateImageUpload } from "../../../lib/upload-security";
 
-const allowedRoles = new Set(["owner", "manager", "buyer", "store_owner", "staff"]);
+const allowedRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 const adminRoles = new Set(["owner", "manager"]);
-const statusRoles = new Set(["owner", "manager", "buyer"]);
+const statusRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 const noteStatuses = new Set(["open", "reviewing", "comparison", "adopted", "rejected"]);
 

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { canAccessStore, requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 
-const comparisonPhotoRoles = new Set(["owner", "manager", "buyer"]);
-const fieldNotePhotoRoles = new Set(["owner", "manager", "buyer", "store_owner", "staff"]);
+const comparisonPhotoRoles = new Set(["owner", "manager"]);
+const fieldNotePhotoRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 
 export async function GET(request: NextRequest) {
   const session = await requireOsSession();

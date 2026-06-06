@@ -29,6 +29,7 @@ type StoreItem = {
   companyAddress?: string;
   companyPhone?: string;
   owner: string;
+  defaultProcurementStaffId?: string;
   brands: string[];
   businessHours?: unknown;
   reservationNote?: string;
@@ -73,6 +74,13 @@ type PaymentAccountItem = {
 type BrandItem = {
   name: string;
   type: string;
+};
+
+type StaffOption = {
+  id: string;
+  name: string;
+  role: string;
+  storeNames: string[];
 };
 
 type StoreEditTab = "basic" | "hours" | "sales" | "payment" | "receipt" | "payroll";
@@ -124,6 +132,7 @@ export default function StoresPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [brandsData, setBrandsData] = useState<BrandItem[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editingStore, setEditingStore] = useState<StoreItem | null>(null);
   const [editingBrand, setEditingBrand] = useState<BrandItem | null>(null);
@@ -138,6 +147,7 @@ export default function StoresPage() {
   const [editingCompanyAddress, setEditingCompanyAddress] = useState("");
   const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
   const [editingOwner, setEditingOwner] = useState("");
+  const [editingDefaultProcurementStaffId, setEditingDefaultProcurementStaffId] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
   const [editingAttendanceLocationEnabled, setEditingAttendanceLocationEnabled] = useState(false);
   const [newAttendanceAddress, setNewAttendanceAddress] = useState("");
@@ -174,10 +184,12 @@ export default function StoresPage() {
     const data = await response.json() as {
       stores?: StoreItem[];
       brands?: BrandItem[];
+      staffOptions?: StaffOption[];
     };
 
     if (data.stores) setStoresData(data.stores);
     if (data.brands) setBrandsData(data.brands);
+    if (data.staffOptions) setStaffOptions(data.staffOptions);
     setDataSource("neon");
   }
 
@@ -237,6 +249,7 @@ export default function StoresPage() {
     const name = String(formData.get("name") ?? "");
     const companyName = String(formData.get("companyName") ?? "");
     const owner = String(formData.get("owner") ?? "");
+    const defaultProcurementStaffId = String(formData.get("defaultProcurementStaffId") ?? "");
     const reservationNote = String(formData.get("reservationNote") ?? "");
     const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
     const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude"));
@@ -275,6 +288,7 @@ export default function StoresPage() {
         name,
         companyName,
         owner,
+        defaultProcurementStaffId,
         brands: selectedBrands,
         businessHours: newBusinessHours,
         reservationNote,
@@ -419,6 +433,7 @@ export default function StoresPage() {
     const companyAddress = String(formData.get("companyAddress") ?? "").trim();
     const companyPhone = String(formData.get("companyPhone") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
+    const defaultProcurementStaffId = String(formData.get("defaultProcurementStaffId") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
     const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
     const attendanceLatitude = parseOptionalCoordinate(formData.get("attendanceLatitude") ?? editingAttendanceLatitude);
@@ -475,6 +490,7 @@ export default function StoresPage() {
         companyAddress,
         companyPhone,
         owner,
+        defaultProcurementStaffId,
         brands: editingStoreBrands,
         businessHours: editingBusinessHours,
         reservationNote,
@@ -504,6 +520,7 @@ export default function StoresPage() {
     setEditingKomojuPaymentTypesEnvName("");
     setEditingKomojuPaymentTypes("");
     setEditingReservationNote("");
+    setEditingDefaultProcurementStaffId("");
     setEditingAttendanceLocationEnabled(false);
     setEditingAttendanceAddress("");
     setEditingAttendanceLatitude("");
@@ -530,6 +547,7 @@ export default function StoresPage() {
     setEditingCompanyAddress(store.companyAddress ?? "");
     setEditingCompanyPhone(store.companyPhone ?? "");
     setEditingOwner(store.owner);
+    setEditingDefaultProcurementStaffId(store.defaultProcurementStaffId ?? "");
     setEditingReservationNote(store.reservationNote ?? "");
     setEditingAttendanceLocationEnabled(store.attendanceLocationEnabled === true);
     setEditingAttendanceAddress(store.companyAddress || store.weatherLocationName || store.name);
@@ -552,6 +570,16 @@ export default function StoresPage() {
     setEditingKomojuWebhookSecretEnvName(store.paymentAccount?.webhookSecretEnvName ?? "");
     setEditingKomojuPaymentTypesEnvName(store.paymentAccount?.paymentTypesEnvName ?? "");
     setEditingKomojuPaymentTypes((store.paymentAccount?.paymentTypes ?? []).join(","));
+  }
+
+  function getStaffName(staffId?: string) {
+    if (!staffId) return "";
+    return staffOptions.find((staff) => staff.id === staffId)?.name ?? "";
+  }
+
+  function getStoreStaffOptions(storeName?: string) {
+    if (!storeName) return staffOptions;
+    return staffOptions.filter((staff) => staff.storeNames.length === 0 || staff.storeNames.includes(storeName));
   }
 
   function toggleBrandSelection(
@@ -646,6 +674,7 @@ export default function StoresPage() {
                     <small>売上源: {formatStoreSalesSources(store)}</small>
                     <small>決済: {store.paymentAccount?.isActive ? `KOMOJU / ${store.paymentAccount.accountName || "アカウント名未設定"}` : "未設定"}</small>
                     <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
+                    <small>通常の購入担当: {getStaffName(store.defaultProcurementStaffId) || "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
                     <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     <small>天気: {store.attendanceLatitude !== null && store.attendanceLatitude !== undefined && store.attendanceLongitude !== null && store.attendanceLongitude !== undefined ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
@@ -682,6 +711,15 @@ export default function StoresPage() {
               <label>
                 <span>担当者メモ</span>
                 <input name="owner" placeholder="例: 店長名・担当者名" />
+              </label>
+              <label>
+                <span>通常の購入担当</span>
+                <select name="defaultProcurementStaffId" defaultValue="">
+                  <option value="">未設定</option>
+                  {staffOptions.map((staff) => (
+                    <option key={staff.id} value={staff.id}>{staff.name}</option>
+                  ))}
+                </select>
               </label>
               <BusinessHoursEditor value={newBusinessHours} onChange={setNewBusinessHours} />
               <label>
@@ -823,6 +861,19 @@ export default function StoresPage() {
                     <input name="owner" value={editingOwner} onChange={(event) => setEditingOwner(event.target.value)} placeholder="例: 店長名・担当者名" />
                   </label>
                   <label>
+                    <span>通常の購入担当</span>
+                    <select
+                      name="defaultProcurementStaffId"
+                      value={editingDefaultProcurementStaffId}
+                      onChange={(event) => setEditingDefaultProcurementStaffId(event.target.value)}
+                    >
+                      <option value="">未設定</option>
+                      {getStoreStaffOptions(editingStoreName).map((staff) => (
+                        <option key={staff.id} value={staff.id}>{staff.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
                     <span>予約画面メモ</span>
                     <input
                       name="reservationNote"
@@ -897,6 +948,7 @@ export default function StoresPage() {
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
                   <input type="hidden" name="owner" value={editingOwner} />
+                  <input type="hidden" name="defaultProcurementStaffId" value={editingDefaultProcurementStaffId} />
                   <input type="hidden" name="reservationNote" value={editingReservationNote} />
                   {editingAttendanceLocationEnabled ? <input type="hidden" name="attendanceLocationEnabled" value="on" /> : null}
                   <input type="hidden" name="attendanceLatitude" value={editingAttendanceLatitude} />
