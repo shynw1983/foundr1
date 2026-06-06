@@ -11,6 +11,10 @@ function formatCurrency(amount: number) {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
+function getFooterBrandText() {
+  return `© ${new Date().getFullYear()} Foundr1`;
+}
+
 function DetailList({ items }: { items: string[] }) {
   const visibleItems = items.map((item) => item.trim()).filter(Boolean);
   if (!visibleItems.length) return null;
@@ -161,7 +165,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
 
       <footer className="online-receipt-footer">
         <p>この領収書は電子的に発行されています。</p>
-        <span>Foundr1 OS</span>
+        <span>{getFooterBrandText()}</span>
       </footer>
     </article>
   );

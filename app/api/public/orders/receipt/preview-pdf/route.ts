@@ -23,6 +23,10 @@ function contentDispositionFileName(filename: string) {
   return `inline; filename="receipt.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+function getFooterBrandText() {
+  return `© ${new Date().getFullYear()} Foundr1`;
+}
+
 let receiptFontFaceCss = "";
 
 function getReceiptFontFaceCss() {
@@ -182,7 +186,7 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
 
       <footer class="online-receipt-footer">
         <p>この領収書は電子的に発行されています。</p>
-        <span>Foundr1 OS</span>
+        <span>${escapeHtml(getFooterBrandText())}</span>
       </footer>
     </article>
   `;
