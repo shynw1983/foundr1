@@ -455,6 +455,7 @@ export default function StorePosPage() {
   const [selectedMember, setSelectedMember] = useState<PosMember | null>(null);
   const [memberCoupons, setMemberCoupons] = useState<PosCoupon[]>([]);
   const [selectedCouponId, setSelectedCouponId] = useState("");
+  const [customerSelectedCouponId, setCustomerSelectedCouponId] = useState("");
   const [memberLookupLoading, setMemberLookupLoading] = useState(false);
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
@@ -719,6 +720,9 @@ export default function StorePosPage() {
     setCashTenderedAmount("");
     setMemberLookupInput("");
     setSelectedMember(null);
+    setMemberCoupons([]);
+    setSelectedCouponId("");
+    setCustomerSelectedCouponId("");
     setCashOpeningBreakdown(createCashBreakdownInput());
     setCashOpeningNote("");
     setCashCountedBreakdown(createCashBreakdownInput());
@@ -749,12 +753,15 @@ export default function StorePosPage() {
       const coupons = Array.isArray(body.coupons) ? body.coupons as PosCoupon[] : [];
       setMemberCoupons(coupons);
       const scannedCouponId = typeof body.selectedCouponId === "string" ? body.selectedCouponId : "";
-      setSelectedCouponId(coupons.some((coupon) => coupon.id === scannedCouponId) ? scannedCouponId : "");
+      const matchedScannedCouponId = coupons.some((coupon) => coupon.id === scannedCouponId) ? scannedCouponId : "";
+      setSelectedCouponId(matchedScannedCouponId);
+      setCustomerSelectedCouponId(matchedScannedCouponId);
       setMessage("会員を会計に紐づけました。");
     } catch (error) {
       setSelectedMember(null);
       setMemberCoupons([]);
       setSelectedCouponId("");
+      setCustomerSelectedCouponId("");
       setMessage(error instanceof Error ? error.message : "会員を確認できませんでした。");
     } finally {
       setMemberLookupLoading(false);
@@ -765,6 +772,7 @@ export default function StorePosPage() {
     setSelectedMember(null);
     setMemberCoupons([]);
     setSelectedCouponId("");
+    setCustomerSelectedCouponId("");
     setMemberLookupInput("");
   }
 
@@ -1473,13 +1481,19 @@ export default function StorePosPage() {
                         const discount = getCouponDiscountAmount(coupon, subtotal);
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
+                        const isCustomerSelected = customerSelectedCouponId === coupon.id;
                         const isUnavailable = subtotal > 0 && discount <= 0;
+                        const couponBadges = [
+                          isCustomerSelected ? "客さま選択済み" : "",
+                          isRecommended ? "おすすめ" : ""
+                        ].filter(Boolean);
                         return (
                           <button
                             key={coupon.id}
                             className={[
                               "store-pos-coupon-choice",
                               isSelected ? "is-selected" : "",
+                              isCustomerSelected ? "is-customer-selected" : "",
                               isRecommended ? "is-recommended" : ""
                             ].filter(Boolean).join(" ")}
                             type="button"
@@ -1488,7 +1502,7 @@ export default function StorePosPage() {
                           >
                             <span>
                               <strong>{coupon.name}</strong>
-                              <small>{coupon.couponCode} / {getCouponValueLabel(coupon)}{isRecommended ? " / おすすめ" : ""}</small>
+                              <small>{coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
                             </span>
                             <b>{getCouponPosStatusLabel(discount, subtotal)}</b>
                           </button>

@@ -6317,6 +6317,11 @@ body :where(
   background: #ecfdf5;
 }
 
+.store-pos-coupon-choice.is-customer-selected {
+  border-color: rgba(31, 111, 85, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(31, 111, 85, 0.18);
+}
+
 .store-pos-coupon-choice:disabled {
   cursor: not-allowed;
   opacity: 0.58;
