@@ -117,6 +117,45 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   };
 }
 
+function buildMaamaaItemPayload(
+  item: Exclude<ReturnType<typeof validateBuildableItem>, { error: string }>,
+  index: number,
+  baseSoup: Awaited<ReturnType<typeof getMaamaaCompatibleMenu>>["baseMenu"]["baseSoup"]
+) {
+  return {
+    itemIndex: index + 1,
+    baseSoup: {
+      id: baseSoup.id,
+      menuCatalogItemId: baseSoup.menuCatalogItemId,
+      name: baseSoup.name,
+      price: baseSoup.price
+    },
+    customization: {
+      medicinalSpice: item.medicinalSpice ? { id: item.medicinalSpice.id, name: item.medicinalSpice.name, price: item.medicinalSpice.price } : null,
+      heat: item.heat ? { id: item.heat.id, name: item.heat.name, price: item.heat.price } : null,
+      numb: item.numb ? { id: item.numb.id, name: item.numb.name, price: item.numb.price } : null,
+      specialFlavors: item.specialFlavorItems.map((flavor) => ({ id: flavor.id, name: flavor.name, price: flavor.price }))
+    },
+    sections: item.selectedSections.map(({ section, items }) => ({
+      sectionId: section.id,
+      sectionTitle: section.title,
+      items: items.map((selectedItem) => ({ id: selectedItem.id, name: selectedItem.name, price: selectedItem.price }))
+    })),
+    amount: item.amount,
+    detailLabel: item.detailLabel
+  };
+}
+
+function buildMaamaaProductionLabels(item: Exclude<ReturnType<typeof validateBuildableItem>, { error: string }>) {
+  return [
+    item.medicinalSpice?.name ?? "",
+    item.heat ? `辛さ: ${item.heat.name}` : "",
+    item.numb ? `痺れ: ${item.numb.name}` : "",
+    ...item.specialFlavorItems.map((flavor) => `味変: ${flavor.name}`),
+    ...item.toppingItems.map((topping) => topping.name)
+  ].filter(Boolean);
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return Response.json({ error: "Invalid request body" }, { status: 400 });
@@ -227,37 +266,44 @@ export async function POST(request: Request) {
       couponDiscountAmount,
       customer: {
         name: completionSummary.name ?? body.name ?? "",
-        phone: completionSummary.phone ?? body.phone ?? "",
-        note: completionSummary.note ?? body.note ?? ""
+        phone: completionSummary.phone ?? body.phone ?? ""
       },
-      items: buildableItems.map((item, index) => ({
-        itemIndex: index + 1,
-        selections: item.selectedSections.map(({ section, items }) => ({
-          sectionId: section.id,
-          sectionTitle: section.title,
-          items
-        }))
-      }))
+      maamaa: {
+        schema: "maamaa_buildable_v1",
+        baseSoup: {
+          id: menu.baseSoup.id,
+          menuCatalogItemId: menu.baseSoup.menuCatalogItemId,
+          name: menu.baseSoup.name,
+          price: menu.baseSoup.price
+        },
+        items: buildableItems.map((item, index) => buildMaamaaItemPayload(item, index, menu.baseSoup))
+      }
     },
     drink: buildableItems.length === 1 ? menu.baseSoup.name : itemSummaries.map((item) => item.name).join("\n"),
     size: detailLabel || "カスタマイズなし",
-    temperature: buildableItems.length === 1 ? buildableItems[0].heat?.name ?? "" : "商品ごと",
-    sweetness: buildableItems.length === 1 ? buildableItems[0].numb?.name ?? "" : "商品ごと",
-    ice: buildableItems.length === 1 ? buildableItems[0].medicinalSpice?.name ?? "" : "商品ごと",
-    option: buildableItems.length === 1 ? buildableItems[0].specialFlavorItems.map((item) => item.name).join(", ") : "商品ごと",
+    temperature: "",
+    sweetness: "",
+    ice: "",
+    option: "",
     toppings: itemSummaries.map((item, index) => `${index + 1}. ${item.sectionLabel}`).join("\n\n") || "トッピングなし",
     items: buildableItems.map((item) => ({
       menuCatalogItemId: menu.baseSoup.menuCatalogItemId,
       itemName: menu.baseSoup.name,
-      sizeKey: "buildable",
+      sizeKey: "maamaa_buildable",
       sizeLabel: item.detailLabel || "カスタマイズなし",
-      temperature: item.heat?.name ?? "",
-      sweetness: item.numb?.name ?? "",
-      ice: item.medicinalSpice?.name ?? "",
+      temperature: "",
+      sweetness: "",
+      ice: "",
       optionKey: item.specialFlavorItems.map((flavor) => flavor.id).join(","),
-      optionLabel: item.specialFlavorItems.map((flavor) => flavor.name).join(", "),
-      toppingKeys: [...item.optionItems, ...item.toppingItems].map((option) => option.id),
-      toppingLabels: [...item.optionItems, ...item.toppingItems].map((option) => option.name),
+      optionLabel: item.specialFlavorItems.map((flavor) => `味変: ${flavor.name}`).join(", "),
+      toppingKeys: [
+        item.medicinalSpice?.id ?? "",
+        item.heat?.id ?? "",
+        item.numb?.id ?? "",
+        ...item.specialFlavorItems.map((flavor) => flavor.id),
+        ...item.toppingItems.map((topping) => topping.id)
+      ].filter(Boolean),
+      toppingLabels: buildMaamaaProductionLabels(item),
       amount: item.amount
     }))
   });

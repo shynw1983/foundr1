@@ -43,6 +43,7 @@ function countLabels(labels: string[]) {
 function buildProductionItemLines(row: {
   itemName: string;
   quantity: number;
+  sizeKey: string;
   sizeLabel: string;
   temperature: string;
   sweetness: string;
@@ -58,7 +59,8 @@ function buildProductionItemLines(row: {
     .split(",")
     .map((part) => part.trim())
     .filter((part) => part && !toppingLabelSet.has(normalizeText(part)));
-  const sizeParts = row.sizeLabel.includes("\n") && toppingLabels.length ? [] : [row.sizeLabel];
+  const isMaamaaBuildable = row.sizeKey === "maamaa_buildable";
+  const sizeParts = (isMaamaaBuildable || row.sizeLabel.includes("\n")) && toppingLabels.length ? [] : [row.sizeLabel];
   const details = uniqueTextParts([
     row.measuredQuantity && row.measuredUnit
       ? `${Number(row.measuredQuantity).toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${row.measuredUnit}`
@@ -101,6 +103,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
       coalesce(brands.name, '制作') as "brandName",
       store_customer_order_items.item_name as "itemName",
       coalesce(store_customer_order_items.quantity, 1)::int as quantity,
+      coalesce(store_customer_order_items.size_key, '') as "sizeKey",
       coalesce(store_customer_order_items.size_label, '') as "sizeLabel",
       coalesce(store_customer_order_items.temperature, '') as temperature,
       coalesce(store_customer_order_items.sweetness, '') as sweetness,
@@ -123,6 +126,7 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     brandName: string;
     itemName: string;
     quantity: number;
+    sizeKey: string;
     sizeLabel: string;
     temperature: string;
     sweetness: string;
