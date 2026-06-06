@@ -298,6 +298,12 @@ function ConfiguredMemberPortal() {
   const profileStatusLabel = missingRequiredProfile ? "必須項目が未入力です" : "必須項目は入力済みです";
   const returningToSite = Boolean(returnTo && handoffEnabled && isLoaded && isSignedIn && !handoffFailed && (!data.member || hasRequiredProfileDetails(data.member)));
   const readyToReturnToSite = Boolean(returningToSite && data.member && hasRequiredProfileDetails(data.member));
+  const selectedCoupon = data.coupons?.find((coupon) => coupon.id === selectedCouponId) ?? null;
+  const couponBadgeLabel = selectedCoupon
+    ? "クーポン選択済み"
+    : data.coupons?.length
+      ? `利用可能クーポン ${data.coupons.length}件`
+      : "";
 
   const scrollToCoupons = () => {
     couponPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -571,7 +577,7 @@ function ConfiguredMemberPortal() {
                     {data.coupons?.length ? (
                       <button className="member-card-coupon-badge" type="button" onClick={scrollToCoupons}>
                         <Gift size={13} />
-                        利用可能クーポン {data.coupons.length}件
+                        {couponBadgeLabel}
                       </button>
                     ) : null}
                   </div>
