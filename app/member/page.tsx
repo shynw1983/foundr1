@@ -1,7 +1,7 @@
 "use client";
 
-import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, Gift, Loader2, QrCode, RefreshCw, Settings, Ticket, UserRound } from "lucide-react";
+import { SignInButton, SignOutButton, SignUpButton, useUser } from "@clerk/nextjs";
+import { BadgePercent, ChevronDown, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, Ticket, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type MemberProfile = {
@@ -218,7 +218,7 @@ export default function MemberPage() {
 }
 
 function ConfiguredMemberPortal() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const settingsPanelRef = useRef<HTMLDetailsElement | null>(null);
   const profilePromptShownRef = useRef(false);
   const [returnTo, setReturnTo] = useState("");
@@ -402,7 +402,56 @@ function ConfiguredMemberPortal() {
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
           <strong>Members</strong>
         </a>
-        {clerkConfigured && isSignedIn ? <UserButton /> : null}
+        {clerkConfigured && isSignedIn ? (
+          <details className="member-account-menu">
+            <summary aria-label="会員メニュー">
+              <span className="member-account-avatar"><UserRound size={18} /></span>
+              <span className="member-account-summary-text">
+                <strong>{data.member?.displayName || user?.fullName || "会員"}</strong>
+                <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || "ログイン中"}</small>
+              </span>
+              <ChevronDown size={16} />
+            </summary>
+            <div className="member-account-popover">
+              <div className="member-account-card">
+                <span>ログイン中</span>
+                <strong>{data.member?.displayName || user?.fullName || user?.primaryEmailAddress?.emailAddress || "会員"}</strong>
+                {data.member?.memberNumber ? <small>会員番号 {data.member.memberNumber}</small> : null}
+              </div>
+              <button
+                className="member-account-menu-item"
+                type="button"
+                onClick={() => {
+                  setSettingsOpen(true);
+                  window.setTimeout(() => {
+                    settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 80);
+                }}
+              >
+                <Settings size={16} />
+                会員情報を編集
+              </button>
+              {returnWithHandoffUrl ? (
+                <a className="member-account-menu-item" href={returnWithHandoffUrl}>
+                  <LogIn size={16} />
+                  サイトへ戻る
+                </a>
+              ) : null}
+              <SignOutButton redirectUrl="/member?loggedOut=1">
+                <button className="member-account-menu-item" type="button">
+                  <LogOut size={16} />
+                  ログアウト
+                </button>
+              </SignOutButton>
+              <SignOutButton redirectUrl="/member?loggedOut=1&switchAccount=1">
+                <button className="member-account-menu-item is-muted" type="button">
+                  <UserPlus size={16} />
+                  別のアカウントでログイン
+                </button>
+              </SignOutButton>
+            </div>
+          </details>
+        ) : null}
       </header>
 
       <section className="member-portal-hero">
@@ -414,10 +463,10 @@ function ConfiguredMemberPortal() {
         {clerkConfigured && isLoaded && !isSignedIn ? (
             <div className="member-portal-auth-actions">
               <SignInButton mode="modal">
-                <button className="primary-button" type="button">ログイン</button>
+                <button className="primary-button" type="button"><LogIn size={16} />ログイン</button>
               </SignInButton>
               <SignUpButton mode="modal" forceRedirectUrl={profileCompletionUrl} fallbackRedirectUrl={profileCompletionUrl}>
-                <button className="secondary-button" type="button">会員登録</button>
+                <button className="secondary-button" type="button"><UserPlus size={16} />会員登録</button>
               </SignUpButton>
             </div>
         ) : null}
