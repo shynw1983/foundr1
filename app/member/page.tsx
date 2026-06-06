@@ -66,6 +66,16 @@ function movementLabel(value: string) {
   return value || "-";
 }
 
+function safeReturnTo(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 export default function MemberPage() {
   if (!clerkConfigured) {
     return (
@@ -99,6 +109,7 @@ export default function MemberPage() {
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn } = useUser();
   const [returnTo, setReturnTo] = useState("");
+  const [handoffEnabled, setHandoffEnabled] = useState(false);
   const [data, setData] = useState<MemberResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -112,7 +123,8 @@ function ConfiguredMemberPortal() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setReturnTo(params.get("returnTo") || "");
+    setReturnTo(safeReturnTo(params.get("returnTo") || ""));
+    setHandoffEnabled(params.get("handoff") === "1");
   }, []);
 
   async function loadMember() {
@@ -136,7 +148,7 @@ function ConfiguredMemberPortal() {
   }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !returnTo || handoffStarted) return;
+    if (!isLoaded || !isSignedIn || !returnTo || !handoffEnabled || handoffStarted) return;
     setHandoffStarted(true);
     void fetch("/api/public/members/handoff", {
       method: "POST",
@@ -152,7 +164,7 @@ function ConfiguredMemberPortal() {
         setMessage(body?.error || "ログイン後の戻り先を準備できませんでした。");
       })
       .catch(() => setMessage("ログイン後の戻り先を準備できませんでした。"));
-  }, [handoffStarted, isLoaded, isSignedIn, returnTo]);
+  }, [handoffEnabled, handoffStarted, isLoaded, isSignedIn, returnTo]);
 
   useEffect(() => {
     let active = true;
@@ -207,7 +219,7 @@ function ConfiguredMemberPortal() {
 
       {
         <>
-          {returnTo && isLoaded && isSignedIn ? (
+          {returnTo && handoffEnabled && isLoaded && isSignedIn ? (
             <section className="member-portal-login-panel">
               <Loader2 size={32} />
               <h2>ログイン済みです</h2>
@@ -226,6 +238,9 @@ function ConfiguredMemberPortal() {
           {isLoaded && isSignedIn ? (
             <>
             <section className="member-portal-toolbar">
+              {returnTo && !handoffEnabled ? (
+                <a className="secondary-button" href={returnTo}>サイトへ戻る</a>
+              ) : null}
               <button className="secondary-button" type="button" onClick={() => void loadMember()} disabled={loading}>
                 {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
                 更新
