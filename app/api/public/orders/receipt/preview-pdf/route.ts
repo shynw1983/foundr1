@@ -2,9 +2,11 @@ import chromium from "@sparticuz/chromium";
 import { existsSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import puppeteer from "puppeteer-core";
 import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 import type { Browser } from "puppeteer-core";
+import type { Page } from "puppeteer-core";
 import type { OnlineReceiptItem, OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 
 type ReceiptRecipientMode = "blank" | "registered" | "custom";
@@ -50,16 +52,17 @@ function getFooterBrandText() {
 }
 
 let receiptFontFaceCss = "";
+let receiptBaseCss = "";
 
 function getReceiptFontFaceCss() {
   if (receiptFontFaceCss) return receiptFontFaceCss;
   const fontPath = join(process.cwd(), "fonts/NotoSansCJKjp-Regular.otf");
   if (!existsSync(fontPath)) return "";
-  const fontData = readFileSync(fontPath).toString("base64");
+  const fontUrl = pathToFileURL(fontPath).href;
   receiptFontFaceCss = `
 @font-face {
   font-family: "Foundr1ReceiptCJK";
-  src: url("data:font/otf;base64,${fontData}") format("opentype");
+  src: url("${fontUrl}") format("opentype");
   font-weight: 400 900;
   font-style: normal;
   font-display: block;
@@ -72,10 +75,11 @@ body,
 }
 
 function getReceiptCss() {
+  if (receiptBaseCss) return `${getReceiptFontFaceCss()}\n${receiptBaseCss}`;
   const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
   const receiptCssEnd = css.indexOf("\nbutton {\n  cursor: pointer;");
-  const receiptCss = receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
-  return `${getReceiptFontFaceCss()}\n${receiptCss}`;
+  receiptBaseCss = receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
+  return `${getReceiptFontFaceCss()}\n${receiptBaseCss}`;
 }
 
 function getPublicDataUrl(src: string) {
@@ -259,6 +263,31 @@ async function launchBrowser(): Promise<Browser> {
   });
 }
 
+let sharedBrowserPromise: Promise<Browser> | null = null;
+
+async function getSharedBrowser() {
+  if (!sharedBrowserPromise) {
+    sharedBrowserPromise = launchBrowser()
+      .then((browser) => {
+        browser.on("disconnected", () => {
+          sharedBrowserPromise = null;
+        });
+        return browser;
+      })
+      .catch((error) => {
+        sharedBrowserPromise = null;
+        throw error;
+      });
+  }
+
+  const browser = await sharedBrowserPromise;
+  if (!browser.connected) {
+    sharedBrowserPromise = null;
+    return getSharedBrowser();
+  }
+  return browser;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const orderId = clean(url.searchParams.get("orderId"));
@@ -277,10 +306,10 @@ export async function GET(request: Request) {
 
   const displayReceipt = applyRecipientChoice(receipt, recipientMode, recipientName);
 
-  let browser: Browser | null = null;
+  let page: Page | null = null;
   try {
-    browser = await launchBrowser();
-    const page = await browser.newPage();
+    const browser = await getSharedBrowser();
+    page = await browser.newPage();
     await page.setContent(getReceiptHtml(displayReceipt), { waitUntil: "load", timeout: 15000 });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForSelector(".online-receipt-sheet", { timeout: 10000 });
@@ -302,6 +331,6 @@ export async function GET(request: Request) {
     console.error("Failed to render receipt preview PDF", error);
     return Response.json({ error: "Receipt PDF could not be generated." }, { status: 500 });
   } finally {
-    await browser?.close().catch(() => {});
+    await page?.close().catch(() => {});
   }
 }
