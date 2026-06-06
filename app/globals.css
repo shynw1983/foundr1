@@ -5430,6 +5430,11 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.store-pos-cash-strip small {
+  display: grid;
+  gap: 2px;
+}
+
 .store-pos-cash-strip strong {
   min-width: 0;
   color: var(--ink);

@@ -261,6 +261,18 @@ function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
 
+function formatDateTime(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function createCashBreakdownInput() {
   return yenDenominations.reduce((result, denomination) => {
     result[String(denomination)] = "";
@@ -1200,18 +1212,33 @@ export default function StorePosPage() {
           <span>レジ状態</span>
           <strong>{reconciliation.activeSession ? "開店済み" : "未開店"}</strong>
           <small>
-            {reconciliation.businessState
-              ? `${reconciliation.businessState.statusLabel} / 営業日 ${reconciliation.businessState.businessDate}`
-              : reconciliation.businessDate || "-"}
+            {reconciliation.activeSession ? (
+              <>
+                <span>開店 {formatDateTime(reconciliation.activeSession.openedAt) || "-"}</span>
+                <span>担当 {reconciliation.activeSession.openedByName || "-"}</span>
+              </>
+            ) : reconciliation.previousClosedSession ? (
+              <>
+                <span>前回閉店 {formatDateTime(reconciliation.previousClosedSession.closedAt) || reconciliation.previousClosedSession.businessDate}</span>
+                <span>担当 {reconciliation.previousClosedSession.closedByName || "-"}</span>
+              </>
+            ) : reconciliation.businessState ? (
+              `${reconciliation.businessState.statusLabel} / 営業日 ${reconciliation.businessState.businessDate}`
+            ) : reconciliation.businessDate || "-"}
           </small>
         </div>
         <div>
           <span>システム上の現金</span>
           <strong>{reconciliation.activeSession ? formatYen(reconciliation.activeSession.expectedCashAmount) : "-"}</strong>
           <small>
-            {reconciliation.activeSession
-              ? `開始 ${formatYen(reconciliation.activeSession.openingAmount)} / 現金売上 ${formatYen(reconciliation.activeSession.cashSales)}`
-              : "開店確認後に POS 会計を開始できます。"}
+            {reconciliation.activeSession ? (
+              <>
+                <span>開始 {formatYen(reconciliation.activeSession.openingAmount)} / 現金売上 {formatYen(reconciliation.activeSession.cashSales)}</span>
+                <span>営業日 {reconciliation.activeSession.businessDate}</span>
+              </>
+            ) : (
+              "開店確認後に POS 会計を開始できます。"
+            )}
           </small>
         </div>
         <div className="store-pos-cash-strip-actions">
