@@ -3,7 +3,6 @@ import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { getCurrentBusinessDayClosing, getStoreReceptionState } from "../../../../lib/store-business-hours";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
-import { cancelTemporaryClosure, createTemporaryClosure, getAffectedOrdersForTemporaryClosures, getUpcomingTemporaryClosures } from "../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +13,6 @@ type StoreOperationPatch = {
   minimumPickupMinutes?: number;
   minimumPickupResetPolicy?: string;
   statusNote?: string;
-  closureId?: string;
-  closureDate?: string;
-  closureStartTime?: string;
-  closureEndTime?: string;
-  closureReason?: string;
-  closurePublicMessage?: string;
 };
 
 const brandDefaultPickupMinutes: Record<string, number> = {
@@ -114,16 +107,9 @@ export async function GET(request: Request) {
     .filter((brand) => Number.isFinite(brand.minimumPickupMinutes));
   const defaultMinimumPickupMinutes = brandDefaults.length > 0 ? brandDefaults[0].minimumPickupMinutes : 15;
 
-  const [temporaryClosures, affectedOrders] = await Promise.all([
-    getUpcomingTemporaryClosures(storeId),
-    getAffectedOrdersForTemporaryClosures(storeId)
-  ]);
-
   return NextResponse.json({
     access,
     selectedStoreId: storeId,
-    temporaryClosures,
-    affectedOrders,
     operation: operation
       ? {
           ...operation,
@@ -150,28 +136,6 @@ export async function PATCH(request: Request) {
   const storeId = getScopedStoreFilter(access, body?.storeId) ?? access.stores[0]?.id ?? "";
   if (!storeId || storeId === "__forbidden__") {
     return NextResponse.json({ error: "店舗を選択できません。" }, { status: 403 });
-  }
-
-  if (body?.action === "create_temporary_closure") {
-    try {
-      await createTemporaryClosure({
-        storeId,
-        date: body.closureDate ?? "",
-        startTime: body.closureStartTime ?? "",
-        endTime: body.closureEndTime ?? "",
-        reason: body.closureReason,
-        publicMessage: body.closurePublicMessage,
-        createdBy: session.id
-      });
-      return NextResponse.json({ ok: true });
-    } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : "臨時休業を保存できませんでした。" }, { status: 400 });
-    }
-  }
-
-  if (body?.action === "cancel_temporary_closure") {
-    await cancelTemporaryClosure({ storeId, closureId: String(body.closureId ?? "") });
-    return NextResponse.json({ ok: true });
   }
 
   const reservationsEnabled = body?.reservationsEnabled !== false;

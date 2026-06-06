@@ -83,7 +83,30 @@ type StaffOption = {
   storeNames: string[];
 };
 
-type StoreEditTab = "basic" | "hours" | "sales" | "payment" | "receipt" | "payroll";
+type StoreEditTab = "basic" | "hours" | "operations" | "sales" | "payment" | "receipt" | "payroll";
+
+type StoreTemporaryClosure = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string;
+  publicMessage: string;
+  status: string;
+};
+
+type AffectedClosureOrder = {
+  id: string;
+  pickupCode: string;
+  pickupDate: string;
+  pickupTime: string;
+  status: string;
+  paymentStatus: string;
+  customerName: string;
+  customerPhone: string;
+  closureId: string;
+  reason: string;
+  publicMessage: string;
+};
 
 function salesSourceKey(platform: string, brandName = "") {
   return `${platform}::${brandName}`;
@@ -177,6 +200,17 @@ export default function StoresPage() {
   const [editingKomojuWebhookSecretEnvName, setEditingKomojuWebhookSecretEnvName] = useState("");
   const [editingKomojuPaymentTypesEnvName, setEditingKomojuPaymentTypesEnvName] = useState("");
   const [editingKomojuPaymentTypes, setEditingKomojuPaymentTypes] = useState("");
+  const [temporaryClosures, setTemporaryClosures] = useState<StoreTemporaryClosure[]>([]);
+  const [affectedClosureOrders, setAffectedClosureOrders] = useState<AffectedClosureOrder[]>([]);
+  const [closureDraft, setClosureDraft] = useState({
+    date: "",
+    startTime: "10:00",
+    endTime: "22:00",
+    reason: "臨時休業",
+    publicMessage: "臨時休業のため、この時間帯は受付を停止しています。"
+  });
+  const [temporaryClosureLoading, setTemporaryClosureLoading] = useState(false);
+  const [temporaryClosureMessage, setTemporaryClosureMessage] = useState("");
 
   async function loadData() {
     const response = await fetch("/api/dashboard");
@@ -239,6 +273,84 @@ export default function StoresPage() {
       setEditingGeocodeMessage(error instanceof Error ? error.message : "住所から座標を取得できませんでした。");
     } finally {
       setIsEditingGeocoding(false);
+    }
+  }
+
+  async function loadTemporaryClosureSettings(storeId?: string) {
+    if (!storeId) {
+      setTemporaryClosures([]);
+      setAffectedClosureOrders([]);
+      return;
+    }
+    setTemporaryClosureLoading(true);
+    setTemporaryClosureMessage("");
+    try {
+      const response = await fetch(`/api/os/store-temporary-closures?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as {
+        temporaryClosures?: StoreTemporaryClosure[];
+        affectedOrders?: AffectedClosureOrder[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(body.error || "臨時休業を読み込めませんでした。");
+      setTemporaryClosures(Array.isArray(body.temporaryClosures) ? body.temporaryClosures : []);
+      setAffectedClosureOrders(Array.isArray(body.affectedOrders) ? body.affectedOrders : []);
+    } catch (error) {
+      setTemporaryClosures([]);
+      setAffectedClosureOrders([]);
+      setTemporaryClosureMessage(error instanceof Error ? error.message : "臨時休業を読み込めませんでした。");
+    } finally {
+      setTemporaryClosureLoading(false);
+    }
+  }
+
+  async function saveTemporaryClosure() {
+    if (!editingStore?.id) return;
+    setTemporaryClosureLoading(true);
+    setTemporaryClosureMessage("");
+    try {
+      const response = await fetch("/api/os/store-temporary-closures", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_temporary_closure",
+          storeId: editingStore.id,
+          closureDate: closureDraft.date,
+          closureStartTime: closureDraft.startTime,
+          closureEndTime: closureDraft.endTime,
+          closureReason: closureDraft.reason,
+          closurePublicMessage: closureDraft.publicMessage
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "臨時休業を保存できませんでした。");
+      setClosureDraft((current) => ({ ...current, date: "" }));
+      setTemporaryClosureMessage("臨時休業を保存しました。受け付け済み予約がある場合は下の一覧で対応してください。");
+      await loadTemporaryClosureSettings(editingStore.id);
+    } catch (error) {
+      setTemporaryClosureMessage(error instanceof Error ? error.message : "臨時休業を保存できませんでした。");
+    } finally {
+      setTemporaryClosureLoading(false);
+    }
+  }
+
+  async function cancelTemporaryClosure(closureId: string) {
+    if (!editingStore?.id) return;
+    setTemporaryClosureLoading(true);
+    setTemporaryClosureMessage("");
+    try {
+      const response = await fetch("/api/os/store-temporary-closures", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_temporary_closure", storeId: editingStore.id, closureId })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "臨時休業を解除できませんでした。");
+      setTemporaryClosureMessage("臨時休業を解除しました。");
+      await loadTemporaryClosureSettings(editingStore.id);
+    } catch (error) {
+      setTemporaryClosureMessage(error instanceof Error ? error.message : "臨時休業を解除できませんでした。");
+    } finally {
+      setTemporaryClosureLoading(false);
     }
   }
 
@@ -570,6 +682,7 @@ export default function StoresPage() {
     setEditingKomojuWebhookSecretEnvName(store.paymentAccount?.webhookSecretEnvName ?? "");
     setEditingKomojuPaymentTypesEnvName(store.paymentAccount?.paymentTypesEnvName ?? "");
     setEditingKomojuPaymentTypes((store.paymentAccount?.paymentTypes ?? []).join(","));
+    void loadTemporaryClosureSettings(store.id);
   }
 
   function getStaffName(staffId?: string) {
@@ -840,6 +953,7 @@ export default function StoresPage() {
             <div className="store-settings-tabs" aria-label="店舗設定メニュー">
               <button className={editingStoreTab === "basic" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("basic")}>基本情報</button>
               <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
+              <button className={editingStoreTab === "operations" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("operations")}>受付・休業</button>
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
               <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
               <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>領収書</button>
@@ -959,6 +1073,66 @@ export default function StoresPage() {
               )}
               {editingStoreTab === "hours" ? (
                 <BusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+              ) : null}
+              {editingStoreTab === "operations" ? (
+                <div className="store-payroll-settings">
+                  <div className="store-payroll-summary">
+                    <strong>臨時休業</strong>
+                    <p>未来の日付や時間帯を指定して、Web 予約の受付を停止します。本日だけの受付停止は Store 画面の「本日休業」を使います。</p>
+                  </div>
+                  <div className="store-temporary-closure-form">
+                    <strong>臨時休業時間</strong>
+                    <label>
+                      <span>日付</span>
+                      <input type="date" value={closureDraft.date} onChange={(event) => setClosureDraft((current) => ({ ...current, date: event.target.value }))} />
+                    </label>
+                    <label>
+                      <span>開始</span>
+                      <input type="time" value={closureDraft.startTime} onChange={(event) => setClosureDraft((current) => ({ ...current, startTime: event.target.value }))} />
+                    </label>
+                    <label>
+                      <span>終了</span>
+                      <input type="time" value={closureDraft.endTime} onChange={(event) => setClosureDraft((current) => ({ ...current, endTime: event.target.value }))} />
+                    </label>
+                    <label>
+                      <span>理由</span>
+                      <input value={closureDraft.reason} onChange={(event) => setClosureDraft((current) => ({ ...current, reason: event.target.value }))} />
+                    </label>
+                    <label className="is-wide">
+                      <span>お客様向け表示</span>
+                      <input value={closureDraft.publicMessage} onChange={(event) => setClosureDraft((current) => ({ ...current, publicMessage: event.target.value }))} />
+                    </label>
+                    <button className="secondary-button" type="button" disabled={temporaryClosureLoading || !closureDraft.date} onClick={() => void saveTemporaryClosure()}>
+                      {temporaryClosureLoading ? "保存中..." : "臨時休業を追加"}
+                    </button>
+                  </div>
+                  {temporaryClosureMessage ? <p className="store-geocode-message">{temporaryClosureMessage}</p> : null}
+                  {temporaryClosures.length ? (
+                    <div className="store-temporary-closure-list">
+                      {temporaryClosures.map((closure) => (
+                        <div key={closure.id}>
+                          <span>{new Date(closure.startsAt).toLocaleString("ja-JP")} - {new Date(closure.endsAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
+                          <strong>{closure.reason || "臨時休業"}</strong>
+                          {closure.publicMessage ? <small>{closure.publicMessage}</small> : null}
+                          <button type="button" disabled={temporaryClosureLoading} onClick={() => void cancelTemporaryClosure(closure.id)}>解除</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-state-text">予定されている臨時休業はありません。</p>
+                  )}
+                  {affectedClosureOrders.length ? (
+                    <div className="store-temporary-affected-orders">
+                      <strong>対応が必要な予約 {affectedClosureOrders.length}件</strong>
+                      {affectedClosureOrders.map((order) => (
+                        <div key={order.id}>
+                          <span>{order.pickupCode} / {order.pickupDate} {order.pickupTime}</span>
+                          <small>{order.customerName || "-"} / {order.customerPhone || "電話未登録"} / {order.status}</small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               {editingStoreTab === "sales" ? (
                 <SalesSourceSelector

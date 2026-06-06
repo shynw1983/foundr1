@@ -76,29 +76,6 @@ type StoreOperation = {
   statusNote: string;
 };
 
-type StoreTemporaryClosure = {
-  id: string;
-  startsAt: string;
-  endsAt: string;
-  reason: string;
-  publicMessage: string;
-  status: string;
-};
-
-type AffectedClosureOrder = {
-  id: string;
-  pickupCode: string;
-  pickupDate: string;
-  pickupTime: string;
-  status: string;
-  paymentStatus: string;
-  customerName: string;
-  customerPhone: string;
-  closureId: string;
-  reason: string;
-  publicMessage: string;
-};
-
 const statusLabels: Record<string, string> = {
   new: "新規",
   preparing: "制作中",
@@ -209,15 +186,6 @@ export default function StoreOrdersPage() {
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
   const [statsDays, setStatsDays] = useState(1);
   const [operation, setOperation] = useState<StoreOperation | null>(null);
-  const [temporaryClosures, setTemporaryClosures] = useState<StoreTemporaryClosure[]>([]);
-  const [affectedClosureOrders, setAffectedClosureOrders] = useState<AffectedClosureOrder[]>([]);
-  const [closureDraft, setClosureDraft] = useState({
-    date: "",
-    startTime: "00:00",
-    endTime: "23:59",
-    reason: "臨時休業",
-    publicMessage: "臨時休業のため、この時間帯は受付を停止しています。"
-  });
   const [minimumPickupOffsetDraft, setMinimumPickupOffsetDraft] = useState(0);
   const [operationSaving, setOperationSaving] = useState(false);
   const [operationMessage, setOperationMessage] = useState("");
@@ -250,8 +218,6 @@ export default function StoreOrdersPage() {
   const loadOperation = async (storeId = selectedStoreId) => {
     if (!storeId) {
       setOperation(null);
-      setTemporaryClosures([]);
-      setAffectedClosureOrders([]);
       setMinimumPickupOffsetDraft(0);
       return;
     }
@@ -261,8 +227,6 @@ export default function StoreOrdersPage() {
     const body = await response.json();
     const nextOperation = body.operation as StoreOperation | null;
     setOperation(nextOperation);
-    setTemporaryClosures(Array.isArray(body.temporaryClosures) ? body.temporaryClosures : []);
-    setAffectedClosureOrders(Array.isArray(body.affectedOrders) ? body.affectedOrders : []);
     const defaultMinutes = nextOperation?.defaultMinimumPickupMinutes ?? 15;
     const currentMinutes = nextOperation?.minimumPickupMinutes ?? defaultMinutes;
     setMinimumPickupOffsetDraft(currentMinutes - defaultMinutes);
@@ -319,51 +283,6 @@ export default function StoreOrdersPage() {
       minimumPickupOffsetDraft === 0 ? "最短準備時間をブランド初期値に戻しました。" : "最短準備時間を保存しました。",
       resetPolicy,
     );
-  };
-
-  const saveTemporaryClosure = async () => {
-    if (!selectedStoreId || operationSaving) return;
-    setOperationSaving(true);
-    setOperationMessage("");
-    try {
-      const response = await fetch("/api/store/operations", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create_temporary_closure",
-          storeId: selectedStoreId,
-          closureDate: closureDraft.date,
-          closureStartTime: closureDraft.startTime,
-          closureEndTime: closureDraft.endTime,
-          closureReason: closureDraft.reason,
-          closurePublicMessage: closureDraft.publicMessage
-        })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "save failed");
-      await loadOperation(selectedStoreId);
-      setOperationMessage("臨時休業を保存しました。受け付け済み注文がある場合は下の一覧で対応してください。");
-    } catch (error) {
-      setOperationMessage(error instanceof Error ? error.message : "臨時休業を保存できませんでした。");
-    } finally {
-      setOperationSaving(false);
-    }
-  };
-
-  const cancelClosure = async (closureId: string) => {
-    if (!selectedStoreId || operationSaving) return;
-    setOperationSaving(true);
-    try {
-      await fetch("/api/store/operations", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel_temporary_closure", storeId: selectedStoreId, closureId })
-      });
-      await loadOperation(selectedStoreId);
-      setOperationMessage("臨時休業を解除しました。");
-    } finally {
-      setOperationSaving(false);
-    }
   };
 
   const ensureAudioReady = async () => {
@@ -773,55 +692,6 @@ export default function StoreOrdersPage() {
                   <button className="secondary-button" type="button" disabled={operationSaving} onClick={() => void saveMinimumPickupMinutes()}>
                     {operationSaving ? "保存中..." : "保存"}
                   </button>
-                  <div className="store-temporary-closure-form">
-                    <strong>臨時休業時間</strong>
-                    <label>
-                      <span>日付</span>
-                      <input type="date" value={closureDraft.date} onChange={(event) => setClosureDraft((current) => ({ ...current, date: event.target.value }))} />
-                    </label>
-                    <label>
-                      <span>開始</span>
-                      <input type="time" value={closureDraft.startTime} onChange={(event) => setClosureDraft((current) => ({ ...current, startTime: event.target.value }))} />
-                    </label>
-                    <label>
-                      <span>終了</span>
-                      <input type="time" value={closureDraft.endTime} onChange={(event) => setClosureDraft((current) => ({ ...current, endTime: event.target.value }))} />
-                    </label>
-                    <label>
-                      <span>理由</span>
-                      <input value={closureDraft.reason} onChange={(event) => setClosureDraft((current) => ({ ...current, reason: event.target.value }))} />
-                    </label>
-                    <label className="is-wide">
-                      <span>お客様向け表示</span>
-                      <input value={closureDraft.publicMessage} onChange={(event) => setClosureDraft((current) => ({ ...current, publicMessage: event.target.value }))} />
-                    </label>
-                    <button className="secondary-button" type="button" disabled={operationSaving || !closureDraft.date} onClick={() => void saveTemporaryClosure()}>
-                      臨時休業を追加
-                    </button>
-                  </div>
-                  {temporaryClosures.length ? (
-                    <div className="store-temporary-closure-list">
-                      {temporaryClosures.map((closure) => (
-                        <div key={closure.id}>
-                          <span>{new Date(closure.startsAt).toLocaleString("ja-JP")} - {new Date(closure.endsAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
-                          <strong>{closure.reason || "臨時休業"}</strong>
-                          {closure.publicMessage ? <small>{closure.publicMessage}</small> : null}
-                          <button type="button" disabled={operationSaving} onClick={() => void cancelClosure(closure.id)}>解除</button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {affectedClosureOrders.length ? (
-                    <div className="store-temporary-affected-orders">
-                      <strong>対応が必要な予約 {affectedClosureOrders.length}件</strong>
-                      {affectedClosureOrders.map((order) => (
-                        <div key={order.id}>
-                          <span>{order.pickupCode} / {order.pickupDate} {order.pickupTime}</span>
-                          <small>{order.customerName || "-"} / {order.customerPhone || "電話未登録"} / {order.status}</small>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                 </>
               ) : (
                 <p>店舗設定を読み込み中です。</p>
