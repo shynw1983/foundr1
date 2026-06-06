@@ -2,7 +2,7 @@
 
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { BadgePercent, Gift, Loader2, QrCode, RefreshCw, Settings, Ticket, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type MemberProfile = {
   id: string;
@@ -148,6 +148,10 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   };
 }
 
+function hasRequiredProfileDetails(member?: MemberProfile | null) {
+  return Boolean(member?.fullName?.trim() && member?.phone?.trim());
+}
+
 export default function MemberPage() {
   if (!clerkConfigured) {
     return (
@@ -180,9 +184,12 @@ export default function MemberPage() {
 
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn } = useUser();
+  const settingsPanelRef = useRef<HTMLElement | null>(null);
+  const profilePromptShownRef = useRef(false);
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
   const [loggedOut, setLoggedOut] = useState(false);
+  const [completeProfileRequested, setCompleteProfileRequested] = useState(false);
   const [data, setData] = useState<MemberResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -201,6 +208,16 @@ function ConfiguredMemberPortal() {
     return `/member?returnTo=${encodeURIComponent(returnTo)}&handoff=1`;
   }, [handoffEnabled, returnTo]);
 
+  const profileCompletionUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (returnTo) params.set("returnTo", returnTo);
+    if (handoffEnabled) params.set("handoff", "1");
+    params.set("completeProfile", "1");
+    return `/member?${params.toString()}`;
+  }, [handoffEnabled, returnTo]);
+
+  const missingRequiredProfile = Boolean(data.member && !hasRequiredProfileDetails(data.member));
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const nextReturnTo = safeReturnTo(params.get("returnTo") || "");
@@ -208,6 +225,7 @@ function ConfiguredMemberPortal() {
     setReturnTo(nextReturnTo);
     setHandoffEnabled(params.get("handoff") === "1");
     setLoggedOut(nextLoggedOut);
+    setCompleteProfileRequested(params.get("completeProfile") === "1");
 
     if (nextReturnTo) {
       window.localStorage.setItem(memberReturnStorageKey, nextReturnTo);
@@ -247,6 +265,15 @@ function ConfiguredMemberPortal() {
     if (isLoaded && isSignedIn) void loadMember();
   }, [isLoaded, isSignedIn]);
 
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !data.member || !missingRequiredProfile || profilePromptShownRef.current) return;
+    profilePromptShownRef.current = true;
+    setMessage("会員登録を完了するため、氏名と電話番号を入力してください。");
+    window.setTimeout(() => {
+      settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }, [data.member, isLoaded, isSignedIn, missingRequiredProfile]);
+
   async function saveSettings() {
     setSettingsSaving(true);
     setMessage("");
@@ -260,6 +287,7 @@ function ConfiguredMemberPortal() {
       if (!response.ok) throw new Error(body.error || "会員情報を保存できませんでした。");
       setData((current) => ({ ...current, member: body.member ?? current.member }));
       setSettingsForm(toSettingsForm(body.member));
+      if (hasRequiredProfileDetails(body.member)) setCompleteProfileRequested(false);
       setMessage("会員情報を保存しました。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会員情報を保存できませんでした。");
@@ -270,6 +298,7 @@ function ConfiguredMemberPortal() {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !returnTo || !handoffEnabled || handoffStarted) return;
+    if (!data.member || !hasRequiredProfileDetails(data.member)) return;
     setHandoffStarted(true);
     void fetch("/api/public/members/handoff", {
       method: "POST",
@@ -285,7 +314,7 @@ function ConfiguredMemberPortal() {
         setMessage(body?.error || "ログイン後の戻り先を準備できませんでした。");
       })
       .catch(() => setMessage("ログイン後の戻り先を準備できませんでした。"));
-  }, [handoffEnabled, handoffStarted, isLoaded, isSignedIn, returnTo]);
+  }, [data.member, handoffEnabled, handoffStarted, isLoaded, isSignedIn, returnTo]);
 
   useEffect(() => {
     let active = true;
@@ -331,7 +360,7 @@ function ConfiguredMemberPortal() {
               <SignInButton mode="modal">
                 <button className="primary-button" type="button">ログイン</button>
               </SignInButton>
-              <SignUpButton mode="modal">
+              <SignUpButton mode="modal" forceRedirectUrl={profileCompletionUrl} fallbackRedirectUrl={profileCompletionUrl}>
                 <button className="secondary-button" type="button">会員登録</button>
               </SignUpButton>
             </div>
@@ -413,11 +442,17 @@ function ConfiguredMemberPortal() {
             )}
 
             <section className="member-portal-content-grid">
-              <article className="member-portal-panel member-settings-panel">
+              <article ref={settingsPanelRef} className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}>
                 <div className="member-portal-panel-title">
                   <Settings size={18} />
                   <h3>会員情報</h3>
                 </div>
+                {missingRequiredProfile ? (
+                  <div className="member-settings-required-alert">
+                    <strong>会員登録を完了してください</strong>
+                    <span>ポイント利用と予約時の自動入力には、氏名と電話番号が必要です。</span>
+                  </div>
+                ) : null}
                 <p className="member-settings-note">氏名と電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
                 <div className="member-settings-grid">
                   <label>

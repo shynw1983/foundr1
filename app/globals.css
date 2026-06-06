@@ -8045,6 +8045,31 @@ body :where(
   grid-column: 1 / -1;
 }
 
+.member-settings-panel.is-profile-task {
+  border-color: var(--member-logo-accent);
+}
+
+.member-settings-required-alert {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(47, 138, 114, 0.28);
+  border-radius: 8px;
+  background: #f3faf7;
+  padding: 12px;
+}
+
+.member-settings-required-alert strong {
+  color: var(--member-logo-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.member-settings-required-alert span {
+  color: var(--member-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .member-settings-note {
   margin: 0;
   color: var(--member-muted);
