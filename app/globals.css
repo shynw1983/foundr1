@@ -2140,6 +2140,30 @@ body :where(
   line-height: 1.55;
 }
 
+.store-danger-zone {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.store-danger-zone summary {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.store-danger-zone p {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.store-danger-zone .danger-button {
+  width: 100%;
+  min-height: 40px;
+}
+
 .store-weather-settings {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

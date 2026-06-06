@@ -457,23 +457,30 @@ export default function StoresPage() {
     showNotice("ブランドを追加しました。");
   }
 
-  function deleteStore(store: StoreItem) {
-    if (!window.confirm(`${store.name} を削除しますか？`)) return;
+  async function deleteEditingStore() {
+    if (!editingStore) return;
+    if (!window.confirm(`${editingStore.name} を削除します。この操作は通常使いません。本当に続行しますか？`)) return;
+    const typedName = window.prompt(`削除を確定するには、店舗名「${editingStore.name}」を入力してください。`);
+    if (typedName !== editingStore.name) {
+      window.alert("店舗名が一致しないため、削除を中止しました。");
+      return;
+    }
+    if (!window.confirm("最後の確認です。店舗データを削除しますか？")) return;
 
-    setStoresData((items) => items.filter((item) => item.name !== store.name));
-    void fetch("/api/stores", {
+    const storeToDelete = editingStore;
+    const response = await fetch("/api/stores", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: store.name })
-    }).then(async (response) => {
-      if (response.ok) {
-        showNotice("店舗を削除しました。");
-        return;
-      }
-      const body = await response.json();
-      setStoresData((items) => (items.some((item) => item.name === store.name) ? items : [...items, store]));
-      window.alert(body.error ?? "店舗を削除できませんでした。");
+      body: JSON.stringify({ name: storeToDelete.name })
     });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "店舗を削除できませんでした。");
+      return;
+    }
+    setStoresData((items) => items.filter((item) => item.name !== storeToDelete.name));
+    setEditingStore(null);
+    showNotice("店舗を削除しました。");
   }
 
   function deleteBrand(brand: BrandItem) {
@@ -797,9 +804,6 @@ export default function StoresPage() {
                   <div className="row-actions">
                     <button className="text-button" type="button" onClick={() => startEditingStore(store)}>
                       編集
-                    </button>
-                    <button className="text-button danger-button" type="button" onClick={() => deleteStore(store)}>
-                      削除
                     </button>
                   </div>
                 </article>
@@ -1309,6 +1313,13 @@ export default function StoresPage() {
                 保存
               </button>
             </div>
+            <details className="store-danger-zone">
+              <summary>閉店・重複登録などで店舗を削除する</summary>
+              <p>店舗削除は通常使いません。予約、POS、勤怠、売上、手順書との関連を確認してから実行してください。</p>
+              <button type="button" className="danger-button" onClick={() => void deleteEditingStore()}>
+                店舗を削除
+              </button>
+            </details>
           </form>
         </div>
       ) : null}
