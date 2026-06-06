@@ -8041,6 +8041,72 @@ body :where(
   padding: 16px;
 }
 
+.member-settings-panel {
+  grid-column: 1 / -1;
+}
+
+.member-settings-note {
+  margin: 0;
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.member-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.member-settings-grid label,
+.member-settings-checks label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.member-settings-grid span,
+.member-settings-checks span {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.member-settings-grid input,
+.member-settings-grid select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  background: white;
+  color: var(--member-ink);
+  font: inherit;
+  padding: 0 12px;
+}
+
+.member-settings-grid input:focus,
+.member-settings-grid select:focus {
+  border-color: var(--member-logo-accent);
+  outline: 0;
+}
+
+.member-settings-checks {
+  display: grid;
+  gap: 8px;
+}
+
+.member-settings-checks label {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.member-settings-checks input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--member-logo-accent);
+}
+
 .member-portal-panel-title {
   display: flex;
   align-items: center;
@@ -8169,6 +8235,10 @@ body :where(
   .member-portal-config,
   .member-portal-login-panel {
     padding: 14px;
+  }
+
+  .member-settings-grid {
+    grid-template-columns: 1fr;
   }
 
   .member-qr-placeholder {

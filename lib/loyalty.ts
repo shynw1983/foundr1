@@ -32,8 +32,15 @@ export type LoyaltyMember = {
   memberNumber: string;
   publicToken: string;
   displayName: string;
+  fullName: string;
+  nameKana: string;
   phone: string;
   email: string;
+  birthday: string;
+  preferredLanguage: string;
+  preferredStoreId: string;
+  marketingOptIn: boolean;
+  lineLinked: boolean;
   status: string;
   pointBalance: number;
   lifetimeSpendAmount: number;
@@ -201,8 +208,15 @@ export async function getMemberProfile(memberId: string) {
       members.member_number as "memberNumber",
       members.public_token as "publicToken",
       members.display_name as "displayName",
+      coalesce(members.metadata->>'fullName', '') as "fullName",
+      members.name_kana as "nameKana",
       members.phone,
       members.email,
+      coalesce(members.birthday::text, '') as "birthday",
+      members.preferred_language as "preferredLanguage",
+      coalesce(members.metadata->>'preferredStoreId', '') as "preferredStoreId",
+      coalesce((members.metadata->>'marketingOptIn')::boolean, false) as "marketingOptIn",
+      coalesce((members.metadata->>'lineLinked')::boolean, false) as "lineLinked",
       members.status,
       coalesce(member_accounts.point_balance, 0)::int as "pointBalance",
       coalesce(member_accounts.lifetime_spend_amount, 0)::int as "lifetimeSpendAmount",
@@ -214,6 +228,54 @@ export async function getMemberProfile(memberId: string) {
     limit 1
   `;
   return (rows[0] as LoyaltyMember | undefined) ?? null;
+}
+
+export type LoyaltyMemberSettingsInput = {
+  displayName?: string;
+  fullName?: string;
+  nameKana?: string;
+  phone?: string;
+  birthday?: string;
+  preferredLanguage?: string;
+  preferredStoreId?: string;
+  marketingOptIn?: boolean;
+  lineLinked?: boolean;
+};
+
+export async function updateMemberSettings(memberId: string, input: LoyaltyMemberSettingsInput) {
+  const displayName = normalizeText(input.displayName).slice(0, 80);
+  const fullName = normalizeText(input.fullName).slice(0, 80);
+  const nameKana = normalizeText(input.nameKana).slice(0, 80);
+  const phone = normalizePhone(input.phone).slice(0, 30);
+  const birthday = normalizeText(input.birthday);
+  const normalizedBirthday = /^\d{4}-\d{2}-\d{2}$/.test(birthday) ? birthday : "";
+  const preferredLanguage = ["ja", "zh", "zh-Hant", "en", "ko"].includes(normalizeText(input.preferredLanguage))
+    ? normalizeText(input.preferredLanguage)
+    : "ja";
+  const preferredStoreId = normalizeText(input.preferredStoreId).slice(0, 80);
+  const marketingOptIn = Boolean(input.marketingOptIn);
+  const lineLinked = Boolean(input.lineLinked);
+  const metadata = {
+    fullName,
+    preferredStoreId,
+    marketingOptIn,
+    lineLinked
+  };
+
+  await sql`
+    update members
+    set
+      display_name = ${displayName},
+      name_kana = ${nameKana},
+      phone = ${phone},
+      birthday = nullif(${normalizedBirthday}, '')::date,
+      preferred_language = ${preferredLanguage},
+      metadata = metadata || ${JSON.stringify(metadata)}::jsonb,
+      updated_at = now()
+    where id::text = ${memberId}
+  `;
+
+  return getMemberProfile(memberId);
 }
 
 export async function resolveMemberForOrder(input: LoyaltyMemberInput) {
