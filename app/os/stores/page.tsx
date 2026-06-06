@@ -483,23 +483,30 @@ export default function StoresPage() {
     showNotice("店舗を削除しました。");
   }
 
-  function deleteBrand(brand: BrandItem) {
-    if (!window.confirm(`${brand.name} を削除しますか？`)) return;
+  async function deleteEditingBrand() {
+    if (!editingBrand) return;
+    if (!window.confirm(`${editingBrand.name} を削除します。この操作は通常使いません。本当に続行しますか？`)) return;
+    const typedName = window.prompt(`削除を確定するには、ブランド名「${editingBrand.name}」を入力してください。`);
+    if (typedName !== editingBrand.name) {
+      window.alert("ブランド名が一致しないため、削除を中止しました。");
+      return;
+    }
+    if (!window.confirm("最後の確認です。ブランドデータを削除しますか？")) return;
 
-    setBrandsData((items) => items.filter((item) => item.name !== brand.name));
-    void fetch("/api/brands", {
+    const brandToDelete = editingBrand;
+    const response = await fetch("/api/brands", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: brand.name })
-    }).then(async (response) => {
-      if (response.ok) {
-        showNotice("ブランドを削除しました。");
-        return;
-      }
-      const body = await response.json();
-      setBrandsData((items) => (items.some((item) => item.name === brand.name) ? items : [...items, brand]));
-      window.alert(body.error ?? "ブランドを削除できませんでした。");
+      body: JSON.stringify({ name: brandToDelete.name })
     });
+    if (!response.ok) {
+      const body = await response.json();
+      window.alert(body.error ?? "ブランドを削除できませんでした。");
+      return;
+    }
+    setBrandsData((items) => items.filter((item) => item.name !== brandToDelete.name));
+    setEditingBrand(null);
+    showNotice("ブランドを削除しました。");
   }
 
   async function saveBrandEdit(event: FormEvent<HTMLFormElement>) {
@@ -928,9 +935,6 @@ export default function StoresPage() {
                     <button className="text-button" type="button" onClick={() => setEditingBrand(brand)}>
                       編集
                     </button>
-                    <button className="text-button danger-button" type="button" onClick={() => deleteBrand(brand)}>
-                      削除
-                    </button>
                   </div>
                 </article>
               ))}
@@ -1354,6 +1358,13 @@ export default function StoresPage() {
                 保存
               </button>
             </div>
+            <details className="store-danger-zone">
+              <summary>廃止・重複登録などでブランドを削除する</summary>
+              <p>ブランド削除は通常使いません。メニュー、予約、POS、売上との関連を確認してから実行してください。</p>
+              <button type="button" className="danger-button" onClick={() => void deleteEditingBrand()}>
+                ブランドを削除
+              </button>
+            </details>
           </form>
         </div>
       ) : null}

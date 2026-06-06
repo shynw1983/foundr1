@@ -407,16 +407,28 @@ export default function StaffPage() {
     showNotice("スタッフを更新しました。");
   }
 
-  async function deleteStaff(member: StaffMember) {
-    if (!window.confirm(`${member.name} を削除しますか？`)) return;
+  async function deleteEditingStaff() {
+    if (!editingStaff) return;
+    if (editingStaff.id === currentUserId) {
+      window.alert("自分自身のアカウントは削除できません。");
+      return;
+    }
+    if (!window.confirm(`${editingStaff.name} を削除します。この操作は通常使いません。本当に続行しますか？`)) return;
+    const typedName = window.prompt(`削除を確定するには、スタッフ名「${editingStaff.name}」を入力してください。`);
+    if (typedName !== editingStaff.name) {
+      window.alert("スタッフ名が一致しないため、削除を中止しました。");
+      return;
+    }
+    if (!window.confirm("最後の確認です。スタッフアカウントを削除しますか？")) return;
 
-    const response = await fetch(`/api/staff/${member.id}`, { method: "DELETE" });
+    const response = await fetch(`/api/staff/${editingStaff.id}`, { method: "DELETE" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       window.alert(body.error ?? "スタッフを削除できませんでした。");
       return;
     }
 
+    setEditingStaff(null);
     await loadStaff();
     showNotice("スタッフを削除しました。");
   }
@@ -542,9 +554,6 @@ export default function StaffPage() {
                           <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
                             編集
                           </button>
-                          <button className="danger-button" type="button" disabled={member.id === currentUserId} onClick={() => deleteStaff(member)}>
-                            削除
-                          </button>
                         </>
                       ) : null}
                     </div>
@@ -590,6 +599,13 @@ export default function StaffPage() {
               />
               <button className="primary-button" type="submit">保存</button>
             </form>
+            <details className="store-danger-zone">
+              <summary>退職・重複登録などでスタッフを削除する</summary>
+              <p>スタッフ削除は通常使いません。勤怠、給与、権限、操作履歴との関連を確認してから実行してください。</p>
+              <button className="danger-button" type="button" disabled={editingStaff.id === currentUserId} onClick={() => void deleteEditingStaff()}>
+                スタッフを削除
+              </button>
+            </details>
           </section>
         </div>
       ) : null}
