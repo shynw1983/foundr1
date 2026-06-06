@@ -836,7 +836,7 @@ async function createPointSettlementEntry(
 
 async function awardStampForOrder(order: { id: string; memberId: string; brandId: string; storeId: string; customerSummary?: Record<string, unknown> }) {
   if (!order.brandId) return;
-  if (order.customerSummary?.stampEligible === false || order.customerSummary?.discountPresetKey) return;
+  if (order.customerSummary?.stampEligible === false) return;
   const campaignRows = await sql`
     select id::text, stamps_required as "stampsRequired", reward_coupon_name as "rewardCouponName", reward_value_amount as "rewardValueAmount"
     from loyalty_stamp_campaigns

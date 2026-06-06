@@ -129,12 +129,25 @@ type PosAccess = {
   canUseAllStoreView: boolean;
 };
 
+type PosDiscountPreset = {
+  key: string;
+  name: string;
+  discountType: "percent" | "amount";
+  discountValue: number;
+  targetScope: "all" | "category" | "item_kind" | "brand";
+  targetValue: string;
+  enabled: boolean;
+  stampEligible: boolean;
+  allowCouponCombination: boolean;
+};
+
 type PosSettings = {
   dineInEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
   priceTaxMode: string;
+  discountPresets: PosDiscountPreset[];
 };
 
 type PosCashSession = {
@@ -265,6 +278,34 @@ function getCouponPosStatusLabel(coupon: PosCoupon, discount: number, subtotal: 
   return "対象外";
 }
 
+function getDiscountEligibleAmount(preset: PosDiscountPreset, cart: PosCartItem[], subtotal: number) {
+  if (preset.targetScope === "all") return subtotal;
+  return cart.reduce((sum, item) => {
+    if (preset.targetScope === "category" && item.category !== preset.targetValue) return sum;
+    if (preset.targetScope === "item_kind" && item.itemKind !== preset.targetValue) return sum;
+    if (preset.targetScope === "brand" && item.brandId !== preset.targetValue) return sum;
+    return sum + getCartItemAmount(item);
+  }, 0);
+}
+
+function getPosDiscountAmount(preset: PosDiscountPreset | undefined, cart: PosCartItem[], subtotal: number) {
+  if (!preset) return 0;
+  const eligibleAmount = Math.max(0, Math.round(getDiscountEligibleAmount(preset, cart, subtotal)));
+  if (eligibleAmount <= 0) return 0;
+  const rawDiscount = preset.discountType === "percent"
+    ? Math.floor(eligibleAmount * preset.discountValue / 100)
+    : preset.discountValue;
+  return Math.min(eligibleAmount, Math.max(0, Math.round(rawDiscount)));
+}
+
+function getDiscountTargetLabel(preset: PosDiscountPreset) {
+  if (preset.targetScope === "all") return "全商品";
+  if (preset.targetScope === "category") return `カテゴリ: ${preset.targetValue}`;
+  if (preset.targetScope === "item_kind") return `商品種別: ${preset.targetValue}`;
+  if (preset.targetScope === "brand") return "ブランド指定";
+  return "対象指定";
+}
+
 const orderTypeOptions = [
   { value: "eat_in", label: "店内" },
   { value: "takeout", label: "持ち帰り" }
@@ -345,6 +386,13 @@ function getTransactionStatusLabel(transaction: Pick<PosTransaction, "status" | 
 
 function getItemPrice(item: Pick<PosMenuItem, "basePrice" | "priceOverride">) {
   return Math.round(Number(item.priceOverride ?? item.basePrice ?? 0));
+}
+
+function getCartItemAmount(item: Pick<PosCartItem, "measuredQuantity" | "measuredUnitPrice" | "optionTotal" | "quantity" | "basePrice" | "priceOverride">) {
+  const unitAmount = item.measuredQuantity
+    ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal
+    : getItemPrice(item) + item.optionTotal;
+  return unitAmount * item.quantity;
 }
 
 function getAllowedRuleKey(groupKey: string) {
@@ -456,7 +504,7 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included" });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [] });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -536,10 +584,15 @@ export default function StorePosPage() {
     const nextAccess = body.access as PosAccess;
     const nextBrands = body.brands as BrandOption[];
     const nextItems = body.items as PosMenuItem[];
+    const nextCategories = (body.categories ?? []) as PosMenuCategory[];
+    const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
+    const nextBrandId = nextBrands.some((brand) => brand.id === selectedBrandId)
+      ? selectedBrandId
+      : nextBrands[0]?.id || "";
     setAccess(nextAccess);
     setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
-    setCategories((body.categories ?? []) as PosMenuCategory[]);
+    setCategories(nextCategories);
     setItems(nextItems ?? []);
     setOptionGroups((body.optionGroups ?? []) as PosOptionGroup[]);
     setSummary((body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] }) as PosSummary);
@@ -548,16 +601,17 @@ export default function StorePosPage() {
       dineInTaxRate: Number(body.posSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: Number(body.posSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: body.posSettings?.externalPaymentTerminalBrand ?? "PayCAS",
-      priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included"
+      priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included",
+      discountPresets: Array.isArray(body.posSettings?.discountPresets) ? body.posSettings.discountPresets : []
     };
     setPosSettings(nextPosSettings);
     setOrderType((current) => nextPosSettings.dineInEnabled ? current : "takeout");
-    const responseStoreId = body.selectedStoreId || nextAccess.stores?.[0]?.id || "";
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
     await loadReconciliation(responseStoreId);
-    setSelectedBrandId((current) => current || nextBrands?.[0]?.id || "");
-    setSelectedCategory((current) => current ?? (nextItems?.[0]?.category || "未分類"));
+    setSelectedBrandId(nextBrandId);
+    setSelectedCategory(null);
+    setQuery("");
     setMessage("");
     setLoading(false);
   }
@@ -572,6 +626,12 @@ export default function StorePosPage() {
     const timer = window.setTimeout(() => setMessage(""), 3500);
     return () => window.clearTimeout(timer);
   }, [message]);
+
+  useEffect(() => {
+    if (!discountPresetKey) return;
+    if (posSettings.discountPresets.some((preset) => preset.enabled && preset.key === discountPresetKey)) return;
+    setDiscountPresetKey("");
+  }, [discountPresetKey, posSettings.discountPresets]);
 
   useEffect(() => {
     const hasDialog = Boolean(configuringItem) || transactionDialogOpen || Boolean(cashDialog) || memberScannerOpen;
@@ -678,16 +738,19 @@ export default function StorePosPage() {
     [posSettings.dineInEnabled]
   );
 
-  const subtotal = cart.reduce((sum, item) => sum + (item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal : getItemPrice(item) + item.optionTotal) * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + getCartItemAmount(item), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const posDiscountAmount = discountPresetKey === "student_20" ? Math.floor(subtotal * 0.2) : 0;
+  const enabledDiscountPresets = posSettings.discountPresets.filter((preset) => preset.enabled);
+  const selectedDiscountPreset = enabledDiscountPresets.find((preset) => preset.key === discountPresetKey);
+  const posDiscountAmount = getPosDiscountAmount(selectedDiscountPreset, cart, subtotal);
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
-  const couponDiscountAmount = discountPresetKey ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
+  const couponBlockedByDiscount = Boolean(selectedDiscountPreset && !selectedDiscountPreset.allowCouponCombination);
+  const couponDiscountAmount = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
   const payableAmount = Math.max(0, subtotal - posDiscountAmount - couponDiscountAmount);
   const recommendedCoupon = useMemo(() => {
-    if (discountPresetKey || !memberCoupons.length || subtotal <= 0) return undefined;
+    if (couponBlockedByDiscount || !memberCoupons.length || subtotal <= 0) return undefined;
     return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBaseAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBaseAmounts(left)))[0];
-  }, [cart, discountPresetKey, memberCoupons, subtotal]);
+  }, [cart, couponBlockedByDiscount, memberCoupons, subtotal]);
   const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBaseAmounts(recommendedCoupon));
   const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
   const canUseRegister = Boolean(reconciliation.activeSession);
@@ -1021,7 +1084,7 @@ export default function StorePosPage() {
           memberEmail: selectedMember?.email || undefined,
           memberPhone: selectedMember?.phone || undefined,
           memberName: selectedMember?.displayName || undefined,
-          couponId: discountPresetKey ? undefined : selectedCouponId || undefined,
+          couponId: couponBlockedByDiscount ? undefined : selectedCouponId || undefined,
           discountPresetKey: discountPresetKey || undefined,
           note,
           items: cart.map((item) => ({
@@ -1356,6 +1419,7 @@ export default function StorePosPage() {
                     onClick={() => {
                       setSelectedBrandId(brand.id);
                       setSelectedCategory(null);
+                      setQuery("");
                     }}
                   >
                     {brand.name}
@@ -1513,9 +1577,9 @@ export default function StorePosPage() {
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
                         const isCustomerSelected = customerSelectedCouponId === coupon.id;
-                        const isUnavailable = Boolean(discountPresetKey) || (subtotal > 0 && discount <= 0);
+                        const isUnavailable = couponBlockedByDiscount || (subtotal > 0 && discount <= 0);
                         const couponBadges = [
-                          discountPresetKey ? "割引中は併用不可" : "",
+                          couponBlockedByDiscount ? "割引中は併用不可" : "",
                           isCustomerSelected ? "客さま選択済み" : "",
                           isRecommended ? "おすすめ" : ""
                         ].filter(Boolean);
@@ -1582,17 +1646,32 @@ export default function StorePosPage() {
 
           <div className="store-pos-discount-panel">
             <span>割引</span>
-            <button
-              className={discountPresetKey === "student_20" ? "is-active" : ""}
-              type="button"
-              onClick={() => {
-                setDiscountPresetKey((current) => current === "student_20" ? "" : "student_20");
-                setSelectedCouponId("");
-              }}
-            >
-              学割 20%OFF
-            </button>
-            {discountPresetKey ? <small>割引適用のため、スタンプ対象外です。</small> : null}
+            {enabledDiscountPresets.length ? enabledDiscountPresets.map((preset) => {
+              const discount = getPosDiscountAmount(preset, cart, subtotal);
+              const isActive = discountPresetKey === preset.key;
+              return (
+                <button
+                  key={preset.key}
+                  className={isActive ? "is-active" : ""}
+                  type="button"
+                  disabled={subtotal > 0 && discount <= 0}
+                  onClick={() => {
+                    setDiscountPresetKey((current) => current === preset.key ? "" : preset.key);
+                    if (!preset.allowCouponCombination) setSelectedCouponId("");
+                  }}
+                >
+                  {preset.name}
+                  {discount > 0 ? ` -${formatYen(discount)}` : ""}
+                </button>
+              );
+            }) : <small>設定済みの割引はありません。</small>}
+            {selectedDiscountPreset ? (
+              <small>
+                {getDiscountTargetLabel(selectedDiscountPreset)}
+                {selectedDiscountPreset.allowCouponCombination ? " / クーポン併用可" : " / クーポン併用不可"}
+                {selectedDiscountPreset.stampEligible ? " / スタンプ対象" : " / スタンプ対象外"}
+              </small>
+            ) : null}
           </div>
 
           <div className="store-pos-payment-grid">

@@ -36,6 +36,39 @@ type PosCheckoutBody = {
   items?: PosCheckoutItemInput[];
 };
 
+type PosDiscountPreset = {
+  key: string;
+  name: string;
+  discountType: "percent" | "amount";
+  discountValue: number;
+  targetScope: "all" | "category" | "item_kind" | "brand";
+  targetValue: string;
+  enabled: boolean;
+  stampEligible: boolean;
+  allowCouponCombination: boolean;
+};
+
+type PosDiscountItem = {
+  brandId: string;
+  itemKind: string;
+  category: string;
+  amount: number;
+};
+
+const discountTypes = new Set(["percent", "amount"]);
+const discountTargetScopes = new Set(["all", "category", "item_kind", "brand"]);
+const defaultDiscountPresets: PosDiscountPreset[] = [{
+  key: "student_20",
+  name: "学割 20%OFF",
+  discountType: "percent",
+  discountValue: 20,
+  targetScope: "all",
+  targetValue: "",
+  enabled: true,
+  stampEligible: false,
+  allowCouponCombination: false
+}];
+
 const dineInWeightMalatangOptionGroupKeys = new Set([
   "heat",
   "numb",
@@ -63,6 +96,56 @@ function isDineInWeightMalatangOptionGroup(group: { groupKey: string; groupName:
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function normalizeDiscountPresets(value: unknown) {
+  const source = Array.isArray(value) ? value : [];
+  const presets = source.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const name = normalizeText(record.name);
+    const key = normalizeText(record.key);
+    if (!name || !key) return [];
+    const discountType = discountTypes.has(normalizeText(record.discountType)) ? normalizeText(record.discountType) as PosDiscountPreset["discountType"] : "percent";
+    const maxValue = discountType === "percent" ? 100 : 999999;
+    const discountValue = Math.max(0, Math.min(maxValue, Math.round(Number(record.discountValue) || 0)));
+    if (discountValue <= 0) return [];
+    const targetScope = discountTargetScopes.has(normalizeText(record.targetScope)) ? normalizeText(record.targetScope) as PosDiscountPreset["targetScope"] : "all";
+    const targetValue = targetScope === "all" ? "" : normalizeText(record.targetValue);
+    if (targetScope !== "all" && !targetValue) return [];
+    return [{
+      key,
+      name,
+      discountType,
+      discountValue,
+      targetScope,
+      targetValue,
+      enabled: record.enabled !== false,
+      stampEligible: record.stampEligible === true,
+      allowCouponCombination: record.allowCouponCombination === true
+    }];
+  });
+  return presets.length ? presets : defaultDiscountPresets;
+}
+
+function getDiscountEligibleAmount(preset: PosDiscountPreset, items: PosDiscountItem[], subtotalAmount: number) {
+  if (preset.targetScope === "all") return subtotalAmount;
+  return items.reduce((sum, item) => {
+    if (preset.targetScope === "category" && item.category !== preset.targetValue) return sum;
+    if (preset.targetScope === "item_kind" && item.itemKind !== preset.targetValue) return sum;
+    if (preset.targetScope === "brand" && item.brandId !== preset.targetValue) return sum;
+    return sum + item.amount;
+  }, 0);
+}
+
+function calculatePosDiscount(preset: PosDiscountPreset | null, items: PosDiscountItem[], subtotalAmount: number) {
+  if (!preset) return 0;
+  const eligibleAmount = Math.max(0, Math.round(getDiscountEligibleAmount(preset, items, subtotalAmount)));
+  if (eligibleAmount <= 0) return 0;
+  const rawDiscount = preset.discountType === "percent"
+    ? Math.floor(eligibleAmount * preset.discountValue / 100)
+    : preset.discountValue;
+  return Math.min(eligibleAmount, Math.max(0, Math.round(rawDiscount)));
 }
 
 function toPositiveInt(value: unknown, fallback = 1) {
@@ -334,19 +417,22 @@ async function getOpenCashSessionId(selectedStoreId: string) {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  if (!selectedStoreId) return { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, priceTaxMode: "tax_included" };
+  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets };
+  if (!selectedStoreId) return defaults;
   const rows = await sql`
     select
       coalesce(dine_in_enabled, true) as "dineInEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
-      coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode"
+      coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode",
+      coalesce(discount_presets, '[]'::jsonb) as "discountPresets"
     from pos_store_settings
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
-  return rows[0] ?? { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included" };
+  const settings = rows[0] as (typeof defaults & { discountPresets?: unknown }) | undefined;
+  return settings ? { ...settings, discountPresets: normalizeDiscountPresets(settings.discountPresets) } : defaults;
 }
 
 export async function GET(request: Request) {
@@ -401,6 +487,7 @@ export async function POST(request: Request) {
   if (storeFilter === "__forbidden__" || !storeFilter) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
+  const posSettings = await getPosSettings(storeId);
 
   const requestedIds = Array.from(new Set(cartItems.map((item) => normalizeText(item.menuCatalogItemId)).filter(Boolean)));
   if (requestedIds.length === 0) {
@@ -429,7 +516,7 @@ export async function POST(request: Request) {
       and coalesce(menu_store_settings.pos_enabled, true) = true
       and coalesce(menu_store_settings.is_available, true) = true
   `;
-  const menuById = new Map((menuRows as Array<{ id: string; brandId: string; name: string; itemKind: string; price: number; variableSchema: Record<string, unknown> }>).map((item) => [item.id, item]));
+  const menuById = new Map((menuRows as Array<{ id: string; brandId: string; name: string; itemKind: string; category: string; price: number; variableSchema: Record<string, unknown> }>).map((item) => [item.id, item]));
   const optionRows = await sql`
     select
       menu_options.id::text,
@@ -477,6 +564,8 @@ export async function POST(request: Request) {
     id: string;
     brandId: string;
     name: string;
+    itemKind: string;
+    category: string;
     quantity: number;
     unitPrice: number;
     amount: number;
@@ -557,13 +646,19 @@ export async function POST(request: Request) {
   }
 
   const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
-  if (discountPresetKey && discountPresetKey !== "student_20") {
+  const discountPreset = discountPresetKey
+    ? posSettings.discountPresets.find((preset) => preset.key === discountPresetKey && preset.enabled) ?? null
+    : null;
+  if (discountPresetKey && !discountPreset) {
     return Response.json({ error: "利用できない割引です。" }, { status: 400 });
   }
-  if (discountPresetKey && couponId) {
+  if (discountPreset && !discountPreset.allowCouponCombination && couponId) {
     return Response.json({ error: "割引とクーポンは同時に利用できません。" }, { status: 400 });
   }
-  const posDiscountAmount = discountPresetKey === "student_20" ? Math.floor(subtotalAmount * 0.2) : 0;
+  const posDiscountAmount = calculatePosDiscount(discountPreset, normalizedItems, subtotalAmount);
+  if (discountPreset && posDiscountAmount <= 0) {
+    return Response.json({ error: "この注文では割引を適用できません。" }, { status: 400 });
+  }
   const cashSessionId = await getOpenCashSessionId(storeId);
   if (!cashSessionId) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
@@ -648,9 +743,9 @@ export async function POST(request: Request) {
         memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
         subtotalAmount,
         discountPresetKey,
-        discountPresetName: discountPresetKey === "student_20" ? "学割 20%OFF" : "",
+        discountPresetName: discountPreset?.name ?? "",
         discountAmount: posDiscountAmount,
-        stampEligible: !discountPresetKey,
+        stampEligible: discountPreset ? discountPreset.stampEligible : true,
         couponId: coupon?.id ?? "",
         couponCode: coupon?.couponCode ?? "",
         couponName: coupon?.name ?? "",

@@ -12,10 +12,12 @@ import {
   MenuSquare,
   MonitorSmartphone,
   PackageCheck,
+  Plus,
   Search,
   ShoppingCart,
   WalletCards,
   Store,
+  Trash2,
   Truck,
   UserCog
 } from "lucide-react";
@@ -103,8 +105,35 @@ type PosTaxSettings = {
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
   priceTaxMode: string;
+  discountPresets: PosDiscountPreset[];
   updatedAt: string;
 };
+
+type PosDiscountPreset = {
+  key: string;
+  name: string;
+  discountType: "percent" | "amount";
+  discountValue: number;
+  targetScope: "all" | "category" | "item_kind" | "brand";
+  targetValue: string;
+  enabled: boolean;
+  stampEligible: boolean;
+  allowCouponCombination: boolean;
+};
+
+function createDiscountPreset(): PosDiscountPreset {
+  return {
+    key: `discount_${Date.now()}`,
+    name: "",
+    discountType: "percent",
+    discountValue: 10,
+    targetScope: "all",
+    targetValue: "",
+    enabled: true,
+    stampEligible: false,
+    allowCouponCombination: false
+  };
+}
 
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
@@ -122,7 +151,14 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState({ dineInEnabled: true, dineInTaxRate: "10", takeoutTaxRate: "8", externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included" });
+  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[] }>({
+    dineInEnabled: true,
+    dineInTaxRate: "10",
+    takeoutTaxRate: "8",
+    externalPaymentTerminalBrand: "PayCAS",
+    priceTaxMode: "tax_included",
+    discountPresets: []
+  });
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
@@ -167,7 +203,8 @@ export default function PosPage() {
       dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: nextSettings?.externalPaymentTerminalBrand ?? "PayCAS",
-      priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included"
+      priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included",
+      discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : []
     });
     setReconciliation({
       businessDate: cashBody?.businessDate ?? "",
@@ -193,7 +230,8 @@ export default function PosPage() {
           dineInTaxRate: taxForm.dineInTaxRate,
           takeoutTaxRate: taxForm.takeoutTaxRate,
           externalPaymentTerminalBrand: taxForm.externalPaymentTerminalBrand,
-          priceTaxMode: taxForm.priceTaxMode
+          priceTaxMode: taxForm.priceTaxMode,
+          discountPresets: taxForm.discountPresets
         })
       });
       const body = await response.json().catch(() => ({}));
@@ -204,7 +242,8 @@ export default function PosPage() {
         dineInTaxRate: String(body.settings?.dineInTaxRate ?? taxForm.dineInTaxRate),
         takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
         externalPaymentTerminalBrand: body.settings?.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
-        priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode
+        priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode,
+        discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets
       });
       setMessage("POS 税設定を保存しました。");
     } catch (error) {
@@ -340,6 +379,140 @@ export default function PosPage() {
                 <option value="tax_excluded">税抜価格</option>
               </select>
             </label>
+          </div>
+          <div className="pos-admin-discount-settings">
+            <div className="pos-admin-discount-heading">
+              <div>
+                <h4>割引プリセット</h4>
+                <p>店舗 POS に表示する割引ボタン、割引率、対象範囲を管理します。</p>
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setTaxForm((current) => ({ ...current, discountPresets: [...current.discountPresets, createDiscountPreset()] }))}
+                disabled={!canManagePosSettings}
+              >
+                <Plus size={15} />
+                追加
+              </button>
+            </div>
+            <div className="pos-admin-discount-list">
+              {taxForm.discountPresets.length ? taxForm.discountPresets.map((preset, index) => (
+                <div className="pos-admin-discount-row" key={preset.key || index}>
+                  <label className="pos-admin-discount-enabled">
+                    <span>有効</span>
+                    <input
+                      type="checkbox"
+                      checked={preset.enabled}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>名称</span>
+                    <input
+                      value={preset.name}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item)
+                      }))}
+                      placeholder="学割 20%OFF"
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>方式</span>
+                    <select
+                      value={preset.discountType}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, discountType: event.target.value as PosDiscountPreset["discountType"] } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    >
+                      <option value="percent">％割引</option>
+                      <option value="amount">金額割引</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{preset.discountType === "percent" ? "割引率（%）" : "割引額"}</span>
+                    <input
+                      inputMode="numeric"
+                      value={String(preset.discountValue)}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, discountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                  </label>
+                  <label>
+                    <span>対象</span>
+                    <select
+                      value={preset.targetScope}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, targetScope: event.target.value as PosDiscountPreset["targetScope"], targetValue: event.target.value === "all" ? "" : item.targetValue } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    >
+                      <option value="all">全商品</option>
+                      <option value="category">カテゴリ</option>
+                      <option value="item_kind">商品種別</option>
+                      <option value="brand">ブランドID</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>対象値</span>
+                    <input
+                      value={preset.targetValue}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, targetValue: event.target.value } : item)
+                      }))}
+                      placeholder={preset.targetScope === "category" ? "ドリンク" : preset.targetScope === "item_kind" ? "drink" : preset.targetScope === "brand" ? "brand id" : "不要"}
+                      disabled={!canManagePosSettings || preset.targetScope === "all"}
+                    />
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input
+                      type="checkbox"
+                      checked={preset.allowCouponCombination}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, allowCouponCombination: event.target.checked } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                    <span>クーポン併用可</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input
+                      type="checkbox"
+                      checked={preset.stampEligible}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, stampEligible: event.target.checked } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    />
+                    <span>スタンプ対象</span>
+                  </label>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label="割引を削除"
+                    onClick={() => setTaxForm((current) => ({ ...current, discountPresets: current.discountPresets.filter((_, itemIndex) => itemIndex !== index) }))}
+                    disabled={!canManagePosSettings}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )) : <p className="pos-admin-discount-empty">割引プリセットは未設定です。</p>}
+            </div>
           </div>
           <div className="pos-admin-tax-footer">
             <span>

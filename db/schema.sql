@@ -1262,6 +1262,7 @@ create table if not exists pos_store_settings (
   takeout_tax_rate numeric(5, 2) not null default 8,
   external_payment_terminal_brand text not null default 'PayCAS',
   price_tax_mode text not null default 'tax_included',
+  discount_presets jsonb not null default '[]'::jsonb,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -1269,6 +1270,7 @@ create table if not exists pos_store_settings (
 
 alter table pos_store_settings add column if not exists dine_in_enabled boolean not null default true;
 alter table pos_store_settings add column if not exists external_payment_terminal_brand text not null default 'PayCAS';
+alter table pos_store_settings add column if not exists discount_presets jsonb not null default '[]'::jsonb;
 
 create table if not exists pos_customer_display_states (
   store_id uuid primary key references stores(id) on delete cascade,

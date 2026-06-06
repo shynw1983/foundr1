@@ -6,6 +6,32 @@ export const dynamic = "force-dynamic";
 
 const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const priceTaxModes = new Set(["tax_included", "tax_excluded"]);
+const discountTypes = new Set(["percent", "amount"]);
+const discountTargetScopes = new Set(["all", "category", "item_kind", "brand"]);
+
+type PosDiscountPreset = {
+  key: string;
+  name: string;
+  discountType: "percent" | "amount";
+  discountValue: number;
+  targetScope: "all" | "category" | "item_kind" | "brand";
+  targetValue: string;
+  enabled: boolean;
+  stampEligible: boolean;
+  allowCouponCombination: boolean;
+};
+
+const defaultDiscountPresets: PosDiscountPreset[] = [{
+  key: "student_20",
+  name: "学割 20%OFF",
+  discountType: "percent",
+  discountValue: 20,
+  targetScope: "all",
+  targetValue: "",
+  enabled: true,
+  stampEligible: false,
+  allowCouponCombination: false
+}];
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -15,6 +41,45 @@ function normalizeRate(value: unknown, fallback: number) {
   const rate = Number(value);
   if (!Number.isFinite(rate)) return fallback;
   return Math.max(0, Math.min(100, Math.round(rate * 100) / 100));
+}
+
+function normalizeDiscountPresets(value: unknown) {
+  const source = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  const presets = source.flatMap((item, index) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const name = normalizeText(record.name);
+    if (!name) return [];
+    const rawKey = normalizeText(record.key) || name.toLowerCase().replace(/[^a-z0-9]+/g, "_") || `discount_${index + 1}`;
+    const keyBase = rawKey.slice(0, 48);
+    let key = keyBase;
+    let suffix = 2;
+    while (seen.has(key)) {
+      key = `${keyBase}_${suffix}`.slice(0, 64);
+      suffix += 1;
+    }
+    seen.add(key);
+    const discountType = discountTypes.has(normalizeText(record.discountType)) ? normalizeText(record.discountType) as PosDiscountPreset["discountType"] : "percent";
+    const maxValue = discountType === "percent" ? 100 : 999999;
+    const discountValue = Math.max(0, Math.min(maxValue, Math.round(Number(record.discountValue) || 0)));
+    if (discountValue <= 0) return [];
+    const targetScope = discountTargetScopes.has(normalizeText(record.targetScope)) ? normalizeText(record.targetScope) as PosDiscountPreset["targetScope"] : "all";
+    const targetValue = targetScope === "all" ? "" : normalizeText(record.targetValue);
+    if (targetScope !== "all" && !targetValue) return [];
+    return [{
+      key,
+      name: name.slice(0, 80),
+      discountType,
+      discountValue,
+      targetScope,
+      targetValue: targetValue.slice(0, 120),
+      enabled: record.enabled !== false,
+      stampEligible: record.stampEligible === true,
+      allowCouponCombination: record.allowCouponCombination === true
+    }];
+  });
+  return presets.length ? presets.slice(0, 20) : defaultDiscountPresets;
 }
 
 async function resolveStoreId(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
@@ -35,13 +100,19 @@ async function getSettings(storeId: string) {
       coalesce(pos_store_settings.takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(pos_store_settings.external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
+      coalesce(pos_store_settings.discount_presets, '[]'::jsonb) as "discountPresets",
       coalesce(pos_store_settings.updated_at::text, '') as "updatedAt"
     from stores
     left join pos_store_settings on pos_store_settings.store_id = stores.id
     where stores.id::text = ${storeId}
     limit 1
   `;
-  return rows[0] ?? null;
+  const settings = rows[0] as (Record<string, unknown> & { discountPresets?: unknown }) | undefined;
+  if (!settings) return null;
+  return {
+    ...settings,
+    discountPresets: normalizeDiscountPresets(settings.discountPresets)
+  };
 }
 
 export async function GET(request: Request) {
@@ -70,6 +141,7 @@ export async function POST(request: Request) {
     takeoutTaxRate?: number | string;
     externalPaymentTerminalBrand?: string;
     priceTaxMode?: string;
+    discountPresets?: unknown[];
   };
   const access = await getStoreOrderAccess(session);
   const storeId = getScopedStoreFilter(access, body.storeId);
@@ -81,6 +153,7 @@ export async function POST(request: Request) {
   const dineInTaxRate = normalizeRate(body.dineInTaxRate, 10);
   const takeoutTaxRate = normalizeRate(body.takeoutTaxRate, 8);
   const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
+  const discountPresets = normalizeDiscountPresets(body.discountPresets);
   await sql`
     insert into pos_store_settings (
       store_id,
@@ -89,6 +162,7 @@ export async function POST(request: Request) {
       takeout_tax_rate,
       external_payment_terminal_brand,
       price_tax_mode,
+      discount_presets,
       updated_by,
       updated_at
     )
@@ -99,6 +173,7 @@ export async function POST(request: Request) {
       ${takeoutTaxRate},
       ${externalPaymentTerminalBrand},
       ${priceTaxMode},
+      ${JSON.stringify(discountPresets)}::jsonb,
       ${session.id},
       now()
     )
@@ -109,6 +184,7 @@ export async function POST(request: Request) {
       takeout_tax_rate = excluded.takeout_tax_rate,
       external_payment_terminal_brand = excluded.external_payment_terminal_brand,
       price_tax_mode = excluded.price_tax_mode,
+      discount_presets = excluded.discount_presets,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
