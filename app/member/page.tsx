@@ -121,6 +121,11 @@ function ConfiguredMemberPortal() {
     return `foundr1:member:${data.member.publicToken}`;
   }, [data.member?.publicToken]);
 
+  const returnWithHandoffUrl = useMemo(() => {
+    if (!returnTo || handoffEnabled) return "";
+    return `/member?returnTo=${encodeURIComponent(returnTo)}&handoff=1`;
+  }, [handoffEnabled, returnTo]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setReturnTo(safeReturnTo(params.get("returnTo") || ""));
@@ -238,8 +243,8 @@ function ConfiguredMemberPortal() {
           {isLoaded && isSignedIn ? (
             <>
             <section className="member-portal-toolbar">
-              {returnTo && !handoffEnabled ? (
-                <a className="secondary-button" href={returnTo}>サイトへ戻る</a>
+              {returnWithHandoffUrl ? (
+                <a className="secondary-button" href={returnWithHandoffUrl}>サイトへ戻る</a>
               ) : null}
               <button className="secondary-button" type="button" onClick={() => void loadMember()} disabled={loading}>
                 {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
