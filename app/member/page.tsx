@@ -222,10 +222,7 @@ function getMemberCardDisplayName(member?: MemberProfile | null) {
 }
 
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }) {
-  const displayName = member?.displayName?.trim() || "";
-  const formalName = getFormalMemberName(member);
-  const nickname = displayName && displayName !== formalName ? displayName : "";
-  return nickname || user?.username || user?.primaryEmailAddress?.emailAddress || "会員";
+  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || "会員";
 }
 
 export default function MemberPage() {
