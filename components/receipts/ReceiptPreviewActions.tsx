@@ -55,17 +55,17 @@ export function ReceiptPreviewActions({ fileName, pdfUrl }: ReceiptPreviewAction
   };
 
   return (
-    <div className="online-receipt-actions" aria-label="領収書操作">
+    <div className={`online-receipt-actions${canShareFile ? " has-file-share" : ""}`} aria-label="領収書操作">
       {canShareFile ? (
-        <button type="button" onClick={sharePdfFile} disabled={isSharing}>
+        <button className="online-receipt-share-button" type="button" onClick={sharePdfFile} disabled={isSharing}>
           <span className="online-receipt-action-icon" aria-hidden="true">SH</span>
           <span className="online-receipt-action-text">
-            <strong>{isSharing ? "準備中" : "ファイル共有"}</strong>
+            <strong>{isSharing ? "準備中" : "PDFを保存/共有"}</strong>
             <small>{pdfFileName}</small>
           </span>
         </button>
       ) : null}
-      <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={openPdf}>
+      <a className="online-receipt-open-button" href={pdfUrl} target="_blank" rel="noreferrer" onClick={openPdf}>
         <span className="online-receipt-action-icon" aria-hidden="true">PDF</span>
         <span className="online-receipt-action-text">
           <strong>PDFを開く</strong>

@@ -638,6 +638,15 @@ input[type="file"] {
     box-shadow: 0 12px 32px rgba(29, 36, 48, 0.24);
   }
 
+  .online-receipt-actions.has-file-share .online-receipt-open-button {
+    display: none;
+  }
+
+  .online-receipt-actions.has-file-share .online-receipt-share-button {
+    width: 190px;
+    max-width: calc(100vw - 24px);
+  }
+
   .online-receipt-action-text small {
     display: none;
   }
