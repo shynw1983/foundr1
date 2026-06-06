@@ -31,6 +31,8 @@ export type OnlineReceiptViewModel = {
     phone: string;
     invoiceRegistrationNumber: string;
   };
+  purposeText: string;
+  taxRate: number;
   items: OnlineReceiptItem[];
   subtotalAmount: number;
   couponDiscountAmount: number;
@@ -64,6 +66,8 @@ type OrderRow = {
   brandType: string;
   issuerName: string;
   invoiceRegistrationNumber: string;
+  receiptPurposeText: string;
+  receiptTaxRate: number | string;
   issuerAddress: string;
   issuerPhone: string;
 };
@@ -151,6 +155,19 @@ function getSubtotal(summary: CustomerSummary, totalAmount: number, couponDiscou
   const itemSubtotal = items.reduce((sum, item) => sum + item.amount, 0);
   if (itemSubtotal > 0) return itemSubtotal;
   return totalAmount + couponDiscountAmount;
+}
+
+function getReceiptPurposeText(value: unknown) {
+  return clean(value) || "テイクアウト飲食代";
+}
+
+function getReceiptTaxRate(value: unknown) {
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate > 0 ? rate : 8;
+}
+
+function getIncludedTax(totalAmount: number, taxRate: number) {
+  return Math.round(totalAmount * taxRate / (100 + taxRate));
 }
 
 function getLogoSrc(brand: OnlineReceiptBrand) {
@@ -268,6 +285,8 @@ export async function getOnlineReceiptViewModel(input: {
       coalesce(brands.brand_type, '') as "brandType",
       coalesce(companies.legal_name, companies.name, stores.name, '') as "issuerName",
       coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
+      coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
+      coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
       coalesce(companies.address, '') as "issuerAddress",
       coalesce(companies.phone, '') as "issuerPhone"
     from store_customer_orders
@@ -308,6 +327,7 @@ export async function getOnlineReceiptViewModel(input: {
   const items = buildItems({ ...order, customerSummary }, itemRows, brand);
   const couponDiscountAmount = getCouponDiscount(customerSummary);
   const subtotalAmount = getSubtotal(customerSummary, totalAmount, couponDiscountAmount, items);
+  const taxRate = getReceiptTaxRate(order.receiptTaxRate);
 
   return {
     brand,
@@ -327,11 +347,13 @@ export async function getOnlineReceiptViewModel(input: {
       phone: clean(order.issuerPhone),
       invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber)
     },
+    purposeText: getReceiptPurposeText(order.receiptPurposeText),
+    taxRate,
     items,
     subtotalAmount,
     couponDiscountAmount,
     totalAmount,
-    taxIncludedAmount: Math.round(totalAmount * 10 / 110)
+    taxIncludedAmount: getIncludedTax(totalAmount, taxRate)
   };
 }
 
@@ -357,6 +379,8 @@ export function getDemoOnlineReceiptViewModel(brand: OnlineReceiptBrand): Online
       phone: "092-000-0000",
       invoiceRegistrationNumber: "T1234567890123"
     },
+    purposeText: "テイクアウト飲食代",
+    taxRate: 8,
     items: brand === "maamaa"
       ? [
           {
@@ -391,6 +415,6 @@ export function getDemoOnlineReceiptViewModel(brand: OnlineReceiptBrand): Online
     subtotalAmount,
     couponDiscountAmount,
     totalAmount,
-    taxIncludedAmount: Math.round(totalAmount * 10 / 110)
+    taxIncludedAmount: getIncludedTax(totalAmount, 8)
   };
 }

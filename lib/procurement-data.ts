@@ -115,6 +115,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           companies.name as "companyName",
           coalesce(companies.legal_name, '') as "companyLegalName",
           coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
+          coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
+          coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
           coalesce(companies.address, '') as "companyAddress",
           coalesce(companies.phone, '') as "companyPhone",
           stores.owner_name as owner,
@@ -172,7 +174,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         left join brands on brands.id = store_brands.brand_id
         left join companies on companies.id = stores.company_id
         where (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
-        group by stores.id, companies.name, companies.legal_name, companies.invoice_registration_number, companies.address, companies.phone
+        group by stores.id, companies.name, companies.legal_name, companies.invoice_registration_number, companies.receipt_purpose_text, companies.receipt_tax_rate, companies.address, companies.phone
         order by stores.name
       `,
       sql`select name, brand_type as type from brands order by name`,

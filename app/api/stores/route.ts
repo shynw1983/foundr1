@@ -21,12 +21,16 @@ async function resolveCompanyId(input: {
   name: string;
   legalName?: string;
   invoiceRegistrationNumber?: string;
+  receiptPurposeText?: string;
+  receiptTaxRate?: number;
   address?: string;
   phone?: string;
 }) {
   const companyName = input.name.trim();
   const legalName = String(input.legalName ?? "").trim();
   const invoiceRegistrationNumber = String(input.invoiceRegistrationNumber ?? "").trim();
+  const receiptPurposeText = normalizeReceiptPurposeText(input.receiptPurposeText);
+  const receiptTaxRate = normalizeReceiptTaxRate(input.receiptTaxRate);
   const address = String(input.address ?? "").trim();
   const phone = String(input.phone ?? "").trim();
   if (!companyName) return null;
@@ -36,6 +40,8 @@ async function resolveCompanyId(input: {
       name,
       legal_name,
       invoice_registration_number,
+      receipt_purpose_text,
+      receipt_tax_rate,
       address,
       phone,
       updated_at
@@ -44,6 +50,8 @@ async function resolveCompanyId(input: {
       ${companyName},
       ${legalName || null},
       ${invoiceRegistrationNumber},
+      ${receiptPurposeText},
+      ${receiptTaxRate},
       ${address},
       ${phone},
       now()
@@ -52,6 +60,8 @@ async function resolveCompanyId(input: {
     do update set
       legal_name = coalesce(nullif(${legalName}, ''), companies.legal_name),
       invoice_registration_number = ${invoiceRegistrationNumber},
+      receipt_purpose_text = ${receiptPurposeText},
+      receipt_tax_rate = ${receiptTaxRate},
       address = ${address},
       phone = ${phone},
       updated_at = now()
@@ -63,6 +73,15 @@ async function resolveCompanyId(input: {
 
 function normalizePayrollCycleType(value: string) {
   return value === "specified_day" ? "specified_day" : "month_end";
+}
+
+function normalizeReceiptPurposeText(value: unknown) {
+  return String(value ?? "").trim() || "テイクアウト飲食代";
+}
+
+function normalizeReceiptTaxRate(value: unknown) {
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate > 0 && rate <= 100 ? rate : 8;
 }
 
 function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
@@ -246,6 +265,8 @@ export async function POST(request: Request) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
+  const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
+  const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
@@ -271,6 +292,8 @@ export async function POST(request: Request) {
     name: companyName,
     legalName: companyLegalName,
     invoiceRegistrationNumber,
+    receiptPurposeText,
+    receiptTaxRate,
     address: companyAddress,
     phone: companyPhone
   });
@@ -382,6 +405,8 @@ export async function PUT(request: Request) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
+  const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
+  const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
@@ -407,6 +432,8 @@ export async function PUT(request: Request) {
     name: companyName,
     legalName: companyLegalName,
     invoiceRegistrationNumber,
+    receiptPurposeText,
+    receiptTaxRate,
     address: companyAddress,
     phone: companyPhone
   });

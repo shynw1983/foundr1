@@ -45,6 +45,8 @@ export async function GET(request: Request) {
       store_customer_orders.created_at as "createdAt",
       coalesce(companies.legal_name, companies.name, stores.name, '') as "issuerName",
       coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
+      coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
+      coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
       coalesce(companies.address, '') as "issuerAddress",
       coalesce(companies.phone, '') as "issuerPhone"
     from store_customer_orders
@@ -80,7 +82,9 @@ export async function GET(request: Request) {
     issuerName: clean(order.issuerName),
     issuerAddress: clean(order.issuerAddress),
     issuerPhone: clean(order.issuerPhone),
-    invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber)
+    invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber),
+    purposeText: clean(order.receiptPurposeText) || "テイクアウト飲食代",
+    taxRate: Number(order.receiptTaxRate ?? 8)
   });
 
   return new Response(pdf, {

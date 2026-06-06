@@ -41,12 +41,17 @@ create table if not exists companies (
   name text not null unique,
   legal_name text,
   invoice_registration_number text,
+  receipt_purpose_text text not null default 'テイクアウト飲食代',
+  receipt_tax_rate numeric(5, 2) not null default 8,
   address text,
   phone text,
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table companies add column if not exists receipt_purpose_text text not null default 'テイクアウト飲食代';
+alter table companies add column if not exists receipt_tax_rate numeric(5, 2) not null default 8;
 
 alter table stores drop constraint if exists stores_company_id_fkey;
 alter table stores

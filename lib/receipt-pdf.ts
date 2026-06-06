@@ -14,6 +14,8 @@ type ReceiptPdfInput = {
   issuerAddress: string;
   issuerPhone: string;
   invoiceRegistrationNumber: string;
+  purposeText: string;
+  taxRate: number;
 };
 
 function escapePdfText(value: string) {
@@ -59,15 +61,17 @@ function splitSummary(value: string) {
 
 export function createReceiptPdf(input: ReceiptPdfInput) {
   const amount = Number.isFinite(input.amount) ? input.amount : 0;
-  const taxIncluded = Math.round(amount * 10 / 110);
+  const taxRate = Number.isFinite(input.taxRate) && input.taxRate > 0 ? input.taxRate : 8;
+  const taxIncluded = Math.round(amount * taxRate / (100 + taxRate));
+  const purposeText = input.purposeText.trim() || "テイクアウト飲食代";
   const lines = [
     textLine("領収書", 250, 790, 24),
     textLine(`${input.recipientName || "お客様"} 様`, 56, 735, 14),
     horizontalLine(56, 724, 300),
     textLine("金額", 56, 684, 12),
     latinTextLine(formatCurrency(amount), 118, 677, 28),
-    textLine("但し Web予約注文代として", 56, 642, 11),
-    textLine(`内消費税等 10%対象 ${formatCurrency(taxIncluded)} / 税込`, 56, 622, 10),
+    textLine(`但し ${purposeText}として`, 56, 642, 11),
+    textLine(`内消費税等 ${taxRate}%対象 ${formatCurrency(taxIncluded)} / 税込`, 56, 622, 10),
     horizontalLine(56, 605, 540),
     textLine("ご注文内容", 56, 574, 13),
     textLine(`取餐番号: ${input.pickupCode}`, 56, 548, 11),

@@ -44,7 +44,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
       <section className="online-receipt-hero" aria-label="金額">
         <div>
           <p className="online-receipt-recipient">{receipt.recipientName || "お客様"} 様</p>
-          <span>但し Web予約注文代として</span>
+          <span>但し {receipt.purposeText}として</span>
         </div>
         <strong>{formatCurrency(receipt.totalAmount)}</strong>
       </section>
@@ -153,7 +153,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
             <dd>{formatCurrency(receipt.totalAmount)}</dd>
           </div>
           <div>
-            <dt>内消費税等 10%対象</dt>
+            <dt>内消費税等 {receipt.taxRate}%対象</dt>
             <dd>{formatCurrency(receipt.taxIncludedAmount)}</dd>
           </div>
         </dl>
