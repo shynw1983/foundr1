@@ -7,12 +7,34 @@ import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../
 import type { Browser } from "puppeteer-core";
 import type { OnlineReceiptItem, OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 
+type ReceiptRecipientMode = "blank" | "registered" | "custom";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function getRecipientMode(value: string): ReceiptRecipientMode {
+  return value === "registered" || value === "custom" ? value : "blank";
+}
+
+function getRegisteredRecipientName(receipt: OnlineReceiptViewModel) {
+  const name = receipt.recipientName.trim();
+  return name && name !== "お客様" ? name : "";
+}
+
+function applyRecipientChoice(receipt: OnlineReceiptViewModel, mode: ReceiptRecipientMode, customName: string) {
+  const registeredName = getRegisteredRecipientName(receipt);
+  const recipientName = mode === "custom"
+    ? customName.trim()
+    : mode === "registered" ? registeredName : "";
+  return {
+    ...receipt,
+    recipientName
+  };
 }
 
 function getReceiptFileName(receipt: OnlineReceiptViewModel) {
@@ -137,7 +159,7 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
 
       <section class="online-receipt-hero" aria-label="金額">
         <div>
-          <p class="online-receipt-recipient">${escapeHtml(receiptWithAssets.recipientName || "お客様")} 様</p>
+          <p class="online-receipt-recipient">${escapeHtml(receiptWithAssets.recipientName || "\u00a0")} 様</p>
           <span>但し ${escapeHtml(receiptWithAssets.purposeText)}として</span>
         </div>
         <strong>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</strong>
@@ -239,6 +261,8 @@ export async function GET(request: Request) {
   const orderId = clean(url.searchParams.get("orderId"));
   const pickupCode = clean(url.searchParams.get("pickupCode"));
   const demo = clean(url.searchParams.get("demo")).toLowerCase();
+  const recipientMode = getRecipientMode(clean(url.searchParams.get("recipientMode")));
+  const recipientName = clean(url.searchParams.get("recipientName")).slice(0, 80);
 
   const receipt = demo === "nanacha" || demo === "maamaa"
     ? getDemoOnlineReceiptViewModel(demo)
@@ -248,11 +272,13 @@ export async function GET(request: Request) {
     return Response.json({ error: "Receipt was not found or payment is not completed." }, { status: 404 });
   }
 
+  const displayReceipt = applyRecipientChoice(receipt, recipientMode, recipientName);
+
   let browser: Browser | null = null;
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
-    await page.setContent(getReceiptHtml(receipt), { waitUntil: "load", timeout: 15000 });
+    await page.setContent(getReceiptHtml(displayReceipt), { waitUntil: "load", timeout: 15000 });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForSelector(".online-receipt-sheet", { timeout: 10000 });
     await page.emulateMediaType("print");
@@ -265,7 +291,7 @@ export async function GET(request: Request) {
     return new Response(pdf, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": contentDispositionFileName(getReceiptFileName(receipt)),
+        "Content-Disposition": contentDispositionFileName(getReceiptFileName(displayReceipt)),
         "Cache-Control": "private, no-store"
       }
     });

@@ -47,7 +47,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
 
       <section className="online-receipt-hero" aria-label="金額">
         <div>
-          <p className="online-receipt-recipient">{receipt.recipientName || "お客様"} 様</p>
+          <p className="online-receipt-recipient">{receipt.recipientName || "\u00a0"} 様</p>
           <span>但し {receipt.purposeText}として</span>
         </div>
         <strong>{formatCurrency(receipt.totalAmount)}</strong>
