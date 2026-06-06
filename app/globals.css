@@ -79,6 +79,7 @@ input[type="file"] {
 
 .online-receipt-actions {
   display: flex;
+  gap: 10px;
   justify-content: center;
   margin: 0 auto 18px;
   width: 210mm;
@@ -88,7 +89,8 @@ input[type="file"] {
   z-index: 10;
 }
 
-.online-receipt-actions a {
+.online-receipt-actions a,
+.online-receipt-actions button {
   display: inline-flex;
   align-items: center;
   gap: 12px;
@@ -98,11 +100,18 @@ input[type="file"] {
   color: #fff;
   font-size: 14px;
   font-weight: 800;
+  font-family: inherit;
   text-decoration: none;
   background: var(--green);
   border: 1px solid var(--green);
   border-radius: 999px;
   box-shadow: 0 12px 30px rgba(33, 116, 91, 0.24);
+  cursor: pointer;
+}
+
+.online-receipt-actions button:disabled {
+  opacity: 0.72;
+  cursor: wait;
 }
 
 .online-receipt-action-icon {
@@ -606,7 +615,7 @@ input[type="file"] {
   .online-receipt-actions {
     top: auto;
     position: fixed;
-    display: block;
+    display: flex;
     right: auto;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     left: 50%;
@@ -620,10 +629,11 @@ input[type="file"] {
     transform: translateX(-50%);
   }
 
-  .online-receipt-actions a {
-    width: 142px;
+  .online-receipt-actions a,
+  .online-receipt-actions button {
+    width: 136px;
     min-height: 46px;
-    max-width: calc(100vw - 24px);
+    max-width: calc((100vw - 34px) / 2);
     padding: 5px 14px 5px 6px;
     box-shadow: 0 12px 32px rgba(29, 36, 48, 0.24);
   }
