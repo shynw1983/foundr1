@@ -1,9 +1,11 @@
 import chromium from "@sparticuz/chromium";
 import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import puppeteer from "puppeteer-core";
 import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 import type { Browser } from "puppeteer-core";
-import type { OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
+import type { OnlineReceiptItem, OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +21,158 @@ function getReceiptFileName(receipt: OnlineReceiptViewModel) {
 
 function contentDispositionFileName(filename: string) {
   return `inline; filename="receipt.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+function getReceiptCss() {
+  const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+  const receiptCssEnd = css.indexOf("\nbutton {\n  cursor: pointer;");
+  return receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
+}
+
+function getPublicDataUrl(src: string) {
+  if (!src.startsWith("/")) return src;
+  const filePath = join(process.cwd(), "public", src.replace(/^\/+/, ""));
+  if (!existsSync(filePath)) return src;
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  const mime = ext === "svg" ? "image/svg+xml" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+  return `data:${mime};base64,${readFileSync(filePath).toString("base64")}`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY"
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function detailList(items: string[]) {
+  const visibleItems = items.map((item) => item.trim()).filter(Boolean);
+  if (!visibleItems.length) return "";
+  return `<div class="online-receipt-detail-list">${visibleItems.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>`;
+}
+
+function receiptItem(item: OnlineReceiptItem, index: number) {
+  const sections = item.sections.length
+    ? `<div class="online-receipt-section-list">${item.sections.map((section) => `
+        <div>
+          <p>${escapeHtml(section.title)}</p>
+          ${detailList(section.items)}
+        </div>
+      `).join("")}</div>`
+    : "";
+
+  return `
+    <div class="online-receipt-item">
+      <div class="online-receipt-item-main">
+        <div>
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <h3>${escapeHtml(item.title)}</h3>
+          ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
+        </div>
+        <strong>${escapeHtml(formatCurrency(item.amount))}</strong>
+      </div>
+      ${detailList(item.details)}
+      ${sections}
+    </div>
+  `;
+}
+
+function getReceiptHtml(receipt: OnlineReceiptViewModel) {
+  const receiptWithAssets = {
+    ...receipt,
+    logoSrc: getPublicDataUrl(receipt.logoSrc)
+  };
+  const brandClass = receiptWithAssets.brand === "maamaa" ? "is-maamaa" : "is-nanacha";
+  const sheet = `
+    <article class="online-receipt-sheet ${brandClass}" aria-label="領収書">
+      <header class="online-receipt-header">
+        <div class="online-receipt-brand">
+          <img src="${escapeHtml(receiptWithAssets.logoSrc)}" alt="${escapeHtml(receiptWithAssets.brandName)}" />
+          <div>
+            <p>${escapeHtml(receiptWithAssets.brandName)}</p>
+            <span>Online pickup receipt</span>
+          </div>
+        </div>
+        <div class="online-receipt-title-block">
+          <h1>領収書</h1>
+          <p>Receipt No. ${escapeHtml(receiptWithAssets.receiptNo)}</p>
+        </div>
+      </header>
+
+      <section class="online-receipt-hero" aria-label="金額">
+        <div>
+          <p class="online-receipt-recipient">${escapeHtml(receiptWithAssets.recipientName || "お客様")} 様</p>
+          <span>但し ${escapeHtml(receiptWithAssets.purposeText)}として</span>
+        </div>
+        <strong>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</strong>
+      </section>
+
+      <section class="online-receipt-info-grid" aria-label="注文と発行者">
+        <div>
+          <h2>注文情報</h2>
+          <dl>
+            <div><dt>取餐番号</dt><dd>${escapeHtml(receiptWithAssets.pickupCode)}</dd></div>
+            <div><dt>受取日時</dt><dd>${escapeHtml(`${receiptWithAssets.pickupDate} ${receiptWithAssets.pickupTime}`)}</dd></div>
+            <div><dt>支払方法</dt><dd>${escapeHtml(receiptWithAssets.paymentProvider || "決済済み")}</dd></div>
+            <div><dt>支払日時</dt><dd>${escapeHtml(receiptWithAssets.paidAt)}</dd></div>
+          </dl>
+        </div>
+        <div>
+          <h2>発行者</h2>
+          <dl>
+            <div><dt>会社名</dt><dd>${escapeHtml(receiptWithAssets.issuer.name)}</dd></div>
+            ${receiptWithAssets.issuer.invoiceRegistrationNumber ? `<div><dt>登録番号</dt><dd>${escapeHtml(receiptWithAssets.issuer.invoiceRegistrationNumber)}</dd></div>` : ""}
+            ${receiptWithAssets.issuer.address ? `<div><dt>住所</dt><dd>${escapeHtml(receiptWithAssets.issuer.address)}</dd></div>` : ""}
+            ${receiptWithAssets.issuer.phone ? `<div><dt>TEL</dt><dd>${escapeHtml(receiptWithAssets.issuer.phone)}</dd></div>` : ""}
+            <div><dt>発行日</dt><dd>${escapeHtml(receiptWithAssets.issuedAt)}</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="online-receipt-items" aria-label="明細">
+        <div class="online-receipt-section-heading">
+          <h2>明細</h2>
+          <span>${receiptWithAssets.items.length} item${receiptWithAssets.items.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="online-receipt-item-list">
+          ${receiptWithAssets.items.map(receiptItem).join("")}
+        </div>
+      </section>
+
+      <section class="online-receipt-total-panel" aria-label="合計">
+        <dl>
+          <div><dt>小計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.subtotalAmount))}</dd></div>
+          ${receiptWithAssets.couponDiscountAmount > 0 ? `<div><dt>クーポン値引き</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.couponDiscountAmount))}</dd></div>` : ""}
+          <div class="is-total"><dt>合計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</dd></div>
+          <div><dt>内消費税等 ${escapeHtml(receiptWithAssets.taxRate)}%対象</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.taxIncludedAmount))}</dd></div>
+        </dl>
+      </section>
+
+      <footer class="online-receipt-footer">
+        <p>この領収書は電子的に発行されています。</p>
+        <span>Foundr1 OS</span>
+      </footer>
+    </article>
+  `;
+  return `<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <style>${getReceiptCss()}</style>
+  </head>
+  <body>
+    <main class="online-receipt-preview-shell">${sheet}</main>
+  </body>
+</html>`;
 }
 
 async function getBrowserExecutable() {
@@ -67,20 +221,11 @@ export async function GET(request: Request) {
     return Response.json({ error: "Receipt was not found or payment is not completed." }, { status: 404 });
   }
 
-  const previewUrl = new URL("/public/orders/receipt/preview", url.origin);
-  if (demo) {
-    previewUrl.searchParams.set("demo", demo);
-  } else {
-    previewUrl.searchParams.set("orderId", orderId);
-    previewUrl.searchParams.set("pickupCode", pickupCode);
-  }
-  previewUrl.searchParams.set("pdf", "1");
-
   let browser: Browser | null = null;
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
-    await page.goto(previewUrl.href, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.setContent(getReceiptHtml(receipt), { waitUntil: "load", timeout: 15000 });
     await page.waitForSelector(".online-receipt-sheet", { timeout: 10000 });
     await page.emulateMediaType("print");
     const pdf = await page.pdf({
