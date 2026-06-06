@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
-import { getMemberAvailableCoupons, upsertMember } from "../../../../../lib/loyalty";
+import { findMember, getMemberAvailableCoupons, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -113,6 +113,22 @@ function isAllowedReturnTo(returnTo: string) {
   }
 }
 
+function serializeMember(member: Awaited<ReturnType<typeof upsertMember>>) {
+  if (!member) return null;
+  return {
+    id: member.id,
+    memberNumber: member.memberNumber,
+    publicToken: member.publicToken,
+    displayName: member.displayName,
+    lastName: member.lastName,
+    firstName: member.firstName,
+    fullName: member.fullName,
+    phone: member.phone,
+    email: member.email,
+    pointBalance: member.pointBalance
+  };
+}
+
 export async function OPTIONS(request: NextRequest) {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
@@ -158,6 +174,20 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const memberToken = request.nextUrl.searchParams.get("memberToken") || "";
+  if (memberToken) {
+    const member = await findMember({ memberToken });
+    if (!member) {
+      return Response.json({ error: "会員情報を読み込めませんでした。" }, { status: 404, headers: corsHeaders(request) });
+    }
+    const coupons = await getMemberAvailableCoupons(member.id);
+    return Response.json({
+      authenticated: true,
+      member: serializeMember(member),
+      coupons
+    }, { headers: { ...corsHeaders(request), "Cache-Control": "no-store" } });
+  }
+
   const token = request.nextUrl.searchParams.get("token") || "";
   const payload = readHandoffToken(token);
   if (!payload) {
@@ -172,18 +202,7 @@ export async function GET(request: NextRequest) {
 
   return Response.json({
     authenticated: true,
-    member: {
-      id: member.id,
-      memberNumber: member.memberNumber,
-      publicToken: member.publicToken,
-      displayName: member.displayName,
-      lastName: member.lastName,
-      firstName: member.firstName,
-      fullName: member.fullName,
-      phone: member.phone,
-      email: member.email,
-      pointBalance: member.pointBalance
-    },
+    member: serializeMember(member),
     coupons
   }, { headers: { ...corsHeaders(request), "Cache-Control": "no-store" } });
 }
