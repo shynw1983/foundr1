@@ -66,6 +66,7 @@ type MemberSettingsForm = {
 };
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const memberReturnStorageKey = "foundr1-member-return-to";
 
 const emptyMemberSettings: MemberSettingsForm = {
   displayName: "",
@@ -121,6 +122,17 @@ function safeReturnTo(value: string) {
   return "";
 }
 
+function withSignedOutMarker(value: string) {
+  try {
+    const url = new URL(value);
+    url.searchParams.delete("memberHandoff");
+    url.searchParams.set("memberSignedOut", "1");
+    return url.toString();
+  } catch {
+    return "/member?loggedOut=1";
+  }
+}
+
 function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   if (!member) return emptyMemberSettings;
   return {
@@ -170,6 +182,7 @@ function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn } = useUser();
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
+  const [loggedOut, setLoggedOut] = useState(false);
   const [data, setData] = useState<MemberResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -190,8 +203,27 @@ function ConfiguredMemberPortal() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setReturnTo(safeReturnTo(params.get("returnTo") || ""));
+    const nextReturnTo = safeReturnTo(params.get("returnTo") || "");
+    const nextLoggedOut = params.get("loggedOut") === "1";
+    setReturnTo(nextReturnTo);
     setHandoffEnabled(params.get("handoff") === "1");
+    setLoggedOut(nextLoggedOut);
+
+    if (nextReturnTo) {
+      window.localStorage.setItem(memberReturnStorageKey, nextReturnTo);
+      return;
+    }
+
+    if (nextLoggedOut) {
+      const storedReturnTo = safeReturnTo(window.localStorage.getItem(memberReturnStorageKey) || "");
+      if (storedReturnTo) {
+        window.localStorage.removeItem(memberReturnStorageKey);
+        window.location.replace(withSignedOutMarker(storedReturnTo));
+      }
+      return;
+    }
+
+    window.localStorage.removeItem(memberReturnStorageKey);
   }, []);
 
   async function loadMember() {
@@ -319,8 +351,8 @@ function ConfiguredMemberPortal() {
           {isLoaded && !isSignedIn ? (
             <section className="member-portal-login-panel">
               <UserRound size={32} />
-              <h2>ログインしてください</h2>
-              <p>メール、Google、Apple、LINE のログイン方法は Clerk ダッシュボードで有効化します。</p>
+              <h2>{loggedOut ? "ログアウトしました" : "ログインしてください"}</h2>
+              <p>{loggedOut ? "もう一度ログインするか、会員登録をしてください。" : "メール、Google、Apple、LINE のログイン方法は Clerk ダッシュボードで有効化します。"}</p>
             </section>
           ) : null}
 
