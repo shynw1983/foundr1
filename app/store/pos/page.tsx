@@ -187,6 +187,7 @@ type PosMember = {
 
 type PosCoupon = {
   id: string;
+  brandId: string;
   brandName: string;
   couponCode: string;
   name: string;
@@ -194,6 +195,7 @@ type PosCoupon = {
   discountValue: number;
   maxDiscountAmount: number | null;
   expiresAt: string;
+  issuedSource: string;
 };
 
 type PosPreviousClosedSession = {
@@ -230,9 +232,13 @@ const paymentOptions = [
   { value: "other", label: "その他", icon: ShoppingCart }
 ];
 
-function getCouponDiscountAmount(coupon: PosCoupon | undefined, amount: number) {
+function getCouponDiscountAmount(coupon: PosCoupon | undefined, amount: number, exchangeEligibleAmounts: number[] = []) {
   if (!coupon) return 0;
   const subtotal = Math.max(0, Math.round(amount || 0));
+  if (isExchangeCoupon(coupon)) {
+    const eligibleAmounts = exchangeEligibleAmounts.map((value) => Math.max(0, Math.round(Number(value) || 0))).filter((value) => value > 0);
+    return eligibleAmounts.length ? Math.min(subtotal, Math.max(...eligibleAmounts)) : 0;
+  }
   const value = Math.max(0, Math.round(Number(coupon.discountValue) || 0));
   const maxAmount = coupon.maxDiscountAmount == null ? null : Math.max(0, Math.round(Number(coupon.maxDiscountAmount) || 0));
   const rawDiscount = coupon.discountType === "percent" ? Math.floor(subtotal * value / 100) : value;
@@ -240,6 +246,7 @@ function getCouponDiscountAmount(coupon: PosCoupon | undefined, amount: number) 
 }
 
 function getCouponValueLabel(coupon: PosCoupon) {
+  if (isExchangeCoupon(coupon)) return "1杯交換";
   return coupon.discountType === "percent" ? `${coupon.discountValue}%` : formatYen(coupon.discountValue);
 }
 
@@ -247,7 +254,12 @@ function getCouponScopeLabel(coupon: { brandName?: string }) {
   return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
 }
 
-function getCouponPosStatusLabel(discount: number, subtotal: number) {
+function isExchangeCoupon(coupon: { issuedSource?: string; name?: string }) {
+  return coupon.issuedSource === "stamp_campaign" || Boolean(coupon.name?.includes("無料券"));
+}
+
+function getCouponPosStatusLabel(coupon: PosCoupon, discount: number, subtotal: number) {
+  if (isExchangeCoupon(coupon) && discount > 0) return "交換適用";
   if (discount > 0) return `-${formatYen(discount)}`;
   if (subtotal <= 0) return "商品追加後に適用";
   return "対象外";
@@ -668,14 +680,14 @@ export default function StorePosPage() {
   const subtotal = cart.reduce((sum, item) => sum + (item.measuredQuantity ? Math.round(item.measuredQuantity * Number(item.measuredUnitPrice ?? 0)) + item.optionTotal : getItemPrice(item) + item.optionTotal) * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
-  const couponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal);
+  const couponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
   const payableAmount = Math.max(0, subtotal - couponDiscountAmount);
   const recommendedCoupon = useMemo(() => {
     if (!memberCoupons.length || subtotal <= 0) return undefined;
-    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal) - getCouponDiscountAmount(left, subtotal))[0];
-  }, [memberCoupons, subtotal]);
-  const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal);
-  const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal);
+    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBaseAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBaseAmounts(left)))[0];
+  }, [cart, memberCoupons, subtotal]);
+  const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBaseAmounts(recommendedCoupon));
+  const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
   const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - payableAmount : null;
@@ -831,6 +843,15 @@ export default function StorePosPage() {
 
   function getLineUnitPrice(item: PosCartItem) {
     return getLineBasePrice(item) + item.optionTotal;
+  }
+
+  function getExchangeEligibleBaseAmounts(coupon?: PosCoupon) {
+    if (!coupon || !isExchangeCoupon(coupon)) return [];
+    return cart.flatMap((item) => {
+      if (coupon.brandId && item.brandId !== coupon.brandId) return [];
+      const basePrice = item.measuredQuantity ? 0 : getItemPrice(item);
+      return Array.from({ length: item.quantity }, () => basePrice).filter((amount) => amount > 0);
+    });
   }
 
   function getWeightLineLabel(item: Pick<PosCartItem, "measuredQuantity" | "measuredUnit" | "measuredUnitPrice">) {
@@ -1483,7 +1504,7 @@ export default function StorePosPage() {
                     ) : null}
                     <div className="store-pos-coupon-list">
                       {memberCoupons.map((coupon) => {
-                        const discount = getCouponDiscountAmount(coupon, subtotal);
+                        const discount = getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBaseAmounts(coupon));
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
                         const isCustomerSelected = customerSelectedCouponId === coupon.id;
@@ -1509,7 +1530,7 @@ export default function StorePosPage() {
                               <strong>{coupon.name}</strong>
                               <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {getCouponValueLabel(coupon)}{couponBadges.length ? ` / ${couponBadges.join(" / ")}` : ""}</small>
                             </span>
-                            <b>{getCouponPosStatusLabel(discount, subtotal)}</b>
+                            <b>{getCouponPosStatusLabel(coupon, discount, subtotal)}</b>
                           </button>
                         );
                       })}

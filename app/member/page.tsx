@@ -35,6 +35,7 @@ type MemberCoupon = {
   discountValue: number;
   maxDiscountAmount: number | null;
   expiresAt: string;
+  issuedSource: string;
 };
 
 type PointHistory = {
@@ -171,6 +172,15 @@ function stampCardProgressLabel(card: MemberStampCard) {
 
 function couponScopeLabel(coupon: { brandName?: string }) {
   return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
+}
+
+function isExchangeCoupon(coupon: { issuedSource?: string; name?: string }) {
+  return coupon.issuedSource === "stamp_campaign" || Boolean(coupon.name?.includes("無料券"));
+}
+
+function couponValueLabel(coupon: MemberCoupon) {
+  if (isExchangeCoupon(coupon)) return "1杯交換";
+  return coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`;
 }
 
 function splitJapanesePhone(value: string) {
@@ -693,7 +703,7 @@ function ConfiguredMemberPortal() {
                         <strong>{coupon.name}</strong>
                         <span>{couponScopeLabel(coupon)} / {coupon.couponCode} / {formatDate(coupon.expiresAt)}{selectedCouponId === coupon.id ? " / 使用予定" : ""}</span>
                       </div>
-                      <b>{coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`}</b>
+                      <b>{couponValueLabel(coupon)}</b>
                       <button
                         className={selectedCouponId === coupon.id ? "member-coupon-use-button is-selected" : "member-coupon-use-button"}
                         type="button"

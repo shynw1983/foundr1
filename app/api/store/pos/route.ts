@@ -577,7 +577,12 @@ export async function POST(request: Request) {
     if (!member?.id) return Response.json({ error: "クーポン利用には会員確認が必要です。" }, { status: 400 });
     coupon = await getUsableMemberCoupon(member.id, couponId);
     if (!coupon) return Response.json({ error: "利用できないクーポンです。" }, { status: 400 });
-    couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount);
+    const exchangeEligibleAmounts = normalizedItems.flatMap((item) => {
+      if (coupon?.brandId && item.brandId !== coupon.brandId) return [];
+      if (item.measuredQuantity) return [];
+      return Array.from({ length: item.quantity }, () => item.unitPrice).filter((amount) => amount > 0);
+    });
+    couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts);
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
   }
   const amount = Math.max(0, subtotalAmount - couponDiscountAmount);

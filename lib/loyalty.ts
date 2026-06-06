@@ -425,12 +425,24 @@ export async function getMemberStampCards(memberId: string) {
   `;
 }
 
-export function calculateCouponDiscount(coupon: { discountType?: string; discountValue?: number; maxDiscountAmount?: number | null }, subtotal: number) {
+export function calculateCouponDiscount(
+  coupon: { discountType?: string; discountValue?: number; maxDiscountAmount?: number | null; issuedSource?: string; name?: string },
+  subtotal: number,
+  exchangeEligibleAmounts: number[] = []
+) {
   const baseAmount = Math.max(0, Math.round(Number(subtotal) || 0));
+  const eligibleAmounts = exchangeEligibleAmounts.map((amount) => Math.max(0, Math.round(Number(amount) || 0))).filter((amount) => amount > 0);
+  if (isMemberExchangeCoupon(coupon)) {
+    return eligibleAmounts.length ? Math.min(baseAmount, Math.max(...eligibleAmounts)) : 0;
+  }
   const value = Math.max(0, Math.round(Number(coupon.discountValue) || 0));
   const maxAmount = coupon.maxDiscountAmount == null ? null : Math.max(0, Math.round(Number(coupon.maxDiscountAmount) || 0));
   const rawDiscount = coupon.discountType === "percent" ? Math.floor(baseAmount * value / 100) : value;
   return Math.min(baseAmount, maxAmount == null ? rawDiscount : Math.min(rawDiscount, maxAmount));
+}
+
+export function isMemberExchangeCoupon(coupon: { issuedSource?: string; name?: string }) {
+  return coupon.issuedSource === "stamp_campaign" || Boolean(coupon.name?.includes("無料券"));
 }
 
 export async function getUsableMemberCoupon(memberId: string, couponId: string) {
@@ -446,7 +458,8 @@ export async function getUsableMemberCoupon(memberId: string, couponId: string) 
       member_coupons.discount_value::int as "discountValue",
       coalesce(member_coupons.max_discount_amount::int, null) as "maxDiscountAmount",
       member_coupons.status,
-      coalesce(member_coupons.expires_at::text, '') as "expiresAt"
+      coalesce(member_coupons.expires_at::text, '') as "expiresAt",
+      member_coupons.issued_source as "issuedSource"
     from member_coupons
     left join brands on brands.id = member_coupons.brand_id
     where member_coupons.id::text = ${couponId}

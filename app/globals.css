@@ -8726,21 +8726,21 @@ body :where(
   display: block;
   border-radius: 999px;
   background: white;
-  transform: rotate(28deg);
 }
 
 .member-stamp-mark::before {
-  top: 19%;
+  top: 20%;
   left: 24%;
-  width: 19%;
-  height: 10%;
+  width: 13%;
+  height: 13%;
 }
 
 .member-stamp-mark::after {
-  top: 23%;
-  left: 42%;
-  width: 26%;
-  height: 11%;
+  top: 21%;
+  left: 39%;
+  width: 27%;
+  height: 12%;
+  transform: rotate(28deg);
 }
 
 .member-stamp-slots span.is-filled .member-stamp-mark {

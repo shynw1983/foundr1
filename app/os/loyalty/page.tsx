@@ -153,6 +153,14 @@ function getCouponScopeLabel(coupon: { brandName?: string }) {
   return coupon.brandName ? `${coupon.brandName} 適用` : "全店舗適用";
 }
 
+function isExchangeCoupon(coupon: { issuedSource?: string; name?: string }) {
+  return coupon.issuedSource === "stamp_campaign" || Boolean(coupon.name?.includes("無料券"));
+}
+
+function getCouponValueLabel(coupon: LoyaltyCoupon) {
+  return isExchangeCoupon(coupon) ? "1杯交換" : formatYen(coupon.discountValue);
+}
+
 export default function LoyaltyPage() {
   const [dashboard, setDashboard] = useState<LoyaltyDashboard>({ summary: emptySummary, recentMembers: [], recentLedger: [], recentCoupons: [], stampCampaigns: [] });
   const [loading, setLoading] = useState(true);
@@ -559,7 +567,7 @@ export default function LoyaltyPage() {
                     </td>
                     <td>
                       <strong>{coupon.name}</strong>
-                      <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {formatYen(coupon.discountValue)}</small>
+                      <small>{getCouponScopeLabel(coupon)} / {coupon.couponCode} / {getCouponValueLabel(coupon)}</small>
                     </td>
                     <td>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "期限なし"}</td>
                     <td>{coupon.status === "available" ? "利用可" : coupon.status === "used" ? "使用済み" : coupon.status}</td>

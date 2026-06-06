@@ -234,7 +234,9 @@ export async function POST(request: Request) {
   const couponId = String(body.couponId || "");
   const coupon = couponId && member?.id ? await getUsableMemberCoupon(member.id, couponId) : null;
   if (couponId && !coupon) return Response.json({ error: "Selected coupon is not available" }, { status: 400 });
-  const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount), Math.max(0, subtotalAmount - 1)) : 0;
+  const exchangeEligibleAmounts = validatedItems.map((item) => item.drink.price).filter((amount) => amount > 0);
+  const couponDiscountAmount = coupon ? Math.min(calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts), Math.max(0, subtotalAmount - 1)) : 0;
+  if (coupon && couponDiscountAmount <= 0) return Response.json({ error: "Selected coupon cannot be applied to this order" }, { status: 400 });
   const amount = Math.max(0, subtotalAmount - couponDiscountAmount);
 
   const localOrder = await createCustomerOrder({
