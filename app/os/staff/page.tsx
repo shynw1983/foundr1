@@ -114,8 +114,8 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 ];
 
 const roleLabels: Record<string, string> = {
-  owner: "Owner",
-  manager: "Manager",
+  owner: "本部オーナー",
+  manager: "本部マネージャー",
   store_owner: "加盟店オーナー",
   store_manager: "店長",
   store_terminal: "店舗Pad",
@@ -128,8 +128,8 @@ const roleOptions = [
   { value: "store_terminal", label: "店舗Pad" },
   { value: "store_owner", label: "加盟店オーナー" },
   { value: "store_manager", label: "店長" },
-  { value: "manager", label: "Manager" },
-  { value: "owner", label: "Owner" }
+  { value: "manager", label: "本部マネージャー" },
+  { value: "owner", label: "本部オーナー" }
 ];
 
 function getAssignableRoleOptions(currentUserRole: string) {
@@ -450,13 +450,13 @@ export default function StaffPage() {
           <div>
             <p className="eyebrow">社員アカウントと店舗権限</p>
             <h2>スタッフ管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : dataSource === "forbidden" ? "Owner 権限が必要" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : dataSource === "forbidden" ? "スタッフ管理権限が必要" : "読み込み中"}</span>
           </div>
         </header>
 
         {dataSource === "forbidden" ? (
           <section className="panel">
-            <PanelTitle title="Owner 権限が必要です" subtitle="スタッフ管理は Owner アカウントでログインした場合のみ操作できます。" />
+            <PanelTitle title="スタッフ管理権限が必要です" subtitle="スタッフ管理は本部オーナー、本部マネージャー、店舗責任者のみ操作できます。" />
           </section>
         ) : (
           <section className="management-grid staff-management-grid">
@@ -643,6 +643,8 @@ function StaffFormFields({
   const shownRoleOptions = member && !assignableRoleOptions.some((option) => option.value === member.role)
     ? [{ value: member.role, label: roleLabels[member.role] ?? member.role }, ...assignableRoleOptions]
     : assignableRoleOptions;
+  const [selectedRole, setSelectedRole] = useState(member?.role ?? "staff");
+  const isStoreTerminal = selectedRole === "store_terminal";
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -650,7 +652,12 @@ function StaffFormFields({
 
   useEffect(() => {
     setSelectedWorkStoreIdList(member ? getWorkStores(member).map((store) => store.id) : []);
+    setSelectedRole(member?.role ?? "staff");
   }, [member]);
+
+  useEffect(() => {
+    if (isStoreTerminal && activeTab === "payroll") setActiveTab("basic");
+  }, [activeTab, isStoreTerminal]);
 
   function toggleWorkStore(storeId: string, checked: boolean) {
     setSelectedWorkStoreIdList((current) => {
@@ -775,71 +782,83 @@ function StaffFormFields({
     <>
       <div className="staff-form-tabs" role="tablist" aria-label="スタッフ情報">
         <button className={activeTab === "basic" ? "is-active" : ""} type="button" onClick={() => setActiveTab("basic")}>基本情報</button>
-        <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>勤務・給与情報</button>
+        {!isStoreTerminal ? (
+          <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>勤務・給与情報</button>
+        ) : null}
         <button className={activeTab === "other" ? "is-active" : ""} type="button" onClick={() => setActiveTab("other")}>その他</button>
       </div>
 
       <section className={activeTab === "basic" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <label>
-          <span>氏名</span>
-          <input name="name" defaultValue={member?.name ?? ""} placeholder="例: 山田 太郎" required />
+          <span>{isStoreTerminal ? "端末名" : "氏名"}</span>
+          <input name="name" defaultValue={member?.name ?? ""} placeholder={isStoreTerminal ? "例: 天神店 店舗Pad" : "例: 山田 太郎"} required />
         </label>
-        <label>
-          <span>フリガナ</span>
-          <input name="nameKana" defaultValue={member?.nameKana ?? ""} placeholder="例: ヤマダ タロウ" />
-        </label>
-        <label>
-          <span>性別</span>
-          <select name="gender" defaultValue={member?.gender ?? "unspecified"}>
-            <option value="unspecified">未設定</option>
-            <option value="male">男性</option>
-            <option value="female">女性</option>
-            <option value="other">その他</option>
-          </select>
-        </label>
-        <label>
-          <span>生年月日</span>
-          <input name="birthDate" type="date" defaultValue={toDateInputValue(member?.birthDate)} />
-        </label>
-        <label>
-          <span>住所</span>
-          <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />
-        </label>
-        <label>
-          <span>外国人</span>
-          <select name="isForeignNational" defaultValue={member?.isForeignNational ? "true" : "false"}>
-            <option value="false">該当しない</option>
-            <option value="true">該当する</option>
-          </select>
-        </label>
+        {!isStoreTerminal ? (
+          <>
+            <label>
+              <span>フリガナ</span>
+              <input name="nameKana" defaultValue={member?.nameKana ?? ""} placeholder="例: ヤマダ タロウ" />
+            </label>
+            <label>
+              <span>性別</span>
+              <select name="gender" defaultValue={member?.gender ?? "unspecified"}>
+                <option value="unspecified">未設定</option>
+                <option value="male">男性</option>
+                <option value="female">女性</option>
+                <option value="other">その他</option>
+              </select>
+            </label>
+            <label>
+              <span>生年月日</span>
+              <input name="birthDate" type="date" defaultValue={toDateInputValue(member?.birthDate)} />
+            </label>
+            <label>
+              <span>住所</span>
+              <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />
+            </label>
+            <label>
+              <span>外国人</span>
+              <select name="isForeignNational" defaultValue={member?.isForeignNational ? "true" : "false"}>
+                <option value="false">該当しない</option>
+                <option value="true">該当する</option>
+              </select>
+            </label>
+          </>
+        ) : null}
         <label>
           <span>ログインID</span>
-          <input name="loginId" defaultValue={member?.loginId ?? ""} placeholder="例: staff01" required />
+          <input name="loginId" defaultValue={member?.loginId ?? ""} placeholder={isStoreTerminal ? "例: tenjin-pad" : "例: staff01"} required />
         </label>
-        <label>
-          <span>メール</span>
-          <input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="任意" />
-        </label>
+        {!isStoreTerminal ? (
+          <label>
+            <span>メール</span>
+            <input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="任意" />
+          </label>
+        ) : null}
         <label>
           <span>{member ? "新しいパスワード" : "初期パスワード"}</span>
           <input name="password" type="password" placeholder={member ? "変更時のみ入力" : "必須"} required={!member} />
         </label>
         <label>
           <span>権限</span>
-          <select name="role" defaultValue={member?.role ?? "staff"}>
+          <select name="role" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
             {shownRoleOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </label>
-        <label>
-          <span>スタッフ区分</span>
-          <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
-            <option value="executive">経営層</option>
-            <option value="management">管理職</option>
-            <option value="working">実勤務スタッフ</option>
-          </select>
-        </label>
+        {!isStoreTerminal ? (
+          <label>
+            <span>スタッフ区分</span>
+            <select name="staffCategory" defaultValue={member?.staffCategory ?? "working"}>
+              <option value="executive">経営層</option>
+              <option value="management">管理職</option>
+              <option value="working">実勤務スタッフ</option>
+            </select>
+          </label>
+        ) : (
+          <input name="staffCategory" type="hidden" value="working" readOnly />
+        )}
         <label>
           <span>状態</span>
           <select name="status" defaultValue={member?.status ?? "active"} disabled={isSelf}>
@@ -849,6 +868,7 @@ function StaffFormFields({
         </label>
       </section>
 
+      {!isStoreTerminal ? (
       <section className={activeTab === "payroll" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <div className="staff-payroll-guide">
           <strong>勤務店舗ごとに雇用情報と給与を設定</strong>
@@ -1097,11 +1117,12 @@ function StaffFormFields({
           }) : <p className="empty-state-text">店舗データがありません。</p>}
         </div>
       </section>
+      ) : null}
 
       <section className={activeTab === "other" ? "staff-form-pane is-active" : "staff-form-pane"}>
         <fieldset className="checkbox-group staff-store-scope">
           <span>閲覧可能店舗（権限）</span>
-          <small>ここは閲覧・管理できる店舗の範囲です。実際に勤務して給与計算する店舗は「給与情報」タブで設定します。</small>
+          <small>{isStoreTerminal ? "店舗Pad を利用する店舗を選択します。" : "ここは閲覧・管理できる店舗の範囲です。実際に勤務して給与計算する店舗は「給与情報」タブで設定します。"}</small>
           {stores.length ? stores.map((store) => (
             <label key={store.id}>
               <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
@@ -1109,20 +1130,24 @@ function StaffFormFields({
             </label>
           )) : <small>店舗データがありません。</small>}
         </fieldset>
-        <label>
-          <span>Lark open_id</span>
-          <input name="larkOpenId" defaultValue={member?.larkOpenId ?? ""} placeholder="任意" />
-        </label>
-        <label>
-          <span>Lark user_id</span>
-          <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
-        </label>
-        <div className="staff-lark-lookup">
-          <button className="secondary-button" type="button" onClick={lookupLarkUser}>
-            Lark 連携を確認
-          </button>
-          {larkStatus ? <small>{larkStatus}</small> : null}
-        </div>
+        {!isStoreTerminal ? (
+          <>
+            <label>
+              <span>Lark open_id</span>
+              <input name="larkOpenId" defaultValue={member?.larkOpenId ?? ""} placeholder="任意" />
+            </label>
+            <label>
+              <span>Lark user_id</span>
+              <input name="larkUserId" defaultValue={member?.larkUserId ?? ""} placeholder="任意" />
+            </label>
+            <div className="staff-lark-lookup">
+              <button className="secondary-button" type="button" onClick={lookupLarkUser}>
+                Lark 連携を確認
+              </button>
+              {larkStatus ? <small>{larkStatus}</small> : null}
+            </div>
+          </>
+        ) : null}
       </section>
     </>
   );

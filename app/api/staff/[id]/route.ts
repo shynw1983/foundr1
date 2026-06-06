@@ -229,8 +229,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
   const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
-  const workStoreIds = filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
+  const workStoreIds = role === "store_terminal" ? [] : filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
+  const effectiveEmail = role === "store_terminal" ? "" : email;
+  const effectiveNameKana = role === "store_terminal" ? null : nameKana;
+  const effectiveAddress = role === "store_terminal" ? null : address;
+  const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
+  const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
+  const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
+  const effectiveLarkOpenId = role === "store_terminal" ? "" : larkOpenId;
+  const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
+  const effectiveStaffCategory = role === "store_terminal" ? "working" : staffCategory;
+  const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -256,17 +266,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       update employees
       set name = ${name},
           login_id = ${loginId},
-          email = ${email || null},
-          gender = ${gender},
-          name_kana = ${nameKana},
-          address = ${address},
-          birth_date = ${birthDate},
-          is_foreign_national = ${isForeignNational},
-          lark_open_id = ${larkOpenId || null},
-          lark_user_id = ${larkUserId || null},
+          email = ${effectiveEmail || null},
+          gender = ${effectiveGender},
+          name_kana = ${effectiveNameKana},
+          address = ${effectiveAddress},
+          birth_date = ${effectiveBirthDate},
+          is_foreign_national = ${effectiveIsForeignNational},
+          lark_open_id = ${effectiveLarkOpenId || null},
+          lark_user_id = ${effectiveLarkUserId || null},
           role = ${role},
-          staff_category = ${staffCategory},
-          payroll_subject = ${payrollSubject},
+          staff_category = ${effectiveStaffCategory},
+          payroll_subject = ${effectivePayrollSubject},
           status = ${status},
           password_hash = ${hashPassword(password)},
           session_version = session_version + 1,
@@ -278,17 +288,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       update employees
       set name = ${name},
           login_id = ${loginId},
-          email = ${email || null},
-          gender = ${gender},
-          name_kana = ${nameKana},
-          address = ${address},
-          birth_date = ${birthDate},
-          is_foreign_national = ${isForeignNational},
-          lark_open_id = ${larkOpenId || null},
-          lark_user_id = ${larkUserId || null},
+          email = ${effectiveEmail || null},
+          gender = ${effectiveGender},
+          name_kana = ${effectiveNameKana},
+          address = ${effectiveAddress},
+          birth_date = ${effectiveBirthDate},
+          is_foreign_national = ${effectiveIsForeignNational},
+          lark_open_id = ${effectiveLarkOpenId || null},
+          lark_user_id = ${effectiveLarkUserId || null},
           role = ${role},
-          staff_category = ${staffCategory},
-          payroll_subject = ${payrollSubject},
+          staff_category = ${effectiveStaffCategory},
+          payroll_subject = ${effectivePayrollSubject},
           status = ${status},
           session_version = session_version + 1,
           updated_at = now()
@@ -568,7 +578,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       ${monthlySalary},
       ${commuteAllowancePerWorkday},
       ${commuteAllowanceMonthlyCap},
-      ${payrollSubject === "paid"},
+      ${effectivePayrollSubject === "paid"},
       ${session.id},
       now()
     )
@@ -579,7 +589,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory, payrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

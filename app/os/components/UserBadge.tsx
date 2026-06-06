@@ -8,8 +8,8 @@ import { getCachedCurrentEmployee, loadCurrentEmployee, type CurrentEmployee } f
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
 const roleLabels: Record<string, string> = {
-  owner: "Owner",
-  manager: "Manager",
+  owner: "本部オーナー",
+  manager: "本部マネージャー",
   store_owner: "加盟店オーナー",
   store_manager: "店長",
   store_terminal: "店舗Pad",

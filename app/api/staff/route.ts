@@ -387,8 +387,18 @@ export async function POST(request: Request) {
   const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
   const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
-  const workStoreIds = filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
+  const workStoreIds = role === "store_terminal" ? [] : filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
+  const effectiveEmail = role === "store_terminal" ? "" : email;
+  const effectiveNameKana = role === "store_terminal" ? null : nameKana;
+  const effectiveAddress = role === "store_terminal" ? null : address;
+  const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
+  const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
+  const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
+  const effectiveLarkOpenId = role === "store_terminal" ? "" : larkOpenId;
+  const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
+  const effectiveStaffCategory = role === "store_terminal" ? "working" : staffCategory;
+  const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
@@ -429,17 +439,17 @@ export async function POST(request: Request) {
     values (
       ${name},
       ${loginId},
-      ${email || null},
-      ${gender},
-      ${nameKana},
-      ${address},
-      ${birthDate},
-      ${isForeignNational},
-      ${larkOpenId || null},
-      ${larkUserId || null},
+      ${effectiveEmail || null},
+      ${effectiveGender},
+      ${effectiveNameKana},
+      ${effectiveAddress},
+      ${effectiveBirthDate},
+      ${effectiveIsForeignNational},
+      ${effectiveLarkOpenId || null},
+      ${effectiveLarkUserId || null},
       ${role},
-      ${staffCategory},
-      ${payrollSubject},
+      ${effectiveStaffCategory},
+      ${effectivePayrollSubject},
       ${status},
       ${hashPassword(password)},
       now()
@@ -467,7 +477,7 @@ export async function POST(request: Request) {
       ${monthlySalary},
       ${commuteAllowancePerWorkday},
       ${commuteAllowanceMonthlyCap},
-      ${payrollSubject === "paid"},
+      ${effectivePayrollSubject === "paid"},
       ${session.id},
       now()
     )
@@ -670,7 +680,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory, payrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

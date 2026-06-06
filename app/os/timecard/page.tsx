@@ -1735,7 +1735,7 @@ export function TimecardPage({
               <WalletCards />
               <div>
                 <h3>給与は表示できません</h3>
-                <p>給与情報は Owner、Manager、店舗責任者のみ確認できます。</p>
+                <p>給与情報は本部オーナー、本部マネージャー、店舗責任者のみ確認できます。</p>
               </div>
             </div>
             <p className="empty-state-text">必要な場合は管理者アカウントでログインしてください。</p>
