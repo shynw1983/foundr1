@@ -106,7 +106,16 @@ type PosTaxSettings = {
   externalPaymentTerminalBrand: string;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
+  posBrandSettings: PosBrandSetting[];
   updatedAt: string;
+};
+
+type PosBrandSetting = {
+  brandId: string;
+  brandName: string;
+  posPricingMode: "fixed" | "weight";
+  posWeightUnit: string;
+  posWeightUnitPrice: number | null;
 };
 
 type PosDiscountPreset = {
@@ -151,13 +160,14 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[] }>({
+  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; posBrandSettings: PosBrandSetting[] }>({
     dineInEnabled: true,
     dineInTaxRate: "10",
     takeoutTaxRate: "8",
     externalPaymentTerminalBrand: "PayCAS",
     priceTaxMode: "tax_included",
-    discountPresets: []
+    discountPresets: [],
+    posBrandSettings: []
   });
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
@@ -204,7 +214,8 @@ export default function PosPage() {
       takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: nextSettings?.externalPaymentTerminalBrand ?? "PayCAS",
       priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included",
-      discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : []
+      discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : [],
+      posBrandSettings: Array.isArray(nextSettings?.posBrandSettings) ? nextSettings.posBrandSettings : []
     });
     setReconciliation({
       businessDate: cashBody?.businessDate ?? "",
@@ -231,7 +242,8 @@ export default function PosPage() {
           takeoutTaxRate: taxForm.takeoutTaxRate,
           externalPaymentTerminalBrand: taxForm.externalPaymentTerminalBrand,
           priceTaxMode: taxForm.priceTaxMode,
-          discountPresets: taxForm.discountPresets
+          discountPresets: taxForm.discountPresets,
+          posBrandSettings: taxForm.posBrandSettings
         })
       });
       const body = await response.json().catch(() => ({}));
@@ -243,7 +255,8 @@ export default function PosPage() {
         takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
         externalPaymentTerminalBrand: body.settings?.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
         priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode,
-        discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets
+        discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets,
+        posBrandSettings: Array.isArray(body.settings?.posBrandSettings) ? body.settings.posBrandSettings : taxForm.posBrandSettings
       });
       setMessage("POS 税設定を保存しました。");
     } catch (error) {
@@ -379,6 +392,59 @@ export default function PosPage() {
                 <option value="tax_excluded">税抜価格</option>
               </select>
             </label>
+          </div>
+          <div className="pos-admin-brand-pricing-settings">
+            <div className="pos-admin-discount-heading">
+              <div>
+                <h4>ブランド別 POS 販売方式</h4>
+                <p>称重販売を行うブランドだけ、重量単価を設定します。通常商品は固定価格のままです。</p>
+              </div>
+            </div>
+            <div className="pos-admin-brand-pricing-list">
+              {taxForm.posBrandSettings.length ? taxForm.posBrandSettings.map((setting, index) => (
+                <div className="pos-admin-brand-pricing-row" key={setting.brandId}>
+                  <strong>{setting.brandName}</strong>
+                  <label>
+                    <span>販売方式</span>
+                    <select
+                      value={setting.posPricingMode}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        posBrandSettings: current.posBrandSettings.map((item, itemIndex) => itemIndex === index ? { ...item, posPricingMode: event.target.value as PosBrandSetting["posPricingMode"] } : item)
+                      }))}
+                      disabled={!canManagePosSettings}
+                    >
+                      <option value="fixed">固定価格</option>
+                      <option value="weight">称重販売</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>重量単位</span>
+                    <input
+                      value={setting.posWeightUnit}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        posBrandSettings: current.posBrandSettings.map((item, itemIndex) => itemIndex === index ? { ...item, posWeightUnit: event.target.value } : item)
+                      }))}
+                      disabled={!canManagePosSettings || setting.posPricingMode !== "weight"}
+                    />
+                  </label>
+                  <label>
+                    <span>重量単価</span>
+                    <input
+                      inputMode="decimal"
+                      value={setting.posWeightUnitPrice == null ? "" : String(setting.posWeightUnitPrice)}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        posBrandSettings: current.posBrandSettings.map((item, itemIndex) => itemIndex === index ? { ...item, posWeightUnitPrice: Number(event.target.value.replace(/[^\d.]/g, "")) || null } : item)
+                      }))}
+                      placeholder="4"
+                      disabled={!canManagePosSettings || setting.posPricingMode !== "weight"}
+                    />
+                  </label>
+                </div>
+              )) : <p className="pos-admin-discount-empty">この店舗に紐づくブランドはありません。</p>}
+            </div>
           </div>
           <div className="pos-admin-discount-settings">
             <div className="pos-admin-discount-heading">

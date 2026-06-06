@@ -50,6 +50,9 @@ type PosDiscountPreset = {
 
 type PosDiscountItem = {
   brandId: string;
+  posPricingMode?: string;
+  posWeightUnit?: string;
+  posWeightUnitPrice?: number | null;
   itemKind: string;
   category: string;
   amount: number;
@@ -148,6 +151,27 @@ function calculatePosDiscount(preset: PosDiscountPreset | null, items: PosDiscou
   return Math.min(eligibleAmount, Math.max(0, Math.round(rawDiscount)));
 }
 
+function getOrderTaxRate(settings: Awaited<ReturnType<typeof getPosSettings>>, orderType: string) {
+  return orderType === "eat_in" ? Number(settings.dineInTaxRate ?? 10) : Number(settings.takeoutTaxRate ?? 8);
+}
+
+function calculateTaxSummary(params: {
+  subtotalAmount: number;
+  discountAmount: number;
+  couponDiscountAmount: number;
+  taxRate: number;
+  priceTaxMode: string;
+}) {
+  const taxableAmount = Math.max(0, Math.round(params.subtotalAmount - params.discountAmount - params.couponDiscountAmount));
+  const taxRate = Math.max(0, Number(params.taxRate) || 0);
+  if (params.priceTaxMode === "tax_excluded") {
+    const taxAmount = Math.floor(taxableAmount * taxRate / 100);
+    return { taxableAmount, taxAmount, amount: taxableAmount + taxAmount };
+  }
+  const taxAmount = taxRate > 0 ? taxableAmount - Math.floor(taxableAmount / (1 + taxRate / 100)) : 0;
+  return { taxableAmount, taxAmount, amount: taxableAmount };
+}
+
 function toPositiveInt(value: unknown, fallback = 1) {
   const nextValue = Number(value);
   if (!Number.isFinite(nextValue)) return fallback;
@@ -180,27 +204,13 @@ function getNestedNumberFromSchema(schema: Record<string, unknown> | undefined, 
   return getNumberFromSchema(parent as Record<string, unknown>, keys);
 }
 
-function isMalatangBuildableItem(item: { name: string; itemKind?: string; variableSchema?: Record<string, unknown> }) {
+function getWeightPricingConfig(item: { posPricingMode?: string; posWeightUnit?: string; posWeightUnitPrice?: number | null; variableSchema?: Record<string, unknown> }, orderType: string) {
+  if (orderType !== "eat_in" || item.posPricingMode !== "weight") return null;
   const schema = item.variableSchema ?? {};
-  return item.itemKind === "buildable_product" && (
-    schema.source === "maamaa-malatang-menu" ||
-    schema.buildable === true ||
-    item.name.includes("麻辣") ||
-    item.name.includes("マーラー")
-  );
-}
-
-function getWeightPricingConfig(item: { name: string; itemKind?: string; variableSchema?: Record<string, unknown> }, orderType: string) {
-  if (orderType !== "eat_in" || !isMalatangBuildableItem(item)) return null;
-  const schema = item.variableSchema ?? {};
-  const explicitMode = String(schema.pricingMode ?? schema.posPricingMode ?? "");
-  const nestedMode = typeof schema.posWeightPricing === "object" && schema.posWeightPricing !== null
-    ? String((schema.posWeightPricing as Record<string, unknown>).mode ?? "")
-    : "";
-  const pricingMode = explicitMode || nestedMode || "weight";
-  if (pricingMode !== "weight") return null;
-  const unit = String(schema.weightUnit ?? schema.measuredUnit ?? (schema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g").trim() || "g";
-  const unitPrice = getNumberFromSchema(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
+  const unit = normalizeText(item.posWeightUnit) || String(schema.weightUnit ?? schema.measuredUnit ?? (schema.posWeightPricing as Record<string, unknown> | undefined)?.unit ?? "g").trim() || "g";
+  const unitPrice = Number(item.posWeightUnitPrice ?? 0) > 0
+    ? Number(item.posWeightUnitPrice)
+    : getNumberFromSchema(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
     getNestedNumberFromSchema(schema, "posWeightPricing", ["pricePerGram", "unitPrice", "weightUnitPrice"]);
   return { unit, unitPrice };
 }
@@ -295,6 +305,9 @@ async function getPosMenu(selectedStoreId: string) {
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
         menu_catalog_items.variable_schema as "variableSchema",
+        coalesce(nullif(store_brands.pos_pricing_mode, ''), 'fixed') as "posPricingMode",
+        coalesce(nullif(store_brands.pos_weight_unit, ''), 'g') as "posWeightUnit",
+        store_brands.pos_weight_unit_price::float as "posWeightUnitPrice",
         menu_store_settings.price_override::float as "priceOverride",
         coalesce(menu_store_settings.is_available, true) as "isAvailable"
       from menu_catalog_items
@@ -502,6 +515,9 @@ export async function POST(request: Request) {
       menu_catalog_items.item_kind as "itemKind",
       coalesce(menu_catalog_items.category, '') as category,
       menu_catalog_items.variable_schema as "variableSchema",
+      coalesce(nullif(store_brands.pos_pricing_mode, ''), 'fixed') as "posPricingMode",
+      coalesce(nullif(store_brands.pos_weight_unit, ''), 'g') as "posWeightUnit",
+      store_brands.pos_weight_unit_price::float as "posWeightUnitPrice",
       coalesce(menu_store_settings.price_override, menu_catalog_items.base_price, 0)::int as price
     from menu_catalog_items
     join store_brands
@@ -516,7 +532,18 @@ export async function POST(request: Request) {
       and coalesce(menu_store_settings.pos_enabled, true) = true
       and coalesce(menu_store_settings.is_available, true) = true
   `;
-  const menuById = new Map((menuRows as Array<{ id: string; brandId: string; name: string; itemKind: string; category: string; price: number; variableSchema: Record<string, unknown> }>).map((item) => [item.id, item]));
+  const menuById = new Map((menuRows as Array<{
+    id: string;
+    brandId: string;
+    name: string;
+    itemKind: string;
+    category: string;
+    posPricingMode: string;
+    posWeightUnit: string;
+    posWeightUnitPrice: number | null;
+    price: number;
+    variableSchema: Record<string, unknown>;
+  }>).map((item) => [item.id, item]));
   const optionRows = await sql`
     select
       menu_options.id::text,
@@ -566,6 +593,9 @@ export async function POST(request: Request) {
     name: string;
     itemKind: string;
     category: string;
+    posPricingMode: string;
+    posWeightUnit: string;
+    posWeightUnitPrice: number | null;
     quantity: number;
     unitPrice: number;
     amount: number;
@@ -689,7 +719,15 @@ export async function POST(request: Request) {
     couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts);
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
   }
-  const amount = Math.max(0, subtotalAmount - posDiscountAmount - couponDiscountAmount);
+  const taxRate = getOrderTaxRate(posSettings, orderType);
+  const taxSummary = calculateTaxSummary({
+    subtotalAmount,
+    discountAmount: posDiscountAmount,
+    couponDiscountAmount,
+    taxRate,
+    priceTaxMode: posSettings.priceTaxMode
+  });
+  const amount = taxSummary.amount;
   if (
     paymentMethod === "cash" &&
     (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
@@ -742,6 +780,10 @@ export async function POST(request: Request) {
         memberNumber: member?.memberNumber ?? "",
         memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
         subtotalAmount,
+        taxableAmount: taxSummary.taxableAmount,
+        taxAmount: taxSummary.taxAmount,
+        taxRate,
+        priceTaxMode: posSettings.priceTaxMode,
         discountPresetKey,
         discountPresetName: discountPreset?.name ?? "",
         discountAmount: posDiscountAmount,
@@ -850,5 +892,21 @@ export async function POST(request: Request) {
   await syncWebReservationToSalesOrder(orderId);
   await publishCustomerOrderEvent("order.created", await findCustomerOrderById(orderId));
   const todaySummary = await getTodaySummary(storeId);
-  return Response.json({ ok: true, orderId, pickupCode, amount, subtotalAmount, discountAmount: posDiscountAmount, couponDiscountAmount, cashTenderedAmount, cashChangeAmount, loyaltyMember, todaySummary });
+  return Response.json({
+    ok: true,
+    orderId,
+    pickupCode,
+    amount,
+    subtotalAmount,
+    taxableAmount: taxSummary.taxableAmount,
+    taxAmount: taxSummary.taxAmount,
+    taxRate,
+    priceTaxMode: posSettings.priceTaxMode,
+    discountAmount: posDiscountAmount,
+    couponDiscountAmount,
+    cashTenderedAmount,
+    cashChangeAmount,
+    loyaltyMember,
+    todaySummary
+  });
 }

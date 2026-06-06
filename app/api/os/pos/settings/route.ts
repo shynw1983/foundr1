@@ -21,6 +21,14 @@ type PosDiscountPreset = {
   allowCouponCombination: boolean;
 };
 
+type PosBrandSetting = {
+  brandId: string;
+  brandName: string;
+  posPricingMode: "fixed" | "weight";
+  posWeightUnit: string;
+  posWeightUnitPrice: number | null;
+};
+
 const defaultDiscountPresets: PosDiscountPreset[] = [{
   key: "student_20",
   name: "学割 20%OFF",
@@ -82,6 +90,26 @@ function normalizeDiscountPresets(value: unknown) {
   return presets.length ? presets.slice(0, 20) : defaultDiscountPresets;
 }
 
+function normalizeBrandSettings(value: unknown) {
+  const source = Array.isArray(value) ? value : [];
+  return source.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const brandId = normalizeText(record.brandId);
+    if (!brandId) return [];
+    const posPricingMode = normalizeText(record.posPricingMode) === "weight" ? "weight" : "fixed";
+    const posWeightUnit = normalizeText(record.posWeightUnit) || "g";
+    const rawUnitPrice = Number(record.posWeightUnitPrice);
+    const posWeightUnitPrice = Number.isFinite(rawUnitPrice) && rawUnitPrice > 0 ? Math.round(rawUnitPrice * 100) / 100 : null;
+    return [{
+      brandId,
+      posPricingMode,
+      posWeightUnit: posWeightUnit.slice(0, 20),
+      posWeightUnitPrice
+    }];
+  });
+}
+
 async function resolveStoreId(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>) {
   const access = await getStoreOrderAccess(session);
   const requestedStoreId = new URL(request.url).searchParams.get("storeId");
@@ -91,7 +119,8 @@ async function resolveStoreId(request: Request, session: NonNullable<Awaited<Ret
 }
 
 async function getSettings(storeId: string) {
-  const rows = await sql`
+  const [rows, brandRows] = await Promise.all([
+    sql`
     select
       stores.id::text as "storeId",
       stores.name as "storeName",
@@ -106,12 +135,27 @@ async function getSettings(storeId: string) {
     left join pos_store_settings on pos_store_settings.store_id = stores.id
     where stores.id::text = ${storeId}
     limit 1
-  `;
+  `,
+    sql`
+      select
+        brands.id::text as "brandId",
+        brands.name as "brandName",
+        coalesce(nullif(store_brands.pos_pricing_mode, ''), 'fixed') as "posPricingMode",
+        coalesce(nullif(store_brands.pos_weight_unit, ''), 'g') as "posWeightUnit",
+        store_brands.pos_weight_unit_price::float as "posWeightUnitPrice"
+      from store_brands
+      join brands on brands.id = store_brands.brand_id
+      where store_brands.store_id::text = ${storeId}
+        and brands.status = 'active'
+      order by brands.name
+    `
+  ]);
   const settings = rows[0] as (Record<string, unknown> & { discountPresets?: unknown }) | undefined;
   if (!settings) return null;
   return {
     ...settings,
-    discountPresets: normalizeDiscountPresets(settings.discountPresets)
+    discountPresets: normalizeDiscountPresets(settings.discountPresets),
+    posBrandSettings: brandRows as PosBrandSetting[]
   };
 }
 
@@ -142,6 +186,7 @@ export async function POST(request: Request) {
     externalPaymentTerminalBrand?: string;
     priceTaxMode?: string;
     discountPresets?: unknown[];
+    posBrandSettings?: unknown[];
   };
   const access = await getStoreOrderAccess(session);
   const storeId = getScopedStoreFilter(access, body.storeId);
@@ -154,6 +199,7 @@ export async function POST(request: Request) {
   const takeoutTaxRate = normalizeRate(body.takeoutTaxRate, 8);
   const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
   const discountPresets = normalizeDiscountPresets(body.discountPresets);
+  const brandSettings = normalizeBrandSettings(body.posBrandSettings);
   await sql`
     insert into pos_store_settings (
       store_id,
@@ -188,6 +234,18 @@ export async function POST(request: Request) {
       updated_by = excluded.updated_by,
       updated_at = now()
   `;
+
+  for (const setting of brandSettings) {
+    await sql`
+      update store_brands
+      set
+        pos_pricing_mode = ${setting.posPricingMode},
+        pos_weight_unit = ${setting.posWeightUnit},
+        pos_weight_unit_price = ${setting.posPricingMode === "weight" ? setting.posWeightUnitPrice : null}
+      where store_id::text = ${storeId}
+        and brand_id::text = ${setting.brandId}
+    `;
+  }
 
   return Response.json({ ok: true, selectedStoreId: storeId, settings: await getSettings(storeId) });
 }

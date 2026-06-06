@@ -65,8 +65,25 @@ create table if not exists brands (
 create table if not exists store_brands (
   store_id uuid not null references stores(id) on delete cascade,
   brand_id uuid not null references brands(id) on delete cascade,
+  pos_pricing_mode text not null default 'fixed',
+  pos_weight_unit text not null default 'g',
+  pos_weight_unit_price numeric(12, 2),
   primary key (store_id, brand_id)
 );
+
+alter table store_brands add column if not exists pos_pricing_mode text not null default 'fixed';
+alter table store_brands add column if not exists pos_weight_unit text not null default 'g';
+alter table store_brands add column if not exists pos_weight_unit_price numeric(12, 2);
+
+update store_brands
+set
+  pos_pricing_mode = 'weight',
+  pos_weight_unit = 'g',
+  pos_weight_unit_price = coalesce(pos_weight_unit_price, 4)
+from brands
+where brands.id = store_brands.brand_id
+  and brands.name = 'まぁ麻'
+  and store_brands.pos_pricing_mode = 'fixed';
 
 create table if not exists store_payment_accounts (
   id uuid primary key default gen_random_uuid(),

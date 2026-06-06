@@ -34,6 +34,9 @@ type PosMenuItem = {
   imageUrl: string;
   basePrice: number | null;
   priceOverride: number | null;
+  posPricingMode: string;
+  posWeightUnit: string;
+  posWeightUnitPrice: number | null;
   isAvailable: boolean;
   variableSchema: Record<string, unknown>;
 };
@@ -298,6 +301,27 @@ function getPosDiscountAmount(preset: PosDiscountPreset | undefined, cart: PosCa
   return Math.min(eligibleAmount, Math.max(0, Math.round(rawDiscount)));
 }
 
+function getOrderTaxRate(settings: PosSettings, orderType: string) {
+  return orderType === "eat_in" ? Number(settings.dineInTaxRate ?? 10) : Number(settings.takeoutTaxRate ?? 8);
+}
+
+function getTaxSummary(params: {
+  subtotal: number;
+  discountAmount: number;
+  couponDiscountAmount: number;
+  taxRate: number;
+  priceTaxMode: string;
+}) {
+  const taxableAmount = Math.max(0, Math.round(params.subtotal - params.discountAmount - params.couponDiscountAmount));
+  const taxRate = Math.max(0, Number(params.taxRate) || 0);
+  if (params.priceTaxMode === "tax_excluded") {
+    const taxAmount = Math.floor(taxableAmount * taxRate / 100);
+    return { taxableAmount, taxAmount, payableAmount: taxableAmount + taxAmount };
+  }
+  const taxAmount = taxRate > 0 ? taxableAmount - Math.floor(taxableAmount / (1 + taxRate / 100)) : 0;
+  return { taxableAmount, taxAmount, payableAmount: taxableAmount };
+}
+
 function getDiscountTargetLabel(preset: PosDiscountPreset) {
   if (preset.targetScope === "all") return "全商品";
   if (preset.targetScope === "category") return `カテゴリ: ${preset.targetValue}`;
@@ -426,31 +450,21 @@ function getNestedSchemaNumber(schema: Record<string, unknown> | undefined, pare
   return getSchemaNumber(parent as Record<string, unknown>, keys);
 }
 
-function isMalatangBuildableItem(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">) {
-  const schema = item.variableSchema ?? {};
-  return item.itemKind === "buildable_product" && (
-    schema.source === "maamaa-malatang-menu" ||
-    schema.buildable === true ||
-    item.name.includes("麻辣") ||
-    item.name.includes("マーラー")
-  );
-}
-
-function getWeightPricingConfig(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">, orderType: string) {
-  if (orderType !== "eat_in" || !isMalatangBuildableItem(item)) return null;
+function getWeightPricingConfig(item: Pick<PosMenuItem, "posPricingMode" | "posWeightUnit" | "posWeightUnitPrice" | "variableSchema">, orderType: string) {
+  if (orderType !== "eat_in" || item.posPricingMode !== "weight") return null;
   const schema = item.variableSchema ?? {};
   const nested = typeof schema.posWeightPricing === "object" && schema.posWeightPricing !== null
     ? schema.posWeightPricing as Record<string, unknown>
     : {};
-  const pricingMode = String(schema.pricingMode ?? schema.posPricingMode ?? nested.mode ?? "weight");
-  if (pricingMode !== "weight") return null;
-  const unit = String(schema.weightUnit ?? schema.measuredUnit ?? nested.unit ?? "g").trim() || "g";
-  const unitPrice = getSchemaNumber(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
+  const unit = item.posWeightUnit || String(schema.weightUnit ?? schema.measuredUnit ?? nested.unit ?? "g").trim() || "g";
+  const unitPrice = Number(item.posWeightUnitPrice ?? 0) > 0
+    ? Number(item.posWeightUnitPrice)
+    : getSchemaNumber(schema, ["pricePerGram", "weightUnitPrice", "measuredUnitPrice"]) ??
     getNestedSchemaNumber(schema, "posWeightPricing", ["pricePerGram", "unitPrice", "weightUnitPrice"]);
   return { unit, unitPrice };
 }
 
-function formatWeightPrice(item: Pick<PosMenuItem, "itemKind" | "name" | "variableSchema">, orderType: string) {
+function formatWeightPrice(item: Pick<PosMenuItem, "posPricingMode" | "posWeightUnit" | "posWeightUnitPrice" | "variableSchema">, orderType: string) {
   const config = getWeightPricingConfig(item, orderType);
   if (!config) return "";
   return config.unitPrice && config.unitPrice > 0
@@ -746,7 +760,19 @@ export default function StorePosPage() {
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
   const couponBlockedByDiscount = Boolean(selectedDiscountPreset && !selectedDiscountPreset.allowCouponCombination);
   const couponDiscountAmount = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
-  const payableAmount = Math.max(0, subtotal - posDiscountAmount - couponDiscountAmount);
+  const taxRate = getOrderTaxRate(posSettings, orderType);
+  const taxSummary = getTaxSummary({
+    subtotal,
+    discountAmount: posDiscountAmount,
+    couponDiscountAmount,
+    taxRate,
+    priceTaxMode: posSettings.priceTaxMode
+  });
+  const payableAmount = taxSummary.payableAmount;
+  const getMenuDisplayPrice = (item: PosMenuItem) => {
+    const price = getItemPrice(item);
+    return posSettings.priceTaxMode === "tax_excluded" ? price + Math.floor(price * taxRate / 100) : price;
+  };
   const recommendedCoupon = useMemo(() => {
     if (couponBlockedByDiscount || !memberCoupons.length || subtotal <= 0) return undefined;
     return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBaseAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBaseAmounts(left)))[0];
@@ -1048,13 +1074,18 @@ export default function StorePosPage() {
 
   function changeOrderType(nextOrderType: string) {
     if (nextOrderType === orderType) return;
+    const needsCartReset = cart.some((item) => (
+      Boolean(item.measuredQuantity) ||
+      Boolean(getWeightPricingConfig(item, orderType)) ||
+      Boolean(getWeightPricingConfig(item, nextOrderType))
+    ));
     setOrderType(nextOrderType);
     setConfiguringItem(null);
     setOptionDraft({});
     setWeightDraft("");
-    if (cart.length) {
+    if (needsCartReset) {
       setCart([]);
-      setMessage("注文区分を変更したため、会計内容をクリアしました。");
+      setMessage("注文区分を変更したため、重量商品の会計内容をクリアしました。");
     }
   }
 
@@ -1484,7 +1515,7 @@ export default function StorePosPage() {
                     <div className="store-pos-item-info">
                       <span>{item.category || item.brandName}</span>
                       <strong>{item.name}</strong>
-                      <em>{formatWeightPrice(item, orderType) || formatYen(getItemPrice(item))}</em>
+                      <em>{formatWeightPrice(item, orderType) || `${formatYen(getMenuDisplayPrice(item))}${posSettings.priceTaxMode === "tax_excluded" ? " 税込" : ""}`}</em>
                     </div>
                   </button>
                 ))}
@@ -1718,7 +1749,7 @@ export default function StorePosPage() {
           ) : null}
 
           <div className="store-pos-total">
-            <span>合計</span>
+            <span>{posSettings.priceTaxMode === "tax_excluded" ? "小計" : "合計"}</span>
             <strong>{formatYen(subtotal)}</strong>
             {posDiscountAmount ? (
               <>
@@ -1732,7 +1763,13 @@ export default function StorePosPage() {
                 <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
               </>
             ) : null}
-            {posDiscountAmount || couponDiscountAmount ? (
+            {subtotal > 0 ? (
+              <>
+                <span>{posSettings.priceTaxMode === "tax_excluded" ? `消費税 ${taxRate}%` : `内消費税 ${taxRate}%`}</span>
+                <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
+              </>
+            ) : null}
+            {posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount ? (
               <>
                 <span>お会計</span>
                 <strong>{formatYen(payableAmount)}</strong>
