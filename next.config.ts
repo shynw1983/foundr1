@@ -37,7 +37,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@sparticuz/chromium"],
   outputFileTracingIncludes: {
-    "/api/public/orders/receipt/preview-pdf": ["./node_modules/@sparticuz/chromium/bin/**/*"]
+    "/api/public/orders/receipt/preview-pdf": [
+      "./node_modules/@sparticuz/chromium/bin/**/*",
+      "./fonts/**/*"
+    ]
   },
   async headers() {
     return [

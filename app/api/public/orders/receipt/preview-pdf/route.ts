@@ -23,10 +23,33 @@ function contentDispositionFileName(filename: string) {
   return `inline; filename="receipt.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+let receiptFontFaceCss = "";
+
+function getReceiptFontFaceCss() {
+  if (receiptFontFaceCss) return receiptFontFaceCss;
+  const fontPath = join(process.cwd(), "fonts/NotoSansCJKjp-Regular.otf");
+  if (!existsSync(fontPath)) return "";
+  const fontData = readFileSync(fontPath).toString("base64");
+  receiptFontFaceCss = `
+@font-face {
+  font-family: "Foundr1ReceiptCJK";
+  src: url("data:font/otf;base64,${fontData}") format("opentype");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: block;
+}
+body,
+.online-receipt-sheet {
+  font-family: "Foundr1ReceiptCJK", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+}`;
+  return receiptFontFaceCss;
+}
+
 function getReceiptCss() {
   const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
   const receiptCssEnd = css.indexOf("\nbutton {\n  cursor: pointer;");
-  return receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
+  const receiptCss = receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
+  return `${getReceiptFontFaceCss()}\n${receiptCss}`;
 }
 
 function getPublicDataUrl(src: string) {
@@ -226,6 +249,7 @@ export async function GET(request: Request) {
     browser = await launchBrowser();
     const page = await browser.newPage();
     await page.setContent(getReceiptHtml(receipt), { waitUntil: "load", timeout: 15000 });
+    await page.evaluate(() => document.fonts.ready);
     await page.waitForSelector(".online-receipt-sheet", { timeout: 10000 });
     await page.emulateMediaType("print");
     const pdf = await page.pdf({
