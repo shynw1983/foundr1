@@ -1,4 +1,5 @@
 import { OnlineOrderReceipt } from "../../../../../components/receipts/OnlineOrderReceipt";
+import { ReceiptPreviewActions } from "../../../../../components/receipts/ReceiptPreviewActions";
 import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../lib/receipt-data";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function ReceiptPreviewPage({ searchParams }: ReceiptPrevie
 
   return (
     <main className="online-receipt-preview-shell">
+      <ReceiptPreviewActions />
       <OnlineOrderReceipt receipt={receipt} />
     </main>
   );

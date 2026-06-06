@@ -77,6 +77,24 @@ input[type="file"] {
     var(--bg);
 }
 
+.online-receipt-actions {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 18px;
+  width: 210mm;
+  max-width: 100%;
+}
+
+.online-receipt-actions button {
+  min-height: 42px;
+  padding: 0 18px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  background: var(--green);
+  border: 1px solid var(--green);
+}
+
 .online-receipt-sheet {
   --receipt-accent: var(--green);
   --receipt-accent-soft: var(--green-soft);
@@ -435,6 +453,10 @@ input[type="file"] {
     padding: 0;
     overflow: visible;
     background: #fff;
+  }
+
+  .online-receipt-actions {
+    display: none;
   }
 
   .online-receipt-sheet {
