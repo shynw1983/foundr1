@@ -14,6 +14,23 @@ This file is the working guide for coding agents and future maintainers of Found
 - Backoffice app path: `/os`.
 - Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
 
+## Associated Brand Websites
+
+Foundr1 OS is connected to two separate brand website projects on this machine. When working on public customer flows, menu sync, pickup reservations, checkout, kitchen display data, or member/loyalty integration for these brands, check these projects directly instead of rediscovering their paths:
+
+- nanacha milk tea site: `/Users/wushengyin/Desktop/nanacha New HP`.
+  - Main pickup reservation UI: `components/reservation-form.js`.
+  - Checkout proxy: `app/api/create-checkout/route.js` and `server/create-checkout.js`.
+  - Menu data imported into Foundr1 OS from `published/menu.json` via `scripts/import-brand-menus.mjs`.
+  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/nanacha/checkout` and Square payment.
+- maamaa / まぁ麻 malatang site: `/Users/wushengyin/Desktop/maamaa`.
+  - Main pickup reservation UI: `src/components/malatang-order-builder.tsx`.
+  - Checkout proxy: `src/app/api/orders/route.js`.
+  - Menu data imported into Foundr1 OS from `src/data/malatang-menu.ts` via `scripts/import-brand-menus.mjs`.
+  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/maamaa/checkout` and KOMOJU payment.
+
+Foundr1 OS already owns shared menu/catalog data, store operations status, public checkout APIs, order records, kitchen/production data, POS linkage, and member/loyalty records. The brand sites are the customer-facing frontends and should pass structured order and member fields to Foundr1 OS rather than duplicating backend business logic.
+
 ## Commands
 
 Use these commands from the repository root:
