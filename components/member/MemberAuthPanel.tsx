@@ -19,10 +19,35 @@ const oauthOptions: Array<{ label: string; strategy: OAuthStrategy; icon: "apple
   { label: "LINE", strategy: "oauth_line", icon: "line" }
 ];
 
+const authTimeoutMs = 12000;
+
+class AuthTimeoutError extends Error {
+  constructor() {
+    super("認証サーバーからの応答がありません。通信状態を確認して、もう一度お試しください。");
+    this.name = "AuthTimeoutError";
+  }
+}
+
 function errorMessage(error: unknown) {
   const maybeErrors = (error as { errors?: Array<{ longMessage?: string; message?: string }> })?.errors;
   const first = maybeErrors?.[0];
-  return first?.longMessage || first?.message || "認証に失敗しました。入力内容を確認してください。";
+  return first?.longMessage || first?.message || (error instanceof Error ? error.message : "") || "認証に失敗しました。入力内容を確認してください。";
+}
+
+function absoluteAuthUrl(path: string) {
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).toString();
+}
+
+function withAuthTimeout<T>(operation: Promise<T>) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new AuthTimeoutError()), authTimeoutMs);
+  });
+
+  return Promise.race([operation, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
 }
 
 function GoogleProviderIcon() {
@@ -91,30 +116,34 @@ export function MemberAuthPanel({
     setMessage("");
     let sent = false;
     try {
-      const signInResult = await signIn.create({ identifier: normalizedEmail, signUpIfMissing: true });
+      const signInResult = await withAuthTimeout(signIn.create({ identifier: normalizedEmail, signUpIfMissing: true }));
       if (signInResult.error) throw signInResult.error;
       if (signIn.isTransferable) {
-        const signUpResult = await signUp.create({ transfer: true });
+        const signUpResult = await withAuthTimeout(signUp.create({ transfer: true }));
         if (signUpResult.error) throw signUpResult.error;
-        const sendResult = await signUp.verifications.sendEmailCode();
+        const sendResult = await withAuthTimeout(signUp.verifications.sendEmailCode());
         if (sendResult.error) throw sendResult.error;
         setEmailFlow("sign_up");
       } else {
-        const sendResult = await signIn.emailCode.sendCode();
+        const sendResult = await withAuthTimeout(signIn.emailCode.sendCode());
         if (sendResult.error) throw sendResult.error;
         setEmailFlow("sign_in");
       }
       sent = true;
     } catch (error) {
-      try {
-        const signUpResult = await signUp.create({ emailAddress: normalizedEmail });
-        if (signUpResult.error) throw signUpResult.error;
-        const sendResult = await signUp.verifications.sendEmailCode();
-        if (sendResult.error) throw sendResult.error;
-        setEmailFlow("sign_up");
-        sent = true;
-      } catch (signUpError) {
-        setMessage(errorMessage(signUpError) || errorMessage(error));
+      if (error instanceof AuthTimeoutError) {
+        setMessage(errorMessage(error));
+      } else {
+        try {
+          const signUpResult = await withAuthTimeout(signUp.create({ emailAddress: normalizedEmail }));
+          if (signUpResult.error) throw signUpResult.error;
+          const sendResult = await withAuthTimeout(signUp.verifications.sendEmailCode());
+          if (sendResult.error) throw sendResult.error;
+          setEmailFlow("sign_up");
+          sent = true;
+        } catch (signUpError) {
+          setMessage(errorMessage(signUpError) || errorMessage(error));
+        }
       }
     }
     if (sent) {
@@ -138,19 +167,19 @@ export function MemberAuthPanel({
     setMessage("");
     try {
       if (emailFlow === "sign_in") {
-        const verifyResult = await signIn.emailCode.verifyCode({ code: verificationCode });
+        const verifyResult = await withAuthTimeout(signIn.emailCode.verifyCode({ code: verificationCode }));
         if (verifyResult.error) throw verifyResult.error;
         if (signIn.status === "complete") {
-          const finalizeResult = await signIn.finalize();
+          const finalizeResult = await withAuthTimeout(signIn.finalize());
           if (finalizeResult.error) throw finalizeResult.error;
           window.location.assign(afterAuthUrl);
           return;
         }
       } else {
-        const verifyResult = await signUp.verifications.verifyEmailCode({ code: verificationCode });
+        const verifyResult = await withAuthTimeout(signUp.verifications.verifyEmailCode({ code: verificationCode }));
         if (verifyResult.error) throw verifyResult.error;
         if (signUp.status === "complete") {
-          const finalizeResult = await signUp.finalize();
+          const finalizeResult = await withAuthTimeout(signUp.finalize());
           if (finalizeResult.error) throw finalizeResult.error;
           window.location.assign(afterAuthUrl);
           return;
@@ -169,11 +198,11 @@ export function MemberAuthPanel({
     setOauthBusy(strategy);
     setMessage("");
     try {
-      const result = await signIn.sso({
+      const result = await withAuthTimeout(signIn.sso({
         strategy,
-        redirectUrl: afterAuthUrl,
-        redirectCallbackUrl: "/sso-callback"
-      });
+        redirectUrl: absoluteAuthUrl(afterAuthUrl),
+        redirectCallbackUrl: absoluteAuthUrl("/sso-callback")
+      }));
       if (result.error) throw result.error;
     } catch (error) {
       setOauthBusy("");
@@ -192,6 +221,7 @@ export function MemberAuthPanel({
             <p>{description}</p>
           </div>
         </div>
+        <div id="clerk-captcha" className="member-auth-captcha" />
 
         {!codeSent ? (
           <form className="member-auth-email-form" onSubmit={(event) => void sendEmailCode(event)}>

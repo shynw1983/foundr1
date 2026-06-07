@@ -10598,6 +10598,10 @@ body :where(
   gap: 10px;
 }
 
+.member-auth-captcha:empty {
+  display: none;
+}
+
 .member-auth-email-form label {
   display: grid;
   gap: 7px;
