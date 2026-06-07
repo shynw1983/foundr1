@@ -1,6 +1,6 @@
 "use client";
 
-import { MonitorSmartphone, RefreshCw } from "lucide-react";
+import { MonitorSmartphone } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
@@ -84,6 +84,7 @@ export default function CustomerDisplayPage() {
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "polling">("connecting");
+  const [clockDate, setClockDate] = useState(() => new Date());
   const selectedStoreIdRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -91,10 +92,25 @@ export default function CustomerDisplayPage() {
   const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";
+  const clockLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(clockDate), [clockDate]);
+  const clockSubLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short"
+  }).format(clockDate), [clockDate]);
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
   }, [selectedStoreId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setClockDate(new Date()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
@@ -219,7 +235,7 @@ export default function CustomerDisplayPage() {
   return (
     <main className={advertisingActive ? "customer-display-page is-advertising" : "customer-display-page"}>
       <button
-        className="store-display-menu-button customer-display-menu-button"
+        className={`store-display-menu-button customer-display-menu-button ${realtimeStatus === "connected" ? "is-realtime" : "is-polling"}`}
         type="button"
         aria-label="メニュー"
         onClick={() => {
@@ -250,8 +266,11 @@ export default function CustomerDisplayPage() {
 
       {advertisingActive ? (
         <section className="customer-display-advertising" aria-live="polite">
-          <div>
-            <span>{state.storeName || "Foundr1"}</span>
+          <div className="customer-display-clock" aria-label={`${clockLabel} ${clockSubLabel}`}>
+            <span>{clockLabel}</span>
+            <small>{clockSubLabel}</small>
+          </div>
+          <div className="customer-display-advertising-copy">
             <strong>Welcome</strong>
             <p>ご来店ありがとうございます</p>
           </div>
@@ -259,15 +278,12 @@ export default function CustomerDisplayPage() {
       ) : (
         <>
       <header className="customer-display-topbar">
-        <div>
-          <p>{state.storeName || "STORE"}</p>
-          <h1>{getStatusLabel(state)}</h1>
+        <div className="customer-display-clock" aria-label={`${clockLabel} ${clockSubLabel}`}>
+          <span>{clockLabel}</span>
+          <small>{clockSubLabel}</small>
         </div>
-        <div className="customer-display-sync">
-          <span>{state.updatedLabel ? `更新 ${state.updatedLabel}` : "同期待ち"} / {realtimeStatus === "connected" ? "リアルタイム" : "自動更新"}</span>
-          <button type="button" onClick={() => void load(selectedStoreIdRef.current)} aria-label="更新">
-            <RefreshCw size={18} />
-          </button>
+        <div className="customer-display-status-title">
+          <h1>{getStatusLabel(state)}</h1>
         </div>
       </header>
 
