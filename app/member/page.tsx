@@ -728,6 +728,18 @@ function ConfiguredMemberPortal() {
                     </article>
                   );
                 })}
+                {data.stampCards.length === 1 ? (
+                  <article className="member-stamp-card member-stamp-card-placeholder" aria-label="Coming Soon">
+                    <div>
+                      <p className="eyebrow">Stamp Card</p>
+                      <h2>Coming Soon</h2>
+                      <span>次のスタンプカードを準備中です。</span>
+                    </div>
+                    <div className="member-stamp-card-placeholder-mark" aria-hidden="true">
+                      <Stamp size={28} />
+                    </div>
+                  </article>
+                ) : null}
               </section>
             ) : null}
 
