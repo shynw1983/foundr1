@@ -10843,19 +10843,24 @@ body :where(
 
 .member-portal-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(150px, 0.55fr));
+  grid-template-columns: minmax(360px, 3fr) repeat(3, minmax(120px, 1fr));
   gap: 14px;
 }
 
 .member-card-main {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   min-width: 0;
   padding: 18px;
   background: var(--member-logo-accent);
   color: white;
+}
+
+.member-card-main > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .member-card-main .eyebrow,
@@ -10866,15 +10871,18 @@ body :where(
 .member-card-main h2 {
   margin: 4px 0;
   color: white;
-  font-size: clamp(26px, 4vw, 42px);
+  font-size: clamp(28px, 3vw, 38px);
   font-weight: 600;
   letter-spacing: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .member-qr-placeholder {
-  width: min(190px, 42vw);
-  min-height: 150px;
+  flex: 0 0 clamp(130px, 12vw, 160px);
+  width: auto;
+  min-height: 142px;
   display: grid;
   place-items: center;
   gap: 8px;
@@ -10885,7 +10893,7 @@ body :where(
 }
 
 .member-qr-placeholder img {
-  width: min(150px, 100%);
+  width: min(122px, 100%);
   height: auto;
   border-radius: 6px;
 }
@@ -12072,6 +12080,14 @@ body :where(
   .member-card-main {
     flex-wrap: wrap;
   }
+
+  .member-card-main h2 {
+    font-size: clamp(28px, 8vw, 38px);
+  }
+
+  .member-qr-placeholder {
+    flex-basis: min(190px, 42vw);
+  }
 }
 
 @media (max-width: 640px) {
@@ -12172,6 +12188,7 @@ body :where(
   }
 
   .member-qr-placeholder {
+    flex-basis: 100%;
     width: 100%;
   }
 
