@@ -1260,6 +1260,7 @@ create table if not exists menu_catalog_items (
   external_id text,
   item_kind text not null default 'fixed_product',
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
   category text,
   description text,
   image_url text,
@@ -1279,6 +1280,7 @@ create table if not exists menu_option_groups (
   external_id text,
   group_key text not null,
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
   selection_type text not null default 'single',
   affects_procedure boolean not null default true,
   rule_json jsonb not null default '{}'::jsonb,
@@ -1295,6 +1297,7 @@ create table if not exists menu_options (
   external_id text,
   option_key text not null,
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
   price_delta numeric(12, 2),
   affects_procedure boolean not null default true,
   sort_order integer not null default 0,
@@ -1303,6 +1306,10 @@ create table if not exists menu_options (
   updated_at timestamptz not null default now(),
   unique (option_group_id, option_key)
 );
+
+alter table menu_catalog_items add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_option_groups add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_options add column if not exists display_names jsonb not null default '{}'::jsonb;
 
 create table if not exists store_operations (
   store_id uuid primary key references stores(id) on delete cascade,

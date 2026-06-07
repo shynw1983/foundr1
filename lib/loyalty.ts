@@ -1705,6 +1705,7 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
   const rows = await sql`
     select
       store_customer_orders.id::text,
+      coalesce(store_customer_orders.brand_id::text, '') as "brandId",
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.order_source as "orderSource",
       store_customer_orders.status,
@@ -1726,13 +1727,18 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
       coalesce(
         jsonb_agg(
           jsonb_build_object(
+            'menuCatalogItemId', coalesce(store_customer_order_items.menu_catalog_item_id::text, ''),
             'name', store_customer_order_items.item_name,
+            'displayNames', coalesce(menu_catalog_items.display_names, '{}'::jsonb),
             'quantity', store_customer_order_items.quantity,
+            'sizeKey', store_customer_order_items.size_key,
             'sizeLabel', store_customer_order_items.size_label,
             'temperature', store_customer_order_items.temperature,
             'sweetness', store_customer_order_items.sweetness,
             'ice', store_customer_order_items.ice,
+            'optionKey', store_customer_order_items.option_key,
             'optionLabel', store_customer_order_items.option_label,
+            'toppingKeys', store_customer_order_items.topping_keys,
             'toppingLabels', store_customer_order_items.topping_labels,
             'measuredQuantity', store_customer_order_items.measured_quantity,
             'measuredUnit', store_customer_order_items.measured_unit,
@@ -1740,7 +1746,8 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
             'couponDiscountAmount', store_customer_order_items.coupon_discount_amount,
             'couponId', coalesce(store_customer_order_items.coupon_id::text, ''),
             'couponCode', coalesce(member_coupons.coupon_code, ''),
-            'couponName', coalesce(member_coupons.name, '')
+            'couponName', coalesce(member_coupons.name, ''),
+            'couponDisplayNames', coalesce(member_coupons.display_names, '{}'::jsonb)
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         ) filter (where store_customer_order_items.id is not null),
@@ -1752,6 +1759,7 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
     left join brands on brands.id = store_customer_orders.brand_id
     left join stores on stores.id = store_customer_orders.store_id
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
+    left join menu_catalog_items on menu_catalog_items.id = store_customer_order_items.menu_catalog_item_id
     left join member_coupons on member_coupons.id = store_customer_order_items.coupon_id
     where store_customer_orders.member_id::text = ${memberId}
       and (${from}::timestamptz is null or store_customer_orders.created_at >= ${from}::timestamptz)
@@ -1761,8 +1769,9 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
     limit ${limit}
   `;
 
-  return (rows as Array<{
+  type RawMemberOrderRow = {
     id: string;
+    brandId: string;
     pickupCode: string;
     orderSource: string;
     status: string;
@@ -1782,13 +1791,18 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
     storeName: string;
     customerDisplayNames?: unknown;
     items: Array<{
+      menuCatalogItemId?: string;
       name?: string;
+      displayNames?: Record<string, unknown>;
       quantity?: number;
+      sizeKey?: string;
       sizeLabel?: string;
       temperature?: string;
       sweetness?: string;
       ice?: string;
+      optionKey?: string;
       optionLabel?: string;
+      toppingKeys?: string[];
       toppingLabels?: string[];
       measuredQuantity?: string | number | null;
       measuredUnit?: string;
@@ -1797,10 +1811,102 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
       couponId?: string;
       couponCode?: string;
       couponName?: string;
+      couponDisplayNames?: Record<string, unknown>;
     }> | null;
     drink: string;
     size: string;
-  }>).map((order) => {
+  };
+  type MenuOptionDisplayRow = {
+    brandId: string;
+    menuCatalogItemId: string;
+    groupKey: string;
+    optionKey: string;
+    name: string;
+    displayNames?: Record<string, unknown>;
+  };
+  const orderRows = rows as RawMemberOrderRow[];
+  const brandIds = Array.from(new Set(orderRows.map((order) => normalizeText(order.brandId)).filter(Boolean)));
+  const menuOptionRows = brandIds.length
+    ? await sql`
+        select
+          menu_option_groups.brand_id::text as "brandId",
+          coalesce(menu_option_groups.menu_catalog_item_id::text, '') as "menuCatalogItemId",
+          menu_option_groups.group_key as "groupKey",
+          menu_options.option_key as "optionKey",
+          menu_options.name,
+          coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames"
+        from menu_options
+        join menu_option_groups on menu_option_groups.id = menu_options.option_group_id
+        where menu_option_groups.brand_id::text = any(${brandIds})
+          and menu_options.is_active = true
+          and menu_option_groups.is_active = true
+      `
+    : [];
+  const menuOptions = menuOptionRows as MenuOptionDisplayRow[];
+
+  const splitKeys = (value: unknown) => normalizeText(value).split(",").map((entry) => entry.trim()).filter(Boolean);
+  const optionDisplayEntry = (
+    order: RawMemberOrderRow,
+    item: NonNullable<RawMemberOrderRow["items"]>[number],
+    groupKey: string,
+    keyValue: string,
+    labelValue: string
+  ) => {
+    const key = normalizeText(keyValue);
+    const label = normalizeText(labelValue);
+    const itemId = normalizeText(item.menuCatalogItemId);
+    const candidates = menuOptions.filter((option) => (
+      option.brandId === order.brandId &&
+      (!option.menuCatalogItemId || !itemId || option.menuCatalogItemId === itemId) &&
+      (!groupKey || option.groupKey === groupKey)
+    ));
+    const match = candidates.find((option) => key && option.optionKey === key)
+      ?? candidates.find((option) => label && option.name === label)
+      ?? (groupKey ? null : menuOptions.find((option) => (
+        option.brandId === order.brandId &&
+        (!option.menuCatalogItemId || !itemId || option.menuCatalogItemId === itemId) &&
+        ((key && option.optionKey === key) || (label && option.name === label))
+      )));
+    const raw = label || match?.name || key;
+    if (!raw) return null;
+    return {
+      raw,
+      displayNames: match ? normalizeDisplayNames(match.displayNames) : {}
+    };
+  };
+  const detailDisplayNames = (order: RawMemberOrderRow, item: NonNullable<RawMemberOrderRow["items"]>[number]) => {
+    const entries: Array<{ raw: string; displayNames: Record<string, string> }> = [];
+    const seen = new Set<string>();
+    const add = (entry: { raw: string; displayNames: Record<string, string> } | null) => {
+      const raw = normalizeText(entry?.raw);
+      if (!raw || seen.has(raw)) return;
+      seen.add(raw);
+      entries.push({ raw, displayNames: entry?.displayNames ?? {} });
+    };
+
+    if (normalizeText(item.sizeKey) && normalizeText(item.sizeKey) !== "maamaa_buildable") add(optionDisplayEntry(order, item, "size", normalizeText(item.sizeKey), normalizeText(item.sizeLabel)));
+    add(optionDisplayEntry(order, item, "temperature", normalizeText(item.temperature), normalizeText(item.temperature)));
+    add(optionDisplayEntry(order, item, "sweetness", normalizeText(item.sweetness), normalizeText(item.sweetness)));
+    add(optionDisplayEntry(order, item, "ice", normalizeText(item.ice), normalizeText(item.ice)));
+    for (const key of splitKeys(item.optionKey)) add(optionDisplayEntry(order, item, "", key, ""));
+
+    const toppingKeys = Array.isArray(item.toppingKeys) ? item.toppingKeys.map(normalizeText).filter(Boolean) : [];
+    const toppingLabels = Array.isArray(item.toppingLabels) ? item.toppingLabels.map(normalizeText).filter(Boolean) : [];
+    const toppingLength = Math.max(toppingKeys.length, toppingLabels.length);
+    for (let index = 0; index < toppingLength; index += 1) {
+      add(optionDisplayEntry(order, item, "", toppingKeys[index] ?? "", toppingLabels[index] ?? ""));
+    }
+    if (!entries.length && normalizeText(item.optionLabel)) add({ raw: normalizeText(item.optionLabel), displayNames: {} });
+
+    return Object.fromEntries(
+      supportedMemberDisplayLanguages.map((language) => [
+        language,
+        entries.map((entry) => entry.displayNames[language] || entry.raw).filter(Boolean)
+      ])
+    );
+  };
+
+  return orderRows.map((order) => {
     const isStorePurchase = order.orderSource === "store_pos";
     const receiptEligible = !isStorePurchase && ["paid", "refunded", "partial_refunded"].includes(order.paymentStatus);
     const receiptParams = new URLSearchParams({
@@ -1821,6 +1927,7 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
       ? order.items
           .map((item) => ({
             name: normalizeText(item?.name),
+            displayNames: normalizeDisplayNames(item?.displayNames),
             quantity: Math.max(1, Math.round(Number(item?.quantity) || 1)),
             sizeLabel: normalizeText(item?.sizeLabel),
             temperature: normalizeText(item?.temperature),
@@ -1828,13 +1935,15 @@ export async function getMemberOnlineOrderHistory(memberId: string, options: Mem
             ice: normalizeText(item?.ice),
             optionLabel: normalizeText(item?.optionLabel),
             toppingLabels: Array.isArray(item?.toppingLabels) ? item.toppingLabels.map(normalizeText).filter(Boolean) : [],
+            detailDisplayNames: detailDisplayNames(order, item),
             measuredQuantity: item?.measuredQuantity === null || item?.measuredQuantity === undefined ? null : Number(item.measuredQuantity),
             measuredUnit: normalizeText(item?.measuredUnit),
             amount: Math.round(Number(item?.amount) || 0),
             couponDiscountAmount: Math.round(Number(item?.couponDiscountAmount) || 0),
             couponId: normalizeText(item?.couponId),
             couponCode: normalizeText(item?.couponCode),
-            couponName: normalizeText(item?.couponName)
+            couponName: normalizeText(item?.couponName),
+            couponDisplayNames: normalizeDisplayNames(item?.couponDisplayNames)
           }))
           .filter((item) => item.name)
       : [];

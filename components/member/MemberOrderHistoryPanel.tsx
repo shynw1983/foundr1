@@ -7,6 +7,7 @@ import { memberText } from "./memberTranslations";
 
 export type MemberOrderHistoryItem = {
   name: string;
+  displayNames?: Record<string, string>;
   quantity: number;
   sizeLabel?: string;
   temperature?: string;
@@ -14,6 +15,7 @@ export type MemberOrderHistoryItem = {
   ice?: string;
   optionLabel?: string;
   toppingLabels?: string[];
+  detailDisplayNames?: Record<string, string[]>;
   measuredQuantity?: number | null;
   measuredUnit?: string;
   amount?: number;
@@ -21,6 +23,7 @@ export type MemberOrderHistoryItem = {
   couponId?: string;
   couponCode?: string;
   couponName?: string;
+  couponDisplayNames?: Record<string, string>;
 };
 
 export type MemberOrderHistory = {
@@ -92,14 +95,27 @@ function getPurchaseChannel(order: MemberOrderHistory) {
   return order.purchaseChannel === "store" || order.orderSource === "store_pos" ? "store" : "online";
 }
 
-function orderItemSummary(items: string[], text: typeof memberText[keyof typeof memberText]) {
-  const visibleItems = items.filter(Boolean);
+function localizedName(value: string, displayNames: Record<string, string> | undefined, language: string) {
+  if (language === "ja") return value;
+  return displayNames?.[language] || value;
+}
+
+function orderItemSummary(order: MemberOrderHistory, text: typeof memberText[keyof typeof memberText], language: string) {
+  const visibleItems = order.itemDetails?.length
+    ? order.itemDetails.map((item) => {
+        const name = localizedName(item.name, item.displayNames, language);
+        return `${name} x ${Math.max(1, Number(item.quantity) || 1)}`;
+      }).filter(Boolean)
+    : order.items.filter(Boolean);
   if (!visibleItems.length) return text.detailsFallback;
   if (visibleItems.length === 1) return visibleItems[0];
   return `${visibleItems[0]} ${text.otherItems(visibleItems.length - 1)}`;
 }
 
-function itemOptionLabels(item: MemberOrderHistoryItem) {
+function itemOptionLabels(item: MemberOrderHistoryItem, language: string) {
+  if (language !== "ja" && Array.isArray(item.detailDisplayNames?.[language]) && item.detailDisplayNames[language].length) {
+    return item.detailDisplayNames[language].map((label) => String(label || "").trim()).filter(Boolean);
+  }
   const measuredQuantity = Number(item.measuredQuantity);
   const measuredLabel = Number.isFinite(measuredQuantity) && measuredQuantity > 0
     ? `${measuredQuantity.toLocaleString("ja-JP")} ${item.measuredUnit || ""}`.trim()
@@ -115,8 +131,9 @@ function itemOptionLabels(item: MemberOrderHistoryItem) {
   ].map((label) => String(label || "").trim()).filter(Boolean);
 }
 
-function couponDisplayName(input: { couponName?: string; couponCode?: string; couponId?: string }, text: typeof memberText[keyof typeof memberText]) {
-  const name = String(input.couponName || "").trim();
+function couponDisplayName(input: { couponName?: string; couponDisplayNames?: Record<string, string>; couponCode?: string; couponId?: string }, text: typeof memberText[keyof typeof memberText], language: string) {
+  const rawName = String(input.couponName || "").trim();
+  const name = localizedName(rawName, input.couponDisplayNames, language);
   const code = String(input.couponCode || "").trim();
   if (name && code) return `${name} / ${code}`;
   if (name) return name;
@@ -228,7 +245,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
                 <strong>{order.brandName || orderSourceLabel(order.orderSource, text)}</strong>
                 <span>{order.storeName || orderSourceLabel(order.orderSource, text)} / {orderSourceLabel(order.orderSource, text)} / {order.pickupCode}</span>
               </div>
-              <p className="member-order-summary">{orderItemSummary(order.items, text)}</p>
+              <p className="member-order-summary">{orderItemSummary(order, text, language)}</p>
             </div>
             <div className="member-order-meta">
               <span>{formatPickupDate(order.pickupDate)} {order.pickupTime}</span>
@@ -286,7 +303,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
                   {selectedOrder.subtotalAmount ? <div><dt>{text.subtotal}</dt><dd>{formatYen(selectedOrder.subtotalAmount)}</dd></div> : null}
                   <div>
                     <dt>{text.usedCoupon}</dt>
-                    <dd>{couponDisplayName(selectedOrder, text) || text.couponApplied}</dd>
+                    <dd>{couponDisplayName(selectedOrder, text, language) || text.couponApplied}</dd>
                   </div>
                   <div className="is-discount">
                     <dt>{text.couponDiscountAmount}</dt>
@@ -301,13 +318,14 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
             <div className="member-order-modal-items">
               <h5>{text.itemDetails}</h5>
               {(selectedOrder.itemDetails?.length ? selectedOrder.itemDetails : selectedOrder.items.map((item): MemberOrderHistoryItem => ({ name: item, quantity: 1 }))).map((item, index) => {
-                const optionLabels = itemOptionLabels(item);
-                const itemCouponName = couponDisplayName(item, text);
+                const optionLabels = itemOptionLabels(item, language);
+                const itemCouponName = couponDisplayName(item, text, language);
                 const itemCouponDiscountAmount = Number(item.couponDiscountAmount || 0);
+                const itemName = localizedName(item.name, item.displayNames, language);
                 return (
                   <div key={`${selectedOrder.id}-detail-${index}`} className="member-order-modal-item">
                     <div>
-                      <strong>{item.name}</strong>
+                      <strong>{itemName}</strong>
                       {optionLabels.length ? <p>{optionLabels.join(" / ")}</p> : null}
                       {itemCouponName || itemCouponDiscountAmount > 0 ? (
                         <p className="member-order-modal-item-coupon">

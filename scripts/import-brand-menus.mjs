@@ -5,6 +5,8 @@ import { loadLocalEnv } from "./db-env.mjs";
 
 const nanachaMenuPath = "/Users/wushengyin/Desktop/nanacha New HP/published/menu.json";
 const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.ts";
+const nanachaLocaleDir = "/Users/wushengyin/Desktop/nanacha New HP/public/locales";
+const maamaaLocaleDir = "/Users/wushengyin/Desktop/maamaa/public/locales";
 
 loadLocalEnv();
 
@@ -27,6 +29,43 @@ function slugKey(value, fallback = "option") {
 function choiceKey(choice, index) {
   if (typeof choice === "string") return choice;
   return choice.id || slugKey(choice.label ?? choice.name, `choice-${index + 1}`);
+}
+
+async function loadDictionary(localeDir, language) {
+  try {
+    return JSON.parse(await readFile(`${localeDir}/${language}.json`, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function loadBrandDictionaries(localeDir) {
+  const [en, zh, ko] = await Promise.all([
+    loadDictionary(localeDir, "en"),
+    loadDictionary(localeDir, "zh"),
+    loadDictionary(localeDir, "ko")
+  ]);
+  return { en, zh, ko };
+}
+
+function translateText(value, dictionary) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (dictionary[text]) return dictionary[text];
+  return Object.entries(dictionary)
+    .filter(([source, target]) => source.length > 3 && target && text.includes(source))
+    .sort((left, right) => right[0].length - left[0].length)
+    .reduce((current, [source, target]) => current.split(source).join(target), text);
+}
+
+function displayNamesFor(value, dictionaries) {
+  const text = String(value ?? "").trim();
+  if (!text) return {};
+  return Object.fromEntries(
+    Object.entries(dictionaries)
+      .map(([language, dictionary]) => [language, translateText(text, dictionary)])
+      .filter(([, translated]) => translated && translated !== text)
+  );
 }
 
 async function ensureBrand(name, brandType) {
@@ -149,6 +188,7 @@ async function upsertItem({
   imageUrl,
   basePrice,
   variableSchema,
+  displayNames = {},
   isActive = true
 }) {
   const existing = await sql`
@@ -168,6 +208,7 @@ async function upsertItem({
         menu_source_id = ${sourceId},
         item_kind = ${itemKind},
         name = ${name},
+        display_names = ${JSON.stringify(displayNames)}::jsonb,
         category = ${category},
         description = ${description},
         image_url = ${imageUrl},
@@ -188,6 +229,7 @@ async function upsertItem({
       external_id,
       item_kind,
       name,
+      display_names,
       category,
       description,
       image_url,
@@ -202,6 +244,7 @@ async function upsertItem({
       ${externalId},
       ${itemKind},
       ${name},
+      ${JSON.stringify(displayNames)}::jsonb,
       ${category},
       ${description},
       ${imageUrl},
@@ -224,6 +267,7 @@ async function upsertGroup({
   selectionType,
   affectsProcedure = true,
   ruleJson = {},
+  displayNames = {},
   sortOrder = 100,
   isActive = true
 }) {
@@ -251,6 +295,7 @@ async function upsertGroup({
       set
         external_id = ${externalId},
         name = ${name},
+        display_names = ${JSON.stringify(displayNames)}::jsonb,
         selection_type = ${selectionType},
         affects_procedure = ${affectsProcedure},
         rule_json = ${JSON.stringify(ruleJson)}::jsonb,
@@ -270,6 +315,7 @@ async function upsertGroup({
       external_id,
       group_key,
       name,
+      display_names,
       selection_type,
       affects_procedure,
       rule_json,
@@ -283,6 +329,7 @@ async function upsertGroup({
       ${externalId},
       ${groupKey},
       ${name},
+      ${JSON.stringify(displayNames)}::jsonb,
       ${selectionType},
       ${affectsProcedure},
       ${JSON.stringify(ruleJson)}::jsonb,
@@ -302,6 +349,7 @@ async function upsertOption({
   name,
   priceDelta = 0,
   affectsProcedure = true,
+  displayNames = {},
   sortOrder = 100,
   isActive = true
 }) {
@@ -319,6 +367,7 @@ async function upsertOption({
       set
         external_id = ${externalId},
         name = ${name},
+        display_names = ${JSON.stringify(displayNames)}::jsonb,
         price_delta = ${priceDelta},
         affects_procedure = ${affectsProcedure},
         sort_order = ${sortOrder},
@@ -336,6 +385,7 @@ async function upsertOption({
       external_id,
       option_key,
       name,
+      display_names,
       price_delta,
       affects_procedure,
       sort_order,
@@ -347,6 +397,7 @@ async function upsertOption({
       ${externalId},
       ${optionKey},
       ${name},
+      ${JSON.stringify(displayNames)}::jsonb,
       ${priceDelta},
       ${affectsProcedure},
       ${sortOrder},
@@ -358,7 +409,7 @@ async function upsertOption({
   return rows[0].id;
 }
 
-async function upsertOptions(groupId, choices, { affectsProcedure = true } = {}) {
+async function upsertOptions(groupId, choices, { affectsProcedure = true, dictionaries = {} } = {}) {
   for (const [index, choice] of choices.entries()) {
     const id = choiceKey(choice, index);
     const name = typeof choice === "string" ? choice : choice.label ?? choice.name;
@@ -370,6 +421,7 @@ async function upsertOptions(groupId, choices, { affectsProcedure = true } = {})
       name,
       priceDelta: price,
       affectsProcedure,
+      displayNames: displayNamesFor(name, dictionaries),
       sortOrder: (index + 1) * 10,
       isActive: true
     });
@@ -378,6 +430,7 @@ async function upsertOptions(groupId, choices, { affectsProcedure = true } = {})
 
 async function importNanacha() {
   const menu = JSON.parse(await readFile(nanachaMenuPath, "utf8")).baseMenu;
+  const dictionaries = await loadBrandDictionaries(nanachaLocaleDir);
   const brand = await ensureBrand("nanacha", "ミルクティー");
   const sourceId = await upsertSource({
     brandId: brand.id,
@@ -425,6 +478,7 @@ async function importNanacha() {
       description: drink.description ?? category?.note ?? "",
       imageUrl: drink.imageUrl ?? "",
       basePrice: drink.price ?? null,
+      displayNames: displayNamesFor(drink.name, dictionaries),
       variableSchema: {
         source: "nanacha-published-menu",
         categoryId: drink.category,
@@ -461,9 +515,10 @@ async function importNanacha() {
       selectionType: group.type,
       affectsProcedure: group.affectsProcedure,
       ruleJson: group.ruleJson,
+      displayNames: displayNamesFor(group.name, dictionaries),
       sortOrder: (index + 1) * 10
     });
-    await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure });
+    await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure, dictionaries });
   }
 
   await sql`
@@ -480,6 +535,7 @@ async function importNanacha() {
 
 async function importMaamaa() {
   const menu = await import(pathToFileURL(maamaaMenuPath).href);
+  const dictionaries = await loadBrandDictionaries(maamaaLocaleDir);
   const brand = await ensureBrand("まぁ麻", "マーラータン");
   const sourceId = await upsertSource({
     brandId: brand.id,
@@ -498,6 +554,7 @@ async function importMaamaa() {
     description: menu.baseSoup.note ?? "",
     imageUrl: "",
     basePrice: menu.baseSoup.price ?? null,
+    displayNames: displayNamesFor(menu.baseSoup.name, dictionaries),
     variableSchema: {
       source: "maamaa-malatang-menu",
       buildable: true,
@@ -536,9 +593,10 @@ async function importMaamaa() {
       selectionType: group.type,
       affectsProcedure: group.affectsProcedure,
       ruleJson: group.ruleJson,
+      displayNames: displayNamesFor(group.name, dictionaries),
       sortOrder: (index + 1) * 10
     });
-    await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure });
+    await upsertOptions(groupId, group.choices, { affectsProcedure: group.affectsProcedure, dictionaries });
     groupCount += 1;
   }
 
@@ -553,9 +611,10 @@ async function importMaamaa() {
       selectionType: "quantity",
       affectsProcedure: true,
       ruleJson: { source: "maamaa", limit: section.limit, optionValueType: "id" },
+      displayNames: displayNamesFor(section.title, dictionaries),
       sortOrder: 100 + (index + 1) * 10
     });
-    await upsertOptions(groupId, section.items, { affectsProcedure: true });
+    await upsertOptions(groupId, section.items, { affectsProcedure: true, dictionaries });
     groupCount += 1;
     optionCount += section.items.length;
   }
