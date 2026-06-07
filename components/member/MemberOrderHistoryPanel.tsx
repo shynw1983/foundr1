@@ -34,6 +34,9 @@ export type MemberOrderHistory = {
   storeName: string;
   items: string[];
   itemDetails?: MemberOrderHistoryItem[];
+  canCancel?: boolean;
+  cancelDeadline?: string;
+  cancelWindowMinutes?: number;
   receiptPreviewUrl: string;
   receiptPdfUrl: string;
 };
@@ -41,6 +44,7 @@ export type MemberOrderHistory = {
 type MemberOrderHistoryPanelProps = {
   orders?: MemberOrderHistory[];
   compact?: boolean;
+  onRefresh?: () => Promise<void> | void;
 };
 
 function formatYen(value: number) {
@@ -57,6 +61,7 @@ function formatPickupDate(value: string) {
 function orderStatusLabel(order: MemberOrderHistory) {
   if (order.paymentStatus === "refunded" || order.status === "cancelled") return "キャンセル済み";
   if (order.paymentStatus === "partial_refunded" || order.paymentRefundStatus === "partial") return "一部返金済み";
+  if (order.status === "refund_pending" || order.paymentRefundStatus === "pending") return "返金処理中";
   if (order.status === "completed") return "完了";
   if (order.status === "ready") return "受け取り可";
   if (order.status === "preparing") return "準備中";
@@ -99,15 +104,64 @@ function itemOptionLabels(item: MemberOrderHistoryItem) {
   ].map((label) => String(label || "").trim()).filter(Boolean);
 }
 
-export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrderHistoryPanelProps) {
+function formatCancelDeadline(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: MemberOrderHistoryPanelProps) {
   const [activeTab, setActiveTab] = useState<"online" | "store">("online");
   const [selectedOrder, setSelectedOrder] = useState<MemberOrderHistory | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState("");
   const groupedOrders = useMemo(() => ({
     online: (orders ?? []).filter((order) => getPurchaseChannel(order) === "online"),
     store: (orders ?? []).filter((order) => getPurchaseChannel(order) === "store")
   }), [orders]);
   const visibleOrders = groupedOrders[activeTab];
   const emptyMessage = activeTab === "online" ? "Web予約の履歴はまだありません。" : "実店舗購入の履歴はまだありません。";
+
+  async function requestCancel(order: MemberOrderHistory) {
+    if (!order.canCancel || cancelSubmitting) return;
+    const confirmed = window.confirm([
+      "このWeb予約をキャンセルし、支払い済みの場合は返金を申請します。",
+      "",
+      `注文番号: ${order.pickupCode}`,
+      `金額: ${formatYen(order.amount)}`,
+      "",
+      "よろしいですか？"
+    ].join("\n"));
+    if (!confirmed) return;
+    setCancelSubmitting(true);
+    setCancelMessage("");
+    try {
+      const response = await fetch("/api/public/members/orders/cancel", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, pickupCode: order.pickupCode })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setCancelMessage(body.error || "キャンセル申請を処理できませんでした。");
+        return;
+      }
+      setCancelMessage("キャンセル・返金申請を受け付けました。");
+      await onRefresh?.();
+      setSelectedOrder(null);
+    } catch {
+      setCancelMessage("通信に失敗しました。時間をおいて再度お試しください。");
+    } finally {
+      setCancelSubmitting(false);
+    }
+  }
 
   return (
     <article className={`member-portal-panel member-order-panel${compact ? " is-compact" : ""}`}>
@@ -222,6 +276,22 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
                   </div>
                 );
               })}
+            </div>
+
+            <div className="member-order-modal-primary-actions">
+              {selectedOrder.orderSource === "maamaa_web" ? (
+                <button type="button" disabled={!selectedOrder.canCancel || cancelSubmitting} onClick={() => void requestCancel(selectedOrder)}>
+                  {cancelSubmitting ? "処理中..." : "キャンセル・返金申請"}
+                </button>
+              ) : null}
+              {selectedOrder.orderSource === "maamaa_web" ? (
+                <p>
+                  {selectedOrder.canCancel
+                    ? `受取予定の${selectedOrder.cancelWindowMinutes ?? 30}分前まで申請できます${formatCancelDeadline(selectedOrder.cancelDeadline) ? `（期限 ${formatCancelDeadline(selectedOrder.cancelDeadline)}）` : ""}。`
+                    : "キャンセル受付時間を過ぎた、または調理開始後のため、この画面からは申請できません。"}
+                </p>
+              ) : null}
+              {cancelMessage ? <p className="member-order-modal-message">{cancelMessage}</p> : null}
             </div>
 
             <div className="member-order-modal-reserved-actions" aria-label="今後追加予定の機能">

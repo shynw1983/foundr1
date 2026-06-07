@@ -27,6 +27,34 @@ function normalizeEmail(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
 
+function getMemberOrderCancelInfo(order: {
+  orderSource: string;
+  status: string;
+  pickupDate: string;
+  pickupTime: string;
+  preparingAt?: string;
+  readyAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+}) {
+  const pickupAt = /^\d{4}-\d{2}-\d{2}$/.test(order.pickupDate) && /^\d{2}:\d{2}$/.test(order.pickupTime)
+    ? new Date(`${order.pickupDate}T${order.pickupTime}:00+09:00`)
+    : null;
+  const cancelDeadline = pickupAt && !Number.isNaN(pickupAt.getTime()) ? new Date(pickupAt.getTime() - 30 * 60 * 1000) : null;
+  const canCancel = order.orderSource === "maamaa_web" &&
+    ["pending_payment", "new"].includes(order.status) &&
+    !order.preparingAt &&
+    !order.readyAt &&
+    !order.completedAt &&
+    !order.cancelledAt &&
+    Boolean(cancelDeadline && new Date() < cancelDeadline);
+  return {
+    canCancel,
+    cancelDeadline: cancelDeadline ? cancelDeadline.toISOString() : "",
+    cancelWindowMinutes: 30
+  };
+}
+
 export type LoyaltyMemberInput = {
   memberId?: string | null;
   memberToken?: string | null;
@@ -1565,6 +1593,10 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       store_customer_orders.created_at::text as "createdAt",
+      coalesce(store_customer_orders.preparing_at::text, '') as "preparingAt",
+      coalesce(store_customer_orders.ready_at::text, '') as "readyAt",
+      coalesce(store_customer_orders.completed_at::text, '') as "completedAt",
+      coalesce(store_customer_orders.cancelled_at::text, '') as "cancelledAt",
       coalesce(brands.name, '') as "brandName",
       coalesce(stores.name, '') as "storeName",
       coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
@@ -1611,6 +1643,10 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     pickupDate: string;
     pickupTime: string;
     createdAt: string;
+    preparingAt: string;
+    readyAt: string;
+    completedAt: string;
+    cancelledAt: string;
     brandName: string;
     storeName: string;
     customerDisplayNames?: unknown;
@@ -1664,9 +1700,13 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
           .filter((item) => item.name)
       : [];
     const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
+    const cancelInfo = getMemberOrderCancelInfo(order);
     return {
       ...order,
       purchaseChannel: isStorePurchase ? "store" : "online",
+      canCancel: cancelInfo.canCancel,
+      cancelDeadline: cancelInfo.cancelDeadline,
+      cancelWindowMinutes: cancelInfo.cancelWindowMinutes,
       storeName: resolveCustomerStoreDisplayName({
         settings: order.customerDisplayNames,
         internalStoreName: order.storeName,

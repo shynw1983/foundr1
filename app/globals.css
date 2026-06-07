@@ -11523,6 +11523,47 @@ body :where(
   white-space: nowrap;
 }
 
+.member-order-modal-primary-actions {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--member-line);
+  padding: 14px 16px;
+}
+
+.member-order-modal-primary-actions button {
+  justify-self: start;
+  min-height: 38px;
+  border: 1px solid rgba(185, 28, 28, 0.22);
+  border-radius: 999px;
+  background: #fff7f7;
+  color: #b91c1c;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.member-order-modal-primary-actions button:disabled {
+  border-color: var(--member-line);
+  background: var(--member-soft);
+  color: var(--member-muted);
+  cursor: not-allowed;
+}
+
+.member-order-modal-primary-actions p {
+  margin: 0;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.member-order-modal-primary-actions .member-order-modal-message {
+  color: var(--member-logo-accent);
+  font-weight: 600;
+}
+
 .member-order-modal-reserved-actions {
   display: flex;
   flex-wrap: wrap;

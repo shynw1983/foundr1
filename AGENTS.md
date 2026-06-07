@@ -33,6 +33,8 @@ Foundr1 OS already owns shared menu/catalog data, store operations status, publi
 
 When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either nanacha or maamaa, check and update the other brand site in the same pass unless the business owner explicitly scopes the change to one brand only. Keep customer-facing flow behavior aligned across both websites.
 
+maamaa Web予約 supports customer-side cancellation/refund requests until 30 minutes before pickup, before preparation starts. Keep this action available from the member order detail modal and reuse the shared order cancellation/refund rules instead of duplicating a separate policy.
+
 ## Commands
 
 Use these commands from the repository root:

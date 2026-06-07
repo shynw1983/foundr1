@@ -145,7 +145,7 @@ export default function MemberOrdersPage() {
                 <p>少々お待ちください。</p>
               </section>
             ) : (
-              <MemberOrderHistoryPanel orders={data.orders} />
+              <MemberOrderHistoryPanel orders={data.orders} onRefresh={loadOrders} />
             )}
           </section>
         </>
