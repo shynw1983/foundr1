@@ -1,8 +1,9 @@
 "use client";
 
 import { MonitorSmartphone, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
+import { useDisplayMode } from "../../components/useDisplayMode";
 
 type StoreOption = {
   id: string;
@@ -74,12 +75,19 @@ export default function CustomerDisplayPage() {
   const [state, setState] = useState<DisplayState>(idleState);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const selectedStoreIdRef = useRef("");
+  const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   const visibleItems = useMemo(() => state.items.slice(0, 12), [state.items]);
   const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
   const changeAmount = state.cashChangeAmount ?? 0;
 
-  async function load(storeId = selectedStoreId || getStoredStoreSelection()) {
+  useEffect(() => {
+    selectedStoreIdRef.current = selectedStoreId;
+  }, [selectedStoreId]);
+
+  async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     const response = await fetch(`/api/store/pos/customer-display${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
@@ -92,6 +100,7 @@ export default function CustomerDisplayPage() {
     const nextStoreId = body.selectedStoreId ?? storeId ?? "";
     setStores(body.access?.stores ?? []);
     setSelectedStoreId(nextStoreId);
+    selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setState({ ...idleState, ...(body.state ?? {}) });
     setMessage("");
@@ -101,9 +110,10 @@ export default function CustomerDisplayPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const storeId = params.get("storeId") || getStoredStoreSelection();
+    selectedStoreIdRef.current = storeId;
     void load(storeId);
     const interval = window.setInterval(() => {
-      const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || getStoredStoreSelection();
+      const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || selectedStoreIdRef.current || getStoredStoreSelection();
       void load(currentStoreId);
     }, 1200);
     return () => window.clearInterval(interval);
@@ -112,6 +122,7 @@ export default function CustomerDisplayPage() {
 
   function handleStoreChange(storeId: string) {
     setSelectedStoreId(storeId);
+    selectedStoreIdRef.current = storeId;
     setStoredStoreSelection(storeId);
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set("storeId", storeId);
@@ -121,19 +132,44 @@ export default function CustomerDisplayPage() {
 
   return (
     <main className="customer-display-page">
-      <header className="customer-display-topbar">
-        <div>
-          <p>{state.storeName || "Foundr1 STORE"}</p>
-          <h1>{getStatusLabel(state)}</h1>
-        </div>
-        <div className="customer-display-controls">
-          <label>
-            <span>店舗</span>
+      <button
+        className="store-display-menu-button customer-display-menu-button"
+        type="button"
+        aria-label="メニュー"
+        onClick={() => {
+          if (!menuOpen) void activateDisplayMode();
+          setMenuOpen((current) => !current);
+        }}
+      />
+      {menuOpen ? (
+        <div className="store-display-menu customer-display-menu">
+          <strong>客席表示</strong>
+          {stores.length > 1 ? (
             <select value={selectedStoreId} onChange={(event) => handleStoreChange(event.target.value)}>
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
-          </label>
-          <button type="button" onClick={() => void load(selectedStoreId)} aria-label="更新">
+          ) : null}
+          <button className="secondary-button" type="button" onClick={() => void load(selectedStoreIdRef.current)}>
+            {loading ? "読み込み中" : "更新"}
+          </button>
+          <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
+            全画面・常時点灯 ON
+          </button>
+          <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
+          <a className="secondary-button" href="/store/pos">POS</a>
+          <a className="secondary-button" href="/store">店舗ホーム</a>
+          <a className="danger-button" href="/os/logout">ログアウト</a>
+        </div>
+      ) : null}
+
+      <header className="customer-display-topbar">
+        <div>
+          <p>{state.storeName || "STORE"}</p>
+          <h1>{getStatusLabel(state)}</h1>
+        </div>
+        <div className="customer-display-sync">
+          <span>{state.updatedLabel ? `更新 ${state.updatedLabel}` : "同期待ち"}</span>
+          <button type="button" onClick={() => void load(selectedStoreIdRef.current)} aria-label="更新">
             <RefreshCw size={18} />
           </button>
         </div>
@@ -179,7 +215,7 @@ export default function CustomerDisplayPage() {
         <aside className={`customer-display-payment is-${state.status || "idle"}`}>
           <div className="customer-display-meta">
             {state.pickupCode ? <span>番号 {state.pickupCode}</span> : <span>{getOrderTypeLabel(state.orderType) || "店頭会計"}</span>}
-            <span>{state.updatedLabel ? `更新 ${state.updatedLabel}` : "同期待ち"}</span>
+            <span>{state.paymentLabel || "お支払い"}</span>
           </div>
 
           <div className="customer-display-total">

@@ -1,4 +1,5 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
+import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
 import { sql } from "../../../../../lib/db";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
@@ -59,12 +60,44 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
 async function getStoreName(storeId: string) {
   if (!storeId) return "";
   const rows = await sql`
-    select name
+    select
+      name,
+      coalesce(customer_display_names, '{}'::jsonb) as "customerDisplayNames"
     from stores
     where id::text = ${storeId}
     limit 1
   `;
-  return normalizeText(rows[0]?.name);
+  const row = rows[0] as { name?: string; customerDisplayNames?: unknown } | undefined;
+  if (!row) return "";
+  return resolveCustomerStoreDisplayName({
+    settings: row.customerDisplayNames,
+    internalStoreName: normalizeText(row.name),
+    platform: "foundr1_pos"
+  });
+}
+
+async function getCustomerDisplayStoreOptions(stores: Array<{ id: string; name: string }>) {
+  if (!stores.length) return [];
+  const rows = await sql`
+    select
+      id::text,
+      name,
+      coalesce(customer_display_names, '{}'::jsonb) as "customerDisplayNames"
+    from stores
+    where id::text = any(${stores.map((store) => store.id)})
+  `;
+  const displayNamesById = new Map((rows as Array<{ id: string; name: string; customerDisplayNames?: unknown }>).map((store) => [
+    store.id,
+    resolveCustomerStoreDisplayName({
+      settings: store.customerDisplayNames,
+      internalStoreName: normalizeText(store.name),
+      platform: "foundr1_pos"
+    })
+  ]));
+  return stores.map((store) => ({
+    ...store,
+    name: displayNamesById.get(store.id) || store.name
+  }));
 }
 
 async function getDisplayState(storeId: string) {
@@ -80,7 +113,7 @@ async function getDisplayState(storeId: string) {
   const state = normalizeDisplayState(rows[0]?.displayState, storeName);
   return {
     ...state,
-    storeName: state.storeName || storeName,
+    storeName,
     updatedAt: rows[0]?.updatedAt ? String(rows[0].updatedAt) : ""
   };
 }
@@ -93,7 +126,7 @@ export async function GET(request: Request) {
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   return Response.json({
-    access,
+    access: { ...access, stores: await getCustomerDisplayStoreOptions(access.stores) },
     selectedStoreId,
     state: await getDisplayState(selectedStoreId)
   }, { headers: { "Cache-Control": "no-store" } });
@@ -116,7 +149,7 @@ export async function POST(request: Request) {
     second: "2-digit",
     hour12: false
   }).format(new Date());
-  const displayState = { ...state, storeName: state.storeName || storeName, updatedLabel };
+  const displayState = { ...state, storeName, updatedLabel };
 
   await sql`
     insert into pos_customer_display_states (

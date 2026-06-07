@@ -6463,6 +6463,51 @@ body :where(
   text-align: left;
 }
 
+.store-order-pickup-chip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.28);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.store-order-pickup-chip span,
+.store-order-pickup-chip small {
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.store-order-pickup-chip span {
+  text-transform: uppercase;
+}
+
+.store-order-pickup-chip strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: var(--green);
+  font-size: 24px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.store-order-pickup-chip small {
+  color: #315f4f;
+}
+
+.store-order-pickup-chip.is-detail {
+  width: auto;
+  min-width: 156px;
+  justify-self: end;
+}
+
 .store-order-card.is-payment-pending {
   border-color: #d8dee8;
   background: repeating-linear-gradient(
@@ -6477,7 +6522,18 @@ body :where(
 
 .store-order-card.is-payment-pending .store-order-code,
 .store-order-card.is-payment-pending .store-order-customer,
+.store-order-card.is-payment-pending .store-order-pickup-chip,
 .store-order-card.is-payment-pending small {
+  color: #667085;
+}
+
+.store-order-card.is-payment-pending .store-order-pickup-chip {
+  border-color: #d8dee8;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.store-order-card.is-payment-pending .store-order-pickup-chip strong,
+.store-order-card.is-payment-pending .store-order-pickup-chip small {
   color: #667085;
 }
 
@@ -8181,10 +8237,11 @@ body :where(
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 14px;
-  background: #f3f6f4;
+  gap: 14px;
+  padding: 18px;
+  background: #f7f6f2;
   color: var(--ink);
+  font-weight: 400;
 }
 
 .customer-display-topbar {
@@ -8202,56 +8259,64 @@ body :where(
 }
 
 .customer-display-topbar p {
-  color: #1f6f55;
+  color: #57534e;
   font-size: 14px;
-  font-weight: 950;
+  font-weight: 500;
 }
 
 .customer-display-topbar h1 {
-  color: var(--ink);
-  font-size: clamp(28px, 5.2vh, 54px);
-  line-height: 1.05;
+  color: #1c1917;
+  font-size: clamp(27px, 5vh, 52px);
+  font-weight: 500;
+  line-height: 1.08;
 }
 
-.customer-display-controls {
+.customer-display-sync {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  padding-right: 52px;
 }
 
-.customer-display-controls label {
+.customer-display-sync span {
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.customer-display-sync button {
   display: grid;
-  gap: 5px;
-  min-width: min(250px, 42vw);
-}
-
-.customer-display-controls span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 850;
-}
-
-.customer-display-controls select,
-.customer-display-controls button {
-  min-height: 42px;
-  border: 1px solid var(--line);
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #e7e5e4;
   border-radius: 8px;
   background: white;
-  color: var(--ink);
-  font-weight: 900;
+  color: #57534e;
 }
 
-.customer-display-controls select {
+.customer-display-menu select {
   width: 100%;
+  min-height: 42px;
   min-width: 0;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
   padding: 0 12px;
+  background: white;
+  color: #1c1917;
+  font-weight: 500;
 }
 
-.customer-display-controls button {
-  display: grid;
-  place-items: center;
-  width: 44px;
+.customer-display-menu .secondary-button,
+.customer-display-menu .danger-button {
+  width: 100%;
+  min-height: 40px;
+  font-weight: 500;
+}
+
+.customer-display-menu small {
+  font-weight: 400;
 }
 
 .customer-display-message {
@@ -8260,7 +8325,7 @@ body :where(
   padding: 10px 12px;
   background: #fff7ed;
   color: #9a3412;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .customer-display-layout {
@@ -8274,10 +8339,10 @@ body :where(
 .customer-display-payment {
   min-width: 0;
   min-height: 0;
-  border: 1px solid var(--line);
+  border: 1px solid #e7e5e4;
   border-radius: 8px;
   background: white;
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 18px 46px rgba(28, 25, 23, 0.08);
 }
 
 .customer-display-items {
@@ -8299,9 +8364,9 @@ body :where(
 .customer-display-section-head span,
 .customer-display-section-head strong,
 .customer-display-meta span {
-  color: var(--muted);
+  color: #78716c;
   font-size: 13px;
-  font-weight: 950;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -8311,10 +8376,10 @@ body :where(
   align-content: center;
   gap: 12px;
   min-height: 0;
-  color: var(--muted);
+  color: #78716c;
   text-align: center;
   font-size: 22px;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .customer-display-empty svg {
@@ -8336,10 +8401,10 @@ body :where(
   align-items: center;
   gap: 12px;
   min-height: 58px;
-  border: 1px solid var(--line);
+  border: 1px solid #e7e5e4;
   border-radius: 8px;
   padding: 9px 11px;
-  background: #f8fafc;
+  background: #fbfaf8;
 }
 
 .customer-display-item div {
@@ -8357,23 +8422,24 @@ body :where(
 }
 
 .customer-display-item strong {
-  color: var(--ink);
+  color: #1c1917;
   font-size: clamp(17px, 2.4vh, 24px);
+  font-weight: 500;
   line-height: 1.2;
 }
 
 .customer-display-item span {
-  color: var(--muted);
+  color: #78716c;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 400;
 }
 
 .customer-display-item em,
 .customer-display-item b {
-  color: var(--ink);
+  color: #1c1917;
   font-style: normal;
   font-size: clamp(18px, 2.6vh, 25px);
-  font-weight: 950;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -8385,10 +8451,10 @@ body :where(
   display: grid;
   place-items: center;
   min-height: 44px;
-  border: 1px dashed var(--line);
+  border: 1px dashed #d6d3d1;
   border-radius: 8px;
-  color: var(--muted);
-  font-weight: 950;
+  color: #78716c;
+  font-weight: 500;
 }
 
 .customer-display-payment {
@@ -8399,7 +8465,7 @@ body :where(
 }
 
 .customer-display-payment.is-complete {
-  border-color: rgba(31, 111, 85, 0.36);
+  border-color: #d6d3d1;
 }
 
 .customer-display-total,
@@ -8413,9 +8479,9 @@ body :where(
 }
 
 .customer-display-total {
-  border: 1px solid #111827;
+  border: 1px solid #1c1917;
   padding: 16px;
-  background: #111827;
+  background: #1c1917;
   color: white;
 }
 
@@ -8425,11 +8491,12 @@ body :where(
 .customer-display-terminal small,
 .customer-display-complete span {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 500;
 }
 
 .customer-display-total strong {
   font-size: clamp(56px, 11vh, 112px);
+  font-weight: 500;
   line-height: 0.98;
   letter-spacing: 0;
 }
@@ -8441,14 +8508,15 @@ body :where(
 }
 
 .customer-display-cash > div {
-  border: 1px solid var(--line);
+  border: 1px solid #e7e5e4;
   padding: 12px;
-  background: #f8fafc;
+  background: #fbfaf8;
 }
 
 .customer-display-cash strong {
-  color: #1f6f55;
+  color: #1c1917;
   font-size: clamp(36px, 7vh, 74px);
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -8459,36 +8527,38 @@ body :where(
 
 .customer-display-terminal {
   align-content: center;
-  border: 1px solid rgba(31, 111, 85, 0.26);
+  border: 1px solid #e7e5e4;
   padding: 16px;
-  background: var(--green-soft);
+  background: #fbfaf8;
   text-align: center;
 }
 
 .customer-display-terminal span {
-  color: #1f6f55;
+  color: #78716c;
 }
 
 .customer-display-terminal strong {
-  color: var(--ink);
+  color: #1c1917;
   font-size: clamp(32px, 6.2vh, 64px);
+  font-weight: 500;
   line-height: 1.08;
 }
 
 .customer-display-terminal small {
-  color: var(--muted);
+  color: #78716c;
 }
 
 .customer-display-complete {
-  border: 1px solid rgba(31, 111, 85, 0.28);
+  border: 1px solid #e7e5e4;
   padding: 12px;
-  background: var(--green-soft);
+  background: #fbfaf8;
   text-align: center;
 }
 
 .customer-display-complete strong {
-  color: #1f6f55;
+  color: #1c1917;
   font-size: clamp(24px, 4.5vh, 44px);
+  font-weight: 500;
   line-height: 1.1;
 }
 
@@ -8501,8 +8571,8 @@ body :where(
     align-items: flex-start;
   }
 
-  .customer-display-controls label {
-    min-width: min(210px, 48vw);
+  .customer-display-sync {
+    padding-right: 48px;
   }
 
   .customer-display-layout {

@@ -176,7 +176,33 @@ function getStoreOrderSortTime(order: StoreOrder) {
 function sortStoreOrders(a: StoreOrder, b: StoreOrder) {
   const priorityDiff = (storeOrderStatusPriority[a.status] ?? 9) - (storeOrderStatusPriority[b.status] ?? 9);
   if (priorityDiff !== 0) return priorityDiff;
-  return getStoreOrderSortTime(b) - getStoreOrderSortTime(a);
+  const pickupDiff = getStoreOrderSortTime(a) - getStoreOrderSortTime(b);
+  if (pickupDiff !== 0) return pickupDiff;
+  const createdAtA = new Date(a.createdAt).getTime();
+  const createdAtB = new Date(b.createdAt).getTime();
+  return (Number.isFinite(createdAtA) ? createdAtA : 0) - (Number.isFinite(createdAtB) ? createdAtB : 0);
+}
+
+function getPickupDisplayParts(order: Pick<StoreOrder, "pickupDate" | "pickupTime">) {
+  const date = new Date(`${order.pickupDate}T${order.pickupTime || "00:00"}`);
+  const dateLabel = Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" }).format(date)
+    : order.pickupDate || "日付未設定";
+  return {
+    dateLabel,
+    timeLabel: order.pickupTime || "時間未設定"
+  };
+}
+
+function PickupTimeChip({ order, detail = false }: { order: Pick<StoreOrder, "pickupDate" | "pickupTime">; detail?: boolean }) {
+  const pickup = getPickupDisplayParts(order);
+  return (
+    <span className={detail ? "store-order-pickup-chip is-detail" : "store-order-pickup-chip"} aria-label={`受取予定 ${pickup.dateLabel} ${pickup.timeLabel}`}>
+      <span>受取予定</span>
+      <strong>{pickup.timeLabel}</strong>
+      <small>{pickup.dateLabel}</small>
+    </span>
+  );
 }
 
 export default function StoreOrdersPage() {
@@ -781,6 +807,7 @@ export default function StoreOrdersPage() {
                 key={order.id}
                 onClick={() => setSelectedId(order.id)}
               >
+                <PickupTimeChip order={order} />
                 {!isPaidOrder(order) ? (
                   <span className="store-order-payment-badge">
                     決済待ち
@@ -800,7 +827,7 @@ export default function StoreOrdersPage() {
                     {order.productionTasks.map((task) => `${task.productionAreaLabel}:${getProductionTaskLabel(task.status)}`).join(" / ")}
                   </span>
                 ) : null}
-                <small>{order.pickupDate} {order.pickupTime} / {statusLabels[order.status] ?? order.status}</small>
+                <small>{statusLabels[order.status] ?? order.status}</small>
               </button>
             ))}
             {!visibleOrders.length && !loading ? <p className="muted-text">表示する注文はありません。</p> : null}
@@ -814,9 +841,10 @@ export default function StoreOrdersPage() {
                 <div>
                   <p className="eyebrow">{selectedOrder.storeName}</p>
                   <h2>{selectedOrder.pickupCode}</h2>
-                  <p>{selectedOrder.pickupDate} {selectedOrder.pickupTime} / {(sourceLabels[selectedOrder.orderSource] ?? selectedOrder.orderSource) || "注文"} / {(orderTypeLabels[selectedOrder.orderType] ?? selectedOrder.orderType) || "受け取り"}</p>
+                  <p>{(sourceLabels[selectedOrder.orderSource] ?? selectedOrder.orderSource) || "注文"} / {(orderTypeLabels[selectedOrder.orderType] ?? selectedOrder.orderType) || "受け取り"}</p>
                 </div>
                 <div className="store-order-status-stack">
+                  <PickupTimeChip order={selectedOrder} detail />
                   <span className="status-pill is-active">{statusLabels[selectedOrder.status] ?? selectedOrder.status}</span>
                   <span className={getPaymentPillClass(selectedOrder.paymentStatus)}>
                     {paymentLabels[selectedOrder.paymentStatus] ?? (selectedOrder.paymentStatus === "paid" ? "決済済み" : "未決済")}
