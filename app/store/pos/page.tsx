@@ -759,7 +759,7 @@ export default function StorePosPage() {
   const posDiscountAmount = getPosDiscountAmount(selectedDiscountPreset, cart, subtotal);
   const selectedCoupon = memberCoupons.find((coupon) => coupon.id === selectedCouponId);
   const couponBlockedByDiscount = Boolean(selectedDiscountPreset && !selectedDiscountPreset.allowCouponCombination);
-  const couponDiscountAmount = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
+  const couponDiscountAmount = couponBlockedByDiscount ? 0 : getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBodyAmounts(selectedCoupon));
   const taxRate = getOrderTaxRate(posSettings, orderType);
   const taxSummary = getTaxSummary({
     subtotal,
@@ -775,10 +775,10 @@ export default function StorePosPage() {
   };
   const recommendedCoupon = useMemo(() => {
     if (couponBlockedByDiscount || !memberCoupons.length || subtotal <= 0) return undefined;
-    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBaseAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBaseAmounts(left)))[0];
+    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBodyAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBodyAmounts(left)))[0];
   }, [cart, couponBlockedByDiscount, memberCoupons, subtotal]);
-  const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBaseAmounts(recommendedCoupon));
-  const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBaseAmounts(selectedCoupon));
+  const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBodyAmounts(recommendedCoupon));
+  const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBodyAmounts(selectedCoupon));
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
   const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - payableAmount : null;
@@ -936,12 +936,20 @@ export default function StorePosPage() {
     return getLineBasePrice(item) + item.optionTotal;
   }
 
-  function getExchangeEligibleBaseAmounts(coupon?: PosCoupon) {
+  function getExchangeEligibleBodyAmount(item: PosCartItem) {
+    if (item.measuredQuantity) return 0;
+    const sizeReduction = item.selectedOptions
+      .filter((option) => option.groupKey === "size")
+      .reduce((sum, option) => sum + Math.min(0, getOptionPrice(option)), 0);
+    return Math.max(0, getItemPrice(item) + sizeReduction);
+  }
+
+  function getExchangeEligibleBodyAmounts(coupon?: PosCoupon) {
     if (!coupon || !isExchangeCoupon(coupon)) return [];
     return cart.flatMap((item) => {
       if (coupon.brandId && item.brandId !== coupon.brandId) return [];
-      const basePrice = item.measuredQuantity ? 0 : getItemPrice(item);
-      return Array.from({ length: item.quantity }, () => basePrice).filter((amount) => amount > 0);
+      const bodyAmount = getExchangeEligibleBodyAmount(item);
+      return Array.from({ length: item.quantity }, () => bodyAmount).filter((amount) => amount > 0);
     });
   }
 
@@ -1604,7 +1612,7 @@ export default function StorePosPage() {
                     ) : null}
                     <div className="store-pos-coupon-list">
                       {memberCoupons.map((coupon) => {
-                        const discount = getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBaseAmounts(coupon));
+                        const discount = getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBodyAmounts(coupon));
                         const isSelected = selectedCouponId === coupon.id;
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
                         const isCustomerSelected = customerSelectedCouponId === coupon.id;

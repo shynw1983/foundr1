@@ -714,7 +714,11 @@ export async function POST(request: Request) {
     const exchangeEligibleAmounts = normalizedItems.flatMap((item) => {
       if (coupon?.brandId && item.brandId !== coupon.brandId) return [];
       if (item.measuredQuantity) return [];
-      return Array.from({ length: item.quantity }, () => item.unitPrice).filter((amount) => amount > 0);
+      const sizeReduction = item.selectedOptions
+        .filter((option) => option.groupKey === "size")
+        .reduce((sum, option) => sum + Math.min(0, Number(option.priceDelta ?? 0)), 0);
+      const bodyAmount = Math.max(0, Math.round(item.unitPrice + sizeReduction));
+      return Array.from({ length: item.quantity }, () => bodyAmount).filter((amount) => amount > 0);
     });
     couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts);
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
