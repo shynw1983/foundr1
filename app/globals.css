@@ -7991,7 +7991,7 @@ body :where(
   margin-top: 4px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .store-pos-transaction-body {
@@ -8025,14 +8025,14 @@ body :where(
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: #f8fafc;
+  background: white;
   color: var(--ink);
   text-align: left;
 }
 
 .store-pos-transaction-list button.is-active {
   border-color: rgba(31, 111, 85, 0.35);
-  background: var(--green-soft);
+  background: color-mix(in srgb, var(--green-soft) 55%, white);
 }
 
 .store-pos-transaction-list button.is-refunded {
@@ -8069,12 +8069,19 @@ body :where(
 .store-pos-transaction-list small {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.store-pos-transaction-list strong {
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .store-pos-transaction-list b {
   color: #1f6f55;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .store-pos-transaction-detail {
@@ -8114,7 +8121,7 @@ body :where(
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: #f8fafc;
+  background: #fbfcfd;
 }
 
 .store-pos-transaction-summary span,
@@ -8125,12 +8132,14 @@ body :where(
 .store-pos-refund-panel small {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .store-pos-transaction-summary strong {
   color: var(--ink);
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 650;
 }
 
 .store-pos-transaction-meta,
@@ -8153,6 +8162,7 @@ body :where(
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
+  background: white;
 }
 
 .store-pos-transaction-items > div > div {
@@ -8174,7 +8184,18 @@ body :where(
 .store-pos-transaction-items span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.store-pos-transaction-items strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.store-pos-transaction-items b {
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .store-pos-refund-panel label {
@@ -8189,7 +8210,7 @@ body :where(
 .store-pos-refund-panel {
   position: sticky;
   bottom: 0;
-  box-shadow: 0 -10px 18px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 -8px 14px rgba(15, 23, 42, 0.04);
 }
 
 .store-pos-refund-panel .danger-button:disabled {
@@ -8205,7 +8226,7 @@ body :where(
   padding: 18px;
   color: var(--muted);
   background: #f8fafc;
-  font-weight: 850;
+  font-weight: 500;
   text-align: center;
 }
 

@@ -1374,6 +1374,49 @@ async function issueMissingStampRewards(input: {
   return Math.max(0, missingRewards);
 }
 
+async function removeSurplusAvailableStampRewards(input: { memberId: string; campaignId: string }) {
+  const totalRows = await sql`
+    select
+      coalesce(sum(loyalty_stamp_ledger.stamps), 0)::int as total,
+      greatest(1, loyalty_stamp_campaigns.stamps_required)::int as "stampsRequired"
+    from loyalty_stamp_campaigns
+    left join loyalty_stamp_ledger
+      on loyalty_stamp_ledger.campaign_id = loyalty_stamp_campaigns.id
+      and loyalty_stamp_ledger.member_id::text = ${input.memberId}
+      and loyalty_stamp_ledger.created_at >= now() - interval '3 months'
+    where loyalty_stamp_campaigns.id::text = ${input.campaignId}
+    group by loyalty_stamp_campaigns.id
+    limit 1
+  `;
+  const total = Number(totalRows[0]?.total ?? 0);
+  const stampsRequired = Math.max(1, Number(totalRows[0]?.stampsRequired ?? 1));
+  const entitledRewards = Math.floor(total / stampsRequired);
+  const couponRows = await sql`
+    select id::text, status
+    from member_coupons
+    where member_id::text = ${input.memberId}
+      and metadata ->> 'stampCampaignId' = ${input.campaignId}
+    order by issued_at asc
+  `;
+  const coupons = couponRows as Array<{ id: string; status: string }>;
+  const surplusCount = coupons.length - entitledRewards;
+  if (surplusCount <= 0) return 0;
+  const removableIds = coupons
+    .filter((coupon) => coupon.status === "available")
+    .slice(-surplusCount)
+    .map((coupon) => coupon.id);
+  if (!removableIds.length) return 0;
+  const removedRows = await sql`
+    delete from member_coupons
+    where id::text = any(${removableIds})
+      and status = 'available'
+      and member_id::text = ${input.memberId}
+      and metadata ->> 'stampCampaignId' = ${input.campaignId}
+    returning id::text
+  `;
+  return removedRows.length;
+}
+
 export async function adjustMemberStamps(input: {
   memberId: string;
   campaignId: string;
@@ -1676,6 +1719,41 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
 }
 
 export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "返金によるポイント取消") {
+  const orderRows = await sql`
+    select
+      coalesce(member_id::text, '') as "memberId"
+    from store_customer_orders
+    where id::text = ${orderId}
+    limit 1
+  `;
+  const order = orderRows[0] as { memberId: string } | undefined;
+  const stampRows = await sql`
+    delete from loyalty_stamp_ledger
+    where order_id::text = ${orderId}
+    returning
+      member_id::text as "memberId",
+      campaign_id::text as "campaignId"
+  `;
+  const affectedStampCampaigns = new Map<string, { memberId: string; campaignId: string }>();
+  for (const row of stampRows as Array<{ memberId: string; campaignId: string }>) {
+    affectedStampCampaigns.set(`${row.memberId}:${row.campaignId}`, row);
+  }
+  for (const campaign of affectedStampCampaigns.values()) {
+    await removeSurplusAvailableStampRewards(campaign);
+  }
+
+  await sql`
+    update member_coupons
+    set
+      status = 'available',
+      used_order_id = null,
+      used_store_id = null,
+      used_at = null,
+      metadata = metadata || ${JSON.stringify({ restoredByRefundOrderId: orderId, restoredAt: new Date().toISOString() })}::jsonb
+    where used_order_id::text = ${orderId}
+      and status = 'used'
+  `;
+
   const earnRows = await sql`
     select
       loyalty_point_ledger.member_id::text as "memberId",
@@ -1699,7 +1777,9 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "�
     points: number;
     eligibleAmount: number;
   } | undefined;
-  if (!earn?.memberId || earn.points <= 0) return null;
+  if (!earn?.memberId || earn.points <= 0) {
+    return order?.memberId ? getMemberProfile(order.memberId) : null;
+  }
 
   const reverseRows = await sql`
     insert into loyalty_point_ledger (
