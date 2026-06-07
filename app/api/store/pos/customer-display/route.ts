@@ -46,6 +46,8 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     preferredLanguage: normalizeDisplayLanguage(state.preferredLanguage),
     memberDisplayName: normalizeText(state.memberDisplayName).slice(0, 80),
     memberMessage: normalizeText(state.memberMessage).slice(0, 120),
+    discountName: normalizeText(state.discountName).slice(0, 80),
+    discountAmount: Math.max(0, toAmount(state.discountAmount)),
     couponName: normalizeText(state.couponName).slice(0, 80),
     couponDiscountAmount: Math.max(0, toAmount(state.couponDiscountAmount)),
     subtotal: Math.max(0, toAmount(state.subtotal)),

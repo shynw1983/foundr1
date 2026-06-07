@@ -984,12 +984,23 @@ export default function StorePosPage() {
     return fallback ? `${fallback}様` : "";
   }
 
-  function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number) {
+  function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number, fallbackName = "") {
     const amount = Math.max(0, Math.round(Number(discountAmount) || 0));
-    if (!coupon || amount <= 0) return { couponName: "", couponDiscountAmount: 0 };
+    const couponName = coupon?.name || coupon?.couponCode || fallbackName.trim();
+    if (!couponName || amount <= 0) return { couponName: "", couponDiscountAmount: 0 };
     return {
-      couponName: coupon.name || coupon.couponCode || "クーポン",
+      couponName,
       couponDiscountAmount: amount
+    };
+  }
+
+  function getDisplayDiscountState(discountPreset: typeof selectedDiscountPreset, discountAmount: number, fallbackName = "") {
+    const amount = Math.max(0, Math.round(Number(discountAmount) || 0));
+    const discountName = discountPreset?.name || fallbackName.trim();
+    if (!discountName || amount <= 0) return { discountName: "", discountAmount: 0 };
+    return {
+      discountName,
+      discountAmount: amount
     };
   }
 
@@ -1014,6 +1025,8 @@ export default function StorePosPage() {
       preferredLanguage: "",
       memberDisplayName: "",
       memberMessage: "",
+      discountName: "",
+      discountAmount: 0,
       couponName: "",
       couponDiscountAmount: 0,
       subtotal: 0,
@@ -1286,7 +1299,8 @@ export default function StorePosPage() {
         preferredLanguage: selectedMember?.preferredLanguage || "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
-        ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount),
+        ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引"),
+        ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン"),
         subtotal: body.amount,
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
@@ -1340,6 +1354,7 @@ export default function StorePosPage() {
         preferredLanguage: selectedMember?.preferredLanguage || "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
+        ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount),
         ...getDisplayCouponState(selectedCoupon, couponDiscountAmount),
         subtotal: payableAmount,
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
@@ -1359,7 +1374,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedCoupon?.id, selectedCoupon?.name, selectedMember, selectedStoreId, payableAmount, couponDiscountAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
