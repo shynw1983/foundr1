@@ -24,6 +24,17 @@ function normalizePreferredLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "ja";
 }
 
+function memberAge(birthday: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return null;
+  const birthDate = new Date(`${birthday}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age -= 1;
+  return age;
+}
+
 async function getPreferredStoreOptions() {
   const rows = await sql`
     select
@@ -156,8 +167,12 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "電話番号を入力してください。" }, { status: 400 });
   }
   const birthday = String(body.birthday || "").trim();
-  if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+  const age = birthday ? memberAge(birthday) : null;
+  if (birthday && (age === null || age < 0)) {
     return Response.json({ error: "生年月日を正しく入力してください。" }, { status: 400 });
+  }
+  if (birthday && age !== null && age < 16 && !Boolean(body.guardianConsent)) {
+    return Response.json({ error: "16歳未満の方は、保護者の同意が必要です。" }, { status: 400 });
   }
 
   try {

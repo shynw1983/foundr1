@@ -167,10 +167,11 @@ function getFormalMemberName(member?: MemberProfile | null) {
   return (member?.fullName || [member?.lastName, member?.firstName].map((part) => part?.trim()).filter(Boolean).join(" ")).trim();
 }
 
-function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会員") {
+function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会員", language = "ja") {
   const formalName = getFormalMemberName(member);
-  if (formalName) return `${formalName}`;
-  return member?.displayName?.trim() || member?.email?.trim() || fallback;
+  const displayName = formalName || member?.displayName?.trim();
+  if (displayName) return language === "ja" ? `${displayName} 様` : displayName;
+  return member?.email?.trim() || fallback;
 }
 
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
@@ -469,7 +470,7 @@ function ConfiguredMemberPortal() {
                   <div>
                     <p className="eyebrow">{text.memberNo}</p>
                     <h2>{data.member.memberNumber}</h2>
-                    <span>{getMemberCardDisplayName(data.member, text.member)}</span>
+                    <span>{getMemberCardDisplayName(data.member, text.member, language)}</span>
                   </div>
                   <div className="member-qr-placeholder" aria-label="会員 QR">
                     {qrDataUrl ? <img src={qrDataUrl} alt="会員 QR" /> : <QrCode size={64} />}

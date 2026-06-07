@@ -12113,6 +12113,28 @@ body :where(
   outline: 0;
 }
 
+.member-settings-grid .member-settings-consent {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid rgba(184, 134, 11, 0.2);
+  border-radius: 8px;
+  background: #fffbeb;
+  padding: 10px 12px;
+}
+
+.member-settings-grid .member-settings-consent input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  accent-color: var(--member-logo-accent);
+  padding: 0;
+}
+
+.member-settings-grid .member-settings-consent span {
+  color: #6f5700;
+  line-height: 1.5;
+}
+
 .member-phone-segments {
   display: grid;
   grid-template-columns: minmax(48px, 0.85fr) auto minmax(54px, 1fr) auto minmax(54px, 1fr);

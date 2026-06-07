@@ -49,6 +49,7 @@ type MemberSettingsForm = {
   phonePart2: string;
   phonePart3: string;
   birthday: string;
+  guardianConsent: boolean;
   preferredLanguage: string;
   preferredStoreId: string;
   marketingOptIn: boolean;
@@ -70,6 +71,7 @@ const emptyMemberSettings: MemberSettingsForm = {
   phonePart2: "",
   phonePart3: "",
   birthday: "",
+  guardianConsent: false,
   preferredLanguage: "ja",
   preferredStoreId: "",
   marketingOptIn: false,
@@ -125,6 +127,8 @@ const memberSettingsText = {
     saveError: "会員情報を保存できませんでした。",
     duplicatePhone: "この電話番号はすでに別の会員で使われています。",
     birthdayError: "生年月日を正しく入力してください。",
+    guardianConsent: "16歳未満の方は、保護者の同意を得ています。",
+    guardianConsentRequired: "16歳未満の方は、保護者の同意が必要です。",
     requiredDisplayName: "表示名・ニックネーム",
     requiredLastName: "姓",
     requiredFirstName: "名",
@@ -179,6 +183,8 @@ const memberSettingsText = {
     saveError: "无法保存会员信息。",
     duplicatePhone: "这个电话号码已经被其他会员使用。",
     birthdayError: "请正确输入生日。",
+    guardianConsent: "未满 16 岁时，已取得监护人同意。",
+    guardianConsentRequired: "未满 16 岁时需要监护人同意。",
     requiredDisplayName: "显示名・昵称",
     requiredLastName: "姓",
     requiredFirstName: "名",
@@ -233,6 +239,8 @@ const memberSettingsText = {
     saveError: "無法儲存會員資訊。",
     duplicatePhone: "這個電話號碼已被其他會員使用。",
     birthdayError: "請正確輸入生日。",
+    guardianConsent: "未滿 16 歲時，已取得監護人同意。",
+    guardianConsentRequired: "未滿 16 歲時需要監護人同意。",
     requiredDisplayName: "顯示名稱・暱稱",
     requiredLastName: "姓",
     requiredFirstName: "名",
@@ -287,6 +295,8 @@ const memberSettingsText = {
     saveError: "Could not save member information.",
     duplicatePhone: "This phone number is already used by another member.",
     birthdayError: "Enter a valid birthday.",
+    guardianConsent: "If under 16, a parent or guardian has agreed.",
+    guardianConsentRequired: "A parent or guardian must agree for members under 16.",
     requiredDisplayName: "display name / nickname",
     requiredLastName: "last name",
     requiredFirstName: "first name",
@@ -341,6 +351,8 @@ const memberSettingsText = {
     saveError: "회원 정보를 저장할 수 없습니다.",
     duplicatePhone: "이 전화번호는 이미 다른 회원이 사용 중입니다.",
     birthdayError: "생년월일을 올바르게 입력해 주세요.",
+    guardianConsent: "16세 미만인 경우 보호자 동의를 받았습니다.",
+    guardianConsentRequired: "16세 미만인 경우 보호자 동의가 필요합니다.",
     requiredDisplayName: "표시 이름・닉네임",
     requiredLastName: "성",
     requiredFirstName: "이름",
@@ -395,6 +407,8 @@ const memberSettingsText = {
     saveError: "Không thể lưu thông tin thành viên.",
     duplicatePhone: "Số điện thoại này đã được thành viên khác sử dụng.",
     birthdayError: "Vui lòng nhập ngày sinh hợp lệ.",
+    guardianConsent: "Nếu dưới 16 tuổi, đã có sự đồng ý của phụ huynh hoặc người giám hộ.",
+    guardianConsentRequired: "Thành viên dưới 16 tuổi cần có sự đồng ý của phụ huynh hoặc người giám hộ.",
     requiredDisplayName: "tên hiển thị・biệt danh",
     requiredLastName: "họ",
     requiredFirstName: "tên",
@@ -449,6 +463,8 @@ const memberSettingsText = {
     saveError: "सदस्य जानकारी सुरक्षित गर्न सकिएन।",
     duplicatePhone: "यो फोन नम्बर अर्को सदस्यले प्रयोग गरिसकेको छ।",
     birthdayError: "कृपया सही जन्मदिन प्रविष्ट गर्नुहोस्।",
+    guardianConsent: "१६ वर्षभन्दा कम भएमा अभिभावक वा संरक्षकको सहमति प्राप्त गरिएको छ।",
+    guardianConsentRequired: "१६ वर्षभन्दा कम सदस्यका लागि अभिभावक वा संरक्षकको सहमति आवश्यक छ।",
     requiredDisplayName: "प्रदर्शन नाम・उपनाम",
     requiredLastName: "थर",
     requiredFirstName: "नाम",
@@ -479,6 +495,22 @@ function composeJapanesePhone(part1: string, part2: string, part3: string) {
   return [part1, part2, part3].map((part) => part.replace(/[^\d]/g, "")).filter(Boolean).join("-");
 }
 
+function memberAge(birthday: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return null;
+  const birthDate = new Date(`${birthday}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age -= 1;
+  return age;
+}
+
+function needsGuardianConsent(birthday: string) {
+  const age = memberAge(birthday);
+  return age !== null && age >= 0 && age < 16;
+}
+
 function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
   if (!member) return emptyMemberSettings;
   const [fallbackLastName = "", fallbackFirstName = ""] = (member.fullName || "").trim().split(/\s+/, 2);
@@ -497,6 +529,7 @@ function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
     phonePart2,
     phonePart3,
     birthday: member.birthday || "",
+    guardianConsent: false,
     preferredLanguage: member.preferredLanguage || "ja",
     preferredStoreId: member.preferredStoreId || "",
     marketingOptIn: Boolean(member.marketingOptIn),
@@ -597,6 +630,15 @@ export default function MemberSettingsPage() {
       setMessage(text.requiredMessage.replace("{{fields}}", requiredMissing.join(currentLanguage === "en" ? ", " : "、")));
       return;
     }
+    const age = form.birthday ? memberAge(form.birthday) : null;
+    if (form.birthday && (age === null || age < 0)) {
+      setMessage(text.birthdayError);
+      return;
+    }
+    if (needsGuardianConsent(form.birthday) && !form.guardianConsent) {
+      setMessage(text.guardianConsentRequired);
+      return;
+    }
 
     setSaving(true);
     setMessage("");
@@ -627,6 +669,8 @@ export default function MemberSettingsPage() {
         ? text.duplicatePhone
         : rawMessage === "生年月日を正しく入力してください。"
           ? text.birthdayError
+          : rawMessage === "16歳未満の方は、保護者の同意が必要です。"
+            ? text.guardianConsentRequired
           : rawMessage;
       setMessage(localizedMessage || text.saveError);
     } finally {
@@ -763,6 +807,12 @@ export default function MemberSettingsPage() {
                   <span>{text.birthday}</span>
                   <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} disabled={loading || saving} />
                 </label>
+                {needsGuardianConsent(settingsForm.birthday) ? (
+                  <label className="member-settings-field-wide member-settings-consent">
+                    <input type="checkbox" checked={settingsForm.guardianConsent} onChange={(event) => setSettingsForm((current) => ({ ...current, guardianConsent: event.target.checked }))} disabled={loading || saving} />
+                    <span>{text.guardianConsent}</span>
+                  </label>
+                ) : null}
                 <label>
                   <span>{text.preferredStore}</span>
                   <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))} disabled={loading || saving}>
