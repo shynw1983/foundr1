@@ -197,12 +197,12 @@ export default function MemberSettingsPage() {
     if (isLoaded && isSignedIn) void loadMemberSettings();
   }, [isLoaded, isSignedIn]);
 
-  async function saveSettings() {
+  async function saveSettings(form = settingsForm) {
     const requiredMissing = [
-      !settingsForm.displayName.trim() ? "表示名・ニックネーム" : "",
-      !settingsForm.lastName.trim() ? "姓" : "",
-      !settingsForm.firstName.trim() ? "名" : "",
-      !(settingsForm.phonePart1.trim() && settingsForm.phonePart2.trim() && settingsForm.phonePart3.trim()) ? "電話番号" : ""
+      !form.displayName.trim() ? "表示名・ニックネーム" : "",
+      !form.lastName.trim() ? "姓" : "",
+      !form.firstName.trim() ? "名" : "",
+      !(form.phonePart1.trim() && form.phonePart2.trim() && form.phonePart3.trim()) ? "電話番号" : ""
     ].filter(Boolean);
     if (requiredMissing.length) {
       setMessage(`${requiredMissing.join("、")}を入力してください。`);
@@ -212,12 +212,12 @@ export default function MemberSettingsPage() {
     setSaving(true);
     setMessage("");
     try {
-      const nameKana = [settingsForm.lastNameKana, settingsForm.firstNameKana].map((part) => part.trim()).filter(Boolean).join(" ");
-      const phone = composeJapanesePhone(settingsForm.phonePart1, settingsForm.phonePart2, settingsForm.phonePart3);
+      const nameKana = [form.lastNameKana, form.firstNameKana].map((part) => part.trim()).filter(Boolean).join(" ");
+      const phone = composeJapanesePhone(form.phonePart1, form.phonePart2, form.phonePart3);
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settingsForm, nameKana, phone })
+        body: JSON.stringify({ ...form, nameKana, phone })
       });
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || "会員情報を保存できませんでした。");

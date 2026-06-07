@@ -11,20 +11,12 @@ type MemberAuthPanelProps = {
 };
 
 type EmailFlow = "sign_in" | "sign_up";
-type AuthStep = "email" | "preparing_code" | "code" | "profile";
+type AuthStep = "email" | "preparing_code" | "code";
 type EmailCodeFactorLike = { strategy: "email_code"; emailAddressId: string };
 type SignUpCompletionResource = {
   status: string | null;
   missingFields?: string[];
   createdSessionId?: string | null;
-};
-type ProfileForm = {
-  displayName: string;
-  lastName: string;
-  firstName: string;
-  phonePart1: string;
-  phonePart2: string;
-  phonePart3: string;
 };
 
 const authTimeoutMs = 12000;
@@ -82,10 +74,6 @@ function signUpCompletionMessage(signUpAttempt: SignUpCompletionResource) {
   return "会員登録を完了できませんでした。もう一度お試しください。";
 }
 
-function composeJapanesePhone(part1: string, part2: string, part3: string) {
-  return [part1, part2, part3].map((part) => part.trim()).filter(Boolean).join("-");
-}
-
 function memberEntryUrl(url: string) {
   try {
     const nextUrl = new URL(url, window.location.origin);
@@ -93,6 +81,21 @@ function memberEntryUrl(url: string) {
     return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
   } catch {
     return "/member";
+  }
+}
+
+function memberSettingsCompletionUrl(url: string) {
+  try {
+    const nextUrl = new URL(url, window.location.origin);
+    const params = new URLSearchParams();
+    params.set("completeProfile", "1");
+    const returnTo = nextUrl.searchParams.get("returnTo");
+    const handoff = nextUrl.searchParams.get("handoff");
+    if (returnTo) params.set("returnTo", returnTo);
+    if (handoff) params.set("handoff", handoff);
+    return `/member/settings?${params.toString()}`;
+  } catch {
+    return "/member/settings?completeProfile=1";
   }
 }
 
@@ -110,24 +113,11 @@ export function MemberAuthPanel({
   const [authStep, setAuthStep] = useState<AuthStep>("email");
   const [emailBusy, setEmailBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [pendingSignUpSessionId, setPendingSignUpSessionId] = useState("");
-  const [profileForm, setProfileForm] = useState<ProfileForm>({
-    displayName: "",
-    lastName: "",
-    firstName: "",
-    phonePart1: "",
-    phonePart2: "",
-    phonePart3: ""
-  });
 
   const authLoaded = signInLoaded && signUpLoaded && Boolean(signIn && signUp);
   const codeDigits = Array.from({ length: codeLength }, (_, index) => code[index] || "");
   const codeReady = authStep === "code";
   const codePreparing = authStep === "preparing_code";
-  const headingTitle = authStep === "profile" ? "会員登録を完了" : title;
-  const headingDescription = authStep === "profile"
-    ? "確認コードの認証が完了しました。続いて会員情報を入力してください。"
-    : description;
 
   function focusCodeInput(index: number) {
     codeInputRefs.current[index]?.focus();
@@ -260,9 +250,7 @@ export function MemberAuthPanel({
           }
         }
         if (signUpAttempt.status === "complete" && signUpAttempt.createdSessionId) {
-          setPendingSignUpSessionId(signUpAttempt.createdSessionId);
-          setAuthStep("profile");
-          setMessage("確認が完了しました。続いて会員情報を入力してください。");
+          await withAuthTimeout(setSignUpActive({ session: signUpAttempt.createdSessionId, redirectUrl: memberSettingsCompletionUrl(afterAuthUrl) }));
           return;
         }
         setMessage(signUpCompletionMessage(signUpAttempt));
@@ -276,56 +264,6 @@ export function MemberAuthPanel({
     }
   }
 
-  async function completeProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!authLoaded || !setSignUpActive) return;
-    if (!pendingSignUpSessionId) {
-      setMessage("会員登録の確認が完了していません。もう一度確認コードを入力してください。");
-      setAuthStep("code");
-      return;
-    }
-    const displayName = profileForm.displayName.trim();
-    const lastName = profileForm.lastName.trim();
-    const firstName = profileForm.firstName.trim();
-    const phone = composeJapanesePhone(profileForm.phonePart1, profileForm.phonePart2, profileForm.phonePart3);
-    const missingFields = [
-      !displayName ? "表示名・ニックネーム" : "",
-      !lastName ? "姓" : "",
-      !firstName ? "名" : "",
-      !(profileForm.phonePart1.trim() && profileForm.phonePart2.trim() && profileForm.phonePart3.trim()) ? "電話番号" : ""
-    ].filter(Boolean);
-    if (missingFields.length) {
-      setMessage(`${missingFields.join("、")}を入力してください。`);
-      return;
-    }
-
-    setEmailBusy(true);
-    setMessage("");
-    try {
-      await withAuthTimeout(setSignUpActive({ session: pendingSignUpSessionId }));
-      const response = await withAuthTimeout(fetch("/api/public/members/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          displayName,
-          lastName,
-          firstName,
-          phone,
-          preferredLanguage: "ja"
-        })
-      }));
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) {
-        throw new Error(body.error || "会員情報を保存できませんでした。");
-      }
-      window.location.assign(memberEntryUrl(afterAuthUrl));
-    } catch (error) {
-      setMessage(errorMessage(error) || "会員情報を保存できませんでした。");
-    } finally {
-      setEmailBusy(false);
-    }
-  }
-
   return (
     <section className="member-auth-panel">
       <div className="member-auth-card">
@@ -333,8 +271,8 @@ export function MemberAuthPanel({
           <span><KeyRound size={20} /></span>
           <div>
             <p className="eyebrow">Foundr1 Member</p>
-            <h2>{headingTitle}</h2>
-            <p>{headingDescription}</p>
+            <h2>{title}</h2>
+            <p>{description}</p>
           </div>
         </div>
         <div id="clerk-captcha" className="member-auth-captcha" />
@@ -364,88 +302,6 @@ export function MemberAuthPanel({
               <a href="/privacy" target="_blank" rel="noreferrer">プライバシーポリシー</a>
               に同意したものとみなされます。未登録のメールアドレスは確認後に会員登録されます。
             </p>
-          </form>
-        ) : authStep === "profile" ? (
-          <form className="member-auth-email-form" onSubmit={(event) => void completeProfile(event)}>
-            <div className="member-auth-profile-intro">
-              <strong>会員情報を入力してください</strong>
-              <span>店頭での会員確認と予約時の自動入力に使用します。</span>
-            </div>
-            <div className="member-auth-profile-grid">
-              <label className="member-auth-profile-wide">
-                <span>表示名・ニックネーム</span>
-                <input
-                  value={profileForm.displayName}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, displayName: event.target.value }))}
-                  placeholder="例: Maamaa fan"
-                  disabled={emailBusy}
-                  required
-                />
-              </label>
-              <label>
-                <span>姓</span>
-                <input
-                  value={profileForm.lastName}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, lastName: event.target.value }))}
-                  placeholder="例: 山田"
-                  autoComplete="family-name"
-                  disabled={emailBusy}
-                  required
-                />
-              </label>
-              <label>
-                <span>名</span>
-                <input
-                  value={profileForm.firstName}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))}
-                  placeholder="例: 太郎"
-                  autoComplete="given-name"
-                  disabled={emailBusy}
-                  required
-                />
-              </label>
-              <label className="member-auth-profile-wide">
-                <span>電話番号</span>
-                <div className="member-auth-phone-segments">
-                  <input
-                    value={profileForm.phonePart1}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5) }))}
-                    placeholder="090"
-                    inputMode="numeric"
-                    autoComplete="tel-area-code"
-                    aria-label="電話番号 1"
-                    disabled={emailBusy}
-                    required
-                  />
-                  <span>-</span>
-                  <input
-                    value={profileForm.phonePart2}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4) }))}
-                    placeholder="1234"
-                    inputMode="numeric"
-                    autoComplete="tel-local-prefix"
-                    aria-label="電話番号 2"
-                    disabled={emailBusy}
-                    required
-                  />
-                  <span>-</span>
-                  <input
-                    value={profileForm.phonePart3}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4) }))}
-                    placeholder="5678"
-                    inputMode="numeric"
-                    autoComplete="tel-local-suffix"
-                    aria-label="電話番号 3"
-                    disabled={emailBusy}
-                    required
-                  />
-                </div>
-              </label>
-            </div>
-            <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded}>
-              {emailBusy ? <Loader2 size={16} /> : <KeyRound size={16} />}
-              会員登録を完了
-            </button>
           </form>
         ) : (
           <form className="member-auth-email-form" onSubmit={(event) => void verifyEmailCode(event)}>
