@@ -10625,6 +10625,51 @@ body :where(
   line-height: 1.5;
 }
 
+.member-auth-profile-intro {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(47, 138, 114, 0.18);
+  border-radius: 8px;
+  background: rgba(232, 247, 242, 0.72);
+}
+
+.member-auth-profile-intro strong {
+  color: var(--member-ink);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.member-auth-profile-intro span {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.member-auth-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.member-auth-profile-wide {
+  grid-column: 1 / -1;
+}
+
+.member-auth-phone-segments {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.member-auth-phone-segments span {
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .member-auth-email-form input {
   width: 100%;
   min-height: 46px;
