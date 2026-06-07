@@ -8640,6 +8640,7 @@ body :where(
 
 .customer-display-total,
 .customer-display-member,
+.customer-display-discount,
 .customer-display-cash > div,
 .customer-display-terminal,
 .customer-display-complete {
@@ -8649,11 +8650,43 @@ body :where(
   border-radius: 8px;
 }
 
-.customer-display-member {
-  border: 1px solid rgba(31, 111, 85, 0.18);
+.customer-display-discount {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  border: 1px solid #e5e5df;
   padding: 10px 12px;
-  background: #f8fbf8;
-  color: #1f6f55;
+  background: #fafaf7;
+}
+
+.customer-display-discount span {
+  grid-column: 1 / -1;
+  color: #73736d;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.customer-display-discount strong,
+.customer-display-discount b {
+  min-width: 0;
+  color: #171717;
+  font-size: clamp(15px, 2.2vh, 20px);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.customer-display-discount strong {
+  overflow-wrap: anywhere;
+}
+
+.customer-display-discount b {
+  white-space: nowrap;
+}
+
+.customer-display-member {
+  border: 1px solid #e5e5df;
+  padding: 10px 12px;
+  background: #fafaf7;
+  color: #171717;
   text-align: left;
 }
 
@@ -8665,7 +8698,7 @@ body :where(
 }
 
 .customer-display-member strong {
-  color: #667066;
+  color: #73736d;
   font-size: clamp(12px, 1.8vh, 16px);
   font-weight: 400;
   line-height: 1.2;
@@ -10555,6 +10588,7 @@ body :where(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: nowrap;
 }
 
 .member-topbar-actions {
@@ -10562,7 +10596,12 @@ body :where(
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  margin-left: auto;
   flex-wrap: nowrap;
+}
+
+.member-portal-topbar > .member-language-switcher {
+  margin-left: auto;
 }
 
 .member-language-switcher {

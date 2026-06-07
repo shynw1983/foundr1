@@ -30,6 +30,8 @@ type DisplayState = {
   preferredLanguage: string;
   memberDisplayName: string;
   memberMessage: string;
+  couponName: string;
+  couponDiscountAmount: number;
   subtotal: number;
   cashTenderedAmount: number | null;
   cashChangeAmount: number | null;
@@ -49,6 +51,8 @@ const idleState: DisplayState = {
   preferredLanguage: "",
   memberDisplayName: "",
   memberMessage: "",
+  couponName: "",
+  couponDiscountAmount: 0,
   subtotal: 0,
   cashTenderedAmount: null,
   cashChangeAmount: null,
@@ -341,6 +345,14 @@ export default function CustomerDisplayPage() {
             <span>合計</span>
             <strong>{formatYen(state.subtotal)}</strong>
           </div>
+
+          {state.couponName && state.couponDiscountAmount > 0 ? (
+            <div className="customer-display-discount">
+              <span>クーポン適用</span>
+              <strong>{state.couponName}</strong>
+              <b>-{formatYen(state.couponDiscountAmount)}</b>
+            </div>
+          ) : null}
 
           {state.paymentMethod === "cash" ? (
             <div className="customer-display-cash">

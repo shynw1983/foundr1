@@ -984,6 +984,15 @@ export default function StorePosPage() {
     return fallback ? `${fallback}様` : "";
   }
 
+  function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number) {
+    const amount = Math.max(0, Math.round(Number(discountAmount) || 0));
+    if (!coupon || amount <= 0) return { couponName: "", couponDiscountAmount: 0 };
+    return {
+      couponName: coupon.name || coupon.couponCode || "クーポン",
+      couponDiscountAmount: amount
+    };
+  }
+
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
     if (!selectedStoreId) return;
     await fetch("/api/store/pos/customer-display", {
@@ -1005,6 +1014,8 @@ export default function StorePosPage() {
       preferredLanguage: "",
       memberDisplayName: "",
       memberMessage: "",
+      couponName: "",
+      couponDiscountAmount: 0,
       subtotal: 0,
       cashTenderedAmount: null,
       cashChangeAmount: null,
@@ -1275,6 +1286,7 @@ export default function StorePosPage() {
         preferredLanguage: selectedMember?.preferredLanguage || "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
+        ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount),
         subtotal: body.amount,
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
@@ -1328,6 +1340,7 @@ export default function StorePosPage() {
         preferredLanguage: selectedMember?.preferredLanguage || "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
+        ...getDisplayCouponState(selectedCoupon, couponDiscountAmount),
         subtotal: payableAmount,
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
@@ -1346,7 +1359,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedMember, selectedStoreId, payableAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedCoupon?.id, selectedCoupon?.name, selectedMember, selectedStoreId, payableAmount, couponDiscountAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
