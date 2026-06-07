@@ -1590,6 +1590,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
       coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
       store_customer_orders.amount::int,
       coalesce(sum(store_customer_order_items.refunded_amount), 0)::int as "refundAmount",
+      coalesce(store_customer_orders.customer_summary, '{}'::jsonb) as "customerSummary",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
       store_customer_orders.created_at::text as "createdAt",
@@ -1613,7 +1614,11 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
             'toppingLabels', store_customer_order_items.topping_labels,
             'measuredQuantity', store_customer_order_items.measured_quantity,
             'measuredUnit', store_customer_order_items.measured_unit,
-            'amount', store_customer_order_items.amount
+            'amount', store_customer_order_items.amount,
+            'couponDiscountAmount', store_customer_order_items.coupon_discount_amount,
+            'couponId', coalesce(store_customer_order_items.coupon_id::text, ''),
+            'couponCode', coalesce(member_coupons.coupon_code, ''),
+            'couponName', coalesce(member_coupons.name, '')
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         ) filter (where store_customer_order_items.id is not null),
@@ -1625,6 +1630,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     left join brands on brands.id = store_customer_orders.brand_id
     left join stores on stores.id = store_customer_orders.store_id
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
+    left join member_coupons on member_coupons.id = store_customer_order_items.coupon_id
     where store_customer_orders.member_id::text = ${memberId}
     group by store_customer_orders.id, brands.name, stores.name, stores.customer_display_names
     order by store_customer_orders.created_at desc
@@ -1640,6 +1646,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     paymentRefundStatus: string;
     amount: number;
     refundAmount: number;
+    customerSummary?: Record<string, unknown>;
     pickupDate: string;
     pickupTime: string;
     createdAt: string;
@@ -1662,6 +1669,10 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
       measuredQuantity?: string | number | null;
       measuredUnit?: string;
       amount?: number;
+      couponDiscountAmount?: number;
+      couponId?: string;
+      couponCode?: string;
+      couponName?: string;
     }> | null;
     drink: string;
     size: string;
@@ -1695,15 +1706,29 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
             toppingLabels: Array.isArray(item?.toppingLabels) ? item.toppingLabels.map(normalizeText).filter(Boolean) : [],
             measuredQuantity: item?.measuredQuantity === null || item?.measuredQuantity === undefined ? null : Number(item.measuredQuantity),
             measuredUnit: normalizeText(item?.measuredUnit),
-            amount: Math.round(Number(item?.amount) || 0)
+            amount: Math.round(Number(item?.amount) || 0),
+            couponDiscountAmount: Math.round(Number(item?.couponDiscountAmount) || 0),
+            couponId: normalizeText(item?.couponId),
+            couponCode: normalizeText(item?.couponCode),
+            couponName: normalizeText(item?.couponName)
           }))
           .filter((item) => item.name)
       : [];
     const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
     const cancelInfo = getMemberOrderCancelInfo(order);
+    const customerSummary = order.customerSummary && typeof order.customerSummary === "object" ? order.customerSummary : {};
+    const couponDiscountAmount = Math.round(Number(customerSummary.couponDiscountAmount) || 0);
+    const couponName = normalizeText(customerSummary.couponName);
+    const couponCode = normalizeText(customerSummary.couponCode);
+    const couponId = normalizeText(customerSummary.couponId);
     return {
       ...order,
       purchaseChannel: isStorePurchase ? "store" : "online",
+      subtotalAmount: Math.round(Number(customerSummary.subtotalAmount) || order.amount + couponDiscountAmount),
+      couponDiscountAmount,
+      couponName,
+      couponCode,
+      couponId,
       canCancel: cancelInfo.canCancel,
       cancelDeadline: cancelInfo.cancelDeadline,
       cancelWindowMinutes: cancelInfo.cancelWindowMinutes,

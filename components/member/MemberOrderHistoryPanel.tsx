@@ -15,6 +15,10 @@ export type MemberOrderHistoryItem = {
   measuredQuantity?: number | null;
   measuredUnit?: string;
   amount?: number;
+  couponDiscountAmount?: number;
+  couponId?: string;
+  couponCode?: string;
+  couponName?: string;
 };
 
 export type MemberOrderHistory = {
@@ -27,6 +31,11 @@ export type MemberOrderHistory = {
   paymentRefundStatus: string;
   amount: number;
   refundAmount: number;
+  subtotalAmount?: number;
+  couponDiscountAmount?: number;
+  couponId?: string;
+  couponCode?: string;
+  couponName?: string;
   pickupDate: string;
   pickupTime: string;
   createdAt: string;
@@ -102,6 +111,15 @@ function itemOptionLabels(item: MemberOrderHistoryItem) {
     item.optionLabel,
     ...(Array.isArray(item.toppingLabels) ? item.toppingLabels : [])
   ].map((label) => String(label || "").trim()).filter(Boolean);
+}
+
+function couponDisplayName(input: { couponName?: string; couponCode?: string; couponId?: string }) {
+  const name = String(input.couponName || "").trim();
+  const code = String(input.couponCode || "").trim();
+  if (name && code) return `${name} / ${code}`;
+  if (name) return name;
+  if (code) return code;
+  return input.couponId ? "クーポン適用" : "";
 }
 
 function formatCancelDeadline(value?: string) {
@@ -262,15 +280,42 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
               {selectedOrder.refundAmount > 0 ? <div><dt>返金</dt><dd>{formatYen(selectedOrder.refundAmount)}</dd></div> : null}
             </dl>
 
+            <div className="member-order-modal-discount">
+              <h5>クーポン・割引</h5>
+              {Number(selectedOrder.couponDiscountAmount || 0) > 0 || selectedOrder.couponName || selectedOrder.couponCode ? (
+                <dl>
+                  {selectedOrder.subtotalAmount ? <div><dt>小計</dt><dd>{formatYen(selectedOrder.subtotalAmount)}</dd></div> : null}
+                  <div>
+                    <dt>使用クーポン</dt>
+                    <dd>{couponDisplayName(selectedOrder) || "クーポン適用"}</dd>
+                  </div>
+                  <div className="is-discount">
+                    <dt>クーポン値引き</dt>
+                    <dd>-{formatYen(selectedOrder.couponDiscountAmount || 0)}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p>この注文ではクーポン・割引は使用されていません。</p>
+              )}
+            </div>
+
             <div className="member-order-modal-items">
               <h5>商品明細</h5>
-              {(selectedOrder.itemDetails?.length ? selectedOrder.itemDetails : selectedOrder.items.map((item) => ({ name: item, quantity: 1 }))).map((item, index) => {
+              {(selectedOrder.itemDetails?.length ? selectedOrder.itemDetails : selectedOrder.items.map((item): MemberOrderHistoryItem => ({ name: item, quantity: 1 }))).map((item, index) => {
                 const optionLabels = itemOptionLabels(item);
+                const itemCouponName = couponDisplayName(item);
+                const itemCouponDiscountAmount = Number(item.couponDiscountAmount || 0);
                 return (
                   <div key={`${selectedOrder.id}-detail-${index}`} className="member-order-modal-item">
                     <div>
                       <strong>{item.name}</strong>
                       {optionLabels.length ? <p>{optionLabels.join(" / ")}</p> : null}
+                      {itemCouponName || itemCouponDiscountAmount > 0 ? (
+                        <p className="member-order-modal-item-coupon">
+                          {itemCouponName || "クーポン適用"}
+                          {itemCouponDiscountAmount > 0 ? ` / -${formatYen(itemCouponDiscountAmount)}` : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <span>x {item.quantity}</span>
                   </div>

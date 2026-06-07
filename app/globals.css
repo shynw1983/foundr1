@@ -11477,17 +11477,64 @@ body :where(
   overflow-wrap: anywhere;
 }
 
-.member-order-modal-items {
+.member-order-modal-discount {
   display: grid;
   gap: 8px;
+  border-bottom: 1px solid var(--member-line);
   padding: 16px;
 }
 
+.member-order-modal-discount h5,
 .member-order-modal-items h5 {
   margin: 0 0 2px;
   color: var(--member-ink);
   font-size: 14px;
   font-weight: 650;
+}
+
+.member-order-modal-discount p {
+  margin: 0;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.member-order-modal-discount dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.member-order-modal-discount dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.member-order-modal-discount dt {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.member-order-modal-discount dd {
+  margin: 0;
+  color: var(--member-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.member-order-modal-discount .is-discount dd {
+  color: #b91c1c;
+}
+
+.member-order-modal-items {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
 }
 
 .member-order-modal-item {
@@ -11514,6 +11561,11 @@ body :where(
   font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
+}
+
+.member-order-modal-item .member-order-modal-item-coupon {
+  color: #b91c1c;
+  font-weight: 600;
 }
 
 .member-order-modal-item span {
