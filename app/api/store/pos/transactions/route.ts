@@ -114,7 +114,7 @@ async function getTransactionDetail(storeId: string, orderId: string) {
       coalesce(nullif(gross_amount, 0), amount)::int as "grossAmount",
       discount_amount::int as "discountAmount",
       coupon_discount_amount::int as "couponDiscountAmount",
-      paid_amount::int as "paidAmount",
+      coalesce(nullif(paid_amount, 0), case when coupon_discount_amount > 0 then 0 else amount end)::int as "paidAmount",
       coalesce(coupon_id::text, '') as "couponId",
       coalesce(refund_status, '') as "refundStatus",
       refunded_quantity::int as "refundedQuantity",

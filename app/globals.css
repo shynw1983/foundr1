@@ -8629,24 +8629,14 @@ body :where(
   gap: 6px;
 }
 
-.store-pos-transaction-item-actions span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  background: white;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
+.store-pos-transaction-item-actions small {
+  max-width: 9em;
+  text-align: right;
 }
 
-.store-pos-transaction-item-choice.is-selected .store-pos-transaction-item-actions span {
-  border-color: rgba(31, 111, 91, 0.38);
-  background: var(--green);
-  color: white;
+.store-pos-transaction-item-choice.is-selected .store-pos-transaction-item-actions small {
+  color: var(--green);
+  font-weight: 650;
 }
 
 .store-pos-selected-refund-item {

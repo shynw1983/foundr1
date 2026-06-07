@@ -810,8 +810,15 @@ export default function StorePosPage() {
     selectedTransaction.cashSessionStatus === "open"
   );
   const selectedRefundItem = selectedTransaction?.items?.find((item) => item.id === selectedRefundItemId) ?? null;
-  const selectedRefundPaidAmount = selectedRefundItem ? Number(selectedRefundItem.paidAmount ?? selectedRefundItem.amount) : 0;
   const selectedRefundHasCouponBenefit = Boolean(selectedRefundItem?.couponId) || Number(selectedRefundItem?.couponDiscountAmount ?? 0) > 0;
+  const selectedRefundStoredPaidAmount = Number(selectedRefundItem?.paidAmount ?? 0);
+  const selectedRefundPaidAmount = selectedRefundItem
+    ? selectedRefundStoredPaidAmount > 0
+      ? selectedRefundStoredPaidAmount
+      : selectedRefundHasCouponBenefit
+        ? 0
+        : Number(selectedRefundItem.amount ?? 0)
+    : 0;
   const canRefundSelectedItem = Boolean(
     selectedRefundItem &&
     canRefundSelectedTransaction &&
@@ -1950,8 +1957,9 @@ export default function StorePosPage() {
                           const weightLabel = item.measuredQuantity && item.measuredUnitPrice
                             ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`
                             : "";
-                          const paidAmount = Number(item.paidAmount ?? item.amount);
                           const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
+                          const storedPaidAmount = Number(item.paidAmount ?? 0);
+                          const paidAmount = storedPaidAmount > 0 ? storedPaidAmount : hasCouponBenefit ? 0 : Number(item.amount ?? 0);
                           const isItemRefunded = item.refundStatus === "refunded";
                           const canRecordItemReturn = paidAmount > 0 || hasCouponBenefit;
                           const isSelectedForRefund = selectedRefundItemId === item.id;
@@ -1986,7 +1994,7 @@ export default function StorePosPage() {
                               </div>
                               <div className="store-pos-transaction-item-actions">
                                 <b>{formatYen(paidAmount)}</b>
-                                <span>{isSelectedForRefund ? "選択中" : canRecordItemReturn ? "選択" : "-"}</span>
+                                <small>{isSelectedForRefund ? "選択中" : canRecordItemReturn ? "タップして選択" : "返金対象外"}</small>
                               </div>
                             </button>
                           );
