@@ -19,6 +19,43 @@ function formatDate(value: string | Date | null) {
   }).format(new Date(value));
 }
 
+function getReceiptStatus(input: {
+  status: unknown;
+  paymentStatus: unknown;
+  paymentRefundStatus: unknown;
+  paymentRefundedAt: unknown;
+  cancelledAt: unknown;
+  refundAmount: number;
+  totalAmount: number;
+}) {
+  const status = clean(input.status);
+  const paymentStatus = clean(input.paymentStatus);
+  const paymentRefundStatus = clean(input.paymentRefundStatus);
+  const refundedAt = formatDate(input.paymentRefundedAt as string | Date | null) || formatDate(input.cancelledAt as string | Date | null);
+  if (paymentStatus === "refunded" || status === "cancelled") {
+    return {
+      statusLabel: "取消済み",
+      statusDetail: "対象注文は取消・返金済みです。",
+      refundAmount: input.refundAmount > 0 ? input.refundAmount : input.totalAmount,
+      refundedAt
+    };
+  }
+  if (paymentStatus === "partial_refunded" || paymentRefundStatus === "partial" || input.refundAmount > 0) {
+    return {
+      statusLabel: "一部返金済み",
+      statusDetail: "対象注文には一部返金があります。",
+      refundAmount: input.refundAmount,
+      refundedAt
+    };
+  }
+  return {
+    statusLabel: "",
+    statusDetail: "",
+    refundAmount: 0,
+    refundedAt: ""
+  };
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const orderId = clean(url.searchParams.get("orderId"));
@@ -31,7 +68,9 @@ export async function GET(request: Request) {
     select
       store_customer_orders.id::text as id,
       store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
       store_customer_orders.payment_provider as "paymentProvider",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
@@ -42,6 +81,8 @@ export async function GET(request: Request) {
       store_customer_orders.toppings,
       store_customer_orders.customer_summary as "customerSummary",
       store_customer_orders.paid_at as "paidAt",
+      store_customer_orders.payment_refunded_at as "paymentRefundedAt",
+      store_customer_orders.cancelled_at as "cancelledAt",
       store_customer_orders.created_at as "createdAt",
       coalesce(companies.legal_name, companies.name, stores.name, '') as "issuerName",
       coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
@@ -58,10 +99,25 @@ export async function GET(request: Request) {
   `;
   const order = rows[0] as Record<string, unknown> | undefined;
   if (!order) return Response.json({ error: "Order not found." }, { status: 404 });
-  if (order.paymentStatus !== "paid") {
+  if (!["paid", "refunded", "partial_refunded"].includes(clean(order.paymentStatus))) {
     return Response.json({ error: "Receipt is available after payment is completed." }, { status: 409 });
   }
 
+  const totalAmount = Number(order.amount ?? 0);
+  const refundRows = await sql`
+    select coalesce(sum(refunded_amount), 0)::int as "refundAmount"
+    from store_customer_order_items
+    where order_id = ${orderId}
+  `;
+  const receiptStatus = getReceiptStatus({
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentRefundStatus: order.paymentRefundStatus,
+    paymentRefundedAt: order.paymentRefundedAt,
+    cancelledAt: order.cancelledAt,
+    refundAmount: Number(refundRows[0]?.refundAmount ?? 0),
+    totalAmount
+  });
   const customerSummary = (order.customerSummary && typeof order.customerSummary === "object" ? order.customerSummary : {}) as Record<string, unknown>;
   const customer = (customerSummary.customer && typeof customerSummary.customer === "object" ? customerSummary.customer : {}) as Record<string, unknown>;
   const customerName = clean(customer.name) || clean(customerSummary.name) || "お客様";
@@ -71,7 +127,7 @@ export async function GET(request: Request) {
     receiptNo: `${clean(order.pickupCode)}-${clean(order.id).slice(0, 8)}`,
     issuedAt,
     recipientName: customerName,
-    amount: Number(order.amount ?? 0),
+    amount: totalAmount,
     currency: clean(order.currency) || "JPY",
     pickupCode: clean(order.pickupCode),
     pickupDate: clean(order.pickupDate),
@@ -84,7 +140,8 @@ export async function GET(request: Request) {
     issuerPhone: clean(order.issuerPhone),
     invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber),
     purposeText: clean(order.receiptPurposeText) || "テイクアウト飲食代",
-    taxRate: Number(order.receiptTaxRate ?? 8)
+    taxRate: Number(order.receiptTaxRate ?? 8),
+    ...receiptStatus
   });
 
   return new Response(pdf, {

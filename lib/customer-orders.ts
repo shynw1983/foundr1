@@ -116,7 +116,7 @@ export function toPublicCustomerOrder(order: CustomerOrderRow, baseUrl = "") {
     orderId: order.id,
     pickupCode: order.pickupCode
   }).toString();
-  const canShowReceipt = order.paymentStatus === "paid";
+  const canShowReceipt = ["paid", "refunded", "partial_refunded"].includes(order.paymentStatus);
   const receiptPreviewPath = `/public/orders/receipt/preview?${receiptParams}`;
   const receiptPdfPath = `/api/public/orders/receipt?${receiptParams}`;
   return {

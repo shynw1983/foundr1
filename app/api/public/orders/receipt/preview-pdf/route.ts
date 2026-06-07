@@ -145,8 +145,22 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
     logoSrc: getPublicDataUrl(receipt.logoSrc)
   };
   const brandClass = receiptWithAssets.brand === "maamaa" ? "is-maamaa" : "is-nanacha";
+  const statusClass = receiptWithAssets.receiptStatus === "valid" ? "" : ` is-${receiptWithAssets.receiptStatus}`;
+  const statusPanel = receiptWithAssets.receiptStatus === "valid" ? "" : `
+      <section class="online-receipt-status-panel" aria-label="領収書ステータス">
+        <strong>${escapeHtml(receiptWithAssets.statusLabel)}</strong>
+        <p>${escapeHtml(receiptWithAssets.statusDetail)}</p>
+      </section>`;
+  const refundRow = receiptWithAssets.refundAmount > 0
+    ? `<div class="is-refund"><dt>${escapeHtml(receiptWithAssets.receiptStatus === "cancelled" ? "取消・返金額" : "返金額")}</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.refundAmount))}</dd></div>`
+    : "";
+  const footerNotice = receiptWithAssets.receiptStatus === "cancelled"
+    ? "この領収書は取消済みです。返金記録として保存してください。"
+    : receiptWithAssets.receiptStatus === "partially_refunded"
+      ? "この領収書には一部返金が記録されています。"
+      : "この領収書は電子的に発行されています。";
   const sheet = `
-    <article class="online-receipt-sheet ${brandClass}" aria-label="領収書">
+    <article class="online-receipt-sheet ${brandClass}${statusClass}" aria-label="領収書">
       <header class="online-receipt-header">
         <div class="online-receipt-brand">
           <img src="${escapeHtml(receiptWithAssets.logoSrc)}" alt="${escapeHtml(receiptWithAssets.brandName)}" />
@@ -157,9 +171,12 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
         </div>
         <div class="online-receipt-title-block">
           <h1>領収書</h1>
+          ${receiptWithAssets.statusLabel ? `<strong>${escapeHtml(receiptWithAssets.statusLabel)}</strong>` : ""}
           <p>Receipt No. ${escapeHtml(receiptWithAssets.receiptNo)}</p>
         </div>
       </header>
+
+      ${statusPanel}
 
       <section class="online-receipt-hero" aria-label="金額">
         <div>
@@ -208,13 +225,15 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
         <dl>
           <div><dt>小計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.subtotalAmount))}</dd></div>
           ${receiptWithAssets.couponDiscountAmount > 0 ? `<div><dt>クーポン値引き</dt><dd>-${escapeHtml(formatCurrency(receiptWithAssets.couponDiscountAmount))}</dd></div>` : ""}
+          ${refundRow}
           <div class="is-total"><dt>合計</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.totalAmount))}</dd></div>
           <div><dt>内消費税等 ${escapeHtml(receiptWithAssets.taxRate)}%対象</dt><dd>${escapeHtml(formatCurrency(receiptWithAssets.taxIncludedAmount))}</dd></div>
         </dl>
       </section>
 
       <footer class="online-receipt-footer">
-        <p>この領収書は電子的に発行されています。</p>
+        <p>${escapeHtml(footerNotice)}</p>
+        ${receiptWithAssets.refundedAt ? `<p>返金記録日時: ${escapeHtml(receiptWithAssets.refundedAt)}</p>` : ""}
         <span>${escapeHtml(getFooterBrandText())}</span>
       </footer>
     </article>

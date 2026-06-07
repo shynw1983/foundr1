@@ -743,6 +743,45 @@ input[type="file"] {
   font-size: 10px;
 }
 
+.online-receipt-title-block > strong {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  background: var(--red-soft);
+  border: 1px solid rgba(190, 57, 50, 0.24);
+}
+
+.online-receipt-status-panel {
+  margin-top: 8mm;
+  padding: 5mm;
+  background: var(--red-soft);
+  border: 1px solid rgba(190, 57, 50, 0.24);
+  border-left: 4px solid var(--red);
+}
+
+.online-receipt-status-panel strong,
+.online-receipt-status-panel p {
+  margin: 0;
+}
+
+.online-receipt-status-panel strong {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.online-receipt-status-panel p {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
 .online-receipt-hero {
   align-items: flex-end;
   margin-top: 12mm;
@@ -966,6 +1005,12 @@ input[type="file"] {
   font-weight: 900;
 }
 
+.online-receipt-total-panel .is-refund dt,
+.online-receipt-total-panel .is-refund dd {
+  color: var(--red);
+  font-weight: 900;
+}
+
 .online-receipt-footer {
   margin-top: 14mm;
   padding-top: 8px;
@@ -975,6 +1020,10 @@ input[type="file"] {
 
 .online-receipt-footer p {
   margin: 0;
+}
+
+.online-receipt-footer p + p {
+  margin-top: 4px;
 }
 
 .online-receipt-footer span {

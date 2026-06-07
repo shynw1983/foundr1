@@ -16,6 +16,10 @@ type ReceiptPdfInput = {
   invoiceRegistrationNumber: string;
   purposeText: string;
   taxRate: number;
+  statusLabel?: string;
+  statusDetail?: string;
+  refundAmount?: number;
+  refundedAt?: string;
 };
 
 function escapePdfText(value: string) {
@@ -61,11 +65,20 @@ function splitSummary(value: string) {
 
 export function createReceiptPdf(input: ReceiptPdfInput) {
   const amount = Number.isFinite(input.amount) ? input.amount : 0;
+  const refundAmount = Number.isFinite(input.refundAmount) ? Number(input.refundAmount) : 0;
   const taxRate = Number.isFinite(input.taxRate) && input.taxRate > 0 ? input.taxRate : 8;
   const taxIncluded = Math.round(amount * taxRate / (100 + taxRate));
   const purposeText = input.purposeText.trim() || "テイクアウト飲食代";
+  const statusLines = [
+    ...(input.statusLabel ? [textLine(input.statusLabel, 420, 790, 13)] : []),
+    ...(input.statusDetail ? [textLine(input.statusDetail, 56, 606, 9)] : []),
+    ...(refundAmount > 0 ? [textLine(`返金額: ${formatCurrency(refundAmount)}`, 56, 590, 10)] : []),
+    ...(input.refundedAt ? [textLine(`返金記録日時: ${input.refundedAt}`, 56, 574, 9)] : [])
+  ];
+  const detailTop = statusLines.length ? 548 : 574;
   const lines = [
     textLine("領収書", 250, 790, 24),
+    ...statusLines,
     textLine(`${input.recipientName || "お客様"} 様`, 56, 735, 14),
     horizontalLine(56, 724, 300),
     textLine("金額", 56, 684, 12),
@@ -73,21 +86,21 @@ export function createReceiptPdf(input: ReceiptPdfInput) {
     textLine(`但し ${purposeText}として`, 56, 642, 11),
     textLine(`内消費税等 ${taxRate}%対象 ${formatCurrency(taxIncluded)} / 税込`, 56, 622, 10),
     horizontalLine(56, 605, 540),
-    textLine("ご注文内容", 56, 574, 13),
-    textLine(`取餐番号: ${input.pickupCode}`, 56, 548, 11),
-    textLine(`受取日時: ${input.pickupDate} ${input.pickupTime}`, 56, 530, 11),
-    textLine(`支払方法: ${input.paymentProvider.toUpperCase()}`, 56, 512, 11),
-    textLine(`支払日時: ${input.paidAt || input.issuedAt}`, 56, 494, 11),
-    textLine("明細", 56, 464, 11),
-    ...splitSummary(input.itemSummary).map((line, index) => textLine(line, 76, 444 - index * 17, 9)),
-    textLine("発行者", 350, 574, 13),
-    textLine(input.issuerName || "会社名未設定", 350, 548, 11),
-    ...(input.invoiceRegistrationNumber ? [textLine(`登録番号: ${input.invoiceRegistrationNumber}`, 350, 530, 10)] : []),
-    ...(input.issuerAddress ? [textLine(input.issuerAddress, 350, 512, 9)] : []),
-    ...(input.issuerPhone ? [textLine(`TEL: ${input.issuerPhone}`, 350, 494, 9)] : []),
+    textLine("ご注文内容", 56, detailTop, 13),
+    textLine(`取餐番号: ${input.pickupCode}`, 56, detailTop - 26, 11),
+    textLine(`受取日時: ${input.pickupDate} ${input.pickupTime}`, 56, detailTop - 44, 11),
+    textLine(`支払方法: ${input.paymentProvider.toUpperCase()}`, 56, detailTop - 62, 11),
+    textLine(`支払日時: ${input.paidAt || input.issuedAt}`, 56, detailTop - 80, 11),
+    textLine("明細", 56, detailTop - 110, 11),
+    ...splitSummary(input.itemSummary).map((line, index) => textLine(line, 76, detailTop - 130 - index * 17, 9)),
+    textLine("発行者", 350, detailTop, 13),
+    textLine(input.issuerName || "会社名未設定", 350, detailTop - 26, 11),
+    ...(input.invoiceRegistrationNumber ? [textLine(`登録番号: ${input.invoiceRegistrationNumber}`, 350, detailTop - 44, 10)] : []),
+    ...(input.issuerAddress ? [textLine(input.issuerAddress, 350, detailTop - 62, 9)] : []),
+    ...(input.issuerPhone ? [textLine(`TEL: ${input.issuerPhone}`, 350, detailTop - 80, 9)] : []),
     textLine(`発行日: ${input.issuedAt}`, 350, 456, 9),
     latinTextLine(`Receipt No. ${input.receiptNo}`, 350, 438, 9),
-    textLine("この領収書は電子的に発行されています。", 56, 86, 8)
+    textLine(input.statusLabel ? "この領収書には取消・返金情報が記録されています。" : "この領収書は電子的に発行されています。", 56, 86, 8)
   ];
   const content = `q\n1 w\n${lines.join("\n")}\nQ`;
 

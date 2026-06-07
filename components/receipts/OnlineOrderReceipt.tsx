@@ -29,8 +29,9 @@ function DetailList({ items }: { items: string[] }) {
 
 export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
   const brandClass = receipt.brand === "maamaa" ? "is-maamaa" : "is-nanacha";
+  const statusClass = receipt.receiptStatus === "valid" ? "" : ` is-${receipt.receiptStatus}`;
   return (
-    <article className={`online-receipt-sheet ${brandClass}`} aria-label="領収書">
+    <article className={`online-receipt-sheet ${brandClass}${statusClass}`} aria-label="領収書">
       <header className="online-receipt-header">
         <div className="online-receipt-brand">
           <img src={receipt.logoSrc} alt={receipt.brandName} />
@@ -41,9 +42,17 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
         </div>
         <div className="online-receipt-title-block">
           <h1>領収書</h1>
+          {receipt.statusLabel ? <strong>{receipt.statusLabel}</strong> : null}
           <p>Receipt No. {receipt.receiptNo}</p>
         </div>
       </header>
+
+      {receipt.receiptStatus !== "valid" ? (
+        <section className="online-receipt-status-panel" aria-label="領収書ステータス">
+          <strong>{receipt.statusLabel}</strong>
+          <p>{receipt.statusDetail}</p>
+        </section>
+      ) : null}
 
       <section className="online-receipt-hero" aria-label="金額">
         <div>
@@ -155,6 +164,12 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
               <dd>-{formatCurrency(receipt.couponDiscountAmount)}</dd>
             </div>
           ) : null}
+          {receipt.refundAmount > 0 ? (
+            <div className="is-refund">
+              <dt>{receipt.receiptStatus === "cancelled" ? "取消・返金額" : "返金額"}</dt>
+              <dd>-{formatCurrency(receipt.refundAmount)}</dd>
+            </div>
+          ) : null}
           <div className="is-total">
             <dt>合計</dt>
             <dd>{formatCurrency(receipt.totalAmount)}</dd>
@@ -167,7 +182,14 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
       </section>
 
       <footer className="online-receipt-footer">
-        <p>この領収書は電子的に発行されています。</p>
+        <p>
+          {receipt.receiptStatus === "cancelled"
+            ? "この領収書は取消済みです。返金記録として保存してください。"
+            : receipt.receiptStatus === "partially_refunded"
+              ? "この領収書には一部返金が記録されています。"
+              : "この領収書は電子的に発行されています。"}
+        </p>
+        {receipt.refundedAt ? <p>返金記録日時: {receipt.refundedAt}</p> : null}
         <span>{getFooterBrandText()}</span>
       </footer>
     </article>

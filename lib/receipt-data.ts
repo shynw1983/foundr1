@@ -17,6 +17,9 @@ export type OnlineReceiptViewModel = {
   brand: OnlineReceiptBrand;
   brandName: string;
   logoSrc: string;
+  receiptStatus: "valid" | "cancelled" | "partially_refunded";
+  statusLabel: string;
+  statusDetail: string;
   receiptNo: string;
   issuedAt: string;
   recipientName: string;
@@ -37,6 +40,8 @@ export type OnlineReceiptViewModel = {
   subtotalAmount: number;
   couponDiscountAmount: number;
   totalAmount: number;
+  refundAmount: number;
+  refundedAt: string;
   taxIncludedAmount: number;
 };
 
@@ -46,7 +51,9 @@ type OrderRow = {
   id: string;
   pickupCode: string;
   orderSource: string;
+  status: string;
   paymentStatus: string;
+  paymentRefundStatus: string;
   paymentProvider: string;
   pickupDate: string;
   pickupTime: string;
@@ -61,6 +68,8 @@ type OrderRow = {
   toppings: string;
   customerSummary: CustomerSummary;
   paidAt: Date | string | null;
+  paymentRefundedAt: Date | string | null;
+  cancelledAt: Date | string | null;
   createdAt: Date | string | null;
   brandName: string;
   brandType: string;
@@ -170,6 +179,38 @@ function getIncludedTax(totalAmount: number, taxRate: number) {
   return Math.round(totalAmount * taxRate / (100 + taxRate));
 }
 
+function getReceiptStatus(order: Pick<OrderRow, "status" | "paymentStatus" | "paymentRefundStatus" | "paymentRefundedAt" | "cancelledAt">, refundAmount: number) {
+  const paymentStatus = clean(order.paymentStatus);
+  const paymentRefundStatus = clean(order.paymentRefundStatus);
+  const status = clean(order.status);
+  const refundedAt = formatDateTime(order.paymentRefundedAt) || formatDateTime(order.cancelledAt);
+  if (paymentStatus === "refunded" || status === "cancelled") {
+    return {
+      receiptStatus: "cancelled" as const,
+      statusLabel: "取消済み",
+      statusDetail: "この領収書の対象注文は取消・返金済みです。原本として利用しないでください。",
+      refundAmount,
+      refundedAt
+    };
+  }
+  if (paymentStatus === "partial_refunded" || paymentRefundStatus === "partial" || refundAmount > 0) {
+    return {
+      receiptStatus: "partially_refunded" as const,
+      statusLabel: "一部返金済み",
+      statusDetail: "この注文には一部返金があります。返金額を確認してください。",
+      refundAmount,
+      refundedAt
+    };
+  }
+  return {
+    receiptStatus: "valid" as const,
+    statusLabel: "",
+    statusDetail: "",
+    refundAmount: 0,
+    refundedAt: ""
+  };
+}
+
 function getLogoSrc(brand: OnlineReceiptBrand) {
   return brand === "maamaa" ? "/brands/maamaa-logo.png" : "/brands/nanacha-logo.png";
 }
@@ -265,7 +306,9 @@ export async function getOnlineReceiptViewModel(input: {
       store_customer_orders.id::text as id,
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.order_source as "orderSource",
+      store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
       store_customer_orders.payment_provider as "paymentProvider",
       store_customer_orders.pickup_date::text as "pickupDate",
       store_customer_orders.pickup_time as "pickupTime",
@@ -280,6 +323,8 @@ export async function getOnlineReceiptViewModel(input: {
       store_customer_orders.toppings,
       store_customer_orders.customer_summary as "customerSummary",
       store_customer_orders.paid_at as "paidAt",
+      store_customer_orders.payment_refunded_at as "paymentRefundedAt",
+      store_customer_orders.cancelled_at as "cancelledAt",
       store_customer_orders.created_at as "createdAt",
       coalesce(brands.name, '') as "brandName",
       coalesce(brands.brand_type, '') as "brandType",
@@ -298,7 +343,7 @@ export async function getOnlineReceiptViewModel(input: {
     limit 1
   `;
   const order = orderRows[0] as OrderRow | undefined;
-  if (!order || order.paymentStatus !== "paid") return null;
+  if (!order || !["paid", "refunded", "partial_refunded"].includes(order.paymentStatus)) return null;
 
   const itemRows = await sql`
     select
@@ -321,9 +366,17 @@ export async function getOnlineReceiptViewModel(input: {
     order by sort_order asc, created_at asc
   ` as ItemRow[];
 
+  const refundRows = await sql`
+    select coalesce(sum(refunded_amount), 0)::int as "refundAmount"
+    from store_customer_order_items
+    where order_id = ${input.orderId}
+  `;
+
   const customerSummary = asRecord(order.customerSummary);
   const brand = getBrand(order);
   const totalAmount = Number(order.amount ?? 0);
+  const rawRefundAmount = Number(refundRows[0]?.refundAmount ?? 0);
+  const receiptStatus = getReceiptStatus(order, rawRefundAmount > 0 ? rawRefundAmount : order.paymentStatus === "refunded" ? totalAmount : 0);
   const items = buildItems({ ...order, customerSummary }, itemRows, brand);
   const couponDiscountAmount = getCouponDiscount(customerSummary);
   const subtotalAmount = getSubtotal(customerSummary, totalAmount, couponDiscountAmount, items);
@@ -333,6 +386,7 @@ export async function getOnlineReceiptViewModel(input: {
     brand,
     brandName: getBrandName(brand, order.brandName),
     logoSrc: getLogoSrc(brand),
+    ...receiptStatus,
     receiptNo: `${clean(order.pickupCode)}-${clean(order.id).slice(0, 8)}`,
     issuedAt: formatDateTime(new Date()),
     recipientName: getCustomerName(customerSummary),
@@ -353,6 +407,8 @@ export async function getOnlineReceiptViewModel(input: {
     subtotalAmount,
     couponDiscountAmount,
     totalAmount,
+    refundAmount: receiptStatus.refundAmount,
+    refundedAt: receiptStatus.refundedAt,
     taxIncludedAmount: getIncludedTax(totalAmount, taxRate)
   };
 }
@@ -365,6 +421,9 @@ export function getDemoOnlineReceiptViewModel(brand: OnlineReceiptBrand): Online
     brand,
     brandName: brand === "maamaa" ? "まぁ麻" : "nanacha",
     logoSrc: getLogoSrc(brand),
+    receiptStatus: "valid",
+    statusLabel: "",
+    statusDetail: "",
     receiptNo: `${brand === "maamaa" ? "M" : "N"}-1234-DEMO`,
     issuedAt: "2026/06/06 21:57",
     recipientName: "山田 太郎",
@@ -415,6 +474,8 @@ export function getDemoOnlineReceiptViewModel(brand: OnlineReceiptBrand): Online
     subtotalAmount,
     couponDiscountAmount,
     totalAmount,
+    refundAmount: 0,
+    refundedAt: "",
     taxIncludedAmount: getIncludedTax(totalAmount, 8)
   };
 }
