@@ -167,11 +167,17 @@ function getFormalMemberName(member?: MemberProfile | null) {
   return (member?.fullName || [member?.lastName, member?.firstName].map((part) => part?.trim()).filter(Boolean).join(" ")).trim();
 }
 
+function withJapaneseHonorific(value: string, language: string) {
+  const name = value.trim();
+  if (!name) return name;
+  if (language !== "ja") return name;
+  return name.endsWith("様") ? name : `${name}様`;
+}
+
 function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会員", language = "ja") {
   const formalName = getFormalMemberName(member);
-  const displayName = formalName || member?.displayName?.trim();
-  if (displayName) return language === "ja" ? `${displayName} 様` : displayName;
-  return member?.email?.trim() || fallback;
+  const displayName = formalName || member?.displayName?.trim() || member?.email?.trim() || fallback;
+  return withJapaneseHonorific(displayName, language);
 }
 
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
