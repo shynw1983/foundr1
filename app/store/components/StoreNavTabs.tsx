@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -31,6 +31,7 @@ const tabs = [
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
+  { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
   { label: "OS", href: "/os", icon: Settings }
 ];
 
@@ -63,14 +64,16 @@ function getAlertOrderKey(order: { id: string; status: string; paymentStatus: st
   return `${order.id}:${order.status}:${order.paymentStatus}`;
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" }) {
+export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "feedback" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"
       ? "/store/display/kitchen"
       : active === "pickup-display"
         ? "/store/display/pickup"
-        : `/store/${active}`;
+        : active === "feedback"
+          ? "/store/feedback"
+          : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState("");
@@ -83,9 +86,9 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
-    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(tab.href))
+    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
     : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/os")
+      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/store/feedback" || tab.href === "/os")
       : tabs;
 
   const clearOrderAlert = () => {

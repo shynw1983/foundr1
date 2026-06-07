@@ -184,6 +184,63 @@ create table if not exists os_audit_logs (
 create index if not exists os_audit_logs_created_at_idx on os_audit_logs (created_at desc);
 create index if not exists os_audit_logs_actor_idx on os_audit_logs (actor_employee_id, created_at desc);
 
+create table if not exists feedback_reports (
+  id uuid primary key default gen_random_uuid(),
+  source text not null default 'os',
+  module text not null default '',
+  category text not null default 'bug',
+  severity text not null default 'normal',
+  status text not null default 'open',
+  title text not null default '',
+  description text not null default '',
+  expected_result text not null default '',
+  page_url text not null default '',
+  screenshot_url text not null default '',
+  reported_by uuid references employees(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  brand_id uuid references brands(id) on delete set null,
+  user_agent text not null default '',
+  viewport_width integer,
+  viewport_height integer,
+  language text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  admin_note text not null default '',
+  handled_by uuid references employees(id) on delete set null,
+  handled_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table feedback_reports add column if not exists source text not null default 'os';
+alter table feedback_reports add column if not exists module text not null default '';
+alter table feedback_reports add column if not exists category text not null default 'bug';
+alter table feedback_reports add column if not exists severity text not null default 'normal';
+alter table feedback_reports add column if not exists status text not null default 'open';
+alter table feedback_reports add column if not exists title text not null default '';
+alter table feedback_reports add column if not exists description text not null default '';
+alter table feedback_reports add column if not exists expected_result text not null default '';
+alter table feedback_reports add column if not exists page_url text not null default '';
+alter table feedback_reports add column if not exists screenshot_url text not null default '';
+alter table feedback_reports add column if not exists reported_by uuid references employees(id) on delete set null;
+alter table feedback_reports add column if not exists store_id uuid references stores(id) on delete set null;
+alter table feedback_reports add column if not exists brand_id uuid references brands(id) on delete set null;
+alter table feedback_reports add column if not exists user_agent text not null default '';
+alter table feedback_reports add column if not exists viewport_width integer;
+alter table feedback_reports add column if not exists viewport_height integer;
+alter table feedback_reports add column if not exists language text not null default '';
+alter table feedback_reports add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table feedback_reports add column if not exists admin_note text not null default '';
+alter table feedback_reports add column if not exists handled_by uuid references employees(id) on delete set null;
+alter table feedback_reports add column if not exists handled_at timestamptz;
+alter table feedback_reports add column if not exists updated_at timestamptz not null default now();
+
+create index if not exists idx_feedback_reports_source_status_created
+  on feedback_reports(source, status, created_at desc);
+create index if not exists idx_feedback_reports_store_status_created
+  on feedback_reports(store_id, status, created_at desc);
+create index if not exists idx_feedback_reports_reported_by_created
+  on feedback_reports(reported_by, created_at desc);
+
 create table if not exists module_settings (
   id uuid primary key default gen_random_uuid(),
   scope_key text not null default 'global',
@@ -1930,6 +1987,18 @@ create table if not exists store_customer_order_items (
   measured_unit text not null default '',
   measured_unit_price numeric(12, 3),
   amount integer not null default 0,
+  gross_amount integer not null default 0,
+  discount_amount integer not null default 0,
+  coupon_discount_amount integer not null default 0,
+  paid_amount integer not null default 0,
+  coupon_id uuid references member_coupons(id) on delete set null,
+  refund_status text not null default '',
+  refunded_quantity integer not null default 0,
+  refunded_amount integer not null default 0,
+  refund_reason text not null default '',
+  external_refund_confirmed_at timestamptz,
+  refunded_at timestamptz,
+  refunded_by uuid references employees(id) on delete set null,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
@@ -1938,6 +2007,18 @@ alter table store_customer_order_items add column if not exists quantity integer
 alter table store_customer_order_items add column if not exists measured_quantity numeric(12, 3);
 alter table store_customer_order_items add column if not exists measured_unit text not null default '';
 alter table store_customer_order_items add column if not exists measured_unit_price numeric(12, 3);
+alter table store_customer_order_items add column if not exists gross_amount integer not null default 0;
+alter table store_customer_order_items add column if not exists discount_amount integer not null default 0;
+alter table store_customer_order_items add column if not exists coupon_discount_amount integer not null default 0;
+alter table store_customer_order_items add column if not exists paid_amount integer not null default 0;
+alter table store_customer_order_items add column if not exists coupon_id uuid references member_coupons(id) on delete set null;
+alter table store_customer_order_items add column if not exists refund_status text not null default '';
+alter table store_customer_order_items add column if not exists refunded_quantity integer not null default 0;
+alter table store_customer_order_items add column if not exists refunded_amount integer not null default 0;
+alter table store_customer_order_items add column if not exists refund_reason text not null default '';
+alter table store_customer_order_items add column if not exists external_refund_confirmed_at timestamptz;
+alter table store_customer_order_items add column if not exists refunded_at timestamptz;
+alter table store_customer_order_items add column if not exists refunded_by uuid references employees(id) on delete set null;
 
 create table if not exists order_production_tasks (
   id uuid primary key default gen_random_uuid(),

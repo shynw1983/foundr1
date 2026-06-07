@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -55,6 +55,13 @@ const storeModules = [
     status: "利用可能"
   },
   {
+    title: "問題報告",
+    description: "日常業務で見つけた操作不明、データ違い、POS・注文・勤怠の問題を送信します。",
+    href: "/store/feedback",
+    icon: MessageSquareWarning,
+    status: "利用可能"
+  },
+  {
     title: "Foundr1 OS",
     description: "管理画面へ移動し、商品、メニュー、スタッフ、店舗、設定、分析を確認します。",
     href: "/os",
@@ -69,9 +76,9 @@ export default function StoreHomePage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
     employeeRole === "store_terminal"
-      ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos"].includes(module.href))
+      ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
       : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/os")
+        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/feedback" || module.href === "/os")
         : storeModules
   ), [employeeRole, isMobileViewport, isTimecardEmployee]);
 

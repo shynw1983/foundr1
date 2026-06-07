@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
-import { reverseLoyaltyForRefundedOrder } from "../../../../../lib/loyalty";
+import { reverseLoyaltyForRefundedOrder, reverseLoyaltyForRefundedOrderItem } from "../../../../../lib/loyalty";
 import { syncWebReservationToSalesOrder } from "../../../../../lib/sales-orders";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
@@ -110,7 +110,18 @@ async function getTransactionDetail(storeId: string, orderId: string) {
       measured_quantity::float as "measuredQuantity",
       measured_unit as "measuredUnit",
       measured_unit_price::float as "measuredUnitPrice",
-      amount
+      amount,
+      coalesce(nullif(gross_amount, 0), amount)::int as "grossAmount",
+      discount_amount::int as "discountAmount",
+      coupon_discount_amount::int as "couponDiscountAmount",
+      paid_amount::int as "paidAmount",
+      coalesce(coupon_id::text, '') as "couponId",
+      coalesce(refund_status, '') as "refundStatus",
+      refunded_quantity::int as "refundedQuantity",
+      refunded_amount::int as "refundedAmount",
+      coalesce(refund_reason, '') as "refundReason",
+      coalesce(external_refund_confirmed_at::text, '') as "externalRefundConfirmedAt",
+      coalesce(refunded_at::text, '') as "refundedAt"
     from store_customer_order_items
     where order_id::text = ${orderId}
     order by sort_order, created_at
@@ -139,8 +150,9 @@ export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; orderId?: string; reason?: string };
+  const body = await request.json().catch(() => ({})) as { storeId?: string; orderId?: string; itemId?: string; reason?: string; externalRefundConfirmed?: boolean };
   const orderId = normalizeText(body.orderId);
+  const itemId = normalizeText(body.itemId);
   const reason = normalizeText(body.reason);
   if (!orderId) return Response.json({ error: "会計を選択してください。" }, { status: 400 });
 
@@ -154,6 +166,8 @@ export async function POST(request: Request) {
       store_customer_orders.store_id::text as "storeId",
       store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
+      store_customer_orders.payment_provider as "paymentMethod",
+      store_customer_orders.amount::int,
       coalesce(pos_cash_sessions.status, '') as "cashSessionStatus"
     from store_customer_orders
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
@@ -162,13 +176,98 @@ export async function POST(request: Request) {
       and store_customer_orders.order_source = 'store_pos'
     limit 1
   `;
-  const target = targetRows[0] as { id: string; storeId: string; status: string; paymentStatus: string; cashSessionStatus: string } | undefined;
+  const target = targetRows[0] as { id: string; storeId: string; status: string; paymentStatus: string; paymentMethod: string; amount: number; cashSessionStatus: string } | undefined;
   if (!target) return Response.json({ error: "会計が見つかりません。" }, { status: 404 });
   if (target.status === "cancelled" || target.paymentStatus === "refunded") {
     return Response.json({ error: "この会計はすでに返金済みです。" }, { status: 400 });
   }
   if (target.cashSessionStatus !== "open") {
     return Response.json({ error: "締め済みのレジ会計は店舗 POS から返金できません。管理画面で修正してください。" }, { status: 400 });
+  }
+
+  if (itemId) {
+    const itemRows = await sql`
+      select
+        id::text,
+        coalesce(quantity, 1)::int as quantity,
+        amount::int,
+        coalesce(nullif(paid_amount, 0), case when coupon_discount_amount > 0 then 0 else amount end)::int as "paidAmount",
+        coupon_discount_amount::int as "couponDiscountAmount",
+        coalesce(coupon_id::text, '') as "couponId",
+        coalesce(refund_status, '') as "refundStatus"
+      from store_customer_order_items
+      where id::text = ${itemId}
+        and order_id::text = ${orderId}
+      limit 1
+    `;
+    const item = itemRows[0] as { id: string; quantity: number; amount: number; paidAmount: number; couponDiscountAmount: number; couponId: string; refundStatus: string } | undefined;
+    if (!item) return Response.json({ error: "返金する商品が見つかりません。" }, { status: 404 });
+    if (item.refundStatus === "refunded") return Response.json({ error: "この商品はすでに返金済みです。" }, { status: 400 });
+    const refundAmount = Math.max(0, Math.round(Number(item.paidAmount) || 0));
+    if (target.paymentMethod !== "cash" && refundAmount > 0 && body.externalRefundConfirmed !== true) {
+      return Response.json({ error: "外部決済端末で返金操作を完了してから、外部返金済みにチェックしてください。" }, { status: 400 });
+    }
+    const itemUpdateRows = await sql`
+      update store_customer_order_items
+      set
+        refund_status = 'refunded',
+        refunded_quantity = quantity,
+        refunded_amount = ${refundAmount},
+        refund_reason = ${reason},
+        external_refund_confirmed_at = case when ${target.paymentMethod !== "cash" && refundAmount > 0} then now() else external_refund_confirmed_at end,
+        refunded_at = now(),
+        refunded_by = ${session.id}
+      where id::text = ${itemId}
+        and order_id::text = ${orderId}
+        and coalesce(refund_status, '') <> 'refunded'
+      returning id::text
+    `;
+    if (!itemUpdateRows[0]?.id) return Response.json({ error: "商品別返金を保存できませんでした。" }, { status: 500 });
+    const openItemRows = await sql`
+      select count(*)::int as count
+      from store_customer_order_items
+      where order_id::text = ${orderId}
+        and coalesce(refund_status, '') <> 'refunded'
+    `;
+    const allItemsRefunded = Number(openItemRows[0]?.count ?? 0) === 0;
+    await sql`
+      update store_customer_orders
+      set
+        amount = greatest(0, amount - ${refundAmount}),
+        status = case when ${allItemsRefunded} then 'cancelled' else status end,
+        payment_status = case when ${allItemsRefunded} then 'refunded' else 'partial_refunded' end,
+        payment_refund_status = case when ${allItemsRefunded} then 'succeeded' else 'partial' end,
+        payment_refunded_at = now(),
+        cancelled_at = case when ${allItemsRefunded} then coalesce(cancelled_at, now()) else cancelled_at end,
+        customer_summary = customer_summary || ${JSON.stringify({
+          lastRefundReason: reason,
+          lastRefundedItemId: itemId,
+          lastRefundAmount: refundAmount,
+          lastRefundedById: session.id,
+          lastRefundedByName: session.name,
+          externalRefundConfirmed: target.paymentMethod !== "cash" && refundAmount > 0
+        })}::jsonb,
+        updated_at = now()
+      where id::text = ${orderId}
+    `;
+    await reverseLoyaltyForRefundedOrderItem({
+      orderId,
+      itemId,
+      paidAmount: refundAmount,
+      couponId: item.couponId,
+      note: "商品別返金による会員特典取消"
+    });
+    await syncWebReservationToSalesOrder(orderId);
+    const [transactions, selectedTransaction, todaySummary] = await Promise.all([
+      getTransactions(storeFilter),
+      getTransactionDetail(storeFilter, orderId),
+      getTodaySummary(storeFilter)
+    ]);
+    return Response.json({ ok: true, transactions, selectedTransaction, todaySummary, refundAmount });
+  }
+
+  if (target.paymentMethod !== "cash" && body.externalRefundConfirmed !== true) {
+    return Response.json({ error: "外部決済端末で返金操作を完了してから、外部返金済みにチェックしてください。" }, { status: 400 });
   }
 
   const rows = await sql`

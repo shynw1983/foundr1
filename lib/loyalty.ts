@@ -1827,6 +1827,153 @@ export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "�
   return getMemberProfile(earn.memberId);
 }
 
+export async function reverseLoyaltyForRefundedOrderItem(input: {
+  orderId: string;
+  itemId: string;
+  paidAmount: number;
+  couponId?: string;
+  note?: string;
+}) {
+  const paidAmount = Math.max(0, Math.round(Number(input.paidAmount) || 0));
+  const itemRows = await sql`
+    select
+      store_customer_order_items.id::text,
+      store_customer_order_items.order_id::text as "orderId",
+      coalesce(store_customer_order_items.coupon_id::text, '') as "couponId",
+      coalesce(store_customer_order_items.quantity, 1)::int as quantity,
+      coalesce(store_customer_order_items.size_key, '') as "sizeKey",
+      coalesce(store_customer_order_items.size_label, '') as "sizeLabel",
+      store_customer_orders.member_id::text as "memberId",
+      coalesce(store_customer_orders.brand_id::text, '') as "brandId",
+      coalesce(store_customer_orders.store_id::text, '') as "storeId",
+      coalesce(stores.company_id::text, '') as "companyId",
+      store_customer_orders.amount::int as "orderAmount"
+    from store_customer_order_items
+    join store_customer_orders on store_customer_orders.id = store_customer_order_items.order_id
+    left join stores on stores.id = store_customer_orders.store_id
+    where store_customer_order_items.id::text = ${input.itemId}
+      and store_customer_order_items.order_id::text = ${input.orderId}
+    limit 1
+  `;
+  const item = itemRows[0] as {
+    id: string;
+    orderId: string;
+    couponId: string;
+    quantity: number;
+    sizeKey: string;
+    sizeLabel: string;
+    memberId: string;
+    brandId: string;
+    storeId: string;
+    companyId: string;
+    orderAmount: number;
+  } | undefined;
+  if (!item?.memberId) return null;
+
+  const couponId = normalizeText(input.couponId) || item.couponId;
+  if (couponId) {
+    await sql`
+      update member_coupons
+      set
+        status = 'available',
+        used_order_id = null,
+        used_store_id = null,
+        used_at = null,
+        metadata = metadata || ${JSON.stringify({ restoredByRefundItemId: input.itemId, restoredAt: new Date().toISOString() })}::jsonb
+      where id::text = ${couponId}
+        and used_order_id::text = ${input.orderId}
+        and status = 'used'
+    `;
+  }
+
+  const earnRows = await sql`
+    select points::int
+    from loyalty_point_ledger
+    where order_id::text = ${input.orderId}
+      and movement_type = 'earn'
+      and member_id::text = ${item.memberId}
+    limit 1
+  `;
+  const earnedPoints = Number(earnRows[0]?.points ?? 0);
+  const reversePoints = paidAmount > 0 && earnedPoints > 0 && item.orderAmount > 0
+    ? Math.min(earnedPoints, Math.max(1, Math.round(earnedPoints * paidAmount / item.orderAmount)))
+    : 0;
+  if (reversePoints > 0) {
+    const reverseRows = await sql`
+      insert into loyalty_point_ledger (
+        member_id,
+        order_id,
+        brand_id,
+        store_id,
+        company_id,
+        movement_type,
+        points,
+        eligible_amount,
+        point_rate_basis,
+        source,
+        note
+      )
+      values (
+        ${item.memberId},
+        ${input.orderId},
+        nullif(${item.brandId}, '')::uuid,
+        nullif(${item.storeId}, '')::uuid,
+        nullif(${item.companyId}, '')::uuid,
+        'item_refund_reversal',
+        ${-reversePoints},
+        ${paidAmount},
+        ${basePointRateBasis},
+        'refund',
+        ${input.note || "商品別返金によるポイント取消"}
+      )
+      returning id::text
+    `;
+    if (reverseRows[0]?.id) {
+      await sql`
+        update member_accounts
+        set
+          point_balance = greatest(0, point_balance - ${reversePoints}),
+          lifetime_points_earned = greatest(0, lifetime_points_earned - ${reversePoints}),
+          lifetime_spend_amount = greatest(0, lifetime_spend_amount - ${paidAmount}),
+          updated_at = now()
+        where member_id::text = ${item.memberId}
+      `;
+    }
+  }
+
+  const stampEligible = coalesceSizeKey(item.sizeKey, item.sizeLabel) !== "s";
+  if (stampEligible && item.quantity > 0) {
+    const stampRows = await sql`
+      update loyalty_stamp_ledger
+      set stamps = greatest(0, stamps - ${item.quantity})
+      where order_id::text = ${input.orderId}
+        and member_id::text = ${item.memberId}
+      returning campaign_id::text as "campaignId", stamps::int
+    `;
+    for (const stamp of stampRows as Array<{ campaignId: string; stamps: number }>) {
+      if (stamp.stamps <= 0) {
+        await sql`
+          delete from loyalty_stamp_ledger
+          where order_id::text = ${input.orderId}
+            and member_id::text = ${item.memberId}
+            and campaign_id::text = ${stamp.campaignId}
+            and stamps <= 0
+        `;
+      }
+      await removeSurplusAvailableStampRewards({ memberId: item.memberId, campaignId: stamp.campaignId });
+    }
+  }
+
+  await refreshMemberTier(item.memberId);
+  return getMemberProfile(item.memberId);
+}
+
+function coalesceSizeKey(sizeKey: string, sizeLabel: string) {
+  const normalized = normalizeText(sizeKey || sizeLabel).toLowerCase();
+  if (normalized === "small" || normalized.startsWith("s")) return "s";
+  return normalized;
+}
+
 export async function refreshMemberTier(memberId: string) {
   const rows = await sql`
     with tier_candidates as (

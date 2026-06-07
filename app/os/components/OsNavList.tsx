@@ -43,6 +43,7 @@ const orderModulePaths = new Set([
   "/os/history",
   "/os/suppliers",
   "/os/field-notes",
+  "/os/feedback",
   "/os/product-comparisons",
   "/os/reports"
 ]);
@@ -66,6 +67,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "月次損益", href: "/os/analytics/profit", icon: LineChart },
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "連絡・報告", href: "/os/reports", icon: MessageSquareWarning },
+  { label: "フィードバック", href: "/os/feedback", icon: MessageSquareWarning },
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
   { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
@@ -123,6 +125,7 @@ const navModules: OsNavModule[] = [
       { href: "/os/history" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
+      { href: "/os/feedback" },
       { href: "/os/suppliers" },
       { href: "/os/product-comparisons", isShortcut: true }
     ]
@@ -228,6 +231,7 @@ function canShowInCurrentModule(pathname: string, item: OsNavItem) {
 function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
+  if (item.href === "/os/feedback") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
   if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
   if (item.href === "/os/staff") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
   if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner", "store_manager"].includes(role);

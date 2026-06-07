@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { createPickupCode, findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
-import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, redeemMemberCouponForOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
+import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, isMemberExchangeCoupon, redeemMemberCouponForOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
 import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
@@ -170,6 +170,25 @@ function calculateTaxSummary(params: {
   }
   const taxAmount = taxRate > 0 ? taxableAmount - Math.floor(taxableAmount / (1 + taxRate / 100)) : 0;
   return { taxableAmount, taxAmount, amount: taxableAmount };
+}
+
+function allocateAmountByWeight(totalAmount: number, weights: number[]) {
+  const total = Math.max(0, Math.round(Number(totalAmount) || 0));
+  const normalizedWeights = weights.map((weight) => Math.max(0, Math.round(Number(weight) || 0)));
+  const weightTotal = normalizedWeights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0 || weightTotal <= 0) return weights.map(() => 0);
+  const rawShares = normalizedWeights.map((weight) => total * weight / weightTotal);
+  const shares = rawShares.map(Math.floor);
+  let remainder = total - shares.reduce((sum, share) => sum + share, 0);
+  rawShares
+    .map((share, index) => ({ index, fraction: share - Math.floor(share) }))
+    .sort((left, right) => right.fraction - left.fraction)
+    .forEach(({ index }) => {
+      if (remainder <= 0) return;
+      shares[index] += 1;
+      remainder -= 1;
+    });
+  return shares;
 }
 
 function toPositiveInt(value: unknown, fallback = 1) {
@@ -707,22 +726,51 @@ export async function POST(request: Request) {
   });
   let coupon: Awaited<ReturnType<typeof getUsableMemberCoupon>> | null = null;
   let couponDiscountAmount = 0;
+  let couponItemIndex = -1;
   if (couponId) {
     if (!member?.id) return Response.json({ error: "クーポン利用には会員確認が必要です。" }, { status: 400 });
     coupon = await getUsableMemberCoupon(member.id, couponId);
     if (!coupon) return Response.json({ error: "利用できないクーポンです。" }, { status: 400 });
-    const exchangeEligibleAmounts = normalizedItems.flatMap((item) => {
+    const exchangeEligibleCandidates = normalizedItems.flatMap((item, index) => {
       if (coupon?.brandId && item.brandId !== coupon.brandId) return [];
       if (item.measuredQuantity) return [];
       const sizeReduction = item.selectedOptions
         .filter((option) => option.groupKey === "size")
         .reduce((sum, option) => sum + Math.min(0, Number(option.priceDelta ?? 0)), 0);
       const bodyAmount = Math.max(0, Math.round(item.unitPrice + sizeReduction));
-      return Array.from({ length: item.quantity }, () => bodyAmount).filter((amount) => amount > 0);
+      return bodyAmount > 0 ? [{ index, amount: bodyAmount }] : [];
     });
+    const exchangeEligibleAmounts = exchangeEligibleCandidates.map((candidate) => candidate.amount);
     couponDiscountAmount = calculateCouponDiscount(coupon, subtotalAmount, exchangeEligibleAmounts);
+    if (isMemberExchangeCoupon(coupon) && couponDiscountAmount > 0) {
+      couponItemIndex = exchangeEligibleCandidates.reduce((bestIndex, candidate, candidateIndex) => (
+        candidate.amount > exchangeEligibleCandidates[bestIndex]?.amount ? candidateIndex : bestIndex
+      ), 0);
+      couponItemIndex = exchangeEligibleCandidates[couponItemIndex]?.index ?? -1;
+    }
     if (couponDiscountAmount <= 0) return Response.json({ error: "この注文ではクーポンを適用できません。" }, { status: 400 });
   }
+  const discountBases = normalizedItems.map((item) => {
+    if (!discountPreset) return 0;
+    if (discountPreset.targetScope === "category" && item.category !== discountPreset.targetValue) return 0;
+    if (discountPreset.targetScope === "item_kind" && item.itemKind !== discountPreset.targetValue) return 0;
+    if (discountPreset.targetScope === "brand" && item.brandId !== discountPreset.targetValue) return 0;
+    return item.amount;
+  });
+  const itemDiscountAmounts = allocateAmountByWeight(posDiscountAmount, discountBases);
+  const couponBases = normalizedItems.map((item, index) => Math.max(0, item.amount - itemDiscountAmounts[index]));
+  const itemCouponDiscountAmounts = normalizedItems.map(() => 0);
+  if (couponDiscountAmount > 0 && coupon) {
+    if (couponItemIndex >= 0) {
+      itemCouponDiscountAmounts[couponItemIndex] = Math.min(couponDiscountAmount, couponBases[couponItemIndex]);
+    } else {
+      const couponShares = allocateAmountByWeight(couponDiscountAmount, couponBases);
+      couponShares.forEach((share, index) => {
+        itemCouponDiscountAmounts[index] = Math.min(share, couponBases[index]);
+      });
+    }
+  }
+  const itemPaidAmounts = normalizedItems.map((item, index) => Math.max(0, item.amount - itemDiscountAmounts[index] - itemCouponDiscountAmounts[index]));
   const taxRate = getOrderTaxRate(posSettings, orderType);
   const taxSummary = calculateTaxSummary({
     subtotalAmount,
@@ -866,6 +914,11 @@ export async function POST(request: Request) {
         measured_unit,
         measured_unit_price,
         amount,
+        gross_amount,
+        discount_amount,
+        coupon_discount_amount,
+        paid_amount,
+        coupon_id,
         sort_order
       )
       values (
@@ -886,6 +939,11 @@ export async function POST(request: Request) {
         ${item.measuredUnit},
         ${item.measuredUnitPrice},
         ${item.amount},
+        ${item.amount},
+        ${itemDiscountAmounts[index]},
+        ${itemCouponDiscountAmounts[index]},
+        ${itemPaidAmounts[index]},
+        ${itemCouponDiscountAmounts[index] > 0 && coupon?.id ? coupon.id : null},
         ${index}
       )
     `;

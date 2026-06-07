@@ -5,6 +5,7 @@ import {
   Clock3,
   LineChart,
   MenuSquare,
+  MessageSquareWarning,
   PackageCheck,
   Settings,
   ShoppingCart,
@@ -110,6 +111,14 @@ const systemModules: OsModule[] = [
     description: "スタッフアカウント、役割、店舗・ブランド・発注先の表示範囲、ログイン情報を管理します。",
     href: "/os/staff",
     icon: UserCog,
+    status: "active",
+    roles: ["owner", "manager", "store_owner", "store_manager"]
+  },
+  {
+    title: "フィードバック",
+    description: "Store と OS から送られた問題報告、データ修正、機能要望を確認し、対応状態を管理します。",
+    href: "/os/feedback",
+    icon: MessageSquareWarning,
     status: "active",
     roles: ["owner", "manager", "store_owner", "store_manager"]
   },
