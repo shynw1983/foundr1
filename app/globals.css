@@ -9909,7 +9909,7 @@ body :where(
   background: #f8fafc;
   color: var(--ink);
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 550;
   overflow-wrap: anywhere;
 }
 
@@ -9936,7 +9936,7 @@ body :where(
 .loyalty-tier-card label span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 550;
 }
 
 .loyalty-settings-grid input,
@@ -10025,14 +10025,14 @@ body :where(
 
 .loyalty-template-card summary strong {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .loyalty-template-card summary small {
   margin-top: 3px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 400;
 }
 
 .loyalty-template-editor {
@@ -10054,7 +10054,7 @@ body :where(
 .loyalty-template-rule-grid label span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 550;
 }
 
 .loyalty-template-editor input,
@@ -10092,7 +10092,7 @@ body :where(
   background: #f8fafc;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .loyalty-template-empty {
@@ -10101,7 +10101,7 @@ body :where(
   padding: 16px;
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 450;
 }
 
 .loyalty-workspace-grid {
@@ -10127,7 +10127,7 @@ body :where(
 .loyalty-member-form label span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 550;
 }
 
 .loyalty-member-form input {
@@ -10184,13 +10184,13 @@ body :where(
 .loyalty-table-wrap th {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .loyalty-table-wrap td {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 450;
 }
 
 .loyalty-table-wrap td strong,
@@ -10200,11 +10200,15 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.loyalty-table-wrap td strong {
+  font-weight: 600;
+}
+
 .loyalty-table-wrap td small {
   margin-top: 3px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 400;
 }
 
 .loyalty-table-wrap .is-negative {
@@ -10223,7 +10227,7 @@ body :where(
   background: #f8fafc;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 550;
   white-space: nowrap;
 }
 

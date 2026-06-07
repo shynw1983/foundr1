@@ -574,8 +574,8 @@ function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate
     return {
       templateKey: "coupon_birthday",
       category: "member",
-      name: "生日优惠券通知",
-      description: "每月生日会员统一发券后发送。",
+      name: "誕生日クーポン通知",
+      description: "毎月、誕生日月の会員へクーポンを一括発行した後に送信します。",
       subject: "お誕生日特典クーポンをお届けしました",
       body: "{{memberName}} 様\n\nお誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
       isEnabled: true,
@@ -587,8 +587,8 @@ function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate
   return {
     templateKey: "coupon_general",
     category: "member",
-    name: "优惠券通知",
-    description: "手动发券、补发优惠券通知时使用。",
+    name: "クーポン通知",
+    description: "手動発行や再送時のクーポン通知に使用します。",
     subject: "クーポンをお届けしました",
     body: "{{memberName}} 様\n\nFoundr1 Members にクーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
     isEnabled: true,

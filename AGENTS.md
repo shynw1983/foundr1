@@ -203,6 +203,7 @@ When editing UI:
 - Check mobile, tablet, half-width desktop, and wide desktop behavior.
 - Avoid horizontal overflow.
 - Keep dense operational screens compact.
+- Keep operational typography light and scannable. Routine table cells, list rows, form labels, helper text, and status pills should generally use `font-weight` 400-600. Reserve 650+ for page titles, important metric values, and rare emphasis; avoid 800/900 weights for ordinary OS data because Japanese text becomes visually heavy and harder to scan.
 - Do not add marketing-style hero sections.
 - Avoid nested cards.
 - For analytics/dashboard metric cards, use a stable vertical layout: label on top, value in the middle, note on the bottom. Do not use horizontal card layouts for KPI cards, because values and notes must not overlap or force awkward wrapping in half-width and mobile windows.
