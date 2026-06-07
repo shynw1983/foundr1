@@ -10618,6 +10618,13 @@ body :where(
   font-weight: 500;
 }
 
+.member-auth-code-field small {
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 .member-auth-email-form input {
   width: 100%;
   min-height: 46px;
@@ -10651,6 +10658,12 @@ body :where(
   font-size: 22px;
   font-weight: 600;
   line-height: 1;
+}
+
+.member-auth-email-form .member-auth-code-inputs input:disabled {
+  background: #f8faf9;
+  color: var(--member-muted);
+  opacity: 1;
 }
 
 .member-auth-email-form {

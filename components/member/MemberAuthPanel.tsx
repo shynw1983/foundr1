@@ -11,6 +11,7 @@ type MemberAuthPanelProps = {
 };
 
 type EmailFlow = "sign_in" | "sign_up";
+type AuthStep = "email" | "preparing_code" | "code";
 type EmailCodeFactorLike = { strategy: "email_code"; emailAddressId: string };
 type SignUpCompletionResource = {
   status: string | null;
@@ -84,12 +85,14 @@ export function MemberAuthPanel({
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [emailFlow, setEmailFlow] = useState<EmailFlow>("sign_in");
-  const [codeSent, setCodeSent] = useState(false);
+  const [authStep, setAuthStep] = useState<AuthStep>("email");
   const [emailBusy, setEmailBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   const authLoaded = signInLoaded && signUpLoaded && Boolean(signIn && signUp);
   const codeDigits = Array.from({ length: codeLength }, (_, index) => code[index] || "");
+  const codeReady = authStep === "code";
+  const codePreparing = authStep === "preparing_code";
 
   function focusCodeInput(index: number) {
     codeInputRefs.current[index]?.focus();
@@ -146,6 +149,8 @@ export function MemberAuthPanel({
     }
 
     setEmailBusy(true);
+    setCode("");
+    setAuthStep("preparing_code");
     setMessage("");
     let sent = false;
     try {
@@ -176,8 +181,11 @@ export function MemberAuthPanel({
     }
     if (sent) {
       setCode("");
-      setCodeSent(true);
+      setAuthStep("code");
       setMessage("確認コードをメールで送信しました。");
+      window.requestAnimationFrame(() => focusCodeInput(0));
+    } else {
+      setAuthStep("email");
     }
     setEmailBusy(false);
   }
@@ -244,7 +252,7 @@ export function MemberAuthPanel({
         </div>
         <div id="clerk-captcha" className="member-auth-captcha" />
 
-        {!codeSent ? (
+        {authStep === "email" ? (
           <form className="member-auth-email-form" onSubmit={(event) => void sendEmailCode(event)}>
             <label>
               <span>メールアドレス</span>
@@ -267,6 +275,7 @@ export function MemberAuthPanel({
           <form className="member-auth-email-form" onSubmit={(event) => void verifyEmailCode(event)}>
             <div className="member-auth-code-field">
               <span>確認コード</span>
+              {codePreparing ? <small>確認コードを送信しています。</small> : null}
               <div className="member-auth-code-inputs" role="group" aria-label="確認コード">
                 {codeDigits.map((digit, index) => (
                   <input
@@ -282,22 +291,22 @@ export function MemberAuthPanel({
                     pattern="[0-9]*"
                     autoComplete={index === 0 ? "one-time-code" : "off"}
                     aria-label={`確認コード ${index + 1} 桁目`}
-                    disabled={emailBusy}
-                    autoFocus={index === 0}
+                    disabled={emailBusy || !codeReady}
+                    autoFocus={index === 0 && codeReady}
                   />
                 ))}
               </div>
             </div>
-            <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded || code.length !== codeLength}>
+            <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded || !codeReady || code.length !== codeLength}>
               {emailBusy ? <Loader2 size={16} /> : <KeyRound size={16} />}
-              会員カードを表示
+              {codePreparing ? "確認コードを送信中" : "会員カードを表示"}
             </button>
             <button
               className="member-auth-link-button"
               type="button"
               onClick={() => {
                 setCode("");
-                setCodeSent(false);
+                setAuthStep("email");
                 setMessage("");
               }}
               disabled={emailBusy}
