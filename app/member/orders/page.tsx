@@ -4,13 +4,16 @@ import { SignOutButton, useUser } from "@clerk/nextjs";
 import { ChevronDown, Home, Loader2, LogOut, RefreshCw, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
+import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
 import { MemberOrderHistoryPanel } from "../../../components/member/MemberOrderHistoryPanel";
 import type { MemberOrderHistory } from "../../../components/member/MemberOrderHistoryPanel";
+import { memberText } from "../../../components/member/memberTranslations";
 
 type MemberProfile = {
   memberNumber: string;
   displayName: string;
   email: string;
+  preferredLanguage?: string;
 };
 
 type MemberOrdersResponse = {
@@ -23,11 +26,13 @@ type MemberOrdersResponse = {
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }) {
-  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || "会員";
+function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
+  return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
 }
 
 export default function MemberOrdersPage() {
+  const { language, syncPreferredLanguage } = useMemberLanguage();
+  const text = memberText[language];
   const { isLoaded, isSignedIn, user } = useUser();
   const [data, setData] = useState<MemberOrdersResponse>({});
   const [loading, setLoading] = useState(false);
@@ -40,13 +45,14 @@ export default function MemberOrdersPage() {
       const response = await fetch("/api/public/members/me", { cache: "no-store" });
       const body = await response.json().catch(() => ({})) as MemberOrdersResponse;
       if (!response.ok) {
-        setMessage(body.error || "購入履歴を読み込めませんでした。");
+        setMessage(body.error || text.loadMemberError);
         setData({});
         return;
       }
       setData(body);
+      syncPreferredLanguage(body.member?.preferredLanguage);
     } catch {
-      setMessage("通信に失敗しました。時間をおいて再度お試しください。");
+      setMessage(text.networkError);
       setData({});
     } finally {
       setLoading(false);
@@ -63,12 +69,13 @@ export default function MemberOrdersPage() {
         <header className="member-portal-topbar">
           <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
             <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-            <strong>Members</strong>
+            <strong>{text.member}</strong>
           </a>
+          <MemberLanguageSwitcher />
         </header>
         <section className="member-portal-config">
-          <strong>Clerk の環境変数が未設定です。</strong>
-          <p>`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` と `CLERK_SECRET_KEY` を設定してください。</p>
+          <strong>{text.notConfiguredTitle}</strong>
+          <p>{text.memberNotConfiguredBody}</p>
         </section>
       </main>
     );
@@ -79,57 +86,60 @@ export default function MemberOrdersPage() {
       <header className="member-portal-topbar">
         <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-          <strong>Members</strong>
+          <strong>{text.member}</strong>
         </a>
+        <div className="member-topbar-actions">
+          <MemberLanguageSwitcher />
         {isSignedIn ? (
           <details className="member-account-menu">
-            <summary aria-label="会員メニュー">
+            <summary aria-label={text.memberMenu}>
               <span className="member-account-avatar"><UserRound size={18} /></span>
               <span className="member-account-summary-text">
-                <strong>{getAccountDisplayName(data.member, user)}</strong>
-                <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || "ログイン中"}</small>
+                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
+                <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}</small>
               </span>
               <ChevronDown size={16} />
             </summary>
             <div className="member-account-popover">
               <div className="member-account-card">
-                <span>ログイン中</span>
-                <strong>{getAccountDisplayName(data.member, user)}</strong>
-                {data.member?.memberNumber ? <small>会員番号 {data.member.memberNumber}</small> : null}
+                <span>{text.signedIn}</span>
+                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
+                {data.member?.memberNumber ? <small>{text.memberNumber} {data.member.memberNumber}</small> : null}
               </div>
               <a className="member-account-menu-item" href="/member">
                 <Home size={16} />
-                会員証に戻る
+                {text.backToCard}
               </a>
               <SignOutButton redirectUrl="/member?loggedOut=1">
                 <button className="member-account-menu-item" type="button">
                   <LogOut size={16} />
-                  ログアウト
+                  {text.signOut}
                 </button>
               </SignOutButton>
             </div>
           </details>
         ) : null}
+        </div>
       </header>
 
       <section className="member-portal-hero member-orders-hero">
         <div>
-          <p className="eyebrow">Purchase History</p>
-          <h1>購入履歴</h1>
-          <span>Web予約と実店舗購入の履歴を確認できます。Web予約は領収書も表示できます。</span>
+          <p className="eyebrow">{text.purchaseHistory}</p>
+          <h1>{text.purchaseHistoryTitle}</h1>
+          <span>{text.purchaseHistoryDescription}</span>
         </div>
         {isLoaded && isSignedIn ? (
           <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>
             {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
-            更新
+            {text.refresh}
           </button>
         ) : null}
       </section>
 
       {isLoaded && !isSignedIn ? (
         <MemberAuthPanel
-          title="購入履歴にログイン"
-          description="メールアドレスに確認コードを送信して、購入履歴を確認できます。"
+          title={text.purchaseHistoryLoginTitle}
+          description={text.purchaseHistoryLoginDescription}
           afterAuthUrl="/member/orders"
         />
       ) : null}
@@ -141,8 +151,8 @@ export default function MemberOrdersPage() {
             {loading && !data.orders ? (
               <section className="member-portal-login-panel">
                 <Loader2 size={32} />
-                <h2>購入履歴を読み込み中</h2>
-                <p>少々お待ちください。</p>
+                <h2>{text.purchaseHistoryLoading}</h2>
+                <p>{text.pleaseWait}</p>
               </section>
             ) : (
               <MemberOrderHistoryPanel orders={data.orders} onRefresh={loadOrders} />

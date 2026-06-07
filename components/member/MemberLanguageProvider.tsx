@@ -1,0 +1,131 @@
+"use client";
+
+import { Globe2 } from "lucide-react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+
+export const memberLanguageOptions = [
+  { value: "ja", label: "日本語" },
+  { value: "zh", label: "简体中文" },
+  { value: "zh-Hant", label: "繁體中文" },
+  { value: "en", label: "English" },
+  { value: "ko", label: "한국어" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "ne", label: "नेपाली" }
+] as const;
+
+export type MemberLanguage = typeof memberLanguageOptions[number]["value"];
+
+type MemberLanguageContextValue = {
+  language: MemberLanguage;
+  setLanguage: (language: string, options?: { saveRemote?: boolean }) => void;
+  syncPreferredLanguage: (language?: string | null) => void;
+};
+
+const memberLanguageStorageKey = "foundr1-member-language";
+const MemberLanguageContext = createContext<MemberLanguageContextValue | null>(null);
+
+export function normalizeMemberLanguage(value?: string | null): MemberLanguage {
+  const language = String(value ?? "").trim();
+  return memberLanguageOptions.some((option) => option.value === language) ? language as MemberLanguage : "ja";
+}
+
+function browserLanguage() {
+  if (typeof navigator === "undefined") return "ja";
+  const source = [navigator.language, ...(navigator.languages ?? [])].join(" ").toLowerCase();
+  if (source.includes("zh-hant") || source.includes("zh-tw") || source.includes("zh-hk")) return "zh-Hant";
+  if (source.includes("zh")) return "zh";
+  if (source.includes("ko")) return "ko";
+  if (source.includes("vi")) return "vi";
+  if (source.includes("ne")) return "ne";
+  if (source.includes("en")) return "en";
+  return "ja";
+}
+
+function initialLanguage() {
+  if (typeof window === "undefined") return "ja";
+  const params = new URLSearchParams(window.location.search);
+  return normalizeMemberLanguage(
+    params.get("lang") ||
+    window.localStorage.getItem(memberLanguageStorageKey) ||
+    browserLanguage()
+  );
+}
+
+function savePreferredLanguage(language: MemberLanguage) {
+  void fetch("/api/public/members/me", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "preferred_language", preferredLanguage: language })
+  }).catch(() => undefined);
+}
+
+export function MemberLanguageProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<MemberLanguage>("ja");
+  const [initialized, setInitialized] = useState(false);
+  const userSelectedLanguageRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nextLanguage = initialLanguage();
+    userSelectedLanguageRef.current = Boolean(params.get("lang"));
+    setLanguageState(nextLanguage);
+    window.localStorage.setItem(memberLanguageStorageKey, nextLanguage);
+    setInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh-Hant" ? "zh-Hant" : language;
+  }, [language]);
+
+  const value = useMemo<MemberLanguageContextValue>(() => ({
+    language,
+    setLanguage: (nextLanguage, options = {}) => {
+      const normalized = normalizeMemberLanguage(nextLanguage);
+      userSelectedLanguageRef.current = true;
+      setLanguageState(normalized);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(memberLanguageStorageKey, normalized);
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("lang", normalized);
+        window.history.replaceState(null, "", nextUrl.toString());
+      }
+      if (options.saveRemote) savePreferredLanguage(normalized);
+    },
+    syncPreferredLanguage: (preferredLanguage) => {
+      if (!preferredLanguage) return;
+      const normalized = normalizeMemberLanguage(preferredLanguage);
+      if (userSelectedLanguageRef.current) return;
+      setLanguageState(normalized);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(memberLanguageStorageKey, normalized);
+      }
+    }
+  }), [initialized, language]);
+
+  return (
+    <MemberLanguageContext.Provider value={value}>
+      {children}
+    </MemberLanguageContext.Provider>
+  );
+}
+
+export function useMemberLanguage() {
+  const value = useContext(MemberLanguageContext);
+  if (!value) throw new Error("useMemberLanguage must be used inside MemberLanguageProvider");
+  return value;
+}
+
+export function MemberLanguageSwitcher() {
+  const { language, setLanguage } = useMemberLanguage();
+  return (
+    <label className="member-language-switcher">
+      <Globe2 size={16} />
+      <span>Language / 言語 / 语言</span>
+      <select value={language} onChange={(event) => setLanguage(event.target.value, { saveRemote: true })} aria-label="Language">
+        {memberLanguageOptions.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}

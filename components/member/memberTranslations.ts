@@ -1,0 +1,808 @@
+import type { MemberLanguage } from "./MemberLanguageProvider";
+
+export const memberText: Record<MemberLanguage, {
+  member: string;
+  signedIn: string;
+  memberNumber: string;
+  memberMenu: string;
+  memberCard: string;
+  editMemberInfo: string;
+  ordersAndReceipts: string;
+  backToCard: string;
+  returnToSite: string;
+  signOut: string;
+  switchAccount: string;
+  refresh: string;
+  loadingAuth: string;
+  preparingAuth: string;
+  signedOutTitle: string;
+  signedOutDescription: string;
+  loginOrRegister: string;
+  loginDescription: string;
+  memberCardTitle: string;
+  memberCardDescription: string;
+  pointsCouponsNumber: string;
+  returningTitle: string;
+  checkingMemberTitle: string;
+  returningBody: string;
+  preparingReturnBody: string;
+  syncMemberTitle: string;
+  syncMemberBody: string;
+  memberNo: string;
+  presentAtStore: string;
+  couponSelected: string;
+  availableCoupons: (count: number) => string;
+  points: string;
+  pointRate: string;
+  rank: string;
+  visits: (count: number) => string;
+  lifetimeSpend: string;
+  webPosShared: string;
+  stampCard: string;
+  nextStampPreparing: string;
+  totalStamps: (count: number) => string;
+  rewardsAvailable: (count: number) => string;
+  stampsRemaining: (count: number) => string;
+  coupons: string;
+  noCoupons: string;
+  selectedForUse: string;
+  clearSelection: string;
+  use: string;
+  allStores: string;
+  pointHistory: string;
+  noPointHistory: string;
+  brand: string;
+  notConfiguredTitle: string;
+  memberNotConfiguredBody: string;
+  loadMemberError: string;
+  returnPrepareError: string;
+  networkError: string;
+  dateNoExpiry: string;
+  movementEarn: string;
+  movementRedeem: string;
+  movementReversal: string;
+  couponApplied: string;
+  oneCupExchange: string;
+  purchaseHistory: string;
+  purchaseHistoryTitle: string;
+  purchaseHistoryDescription: string;
+  purchaseHistoryLoginTitle: string;
+  purchaseHistoryLoginDescription: string;
+  purchaseHistoryLoading: string;
+  pleaseWait: string;
+  orderTypeTabs: string;
+  webReservation: string;
+  storePurchase: string;
+  noWebOrders: string;
+  noStoreOrders: string;
+  detailsFallback: string;
+  otherItems: (count: number) => string;
+  receipt: string;
+  store: string;
+  dateTime: string;
+  refund: string;
+  couponDiscount: string;
+  subtotal: string;
+  usedCoupon: string;
+  couponDiscountAmount: string;
+  noCouponDiscount: string;
+  itemDetails: string;
+  cancelRefundRequest: string;
+  processing: string;
+  cancelConfirm: (pickupCode: string, amount: string) => string;
+  cancelRequestFailed: string;
+  cancelRequestAccepted: string;
+  cancelDeadlineAvailable: (minutes: number, deadline: string) => string;
+  cancelUnavailable: string;
+  orderAgain: string;
+  tasteFeedback: string;
+  close: string;
+  statusCancelled: string;
+  statusPartialRefunded: string;
+  statusRefundPending: string;
+  statusCompleted: string;
+  statusReady: string;
+  statusPreparing: string;
+  statusPaid: string;
+  statusPending: string;
+  sourceStorePos: string;
+  sourceMaamaaWeb: string;
+  sourceNanachaWeb: string;
+  sourceWeb: string;
+  authEyebrow: string;
+  email: string;
+  sendCode: string;
+  legalPrefix: string;
+  terms: string;
+  privacy: string;
+  legalSuffix: string;
+  verificationCode: string;
+  sendingCode: string;
+  showMemberCard: string;
+  changeEmail: string;
+  emailRequired: string;
+  codeRequired: string;
+  codeSent: string;
+  authFailed: string;
+  authNoResponse: string;
+  authUnavailableEmail: string;
+  authCannotComplete: string;
+  authMissingFields: (fields: string) => string;
+  authStatusCannotComplete: (status: string) => string;
+  authPasswordRequired: string;
+  codeDigit: (index: number) => string;
+}> = {
+  ja: {
+    member: "会員",
+    signedIn: "ログイン中",
+    memberNumber: "会員番号",
+    memberMenu: "会員メニュー",
+    memberCard: "会員証",
+    editMemberInfo: "会員情報を編集",
+    ordersAndReceipts: "購入履歴・領収書",
+    backToCard: "会員証に戻る",
+    returnToSite: "サイトへ戻る",
+    signOut: "ログアウト",
+    switchAccount: "別のアカウントでログイン",
+    refresh: "更新",
+    loadingAuth: "ログインを読み込んでいます",
+    preparingAuth: "認証画面の準備をしています。",
+    signedOutTitle: "ログアウトしました",
+    signedOutDescription: "もう一度ログインするか、新しい会員登録を続けてください。",
+    loginOrRegister: "ログインまたは会員登録",
+    loginDescription: "メールアドレスに確認コードを送信して、会員カードを表示できます。",
+    memberCardTitle: "会員証",
+    memberCardDescription: "ポイント、クーポン、ブランド共通の会員番号を確認できます。",
+    pointsCouponsNumber: "ポイント、クーポン、ブランド共通の会員番号を確認できます。",
+    returningTitle: "サイトへ戻っています",
+    checkingMemberTitle: "会員情報を確認中です",
+    returningBody: "予約ページへ自動で戻ります。",
+    preparingReturnBody: "戻り先のサイトへ連携する準備をしています。",
+    syncMemberTitle: "会員情報を同期中",
+    syncMemberBody: "ログイン情報から Foundr1 会員を作成しています。",
+    memberNo: "Member No.",
+    presentAtStore: "店頭で提示してください",
+    couponSelected: "クーポン選択済み",
+    availableCoupons: (count: number) => `利用可能クーポン ${count}件`,
+    points: "ポイント",
+    pointRate: "1 pt = 1 円",
+    rank: "ランク",
+    visits: (count: number) => `${count.toLocaleString("ja-JP")} 回来店`,
+    lifetimeSpend: "累計購入",
+    webPosShared: "Web / POS 共通",
+    stampCard: "Stamp Card",
+    nextStampPreparing: "次のスタンプカードを準備中です。",
+    totalStamps: (count: number) => `累計 ${count.toLocaleString("ja-JP")} stamp`,
+    rewardsAvailable: (count: number) => `特典 ${count.toLocaleString("ja-JP")}件 利用可`,
+    stampsRemaining: (count: number) => `あと ${count.toLocaleString("ja-JP")} stamp`,
+    coupons: "クーポン",
+    noCoupons: "利用できるクーポンはありません。",
+    selectedForUse: "使用予定",
+    clearSelection: "選択解除",
+    use: "使う",
+    allStores: "全店舗適用",
+    pointHistory: "ポイント履歴",
+    noPointHistory: "ポイント履歴はまだありません。",
+    brand: "ブランド",
+    notConfiguredTitle: "Clerk の環境変数が未設定です。",
+    memberNotConfiguredBody: "`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` と `CLERK_SECRET_KEY` を設定すると、メールログインを有効化できます。",
+    loadMemberError: "会員情報を読み込めませんでした。",
+    returnPrepareError: "ログイン後の戻り先を準備できませんでした。",
+    networkError: "通信に失敗しました。時間をおいて再度お試しください。",
+    dateNoExpiry: "期限なし",
+    movementEarn: "付与",
+    movementRedeem: "利用",
+    movementReversal: "取消",
+    couponApplied: "クーポン適用",
+    oneCupExchange: "1杯交換",
+    purchaseHistory: "購入履歴",
+    purchaseHistoryTitle: "購入履歴",
+    purchaseHistoryDescription: "Web予約と実店舗購入の履歴を確認できます。Web予約は領収書も表示できます。",
+    purchaseHistoryLoginTitle: "購入履歴にログイン",
+    purchaseHistoryLoginDescription: "メールアドレスに確認コードを送信して、購入履歴を確認できます。",
+    purchaseHistoryLoading: "購入履歴を読み込み中",
+    pleaseWait: "少々お待ちください。",
+    orderTypeTabs: "購入履歴の種別",
+    webReservation: "Web予約",
+    storePurchase: "実店舗購入",
+    noWebOrders: "Web予約の履歴はまだありません。",
+    noStoreOrders: "実店舗購入の履歴はまだありません。",
+    detailsFallback: "明細は詳細で確認できます",
+    otherItems: (count: number) => `ほか ${count}件`,
+    receipt: "領収書",
+    store: "店舗",
+    dateTime: "日時",
+    refund: "返金",
+    couponDiscount: "クーポン・割引",
+    subtotal: "小計",
+    usedCoupon: "使用クーポン",
+    couponDiscountAmount: "クーポン値引き",
+    noCouponDiscount: "この注文ではクーポン・割引は使用されていません。",
+    itemDetails: "商品明細",
+    cancelRefundRequest: "キャンセル・返金申請",
+    processing: "処理中...",
+    cancelConfirm: (pickupCode: string, amount: string) => `このWeb予約をキャンセルし、支払い済みの場合は返金を申請します。\n\n注文番号: ${pickupCode}\n金額: ${amount}\n\nよろしいですか？`,
+    cancelRequestFailed: "キャンセル申請を処理できませんでした。",
+    cancelRequestAccepted: "キャンセル・返金申請を受け付けました。",
+    cancelDeadlineAvailable: (minutes: number, deadline: string) => `受取予定の${minutes}分前まで申請できます${deadline ? `（期限 ${deadline}）` : ""}。`,
+    cancelUnavailable: "キャンセル受付時間を過ぎた、または調理開始後のため、この画面からは申請できません。",
+    orderAgain: "もう一度注文",
+    tasteFeedback: "評価・味のフィードバック",
+    close: "閉じる",
+    statusCancelled: "キャンセル済み",
+    statusPartialRefunded: "一部返金済み",
+    statusRefundPending: "返金処理中",
+    statusCompleted: "完了",
+    statusReady: "受け取り可",
+    statusPreparing: "準備中",
+    statusPaid: "支払い済み",
+    statusPending: "支払い待ち",
+    sourceStorePos: "店舗購入",
+    sourceMaamaaWeb: "まぁ麻 Web予約",
+    sourceNanachaWeb: "nanacha Web予約",
+    sourceWeb: "Web予約",
+    authEyebrow: "Foundr1 Member",
+    email: "メールアドレス",
+    sendCode: "確認コードを送る",
+    legalPrefix: "続行すると、",
+    terms: "利用規約",
+    privacy: "プライバシーポリシー",
+    legalSuffix: "に同意したものとみなされます。未登録のメールアドレスは確認後に会員登録されます。",
+    verificationCode: "確認コード",
+    sendingCode: "確認コードを送信中",
+    showMemberCard: "会員カードを表示",
+    changeEmail: "メールアドレスを変更",
+    emailRequired: "メールアドレスを入力してください。",
+    codeRequired: "確認コードを入力してください。",
+    codeSent: "確認コードをメールで送信しました。",
+    authFailed: "認証に失敗しました。入力内容を確認してください。",
+    authNoResponse: "認証サーバーからの応答がありません。通信状態を確認して、もう一度お試しください。",
+    authUnavailableEmail: "このメールアドレスでは確認コード認証を利用できません。別のメールアドレスでお試しください。",
+    authCannotComplete: "会員登録を完了できませんでした。もう一度お試しください。",
+    authMissingFields: (fields: string) => `会員登録に必要な項目が残っています: ${fields}`,
+    authStatusCannotComplete: (status: string) => `会員登録を完了できませんでした。状態: ${status}`,
+    authPasswordRequired: "このメールアドレスはパスワード登録が必要な設定になっています。Clerk の会員登録設定でパスワードを任意または無効にしてください。",
+    codeDigit: (index: number) => `確認コード ${index} 桁目`
+  },
+  zh: {
+    member: "会员", signedIn: "已登录", memberNumber: "会员编号", memberMenu: "会员菜单", memberCard: "会员卡", editMemberInfo: "编辑会员信息", ordersAndReceipts: "购买记录・收据", backToCard: "返回会员卡", returnToSite: "返回网站", signOut: "退出登录", switchAccount: "使用其他账号登录", refresh: "刷新", loadingAuth: "正在读取登录状态", preparingAuth: "正在准备认证页面。", signedOutTitle: "已退出登录", signedOutDescription: "请重新登录或继续注册新会员。", loginOrRegister: "登录或注册会员", loginDescription: "输入邮箱接收验证码，即可显示会员卡。", memberCardTitle: "会员卡", memberCardDescription: "可查看积分、优惠券和品牌通用会员编号。", pointsCouponsNumber: "可查看积分、优惠券和品牌通用会员编号。", returningTitle: "正在返回网站", checkingMemberTitle: "正在确认会员信息", returningBody: "将自动返回预约页面。", preparingReturnBody: "正在准备与返回网站联动。", syncMemberTitle: "正在同步会员信息", syncMemberBody: "正在根据登录信息创建 Foundr1 会员。", memberNo: "会员编号", presentAtStore: "请在店头出示", couponSelected: "已选择优惠券", availableCoupons: (count: number) => `可用优惠券 ${count} 张`, points: "积分", pointRate: "1 pt = 1 日元", rank: "等级", visits: (count: number) => `到店 ${count.toLocaleString("ja-JP")} 次`, lifetimeSpend: "累计购买", webPosShared: "Web / POS 通用", stampCard: "印章卡", nextStampPreparing: "下一张印章卡准备中。", totalStamps: (count: number) => `累计 ${count.toLocaleString("ja-JP")} stamp`, rewardsAvailable: (count: number) => `特典 ${count.toLocaleString("ja-JP")} 件可用`, stampsRemaining: (count: number) => `还差 ${count.toLocaleString("ja-JP")} stamp`, coupons: "优惠券", noCoupons: "暂无可用优惠券。", selectedForUse: "准备使用", clearSelection: "取消选择", use: "使用", allStores: "全部门店适用", pointHistory: "积分记录", noPointHistory: "暂无积分记录。", brand: "品牌", notConfiguredTitle: "Clerk 环境变量尚未设置。", memberNotConfiguredBody: "设置 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` 和 `CLERK_SECRET_KEY` 后即可启用邮箱登录。", loadMemberError: "无法读取会员信息。", returnPrepareError: "无法准备登录后的返回地址。", networkError: "通信失败。请稍后再试。", dateNoExpiry: "无期限", movementEarn: "获得", movementRedeem: "使用", movementReversal: "取消", couponApplied: "已使用优惠券", oneCupExchange: "兑换 1 杯", purchaseHistory: "购买记录", purchaseHistoryTitle: "购买记录", purchaseHistoryDescription: "可查看 Web 预约和实体店购买记录。Web 预约也可显示收据。", purchaseHistoryLoginTitle: "登录购买记录", purchaseHistoryLoginDescription: "输入邮箱接收验证码，即可查看购买记录。", purchaseHistoryLoading: "正在读取购买记录", pleaseWait: "请稍候。", orderTypeTabs: "购买记录类型", webReservation: "Web预约", storePurchase: "实体店购买", noWebOrders: "暂无 Web 预约记录。", noStoreOrders: "暂无实体店购买记录。", detailsFallback: "明细可在详情中查看", otherItems: (count: number) => `另有 ${count} 件`, receipt: "收据", store: "门店", dateTime: "日期时间", refund: "退款", couponDiscount: "优惠券・折扣", subtotal: "小计", usedCoupon: "使用优惠券", couponDiscountAmount: "优惠券折扣", noCouponDiscount: "此订单未使用优惠券・折扣。", itemDetails: "商品明细", cancelRefundRequest: "申请取消・退款", processing: "处理中...", cancelConfirm: (pickupCode: string, amount: string) => `将取消此 Web 预约；如已付款，将申请退款。\n\n订单号: ${pickupCode}\n金额: ${amount}\n\n确定吗？`, cancelRequestFailed: "无法处理取消申请。", cancelRequestAccepted: "已受理取消・退款申请。", cancelDeadlineAvailable: (minutes: number, deadline: string) => `可在取餐前 ${minutes} 分钟前申请${deadline ? `（截止 ${deadline}）` : ""}。`, cancelUnavailable: "已超过取消受理时间，或已开始制作，无法在此页面申请。", orderAgain: "再次下单", tasteFeedback: "评价・口味反馈", close: "关闭", statusCancelled: "已取消", statusPartialRefunded: "部分退款", statusRefundPending: "退款处理中", statusCompleted: "完成", statusReady: "可取餐", statusPreparing: "准备中", statusPaid: "已支付", statusPending: "待支付", sourceStorePos: "实体店购买", sourceMaamaaWeb: "まぁ麻 Web预约", sourceNanachaWeb: "nanacha Web预约", sourceWeb: "Web预约", authEyebrow: "Foundr1 Member", email: "邮箱地址", sendCode: "发送验证码", legalPrefix: "继续即表示同意", terms: "使用条款", privacy: "隐私政策", legalSuffix: "。未注册邮箱将在验证后注册为会员。", verificationCode: "验证码", sendingCode: "正在发送验证码", showMemberCard: "显示会员卡", changeEmail: "更改邮箱", emailRequired: "请输入邮箱地址。", codeRequired: "请输入验证码。", codeSent: "验证码已发送至邮箱。", authFailed: "认证失败。请确认输入内容。", authNoResponse: "认证服务器没有响应。请确认网络后重试。", authUnavailableEmail: "此邮箱无法使用验证码认证。请尝试其他邮箱。", authCannotComplete: "无法完成会员注册。请重试。", authMissingFields: (fields: string) => `会员注册仍缺少项目: ${fields}`, authStatusCannotComplete: (status: string) => `无法完成会员注册。状态: ${status}`, authPasswordRequired: "此邮箱需要注册密码。请在 Clerk 会员注册设置中将密码设为可选或关闭。", codeDigit: (index: number) => `验证码第 ${index} 位`
+  },
+  "zh-Hant": {} as any,
+  en: {} as any,
+  ko: {} as any,
+  vi: {} as any,
+  ne: {} as any
+};
+
+memberText["zh-Hant"] = {
+  ...memberText.zh,
+  member: "會員",
+  signedIn: "已登入",
+  memberNumber: "會員編號",
+  memberMenu: "會員選單",
+  memberCard: "會員卡",
+  editMemberInfo: "編輯會員資料",
+  ordersAndReceipts: "購買紀錄・收據",
+  backToCard: "返回會員卡",
+  signOut: "登出",
+  switchAccount: "使用其他帳號登入",
+  loginOrRegister: "登入或註冊會員",
+  loginDescription: "輸入電子郵件接收驗證碼，即可顯示會員卡。",
+  memberCardTitle: "會員卡",
+  memberCardDescription: "可查看點數、優惠券與品牌共用會員編號。",
+  pointsCouponsNumber: "可查看點數、優惠券與品牌共用會員編號。",
+  presentAtStore: "請在店頭出示",
+  availableCoupons: (count: number) => `可用優惠券 ${count} 張`,
+  points: "點數",
+  pointRate: "1 pt = 1 日圓",
+  rank: "等級",
+  visits: (count: number) => `到店 ${count.toLocaleString("ja-JP")} 次`,
+  lifetimeSpend: "累計購買",
+  stampCard: "印章卡",
+  nextStampPreparing: "下一張印章卡準備中。",
+  rewardsAvailable: (count: number) => `特典 ${count.toLocaleString("ja-JP")} 件可用`,
+  coupons: "優惠券",
+  noCoupons: "目前沒有可用優惠券。",
+  selectedForUse: "準備使用",
+  clearSelection: "取消選擇",
+  allStores: "全部門店適用",
+  pointHistory: "點數紀錄",
+  noPointHistory: "目前沒有點數紀錄。",
+  loadMemberError: "無法讀取會員資料。",
+  networkError: "通訊失敗。請稍後再試。",
+  purchaseHistory: "購買紀錄",
+  purchaseHistoryTitle: "購買紀錄",
+  purchaseHistoryDescription: "可查看 Web 預約與實體店購買紀錄。Web 預約也可顯示收據。",
+  purchaseHistoryLoginTitle: "登入購買紀錄",
+  purchaseHistoryLoginDescription: "輸入電子郵件接收驗證碼，即可查看購買紀錄。",
+  webReservation: "Web 預約",
+  storePurchase: "實體店購買",
+  noWebOrders: "目前沒有 Web 預約紀錄。",
+  noStoreOrders: "目前沒有實體店購買紀錄。",
+  receipt: "收據",
+  store: "門店",
+  refund: "退款",
+  usedCoupon: "使用優惠券",
+  itemDetails: "商品明細",
+  cancelRefundRequest: "申請取消・退款",
+  cancelRequestAccepted: "已受理取消・退款申請。",
+  cancelUnavailable: "已超過取消受理時間，或已開始製作，無法在此頁面申請。",
+  orderAgain: "再次下單",
+  tasteFeedback: "評價・口味回饋",
+  close: "關閉",
+  statusCancelled: "已取消",
+  statusCompleted: "完成",
+  statusReady: "可取餐",
+  statusPreparing: "準備中",
+  statusPaid: "已支付",
+  statusPending: "待支付",
+  sourceStorePos: "實體店購買",
+  sourceMaamaaWeb: "まぁ麻 Web 預約",
+  sourceNanachaWeb: "nanacha Web 預約",
+  sourceWeb: "Web 預約",
+  email: "電子郵件",
+  sendCode: "發送驗證碼",
+  legalPrefix: "繼續即表示同意",
+  terms: "使用條款",
+  privacy: "隱私權政策",
+  legalSuffix: "。未註冊的電子郵件會在驗證後註冊為會員。",
+  verificationCode: "驗證碼",
+  showMemberCard: "顯示會員卡",
+  changeEmail: "更改電子郵件",
+  emailRequired: "請輸入電子郵件。",
+  codeRequired: "請輸入驗證碼。",
+  codeSent: "驗證碼已發送至電子郵件。",
+  authFailed: "認證失敗。請確認輸入內容。",
+  authCannotComplete: "無法完成會員註冊。請再試一次。",
+  authMissingFields: (fields: string) => `會員註冊仍缺少項目: ${fields}`,
+  codeDigit: (index: number) => `驗證碼第 ${index} 位`
+} as any;
+
+memberText.en = {
+  ...memberText.ja,
+  member: "Member",
+  signedIn: "Signed in",
+  memberNumber: "Member No.",
+  memberMenu: "Member menu",
+  memberCard: "Member card",
+  editMemberInfo: "Edit member information",
+  ordersAndReceipts: "Orders and receipts",
+  backToCard: "Back to member card",
+  returnToSite: "Return to site",
+  signOut: "Sign out",
+  switchAccount: "Sign in with another account",
+  refresh: "Refresh",
+  loadingAuth: "Loading sign-in",
+  preparingAuth: "Preparing the sign-in screen.",
+  signedOutTitle: "Signed out",
+  signedOutDescription: "Sign in again or continue with a new member registration.",
+  loginOrRegister: "Sign in or register",
+  loginDescription: "Enter your email address to receive a verification code and show your member card.",
+  memberCardTitle: "Member card",
+  memberCardDescription: "Check your points, coupons, and shared brand member number.",
+  pointsCouponsNumber: "Check your points, coupons, and shared brand member number.",
+  returningTitle: "Returning to the site",
+  checkingMemberTitle: "Checking member information",
+  returningBody: "You will be returned to the reservation page automatically.",
+  preparingReturnBody: "Preparing to connect with the return site.",
+  syncMemberTitle: "Syncing member information",
+  syncMemberBody: "Creating a Foundr1 member from your sign-in information.",
+  memberNo: "Member No.",
+  presentAtStore: "Please show this at the store",
+  couponSelected: "Coupon selected",
+  availableCoupons: (count: number) => `${count.toLocaleString("en-US")} coupons available`,
+  points: "Points",
+  pointRate: "1 pt = 1 yen",
+  rank: "Rank",
+  visits: (count: number) => `${count.toLocaleString("en-US")} visits`,
+  lifetimeSpend: "Lifetime spend",
+  webPosShared: "Shared on Web / POS",
+  stampCard: "Stamp card",
+  nextStampPreparing: "The next stamp card is being prepared.",
+  totalStamps: (count: number) => `${count.toLocaleString("en-US")} stamps total`,
+  rewardsAvailable: (count: number) => `${count.toLocaleString("en-US")} rewards available`,
+  stampsRemaining: (count: number) => `${count.toLocaleString("en-US")} stamps remaining`,
+  coupons: "Coupons",
+  noCoupons: "No coupons are available.",
+  selectedForUse: "Selected for use",
+  clearSelection: "Clear selection",
+  use: "Use",
+  allStores: "Available at all stores",
+  pointHistory: "Point history",
+  noPointHistory: "No point history yet.",
+  brand: "Brand",
+  notConfiguredTitle: "Clerk environment variables are not set.",
+  memberNotConfiguredBody: "Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` to enable email sign-in.",
+  loadMemberError: "Could not load member information.",
+  returnPrepareError: "Could not prepare the return destination after sign-in.",
+  networkError: "Connection failed. Please try again later.",
+  dateNoExpiry: "No expiry",
+  movementEarn: "Earned",
+  movementRedeem: "Used",
+  movementReversal: "Reversed",
+  couponApplied: "Coupon applied",
+  oneCupExchange: "One drink exchange",
+  purchaseHistory: "Purchase history",
+  purchaseHistoryTitle: "Purchase history",
+  purchaseHistoryDescription: "Review Web reservations and in-store purchases. Receipts are available for Web reservations.",
+  purchaseHistoryLoginTitle: "Sign in to purchase history",
+  purchaseHistoryLoginDescription: "Enter your email address to receive a verification code and view your purchase history.",
+  purchaseHistoryLoading: "Loading purchase history",
+  pleaseWait: "Please wait.",
+  orderTypeTabs: "Purchase history type",
+  webReservation: "Web reservation",
+  storePurchase: "In-store purchase",
+  noWebOrders: "No Web reservations yet.",
+  noStoreOrders: "No in-store purchases yet.",
+  detailsFallback: "Details are available in the order detail.",
+  otherItems: (count: number) => `${count.toLocaleString("en-US")} more items`,
+  receipt: "Receipt",
+  store: "Store",
+  dateTime: "Date and time",
+  refund: "Refund",
+  couponDiscount: "Coupon / discount",
+  subtotal: "Subtotal",
+  usedCoupon: "Coupon used",
+  couponDiscountAmount: "Coupon discount",
+  noCouponDiscount: "No coupon or discount was used for this order.",
+  itemDetails: "Item details",
+  cancelRefundRequest: "Cancel / refund request",
+  processing: "Processing...",
+  cancelConfirm: (pickupCode: string, amount: string) => `This Web reservation will be canceled. If it has been paid, a refund request will be submitted.\n\nOrder number: ${pickupCode}\nAmount: ${amount}\n\nContinue?`,
+  cancelRequestFailed: "Could not process the cancellation request.",
+  cancelRequestAccepted: "Cancellation / refund request accepted.",
+  cancelDeadlineAvailable: (minutes: number, deadline: string) => `You can request this until ${minutes} minutes before pickup${deadline ? ` (deadline ${deadline})` : ""}.`,
+  cancelUnavailable: "The cancellation window has passed, or preparation has already started. This request cannot be submitted from this screen.",
+  orderAgain: "Order again",
+  tasteFeedback: "Rating / taste feedback",
+  close: "Close",
+  statusCancelled: "Canceled",
+  statusPartialRefunded: "Partially refunded",
+  statusRefundPending: "Refund processing",
+  statusCompleted: "Completed",
+  statusReady: "Ready for pickup",
+  statusPreparing: "Preparing",
+  statusPaid: "Paid",
+  statusPending: "Payment pending",
+  sourceStorePos: "In-store purchase",
+  sourceMaamaaWeb: "Maamaa Web reservation",
+  sourceNanachaWeb: "nanacha Web reservation",
+  sourceWeb: "Web reservation",
+  authEyebrow: "Foundr1 Member",
+  email: "Email address",
+  sendCode: "Send verification code",
+  legalPrefix: "By continuing, you agree to the ",
+  terms: "Terms of use",
+  privacy: "Privacy policy",
+  legalSuffix: ". Unregistered email addresses will be registered as members after verification.",
+  verificationCode: "Verification code",
+  sendingCode: "Sending verification code",
+  showMemberCard: "Show member card",
+  changeEmail: "Change email",
+  emailRequired: "Enter your email address.",
+  codeRequired: "Enter the verification code.",
+  codeSent: "A verification code has been sent by email.",
+  authFailed: "Authentication failed. Please check your entry.",
+  authNoResponse: "No response from the authentication server. Check your connection and try again.",
+  authUnavailableEmail: "Verification code authentication is not available for this email address. Try another email address.",
+  authCannotComplete: "Could not complete member registration. Please try again.",
+  authMissingFields: (fields: string) => `Member registration still needs: ${fields}`,
+  authStatusCannotComplete: (status: string) => `Could not complete member registration. Status: ${status}`,
+  authPasswordRequired: "This email address requires password registration. In Clerk member registration settings, make password optional or disabled.",
+  codeDigit: (index: number) => `Verification code digit ${index}`
+};
+
+memberText.ko = {
+  ...memberText.en,
+  member: "회원",
+  signedIn: "로그인 중",
+  memberNumber: "회원 번호",
+  memberMenu: "회원 메뉴",
+  memberCard: "회원 카드",
+  editMemberInfo: "회원 정보 편집",
+  ordersAndReceipts: "구매 내역・영수증",
+  backToCard: "회원 카드로 돌아가기",
+  returnToSite: "사이트로 돌아가기",
+  signOut: "로그아웃",
+  switchAccount: "다른 계정으로 로그인",
+  refresh: "새로고침",
+  loadingAuth: "로그인 정보를 불러오는 중",
+  preparingAuth: "인증 화면을 준비하고 있습니다.",
+  signedOutTitle: "로그아웃되었습니다",
+  signedOutDescription: "다시 로그인하거나 새 회원 등록을 계속해 주세요.",
+  loginOrRegister: "로그인 또는 회원 등록",
+  loginDescription: "이메일 주소로 인증 코드를 받아 회원 카드를 표시할 수 있습니다.",
+  memberCardTitle: "회원 카드",
+  memberCardDescription: "포인트, 쿠폰, 브랜드 공통 회원 번호를 확인할 수 있습니다.",
+  pointsCouponsNumber: "포인트, 쿠폰, 브랜드 공통 회원 번호를 확인할 수 있습니다.",
+  returningTitle: "사이트로 돌아가는 중",
+  checkingMemberTitle: "회원 정보를 확인하는 중",
+  returningBody: "예약 페이지로 자동 이동합니다.",
+  preparingReturnBody: "돌아갈 사이트와 연동을 준비하고 있습니다.",
+  syncMemberTitle: "회원 정보 동기화 중",
+  syncMemberBody: "로그인 정보로 Foundr1 회원을 생성하고 있습니다.",
+  presentAtStore: "매장에서 제시해 주세요",
+  couponSelected: "쿠폰 선택됨",
+  availableCoupons: (count: number) => `사용 가능한 쿠폰 ${count.toLocaleString("ko-KR")}장`,
+  points: "포인트",
+  pointRate: "1 pt = 1엔",
+  rank: "등급",
+  visits: (count: number) => `${count.toLocaleString("ko-KR")}회 방문`,
+  lifetimeSpend: "누적 구매",
+  webPosShared: "Web / POS 공통",
+  stampCard: "스탬프 카드",
+  nextStampPreparing: "다음 스탬프 카드를 준비 중입니다.",
+  totalStamps: (count: number) => `누적 ${count.toLocaleString("ko-KR")} stamp`,
+  rewardsAvailable: (count: number) => `혜택 ${count.toLocaleString("ko-KR")}건 사용 가능`,
+  stampsRemaining: (count: number) => `${count.toLocaleString("ko-KR")} stamp 남음`,
+  coupons: "쿠폰",
+  noCoupons: "사용 가능한 쿠폰이 없습니다.",
+  selectedForUse: "사용 예정",
+  clearSelection: "선택 해제",
+  use: "사용",
+  allStores: "전 매장에서 사용 가능",
+  pointHistory: "포인트 내역",
+  noPointHistory: "포인트 내역이 아직 없습니다.",
+  loadMemberError: "회원 정보를 불러오지 못했습니다.",
+  returnPrepareError: "로그인 후 돌아갈 위치를 준비하지 못했습니다.",
+  networkError: "통신에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+  dateNoExpiry: "기한 없음",
+  purchaseHistory: "구매 내역",
+  purchaseHistoryTitle: "구매 내역",
+  purchaseHistoryDescription: "Web 예약과 매장 구매 내역을 확인할 수 있습니다. Web 예약은 영수증도 표시할 수 있습니다.",
+  purchaseHistoryLoginTitle: "구매 내역 로그인",
+  purchaseHistoryLoginDescription: "이메일 주소로 인증 코드를 받아 구매 내역을 확인할 수 있습니다.",
+  webReservation: "Web 예약",
+  storePurchase: "매장 구매",
+  noWebOrders: "Web 예약 내역이 아직 없습니다.",
+  noStoreOrders: "매장 구매 내역이 아직 없습니다.",
+  receipt: "영수증",
+  store: "매장",
+  dateTime: "일시",
+  refund: "환불",
+  subtotal: "소계",
+  usedCoupon: "사용한 쿠폰",
+  itemDetails: "상품 명세",
+  cancelRefundRequest: "취소・환불 신청",
+  processing: "처리 중...",
+  cancelRequestAccepted: "취소・환불 신청을 접수했습니다.",
+  cancelUnavailable: "취소 접수 시간이 지났거나 조리가 시작되어 이 화면에서는 신청할 수 없습니다.",
+  orderAgain: "다시 주문",
+  tasteFeedback: "평가・맛 피드백",
+  close: "닫기",
+  statusCancelled: "취소됨",
+  statusCompleted: "완료",
+  statusReady: "수령 가능",
+  statusPreparing: "준비 중",
+  statusPaid: "결제 완료",
+  statusPending: "결제 대기",
+  sourceStorePos: "매장 구매",
+  sourceWeb: "Web 예약",
+  email: "이메일 주소",
+  sendCode: "인증 코드 보내기",
+  legalPrefix: "계속하면 ",
+  terms: "이용약관",
+  privacy: "개인정보 처리방침",
+  legalSuffix: "에 동의한 것으로 간주됩니다. 미등록 이메일은 확인 후 회원으로 등록됩니다.",
+  verificationCode: "인증 코드",
+  sendingCode: "인증 코드 전송 중",
+  showMemberCard: "회원 카드 표시",
+  changeEmail: "이메일 주소 변경",
+  emailRequired: "이메일 주소를 입력해 주세요.",
+  codeRequired: "인증 코드를 입력해 주세요.",
+  codeSent: "인증 코드를 이메일로 보냈습니다.",
+  authFailed: "인증에 실패했습니다. 입력 내용을 확인해 주세요.",
+  authCannotComplete: "회원 등록을 완료하지 못했습니다. 다시 시도해 주세요.",
+  authMissingFields: (fields: string) => `회원 등록에 필요한 항목이 남아 있습니다: ${fields}`,
+  codeDigit: (index: number) => `인증 코드 ${index}번째 자리`
+};
+
+memberText.vi = {
+  ...memberText.en,
+  member: "Thành viên",
+  signedIn: "Đã đăng nhập",
+  memberNumber: "Mã thành viên",
+  memberMenu: "Menu thành viên",
+  memberCard: "Thẻ thành viên",
+  editMemberInfo: "Chỉnh sửa thông tin thành viên",
+  ordersAndReceipts: "Lịch sử mua hàng・Biên lai",
+  backToCard: "Quay lại thẻ thành viên",
+  returnToSite: "Quay lại trang web",
+  signOut: "Đăng xuất",
+  switchAccount: "Đăng nhập bằng tài khoản khác",
+  refresh: "Làm mới",
+  loadingAuth: "Đang tải trạng thái đăng nhập",
+  preparingAuth: "Đang chuẩn bị màn hình xác thực.",
+  signedOutTitle: "Đã đăng xuất",
+  signedOutDescription: "Vui lòng đăng nhập lại hoặc tiếp tục đăng ký thành viên mới.",
+  loginOrRegister: "Đăng nhập hoặc đăng ký",
+  loginDescription: "Nhập email để nhận mã xác thực và hiển thị thẻ thành viên.",
+  memberCardTitle: "Thẻ thành viên",
+  memberCardDescription: "Xem điểm, phiếu giảm giá và mã thành viên dùng chung cho các thương hiệu.",
+  pointsCouponsNumber: "Xem điểm, phiếu giảm giá và mã thành viên dùng chung cho các thương hiệu.",
+  returningTitle: "Đang quay lại trang web",
+  checkingMemberTitle: "Đang kiểm tra thông tin thành viên",
+  returningBody: "Bạn sẽ tự động quay lại trang đặt trước.",
+  preparingReturnBody: "Đang chuẩn bị liên kết với trang quay lại.",
+  syncMemberTitle: "Đang đồng bộ thông tin thành viên",
+  syncMemberBody: "Đang tạo thành viên Foundr1 từ thông tin đăng nhập.",
+  presentAtStore: "Vui lòng xuất trình tại cửa hàng",
+  couponSelected: "Đã chọn phiếu giảm giá",
+  availableCoupons: (count: number) => `${count.toLocaleString("vi-VN")} phiếu có thể dùng`,
+  points: "Điểm",
+  pointRate: "1 pt = 1 yên",
+  rank: "Hạng",
+  visits: (count: number) => `${count.toLocaleString("vi-VN")} lần ghé cửa hàng`,
+  lifetimeSpend: "Tổng mua hàng",
+  webPosShared: "Dùng chung Web / POS",
+  stampCard: "Thẻ tích dấu",
+  nextStampPreparing: "Thẻ tích dấu tiếp theo đang được chuẩn bị.",
+  totalStamps: (count: number) => `Tổng ${count.toLocaleString("vi-VN")} stamp`,
+  rewardsAvailable: (count: number) => `${count.toLocaleString("vi-VN")} ưu đãi có thể dùng`,
+  stampsRemaining: (count: number) => `Còn ${count.toLocaleString("vi-VN")} stamp`,
+  coupons: "Phiếu giảm giá",
+  noCoupons: "Hiện không có phiếu giảm giá nào.",
+  selectedForUse: "Đã chọn để dùng",
+  clearSelection: "Bỏ chọn",
+  use: "Dùng",
+  allStores: "Dùng tại tất cả cửa hàng",
+  pointHistory: "Lịch sử điểm",
+  noPointHistory: "Chưa có lịch sử điểm.",
+  loadMemberError: "Không thể tải thông tin thành viên.",
+  returnPrepareError: "Không thể chuẩn bị trang quay lại sau đăng nhập.",
+  networkError: "Kết nối thất bại. Vui lòng thử lại sau.",
+  dateNoExpiry: "Không hết hạn",
+  purchaseHistory: "Lịch sử mua hàng",
+  purchaseHistoryTitle: "Lịch sử mua hàng",
+  purchaseHistoryDescription: "Xem lịch sử đặt trước trên Web và mua tại cửa hàng. Đặt trước trên Web cũng có thể xem biên lai.",
+  purchaseHistoryLoginTitle: "Đăng nhập để xem lịch sử mua hàng",
+  purchaseHistoryLoginDescription: "Nhập email để nhận mã xác thực và xem lịch sử mua hàng.",
+  webReservation: "Đặt trước trên Web",
+  storePurchase: "Mua tại cửa hàng",
+  noWebOrders: "Chưa có lịch sử đặt trước trên Web.",
+  noStoreOrders: "Chưa có lịch sử mua tại cửa hàng.",
+  receipt: "Biên lai",
+  store: "Cửa hàng",
+  dateTime: "Ngày giờ",
+  refund: "Hoàn tiền",
+  subtotal: "Tạm tính",
+  usedCoupon: "Phiếu đã dùng",
+  itemDetails: "Chi tiết sản phẩm",
+  cancelRefundRequest: "Yêu cầu hủy・hoàn tiền",
+  processing: "Đang xử lý...",
+  cancelRequestAccepted: "Đã nhận yêu cầu hủy・hoàn tiền.",
+  cancelUnavailable: "Đã quá thời hạn hủy hoặc đơn đã bắt đầu chuẩn bị, nên không thể gửi yêu cầu từ màn hình này.",
+  orderAgain: "Đặt lại",
+  tasteFeedback: "Đánh giá・góp ý hương vị",
+  close: "Đóng",
+  statusCancelled: "Đã hủy",
+  statusCompleted: "Hoàn tất",
+  statusReady: "Có thể nhận",
+  statusPreparing: "Đang chuẩn bị",
+  statusPaid: "Đã thanh toán",
+  statusPending: "Chờ thanh toán",
+  sourceStorePos: "Mua tại cửa hàng",
+  sourceWeb: "Đặt trước trên Web",
+  email: "Email",
+  sendCode: "Gửi mã xác thực",
+  legalPrefix: "Khi tiếp tục, bạn đồng ý với ",
+  terms: "Điều khoản sử dụng",
+  privacy: "Chính sách quyền riêng tư",
+  legalSuffix: ". Email chưa đăng ký sẽ được đăng ký làm thành viên sau khi xác thực.",
+  verificationCode: "Mã xác thực",
+  sendingCode: "Đang gửi mã xác thực",
+  showMemberCard: "Hiển thị thẻ thành viên",
+  changeEmail: "Đổi email",
+  emailRequired: "Vui lòng nhập email.",
+  codeRequired: "Vui lòng nhập mã xác thực.",
+  codeSent: "Mã xác thực đã được gửi qua email.",
+  authFailed: "Xác thực thất bại. Vui lòng kiểm tra thông tin nhập.",
+  authCannotComplete: "Không thể hoàn tất đăng ký thành viên. Vui lòng thử lại.",
+  authMissingFields: (fields: string) => `Còn thiếu thông tin cần thiết để đăng ký: ${fields}`,
+  codeDigit: (index: number) => `Số thứ ${index} của mã xác thực`
+};
+
+memberText.ne = {
+  ...memberText.en,
+  member: "सदस्य",
+  signedIn: "लगइन गरिएको",
+  memberNumber: "सदस्य नम्बर",
+  memberMenu: "सदस्य मेनु",
+  memberCard: "सदस्य कार्ड",
+  editMemberInfo: "सदस्य जानकारी सम्पादन",
+  ordersAndReceipts: "खरिद इतिहास・रसिद",
+  backToCard: "सदस्य कार्डमा फर्कनुहोस्",
+  returnToSite: "साइटमा फर्कनुहोस्",
+  signOut: "लगआउट",
+  switchAccount: "अर्को खाताबाट लगइन",
+  refresh: "रिफ्रेस",
+  loadingAuth: "लगइन अवस्था लोड हुँदैछ",
+  preparingAuth: "प्रमाणीकरण स्क्रिन तयार हुँदैछ।",
+  signedOutTitle: "लगआउट भयो",
+  signedOutDescription: "फेरि लगइन गर्नुहोस् वा नयाँ सदस्य दर्ता जारी राख्नुहोस्।",
+  loginOrRegister: "लगइन वा सदस्य दर्ता",
+  loginDescription: "इमेलमा प्रमाणीकरण कोड प्राप्त गरी सदस्य कार्ड देखाउन सक्नुहुन्छ।",
+  memberCardTitle: "सदस्य कार्ड",
+  memberCardDescription: "प्वाइन्ट, कुपन र साझा ब्रान्ड सदस्य नम्बर हेर्न सक्नुहुन्छ।",
+  pointsCouponsNumber: "प्वाइन्ट, कुपन र साझा ब्रान्ड सदस्य नम्बर हेर्न सक्नुहुन्छ।",
+  returningTitle: "साइटमा फर्किँदै",
+  checkingMemberTitle: "सदस्य जानकारी जाँच हुँदै",
+  returningBody: "आरक्षण पृष्ठमा स्वचालित रूपमा फर्किनेछ।",
+  preparingReturnBody: "फर्किने साइटसँग जोड्ने तयारी हुँदैछ।",
+  syncMemberTitle: "सदस्य जानकारी सिंक हुँदै",
+  syncMemberBody: "लगइन जानकारीबाट Foundr1 सदस्य बनाउँदैछ।",
+  presentAtStore: "कृपया पसलमा देखाउनुहोस्",
+  couponSelected: "कुपन चयन गरियो",
+  availableCoupons: (count: number) => `${count.toLocaleString("en-US")} कुपन उपलब्ध`,
+  points: "प्वाइन्ट",
+  pointRate: "1 pt = 1 येन",
+  rank: "र्‍यांक",
+  visits: (count: number) => `${count.toLocaleString("en-US")} पटक भ्रमण`,
+  lifetimeSpend: "कुल खरिद",
+  webPosShared: "Web / POS साझा",
+  stampCard: "स्ट्याम्प कार्ड",
+  nextStampPreparing: "अर्को स्ट्याम्प कार्ड तयार हुँदैछ।",
+  totalStamps: (count: number) => `कुल ${count.toLocaleString("en-US")} stamp`,
+  rewardsAvailable: (count: number) => `${count.toLocaleString("en-US")} सुविधा उपलब्ध`,
+  stampsRemaining: (count: number) => `${count.toLocaleString("en-US")} stamp बाँकी`,
+  coupons: "कुपन",
+  noCoupons: "हाल प्रयोग गर्न मिल्ने कुपन छैन।",
+  selectedForUse: "प्रयोगका लागि चयन",
+  clearSelection: "चयन हटाउनुहोस्",
+  use: "प्रयोग",
+  allStores: "सबै पसलमा प्रयोग गर्न मिल्ने",
+  pointHistory: "प्वाइन्ट इतिहास",
+  noPointHistory: "अहिलेसम्म प्वाइन्ट इतिहास छैन।",
+  loadMemberError: "सदस्य जानकारी लोड गर्न सकेन।",
+  returnPrepareError: "लगइनपछिको फर्किने स्थान तयार गर्न सकेन।",
+  networkError: "सञ्चार असफल भयो। कृपया पछि फेरि प्रयास गर्नुहोस्।",
+  dateNoExpiry: "म्याद छैन",
+  purchaseHistory: "खरिद इतिहास",
+  purchaseHistoryTitle: "खरिद इतिहास",
+  purchaseHistoryDescription: "Web आरक्षण र पसलमा खरिद इतिहास हेर्न सक्नुहुन्छ। Web आरक्षणको रसिद पनि देखाउन सकिन्छ।",
+  purchaseHistoryLoginTitle: "खरिद इतिहासमा लगइन",
+  purchaseHistoryLoginDescription: "इमेलमा प्रमाणीकरण कोड प्राप्त गरी खरिद इतिहास हेर्न सक्नुहुन्छ।",
+  webReservation: "Web आरक्षण",
+  storePurchase: "पसलमा खरिद",
+  noWebOrders: "अहिलेसम्म Web आरक्षण इतिहास छैन।",
+  noStoreOrders: "अहिलेसम्म पसल खरिद इतिहास छैन।",
+  receipt: "रसिद",
+  store: "पसल",
+  dateTime: "मिति र समय",
+  refund: "फिर्ता रकम",
+  subtotal: "उप-जम्मा",
+  usedCoupon: "प्रयोग गरिएको कुपन",
+  itemDetails: "वस्तु विवरण",
+  cancelRefundRequest: "रद्द・फिर्ता अनुरोध",
+  processing: "प्रक्रिया हुँदै...",
+  cancelRequestAccepted: "रद्द・फिर्ता अनुरोध स्वीकार गरियो।",
+  cancelUnavailable: "रद्द गर्ने समय सकिएको छ वा तयारी सुरु भइसकेको छ, त्यसैले यस स्क्रिनबाट अनुरोध गर्न सकिँदैन।",
+  orderAgain: "फेरि अर्डर",
+  tasteFeedback: "मूल्यांकन・स्वाद प्रतिक्रिया",
+  close: "बन्द",
+  statusCancelled: "रद्द भयो",
+  statusCompleted: "पूरा भयो",
+  statusReady: "लिन तयार",
+  statusPreparing: "तयारी हुँदै",
+  statusPaid: "भुक्तानी भयो",
+  statusPending: "भुक्तानी बाँकी",
+  sourceStorePos: "पसलमा खरिद",
+  sourceWeb: "Web आरक्षण",
+  email: "इमेल",
+  sendCode: "प्रमाणीकरण कोड पठाउनुहोस्",
+  legalPrefix: "जारी राख्दा, तपाईं ",
+  terms: "प्रयोगका सर्तहरू",
+  privacy: "गोपनीयता नीति",
+  legalSuffix: "मा सहमत भएको मानिन्छ। दर्ता नभएको इमेल प्रमाणीकरणपछि सदस्यको रूपमा दर्ता हुनेछ।",
+  verificationCode: "प्रमाणीकरण कोड",
+  sendingCode: "प्रमाणीकरण कोड पठाउँदै",
+  showMemberCard: "सदस्य कार्ड देखाउनुहोस्",
+  changeEmail: "इमेल परिवर्तन",
+  emailRequired: "कृपया इमेल प्रविष्ट गर्नुहोस्।",
+  codeRequired: "कृपया प्रमाणीकरण कोड प्रविष्ट गर्नुहोस्।",
+  codeSent: "प्रमाणीकरण कोड इमेलबाट पठाइयो।",
+  authFailed: "प्रमाणीकरण असफल भयो। कृपया प्रविष्टि जाँच गर्नुहोस्।",
+  authCannotComplete: "सदस्य दर्ता पूरा गर्न सकेन। कृपया फेरि प्रयास गर्नुहोस्।",
+  authMissingFields: (fields: string) => `सदस्य दर्ताका लागि अझै आवश्यक: ${fields}`,
+  codeDigit: (index: number) => `प्रमाणीकरण कोडको ${index} औं अंक`
+};

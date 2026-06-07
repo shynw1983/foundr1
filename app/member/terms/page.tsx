@@ -1,3 +1,8 @@
+"use client";
+
+import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
+import { memberText } from "../../../components/member/memberTranslations";
+
 const terms = [
   {
     title: "第1条（適用）",
@@ -42,18 +47,22 @@ const terms = [
 ];
 
 export default function MemberTermsPage() {
+  const { language } = useMemberLanguage();
+  const text = memberText[language];
+
   return (
     <main className="member-portal-page member-legal-page">
       <header className="member-portal-topbar">
         <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-          <strong>Members</strong>
+          <strong>{text.member}</strong>
         </a>
+        <MemberLanguageSwitcher />
       </header>
 
       <article className="member-legal-document">
-        <p className="eyebrow">Terms</p>
-        <h1>Foundr1 Member 利用規約</h1>
+        <p className="eyebrow">{text.terms}</p>
+        <h1>Foundr1 Member {text.terms}</h1>
         <p className="member-legal-lead">
           この規約は、Foundr1 の会員カードおよび会員向けサービスを安心してご利用いただくための基本的な条件をまとめたものです。
         </p>

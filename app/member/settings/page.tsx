@@ -4,6 +4,7 @@ import { SignOutButton, useUser } from "@clerk/nextjs";
 import { ChevronDown, Home, Loader2, LogOut, Save, Settings, ShoppingBag, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
+import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
 
 type MemberProfile = {
   memberNumber: string;
@@ -73,16 +74,6 @@ const emptyMemberSettings: MemberSettingsForm = {
   marketingOptIn: false,
   lineLinked: false
 };
-
-const languageOptions = [
-  { value: "ja", label: "日本語" },
-  { value: "zh", label: "简体中文" },
-  { value: "zh-Hant", label: "繁體中文" },
-  { value: "en", label: "English" },
-  { value: "ko", label: "한국어" },
-  { value: "vi", label: "Tiếng Việt" },
-  { value: "ne", label: "नेपाली" }
-];
 
 const memberSettingsText = {
   ja: {
@@ -535,6 +526,7 @@ function settingsReturnUrl(returnTo: string, handoffEnabled: boolean) {
 }
 
 export default function MemberSettingsPage() {
+  const { language, syncPreferredLanguage } = useMemberLanguage();
   const { isLoaded, isSignedIn, user } = useUser();
   const [data, setData] = useState<MemberResponse>({});
   const [settingsForm, setSettingsForm] = useState<MemberSettingsForm>(emptyMemberSettings);
@@ -544,7 +536,7 @@ export default function MemberSettingsPage() {
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
   const [completeProfileRequested, setCompleteProfileRequested] = useState(false);
-  const currentLanguage = normalizeSettingsLanguage(settingsForm.preferredLanguage);
+  const currentLanguage = normalizeSettingsLanguage(language);
   const text = memberSettingsText[currentLanguage];
   const preferredStoreOptions = useMemo(() => [
     { value: "", label: text.unset },
@@ -572,6 +564,7 @@ export default function MemberSettingsPage() {
         return;
       }
       setData(body);
+      syncPreferredLanguage(body.member?.preferredLanguage);
       setSettingsForm(toSettingsForm(body.member));
     } catch {
       setMessage(text.networkError);
@@ -612,7 +605,7 @@ export default function MemberSettingsPage() {
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, nameKana, phone })
+        body: JSON.stringify({ ...form, nameKana, phone, preferredLanguage: language })
       });
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || text.saveError);
@@ -646,8 +639,9 @@ export default function MemberSettingsPage() {
         <header className="member-portal-topbar">
           <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
             <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-            <strong>Members</strong>
+            <strong>{text.member}</strong>
           </a>
+          <MemberLanguageSwitcher />
         </header>
         <section className="member-portal-config">
           <strong>{text.notConfiguredTitle}</strong>
@@ -662,8 +656,10 @@ export default function MemberSettingsPage() {
       <header className="member-portal-topbar">
         <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-          <strong>Members</strong>
+          <strong>{text.member}</strong>
         </a>
+        <div className="member-topbar-actions">
+          <MemberLanguageSwitcher />
         {isSignedIn ? (
           <details className="member-account-menu">
             <summary aria-label={text.accountMenuLabel}>
@@ -697,6 +693,7 @@ export default function MemberSettingsPage() {
             </div>
           </details>
         ) : null}
+        </div>
       </header>
 
       <section className="member-portal-hero member-orders-hero">
@@ -777,12 +774,6 @@ export default function MemberSettingsPage() {
                   <span>{text.preferredStore}</span>
                   <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))} disabled={loading || saving}>
                     {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>{text.preferredLanguage}</span>
-                  <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))} disabled={loading || saving}>
-                    {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
               </div>

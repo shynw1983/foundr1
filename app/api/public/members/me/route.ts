@@ -19,6 +19,11 @@ function displayName(user: Awaited<ReturnType<typeof currentUser>>) {
   return [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.username || "";
 }
 
+function normalizePreferredLanguage(value: unknown) {
+  const language = String(value ?? "").trim();
+  return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "ja";
+}
+
 async function getPreferredStoreOptions() {
   const rows = await sql`
     select
@@ -123,6 +128,16 @@ export async function PATCH(request: Request) {
   if (!existing) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  if (String(body.action ?? "") === "preferred_language") {
+    const preferredLanguage = normalizePreferredLanguage(body.preferredLanguage);
+    await sql`
+      update members
+      set preferred_language = ${preferredLanguage}, updated_at = now()
+      where id = ${existing.id}
+    `;
+    return Response.json({ configured: true, authenticated: true, preferredLanguage }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const profileDisplayName = String(body.displayName || "").trim();
   const lastName = String(body.lastName || "").trim();
   const firstName = String(body.firstName || "").trim();

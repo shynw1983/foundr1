@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { MemberLanguageProvider } from "../../components/member/MemberLanguageProvider";
 
 export const metadata: Metadata = {
   title: "Foundr1 MEMBER",
@@ -29,5 +30,5 @@ export default function MemberLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return children;
+  return <MemberLanguageProvider>{children}</MemberLanguageProvider>;
 }

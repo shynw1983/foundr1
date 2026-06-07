@@ -3,6 +3,8 @@
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { KeyRound, Loader2, Mail } from "lucide-react";
 import { ClipboardEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
+import { useMemberLanguage } from "./MemberLanguageProvider";
+import { memberText } from "./memberTranslations";
 
 type MemberAuthPanelProps = {
   title?: string;
@@ -60,18 +62,18 @@ function emailCodeFactor(factors: unknown): EmailCodeFactorLike | undefined {
   });
 }
 
-function signUpCompletionMessage(signUpAttempt: SignUpCompletionResource) {
+function signUpCompletionMessage(signUpAttempt: SignUpCompletionResource, text: typeof memberText[keyof typeof memberText]) {
   const missingFields = signUpAttempt.missingFields || [];
   if (missingFields.includes("password")) {
-    return "このメールアドレスはパスワード登録が必要な設定になっています。Clerk の会員登録設定でパスワードを任意または無効にしてください。";
+    return text.authPasswordRequired;
   }
   if (missingFields.length) {
-    return `会員登録に必要な項目が残っています: ${missingFields.join(", ")}`;
+    return text.authMissingFields(missingFields.join(", "));
   }
   if (signUpAttempt.status) {
-    return `会員登録を完了できませんでした。状態: ${signUpAttempt.status}`;
+    return text.authStatusCannotComplete(signUpAttempt.status);
   }
-  return "会員登録を完了できませんでした。もう一度お試しください。";
+  return text.authCannotComplete;
 }
 
 function memberEntryUrl(url: string) {
@@ -100,10 +102,12 @@ function memberSettingsCompletionUrl(url: string) {
 }
 
 export function MemberAuthPanel({
-  title = "ログインまたは会員登録",
-  description = "メールアドレスに確認コードを送信して、会員カードを表示できます。",
+  title,
+  description,
   afterAuthUrl = "/member"
 }: MemberAuthPanelProps) {
+  const { language } = useMemberLanguage();
+  const text = memberText[language];
   const { isLoaded: signInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
   const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -169,7 +173,7 @@ export function MemberAuthPanel({
     if (!authLoaded) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
-      setMessage("メールアドレスを入力してください。");
+      setMessage(text.emailRequired);
       return;
     }
 
@@ -182,7 +186,7 @@ export function MemberAuthPanel({
       const signInAttempt = await withAuthTimeout(signIn.create({ identifier: normalizedEmail }));
       const factor = emailCodeFactor(signInAttempt.supportedFirstFactors);
       if (!factor) {
-        throw new Error("このメールアドレスでは確認コード認証を利用できません。別のメールアドレスでお試しください。");
+        throw new Error(text.authUnavailableEmail);
       }
       await withAuthTimeout(signIn.prepareFirstFactor({
         strategy: "email_code",
@@ -192,7 +196,7 @@ export function MemberAuthPanel({
       sent = true;
     } catch (error) {
       if (error instanceof AuthTimeoutError) {
-        setMessage(errorMessage(error));
+        setMessage(text.authNoResponse);
       } else {
         try {
           await withAuthTimeout(signUp.create({ emailAddress: normalizedEmail }));
@@ -207,7 +211,7 @@ export function MemberAuthPanel({
     if (sent) {
       setCode("");
       setAuthStep("code");
-      setMessage("確認コードをメールで送信しました。");
+      setMessage(text.codeSent);
       window.requestAnimationFrame(() => focusCodeInput(0));
     } else {
       setAuthStep("email");
@@ -220,7 +224,7 @@ export function MemberAuthPanel({
     if (!authLoaded) return;
     const verificationCode = code.trim();
     if (!verificationCode) {
-      setMessage("確認コードを入力してください。");
+      setMessage(text.codeRequired);
       return;
     }
 
@@ -253,12 +257,12 @@ export function MemberAuthPanel({
           await withAuthTimeout(setSignUpActive({ session: signUpAttempt.createdSessionId, redirectUrl: memberSettingsCompletionUrl(afterAuthUrl) }));
           return;
         }
-        setMessage(signUpCompletionMessage(signUpAttempt));
+        setMessage(signUpCompletionMessage(signUpAttempt, text));
         return;
       }
-      setMessage("認証を完了できませんでした。もう一度お試しください。");
+      setMessage(text.authCannotComplete);
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(error instanceof AuthTimeoutError ? text.authNoResponse : errorMessage(error));
     } finally {
       setEmailBusy(false);
     }
@@ -270,9 +274,9 @@ export function MemberAuthPanel({
         <div className="member-auth-heading">
           <span><KeyRound size={20} /></span>
           <div>
-            <p className="eyebrow">Foundr1 Member</p>
-            <h2>{title}</h2>
-            <p>{description}</p>
+            <p className="eyebrow">{text.authEyebrow}</p>
+            <h2>{title ?? text.loginOrRegister}</h2>
+            <p>{description ?? text.loginDescription}</p>
           </div>
         </div>
         <div id="clerk-captcha" className="member-auth-captcha" />
@@ -280,7 +284,7 @@ export function MemberAuthPanel({
         {authStep === "email" ? (
           <form className="member-auth-email-form" onSubmit={(event) => void sendEmailCode(event)}>
             <label>
-              <span>メールアドレス</span>
+              <span>{text.email}</span>
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -293,22 +297,22 @@ export function MemberAuthPanel({
             </label>
             <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded}>
               {emailBusy ? <Loader2 size={16} /> : <Mail size={16} />}
-              確認コードを送る
+              {text.sendCode}
             </button>
             <p className="member-auth-legal-note">
-              続行すると、
-              <a href="/member/terms" target="_blank" rel="noreferrer">利用規約</a>
+              {text.legalPrefix}
+              <a href="/member/terms" target="_blank" rel="noreferrer">{text.terms}</a>
               ・
-              <a href="/privacy" target="_blank" rel="noreferrer">プライバシーポリシー</a>
-              に同意したものとみなされます。未登録のメールアドレスは確認後に会員登録されます。
+              <a href="/privacy" target="_blank" rel="noreferrer">{text.privacy}</a>
+              {text.legalSuffix}
             </p>
           </form>
         ) : (
           <form className="member-auth-email-form" onSubmit={(event) => void verifyEmailCode(event)}>
             <div className="member-auth-code-field">
-              <span>確認コード</span>
-              {codePreparing ? <small>確認コードを送信しています。</small> : null}
-              <div className="member-auth-code-inputs" role="group" aria-label="確認コード">
+              <span>{text.verificationCode}</span>
+              {codePreparing ? <small>{text.sendingCode}</small> : null}
+              <div className="member-auth-code-inputs" role="group" aria-label={text.verificationCode}>
                 {codeDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -322,7 +326,7 @@ export function MemberAuthPanel({
                     inputMode="numeric"
                     pattern="[0-9]*"
                     autoComplete={index === 0 ? "one-time-code" : "off"}
-                    aria-label={`確認コード ${index + 1} 桁目`}
+                    aria-label={text.codeDigit(index + 1)}
                     disabled={emailBusy || !codeReady}
                     autoFocus={index === 0 && codeReady}
                   />
@@ -331,7 +335,7 @@ export function MemberAuthPanel({
             </div>
             <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded || !codeReady || code.length !== codeLength}>
               {emailBusy ? <Loader2 size={16} /> : <KeyRound size={16} />}
-              {codePreparing ? "確認コードを送信中" : "会員カードを表示"}
+              {codePreparing ? text.sendingCode : text.showMemberCard}
             </button>
             <button
               className="member-auth-link-button"
@@ -343,7 +347,7 @@ export function MemberAuthPanel({
               }}
               disabled={emailBusy}
             >
-              メールアドレスを変更
+              {text.changeEmail}
             </button>
           </form>
         )}
