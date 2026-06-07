@@ -28,6 +28,8 @@ type DisplayState = {
   externalPaymentTerminalBrand: string;
   pickupCode: string;
   preferredLanguage: string;
+  memberDisplayName: string;
+  memberMessage: string;
   subtotal: number;
   cashTenderedAmount: number | null;
   cashChangeAmount: number | null;
@@ -45,6 +47,8 @@ const idleState: DisplayState = {
   externalPaymentTerminalBrand: "PayCAS",
   pickupCode: "",
   preferredLanguage: "",
+  memberDisplayName: "",
+  memberMessage: "",
   subtotal: 0,
   cashTenderedAmount: null,
   cashChangeAmount: null,
@@ -58,6 +62,7 @@ function formatYen(value: number) {
 }
 
 function getStatusLabel(state: DisplayState) {
+  if (state.status === "advertising") return "いらっしゃいませ";
   if (state.status === "complete") return "決済完了";
   if (state.status === "cash_change") return "お釣りをお受け取りください";
   if (state.status === "external_wait") return "端末でお支払いください";
@@ -84,6 +89,7 @@ export default function CustomerDisplayPage() {
   const visibleItems = useMemo(() => state.items.slice(0, 12), [state.items]);
   const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
   const changeAmount = state.cashChangeAmount ?? 0;
+  const advertisingActive = state.status === "advertising";
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -133,7 +139,7 @@ export default function CustomerDisplayPage() {
   }
 
   return (
-    <main className="customer-display-page">
+    <main className={advertisingActive ? "customer-display-page is-advertising" : "customer-display-page"}>
       <button
         className="store-display-menu-button customer-display-menu-button"
         type="button"
@@ -164,6 +170,16 @@ export default function CustomerDisplayPage() {
         </div>
       ) : null}
 
+      {advertisingActive ? (
+        <section className="customer-display-advertising" aria-live="polite">
+          <div>
+            <span>{state.storeName || "Foundr1"}</span>
+            <strong>Welcome</strong>
+            <p>ご来店ありがとうございます</p>
+          </div>
+        </section>
+      ) : (
+        <>
       <header className="customer-display-topbar">
         <div>
           <p>{state.storeName || "STORE"}</p>
@@ -215,6 +231,13 @@ export default function CustomerDisplayPage() {
         </div>
 
         <aside className={`customer-display-payment is-${state.status || "idle"}`}>
+          {state.memberDisplayName ? (
+            <div className="customer-display-member">
+              <span>{state.memberDisplayName}</span>
+              <strong>{state.memberMessage || "いつもご利用いただきありがとうございます。"}</strong>
+            </div>
+          ) : null}
+
           <div className="customer-display-meta">
             {state.pickupCode ? <span>番号 {state.pickupCode}</span> : <span>{getOrderTypeLabel(state.orderType) || "店頭会計"}</span>}
             <span>{state.paymentLabel || "お支払い"}</span>
@@ -253,6 +276,8 @@ export default function CustomerDisplayPage() {
           ) : null}
         </aside>
       </section>
+        </>
+      )}
     </main>
   );
 }

@@ -204,6 +204,9 @@ type PosMember = {
   memberNumber: string;
   publicToken: string;
   displayName: string;
+  lastName: string;
+  firstName: string;
+  fullName: string;
   phone: string;
   email: string;
   preferredLanguage: string;
@@ -577,6 +580,7 @@ export default function StorePosPage() {
   const [selectedRefundItemIds, setSelectedRefundItemIds] = useState<string[]>([]);
   const [externalRefundConfirmed, setExternalRefundConfirmed] = useState(false);
   const [completedDisplayState, setCompletedDisplayState] = useState<Record<string, unknown> | null>(null);
+  const [customerDisplayMode, setCustomerDisplayMode] = useState<"business" | "advertising">("business");
 
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
@@ -882,6 +886,7 @@ export default function StorePosPage() {
     setRefundingTransactionId("");
     setExternalRefundConfirmed(false);
     setCompletedDisplayState(null);
+    setCustomerDisplayMode("business");
     void load(storeId);
   }
 
@@ -891,6 +896,7 @@ export default function StorePosPage() {
     setMemberLookupLoading(true);
     setMessage("");
     setMemberLookupInput(code);
+    setCustomerDisplayMode("business");
     try {
       const params = new URLSearchParams({ storeId: selectedStoreId, code });
       const response = await fetch(`/api/store/pos/member?${params.toString()}`, { cache: "no-store" });
@@ -921,6 +927,7 @@ export default function StorePosPage() {
     setSelectedCouponId("");
     setCustomerSelectedCouponId("");
     setMemberLookupInput("");
+    setCustomerDisplayMode("business");
   }
 
   function getItemOptionGroups(item: PosMenuItem) {
@@ -955,6 +962,17 @@ export default function StorePosPage() {
     if (value === "card") return posSettings.externalPaymentTerminalBrand || "外部決済端末";
     if (value === "other") return "その他";
     return value || "-";
+  }
+
+  function getMemberDisplayName(member: PosMember | null) {
+    if (!member) return "";
+    const directLastName = String(member.lastName || "").trim();
+    if (directLastName) return `${directLastName}様`;
+    const fullName = String(member.fullName || member.displayName || "").trim();
+    const spacedLastName = fullName.split(/\s+/).filter(Boolean)[0] ?? "";
+    if (spacedLastName) return `${spacedLastName}様`;
+    const fallback = String(member.email || member.memberNumber || "").trim();
+    return fallback ? `${fallback}様` : "";
   }
 
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
@@ -1023,6 +1041,7 @@ export default function StorePosPage() {
     const optionTotal = selectedOptions.reduce((sum, option) => sum + getOptionPrice(option), 0);
     const measuredQuantityValue = weightPricing ? Math.round(Number(measuredQuantity) * 1000) / 1000 : null;
     const cartKey = getCartKey(item, selectedOptions, measuredQuantityValue, weightPricing?.unitPrice ?? null);
+    setCustomerDisplayMode("business");
     setCart((current) => {
       const existing = current.find((entry) => entry.cartKey === cartKey);
       if (existing) {
@@ -1046,6 +1065,7 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    setCustomerDisplayMode("business");
     const groups = getItemOptionGroups(item);
     if (!groups.length && !getWeightPricingConfig(item, orderType)) {
       addItem(item);
@@ -1114,6 +1134,7 @@ export default function StorePosPage() {
   }
 
   function changeQuantity(cartKey: string, amount: number) {
+    setCustomerDisplayMode("business");
     setCart((current) => current
       .map((item) => item.cartKey === cartKey ? { ...item, quantity: item.quantity + amount } : item)
       .filter((item) => item.quantity > 0));
@@ -1127,6 +1148,7 @@ export default function StorePosPage() {
       Boolean(getWeightPricingConfig(item, nextOrderType))
     ));
     setOrderType(nextOrderType);
+    setCustomerDisplayMode("business");
     setConfiguringItem(null);
     setOptionDraft({});
     setWeightDraft("");
@@ -1202,6 +1224,8 @@ export default function StorePosPage() {
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: body.pickupCode,
         preferredLanguage: selectedMember?.preferredLanguage || "",
+        memberDisplayName: getMemberDisplayName(selectedMember),
+        memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         subtotal: body.amount,
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
@@ -1228,9 +1252,29 @@ export default function StorePosPage() {
     if (!selectedStoreId || !canUseRegister) return;
     if (completedDisplayState) {
       void publishCustomerDisplayState(completedDisplayState);
-      const timer = window.setTimeout(() => setCompletedDisplayState(null), 9000);
+      const timer = window.setTimeout(() => {
+        setCompletedDisplayState(null);
+        setCustomerDisplayMode("advertising");
+        void publishCustomerDisplayState({
+          status: "advertising",
+          storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
+          orderType: "",
+          paymentMethod: "cash",
+          paymentLabel: "現金",
+          externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
+          pickupCode: "",
+          preferredLanguage: "",
+          memberDisplayName: "",
+          memberMessage: "",
+          subtotal: 0,
+          cashTenderedAmount: null,
+          cashChangeAmount: null,
+          items: []
+        });
+      }, 9000);
       return () => window.clearTimeout(timer);
     }
+    if (customerDisplayMode === "advertising" && cart.length === 0 && !selectedMember && !memberLookupInput.trim()) return;
     const status = cart.length === 0
       ? "idle"
       : paymentMethod === "cash"
@@ -1248,6 +1292,8 @@ export default function StorePosPage() {
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: "",
         preferredLanguage: selectedMember?.preferredLanguage || "",
+        memberDisplayName: getMemberDisplayName(selectedMember),
+        memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         subtotal: payableAmount,
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
@@ -1266,7 +1312,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedMember?.preferredLanguage, selectedStoreId, payableAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedMember, selectedStoreId, payableAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;

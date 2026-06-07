@@ -43,6 +43,8 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     externalPaymentTerminalBrand: normalizeText(state.externalPaymentTerminalBrand) || "PayCAS",
     pickupCode: normalizeText(state.pickupCode),
     preferredLanguage: normalizeDisplayLanguage(state.preferredLanguage),
+    memberDisplayName: normalizeText(state.memberDisplayName).slice(0, 80),
+    memberMessage: normalizeText(state.memberMessage).slice(0, 120),
     subtotal: Math.max(0, toAmount(state.subtotal)),
     cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
     cashChangeAmount: toNullableAmount(state.cashChangeAmount),

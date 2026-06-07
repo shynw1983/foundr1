@@ -8350,6 +8350,53 @@ body :where(
   font-weight: 400;
 }
 
+.customer-display-page.is-advertising {
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  background: #0f1f1a;
+  color: white;
+}
+
+.customer-display-advertising {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  overflow: hidden;
+  background: #0f1f1a;
+}
+
+.customer-display-advertising > div {
+  display: grid;
+  gap: 12px;
+  width: min(920px, calc(100vw - 48px));
+  text-align: center;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.32);
+}
+
+.customer-display-advertising span,
+.customer-display-advertising strong,
+.customer-display-advertising p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.customer-display-advertising span {
+  font-size: clamp(22px, 4vh, 42px);
+  font-weight: 500;
+}
+
+.customer-display-advertising strong {
+  font-size: clamp(68px, 15vh, 172px);
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.customer-display-advertising p {
+  font-size: clamp(26px, 5vh, 58px);
+  font-weight: 500;
+}
+
 .customer-display-topbar {
   display: flex;
   align-items: center;
@@ -8565,7 +8612,7 @@ body :where(
 
 .customer-display-payment {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 14px;
 }
@@ -8575,6 +8622,7 @@ body :where(
 }
 
 .customer-display-total,
+.customer-display-member,
 .customer-display-cash > div,
 .customer-display-terminal,
 .customer-display-complete {
@@ -8582,6 +8630,28 @@ body :where(
   gap: 6px;
   min-width: 0;
   border-radius: 8px;
+}
+
+.customer-display-member {
+  border: 1px solid rgba(20, 83, 45, 0.18);
+  padding: 12px;
+  background: #f0fdf4;
+  color: #14532d;
+  text-align: center;
+}
+
+.customer-display-member span {
+  font-size: clamp(26px, 5vh, 52px);
+  font-weight: 500;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.customer-display-member strong {
+  color: #166534;
+  font-size: clamp(17px, 2.7vh, 27px);
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .customer-display-total {
