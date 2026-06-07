@@ -271,11 +271,11 @@ export default function PosReconciliationPage() {
     if (!selectedStoreId || saving) return;
     const reason = orderCorrectionReason.trim();
     if (!reason) {
-      setMessage("返金・取消理由を入力してください。");
+      setMessage("返金・キャンセル理由を入力してください。");
       setSelectedOrderId(order.id);
       return;
     }
-    if (!window.confirm(`${order.pickupCode} を返金・取消として記録しますか？`)) return;
+    if (!window.confirm(`${order.pickupCode} を返金・キャンセルとして記録しますか？`)) return;
     setSaving(true);
     setMessage("");
     try {
@@ -291,7 +291,7 @@ export default function PosReconciliationPage() {
         })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "返金・取消を保存できませんでした。");
+      if (!response.ok) throw new Error(body.error || "返金・キャンセルを保存できませんでした。");
       setSessions(body.sessions ?? []);
       setPreviousClosedSession(body.previousClosedSession ?? previousClosedSession);
       setMovements(body.movements ?? []);
@@ -301,10 +301,10 @@ export default function PosReconciliationPage() {
       setTotals(body.totals ?? totals);
       setSelectedOrderId("");
       setOrderCorrectionReason("");
-      setMessage("返金・取消を修正記録として保存しました。");
+      setMessage("返金・キャンセルを修正記録として保存しました。");
       await load(selectedStoreId, businessDate);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "返金・取消を保存できませんでした。");
+      setMessage(error instanceof Error ? error.message : "返金・キャンセルを保存できませんでした。");
     } finally {
       setSaving(false);
     }
@@ -631,10 +631,10 @@ export default function PosReconciliationPage() {
                                   type="text"
                                   value={orderCorrectionReason}
                                   onChange={(event) => setOrderCorrectionReason(event.target.value)}
-                                  placeholder="返金・取消理由"
+                                  placeholder="返金・キャンセル理由"
                                 />
                                 <button className="danger-button" type="button" disabled={saving} onClick={() => refundOrder(order)}>
-                                  返金・取消を保存
+                                  返金・キャンセルを保存
                                 </button>
                                 <button
                                   className="secondary-button"
@@ -658,7 +658,7 @@ export default function PosReconciliationPage() {
                                   setOrderCorrectionReason("");
                                 }}
                               >
-                                返金・取消
+                                返金・キャンセル
                               </button>
                             )}
                           </div>

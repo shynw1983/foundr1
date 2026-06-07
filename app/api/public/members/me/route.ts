@@ -24,7 +24,7 @@ function normalizePreferredLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "ja";
 }
 
-function clampPointHistoryLimit(value: unknown) {
+function clampHistoryLimit(value: unknown) {
   const limit = Math.round(Number(value));
   if (!Number.isFinite(limit)) return 30;
   return Math.max(1, Math.min(200, limit));
@@ -46,10 +46,10 @@ function parseEndDateParam(value: string | null) {
   return date.toISOString();
 }
 
-function pointHistoryOptions(request: Request) {
+function historyOptions(request: Request, prefix: "pointHistory" | "orderHistory") {
   const params = new URL(request.url).searchParams;
-  const range = String(params.get("pointHistoryRange") ?? "").trim();
-  const limit = range === "latest" || !range ? 30 : clampPointHistoryLimit(params.get("pointHistoryLimit") ?? 100);
+  const range = String(params.get(`${prefix}Range`) ?? "").trim();
+  const limit = range === "latest" || !range ? 30 : clampHistoryLimit(params.get(`${prefix}Limit`) ?? 100);
   const now = new Date();
   const fromRelative = (days: number) => {
     const date = new Date(now);
@@ -62,12 +62,20 @@ function pointHistoryOptions(request: Request) {
   if (range === "1y") return { from: fromRelative(365), to: null, limit };
   if (range === "custom") {
     return {
-      from: parseDateParam(params.get("pointHistoryFrom")) || null,
-      to: parseEndDateParam(params.get("pointHistoryTo")) || null,
+      from: parseDateParam(params.get(`${prefix}From`)) || null,
+      to: parseEndDateParam(params.get(`${prefix}To`)) || null,
       limit
     };
   }
   return { from: null, to: null, limit: 30 };
+}
+
+function pointHistoryOptions(request: Request) {
+  return historyOptions(request, "pointHistory");
+}
+
+function orderHistoryOptions(request: Request) {
+  return historyOptions(request, "orderHistory");
 }
 
 function memberAge(birthday: string) {
@@ -138,7 +146,7 @@ export async function GET(request: Request) {
     getMemberAvailableCoupons(member.id),
     getMemberPointHistory(member.id, pointHistoryOptions(request)),
     getMemberStampCards(member.id),
-    getMemberOnlineOrderHistory(member.id),
+    getMemberOnlineOrderHistory(member.id, orderHistoryOptions(request)),
     getPreferredStoreOptions()
   ]);
 

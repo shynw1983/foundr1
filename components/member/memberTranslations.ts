@@ -212,7 +212,7 @@ export const memberText: Record<MemberLanguage, {
     dateNoExpiry: "期限なし",
     movementEarn: "付与",
     movementRedeem: "利用",
-    movementReversal: "取消",
+    movementReversal: "キャンセル",
     couponApplied: "クーポン適用",
     oneCupExchange: "1杯交換",
     purchaseHistory: "購入履歴",

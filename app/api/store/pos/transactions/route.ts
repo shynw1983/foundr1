@@ -266,7 +266,7 @@ export async function POST(request: Request) {
         itemId: item.id,
         paidAmount: item.refundAmount,
         couponId: item.couponId,
-        note: "商品別返金による会員特典取消"
+        note: "商品別返金による会員特典キャンセル"
       });
     }
     await syncWebReservationToSalesOrder(orderId);

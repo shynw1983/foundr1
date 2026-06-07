@@ -179,8 +179,8 @@ export default function MemberPointsPage() {
           <span>{text.pointsCouponsNumber}</span>
         </div>
         {isLoaded && isSignedIn ? (
-          <div className="member-point-hero-controls">
-            <label className="member-point-period-select">
+          <div className="member-history-hero-controls">
+            <label className="member-history-period-select">
               <CalendarDays size={16} />
               <select value={periodRange} onChange={(event) => changePeriodRange(event.target.value)} aria-label={text.pointHistoryPeriod}>
                 <option value="latest">{text.pointHistoryLatest}</option>

@@ -593,7 +593,7 @@ export async function POST(request: Request) {
     const orderId = normalizeText(body.orderId);
     const reason = normalizeText(body.reason || body.note);
     if (!orderId) return Response.json({ error: "会計を選択してください。" }, { status: 400 });
-    if (!reason) return Response.json({ error: "返金・取消理由を入力してください。" }, { status: 400 });
+    if (!reason) return Response.json({ error: "返金・キャンセル理由を入力してください。" }, { status: 400 });
     const targetRows = await sql`
       select
         store_customer_orders.id::text,
@@ -643,7 +643,7 @@ export async function POST(request: Request) {
       where id::text = ${orderId}
       returning id::text
     `;
-    if (!updatedRows[0]?.id) return Response.json({ error: "返金・取消を保存できませんでした。" }, { status: 500 });
+    if (!updatedRows[0]?.id) return Response.json({ error: "返金・キャンセルを保存できませんでした。" }, { status: 500 });
     await sql`
       insert into pos_order_corrections (
         store_id,

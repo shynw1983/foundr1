@@ -220,7 +220,7 @@ function formatDateTime(value: string) {
 
 function getMovementLabel(value: string) {
   if (value === "earn") return "付与";
-  if (value === "refund_reversal") return "取消";
+  if (value === "refund_reversal") return "キャンセル";
   if (value === "redeem") return "利用";
   if (value === "manual_adjustment") return "調整";
   return value || "-";

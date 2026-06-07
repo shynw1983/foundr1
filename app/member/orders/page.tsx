@@ -1,7 +1,7 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, Home, Loader2, LogOut, RefreshCw, Settings } from "lucide-react";
+import { BadgePercent, CalendarDays, Home, Loader2, LogOut, RefreshCw, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
@@ -26,6 +26,7 @@ type MemberOrdersResponse = {
 };
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+type OrderHistoryRange = "latest" | "30d" | "90d" | "1y" | "custom";
 
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
   return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
@@ -38,12 +39,21 @@ export default function MemberOrdersPage() {
   const [data, setData] = useState<MemberOrdersResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [periodRange, setPeriodRange] = useState<OrderHistoryRange>("latest");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  async function loadOrders() {
+  async function loadOrders(range = periodRange, from = fromDate, to = toDate) {
     setLoading(true);
     setMessage("");
     try {
-      const response = await fetch("/api/public/members/me", { cache: "no-store" });
+      const params = new URLSearchParams({ orderHistoryRange: range });
+      if (range !== "latest") params.set("orderHistoryLimit", "100");
+      if (range === "custom") {
+        if (from) params.set("orderHistoryFrom", from);
+        if (to) params.set("orderHistoryTo", to);
+      }
+      const response = await fetch(`/api/public/members/me?${params.toString()}`, { cache: "no-store" });
       const body = await response.json().catch(() => ({})) as MemberOrdersResponse;
       if (!response.ok) {
         setMessage(body.error || text.loadMemberError);
@@ -63,6 +73,19 @@ export default function MemberOrdersPage() {
   useEffect(() => {
     if (isLoaded && isSignedIn) void loadOrders();
   }, [isLoaded, isSignedIn]);
+
+  function changePeriodRange(value: string) {
+    const nextRange = ["latest", "30d", "90d", "1y", "custom"].includes(value) ? value as OrderHistoryRange : "latest";
+    setPeriodRange(nextRange);
+    if (nextRange !== "custom" && isLoaded && isSignedIn) void loadOrders(nextRange, fromDate, toDate);
+  }
+
+  function clearFilter() {
+    setPeriodRange("latest");
+    setFromDate("");
+    setToDate("");
+    if (isLoaded && isSignedIn) void loadOrders("latest", "", "");
+  }
 
   if (!clerkConfigured) {
     return (
@@ -130,10 +153,22 @@ export default function MemberOrdersPage() {
           <span>{text.purchaseHistoryDescription}</span>
         </div>
         {isLoaded && isSignedIn ? (
-          <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>
-            {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
-            {text.refresh}
-          </button>
+          <div className="member-history-hero-controls">
+            <label className="member-history-period-select">
+              <CalendarDays size={16} />
+              <select value={periodRange} onChange={(event) => changePeriodRange(event.target.value)} aria-label={text.pointHistoryPeriod}>
+                <option value="latest">{text.pointHistoryLatest}</option>
+                <option value="30d">{text.pointHistoryLast30Days}</option>
+                <option value="90d">{text.pointHistoryLast90Days}</option>
+                <option value="1y">{text.pointHistoryLastYear}</option>
+                <option value="custom">{text.pointHistoryCustom}</option>
+              </select>
+            </label>
+            <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>
+              {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
+              {text.refresh}
+            </button>
+          </div>
         ) : null}
       </section>
 
@@ -149,6 +184,29 @@ export default function MemberOrdersPage() {
         <>
           {message ? <p className="member-orders-message">{message}</p> : null}
           <section className="member-orders-shell">
+            {periodRange === "custom" ? (
+              <article className="member-portal-panel">
+                <div className="member-settings-grid">
+                  <label>
+                    <span>{text.pointHistoryStartDate}</span>
+                    <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{text.pointHistoryEndDate}</span>
+                    <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+                  </label>
+                  <div className="member-portal-toolbar member-settings-field-wide">
+                    <button className="secondary-button" type="button" onClick={() => void loadOrders("custom", fromDate, toDate)} disabled={loading}>
+                      {loading ? <Loader2 size={16} /> : <CalendarDays size={16} />}
+                      {text.applyFilter}
+                    </button>
+                    <button className="secondary-button" type="button" onClick={clearFilter} disabled={loading}>
+                      {text.clearFilter}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ) : null}
             {loading && !data.orders ? (
               <section className="member-portal-login-panel">
                 <Loader2 size={32} />

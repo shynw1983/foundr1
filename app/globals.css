@@ -11507,7 +11507,7 @@ body :where(
   gap: 14px;
 }
 
-.member-point-hero-controls {
+.member-history-hero-controls {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -11515,7 +11515,12 @@ body :where(
   flex-wrap: wrap;
 }
 
-.member-point-period-select {
+.member-history-hero-controls .secondary-button {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.member-history-period-select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -11527,7 +11532,7 @@ body :where(
   padding: 0 10px 0 12px;
 }
 
-.member-point-period-select select {
+.member-history-period-select select {
   min-width: 138px;
   border: 0;
   background: transparent;
@@ -12531,20 +12536,20 @@ body :where(
     flex-direction: column;
   }
 
-  .member-point-hero-controls,
+  .member-history-hero-controls,
   .member-portal-auth-actions,
   .member-portal-toolbar {
     width: 100%;
     justify-content: stretch;
   }
 
-  .member-point-period-select,
+  .member-history-period-select,
   .member-portal-auth-actions button,
   .member-portal-toolbar button {
     flex: 1 1 150px;
   }
 
-  .member-point-period-select select {
+  .member-history-period-select select {
     min-width: 0;
     width: 100%;
   }

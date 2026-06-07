@@ -1634,6 +1634,12 @@ export type MemberPointHistoryOptions = {
   limit?: number;
 };
 
+export type MemberOrderHistoryOptions = {
+  from?: string | null;
+  to?: string | null;
+  limit?: number;
+};
+
 export async function getMemberPointHistory(memberId: string, options: MemberPointHistoryOptions = {}) {
   const from = normalizeText(options.from) || null;
   const to = normalizeText(options.to) || null;
@@ -1680,7 +1686,10 @@ export async function getMemberPointHistory(memberId: string, options: MemberPoi
   }));
 }
 
-export async function getMemberOnlineOrderHistory(memberId: string) {
+export async function getMemberOnlineOrderHistory(memberId: string, options: MemberOrderHistoryOptions = {}) {
+  const from = normalizeText(options.from) || null;
+  const to = normalizeText(options.to) || null;
+  const limit = clampInteger(options.limit, 30, 1, 200);
   const rows = await sql`
     select
       store_customer_orders.id::text,
@@ -1733,9 +1742,11 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
     left join member_coupons on member_coupons.id = store_customer_order_items.coupon_id
     where store_customer_orders.member_id::text = ${memberId}
+      and (${from}::timestamptz is null or store_customer_orders.created_at >= ${from}::timestamptz)
+      and (${to}::timestamptz is null or store_customer_orders.created_at < ${to}::timestamptz)
     group by store_customer_orders.id, brands.name, stores.name, stores.customer_display_names
     order by store_customer_orders.created_at desc
-    limit 30
+    limit ${limit}
   `;
 
   return (rows as Array<{
@@ -2054,7 +2065,7 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
   }
 }
 
-export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "返金によるポイント取消") {
+export async function reverseLoyaltyForRefundedOrder(orderId: string, note = "返金によるポイントキャンセル") {
   const orderRows = await sql`
     select
       coalesce(member_id::text, '') as "memberId"
@@ -2260,7 +2271,7 @@ export async function reverseLoyaltyForRefundedOrderItem(input: {
         ${paidAmount},
         ${basePointRateBasis},
         'refund',
-        ${input.note || "商品別返金によるポイント取消"}
+        ${input.note || "商品別返金によるポイントキャンセル"}
       )
       returning id::text
     `;
