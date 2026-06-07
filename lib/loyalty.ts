@@ -174,6 +174,16 @@ function defaultMemberBenefitDisplayNames(name: string) {
       ne: "निःशुल्क पेय कुपन"
     };
   }
+  if (normalized.includes("会員登録特典")) {
+    return {
+      en: "Member registration reward ¥500 off",
+      zh: "会员注册特典 500日元优惠",
+      "zh-Hant": "會員註冊特典 500日圓優惠",
+      ko: "회원 등록 혜택 500엔 할인",
+      vi: "Ưu đãi đăng ký thành viên giảm 500 yên",
+      ne: "सदस्य दर्ता सुविधा ५०० येन छुट"
+    };
+  }
   if (normalized.includes("nanacha") && normalized.includes("スタンプカード")) {
     return {
       en: "nanacha Stamp Card",
@@ -415,6 +425,7 @@ async function issueSignupCoupon(memberId: string) {
     insert into member_coupons (
       member_id,
       name,
+      display_names,
       discount_type,
       discount_value,
       max_discount_amount,
@@ -425,6 +436,7 @@ async function issueSignupCoupon(memberId: string) {
     values (
       ${memberId},
       '会員登録特典 500円OFF',
+      ${JSON.stringify(mergeMemberDisplayNames("会員登録特典 500円OFF", {}))}::jsonb,
       'amount',
       500,
       500,
