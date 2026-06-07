@@ -7,6 +7,7 @@ create table if not exists stores (
   company_id uuid,
   address text,
   owner_name text,
+  customer_display_names jsonb not null default '{}'::jsonb,
   business_hours jsonb not null default '{}'::jsonb,
   reservation_note text not null default '',
   payroll_cycle_type text not null default 'month_end',
@@ -19,6 +20,7 @@ create table if not exists stores (
 
 alter table stores add column if not exists external_id text;
 alter table stores add column if not exists company_id uuid;
+alter table stores add column if not exists customer_display_names jsonb not null default '{}'::jsonb;
 alter table stores add column if not exists business_hours jsonb not null default '{}'::jsonb;
 alter table stores add column if not exists reservation_note text not null default '';
 alter table stores add column if not exists payroll_cycle_type text not null default 'month_end';

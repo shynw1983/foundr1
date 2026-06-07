@@ -3468,6 +3468,33 @@ body :where(
   line-height: 1.55;
 }
 
+.customer-display-name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.customer-display-name-grid .store-payroll-summary {
+  grid-column: 1 / -1;
+}
+
+.customer-display-name-row {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-display-name-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .customer-display-name-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .store-danger-zone {
   border-top: 1px solid var(--line);
   padding-top: 12px;

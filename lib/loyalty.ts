@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { orderSourceToCustomerDisplayPlatform, resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { sendCouponEmail } from "./email";
 
 const basePointRateBasis = 100;
@@ -1498,11 +1499,12 @@ export async function adjustMemberStamps(input: {
 }
 
 export async function getMemberPointHistory(memberId: string) {
-  return sql`
+  const rows = await sql`
     select
       loyalty_point_ledger.id::text,
       coalesce(brands.name, '') as "brandName",
       coalesce(stores.name, '') as "storeName",
+      coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
       loyalty_point_ledger.movement_type as "movementType",
       loyalty_point_ledger.points::int,
       loyalty_point_ledger.eligible_amount::int as "eligibleAmount",
@@ -1515,6 +1517,26 @@ export async function getMemberPointHistory(memberId: string) {
     order by loyalty_point_ledger.created_at desc
     limit 30
   `;
+
+  return (rows as Array<{
+    id: string;
+    brandName: string;
+    storeName: string;
+    customerDisplayNames?: unknown;
+    movementType: string;
+    points: number;
+    eligibleAmount: number;
+    note: string;
+    createdAt: string;
+  }>).map((entry) => ({
+    ...entry,
+    storeName: resolveCustomerStoreDisplayName({
+      settings: entry.customerDisplayNames,
+      internalStoreName: entry.storeName,
+      brandName: entry.brandName,
+      platform: ""
+    })
+  }));
 }
 
 export async function getMemberOnlineOrderHistory(memberId: string) {
@@ -1533,6 +1555,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
       store_customer_orders.created_at::text as "createdAt",
       coalesce(brands.name, '') as "brandName",
       coalesce(stores.name, '') as "storeName",
+      coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
       coalesce(
         jsonb_agg(
           jsonb_build_object(
@@ -1551,7 +1574,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
     where store_customer_orders.member_id::text = ${memberId}
       and store_customer_orders.order_source <> 'store_pos'
-    group by store_customer_orders.id, brands.name, stores.name
+    group by store_customer_orders.id, brands.name, stores.name, stores.customer_display_names
     order by store_customer_orders.created_at desc
     limit 30
   `;
@@ -1570,6 +1593,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     createdAt: string;
     brandName: string;
     storeName: string;
+    customerDisplayNames?: unknown;
     items: Array<{ name?: string; quantity?: number }> | null;
     drink: string;
     size: string;
@@ -1592,6 +1616,12 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
     return {
       ...order,
+      storeName: resolveCustomerStoreDisplayName({
+        settings: order.customerDisplayNames,
+        internalStoreName: order.storeName,
+        brandName: order.brandName,
+        platform: orderSourceToCustomerDisplayPlatform(order.orderSource)
+      }),
       items: itemLabels.length ? itemLabels : fallbackLabel ? [fallbackLabel] : [],
       receiptPreviewUrl: receiptEligible ? `/public/orders/receipt/preview?${receiptParams.toString()}` : "",
       receiptPdfUrl: receiptEligible ? `/api/public/orders/receipt?${receiptParams.toString()}` : ""

@@ -8,6 +8,11 @@ import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import {
+  emptyCustomerDisplayNameSettings,
+  normalizeCustomerDisplayNameSettings,
+  type CustomerDisplayNameSettings
+} from "../../../lib/customer-display-names";
 import { salesSourceDefinitions } from "../../../lib/sales-sources";
 import {
   defaultBusinessHours,
@@ -30,6 +35,7 @@ type StoreItem = {
   receiptTaxRate?: number;
   companyAddress?: string;
   companyPhone?: string;
+  customerDisplayNames?: CustomerDisplayNameSettings;
   owner: string;
   defaultProcurementStaffId?: string;
   brands: string[];
@@ -85,7 +91,7 @@ type StaffOption = {
   storeNames: string[];
 };
 
-type StoreEditTab = "basic" | "hours" | "operations" | "sales" | "payment" | "receipt" | "payroll";
+type StoreEditTab = "basic" | "hours" | "operations" | "sales" | "customer" | "payment" | "receipt" | "payroll";
 
 type StoreTemporaryClosure = {
   id: string;
@@ -118,6 +124,35 @@ function salesSourceFormField(platform: string, brandName = "") {
   return brandName
     ? `salesSource:${platform}:brand:${brandName}:enabled`
     : `salesSource:${platform}:enabled`;
+}
+
+function customerDisplayOverrideKey(brandName: string, platform: string) {
+  return `${brandName}::${platform}`;
+}
+
+function getCustomerDisplayOverrideValue(settings: CustomerDisplayNameSettings, brandName: string, platform: string) {
+  return settings.overrides.find((override) => override.brandName === brandName && override.platform === platform)?.displayName ?? "";
+}
+
+function getCustomerDisplayNameCandidates(brandNames: string[], selectedSourceKeys: string[]) {
+  const concreteBrandNames = brandNames.filter((brandName) => brandName && brandName !== "共通");
+  const brands = concreteBrandNames.length ? concreteBrandNames : [""];
+  const selectedPlatforms = Array.from(new Set(
+    selectedSourceKeys
+      .map((key) => key.split("::")[0] ?? "")
+      .filter(Boolean)
+  ));
+  const platforms = selectedPlatforms.length ? selectedPlatforms : ["web_reservation"];
+
+  return platforms.flatMap((platform) => {
+    const definition = salesSourceDefinitions.find((source) => source.platform === platform);
+    return brands.map((brandName) => ({
+      key: customerDisplayOverrideKey(brandName, platform),
+      brandName,
+      platform,
+      sourceLabel: definition?.label ?? platform
+    }));
+  });
 }
 
 const prefectureOptions = [
@@ -173,6 +208,7 @@ export default function StoresPage() {
   const [editingReceiptTaxRate, setEditingReceiptTaxRate] = useState("8");
   const [editingCompanyAddress, setEditingCompanyAddress] = useState("");
   const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
+  const [editingCustomerDisplayNames, setEditingCustomerDisplayNames] = useState<CustomerDisplayNameSettings>(emptyCustomerDisplayNameSettings);
   const [editingOwner, setEditingOwner] = useState("");
   const [editingDefaultProcurementStaffId, setEditingDefaultProcurementStaffId] = useState("");
   const [editingReservationNote, setEditingReservationNote] = useState("");
@@ -585,6 +621,7 @@ export default function StoresPage() {
     if (!nextName) return;
 
     formData.set("currentName", editingStore.name);
+    formData.set("customerDisplayNames", JSON.stringify(editingCustomerDisplayNames));
     formData.set("businessHours", serializeBusinessHours(editingBusinessHours));
     formData.set("weatherLocationName", weatherLocationName);
     formData.set("weatherLatitude", weatherLatitude === null ? "" : String(weatherLatitude));
@@ -623,6 +660,7 @@ export default function StoresPage() {
         receiptTaxRate,
         companyAddress,
         companyPhone,
+        customerDisplayNames: editingCustomerDisplayNames,
         owner,
         defaultProcurementStaffId,
         brands: editingStoreBrands,
@@ -647,6 +685,7 @@ export default function StoresPage() {
     setEditingStore(null);
     setEditingStoreBrands([]);
     setEditingSalesSourceKeys([]);
+    setEditingCustomerDisplayNames(emptyCustomerDisplayNameSettings);
     setEditingKomojuEnabled(false);
     setEditingKomojuAccountName("");
     setEditingKomojuSecretKeyEnvName("");
@@ -682,6 +721,7 @@ export default function StoresPage() {
     setEditingReceiptTaxRate(String(store.receiptTaxRate ?? 8));
     setEditingCompanyAddress(store.companyAddress ?? "");
     setEditingCompanyPhone(store.companyPhone ?? "");
+    setEditingCustomerDisplayNames(normalizeCustomerDisplayNameSettings(store.customerDisplayNames));
     setEditingOwner(store.owner);
     setEditingDefaultProcurementStaffId(store.defaultProcurementStaffId ?? "");
     setEditingReservationNote(store.reservationNote ?? "");
@@ -973,6 +1013,7 @@ export default function StoresPage() {
               <button className={editingStoreTab === "hours" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("hours")}>営業時間</button>
               <button className={editingStoreTab === "operations" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("operations")}>受付・休業</button>
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
+              <button className={editingStoreTab === "customer" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("customer")}>顧客表示</button>
               <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
               <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>領収書</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
@@ -1081,6 +1122,7 @@ export default function StoresPage() {
                   <input type="hidden" name="receiptTaxRate" value={editingReceiptTaxRate} />
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
+                  <input type="hidden" name="customerDisplayNames" value={JSON.stringify(editingCustomerDisplayNames)} />
                   <input type="hidden" name="owner" value={editingOwner} />
                   <input type="hidden" name="defaultProcurementStaffId" value={editingDefaultProcurementStaffId} />
                   <input type="hidden" name="reservationNote" value={editingReservationNote} />
@@ -1159,6 +1201,15 @@ export default function StoresPage() {
                   selectedKeys={editingSalesSourceKeys}
                   brandNames={editingStoreBrands}
                   onToggle={(key, checked) => setEditingSalesSourceKeys((current) => toggleSalesSourceKey(current, key, checked))}
+                />
+              ) : null}
+              {editingStoreTab === "customer" ? (
+                <CustomerDisplayNameEditor
+                  value={editingCustomerDisplayNames}
+                  internalStoreName={editingStoreName}
+                  brandNames={editingStoreBrands}
+                  selectedSourceKeys={editingSalesSourceKeys}
+                  onChange={setEditingCustomerDisplayNames}
                 />
               ) : null}
               {editingStoreTab === "payment" ? (
@@ -1458,6 +1509,71 @@ function SalesSourceSelector({
               );
             }) : <small>先に取り扱いブランドを選択してください。</small>}
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomerDisplayNameEditor({
+  value,
+  internalStoreName,
+  brandNames,
+  selectedSourceKeys,
+  onChange
+}: {
+  value: CustomerDisplayNameSettings;
+  internalStoreName: string;
+  brandNames: string[];
+  selectedSourceKeys: string[];
+  onChange: (value: CustomerDisplayNameSettings) => void;
+}) {
+  const settings = normalizeCustomerDisplayNameSettings(value);
+  const candidates = getCustomerDisplayNameCandidates(brandNames, selectedSourceKeys);
+
+  function updateDefaultName(defaultName: string) {
+    onChange({ ...settings, defaultName });
+  }
+
+  function updateOverride(brandName: string, platform: string, sourceLabel: string, displayName: string) {
+    const nextOverrides = settings.overrides.filter((override) => !(override.brandName === brandName && override.platform === platform));
+    const trimmedName = displayName.trim();
+    onChange({
+      ...settings,
+      overrides: trimmedName
+        ? [...nextOverrides, { brandName, platform, sourceLabel, displayName: trimmedName }]
+        : nextOverrides
+    });
+  }
+
+  return (
+    <div className="store-payroll-settings">
+      <div className="store-payroll-summary">
+        <strong>お客様向け店舗名</strong>
+        <p>購入履歴、領収書、Web予約など、お客様向け画面に表示する名称です。内部管理用の店舗名は変更されません。</p>
+      </div>
+      <label>
+        <span>標準表示名</span>
+        <input
+          value={settings.defaultName}
+          onChange={(event) => updateDefaultName(event.target.value)}
+          placeholder={internalStoreName || "例: まぁ麻 福岡清水店"}
+        />
+      </label>
+      <div className="customer-display-name-grid">
+        <div className="store-payroll-summary">
+          <strong>ブランド・チャネル別表示名</strong>
+          <p>未入力の組み合わせは標準表示名を使います。ブランドやチャネルごとに正式名称が違う場合だけ入力してください。</p>
+        </div>
+        {candidates.map((candidate) => (
+          <label key={candidate.key} className="customer-display-name-row">
+            <span>{candidate.brandName || "全ブランド"} / {candidate.sourceLabel}</span>
+            <input
+              value={getCustomerDisplayOverrideValue(settings, candidate.brandName, candidate.platform)}
+              onChange={(event) => updateOverride(candidate.brandName, candidate.platform, candidate.sourceLabel, event.target.value)}
+              placeholder={settings.defaultName || internalStoreName || "表示名"}
+            />
+          </label>
         ))}
       </div>
     </div>

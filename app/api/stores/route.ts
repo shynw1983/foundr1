@@ -1,4 +1,5 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
+import { normalizeCustomerDisplayNameSettings } from "../../../lib/customer-display-names";
 import { sql } from "../../../lib/db";
 import { getSalesSourceDefinition, salesSourceDefinitions } from "../../../lib/sales-sources";
 import { serializeBusinessHours } from "../../../lib/store-business-hours";
@@ -144,6 +145,14 @@ function normalizeSalesSources(formData: FormData, brandNames: string[]) {
   });
 }
 
+function normalizeCustomerDisplayNames(value: FormDataEntryValue | null) {
+  try {
+    return normalizeCustomerDisplayNameSettings(JSON.parse(String(value ?? "{}")));
+  } catch {
+    return normalizeCustomerDisplayNameSettings({});
+  }
+}
+
 async function replaceStoreSalesSources(storeId: string, formData: FormData, brandNames: string[]) {
   const sources = normalizeSalesSources(formData, brandNames);
   await sql`delete from store_sales_sources where store_id = ${storeId}`;
@@ -262,6 +271,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const customerDisplayNames = normalizeCustomerDisplayNames(formData.get("customerDisplayNames"));
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
@@ -307,6 +317,7 @@ export async function POST(request: Request) {
       name,
       company_id,
       owner_name,
+      customer_display_names,
       business_hours,
       reservation_note,
       payroll_cycle_type,
@@ -330,6 +341,7 @@ export async function POST(request: Request) {
       ${name},
       ${companyId},
       ${owner},
+      ${JSON.stringify(customerDisplayNames)}::jsonb,
       ${businessHours}::jsonb,
       ${reservationNote},
       ${payrollCycleType},
@@ -353,6 +365,7 @@ export async function POST(request: Request) {
     do update set
       company_id = excluded.company_id,
       owner_name = excluded.owner_name,
+      customer_display_names = excluded.customer_display_names,
       business_hours = excluded.business_hours,
       reservation_note = excluded.reservation_note,
       payroll_cycle_type = excluded.payroll_cycle_type,
@@ -402,6 +415,7 @@ export async function PUT(request: Request) {
   const currentName = String(formData.get("currentName") ?? "").trim();
   const nextName = String(formData.get("name") ?? "").trim();
   const owner = String(formData.get("owner") ?? "").trim();
+  const customerDisplayNames = normalizeCustomerDisplayNames(formData.get("customerDisplayNames"));
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
@@ -462,6 +476,7 @@ export async function PUT(request: Request) {
       name = ${nextName},
       company_id = ${companyId},
       owner_name = ${owner},
+      customer_display_names = ${JSON.stringify(customerDisplayNames)}::jsonb,
       business_hours = ${businessHours}::jsonb,
       reservation_note = ${reservationNote},
       payroll_cycle_type = ${payrollCycleType},

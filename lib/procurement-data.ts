@@ -120,6 +120,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(companies.address, '') as "companyAddress",
           coalesce(companies.phone, '') as "companyPhone",
           stores.owner_name as owner,
+          coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
           coalesce(stores.default_procurement_staff_id::text, '') as "defaultProcurementStaffId",
           stores.business_hours as "businessHours",
           coalesce(stores.reservation_note, '') as "reservationNote",

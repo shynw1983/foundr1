@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
 
 export type MaamaaPricedOption = {
@@ -144,21 +145,26 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       order by sort_order, name
     `,
     sql`
-      select stores.id::text, stores.name, coalesce(stores.external_id, '') as "externalId"
+      select stores.id::text, stores.name, coalesce(stores.external_id, '') as "externalId", coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames"
       from stores
       join store_brands on store_brands.store_id = stores.id
       where store_brands.brand_id = ${brand.id}
         and stores.status = 'active'
       order by stores.name
     `
-  ]) as [MenuItemRow[], MenuGroupRow[], MenuOptionRow[], Array<{ id: string; name: string; externalId: string }>];
+  ]) as [MenuItemRow[], MenuGroupRow[], MenuOptionRow[], Array<{ id: string; name: string; externalId: string; customerDisplayNames?: unknown }>];
 
   const base = items[0];
   if (!base) throw new Error("base menu item not found");
 
   const publicStores = stores.map((store) => ({
     id: store.externalId || store.name,
-    label: store.name,
+    label: resolveCustomerStoreDisplayName({
+      settings: store.customerDisplayNames,
+      internalStoreName: store.name,
+      brandName: "まぁ麻",
+      platform: "web_reservation"
+    }),
     osStoreId: store.id
   }));
   const normalizedStoreQuery = normalizeStoreQuery(storeQuery);
