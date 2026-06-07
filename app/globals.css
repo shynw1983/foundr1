@@ -11025,13 +11025,16 @@ body :where(
 
 .member-stamp-slots {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(44px, clamp(56px, 14vw, 96px)));
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .member-stamp-slots span {
   display: grid;
   place-items: center;
+  width: 100%;
+  max-width: 96px;
   min-width: 0;
   aspect-ratio: 1;
   border: 1px solid var(--member-line);
@@ -11047,19 +11050,24 @@ body :where(
 .member-stamp-mark {
   position: relative;
   display: block;
-  width: min(30px, 62%);
+  width: 72%;
   aspect-ratio: 1;
   border-radius: 999px;
-  background: #d6d6d6;
+  background:
+    radial-gradient(circle at 31% 31%, rgba(255, 255, 255, 0.95) 0 4%, transparent 4.5%),
+    radial-gradient(circle at 44% 26%, rgba(255, 255, 255, 0.9) 0 5%, transparent 5.5%),
+    radial-gradient(circle at 68% 32%, rgba(255, 255, 255, 0.9) 0 4%, transparent 4.5%),
+    radial-gradient(circle at 28% 53%, currentColor 0 18%, transparent 18.5%),
+    radial-gradient(circle at 52% 50%, currentColor 0 20%, transparent 20.5%),
+    radial-gradient(circle at 73% 57%, currentColor 0 18%, transparent 18.5%),
+    radial-gradient(circle at 39% 76%, currentColor 0 17%, transparent 17.5%),
+    radial-gradient(circle at 62% 78%, currentColor 0 18%, transparent 18.5%);
+  color: #d6d6d6;
 }
 
 .member-stamp-mark::before,
 .member-stamp-mark::after {
-  content: "";
-  position: absolute;
-  display: block;
-  border-radius: 999px;
-  background: white;
+  content: none;
 }
 
 .member-stamp-mark::before {
@@ -11078,7 +11086,7 @@ body :where(
 }
 
 .member-stamp-slots span.is-filled .member-stamp-mark {
-  background: #241916;
+  color: #241916;
 }
 
 .member-stamp-card-foot {
