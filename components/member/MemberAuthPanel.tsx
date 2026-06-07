@@ -270,6 +270,13 @@ export function MemberAuthPanel({
               {emailBusy ? <Loader2 size={16} /> : <Mail size={16} />}
               確認コードを送る
             </button>
+            <p className="member-auth-legal-note">
+              続行すると、
+              <a href="/member/terms" target="_blank" rel="noreferrer">利用規約</a>
+              ・
+              <a href="/privacy" target="_blank" rel="noreferrer">プライバシーポリシー</a>
+              に同意したものとみなされます。未登録のメールアドレスは確認後に会員登録されます。
+            </p>
           </form>
         ) : (
           <form className="member-auth-email-form" onSubmit={(event) => void verifyEmailCode(event)}>

@@ -10671,6 +10671,22 @@ body :where(
   z-index: 1;
 }
 
+.member-auth-legal-note {
+  margin: 0;
+  color: var(--member-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.member-auth-legal-note a {
+  color: var(--member-logo-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 .member-auth-link-button {
   justify-self: center;
   border: 0;
@@ -10685,6 +10701,64 @@ body :where(
 
 .member-auth-message {
   margin: 0;
+}
+
+.member-legal-page {
+  align-content: start;
+}
+
+.member-legal-document {
+  width: min(860px, 100%);
+  margin: 0 auto;
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  padding: clamp(24px, 5vw, 42px);
+  background: white;
+  box-shadow: var(--member-shadow);
+}
+
+.member-legal-document h1 {
+  margin: 6px 0 12px;
+  color: var(--member-ink);
+  font-size: clamp(26px, 4vw, 40px);
+  line-height: 1.18;
+}
+
+.member-legal-lead,
+.member-legal-sections p,
+.member-legal-updated {
+  color: var(--member-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.8;
+}
+
+.member-legal-sections {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.member-legal-sections section {
+  display: grid;
+  gap: 7px;
+}
+
+.member-legal-sections h2 {
+  margin: 0;
+  color: var(--member-ink);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.member-legal-sections p,
+.member-legal-updated {
+  margin: 0;
+}
+
+.member-legal-updated {
+  margin-top: 28px;
+  text-align: right;
 }
 
 @keyframes member-return-spin {
