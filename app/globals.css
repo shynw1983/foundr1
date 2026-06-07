@@ -1035,7 +1035,8 @@ input[type="file"] {
 
   .online-receipt-actions a,
   .online-receipt-actions button {
-    width: 136px;
+    width: fit-content;
+    min-width: 136px;
     min-height: 46px;
     max-width: calc((100vw - 34px) / 2);
     padding: 5px 14px 5px 6px;
@@ -1047,7 +1048,8 @@ input[type="file"] {
   }
 
   .online-receipt-actions.has-file-share .online-receipt-share-button {
-    width: 190px;
+    width: fit-content;
+    min-width: 154px;
     max-width: calc(100vw - 24px);
   }
 
