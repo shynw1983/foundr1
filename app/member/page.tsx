@@ -77,60 +77,8 @@ type MemberResponse = {
   error?: string;
 };
 
-type MemberSettingsForm = {
-  displayName: string;
-  lastName: string;
-  firstName: string;
-  fullName: string;
-  nameKana: string;
-  lastNameKana: string;
-  firstNameKana: string;
-  phone: string;
-  phonePart1: string;
-  phonePart2: string;
-  phonePart3: string;
-  birthday: string;
-  preferredLanguage: string;
-  preferredStoreId: string;
-  marketingOptIn: boolean;
-  lineLinked: boolean;
-};
-
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 const memberReturnStorageKey = "foundr1-member-return-to";
-
-const emptyMemberSettings: MemberSettingsForm = {
-  displayName: "",
-  lastName: "",
-  firstName: "",
-  fullName: "",
-  nameKana: "",
-  lastNameKana: "",
-  firstNameKana: "",
-  phone: "",
-  phonePart1: "",
-  phonePart2: "",
-  phonePart3: "",
-  birthday: "",
-  preferredLanguage: "ja",
-  preferredStoreId: "",
-  marketingOptIn: false,
-  lineLinked: false
-};
-
-const preferredStoreOptions = [
-  { value: "", label: "未設定" },
-  { value: "nanacha-kiyokawa", label: "nanacha 清川店" },
-  { value: "maamaa-shimizu", label: "まぁ麻 清水店" }
-];
-
-const languageOptions = [
-  { value: "ja", label: "日本語" },
-  { value: "zh", label: "简体中文" },
-  { value: "zh-Hant", label: "繁體中文" },
-  { value: "en", label: "English" },
-  { value: "ko", label: "한국어" }
-];
 
 const memberBrandLinks = [
   {
@@ -186,22 +134,6 @@ function couponValueLabel(coupon: MemberCoupon) {
   return coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`;
 }
 
-function splitJapanesePhone(value: string) {
-  const hyphenParts = value.split("-").map((part) => part.replace(/[^\d]/g, "")).filter(Boolean);
-  if (hyphenParts.length === 3) return hyphenParts as [string, string, string];
-
-  const digits = value.replace(/[^\d]/g, "");
-  if (/^0[789]0\d{8}$/.test(digits)) return [digits.slice(0, 3), digits.slice(3, 7), digits.slice(7)];
-  if (/^(0120\d{6}|0800\d{7})$/.test(digits)) return [digits.slice(0, 4), digits.slice(4, 7), digits.slice(7)];
-  if (/^0\d{9}$/.test(digits)) return [digits.slice(0, 2), digits.slice(2, 6), digits.slice(6)];
-  if (/^0\d{8}$/.test(digits)) return [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5)];
-  return [digits, "", ""];
-}
-
-function composeJapanesePhone(part1: string, part2: string, part3: string) {
-  return [part1, part2, part3].map((part) => part.replace(/[^\d]/g, "")).filter(Boolean).join("-");
-}
-
 function safeReturnTo(value: string) {
   try {
     const url = new URL(value);
@@ -221,31 +153,6 @@ function withSignedOutMarker(value: string) {
   } catch {
     return "/member?loggedOut=1";
   }
-}
-
-function toSettingsForm(member?: MemberProfile | null): MemberSettingsForm {
-  if (!member) return emptyMemberSettings;
-  const [fallbackLastName = "", fallbackFirstName = ""] = (member.fullName || "").trim().split(/\s+/, 2);
-  const [fallbackLastNameKana = "", fallbackFirstNameKana = ""] = (member.nameKana || "").trim().split(/\s+/, 2);
-  const [phonePart1, phonePart2, phonePart3] = splitJapanesePhone(member.phone || "");
-  return {
-    displayName: member.displayName || "",
-    lastName: member.lastName || fallbackLastName,
-    firstName: member.firstName || fallbackFirstName,
-    fullName: member.fullName || "",
-    nameKana: member.nameKana || "",
-    lastNameKana: fallbackLastNameKana,
-    firstNameKana: fallbackFirstNameKana,
-    phone: member.phone || "",
-    phonePart1,
-    phonePart2,
-    phonePart3,
-    birthday: member.birthday || "",
-    preferredLanguage: member.preferredLanguage || "ja",
-    preferredStoreId: member.preferredStoreId || "",
-    marketingOptIn: Boolean(member.marketingOptIn),
-    lineLinked: Boolean(member.lineLinked)
-  };
 }
 
 function hasRequiredProfileDetails(member?: MemberProfile | null) {
@@ -298,23 +205,16 @@ export default function MemberPage() {
 
 function ConfiguredMemberPortal() {
   const { isLoaded, isSignedIn, user } = useUser();
-  const settingsPanelRef = useRef<HTMLDetailsElement | null>(null);
   const couponPanelRef = useRef<HTMLElement | null>(null);
-  const profilePromptShownRef = useRef(false);
   const [returnTo, setReturnTo] = useState("");
   const [handoffEnabled, setHandoffEnabled] = useState(false);
   const [loggedOut, setLoggedOut] = useState(false);
-  const [completeProfileRequested, setCompleteProfileRequested] = useState(false);
   const [data, setData] = useState<MemberResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [handoffStarted, setHandoffStarted] = useState(false);
   const [handoffFailed, setHandoffFailed] = useState(false);
-  const [settingsForm, setSettingsForm] = useState<MemberSettingsForm>(emptyMemberSettings);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsMessage, setSettingsMessage] = useState("");
   const [selectedCouponId, setSelectedCouponId] = useState("");
 
   const qrValue = useMemo(() => {
@@ -331,12 +231,11 @@ function ConfiguredMemberPortal() {
     const params = new URLSearchParams();
     if (returnTo) params.set("returnTo", returnTo);
     if (handoffEnabled) params.set("handoff", "1");
-    params.set("completeProfile", "1");
-    return `/member?${params.toString()}`;
+    const query = params.toString();
+    return query ? `/member?${query}` : "/member";
   }, [handoffEnabled, returnTo]);
 
   const missingRequiredProfile = Boolean(data.member && !hasRequiredProfileDetails(data.member));
-  const profileStatusLabel = missingRequiredProfile ? "必須項目が未入力です" : "必須項目は入力済みです";
   const returningToSite = Boolean(returnTo && handoffEnabled && isLoaded && isSignedIn && !handoffFailed && (!data.member || hasRequiredProfileDetails(data.member)));
   const readyToReturnToSite = Boolean(returningToSite && data.member && hasRequiredProfileDetails(data.member));
   const selectedCoupon = data.coupons?.find((coupon) => coupon.id === selectedCouponId) ?? null;
@@ -362,7 +261,6 @@ function ConfiguredMemberPortal() {
     setReturnTo(nextReturnTo);
     setHandoffEnabled(params.get("handoff") === "1");
     setLoggedOut(nextLoggedOut);
-    setCompleteProfileRequested(params.get("completeProfile") === "1");
 
     if (nextReturnTo) {
       window.localStorage.setItem(memberReturnStorageKey, nextReturnTo);
@@ -390,9 +288,7 @@ function ConfiguredMemberPortal() {
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || "会員情報を読み込めませんでした。");
       setData(body);
-      setSettingsForm(toSettingsForm(body.member));
       setSelectedCouponId((current) => body.coupons?.some((coupon) => coupon.id === current) ? current : "");
-      setSettingsMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会員情報を読み込めませんでした。");
     } finally {
@@ -405,54 +301,13 @@ function ConfiguredMemberPortal() {
   }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !data.member || !missingRequiredProfile || profilePromptShownRef.current) return;
-    profilePromptShownRef.current = true;
-    setSettingsOpen(true);
-    window.setTimeout(() => {
-      settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 120);
-  }, [data.member, isLoaded, isSignedIn, missingRequiredProfile]);
-
-  async function saveSettings() {
-    const requiredMissing = [
-      !settingsForm.displayName.trim() ? "表示名・ニックネーム" : "",
-      !settingsForm.lastName.trim() ? "姓" : "",
-      !settingsForm.firstName.trim() ? "名" : "",
-      !(settingsForm.phonePart1.trim() && settingsForm.phonePart2.trim() && settingsForm.phonePart3.trim()) ? "電話番号" : ""
-    ].filter(Boolean);
-    if (requiredMissing.length) {
-      setSettingsOpen(true);
-      setSettingsMessage(`${requiredMissing.join("、")}を入力してください。`);
-      window.setTimeout(() => {
-        settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 80);
-      return;
-    }
-
-    setSettingsSaving(true);
-    setSettingsMessage("");
-    try {
-      const nameKana = [settingsForm.lastNameKana, settingsForm.firstNameKana].map((part) => part.trim()).filter(Boolean).join(" ");
-      const phone = composeJapanesePhone(settingsForm.phonePart1, settingsForm.phonePart2, settingsForm.phonePart3);
-      const response = await fetch("/api/public/members/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settingsForm, nameKana, phone })
-      });
-      const body = await response.json().catch(() => ({})) as MemberResponse;
-      if (!response.ok) throw new Error(body.error || "会員情報を保存できませんでした。");
-      setData((current) => ({ ...current, member: body.member ?? current.member }));
-      setSettingsForm(toSettingsForm(body.member));
-      if (hasRequiredProfileDetails(body.member)) setCompleteProfileRequested(false);
-      setSettingsMessage("会員情報を保存しました。");
-      if (hasRequiredProfileDetails(body.member)) setSettingsOpen(false);
-    } catch (error) {
-      setSettingsOpen(true);
-      setSettingsMessage(error instanceof Error ? error.message : "会員情報を保存できませんでした。");
-    } finally {
-      setSettingsSaving(false);
-    }
-  }
+    if (!isLoaded || !isSignedIn || !missingRequiredProfile) return;
+    const params = new URLSearchParams();
+    params.set("completeProfile", "1");
+    if (returnTo) params.set("returnTo", returnTo);
+    if (handoffEnabled) params.set("handoff", "1");
+    window.location.replace(`/member/settings?${params.toString()}`);
+  }, [handoffEnabled, isLoaded, isSignedIn, missingRequiredProfile, returnTo]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !returnTo || !handoffEnabled || handoffStarted) return;
@@ -525,19 +380,10 @@ function ConfiguredMemberPortal() {
                 <strong>{getAccountDisplayName(data.member, user)}</strong>
                 {data.member?.memberNumber ? <small>会員番号 {data.member.memberNumber}</small> : null}
               </div>
-              <button
-                className="member-account-menu-item"
-                type="button"
-                onClick={() => {
-                  setSettingsOpen(true);
-                  window.setTimeout(() => {
-                    settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 80);
-                }}
-              >
+              <a className="member-account-menu-item" href="/member/settings">
                 <Settings size={16} />
                 会員情報を編集
-              </button>
+              </a>
               <a className="member-account-menu-item" href="/member/orders">
                 <ShoppingBag size={16} />
                 購入履歴・領収書
@@ -751,97 +597,6 @@ function ConfiguredMemberPortal() {
                   )) : <p>ポイント履歴はまだありません。</p>}
                 </div>
               </article>
-
-              {settingsOpen || missingRequiredProfile || completeProfileRequested ? (
-                <details
-                  ref={settingsPanelRef}
-                  className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}
-                  open={settingsOpen}
-                  onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
-                >
-                  <summary className="member-settings-summary">
-                    <div className="member-portal-panel-title">
-                      <Settings size={18} />
-                      <h3>会員情報</h3>
-                    </div>
-                    <div className="member-settings-summary-status">
-                      <span className={missingRequiredProfile ? "is-required" : "is-complete"}>{profileStatusLabel}</span>
-                      <b>{settingsOpen ? "閉じる" : "編集"}</b>
-                    </div>
-                  </summary>
-                  <div className="member-settings-body">
-                    {missingRequiredProfile ? (
-                      <div className="member-settings-required-alert">
-                        <strong>会員登録を完了してください</strong>
-                        <span>ポイント利用と予約時の自動入力には、表示名・氏名・電話番号が必要です。</span>
-                      </div>
-                    ) : null}
-                    {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
-                    <p className="member-settings-note">表示名、氏名、電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
-                    <div className="member-settings-grid">
-                      <label className="member-settings-field-wide">
-                        <span>表示名・ニックネーム</span>
-                        <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
-                      </label>
-                      <label className="member-settings-field-name">
-                        <span>姓</span>
-                        <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
-                      </label>
-                      <label className="member-settings-field-name">
-                        <span>名</span>
-                        <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
-                      </label>
-                      <label className="member-settings-field-kana">
-                        <span>セイ（任意）</span>
-                        <input value={settingsForm.lastNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, lastNameKana: event.target.value, nameKana: [event.target.value, current.firstNameKana].filter(Boolean).join(" ") }))} placeholder="例: ヤマダ" autoComplete="section-kana family-name" />
-                      </label>
-                      <label className="member-settings-field-kana">
-                        <span>メイ（任意）</span>
-                        <input value={settingsForm.firstNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, firstNameKana: event.target.value, nameKana: [current.lastNameKana, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: タロウ" autoComplete="section-kana given-name" />
-                      </label>
-                      <label>
-                        <span>電話番号</span>
-                        <div className="member-phone-segments">
-                          <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label="電話番号 1" required />
-                          <span>-</span>
-                          <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label="電話番号 2" required />
-                          <span>-</span>
-                          <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label="電話番号 3" required />
-                        </div>
-                      </label>
-                      <label>
-                        <span>生年月日（任意）</span>
-                        <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
-                      </label>
-                      <label>
-                        <span>よく利用する店舗（任意）</span>
-                        <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
-                          {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                        </select>
-                      </label>
-                      <label>
-                        <span>表示言語（任意）</span>
-                        <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))}>
-                          {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="member-settings-checks">
-                      <label>
-                        <input type="checkbox" checked={settingsForm.marketingOptIn} onChange={(event) => setSettingsForm((current) => ({ ...current, marketingOptIn: event.target.checked }))} />
-                        <span>クーポンやキャンペーンのお知らせを受け取る</span>
-                      </label>
-                      <label>
-                        <input type="checkbox" checked={settingsForm.lineLinked} onChange={(event) => setSettingsForm((current) => ({ ...current, lineLinked: event.target.checked }))} />
-                        <span>LINE連携済みとして記録する（本連携機能は準備中）</span>
-                      </label>
-                    </div>
-                    <button className="primary-button" type="button" onClick={() => void saveSettings()} disabled={settingsSaving}>
-                      {settingsSaving ? "保存中..." : "会員情報を保存"}
-                    </button>
-                  </div>
-                </details>
-              ) : null}
 
               <article className="member-portal-panel member-brand-panel">
                 <div className="member-portal-panel-title">
