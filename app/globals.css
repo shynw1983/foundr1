@@ -8499,9 +8499,9 @@ body :where(
 
 .customer-display-topbar {
   display: grid;
-  grid-template-columns: minmax(120px, 0.22fr) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 16px;
+  gap: clamp(28px, 5vw, 78px);
   min-width: 0;
 }
 
@@ -8511,15 +8511,15 @@ body :where(
 }
 
 .customer-display-topbar h1 {
-  color: #171717;
-  font-size: clamp(24px, 4.2vh, 42px);
-  font-weight: 450;
-  line-height: 1.12;
+  color: #565650;
+  font-size: clamp(18px, 2.6vh, 30px);
+  font-weight: 400;
+  line-height: 1.18;
 }
 
 .customer-display-status-title {
   min-width: 0;
-  padding-top: 6px;
+  padding-top: clamp(10px, 1.8vh, 22px);
 }
 
 .customer-display-menu select {
@@ -8850,8 +8850,17 @@ body :where(
   }
 
   .customer-display-topbar {
-    grid-template-columns: minmax(86px, 0.32fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: flex-start;
+    gap: 18px;
+  }
+
+  .customer-display-status-title {
+    padding-top: 8px;
+  }
+
+  .customer-display-topbar h1 {
+    font-size: clamp(16px, 3.8vw, 22px);
   }
 
   .customer-display-layout {
