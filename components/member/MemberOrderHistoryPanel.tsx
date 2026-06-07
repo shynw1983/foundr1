@@ -1,11 +1,13 @@
 "use client";
 
 import { ReceiptText, ShoppingBag } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export type MemberOrderHistory = {
   id: string;
   pickupCode: string;
   orderSource: string;
+  purchaseChannel?: "online" | "store";
   status: string;
   paymentStatus: string;
   paymentRefundStatus: string;
@@ -46,28 +48,63 @@ function orderStatusLabel(order: MemberOrderHistory) {
 }
 
 function orderSourceLabel(value: string) {
+  if (value === "store_pos") return "店舗購入";
   if (value === "maamaa_web") return "まぁ麻 Web予約";
   if (value === "nanacha_web") return "nanacha Web予約";
   return "Web予約";
 }
 
+function getPurchaseChannel(order: MemberOrderHistory) {
+  return order.purchaseChannel === "store" || order.orderSource === "store_pos" ? "store" : "online";
+}
+
 export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrderHistoryPanelProps) {
+  const [activeTab, setActiveTab] = useState<"online" | "store">("online");
+  const groupedOrders = useMemo(() => ({
+    online: (orders ?? []).filter((order) => getPurchaseChannel(order) === "online"),
+    store: (orders ?? []).filter((order) => getPurchaseChannel(order) === "store")
+  }), [orders]);
+  const visibleOrders = groupedOrders[activeTab];
+  const emptyMessage = activeTab === "online" ? "ネット購入の履歴はまだありません。" : "店舗購入の履歴はまだありません。";
+
   return (
     <article className={`member-portal-panel member-order-panel${compact ? " is-compact" : ""}`}>
       <div className="member-portal-panel-title">
         <ShoppingBag size={18} />
-        <h3>購入履歴・領収書</h3>
+        <h3>購入履歴</h3>
+      </div>
+      <div className="member-order-tabs" role="tablist" aria-label="購入履歴の種別">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "online"}
+          className={activeTab === "online" ? "is-active" : ""}
+          onClick={() => setActiveTab("online")}
+        >
+          ネット購入
+          <span>{groupedOrders.online.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "store"}
+          className={activeTab === "store" ? "is-active" : ""}
+          onClick={() => setActiveTab("store")}
+        >
+          店舗購入
+          <span>{groupedOrders.store.length}</span>
+        </button>
       </div>
       <div className="member-order-list">
-        {orders?.length ? orders.map((order) => (
+        {visibleOrders.length ? visibleOrders.map((order) => (
           <div key={order.id} className="member-order-row">
             <div className="member-order-main">
               <div>
                 <strong>{order.brandName || orderSourceLabel(order.orderSource)}</strong>
-                <span>{order.storeName || orderSourceLabel(order.orderSource)} / {order.pickupCode}</span>
+                <span>{order.storeName || orderSourceLabel(order.orderSource)} / {orderSourceLabel(order.orderSource)} / {order.pickupCode}</span>
               </div>
               <div className="member-order-items">
-                {(order.items.length ? order.items : ["明細なし"]).slice(0, 3).map((item) => <span key={`${order.id}-${item}`}>{item}</span>)}
+                {(order.items.length ? order.items : ["明細なし"]).map((item, index) => <span key={`${order.id}-${index}-${item}`}>{item}</span>)}
               </div>
             </div>
             <div className="member-order-meta">
@@ -77,7 +114,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
             </div>
             <div className="member-order-actions">
               <span className={order.paymentStatus === "refunded" || order.status === "cancelled" ? "is-cancelled" : ""}>{orderStatusLabel(order)}</span>
-              {order.receiptPreviewUrl ? (
+              {getPurchaseChannel(order) === "online" && order.receiptPreviewUrl ? (
                 <a href={order.receiptPreviewUrl} target="_blank" rel="noreferrer">
                   <ReceiptText size={15} />
                   領収書
@@ -85,7 +122,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
               ) : null}
             </div>
           </div>
-        )) : <p>Web予約の購入履歴はまだありません。</p>}
+        )) : <p>{emptyMessage}</p>}
       </div>
     </article>
   );

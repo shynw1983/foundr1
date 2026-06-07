@@ -1572,7 +1572,16 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
         jsonb_agg(
           jsonb_build_object(
             'name', store_customer_order_items.item_name,
-            'quantity', store_customer_order_items.quantity
+            'quantity', store_customer_order_items.quantity,
+            'sizeLabel', store_customer_order_items.size_label,
+            'temperature', store_customer_order_items.temperature,
+            'sweetness', store_customer_order_items.sweetness,
+            'ice', store_customer_order_items.ice,
+            'optionLabel', store_customer_order_items.option_label,
+            'toppingLabels', store_customer_order_items.topping_labels,
+            'measuredQuantity', store_customer_order_items.measured_quantity,
+            'measuredUnit', store_customer_order_items.measured_unit,
+            'amount', store_customer_order_items.amount
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         ) filter (where store_customer_order_items.id is not null),
@@ -1585,7 +1594,6 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     left join stores on stores.id = store_customer_orders.store_id
     left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
     where store_customer_orders.member_id::text = ${memberId}
-      and store_customer_orders.order_source <> 'store_pos'
     group by store_customer_orders.id, brands.name, stores.name, stores.customer_display_names
     order by store_customer_orders.created_at desc
     limit 30
@@ -1606,11 +1614,24 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     brandName: string;
     storeName: string;
     customerDisplayNames?: unknown;
-    items: Array<{ name?: string; quantity?: number }> | null;
+    items: Array<{
+      name?: string;
+      quantity?: number;
+      sizeLabel?: string;
+      temperature?: string;
+      sweetness?: string;
+      ice?: string;
+      optionLabel?: string;
+      toppingLabels?: string[];
+      measuredQuantity?: string | number | null;
+      measuredUnit?: string;
+      amount?: number;
+    }> | null;
     drink: string;
     size: string;
   }>).map((order) => {
-    const receiptEligible = ["paid", "refunded", "partial_refunded"].includes(order.paymentStatus);
+    const isStorePurchase = order.orderSource === "store_pos";
+    const receiptEligible = !isStorePurchase && ["paid", "refunded", "partial_refunded"].includes(order.paymentStatus);
     const receiptParams = new URLSearchParams({
       orderId: order.id,
       pickupCode: order.pickupCode
@@ -1621,13 +1642,27 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
             const name = normalizeText(item?.name);
             if (!name) return "";
             const quantity = Math.max(1, Math.round(Number(item?.quantity) || 1));
-            return `${name} x ${quantity}`;
+            const measuredQuantity = Number(item?.measuredQuantity);
+            const measuredLabel = Number.isFinite(measuredQuantity) && measuredQuantity > 0
+              ? `${measuredQuantity.toLocaleString("ja-JP")} ${normalizeText(item?.measuredUnit)}`
+              : "";
+            const options = [
+              normalizeText(item?.sizeLabel),
+              normalizeText(item?.temperature),
+              normalizeText(item?.sweetness),
+              normalizeText(item?.ice),
+              normalizeText(item?.optionLabel),
+              ...(Array.isArray(item?.toppingLabels) ? item.toppingLabels.map(normalizeText) : [])
+            ].filter(Boolean);
+            const detailLabel = [measuredLabel, ...options].filter(Boolean).join(" / ");
+            return `${name} x ${quantity}${detailLabel ? ` (${detailLabel})` : ""}`;
           })
           .filter(Boolean)
       : [];
     const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
     return {
       ...order,
+      purchaseChannel: isStorePurchase ? "store" : "online",
       storeName: resolveCustomerStoreDisplayName({
         settings: order.customerDisplayNames,
         internalStoreName: order.storeName,

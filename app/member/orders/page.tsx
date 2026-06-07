@@ -115,8 +115,8 @@ export default function MemberOrdersPage() {
       <section className="member-portal-hero member-orders-hero">
         <div>
           <p className="eyebrow">Purchase History</p>
-          <h1>購入履歴・領収書</h1>
-          <span>Web予約の購入履歴と領収書を確認できます。</span>
+          <h1>購入履歴</h1>
+          <span>ネット購入と店舗購入の履歴を確認できます。ネット購入は領収書も表示できます。</span>
         </div>
         {isLoaded && isSignedIn ? (
           <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>
@@ -129,7 +129,7 @@ export default function MemberOrdersPage() {
       {isLoaded && !isSignedIn ? (
         <MemberAuthPanel
           title="購入履歴にログイン"
-          description="メールアドレスに確認コードを送信して、購入履歴と領収書を確認できます。"
+          description="メールアドレスに確認コードを送信して、購入履歴を確認できます。"
           afterAuthUrl="/member/orders"
         />
       ) : null}
