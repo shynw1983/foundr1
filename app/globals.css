@@ -5823,6 +5823,54 @@ body :where(
   color: #f7fafc;
 }
 
+.store-version-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(420px, calc(100vw - 36px));
+  border: 1px solid #d8ded8;
+  border-radius: 8px;
+  padding: 12px 12px 12px 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+  color: var(--ink);
+}
+
+.store-version-notice div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-version-notice strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.store-version-notice span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.store-version-notice button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 7px;
+  padding: 0 12px;
+  background: var(--green);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .store-workbench-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -20890,6 +20938,20 @@ body :where(
   .store-nav-menu summary {
     width: 100%;
     margin-left: auto;
+    padding-inline: 10px;
+  }
+
+  .store-version-notice {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .store-version-notice button {
+    min-height: 36px;
     padding-inline: 10px;
   }
 

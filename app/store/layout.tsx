@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
+import { StoreVersionNotice } from "./components/StoreVersionNotice";
 
 export const metadata: Metadata = {
   title: "Foundr1 STORE",
@@ -23,5 +25,11 @@ export default function StoreLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return children;
+  const version = getAppVersion();
+  return (
+    <>
+      <StoreVersionNotice initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
+      {children}
+    </>
+  );
 }

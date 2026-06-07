@@ -23,6 +23,7 @@ export async function GET(request: Request) {
   return Response.json({
     key: process.env.PUSHER_KEY || "",
     cluster: process.env.PUSHER_CLUSTER || "",
+    versionChannel: "store-version",
     channels: channelStoreIds.map((storeId) => `private-store-orders-${storeId}`)
   }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -1,5 +1,6 @@
 import Pusher from "pusher";
 import { type CustomerOrderRow, toPublicCustomerOrder } from "./customer-orders";
+import { getAppVersion, getShortAppVersion } from "./app-version";
 
 let pusherClient: Pusher | null = null;
 
@@ -38,5 +39,16 @@ export async function publishPosCustomerDisplayEvent(storeId: string, state: Rec
   await pusher.trigger(`private-store-orders-${storeId}`, "pos.customer-display.updated", {
     storeId,
     state
+  });
+}
+
+export async function publishStoreVersionUpdatedEvent(version = getAppVersion()) {
+  const pusher = getPusher();
+  if (!pusher || !version || version === "local") return;
+
+  await pusher.trigger("store-version", "store.version.updated", {
+    version,
+    shortVersion: getShortAppVersion(version),
+    publishedAt: new Date().toISOString()
   });
 }
