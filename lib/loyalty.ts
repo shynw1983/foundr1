@@ -1572,7 +1572,16 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
         jsonb_agg(
           jsonb_build_object(
             'name', store_customer_order_items.item_name,
-            'quantity', store_customer_order_items.quantity
+            'quantity', store_customer_order_items.quantity,
+            'sizeLabel', store_customer_order_items.size_label,
+            'temperature', store_customer_order_items.temperature,
+            'sweetness', store_customer_order_items.sweetness,
+            'ice', store_customer_order_items.ice,
+            'optionLabel', store_customer_order_items.option_label,
+            'toppingLabels', store_customer_order_items.topping_labels,
+            'measuredQuantity', store_customer_order_items.measured_quantity,
+            'measuredUnit', store_customer_order_items.measured_unit,
+            'amount', store_customer_order_items.amount
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         ) filter (where store_customer_order_items.id is not null),
@@ -1605,7 +1614,19 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     brandName: string;
     storeName: string;
     customerDisplayNames?: unknown;
-    items: Array<{ name?: string; quantity?: number }> | null;
+    items: Array<{
+      name?: string;
+      quantity?: number;
+      sizeLabel?: string;
+      temperature?: string;
+      sweetness?: string;
+      ice?: string;
+      optionLabel?: string;
+      toppingLabels?: string[];
+      measuredQuantity?: string | number | null;
+      measuredUnit?: string;
+      amount?: number;
+    }> | null;
     drink: string;
     size: string;
   }>).map((order) => {
@@ -1625,6 +1646,23 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
           })
           .filter(Boolean)
       : [];
+    const itemDetails = Array.isArray(order.items)
+      ? order.items
+          .map((item) => ({
+            name: normalizeText(item?.name),
+            quantity: Math.max(1, Math.round(Number(item?.quantity) || 1)),
+            sizeLabel: normalizeText(item?.sizeLabel),
+            temperature: normalizeText(item?.temperature),
+            sweetness: normalizeText(item?.sweetness),
+            ice: normalizeText(item?.ice),
+            optionLabel: normalizeText(item?.optionLabel),
+            toppingLabels: Array.isArray(item?.toppingLabels) ? item.toppingLabels.map(normalizeText).filter(Boolean) : [],
+            measuredQuantity: item?.measuredQuantity === null || item?.measuredQuantity === undefined ? null : Number(item.measuredQuantity),
+            measuredUnit: normalizeText(item?.measuredUnit),
+            amount: Math.round(Number(item?.amount) || 0)
+          }))
+          .filter((item) => item.name)
+      : [];
     const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
     return {
       ...order,
@@ -1636,6 +1674,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
         platform: orderSourceToCustomerDisplayPlatform(order.orderSource)
       }),
       items: itemLabels.length ? itemLabels : fallbackLabel ? [fallbackLabel] : [],
+      itemDetails: itemDetails.length ? itemDetails : fallbackLabel ? [{ name: fallbackLabel, quantity: 1, sizeLabel: "", temperature: "", sweetness: "", ice: "", optionLabel: "", toppingLabels: [], measuredQuantity: null, measuredUnit: "", amount: order.amount }] : [],
       receiptPreviewUrl: receiptEligible ? `/public/orders/receipt/preview?${receiptParams.toString()}` : "",
       receiptPdfUrl: receiptEligible ? `/api/public/orders/receipt?${receiptParams.toString()}` : ""
     };
