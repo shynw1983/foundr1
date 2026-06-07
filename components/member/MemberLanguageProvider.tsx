@@ -120,7 +120,6 @@ export function MemberLanguageSwitcher() {
   return (
     <label className="member-language-switcher">
       <Globe2 size={16} />
-      <span>Language / 言語 / 语言</span>
       <select value={language} onChange={(event) => setLanguage(event.target.value, { saveRemote: true })} aria-label="Language">
         {memberLanguageOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>

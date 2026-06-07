@@ -10567,7 +10567,7 @@ body :where(
 .member-language-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 42px;
   border: 1px solid var(--member-line);
   border-radius: 999px;
@@ -10575,7 +10575,7 @@ body :where(
   color: var(--member-muted);
   font-size: 12px;
   font-weight: 500;
-  padding: 4px 8px 4px 12px;
+  padding: 4px 8px 4px 10px;
 }
 
 .member-language-switcher svg {
@@ -10584,7 +10584,7 @@ body :where(
 }
 
 .member-language-switcher select {
-  min-width: 112px;
+  min-width: 104px;
   height: 32px;
   border: 0;
   border-radius: 999px;
@@ -12347,14 +12347,7 @@ body :where(
   }
 
   .member-language-switcher {
-    flex: 1 1 190px;
-  }
-
-  .member-language-switcher span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    flex: 0 1 auto;
   }
 
   .member-account-summary-text {
