@@ -573,8 +573,7 @@ export default function StorePosPage() {
   const [refundReason, setRefundReason] = useState("");
   const [refundSaving, setRefundSaving] = useState(false);
   const [refundingTransactionId, setRefundingTransactionId] = useState("");
-  const [refundingItemId, setRefundingItemId] = useState("");
-  const [selectedRefundItemId, setSelectedRefundItemId] = useState("");
+  const [selectedRefundItemIds, setSelectedRefundItemIds] = useState<string[]>([]);
   const [externalRefundConfirmed, setExternalRefundConfirmed] = useState(false);
   const [completedDisplayState, setCompletedDisplayState] = useState<Record<string, unknown> | null>(null);
 
@@ -809,27 +808,29 @@ export default function StorePosPage() {
     selectedTransaction.paymentStatus !== "refunded" &&
     selectedTransaction.cashSessionStatus === "open"
   );
-  const selectedRefundItem = selectedTransaction?.items?.find((item) => item.id === selectedRefundItemId) ?? null;
-  const selectedRefundHasCouponBenefit = Boolean(selectedRefundItem?.couponId) || Number(selectedRefundItem?.couponDiscountAmount ?? 0) > 0;
-  const selectedRefundStoredPaidAmount = Number(selectedRefundItem?.paidAmount ?? 0);
-  const selectedRefundPaidAmount = selectedRefundItem
-    ? selectedRefundStoredPaidAmount > 0
-      ? selectedRefundStoredPaidAmount
-      : selectedRefundHasCouponBenefit
-        ? 0
-        : Number(selectedRefundItem.amount ?? 0)
-    : 0;
-  const canRefundSelectedItem = Boolean(
-    selectedRefundItem &&
-    canRefundSelectedTransaction &&
-    selectedRefundItem.refundStatus !== "refunded" &&
-    (selectedRefundPaidAmount > 0 || selectedRefundHasCouponBenefit)
-  );
+  const getRefundItemState = (item: PosTransactionItem) => {
+    const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
+    const storedPaidAmount = Number(item.paidAmount ?? 0);
+    const paidAmount = storedPaidAmount > 0 ? storedPaidAmount : hasCouponBenefit ? 0 : Number(item.amount ?? 0);
+    const isRefunded = item.refundStatus === "refunded";
+    const canRefund = !isRefunded && (paidAmount > 0 || hasCouponBenefit);
+    return { canRefund, hasCouponBenefit, isRefunded, paidAmount };
+  };
+  const refundableRefundItems = (selectedTransaction?.items ?? []).filter((item) => getRefundItemState(item).canRefund);
+  const selectedRefundItems = refundableRefundItems.filter((item) => selectedRefundItemIds.includes(item.id));
+  const selectedRefundPaidAmount = selectedRefundItems.reduce((sum, item) => sum + getRefundItemState(item).paidAmount, 0);
+  const selectedRefundCouponCount = selectedRefundItems.filter((item) => getRefundItemState(item).hasCouponBenefit).length;
+  const canRefundSelectedItem = Boolean(canRefundSelectedTransaction && selectedRefundItems.length);
   const selectedItemRefundNeedsExternalConfirmation = Boolean(
     selectedTransaction &&
     selectedTransaction.paymentMethod !== "cash" &&
     selectedRefundPaidAmount > 0
   );
+
+  useEffect(() => {
+    setSelectedRefundItemIds(refundableRefundItems.map((item) => item.id));
+  }, [selectedTransaction]);
+
   const openingBreakdownTotal = getCashBreakdownTotal(cashOpeningBreakdown);
   const countedBreakdownTotal = getCashBreakdownTotal(cashCountedBreakdown);
   const openingHandoverDifference = reconciliation.previousClosedSession
@@ -878,7 +879,6 @@ export default function StorePosPage() {
     setSelectedTransaction(null);
     setRefundReason("");
     setRefundingTransactionId("");
-    setRefundingItemId("");
     setExternalRefundConfirmed(false);
     setCompletedDisplayState(null);
     void load(storeId);
@@ -1339,8 +1339,7 @@ export default function StorePosPage() {
       setTransactions(nextTransactions);
       setSelectedTransaction((body.selectedTransaction ?? null) as PosTransaction | null);
       setRefundReason("");
-      setRefundingItemId("");
-      setSelectedRefundItemId("");
+      setSelectedRefundItemIds([]);
       setExternalRefundConfirmed(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "取引履歴を読み込めませんでした。");
@@ -1358,12 +1357,12 @@ export default function StorePosPage() {
     await loadTransactions(orderId);
   }
 
-  async function refundTransaction(itemId = "") {
+  async function refundTransaction(itemIds: string[] = []) {
     if (!selectedStoreId || !selectedTransaction || refundSaving) return;
+    if (!itemIds.length) return;
     const refundingId = selectedTransaction.id;
     setRefundSaving(true);
     setRefundingTransactionId(refundingId);
-    setRefundingItemId(itemId);
     setMessage("");
     try {
       const response = await fetch("/api/store/pos/transactions", {
@@ -1372,7 +1371,7 @@ export default function StorePosPage() {
         body: JSON.stringify({
           storeId: selectedStoreId,
           orderId: refundingId,
-          itemId: itemId || undefined,
+          itemIds,
           reason: refundReason,
           externalRefundConfirmed
         })
@@ -1383,18 +1382,15 @@ export default function StorePosPage() {
       setSelectedTransaction((body.selectedTransaction ?? null) as PosTransaction | null);
       setSummary((current) => ({ ...current, ...(body.todaySummary ?? {}) }));
       setRefundReason("");
-      setSelectedRefundItemId("");
+      setSelectedRefundItemIds([]);
       setExternalRefundConfirmed(false);
       await loadReconciliation(selectedStoreId);
-      setMessage(itemId
-        ? `商品別返金を記録しました。${selectedTransaction.pickupCode} / ${formatYen(body.refundAmount ?? 0)}`
-        : `返金を記録しました。${selectedTransaction.pickupCode} / ${formatYen(selectedTransaction.amount)}`);
+      setMessage(`返品を記録しました。${selectedTransaction.pickupCode} / ${formatYen(body.refundAmount ?? 0)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "返金を保存できませんでした。");
     } finally {
       setRefundSaving(false);
       setRefundingTransactionId("");
-      setRefundingItemId("");
     }
   }
 
@@ -1957,12 +1953,8 @@ export default function StorePosPage() {
                           const weightLabel = item.measuredQuantity && item.measuredUnitPrice
                             ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`
                             : "";
-                          const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
-                          const storedPaidAmount = Number(item.paidAmount ?? 0);
-                          const paidAmount = storedPaidAmount > 0 ? storedPaidAmount : hasCouponBenefit ? 0 : Number(item.amount ?? 0);
-                          const isItemRefunded = item.refundStatus === "refunded";
-                          const canRecordItemReturn = paidAmount > 0 || hasCouponBenefit;
-                          const isSelectedForRefund = selectedRefundItemId === item.id;
+                          const { canRefund: canRecordItemReturn, hasCouponBenefit, isRefunded: isItemRefunded, paidAmount } = getRefundItemState(item);
+                          const isSelectedForRefund = selectedRefundItemIds.includes(item.id);
                           const selectionDisabled = !canRefundSelectedTransaction || refundSaving || isItemRefunded || !canRecordItemReturn;
                           return (
                             <button
@@ -1974,7 +1966,7 @@ export default function StorePosPage() {
                                 !canRecordItemReturn ? "is-static" : ""
                               ].filter(Boolean).join(" ")}
                               type="button"
-                              onClick={() => setSelectedRefundItemId(item.id)}
+                              onClick={() => setSelectedRefundItemIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
                               disabled={selectionDisabled}
                             >
                               <div>
@@ -1994,7 +1986,7 @@ export default function StorePosPage() {
                               </div>
                               <div className="store-pos-transaction-item-actions">
                                 <b>{formatYen(paidAmount)}</b>
-                                <small>{isSelectedForRefund ? "選択中" : canRecordItemReturn ? "タップして選択" : "返金対象外"}</small>
+                                <small>{isSelectedForRefund ? "返品する" : canRecordItemReturn ? "保留" : "返金対象外"}</small>
                               </div>
                             </button>
                           );
@@ -2016,7 +2008,7 @@ export default function StorePosPage() {
                             ? "返金を処理しています。画面を閉じずにお待ちください。"
                             : canRefundSelectedTransaction
                             ? selectedTransaction.paymentMethod === "cash"
-                              ? "商品別返金、または会計全体の返金を記録できます。"
+                              ? "返品しない商品は上の商品明細で外してください。"
                               : "外部決済は端末側の返金完了を確認してから記録してください。"
                             : selectedTransaction.cashSessionStatus !== "open"
                               ? "締め済みのレジ会計は管理画面で修正してください。"
@@ -2035,13 +2027,13 @@ export default function StorePosPage() {
                         </label>
                       ) : null}
                       {selectedTransaction.refundReason ? <small>返金理由: {selectedTransaction.refundReason}</small> : null}
-                      <div className={selectedRefundItem ? "store-pos-selected-refund-item is-selected" : "store-pos-selected-refund-item"}>
-                        <span>選択中の商品</span>
-                        <strong>{selectedRefundItem ? selectedRefundItem.name : "商品を選択してください"}</strong>
+                      <div className={selectedRefundItems.length ? "store-pos-selected-refund-item is-selected" : "store-pos-selected-refund-item"}>
+                        <span>返品対象</span>
+                        <strong>{selectedRefundItems.length ? `${selectedRefundItems.length} 件を返品` : "返品する商品がありません"}</strong>
                         <small>
-                          {selectedRefundItem
-                            ? `${selectedRefundPaidAmount > 0 ? `返金 ${formatYen(selectedRefundPaidAmount)}` : "返金なし"}${selectedRefundHasCouponBenefit ? " / クーポン自動復元" : ""}`
-                            : "上の商品明細から、返品する商品を選んでください。"}
+                          {selectedRefundItems.length
+                            ? `${selectedRefundPaidAmount > 0 ? `返金 ${formatYen(selectedRefundPaidAmount)}` : "返金なし"}${selectedRefundCouponCount ? ` / クーポン ${selectedRefundCouponCount}件を自動復元` : ""}`
+                            : "返品しない商品だけを残し、返品する商品を選択状態にしてください。"}
                         </small>
                       </div>
                       <label>
@@ -2051,28 +2043,16 @@ export default function StorePosPage() {
                       <button
                         className="danger-button"
                         type="button"
-                        onClick={() => selectedRefundItem ? void refundTransaction(selectedRefundItem.id) : undefined}
+                        onClick={() => void refundTransaction(selectedRefundItems.map((item) => item.id))}
                         disabled={!canRefundSelectedItem || refundSaving || (selectedItemRefundNeedsExternalConfirmation && !externalRefundConfirmed)}
                       >
-                        {selectedRefundItem && refundSaving && refundingItemId === selectedRefundItem.id
-                          ? "商品返金処理中..."
-                          : selectedRefundItem
+                        {refundSaving && refundingTransactionId === selectedTransaction.id
+                          ? "返品処理中..."
+                          : selectedRefundItems.length
                             ? selectedRefundPaidAmount > 0
                               ? "選択した商品を返金"
-                              : "選択した返品を記録"
-                            : "商品を選択してください"}
-                      </button>
-                      <button
-                        className="danger-button"
-                        type="button"
-                        onClick={() => void refundTransaction()}
-                        disabled={!canRefundSelectedTransaction || refundSaving || (selectedTransaction.paymentMethod !== "cash" && !externalRefundConfirmed)}
-                      >
-                        {refundSaving && refundingTransactionId === selectedTransaction.id
-                          ? "返金処理中..."
-                          : canRefundSelectedTransaction
-                            ? "会計全体を返金"
-                            : "返金済み"}
+                              : "返品を記録"
+                            : "返品する商品がありません"}
                       </button>
                     </div>
                   </>

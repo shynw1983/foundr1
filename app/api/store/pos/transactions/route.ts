@@ -150,9 +150,12 @@ export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; orderId?: string; itemId?: string; reason?: string; externalRefundConfirmed?: boolean };
+  const body = await request.json().catch(() => ({})) as { storeId?: string; orderId?: string; itemId?: string; itemIds?: string[]; reason?: string; externalRefundConfirmed?: boolean };
   const orderId = normalizeText(body.orderId);
-  const itemId = normalizeText(body.itemId);
+  const itemIds = Array.from(new Set([
+    ...(Array.isArray(body.itemIds) ? body.itemIds : []),
+    body.itemId
+  ].map((id) => normalizeText(id)).filter(Boolean)));
   const reason = normalizeText(body.reason);
   if (!orderId) return Response.json({ error: "会計を選択してください。" }, { status: 400 });
 
@@ -185,7 +188,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "締め済みのレジ会計は店舗 POS から返金できません。管理画面で修正してください。" }, { status: 400 });
   }
 
-  if (itemId) {
+  if (itemIds.length) {
     const itemRows = await sql`
       select
         id::text,
@@ -196,18 +199,21 @@ export async function POST(request: Request) {
         coalesce(coupon_id::text, '') as "couponId",
         coalesce(refund_status, '') as "refundStatus"
       from store_customer_order_items
-      where id::text = ${itemId}
+      where id::text = any(${itemIds})
         and order_id::text = ${orderId}
-      limit 1
     `;
-    const item = itemRows[0] as { id: string; quantity: number; amount: number; paidAmount: number; couponDiscountAmount: number; couponId: string; refundStatus: string } | undefined;
-    if (!item) return Response.json({ error: "返金する商品が見つかりません。" }, { status: 404 });
-    if (item.refundStatus === "refunded") return Response.json({ error: "この商品はすでに返金済みです。" }, { status: 400 });
-    const refundAmount = Math.max(0, Math.round(Number(item.paidAmount) || 0));
-    const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
-    if (refundAmount <= 0 && !hasCouponBenefit) {
-      return Response.json({ error: "この商品には返金またはクーポン復元の対象がありません。" }, { status: 400 });
+    const items = itemRows as { id: string; quantity: number; amount: number; paidAmount: number; couponDiscountAmount: number; couponId: string; refundStatus: string }[];
+    if (items.length !== itemIds.length) return Response.json({ error: "返金する商品が見つかりません。" }, { status: 404 });
+    if (items.some((item) => item.refundStatus === "refunded")) return Response.json({ error: "返金済みの商品が含まれています。" }, { status: 400 });
+    const refundableItems = items.map((item) => {
+      const refundAmount = Math.max(0, Math.round(Number(item.paidAmount) || 0));
+      const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
+      return { ...item, refundAmount, hasCouponBenefit };
+    });
+    if (refundableItems.some((item) => item.refundAmount <= 0 && !item.hasCouponBenefit)) {
+      return Response.json({ error: "返金またはクーポン復元の対象外の商品が含まれています。" }, { status: 400 });
     }
+    const refundAmount = refundableItems.reduce((sum, item) => sum + item.refundAmount, 0);
     if (target.paymentMethod !== "cash" && refundAmount > 0 && body.externalRefundConfirmed !== true) {
       return Response.json({ error: "外部決済端末で返金操作を完了してから、外部返金済みにチェックしてください。" }, { status: 400 });
     }
@@ -216,17 +222,17 @@ export async function POST(request: Request) {
       set
         refund_status = 'refunded',
         refunded_quantity = quantity,
-        refunded_amount = ${refundAmount},
+        refunded_amount = coalesce(nullif(paid_amount, 0), case when coupon_discount_amount > 0 then 0 else amount end),
         refund_reason = ${reason},
         external_refund_confirmed_at = case when ${target.paymentMethod !== "cash" && refundAmount > 0} then now() else external_refund_confirmed_at end,
         refunded_at = now(),
         refunded_by = ${session.id}
-      where id::text = ${itemId}
+      where id::text = any(${itemIds})
         and order_id::text = ${orderId}
         and coalesce(refund_status, '') <> 'refunded'
       returning id::text
     `;
-    if (!itemUpdateRows[0]?.id) return Response.json({ error: "商品別返金を保存できませんでした。" }, { status: 500 });
+    if (itemUpdateRows.length !== itemIds.length) return Response.json({ error: "商品別返金を保存できませんでした。" }, { status: 500 });
     const openItemRows = await sql`
       select count(*)::int as count
       from store_customer_order_items
@@ -245,7 +251,7 @@ export async function POST(request: Request) {
         cancelled_at = case when ${allItemsRefunded} then coalesce(cancelled_at, now()) else cancelled_at end,
         customer_summary = customer_summary || ${JSON.stringify({
           lastRefundReason: reason,
-          lastRefundedItemId: itemId,
+          lastRefundedItemIds: itemIds,
           lastRefundAmount: refundAmount,
           lastRefundedById: session.id,
           lastRefundedByName: session.name,
@@ -254,20 +260,22 @@ export async function POST(request: Request) {
         updated_at = now()
       where id::text = ${orderId}
     `;
-    await reverseLoyaltyForRefundedOrderItem({
-      orderId,
-      itemId,
-      paidAmount: refundAmount,
-      couponId: item.couponId,
-      note: "商品別返金による会員特典取消"
-    });
+    for (const item of refundableItems) {
+      await reverseLoyaltyForRefundedOrderItem({
+        orderId,
+        itemId: item.id,
+        paidAmount: item.refundAmount,
+        couponId: item.couponId,
+        note: "商品別返金による会員特典取消"
+      });
+    }
     await syncWebReservationToSalesOrder(orderId);
     const [transactions, selectedTransaction, todaySummary] = await Promise.all([
       getTransactions(storeFilter),
       getTransactionDetail(storeFilter, orderId),
       getTodaySummary(storeFilter)
     ]);
-    return Response.json({ ok: true, transactions, selectedTransaction, todaySummary, refundAmount });
+    return Response.json({ ok: true, transactions, selectedTransaction, todaySummary, refundAmount, refundedItemIds: itemIds });
   }
 
   if (target.paymentMethod !== "cash" && body.externalRefundConfirmed !== true) {
