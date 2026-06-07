@@ -116,7 +116,7 @@ export default function MemberOrdersPage() {
         <div>
           <p className="eyebrow">Purchase History</p>
           <h1>購入履歴</h1>
-          <span>ネット予約と実店舗購入の履歴を確認できます。ネット予約は領収書も表示できます。</span>
+          <span>Web予約と実店舗購入の履歴を確認できます。Web予約は領収書も表示できます。</span>
         </div>
         {isLoaded && isSignedIn ? (
           <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>

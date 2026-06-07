@@ -68,6 +68,8 @@ Keep Japanese UI terminology consistent.
 - Use `レシート` for receipts. Do not use `小票`.
 - Use `発注先` for supplier/order destination in Japanese UI.
 - Use `メイン発注先`, `予備発注先`, and `臨時発注先` for supplier roles.
+- Use `Web予約` for customer-facing online pickup reservations. Do not use `ネット予約`.
+- Use `キャンセル` / `キャンセル済み` for customer-facing order cancellation status. Do not use `取消` / `取消済み` for order status labels.
 
 Do not reintroduce mixed terms such as using `仕入れ` for the primary flow unless the business owner explicitly changes the vocabulary again.
 

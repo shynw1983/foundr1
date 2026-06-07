@@ -40,7 +40,7 @@ function formatPickupDate(value: string) {
 }
 
 function orderStatusLabel(order: MemberOrderHistory) {
-  if (order.paymentStatus === "refunded" || order.status === "cancelled") return "取消済み";
+  if (order.paymentStatus === "refunded" || order.status === "cancelled") return "キャンセル済み";
   if (order.paymentStatus === "partial_refunded" || order.paymentRefundStatus === "partial") return "一部返金済み";
   if (order.paymentStatus === "paid") return "支払い済み";
   if (order.paymentStatus === "pending") return "支払い待ち";
@@ -72,7 +72,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
     store: (orders ?? []).filter((order) => getPurchaseChannel(order) === "store")
   }), [orders]);
   const visibleOrders = groupedOrders[activeTab];
-  const emptyMessage = activeTab === "online" ? "ネット予約の履歴はまだありません。" : "実店舗購入の履歴はまだありません。";
+  const emptyMessage = activeTab === "online" ? "Web予約の履歴はまだありません。" : "実店舗購入の履歴はまだありません。";
 
   return (
     <article className={`member-portal-panel member-order-panel${compact ? " is-compact" : ""}`}>
@@ -88,7 +88,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
           className={activeTab === "online" ? "is-active" : ""}
           onClick={() => setActiveTab("online")}
         >
-          ネット予約
+          Web予約
           <span>{groupedOrders.online.length}</span>
         </button>
         <button
