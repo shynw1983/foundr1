@@ -807,6 +807,15 @@ export default function StorePosPage() {
     canUseRegister &&
     (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= payableAmount))
   );
+  const hasCurrentTransaction = Boolean(
+    cart.length > 0 ||
+    selectedMember ||
+    memberLookupInput.trim() ||
+    cashTenderedAmount.trim() ||
+    note.trim() ||
+    discountPresetKey ||
+    selectedCouponId
+  );
   const canRefundSelectedTransaction = Boolean(
     selectedTransaction &&
     selectedTransaction.status !== "cancelled" &&
@@ -982,6 +991,46 @@ export default function StorePosPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storeId: selectedStoreId, state })
     }).catch(() => undefined);
+  }
+
+  function getAdvertisingDisplayState() {
+    return {
+      status: "advertising",
+      storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
+      orderType: "",
+      paymentMethod: "cash",
+      paymentLabel: "現金",
+      externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
+      pickupCode: "",
+      preferredLanguage: "",
+      memberDisplayName: "",
+      memberMessage: "",
+      subtotal: 0,
+      cashTenderedAmount: null,
+      cashChangeAmount: null,
+      items: []
+    };
+  }
+
+  function cancelCurrentTransaction() {
+    if (!hasCurrentTransaction || saving) return;
+    setCart([]);
+    setCashTenderedAmount("");
+    setMemberLookupInput("");
+    setSelectedMember(null);
+    setMemberCoupons([]);
+    setSelectedCouponId("");
+    setCustomerSelectedCouponId("");
+    setDiscountPresetKey("");
+    setPaymentMethod("cash");
+    setNote("");
+    setConfiguringItem(null);
+    setOptionDraft({});
+    setWeightDraft("");
+    setCompletedDisplayState(null);
+    setCustomerDisplayMode("advertising");
+    setMessage("現在の会計を中止しました。");
+    void publishCustomerDisplayState(getAdvertisingDisplayState());
   }
 
   function getLineBasePrice(item: PosCartItem) {
@@ -1255,22 +1304,7 @@ export default function StorePosPage() {
       const timer = window.setTimeout(() => {
         setCompletedDisplayState(null);
         setCustomerDisplayMode("advertising");
-        void publishCustomerDisplayState({
-          status: "advertising",
-          storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
-          orderType: "",
-          paymentMethod: "cash",
-          paymentLabel: "現金",
-          externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
-          pickupCode: "",
-          preferredLanguage: "",
-          memberDisplayName: "",
-          memberMessage: "",
-          subtotal: 0,
-          cashTenderedAmount: null,
-          cashChangeAmount: null,
-          items: []
-        });
+        void publishCustomerDisplayState(getAdvertisingDisplayState());
       }, 9000);
       return () => window.clearTimeout(timer);
     }
@@ -1883,9 +1917,14 @@ export default function StorePosPage() {
               </>
             ) : null}
           </div>
-          <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={!canCheckout}>
-            {saving ? "保存中..." : "会計を確定"}
-          </button>
+          <div className="store-pos-checkout-actions">
+            <button className="danger-button store-pos-cancel-transaction" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>
+              会計を中止
+            </button>
+            <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={!canCheckout}>
+              {saving ? "保存中..." : "会計を確定"}
+            </button>
+          </div>
         </aside>
       </section>
 

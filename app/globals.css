@@ -8162,6 +8162,18 @@ body :where(
   min-height: 52px;
 }
 
+.store-pos-checkout-actions {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.store-pos-cancel-transaction,
+.store-pos-checkout-actions .store-pos-checkout {
+  width: 100%;
+  min-height: 52px;
+}
+
 .store-pos-page {
   color: #1f2933;
 }
@@ -8318,6 +8330,11 @@ body :where(
 }
 
 .store-pos-checkout {
+  min-height: 46px;
+}
+
+.store-pos-cancel-transaction,
+.store-pos-checkout-actions .store-pos-checkout {
   min-height: 46px;
 }
 
