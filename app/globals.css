@@ -8498,11 +8498,16 @@ body :where(
 }
 
 .customer-display-topbar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: clamp(28px, 5vw, 78px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
   min-width: 0;
+  min-height: 112px;
+  border-radius: 8px;
+  padding: 14px 22px;
+  background: #171717;
+  color: #f8f8f4;
 }
 
 .customer-display-topbar h1 {
@@ -8511,15 +8516,52 @@ body :where(
 }
 
 .customer-display-topbar h1 {
-  color: #565650;
-  font-size: clamp(18px, 2.6vh, 30px);
+  color: #f8f8f4;
+  font-size: clamp(18px, 2.4vh, 28px);
   font-weight: 400;
-  line-height: 1.18;
+  line-height: 1.15;
 }
 
 .customer-display-status-title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
   min-width: 0;
-  padding-top: clamp(10px, 1.8vh, 22px);
+  max-width: min(48vw, 520px);
+  margin-left: auto;
+  padding-top: 4px;
+}
+
+.customer-display-status-title > span {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(248, 248, 244, 0.52);
+}
+
+.customer-display-status-title.is-cash_change > span,
+.customer-display-status-title.is-external_wait > span {
+  background: #f8f8f4;
+}
+
+.customer-display-status-title h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-display-topbar .customer-display-clock {
+  color: #f8f8f4;
+}
+
+.customer-display-topbar .customer-display-clock span {
+  font-size: clamp(54px, 8.4vh, 104px);
+}
+
+.customer-display-topbar .customer-display-clock small {
+  color: rgba(248, 248, 244, 0.58);
 }
 
 .customer-display-menu select {
@@ -8850,17 +8892,21 @@ body :where(
   }
 
   .customer-display-topbar {
-    grid-template-columns: auto minmax(0, 1fr);
     align-items: flex-start;
-    gap: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .customer-display-status-title {
-    padding-top: 8px;
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+    margin-left: 0;
+    padding: 8px 12px;
   }
 
   .customer-display-topbar h1 {
-    font-size: clamp(16px, 3.8vw, 22px);
+    font-size: 16px;
   }
 
   .customer-display-layout {

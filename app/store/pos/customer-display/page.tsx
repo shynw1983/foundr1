@@ -100,6 +100,8 @@ export default function CustomerDisplayPage() {
   const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";
+  const topStatusLabel = getStatusLabel(state);
+  const showTopStatus = true;
   const clockLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
@@ -290,9 +292,12 @@ export default function CustomerDisplayPage() {
           <span>{clockLabel}</span>
           <small>{clockSubLabel}</small>
         </div>
-        <div className="customer-display-status-title">
-          <h1>{getStatusLabel(state)}</h1>
-        </div>
+        {showTopStatus ? (
+          <div className={`customer-display-status-title is-${state.status || "idle"}`}>
+            <span />
+            <h1>{topStatusLabel}</h1>
+          </div>
+        ) : null}
       </header>
 
       {message ? <div className="customer-display-message">{message}</div> : null}
