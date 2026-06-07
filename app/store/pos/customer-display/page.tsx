@@ -83,6 +83,7 @@ export default function CustomerDisplayPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "polling">("connecting");
   const selectedStoreIdRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -123,10 +124,87 @@ export default function CustomerDisplayPage() {
     const interval = window.setInterval(() => {
       const currentStoreId = new URLSearchParams(window.location.search).get("storeId") || selectedStoreIdRef.current || getStoredStoreSelection();
       void load(currentStoreId);
-    }, 1200);
+    }, realtimeStatus === "connected" ? 60000 : 1200);
     return () => window.clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [realtimeStatus]);
+
+  useEffect(() => {
+    let pusher: any;
+    let channels: any[] = [];
+    let active = true;
+    const storeId = selectedStoreId;
+    if (!storeId) {
+      setRealtimeStatus("polling");
+      return () => {
+        active = false;
+      };
+    }
+
+    const refreshDisplay = (payload?: { storeId?: string; state?: Partial<DisplayState> }) => {
+      if (payload?.storeId && payload.storeId !== selectedStoreIdRef.current) return;
+      if (payload?.state) {
+        setState({ ...idleState, ...payload.state });
+        setMessage("");
+        setLoading(false);
+        return;
+      }
+      void load(selectedStoreIdRef.current);
+    };
+
+    setRealtimeStatus("connecting");
+    fetch(`/api/store/realtime-config?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (config) => {
+        if (!active) return;
+        if (!config?.key || !config?.cluster || !config?.channels?.length) {
+          setRealtimeStatus("polling");
+          return;
+        }
+        const { default: Pusher } = await import("pusher-js");
+        if (!active) return;
+        pusher = new Pusher(config.key, {
+          cluster: config.cluster,
+          channelAuthorization: {
+            endpoint: "/api/store/realtime-auth",
+            transport: "ajax"
+          }
+        });
+        pusher.connection.bind("unavailable", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("failed", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        pusher.connection.bind("disconnected", () => {
+          if (active) setRealtimeStatus("polling");
+        });
+        channels = config.channels.map((channelName: string) => {
+          const channel = pusher.subscribe(channelName);
+          channel.bind("pusher:subscription_succeeded", () => {
+            if (active) setRealtimeStatus("connected");
+          });
+          channel.bind("pusher:subscription_error", () => {
+            if (active) setRealtimeStatus("polling");
+          });
+          channel.bind("pos.customer-display.updated", refreshDisplay);
+          return channel;
+        });
+      })
+      .catch(() => {
+        if (active) setRealtimeStatus("polling");
+      });
+
+    return () => {
+      active = false;
+      channels.forEach((channel) => {
+        channel.unbind("pos.customer-display.updated", refreshDisplay);
+        pusher?.unsubscribe(channel.name);
+      });
+      pusher?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
 
   function handleStoreChange(storeId: string) {
     setSelectedStoreId(storeId);
@@ -163,7 +241,7 @@ export default function CustomerDisplayPage() {
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             全画面・常時点灯 ON
           </button>
-          <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
+          <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"} / 同期 {realtimeStatus === "connected" ? "リアルタイム" : "自動更新"}</small>
           <a className="secondary-button" href="/store/pos">POS</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/os/logout">ログアウト</a>
@@ -186,7 +264,7 @@ export default function CustomerDisplayPage() {
           <h1>{getStatusLabel(state)}</h1>
         </div>
         <div className="customer-display-sync">
-          <span>{state.updatedLabel ? `更新 ${state.updatedLabel}` : "同期待ち"}</span>
+          <span>{state.updatedLabel ? `更新 ${state.updatedLabel}` : "同期待ち"} / {realtimeStatus === "connected" ? "リアルタイム" : "自動更新"}</span>
           <button type="button" onClick={() => void load(selectedStoreIdRef.current)} aria-label="更新">
             <RefreshCw size={18} />
           </button>

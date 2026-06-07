@@ -1,6 +1,7 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
 import { sql } from "../../../../../lib/db";
+import { publishPosCustomerDisplayEvent } from "../../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -179,5 +180,8 @@ export async function POST(request: Request) {
       updated_at = now()
   `;
 
-  return Response.json({ ok: true, selectedStoreId, state: await getDisplayState(selectedStoreId) });
+  const nextState = await getDisplayState(selectedStoreId);
+  await publishPosCustomerDisplayEvent(selectedStoreId, nextState).catch(() => undefined);
+
+  return Response.json({ ok: true, selectedStoreId, state: nextState });
 }

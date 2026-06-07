@@ -30,3 +30,13 @@ export async function publishCustomerOrderEvent(eventName: "order.created" | "or
     pusher.trigger(`order-${order.id}`, eventName, { order: toPublicCustomerOrder(order) })
   ]);
 }
+
+export async function publishPosCustomerDisplayEvent(storeId: string, state: Record<string, unknown>) {
+  const pusher = getPusher();
+  if (!pusher || !storeId) return;
+
+  await pusher.trigger(`private-store-orders-${storeId}`, "pos.customer-display.updated", {
+    storeId,
+    state
+  });
+}
