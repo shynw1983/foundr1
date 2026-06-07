@@ -8436,30 +8436,38 @@ body :where(
 .customer-display-clock {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: 4px;
   color: #171717;
   letter-spacing: 0;
 }
 
 .customer-display-clock span {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(32px, 6vh, 72px);
+  font-size: clamp(52px, 9vh, 112px);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
-  line-height: 0.92;
+  line-height: 0.88;
 }
 
 .customer-display-clock small {
   color: #8a8a84;
-  font-size: clamp(11px, 1.6vh, 15px);
+  font-size: clamp(13px, 1.9vh, 18px);
   font-weight: 400;
   line-height: 1.2;
 }
 
 .customer-display-advertising .customer-display-clock {
   position: absolute;
-  top: 28px;
-  left: 30px;
+  top: 34px;
+  left: 38px;
+}
+
+.customer-display-advertising .customer-display-clock span {
+  font-size: clamp(72px, 13vh, 168px);
+}
+
+.customer-display-advertising .customer-display-clock small {
+  font-size: clamp(15px, 2.4vh, 24px);
 }
 
 .customer-display-advertising-copy {
