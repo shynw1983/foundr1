@@ -124,6 +124,10 @@ export function MemberAuthPanel({
   const codeDigits = Array.from({ length: codeLength }, (_, index) => code[index] || "");
   const codeReady = authStep === "code";
   const codePreparing = authStep === "preparing_code";
+  const headingTitle = authStep === "profile" ? "会員登録を完了" : title;
+  const headingDescription = authStep === "profile"
+    ? "確認コードの認証が完了しました。続いて会員情報を入力してください。"
+    : description;
 
   function focusCodeInput(index: number) {
     codeInputRefs.current[index]?.focus();
@@ -329,8 +333,8 @@ export function MemberAuthPanel({
           <span><KeyRound size={20} /></span>
           <div>
             <p className="eyebrow">Foundr1 Member</p>
-            <h2>{title}</h2>
-            <p>{description}</p>
+            <h2>{headingTitle}</h2>
+            <p>{headingDescription}</p>
           </div>
         </div>
         <div id="clerk-captcha" className="member-auth-captcha" />
