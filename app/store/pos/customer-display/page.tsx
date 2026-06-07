@@ -102,19 +102,281 @@ function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
 
-function getStatusLabel(state: DisplayState) {
-  if (state.status === "advertising") return "いらっしゃいませ";
-  if (state.status === "complete") return "決済完了";
-  if (state.status === "cash_change") return "お釣りをお受け取りください";
-  if (state.status === "external_wait") return "端末でお支払いください";
-  if (state.items.length > 0) return "注文内容をご確認ください";
-  return "いらっしゃいませ";
+type DisplayLanguage = "ja" | "zh" | "zh-Hant" | "en" | "ko" | "vi" | "ne";
+
+const customerDisplayText: Record<DisplayLanguage, {
+  welcome: string;
+  welcomeBody: string;
+  completed: string;
+  thanks: string;
+  thanksBody: string;
+  cashChange: string;
+  externalWait: string;
+  confirmOrder: string;
+  orderSection: string;
+  itemCount: string;
+  loading: string;
+  waitingOrder: string;
+  moreItems: string;
+  pickupCode: string;
+  counterCheckout: string;
+  payment: string;
+  total: string;
+  discountApplied: string;
+  couponApplied: string;
+  cashTendered: string;
+  change: string;
+  shortage: string;
+  terminalDefault: string;
+  terminalInstruction: string;
+  terminalMethods: string;
+  memberMessage: string;
+  eatIn: string;
+  takeout: string;
+  cash: string;
+}> = {
+  ja: {
+    welcome: "Welcome",
+    welcomeBody: "ご来店ありがとうございます",
+    completed: "決済完了",
+    thanks: "ありがとうございました",
+    thanksBody: "またのご来店をお待ちしております",
+    cashChange: "お釣りをお受け取りください",
+    externalWait: "端末でお支払いください",
+    confirmOrder: "注文内容をご確認ください",
+    orderSection: "ご注文内容",
+    itemCount: "点",
+    loading: "読み込み中...",
+    waitingOrder: "ご注文をお待ちしています。",
+    moreItems: "ほか",
+    pickupCode: "番号",
+    counterCheckout: "店頭会計",
+    payment: "お支払い",
+    total: "合計",
+    discountApplied: "割引適用",
+    couponApplied: "クーポン適用",
+    cashTendered: "お預り",
+    change: "お釣り",
+    shortage: "不足",
+    terminalDefault: "決済端末",
+    terminalInstruction: "決済端末でお支払いください",
+    terminalMethods: "カード・電子マネー・QR 決済",
+    memberMessage: "いつもご利用いただきありがとうございます。",
+    eatIn: "店内",
+    takeout: "持ち帰り",
+    cash: "現金"
+  },
+  zh: {
+    welcome: "Welcome",
+    welcomeBody: "感谢光临",
+    completed: "支付完成",
+    thanks: "谢谢惠顾",
+    thanksBody: "期待您的再次光临",
+    cashChange: "请收取找零",
+    externalWait: "请在终端完成支付",
+    confirmOrder: "请确认订单内容",
+    orderSection: "订单内容",
+    itemCount: "件",
+    loading: "加载中...",
+    waitingOrder: "正在等待点单。",
+    moreItems: "另有",
+    pickupCode: "号码",
+    counterCheckout: "店内结账",
+    payment: "支付方式",
+    total: "合计",
+    discountApplied: "已应用折扣",
+    couponApplied: "已应用优惠券",
+    cashTendered: "已收款",
+    change: "找零",
+    shortage: "不足",
+    terminalDefault: "支付终端",
+    terminalInstruction: "请在支付终端完成支付",
+    terminalMethods: "银行卡・电子钱包・二维码支付",
+    memberMessage: "感谢您一直以来的支持。",
+    eatIn: "店内",
+    takeout: "外带",
+    cash: "现金"
+  },
+  "zh-Hant": {
+    welcome: "Welcome",
+    welcomeBody: "感謝光臨",
+    completed: "付款完成",
+    thanks: "謝謝惠顧",
+    thanksBody: "期待您的再次光臨",
+    cashChange: "請收取找零",
+    externalWait: "請在終端完成付款",
+    confirmOrder: "請確認訂單內容",
+    orderSection: "訂單內容",
+    itemCount: "件",
+    loading: "載入中...",
+    waitingOrder: "正在等待點單。",
+    moreItems: "另有",
+    pickupCode: "號碼",
+    counterCheckout: "店內結帳",
+    payment: "付款方式",
+    total: "合計",
+    discountApplied: "已套用折扣",
+    couponApplied: "已套用優惠券",
+    cashTendered: "已收款",
+    change: "找零",
+    shortage: "不足",
+    terminalDefault: "支付終端",
+    terminalInstruction: "請在支付終端完成付款",
+    terminalMethods: "信用卡・電子錢包・QR 付款",
+    memberMessage: "感謝您一直以來的支持。",
+    eatIn: "店內",
+    takeout: "外帶",
+    cash: "現金"
+  },
+  en: {
+    welcome: "Welcome",
+    welcomeBody: "Thank you for visiting us",
+    completed: "Payment complete",
+    thanks: "Thank you",
+    thanksBody: "We look forward to seeing you again",
+    cashChange: "Please take your change",
+    externalWait: "Please pay at the terminal",
+    confirmOrder: "Please check your order",
+    orderSection: "Order details",
+    itemCount: "items",
+    loading: "Loading...",
+    waitingOrder: "Waiting for your order.",
+    moreItems: "more",
+    pickupCode: "No.",
+    counterCheckout: "Counter checkout",
+    payment: "Payment",
+    total: "Total",
+    discountApplied: "Discount applied",
+    couponApplied: "Coupon applied",
+    cashTendered: "Received",
+    change: "Change",
+    shortage: "Short",
+    terminalDefault: "Payment terminal",
+    terminalInstruction: "Please pay at the terminal",
+    terminalMethods: "Card, e-money, or QR payment",
+    memberMessage: "Thank you for your continued support.",
+    eatIn: "Eat in",
+    takeout: "Takeout",
+    cash: "Cash"
+  },
+  ko: {
+    welcome: "Welcome",
+    welcomeBody: "방문해 주셔서 감사합니다",
+    completed: "결제 완료",
+    thanks: "감사합니다",
+    thanksBody: "또 방문해 주세요",
+    cashChange: "거스름돈을 받아 주세요",
+    externalWait: "단말기에서 결제해 주세요",
+    confirmOrder: "주문 내용을 확인해 주세요",
+    orderSection: "주문 내용",
+    itemCount: "개",
+    loading: "불러오는 중...",
+    waitingOrder: "주문을 기다리고 있습니다.",
+    moreItems: "외",
+    pickupCode: "번호",
+    counterCheckout: "매장 결제",
+    payment: "결제",
+    total: "합계",
+    discountApplied: "할인 적용",
+    couponApplied: "쿠폰 적용",
+    cashTendered: "받은 금액",
+    change: "거스름돈",
+    shortage: "부족",
+    terminalDefault: "결제 단말기",
+    terminalInstruction: "결제 단말기에서 결제해 주세요",
+    terminalMethods: "카드・전자머니・QR 결제",
+    memberMessage: "항상 이용해 주셔서 감사합니다.",
+    eatIn: "매장",
+    takeout: "포장",
+    cash: "현금"
+  },
+  vi: {
+    welcome: "Welcome",
+    welcomeBody: "Cảm ơn quý khách đã ghé thăm",
+    completed: "Thanh toán hoàn tất",
+    thanks: "Xin cảm ơn",
+    thanksBody: "Hẹn gặp lại quý khách",
+    cashChange: "Vui lòng nhận tiền thừa",
+    externalWait: "Vui lòng thanh toán tại thiết bị",
+    confirmOrder: "Vui lòng kiểm tra đơn hàng",
+    orderSection: "Nội dung đơn hàng",
+    itemCount: "món",
+    loading: "Đang tải...",
+    waitingOrder: "Đang chờ đơn hàng.",
+    moreItems: "món khác",
+    pickupCode: "Số",
+    counterCheckout: "Thanh toán tại quầy",
+    payment: "Thanh toán",
+    total: "Tổng cộng",
+    discountApplied: "Đã áp dụng giảm giá",
+    couponApplied: "Đã áp dụng phiếu ưu đãi",
+    cashTendered: "Đã nhận",
+    change: "Tiền thừa",
+    shortage: "Thiếu",
+    terminalDefault: "Thiết bị thanh toán",
+    terminalInstruction: "Vui lòng thanh toán tại thiết bị",
+    terminalMethods: "Thẻ, tiền điện tử hoặc QR",
+    memberMessage: "Cảm ơn quý khách luôn ủng hộ.",
+    eatIn: "Ăn tại quán",
+    takeout: "Mang đi",
+    cash: "Tiền mặt"
+  },
+  ne: {
+    welcome: "Welcome",
+    welcomeBody: "आउनु भएकोमा धन्यवाद",
+    completed: "भुक्तानी पूरा भयो",
+    thanks: "धन्यवाद",
+    thanksBody: "फेरि भेट्ने आशा छ",
+    cashChange: "कृपया फिर्ता रकम लिनुहोस्",
+    externalWait: "कृपया टर्मिनलमा भुक्तानी गर्नुहोस्",
+    confirmOrder: "कृपया अर्डर जाँच गर्नुहोस्",
+    orderSection: "अर्डर विवरण",
+    itemCount: "वटा",
+    loading: "लोड हुँदै...",
+    waitingOrder: "अर्डरको प्रतीक्षा गर्दै।",
+    moreItems: "थप",
+    pickupCode: "नं.",
+    counterCheckout: "काउन्टर भुक्तानी",
+    payment: "भुक्तानी",
+    total: "जम्मा",
+    discountApplied: "छुट लागू",
+    couponApplied: "कुपन लागू",
+    cashTendered: "प्राप्त रकम",
+    change: "फिर्ता रकम",
+    shortage: "अपुरो",
+    terminalDefault: "भुक्तानी टर्मिनल",
+    terminalInstruction: "कृपया टर्मिनलमा भुक्तानी गर्नुहोस्",
+    terminalMethods: "कार्ड, ई-मनी वा QR भुक्तानी",
+    memberMessage: "सधैंको साथका लागि धन्यवाद।",
+    eatIn: "यहीँ खाने",
+    takeout: "लैजाने",
+    cash: "नगद"
+  }
+};
+
+function normalizeDisplayLanguage(value: string): DisplayLanguage {
+  return value === "zh" || value === "zh-Hant" || value === "en" || value === "ko" || value === "vi" || value === "ne" ? value : "ja";
 }
 
-function getOrderTypeLabel(value: string) {
-  if (value === "eat_in") return "店内";
-  if (value === "takeout") return "持ち帰り";
+function getStatusLabel(state: DisplayState, text: (typeof customerDisplayText)[DisplayLanguage]) {
+  if (state.status === "advertising") return text.welcomeBody;
+  if (state.status === "complete") return text.completed;
+  if (state.status === "cash_change") return text.cashChange;
+  if (state.status === "external_wait") return text.externalWait;
+  if (state.items.length > 0) return text.confirmOrder;
+  return text.welcomeBody;
+}
+
+function getOrderTypeLabel(value: string, text: (typeof customerDisplayText)[DisplayLanguage]) {
+  if (value === "eat_in") return text.eatIn;
+  if (value === "takeout") return text.takeout;
   return "";
+}
+
+function translateTaxLabel(label: string, language: DisplayLanguage) {
+  if (language === "ja") return label;
+  const rateMatch = label.match(/(\d+(?:\.\d+)?)%/);
+  return rateMatch?.[1] ? `Tax included ${rateMatch[1]}%` : "Tax included";
 }
 
 export default function CustomerDisplayPage() {
@@ -143,7 +405,11 @@ export default function CustomerDisplayPage() {
     (mediaSettings.mode === "slideshow" && slideshowAssets.length > 0) ||
     (mediaSettings.mode === "video" && Boolean(videoAsset))
   );
-  const topStatusLabel = getStatusLabel(state);
+  const displayLanguage = normalizeDisplayLanguage(state.preferredLanguage);
+  const text = customerDisplayText[displayLanguage];
+  const topStatusLabel = getStatusLabel(state, text);
+  const paymentLabel = state.paymentMethod === "cash" ? text.cash : state.paymentLabel || text.payment;
+  const memberMessage = displayLanguage === "ja" ? state.memberMessage || text.memberMessage : text.memberMessage;
   const showTopStatus = true;
   const clockLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
     hour: "2-digit",
@@ -371,8 +637,8 @@ export default function CustomerDisplayPage() {
             <small>{clockSubLabel}</small>
           </div>
           <div className={useMediaAdvertising ? "customer-display-advertising-copy is-hidden" : "customer-display-advertising-copy"}>
-            <strong>{completeActive ? "ありがとうございました" : "Welcome"}</strong>
-            <p>{completeActive ? "またのご来店をお待ちしております" : "ご来店ありがとうございます"}</p>
+            <strong>{completeActive ? text.thanks : text.welcome}</strong>
+            <p>{completeActive ? text.thanksBody : text.welcomeBody}</p>
           </div>
         </section>
       ) : (
@@ -395,19 +661,19 @@ export default function CustomerDisplayPage() {
       <section className="customer-display-layout">
         <div className="customer-display-items">
           <div className="customer-display-section-head">
-            <span>ご注文内容</span>
-            <strong>{state.items.reduce((sum, item) => sum + item.quantity, 0)} 点</strong>
+            <span>{text.orderSection}</span>
+            <strong>{state.items.reduce((sum, item) => sum + item.quantity, 0)} {text.itemCount}</strong>
           </div>
 
           {loading ? (
             <div className="customer-display-empty">
               <MonitorSmartphone />
-              <p>読み込み中...</p>
+              <p>{text.loading}</p>
             </div>
           ) : state.items.length === 0 ? (
             <div className="customer-display-empty">
               <MonitorSmartphone />
-              <p>ご注文をお待ちしています。</p>
+              <p>{text.waitingOrder}</p>
             </div>
           ) : (
             <div className="customer-display-item-list">
@@ -422,7 +688,7 @@ export default function CustomerDisplayPage() {
                   <b>{formatYen(item.amount)}</b>
                 </div>
               ))}
-              {hiddenItemCount > 0 ? <div className="customer-display-more">ほか {hiddenItemCount} 点</div> : null}
+              {hiddenItemCount > 0 ? <div className="customer-display-more">{text.moreItems} {hiddenItemCount} {text.itemCount}</div> : null}
             </div>
           )}
         </div>
@@ -431,21 +697,21 @@ export default function CustomerDisplayPage() {
           {state.memberDisplayName ? (
             <div className="customer-display-member">
               <span>{state.memberDisplayName}</span>
-              <strong>{state.memberMessage || "いつもご利用いただきありがとうございます。"}</strong>
+              <strong>{memberMessage}</strong>
             </div>
           ) : null}
 
           <div className="customer-display-meta">
-            {state.pickupCode ? <span>番号 {state.pickupCode}</span> : <span>{getOrderTypeLabel(state.orderType) || "店頭会計"}</span>}
-            <span>{state.paymentLabel || "お支払い"}</span>
+            {state.pickupCode ? <span>{text.pickupCode} {state.pickupCode}</span> : <span>{getOrderTypeLabel(state.orderType, text) || text.counterCheckout}</span>}
+            <span>{paymentLabel}</span>
           </div>
 
           <div className="customer-display-total">
-            <span>合計</span>
+            <span>{text.total}</span>
             <strong>{formatYen(state.subtotal)}</strong>
             {state.taxLabel && state.taxAmount > 0 ? (
               <small>
-                <em>{state.taxLabel}</em>
+                <em>{translateTaxLabel(state.taxLabel, displayLanguage)}</em>
                 <b>{formatYen(state.taxAmount)}</b>
               </small>
             ) : null}
@@ -456,7 +722,7 @@ export default function CustomerDisplayPage() {
               <>
                 {hasDiscount ? (
                   <div className="customer-display-discount">
-                    <span>割引適用</span>
+                    <span>{text.discountApplied}</span>
                     <strong>{state.discountName}</strong>
                     <b>-{formatYen(state.discountAmount)}</b>
                   </div>
@@ -464,20 +730,20 @@ export default function CustomerDisplayPage() {
 
                 {hasCoupon ? (
                   <div className="customer-display-discount">
-                    <span>クーポン適用</span>
+                    <span>{text.couponApplied}</span>
                     <strong>{state.couponName}</strong>
                     <b>-{formatYen(state.couponDiscountAmount)}</b>
                   </div>
                 ) : null}
 
                 <div className="customer-display-cash-card">
-                  <span>お預り</span>
+                  <span>{text.cashTendered}</span>
                   <strong>{state.cashTenderedAmount === null ? "-" : formatYen(state.cashTenderedAmount)}</strong>
                 </div>
                 <div className={`customer-display-cash-card ${changeAmount < 0 ? "is-short" : ""}`}>
-                  <span>お釣り</span>
+                  <span>{text.change}</span>
                   <strong>{state.cashChangeAmount === null ? "-" : formatYen(Math.max(0, changeAmount))}</strong>
-                  {changeAmount < 0 ? <small>不足 {formatYen(Math.abs(changeAmount))}</small> : null}
+                  {changeAmount < 0 ? <small>{text.shortage} {formatYen(Math.abs(changeAmount))}</small> : null}
                 </div>
               </>
             ) : (
@@ -486,7 +752,7 @@ export default function CustomerDisplayPage() {
                   <div className="customer-display-promotion-group">
                     {hasDiscount ? (
                       <div className="customer-display-discount">
-                        <span>割引適用</span>
+                        <span>{text.discountApplied}</span>
                         <strong>{state.discountName}</strong>
                         <b>-{formatYen(state.discountAmount)}</b>
                       </div>
@@ -494,7 +760,7 @@ export default function CustomerDisplayPage() {
 
                     {hasCoupon ? (
                       <div className="customer-display-discount">
-                        <span>クーポン適用</span>
+                        <span>{text.couponApplied}</span>
                         <strong>{state.couponName}</strong>
                         <b>-{formatYen(state.couponDiscountAmount)}</b>
                       </div>
@@ -503,9 +769,9 @@ export default function CustomerDisplayPage() {
                 ) : null}
 
                 <div className="customer-display-terminal">
-                  <span>{state.externalPaymentTerminalBrand || state.paymentLabel || "決済端末"}</span>
-                  <strong>決済端末でお支払いください</strong>
-                  <small>カード・電子マネー・QR 決済</small>
+                  <span>{state.externalPaymentTerminalBrand || paymentLabel || text.terminalDefault}</span>
+                  <strong>{text.terminalInstruction}</strong>
+                  <small>{text.terminalMethods}</small>
                 </div>
               </>
             )}

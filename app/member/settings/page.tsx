@@ -5,7 +5,7 @@ import { BadgePercent, Home, Loader2, LogOut, Save, Settings, ShoppingBag } from
 import { useEffect, useMemo, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
-import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
+import { MemberLanguageSwitcher, memberLanguageOptions, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
 import { memberText } from "../../../components/member/memberTranslations";
 
 type MemberProfile = {
@@ -650,7 +650,7 @@ export default function MemberSettingsPage() {
       const response = await fetch("/api/public/members/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, nameKana, phone, preferredLanguage: language })
+        body: JSON.stringify({ ...form, nameKana, phone, preferredLanguage: form.preferredLanguage || language })
       });
       const body = await response.json().catch(() => ({})) as MemberResponse;
       if (!response.ok) throw new Error(body.error || text.saveError);
@@ -660,6 +660,7 @@ export default function MemberSettingsPage() {
         preferredStoreOptions: body.preferredStoreOptions ?? current.preferredStoreOptions
       }));
       setSettingsForm(toSettingsForm(body.member));
+      syncPreferredLanguage(body.member?.preferredLanguage);
       if (completeProfileRequested || handoffEnabled) {
         window.location.href = settingsReturnUrl(returnTo, handoffEnabled);
         return;
@@ -823,6 +824,12 @@ export default function MemberSettingsPage() {
                   <span>{text.preferredStore}</span>
                   <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))} disabled={loading || saving}>
                     {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>{text.preferredLanguage}</span>
+                  <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))} disabled={loading || saving}>
+                    {memberLanguageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
               </div>

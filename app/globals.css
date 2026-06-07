@@ -8579,9 +8579,9 @@ body :where(
   justify-content: space-between;
   gap: 24px;
   min-width: 0;
-  min-height: 112px;
+  min-height: 128px;
   border-radius: 8px;
-  padding: 14px 22px;
+  padding: 18px 24px;
   background: #171717;
   color: #f8f8f4;
 }
@@ -8629,15 +8629,21 @@ body :where(
 }
 
 .customer-display-topbar .customer-display-clock {
+  gap: 0;
   color: #f8f8f4;
 }
 
 .customer-display-topbar .customer-display-clock span {
+  display: block;
   font-size: clamp(54px, 8.4vh, 104px);
+  line-height: 0.92;
+  padding-bottom: 12px;
+  transform: translateY(-4px);
 }
 
 .customer-display-topbar .customer-display-clock small {
   color: rgba(248, 248, 244, 0.58);
+  transform: translateY(2px);
 }
 
 .customer-display-menu select {
