@@ -116,6 +116,18 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
               <dt>発行日</dt>
               <dd>{receipt.issuedAt}</dd>
             </div>
+            {receipt.downloadedAt ? (
+              <div>
+                <dt>DL日時</dt>
+                <dd>{receipt.downloadedAt}</dd>
+              </div>
+            ) : null}
+            {receipt.downloadCount > 0 ? (
+              <div>
+                <dt>DL回数</dt>
+                <dd>{receipt.downloadCount.toLocaleString("ja-JP")}回</dd>
+              </div>
+            ) : null}
           </dl>
         </div>
       </section>

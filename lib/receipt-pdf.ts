@@ -20,6 +20,8 @@ type ReceiptPdfInput = {
   statusDetail?: string;
   refundAmount?: number;
   refundedAt?: string;
+  downloadedAt?: string;
+  downloadCount?: number;
 };
 
 function escapePdfText(value: string) {
@@ -66,6 +68,7 @@ function splitSummary(value: string) {
 export function createReceiptPdf(input: ReceiptPdfInput) {
   const amount = Number.isFinite(input.amount) ? input.amount : 0;
   const refundAmount = Number.isFinite(input.refundAmount) ? Number(input.refundAmount) : 0;
+  const downloadCount = Number.isFinite(input.downloadCount) ? Math.max(0, Math.round(Number(input.downloadCount))) : 0;
   const taxRate = Number.isFinite(input.taxRate) && input.taxRate > 0 ? input.taxRate : 8;
   const taxIncluded = Math.round(amount * taxRate / (100 + taxRate));
   const purposeText = input.purposeText.trim() || "テイクアウト飲食代";
@@ -99,7 +102,9 @@ export function createReceiptPdf(input: ReceiptPdfInput) {
     ...(input.issuerAddress ? [textLine(input.issuerAddress, 350, detailTop - 62, 9)] : []),
     ...(input.issuerPhone ? [textLine(`TEL: ${input.issuerPhone}`, 350, detailTop - 80, 9)] : []),
     textLine(`発行日: ${input.issuedAt}`, 350, 456, 9),
-    latinTextLine(`Receipt No. ${input.receiptNo}`, 350, 438, 9),
+    ...(input.downloadedAt ? [textLine(`DL日時: ${input.downloadedAt}`, 350, 438, 9)] : []),
+    ...(downloadCount > 0 ? [textLine(`DL回数: ${downloadCount.toLocaleString("ja-JP")}回`, 350, input.downloadedAt ? 420 : 438, 9)] : []),
+    latinTextLine(`Receipt No. ${input.receiptNo}`, 350, input.downloadedAt || downloadCount > 0 ? 402 : 438, 9),
     textLine(input.statusLabel ? "この領収書には取消・返金情報が記録されています。" : "この領収書は電子的に発行されています。", 56, 86, 8)
   ];
   const content = `q\n1 w\n${lines.join("\n")}\nQ`;

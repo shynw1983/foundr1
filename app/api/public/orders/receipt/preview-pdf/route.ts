@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import puppeteer from "puppeteer-core";
-import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
+import { getDemoOnlineReceiptViewModel, getOnlineReceiptViewModel, recordOnlineReceiptDownload } from "../../../../../../lib/receipt-data";
 import type { Browser } from "puppeteer-core";
 import type { Page } from "puppeteer-core";
 import type { OnlineReceiptItem, OnlineReceiptViewModel } from "../../../../../../lib/receipt-data";
@@ -207,6 +207,8 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
             ${receiptWithAssets.issuer.address ? `<div><dt>住所</dt><dd>${escapeHtml(receiptWithAssets.issuer.address)}</dd></div>` : ""}
             ${receiptWithAssets.issuer.phone ? `<div><dt>TEL</dt><dd>${escapeHtml(receiptWithAssets.issuer.phone)}</dd></div>` : ""}
             <div><dt>発行日</dt><dd>${escapeHtml(receiptWithAssets.issuedAt)}</dd></div>
+            ${receiptWithAssets.downloadedAt ? `<div><dt>DL日時</dt><dd>${escapeHtml(receiptWithAssets.downloadedAt)}</dd></div>` : ""}
+            ${receiptWithAssets.downloadCount > 0 ? `<div><dt>DL回数</dt><dd>${escapeHtml(receiptWithAssets.downloadCount.toLocaleString("ja-JP"))}回</dd></div>` : ""}
           </dl>
         </div>
       </section>
@@ -315,9 +317,17 @@ export async function GET(request: Request) {
   const recipientMode = getRecipientMode(clean(url.searchParams.get("recipientMode")));
   const recipientName = clean(url.searchParams.get("recipientName")).slice(0, 80);
 
+  const downloadRecord = demo === "nanacha" || demo === "maamaa" || !orderId || !pickupCode
+    ? null
+    : await recordOnlineReceiptDownload({ orderId, pickupCode });
   const receipt = demo === "nanacha" || demo === "maamaa"
     ? getDemoOnlineReceiptViewModel(demo)
-    : orderId && pickupCode ? await getOnlineReceiptViewModel({ orderId, pickupCode }) : null;
+    : orderId && pickupCode ? await getOnlineReceiptViewModel({
+        orderId,
+        pickupCode,
+        downloadedAt: downloadRecord?.downloadedAt ?? null,
+        downloadCount: downloadRecord?.downloadCount ?? 0
+      }) : null;
 
   if (!receipt) {
     return Response.json({ error: "Receipt was not found or payment is not completed." }, { status: 404 });

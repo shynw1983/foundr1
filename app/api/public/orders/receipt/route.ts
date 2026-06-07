@@ -1,4 +1,5 @@
 import { sql } from "../../../../../lib/db";
+import { recordOnlineReceiptDownload } from "../../../../../lib/receipt-data";
 import { createReceiptPdf } from "../../../../../lib/receipt-pdf";
 
 export const dynamic = "force-dynamic";
@@ -123,6 +124,7 @@ export async function GET(request: Request) {
   const customerName = clean(customer.name) || clean(customerSummary.name) || "お客様";
   const itemSummary = [clean(order.drink), clean(order.size), clean(order.toppings)].filter(Boolean).join("\n");
   const issuedAt = formatDate(new Date());
+  const downloadRecord = await recordOnlineReceiptDownload({ orderId, pickupCode });
   const pdf = createReceiptPdf({
     receiptNo: `${clean(order.pickupCode)}-${clean(order.id).slice(0, 8)}`,
     issuedAt,
@@ -141,6 +143,8 @@ export async function GET(request: Request) {
     invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber),
     purposeText: clean(order.receiptPurposeText) || "テイクアウト飲食代",
     taxRate: Number(order.receiptTaxRate ?? 8),
+    downloadedAt: formatDate(downloadRecord?.downloadedAt ?? null),
+    downloadCount: downloadRecord?.downloadCount ?? 0,
     ...receiptStatus
   });
 

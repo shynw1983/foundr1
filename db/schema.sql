@@ -1439,6 +1439,8 @@ create table if not exists store_customer_orders (
   payment_refund_status text not null default '',
   payment_refund_error text not null default '',
   payment_refunded_at timestamptz,
+  receipt_download_count integer not null default 0,
+  receipt_last_downloaded_at timestamptz,
   square_order_id text,
   square_payment_id text,
   square_receipt_url text,
@@ -1478,6 +1480,8 @@ alter table store_customer_orders add column if not exists payment_refund_id tex
 alter table store_customer_orders add column if not exists payment_refund_status text not null default '';
 alter table store_customer_orders add column if not exists payment_refund_error text not null default '';
 alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
+alter table store_customer_orders add column if not exists receipt_download_count integer not null default 0;
+alter table store_customer_orders add column if not exists receipt_last_downloaded_at timestamptz;
 
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),

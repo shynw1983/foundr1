@@ -28,6 +28,8 @@ export type OnlineReceiptViewModel = {
   pickupTime: string;
   paidAt: string;
   paymentProvider: string;
+  downloadedAt: string;
+  downloadCount: number;
   issuer: {
     name: string;
     address: string;
@@ -220,6 +222,31 @@ function getBrandName(brand: OnlineReceiptBrand, fallback: string) {
   return brand === "maamaa" ? "まぁ麻" : "nanacha";
 }
 
+export async function recordOnlineReceiptDownload(input: {
+  orderId: string;
+  pickupCode: string;
+}) {
+  const rows = await sql`
+    update store_customer_orders
+    set
+      receipt_download_count = coalesce(receipt_download_count, 0) + 1,
+      receipt_last_downloaded_at = now(),
+      updated_at = now()
+    where id::text = ${input.orderId}
+      and pickup_code = ${input.pickupCode}
+      and payment_status in ('paid', 'refunded', 'partial_refunded')
+    returning
+      receipt_download_count::int as "downloadCount",
+      receipt_last_downloaded_at as "downloadedAt"
+  `;
+  const row = rows[0] as { downloadCount?: number; downloadedAt?: Date | string | null } | undefined;
+  if (!row) return null;
+  return {
+    downloadCount: Number(row.downloadCount ?? 0),
+    downloadedAt: row.downloadedAt ?? null
+  };
+}
+
 function getNanachaDetails(item: ItemRow) {
   return [
     item.sizeLabel,
@@ -300,6 +327,8 @@ function buildItems(order: OrderRow, itemRows: ItemRow[], brand: OnlineReceiptBr
 export async function getOnlineReceiptViewModel(input: {
   orderId: string;
   pickupCode: string;
+  downloadedAt?: Date | string | null;
+  downloadCount?: number;
 }): Promise<OnlineReceiptViewModel | null> {
   const orderRows = await sql`
     select
@@ -395,6 +424,8 @@ export async function getOnlineReceiptViewModel(input: {
     pickupTime: clean(order.pickupTime),
     paidAt: formatDateTime(order.paidAt) || formatDateTime(order.createdAt),
     paymentProvider: clean(order.paymentProvider).toUpperCase(),
+    downloadedAt: formatDateTime(input.downloadedAt ?? null),
+    downloadCount: Math.max(0, Math.round(Number(input.downloadCount ?? 0) || 0)),
     issuer: {
       name: clean(order.issuerName) || "会社名未設定",
       address: clean(order.issuerAddress),
@@ -432,6 +463,8 @@ export function getDemoOnlineReceiptViewModel(brand: OnlineReceiptBrand): Online
     pickupTime: "18:30",
     paidAt: "2026/06/06 18:05",
     paymentProvider: brand === "maamaa" ? "KOMOJU" : "SQUARE",
+    downloadedAt: "",
+    downloadCount: 0,
     issuer: {
       name: "Foundr1 株式会社",
       address: "福岡県福岡市中央区天神 1-1-1",
