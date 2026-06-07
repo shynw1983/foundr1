@@ -22103,6 +22103,41 @@ a:focus-visible {
   }
 }
 
+@media (max-width: 760px) {
+  .store-workbench-topbar {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .store-workbench-topbar .brand-block {
+    min-height: 48px;
+    padding: 0;
+    gap: 12px;
+  }
+
+  .store-workbench-topbar .brand-mark {
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .store-workbench-topbar .brand-block h1 {
+    font-size: 30px;
+    line-height: 1.05;
+  }
+
+  .store-nav-menu {
+    width: 48px;
+  }
+
+  .store-nav-menu summary {
+    width: 48px;
+    min-height: 48px;
+    padding: 0;
+  }
+}
+
 @media (max-width: 1120px) {
   .shell .sidebar .mobile-nav-menu summary,
   .os-home-shell .mobile-nav-menu summary {
