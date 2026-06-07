@@ -10514,6 +10514,140 @@ body :where(
   animation: member-return-spin 900ms linear infinite;
 }
 
+.member-auth-panel {
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
+.member-auth-card {
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  background: var(--member-panel);
+  padding: 22px;
+}
+
+.member-auth-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.member-auth-heading > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #f3faf7;
+  color: var(--member-logo-accent);
+}
+
+.member-auth-heading h2,
+.member-auth-heading p {
+  margin: 0;
+}
+
+.member-auth-heading h2 {
+  color: var(--member-ink);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.member-auth-heading p:not(.eyebrow),
+.member-auth-message {
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.member-auth-email-form {
+  display: grid;
+  gap: 10px;
+}
+
+.member-auth-email-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.member-auth-email-form input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--member-line);
+  border-radius: 8px;
+  background: white;
+  color: var(--member-ink);
+  font: inherit;
+  font-size: 15px;
+  padding: 0 12px;
+}
+
+.member-auth-email-form input:focus {
+  border-color: var(--member-logo-accent);
+  outline: 2px solid rgba(47, 138, 114, 0.14);
+}
+
+.member-auth-link-button {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--member-logo-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.member-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.member-auth-divider::before,
+.member-auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--member-soft-line);
+}
+
+.member-auth-oauth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.member-auth-oauth-button {
+  justify-content: center;
+}
+
+.member-auth-provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.member-auth-message {
+  margin: 0;
+}
+
 @keyframes member-return-spin {
   to {
     transform: rotate(360deg);
@@ -11399,10 +11533,19 @@ body :where(
   }
 
   .member-card-main,
+  .member-auth-card,
   .member-portal-panel,
   .member-portal-config,
   .member-portal-login-panel {
     padding: 14px;
+  }
+
+  .member-auth-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .member-auth-oauth-grid {
+    grid-template-columns: 1fr;
   }
 
   .member-settings-panel {

@@ -1,8 +1,9 @@
 "use client";
 
-import { SignInButton, SignOutButton, SignUpButton, useUser } from "@clerk/nextjs";
+import { SignOutButton, useUser } from "@clerk/nextjs";
 import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, ShoppingBag, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MemberAuthPanel } from "../../components/member/MemberAuthPanel";
 import type { MemberOrderHistory } from "../../components/member/MemberOrderHistoryPanel";
 
 type MemberProfile = {
@@ -569,16 +570,6 @@ function ConfiguredMemberPortal() {
           <h1>会員証</h1>
           <span>ポイント、クーポン、ブランド共通の会員番号を確認できます。</span>
         </div>
-        {clerkConfigured && isLoaded && !isSignedIn ? (
-            <div className="member-portal-auth-actions">
-              <SignInButton mode="modal">
-                <button className="primary-button" type="button"><LogIn size={16} />ログイン</button>
-              </SignInButton>
-              <SignUpButton mode="modal" forceRedirectUrl={profileCompletionUrl} fallbackRedirectUrl={profileCompletionUrl}>
-                <button className="secondary-button" type="button"><UserPlus size={16} />会員登録</button>
-              </SignUpButton>
-            </div>
-        ) : null}
       </section>
 
       {
@@ -592,11 +583,11 @@ function ConfiguredMemberPortal() {
           ) : null}
 
           {isLoaded && !isSignedIn ? (
-            <section className="member-portal-login-panel">
-              <UserRound size={32} />
-              <h2>{loggedOut ? "ログアウトしました" : "ログインしてください"}</h2>
-              <p>{loggedOut ? "もう一度ログインするか、会員登録をしてください。" : "メール、Google、Apple、LINE のログイン方法は Clerk ダッシュボードで有効化します。"}</p>
-            </section>
+            <MemberAuthPanel
+              title={loggedOut ? "ログアウトしました" : "ログインまたは会員登録"}
+              description={loggedOut ? "もう一度ログインするか、新しい会員登録を続けてください。" : "メールアドレス、Apple、Google、LINE で会員カードを表示できます。"}
+              afterAuthUrl={profileCompletionUrl}
+            />
           ) : null}
 
           {isLoaded && isSignedIn && !returningToSite ? (

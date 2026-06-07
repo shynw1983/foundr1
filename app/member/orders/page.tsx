@@ -1,8 +1,9 @@
 "use client";
 
-import { SignInButton, SignOutButton, useUser } from "@clerk/nextjs";
-import { ChevronDown, Home, Loader2, LogIn, LogOut, RefreshCw, ShoppingBag, UserRound } from "lucide-react";
+import { SignOutButton, useUser } from "@clerk/nextjs";
+import { ChevronDown, Home, Loader2, LogOut, RefreshCw, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberOrderHistoryPanel } from "../../../components/member/MemberOrderHistoryPanel";
 import type { MemberOrderHistory } from "../../../components/member/MemberOrderHistoryPanel";
 
@@ -126,14 +127,11 @@ export default function MemberOrdersPage() {
       </section>
 
       {isLoaded && !isSignedIn ? (
-        <section className="member-portal-login-panel">
-          <ShoppingBag size={32} />
-          <h2>ログインしてください</h2>
-          <p>購入履歴と領収書の確認にはログインが必要です。</p>
-          <SignInButton mode="modal">
-            <button className="primary-button" type="button"><LogIn size={16} />ログイン</button>
-          </SignInButton>
-        </section>
+        <MemberAuthPanel
+          title="購入履歴にログイン"
+          description="メールアドレス、Apple、Google、LINE で購入履歴と領収書を確認できます。"
+          afterAuthUrl="/member/orders"
+        />
       ) : null}
 
       {isLoaded && isSignedIn ? (
