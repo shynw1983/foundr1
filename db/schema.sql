@@ -1865,9 +1865,11 @@ create table if not exists loyalty_stamp_campaigns (
   brand_id uuid references brands(id) on delete cascade,
   campaign_key text not null unique,
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
   earn_rule text not null default 'per_item',
   stamps_required integer not null default 5,
   reward_coupon_name text not null default '',
+  reward_coupon_display_names jsonb not null default '{}'::jsonb,
   reward_value_amount integer not null default 0,
   valid_from date,
   valid_until date,
@@ -1875,6 +1877,9 @@ create table if not exists loyalty_stamp_campaigns (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table loyalty_stamp_campaigns add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table loyalty_stamp_campaigns add column if not exists reward_coupon_display_names jsonb not null default '{}'::jsonb;
 
 create table if not exists loyalty_stamp_ledger (
   id uuid primary key default gen_random_uuid(),
@@ -1901,6 +1906,7 @@ create table if not exists member_coupons (
   brand_id uuid references brands(id) on delete set null,
   coupon_code text not null unique default ('C' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10))),
   name text not null,
+  display_names jsonb not null default '{}'::jsonb,
   discount_type text not null default 'amount',
   discount_value integer not null default 0,
   max_discount_amount integer,
@@ -1914,6 +1920,8 @@ create table if not exists member_coupons (
   metadata jsonb not null default '{}'::jsonb
 );
 
+alter table member_coupons add column if not exists display_names jsonb not null default '{}'::jsonb;
+
 create index if not exists idx_member_coupons_member_status
   on member_coupons(member_id, status, expires_at);
 
@@ -1921,9 +1929,11 @@ insert into loyalty_stamp_campaigns (
   brand_id,
   campaign_key,
   name,
+  display_names,
   earn_rule,
   stamps_required,
   reward_coupon_name,
+  reward_coupon_display_names,
   reward_value_amount,
   valid_from,
   valid_until,
@@ -1934,9 +1944,11 @@ select
   brands.id,
   'nanacha_buy_5_get_1',
   'nanachaスタンプカード',
+  '{"en":"nanacha Stamp Card","zh":"nanacha印章卡","zh-Hant":"nanacha印章卡","ko":"nanacha 스탬프 카드","vi":"Thẻ tích dấu nanacha","ne":"nanacha स्ट्याम्प कार्ड"}'::jsonb,
   'per_item',
   5,
   'ドリンク無料券',
+  '{"en":"Free drink coupon","zh":"饮品免费券","zh-Hant":"飲品免費券","ko":"음료 무료 쿠폰","vi":"Phiếu đồ uống miễn phí","ne":"निःशुल्क पेय कुपन"}'::jsonb,
   600,
   current_date,
   null,
@@ -1948,9 +1960,11 @@ on conflict (campaign_key)
 do update set
   brand_id = excluded.brand_id,
   name = excluded.name,
+  display_names = loyalty_stamp_campaigns.display_names || excluded.display_names,
   earn_rule = excluded.earn_rule,
   stamps_required = excluded.stamps_required,
   reward_coupon_name = excluded.reward_coupon_name,
+  reward_coupon_display_names = loyalty_stamp_campaigns.reward_coupon_display_names || excluded.reward_coupon_display_names,
   reward_value_amount = excluded.reward_value_amount,
   valid_until = excluded.valid_until,
   is_active = excluded.is_active,

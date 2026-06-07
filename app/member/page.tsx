@@ -37,6 +37,7 @@ type MemberCoupon = {
   brandName: string;
   couponCode: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: string;
   discountValue: number;
   maxDiscountAmount: number | null;
@@ -48,9 +49,11 @@ type MemberStampCard = {
   id: string;
   campaignKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   brandName: string;
   stampsRequired: number;
   rewardCouponName: string;
+  rewardCouponDisplayNames?: Record<string, string>;
   rewardValueAmount: number;
   totalStamps: number;
   currentStamps: number;
@@ -118,6 +121,11 @@ function isExchangeCoupon(coupon: { issuedSource?: string; name?: string }) {
 function couponValueLabel(coupon: MemberCoupon, text: typeof memberText[keyof typeof memberText]) {
   if (isExchangeCoupon(coupon)) return text.oneCupExchange;
   return coupon.discountType === "amount" ? formatYen(coupon.discountValue) : `${coupon.discountValue}%`;
+}
+
+function localizedMemberBenefitName(name: string, displayNames: Record<string, string> | undefined, language: string) {
+  if (language === "ja") return name;
+  return displayNames?.[language] || name;
 }
 
 function safeReturnTo(value: string) {
@@ -510,20 +518,22 @@ function ConfiguredMemberPortal() {
                 {data.stampCards.map((card) => {
                   const required = Math.max(1, Number(card.stampsRequired) || 1);
                   const current = Math.max(0, Math.min(required, Number(card.currentStamps) || 0));
+                  const cardName = localizedMemberBenefitName(card.name, card.displayNames, language);
+                  const rewardCouponName = localizedMemberBenefitName(card.rewardCouponName || "特典クーポン", card.rewardCouponDisplayNames, language);
                   return (
                     <article key={card.id} className="member-stamp-card">
                       <div className="member-stamp-card-head">
                         <div>
                           <p className="eyebrow">{text.stampCard}</p>
-                          <h2>{card.name}</h2>
-                          <span>{card.brandName || "Foundr1"} / {card.rewardCouponName || "特典クーポン"}</span>
+                          <h2>{cardName}</h2>
+                          <span>{card.brandName || "Foundr1"} / {rewardCouponName}</span>
                         </div>
                         <div className="member-stamp-card-count">
                           <Stamp size={18} />
                           <strong>{stampCardProgressLabel(card)}</strong>
                         </div>
                       </div>
-                      <div className="member-stamp-slots" style={{ "--member-stamp-count": required } as CSSProperties} aria-label={`${card.name} ${stampCardProgressLabel(card)}`}>
+                      <div className="member-stamp-slots" style={{ "--member-stamp-count": required } as CSSProperties} aria-label={`${cardName} ${stampCardProgressLabel(card)}`}>
                         {Array.from({ length: required }).map((_, index) => (
                           <span key={`${card.id}-${index}`} className={index < current ? "is-filled" : ""}>
                             <i className="member-stamp-mark" aria-hidden="true" />
@@ -559,22 +569,25 @@ function ConfiguredMemberPortal() {
                   <h3>{text.coupons}</h3>
                 </div>
                 <div className="member-portal-list">
-                  {data.coupons?.length ? data.coupons.map((coupon) => (
-                    <div key={coupon.id} id={`member-coupon-${coupon.id}`} className="member-portal-list-row">
-                      <div>
-                        <strong>{coupon.name}</strong>
-                        <span>{couponScopeLabel(coupon, text)} / {coupon.couponCode} / {formatDate(coupon.expiresAt, text.dateNoExpiry)}{selectedCouponId === coupon.id ? ` / ${text.selectedForUse}` : ""}</span>
+                  {data.coupons?.length ? data.coupons.map((coupon) => {
+                    const couponName = localizedMemberBenefitName(coupon.name, coupon.displayNames, language);
+                    return (
+                      <div key={coupon.id} id={`member-coupon-${coupon.id}`} className="member-portal-list-row">
+                        <div>
+                          <strong>{couponName}</strong>
+                          <span>{couponScopeLabel(coupon, text)} / {coupon.couponCode} / {formatDate(coupon.expiresAt, text.dateNoExpiry)}{selectedCouponId === coupon.id ? ` / ${text.selectedForUse}` : ""}</span>
+                        </div>
+                        <b>{couponValueLabel(coupon, text)}</b>
+                        <button
+                          className={selectedCouponId === coupon.id ? "member-coupon-use-button is-selected" : "member-coupon-use-button"}
+                          type="button"
+                          onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
+                        >
+                          {selectedCouponId === coupon.id ? text.clearSelection : text.use}
+                        </button>
                       </div>
-                      <b>{couponValueLabel(coupon, text)}</b>
-                      <button
-                        className={selectedCouponId === coupon.id ? "member-coupon-use-button is-selected" : "member-coupon-use-button"}
-                        type="button"
-                        onClick={() => setSelectedCouponId((current) => current === coupon.id ? "" : coupon.id)}
-                      >
-                        {selectedCouponId === coupon.id ? text.clearSelection : text.use}
-                      </button>
-                    </div>
-                  )) : <p>{text.noCoupons}</p>}
+                    );
+                  }) : <p>{text.noCoupons}</p>}
                 </div>
               </article>
 

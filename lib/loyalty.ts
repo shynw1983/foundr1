@@ -150,6 +150,70 @@ function normalizeDiscountType(value: unknown) {
   return text === "percent" ? "percent" : "amount";
 }
 
+const supportedMemberDisplayLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"] as const;
+
+function normalizeDisplayNames(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    supportedMemberDisplayLanguages
+      .map((language) => [language, normalizeText(source[language]).slice(0, 120)])
+      .filter(([, displayName]) => displayName)
+  );
+}
+
+function defaultMemberBenefitDisplayNames(name: string) {
+  const normalized = normalizeText(name);
+  if (!normalized) return {};
+  if (normalized.includes("ドリンク無料券")) {
+    return {
+      en: "Free drink coupon",
+      zh: "饮品免费券",
+      "zh-Hant": "飲品免費券",
+      ko: "음료 무료 쿠폰",
+      vi: "Phiếu đồ uống miễn phí",
+      ne: "निःशुल्क पेय कुपन"
+    };
+  }
+  if (normalized.includes("nanacha") && normalized.includes("スタンプカード")) {
+    return {
+      en: "nanacha Stamp Card",
+      zh: "nanacha印章卡",
+      "zh-Hant": "nanacha印章卡",
+      ko: "nanacha 스탬프 카드",
+      vi: "Thẻ tích dấu nanacha",
+      ne: "nanacha स्ट्याम्प कार्ड"
+    };
+  }
+  if (normalized.includes("誕生日")) {
+    return {
+      en: "Birthday reward",
+      zh: "生日特典",
+      "zh-Hant": "生日特典",
+      ko: "생일 혜택",
+      vi: "Ưu đãi sinh nhật",
+      ne: "जन्मदिन सुविधा"
+    };
+  }
+  if (normalized.includes("お久しぶり")) {
+    return {
+      en: "Welcome back reward",
+      zh: "再次光临特典",
+      "zh-Hant": "再次光臨特典",
+      ko: "재방문 혜택",
+      vi: "Ưu đãi quay lại",
+      ne: "फेरि स्वागत सुविधा"
+    };
+  }
+  return {};
+}
+
+function mergeMemberDisplayNames(name: string, value: unknown) {
+  return {
+    ...defaultMemberBenefitDisplayNames(name),
+    ...normalizeDisplayNames(value)
+  };
+}
+
 function currentTokyoYearMonth() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
@@ -817,13 +881,14 @@ export async function resolveBrandId(value: unknown) {
 
 export async function getMemberAvailableCoupons(memberId: string, input: { brandId?: string | null; brand?: string | null } = {}) {
   const brandId = normalizeText(input.brandId) || await resolveBrandId(input.brand);
-  return sql`
+  const rows = await sql`
     select
       member_coupons.id::text,
       coalesce(member_coupons.brand_id::text, '') as "brandId",
       coalesce(brands.name, '') as "brandName",
       member_coupons.coupon_code as "couponCode",
       member_coupons.name,
+      coalesce(member_coupons.display_names, '{}'::jsonb) as "displayNames",
       member_coupons.discount_type as "discountType",
       member_coupons.discount_value::int as "discountValue",
       coalesce(member_coupons.max_discount_amount::int, null) as "maxDiscountAmount",
@@ -840,10 +905,14 @@ export async function getMemberAvailableCoupons(memberId: string, input: { brand
     order by member_coupons.expires_at nulls last, member_coupons.issued_at desc
     limit 50
   `;
+  return rows.map((coupon) => ({
+    ...coupon,
+    displayNames: mergeMemberDisplayNames(String(coupon.name ?? ""), coupon.displayNames)
+  }));
 }
 
 export async function getMemberStampCards(memberId: string) {
-  return sql`
+  const rows = await sql`
     with stamp_totals as (
       select
         campaign_id,
@@ -868,9 +937,11 @@ export async function getMemberStampCards(memberId: string) {
       loyalty_stamp_campaigns.id::text,
       loyalty_stamp_campaigns.campaign_key as "campaignKey",
       loyalty_stamp_campaigns.name,
+      coalesce(loyalty_stamp_campaigns.display_names, '{}'::jsonb) as "displayNames",
       coalesce(brands.name, '') as "brandName",
       coalesce(loyalty_stamp_campaigns.stamps_required, 5)::int as "stampsRequired",
       loyalty_stamp_campaigns.reward_coupon_name as "rewardCouponName",
+      coalesce(loyalty_stamp_campaigns.reward_coupon_display_names, '{}'::jsonb) as "rewardCouponDisplayNames",
       coalesce(loyalty_stamp_campaigns.reward_value_amount, 0)::int as "rewardValueAmount",
       coalesce(stamp_totals.total_stamps, 0)::int as "totalStamps",
       mod(coalesce(stamp_totals.total_stamps, 0), greatest(1, loyalty_stamp_campaigns.stamps_required))::int as "currentStamps",
@@ -890,6 +961,11 @@ export async function getMemberStampCards(memberId: string) {
       loyalty_stamp_campaigns.created_at desc
     limit 20
   `;
+  return rows.map((card) => ({
+    ...card,
+    displayNames: mergeMemberDisplayNames(String(card.name ?? ""), card.displayNames),
+    rewardCouponDisplayNames: mergeMemberDisplayNames(String(card.rewardCouponName ?? ""), card.rewardCouponDisplayNames)
+  }));
 }
 
 export function calculateCouponDiscount(
@@ -976,6 +1052,7 @@ export async function redeemPendingCouponForPaidOrder(orderId: string) {
 export async function issueMemberCoupon(input: {
   memberId: string;
   name: string;
+  displayNames?: Record<string, unknown>;
   discountType?: string;
   discountValue: number;
   maxDiscountAmount?: number | null;
@@ -991,12 +1068,14 @@ export async function issueMemberCoupon(input: {
   const maxDiscountAmount = input.maxDiscountAmount == null ? discountValue : Math.max(0, Math.round(Number(input.maxDiscountAmount) || 0));
   const expiresAt = normalizeText(input.expiresAt);
   const source = normalizeText(input.source) || "manual";
+  const displayNames = mergeMemberDisplayNames(name, input.displayNames);
   if (!memberId || discountValue <= 0) throw new Error("会員と割引金額を指定してください。");
 
   const rows = await sql`
     insert into member_coupons (
       member_id,
       name,
+      display_names,
       discount_type,
       discount_value,
       max_discount_amount,
@@ -1007,6 +1086,7 @@ export async function issueMemberCoupon(input: {
     values (
       ${memberId},
       ${name},
+      ${JSON.stringify(displayNames)}::jsonb,
       ${discountType},
       ${discountValue},
       ${maxDiscountAmount},
@@ -1022,6 +1102,7 @@ export async function issueMemberCoupon(input: {
 async function issueAutomaticCoupon(input: {
   memberId: string;
   name: string;
+  displayNames?: Record<string, unknown>;
   discountType: string;
   discountValue: number;
   maxDiscountAmount: number | null;
@@ -1032,6 +1113,7 @@ async function issueAutomaticCoupon(input: {
   const memberId = normalizeText(input.memberId);
   const source = normalizeText(input.source);
   const rewardKey = normalizeText(input.metadata.rewardKey);
+  const displayNames = mergeMemberDisplayNames(input.name, input.displayNames);
   if (!memberId || !source || !rewardKey || input.discountValue <= 0) return null;
 
   const existingRows = await sql`
@@ -1048,6 +1130,7 @@ async function issueAutomaticCoupon(input: {
     insert into member_coupons (
       member_id,
       name,
+      display_names,
       discount_type,
       discount_value,
       max_discount_amount,
@@ -1058,6 +1141,7 @@ async function issueAutomaticCoupon(input: {
     values (
       ${memberId},
       ${input.name},
+      ${JSON.stringify(displayNames)}::jsonb,
       ${input.discountType},
       ${input.discountValue},
       ${input.maxDiscountAmount},
@@ -1369,6 +1453,7 @@ async function issueMissingStampRewards(input: {
   brandId: string;
   stampsRequired: number;
   rewardCouponName: string;
+  rewardCouponDisplayNames?: Record<string, unknown>;
   rewardValueAmount: number;
 }) {
   const totalRows = await sql`
@@ -1392,6 +1477,7 @@ async function issueMissingStampRewards(input: {
         member_id,
         brand_id,
         name,
+        display_names,
         discount_type,
         discount_value,
         max_discount_amount,
@@ -1403,6 +1489,7 @@ async function issueMissingStampRewards(input: {
         ${input.memberId},
         nullif(${input.brandId}, '')::uuid,
         ${input.rewardCouponName || "ドリンク無料券"},
+        ${JSON.stringify(mergeMemberDisplayNames(input.rewardCouponName || "ドリンク無料券", input.rewardCouponDisplayNames))}::jsonb,
         'amount',
         ${input.rewardValueAmount || 600},
         ${input.rewardValueAmount || 600},
@@ -1477,6 +1564,7 @@ export async function adjustMemberStamps(input: {
       coalesce(brand_id::text, '') as "brandId",
       stamps_required as "stampsRequired",
       reward_coupon_name as "rewardCouponName",
+      coalesce(reward_coupon_display_names, '{}'::jsonb) as "rewardCouponDisplayNames",
       reward_value_amount as "rewardValueAmount"
     from loyalty_stamp_campaigns
     where id::text = ${campaignId}
@@ -1490,6 +1578,7 @@ export async function adjustMemberStamps(input: {
     brandId: string;
     stampsRequired: number;
     rewardCouponName: string;
+    rewardCouponDisplayNames?: Record<string, unknown>;
     rewardValueAmount: number;
   } | undefined;
   if (!campaign?.id) throw new Error("利用できるスタンプカードが見つかりません。");
@@ -1532,6 +1621,7 @@ export async function adjustMemberStamps(input: {
     brandId: campaign.brandId,
     stampsRequired: campaign.stampsRequired,
     rewardCouponName: campaign.rewardCouponName,
+    rewardCouponDisplayNames: campaign.rewardCouponDisplayNames,
     rewardValueAmount: campaign.rewardValueAmount
   });
 
@@ -1905,7 +1995,12 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
   if (!order.brandId) return;
   if (order.customerSummary?.stampEligible === false) return;
   const campaignRows = await sql`
-    select id::text, stamps_required as "stampsRequired", reward_coupon_name as "rewardCouponName", reward_value_amount as "rewardValueAmount"
+    select
+      id::text,
+      stamps_required as "stampsRequired",
+      reward_coupon_name as "rewardCouponName",
+      coalesce(reward_coupon_display_names, '{}'::jsonb) as "rewardCouponDisplayNames",
+      reward_value_amount as "rewardValueAmount"
     from loyalty_stamp_campaigns
     where brand_id::text = ${order.brandId}
       and is_active = true
@@ -1913,7 +2008,7 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
       and (valid_until is null or valid_until >= current_date)
     order by created_at
   `;
-  for (const campaign of campaignRows as Array<{ id: string; stampsRequired: number; rewardCouponName: string; rewardValueAmount: number }>) {
+  for (const campaign of campaignRows as Array<{ id: string; stampsRequired: number; rewardCouponName: string; rewardCouponDisplayNames?: Record<string, unknown>; rewardValueAmount: number }>) {
     const itemRows = await sql`
       select coalesce(sum(quantity), 0)::int as quantity
       from store_customer_order_items
@@ -1953,6 +2048,7 @@ async function awardStampForOrder(order: { id: string; memberId: string; brandId
       brandId: order.brandId,
       stampsRequired: campaign.stampsRequired,
       rewardCouponName: campaign.rewardCouponName,
+      rewardCouponDisplayNames: campaign.rewardCouponDisplayNames,
       rewardValueAmount: campaign.rewardValueAmount
     });
   }
