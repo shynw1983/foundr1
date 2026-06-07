@@ -22,6 +22,15 @@ type FeedbackReport = {
   viewportWidth?: number;
   viewportHeight?: number;
   language: string;
+  metadata?: {
+    feedbackReporter?: {
+      employeeId?: string;
+      employeeName?: string;
+      storeName?: string;
+      timecardStatus?: string;
+      selectedFromActiveTimecard?: boolean;
+    } | null;
+  };
   adminNote: string;
   handledBy: string;
   createdLabel: string;
@@ -188,6 +197,7 @@ function FeedbackReportCard({
   const [status, setStatus] = useState(report.status);
   const [adminNote, setAdminNote] = useState(report.adminNote ?? "");
   const [isSaving, setIsSaving] = useState(false);
+  const feedbackReporter = report.metadata?.feedbackReporter ?? null;
 
   async function save() {
     setIsSaving(true);
@@ -215,7 +225,10 @@ function FeedbackReportCard({
         <dl className="feedback-report-meta">
           <div>
             <dt>報告者</dt>
-            <dd>{report.reportedBy || "不明"}</dd>
+            <dd>
+              {feedbackReporter?.employeeName || report.reportedBy || "不明"}
+              {feedbackReporter?.selectedFromActiveTimecard ? `（Timecard${feedbackReporter.timecardStatus ? ` / ${feedbackReporter.timecardStatus}` : ""}）` : ""}
+            </dd>
           </div>
           <div>
             <dt>店舗</dt>

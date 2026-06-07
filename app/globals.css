@@ -122,6 +122,98 @@
   text-decoration: underline;
 }
 
+.floating-feedback-panel {
+  width: min(380px, calc(100vw - 88px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  pointer-events: auto;
+}
+
+.floating-feedback-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.floating-feedback-panel-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.floating-feedback-form {
+  display: grid;
+  gap: 10px;
+}
+
+.floating-feedback-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.floating-feedback-form input,
+.floating-feedback-form select,
+.floating-feedback-form textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+}
+
+.floating-feedback-form textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.floating-feedback-form input:focus,
+.floating-feedback-form select:focus,
+.floating-feedback-form textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(18, 91, 61, 0.12);
+  outline: none;
+}
+
+.floating-feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.floating-feedback-actions a {
+  color: var(--green);
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.floating-feedback-actions a:hover {
+  text-decoration: underline;
+}
+
+.floating-feedback-actions .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+}
+
 .feedback-submit-panel,
 .feedback-board {
   width: min(100%, 1040px);
@@ -480,6 +572,20 @@
 }
 
 @media (max-width: 640px) {
+  .floating-feedback {
+    right: 12px;
+    bottom: 12px;
+    flex-direction: column;
+  }
+
+  .floating-feedback-panel {
+    width: calc(100vw - 24px);
+  }
+
+  .floating-feedback-toast {
+    max-width: calc(100vw - 88px);
+  }
+
   .feedback-submit-panel,
   .feedback-board {
     padding: 16px;

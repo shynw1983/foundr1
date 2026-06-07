@@ -13,11 +13,25 @@ const maxScreenshotSizeBytes = 5 * 1024 * 1024;
 
 export async function GET(request: Request) {
   const session = await requireOsSession();
-  if (!session || !manageRoles.has(session.role)) {
+  if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("mode") === "active-staff") {
+    if (!submitRoles.has(session.role)) {
+      return Response.json({ error: "権限がありません。" }, { status: 403 });
+    }
+    const storeId = String(url.searchParams.get("storeId") ?? "").trim();
+    const activeStaff = await loadActiveFeedbackStaff(session, storeId);
+    return Response.json({
+      currentEmployeeRole: session.role,
+      activeStaff
+    });
+  }
+
+  if (!manageRoles.has(session.role)) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
-  const url = new URL(request.url);
   const source = normalizeSource(url.searchParams.get("source"));
   const status = normalizeOptionalStatus(url.searchParams.get("status"));
   const rows = await loadFeedbackReports(session, source, status);
@@ -262,6 +276,50 @@ async function loadFeedbackReports(session: { id: string; role: string }, source
     order by feedback_reports.created_at desc
     limit 200
   `;
+}
+
+async function loadActiveFeedbackStaff(session: { id: string; role: string }, requestedStoreId: string) {
+  const scope = await getSessionStoreScope(session as any);
+  const storeIds = scope.allStores
+    ? requestedStoreId ? [requestedStoreId] : []
+    : requestedStoreId && scope.storeIds.includes(requestedStoreId) ? [requestedStoreId] : scope.storeIds;
+
+  if (!storeIds.length) return [];
+
+  const rows = await sql`
+    select
+      latest_punch.employee_id::text as "employeeId",
+      employees.name as "employeeName",
+      latest_punch.store_id::text as "storeId",
+      stores.name as "storeName",
+      latest_punch.punch_type as "punchType",
+      latest_punch.punched_at as "punchedAt"
+    from (
+      select distinct on (timecard_punches.employee_id)
+        timecard_punches.employee_id,
+        timecard_punches.store_id,
+        timecard_punches.punch_type,
+        timecard_punches.punched_at
+      from timecard_punches
+      where timecard_punches.store_id::text = any(${storeIds})
+        and timecard_punches.punched_at >= now() - interval '36 hours'
+      order by timecard_punches.employee_id, timecard_punches.punched_at desc
+    ) latest_punch
+    join employees on employees.id = latest_punch.employee_id
+    join stores on stores.id = latest_punch.store_id
+    where latest_punch.punch_type in ('clock_in', 'break_start', 'break_end')
+      and employees.status = 'active'
+    order by stores.name, employees.name
+  `;
+
+  return rows.map((row) => ({
+    employeeId: String(row.employeeId),
+    employeeName: String(row.employeeName),
+    storeId: String(row.storeId),
+    storeName: String(row.storeName),
+    punchType: String(row.punchType),
+    punchedAt: new Date(String(row.punchedAt)).toISOString()
+  }));
 }
 
 async function canAccessReport(session: { id: string; role: string }, id: string) {
