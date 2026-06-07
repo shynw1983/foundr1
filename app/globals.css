@@ -12553,7 +12553,6 @@ body :where(
 }
 
 @media (max-width: 420px) {
-  .member-portal-brand strong,
   .member-account-summary-text {
     display: none;
   }

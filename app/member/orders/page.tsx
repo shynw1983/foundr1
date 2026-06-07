@@ -69,7 +69,7 @@ export default function MemberOrdersPage() {
         <header className="member-portal-topbar">
           <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
             <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-            <strong>{text.member}</strong>
+            <strong>Members</strong>
           </a>
           <MemberLanguageSwitcher />
         </header>
@@ -86,7 +86,7 @@ export default function MemberOrdersPage() {
       <header className="member-portal-topbar">
         <a className="member-portal-brand" href="/member" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-          <strong>{text.member}</strong>
+          <strong>Members</strong>
         </a>
         <div className="member-topbar-actions">
           <MemberLanguageSwitcher />

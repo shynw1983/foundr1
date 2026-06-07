@@ -185,7 +185,7 @@ export default function MemberPage() {
         <header className="member-portal-topbar">
           <div className="member-portal-brand" aria-label="Foundr1 Members">
             <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-            <strong>{text.member}</strong>
+            <strong>Members</strong>
           </div>
           <MemberLanguageSwitcher />
         </header>
@@ -371,7 +371,7 @@ function ConfiguredMemberPortal() {
       <header className="member-portal-topbar">
         <div className="member-portal-brand" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-store-512.png" alt="Foundr1" /></span>
-          <strong>{text.member}</strong>
+          <strong>Members</strong>
         </div>
         <div className="member-topbar-actions">
           <MemberLanguageSwitcher />
