@@ -9,6 +9,11 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizeDisplayLanguage(value: unknown) {
+  const language = normalizeText(value);
+  return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
+}
+
 async function resolveStoreId(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, bodyStoreId = "") {
   const access = await getStoreOrderAccess(session);
   const requestedStoreId = bodyStoreId || new URL(request.url).searchParams.get("storeId") || "";
@@ -37,6 +42,7 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     paymentLabel: normalizeText(state.paymentLabel),
     externalPaymentTerminalBrand: normalizeText(state.externalPaymentTerminalBrand) || "PayCAS",
     pickupCode: normalizeText(state.pickupCode),
+    preferredLanguage: normalizeDisplayLanguage(state.preferredLanguage),
     subtotal: Math.max(0, toAmount(state.subtotal)),
     cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
     cashChangeAmount: toNullableAmount(state.cashChangeAmount),

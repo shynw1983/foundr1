@@ -30,6 +30,7 @@ type PosCheckoutBody = {
   memberPhone?: string;
   memberEmail?: string;
   memberName?: string;
+  memberLanguage?: string;
   couponId?: string;
   discountPresetKey?: string;
   note?: string;
@@ -99,6 +100,11 @@ function isDineInWeightMalatangOptionGroup(group: { groupKey: string; groupName:
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function normalizeMemberLanguage(value: unknown) {
+  const language = normalizeText(value);
+  return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
 }
 
 function normalizeDiscountPresets(value: unknown) {
@@ -502,6 +508,7 @@ export async function POST(request: Request) {
   const memberPhone = normalizeText(body.memberPhone);
   const memberEmail = normalizeText(body.memberEmail);
   const memberName = normalizeText(body.memberName);
+  const memberLanguage = normalizeMemberLanguage(body.memberLanguage);
   const couponId = normalizeText(body.couponId);
   const discountPresetKey = normalizeText(body.discountPresetKey);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
@@ -831,6 +838,7 @@ export async function POST(request: Request) {
         memberId: member?.id ?? "",
         memberNumber: member?.memberNumber ?? "",
         memberLabel: member ? (member.displayName || member.phone || member.email || member.memberNumber) : "",
+        memberLanguage: normalizeMemberLanguage(member?.preferredLanguage || memberLanguage),
         subtotalAmount,
         taxableAmount: taxSummary.taxableAmount,
         taxAmount: taxSummary.taxAmount,

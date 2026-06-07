@@ -27,6 +27,7 @@ type DisplayState = {
   paymentLabel: string;
   externalPaymentTerminalBrand: string;
   pickupCode: string;
+  preferredLanguage: string;
   subtotal: number;
   cashTenderedAmount: number | null;
   cashChangeAmount: number | null;
@@ -43,6 +44,7 @@ const idleState: DisplayState = {
   paymentLabel: "現金",
   externalPaymentTerminalBrand: "PayCAS",
   pickupCode: "",
+  preferredLanguage: "",
   subtotal: 0,
   cashTenderedAmount: null,
   cashChangeAmount: null,

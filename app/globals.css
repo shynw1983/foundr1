@@ -10949,11 +10949,12 @@ body :where(
 
 .member-portal-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 3fr) repeat(3, minmax(120px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
 }
 
 .member-card-main {
+  grid-column: span 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -12172,6 +12173,10 @@ body :where(
   .member-stamp-card-grid,
   .member-portal-content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .member-card-main {
+    grid-column: auto;
   }
 
   .member-stamp-card-placeholder {

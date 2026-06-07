@@ -1,4 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
+import { sql } from "../../../../../lib/db";
 import { getMemberAvailableCoupons, getMemberOnlineOrderHistory, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +17,28 @@ function firstEmail(user: Awaited<ReturnType<typeof currentUser>>) {
 
 function displayName(user: Awaited<ReturnType<typeof currentUser>>) {
   return [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.username || "";
+}
+
+async function getPreferredStoreOptions() {
+  const rows = await sql`
+    select
+      id::text,
+      coalesce(external_id, '') as "externalId",
+      name,
+      coalesce(customer_display_names, '{}'::jsonb) as "customerDisplayNames"
+    from stores
+    where status = 'active'
+    order by name
+  `;
+
+  return rows.map((row) => ({
+    value: String(row.externalId || row.id),
+    label: resolveCustomerStoreDisplayName({
+      settings: row.customerDisplayNames,
+      internalStoreName: String(row.name ?? ""),
+      platform: "web_reservation"
+    })
+  }));
 }
 
 export async function GET() {
@@ -48,11 +72,12 @@ export async function GET() {
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
   await issueAutomaticLoyaltyRewardsForMember(member.id);
 
-  const [coupons, pointHistory, stampCards, orders] = await Promise.all([
+  const [coupons, pointHistory, stampCards, orders, preferredStoreOptions] = await Promise.all([
     getMemberAvailableCoupons(member.id),
     getMemberPointHistory(member.id),
     getMemberStampCards(member.id),
-    getMemberOnlineOrderHistory(member.id)
+    getMemberOnlineOrderHistory(member.id),
+    getPreferredStoreOptions()
   ]);
 
   return Response.json({
@@ -62,7 +87,8 @@ export async function GET() {
     coupons,
     pointHistory,
     stampCards,
-    orders
+    orders,
+    preferredStoreOptions
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -134,7 +160,8 @@ export async function PATCH(request: Request) {
       lineLinked: Boolean(body.lineLinked)
     });
     if (member?.id) await issueAutomaticLoyaltyRewardsForMember(member.id);
-    return Response.json({ configured: true, authenticated: true, member }, { headers: { "Cache-Control": "no-store" } });
+    const preferredStoreOptions = await getPreferredStoreOptions();
+    return Response.json({ configured: true, authenticated: true, member, preferredStoreOptions }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error && error.message.includes("duplicate key")
       ? "この電話番号はすでに別の会員で使われています。"

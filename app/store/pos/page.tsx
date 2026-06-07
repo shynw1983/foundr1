@@ -206,6 +206,7 @@ type PosMember = {
   displayName: string;
   phone: string;
   email: string;
+  preferredLanguage: string;
   pointBalance: number;
   lifetimeSpendAmount: number;
   lifetimeVisitCount: number;
@@ -1161,6 +1162,7 @@ export default function StorePosPage() {
           memberEmail: selectedMember?.email || undefined,
           memberPhone: selectedMember?.phone || undefined,
           memberName: selectedMember?.displayName || undefined,
+          memberLanguage: selectedMember?.preferredLanguage || undefined,
           couponId: couponBlockedByDiscount ? undefined : selectedCouponId || undefined,
           discountPresetKey: discountPresetKey || undefined,
           note,
@@ -1199,6 +1201,7 @@ export default function StorePosPage() {
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: body.pickupCode,
+        preferredLanguage: selectedMember?.preferredLanguage || "",
         subtotal: body.amount,
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
@@ -1244,6 +1247,7 @@ export default function StorePosPage() {
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: "",
+        preferredLanguage: selectedMember?.preferredLanguage || "",
         subtotal: payableAmount,
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
@@ -1262,7 +1266,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedStoreId, payableAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedMember?.preferredLanguage, selectedStoreId, payableAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;

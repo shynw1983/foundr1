@@ -430,7 +430,7 @@ export async function updateMemberSettings(memberId: string, input: LoyaltyMembe
   const phone = normalizePhone(input.phone).slice(0, 30);
   const birthday = normalizeText(input.birthday);
   const normalizedBirthday = /^\d{4}-\d{2}-\d{2}$/.test(birthday) ? birthday : "";
-  const preferredLanguage = ["ja", "zh", "zh-Hant", "en", "ko"].includes(normalizeText(input.preferredLanguage))
+  const preferredLanguage = ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(normalizeText(input.preferredLanguage))
     ? normalizeText(input.preferredLanguage)
     : "ja";
   const preferredStoreId = normalizeText(input.preferredStoreId).slice(0, 80);
