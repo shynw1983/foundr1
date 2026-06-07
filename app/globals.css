@@ -45,6 +45,83 @@
   color: var(--green);
 }
 
+.floating-feedback {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.floating-feedback-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(20, 80, 58, 0.28);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.floating-feedback-button:hover:not(:disabled),
+.floating-feedback-button:focus-visible:not(:disabled) {
+  background: #185d48;
+  box-shadow: 0 16px 38px rgba(20, 80, 58, 0.34);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.floating-feedback-button:disabled {
+  cursor: progress;
+  opacity: 0.78;
+}
+
+.floating-feedback-button.is-sent {
+  background: #111827;
+}
+
+.floating-feedback-button.is-error {
+  background: var(--red);
+}
+
+.floating-feedback-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(300px, calc(100vw - 96px));
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 9px 11px;
+  pointer-events: auto;
+}
+
+.floating-feedback-toast a {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.floating-feedback-toast a:hover {
+  text-decoration: underline;
+}
+
 .feedback-submit-panel,
 .feedback-board {
   width: min(100%, 1040px);
