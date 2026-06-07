@@ -11507,6 +11507,37 @@ body :where(
   gap: 14px;
 }
 
+.member-point-hero-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.member-point-period-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--member-line);
+  border-radius: 999px;
+  background: white;
+  color: var(--member-logo-accent);
+  padding: 0 10px 0 12px;
+}
+
+.member-point-period-select select {
+  min-width: 138px;
+  border: 0;
+  background: transparent;
+  color: var(--member-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: 0;
+}
+
 .member-orders-message {
   color: var(--member-muted);
   font-size: 13px;
@@ -12500,15 +12531,22 @@ body :where(
     flex-direction: column;
   }
 
+  .member-point-hero-controls,
   .member-portal-auth-actions,
   .member-portal-toolbar {
     width: 100%;
     justify-content: stretch;
   }
 
+  .member-point-period-select,
   .member-portal-auth-actions button,
   .member-portal-toolbar button {
     flex: 1 1 150px;
+  }
+
+  .member-point-period-select select {
+    min-width: 0;
+    width: 100%;
   }
 
   .member-card-main,

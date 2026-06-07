@@ -179,10 +179,22 @@ export default function MemberPointsPage() {
           <span>{text.pointsCouponsNumber}</span>
         </div>
         {isLoaded && isSignedIn ? (
-          <button className="secondary-button" type="button" onClick={() => void loadPoints()} disabled={loading}>
-            {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
-            {text.refresh}
-          </button>
+          <div className="member-point-hero-controls">
+            <label className="member-point-period-select">
+              <CalendarDays size={16} />
+              <select value={periodRange} onChange={(event) => changePeriodRange(event.target.value)} aria-label={text.pointHistoryPeriod}>
+                <option value="latest">{text.pointHistoryLatest}</option>
+                <option value="30d">{text.pointHistoryLast30Days}</option>
+                <option value="90d">{text.pointHistoryLast90Days}</option>
+                <option value="1y">{text.pointHistoryLastYear}</option>
+                <option value="custom">{text.pointHistoryCustom}</option>
+              </select>
+            </label>
+            <button className="secondary-button" type="button" onClick={() => void loadPoints()} disabled={loading}>
+              {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
+              {text.refresh}
+            </button>
+          </div>
         ) : null}
       </section>
 
@@ -198,47 +210,29 @@ export default function MemberPointsPage() {
         <>
           {message ? <p className="member-orders-message">{message}</p> : null}
           <section className="member-orders-shell">
-            <article className="member-portal-panel member-point-filter-panel">
-              <div className="member-portal-panel-title">
-                <CalendarDays size={18} />
-                <h3>{text.pointHistoryPeriod}</h3>
-              </div>
-              <div className="member-settings-grid">
-                <label>
-                  <span>{text.pointHistoryPeriod}</span>
-                  <select value={periodRange} onChange={(event) => changePeriodRange(event.target.value)}>
-                    <option value="latest">{text.pointHistoryLatest}</option>
-                    <option value="30d">{text.pointHistoryLast30Days}</option>
-                    <option value="90d">{text.pointHistoryLast90Days}</option>
-                    <option value="1y">{text.pointHistoryLastYear}</option>
-                    <option value="custom">{text.pointHistoryCustom}</option>
-                  </select>
-                </label>
-                {periodRange === "custom" ? (
-                  <>
-                    <label>
-                      <span>{text.pointHistoryStartDate}</span>
-                      <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
-                    </label>
-                    <label>
-                      <span>{text.pointHistoryEndDate}</span>
-                      <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
-                    </label>
-                  </>
-                ) : null}
-                <div className="member-portal-toolbar member-settings-field-wide">
-                  {periodRange === "custom" ? (
+            {periodRange === "custom" ? (
+              <article className="member-portal-panel">
+                <div className="member-settings-grid">
+                  <label>
+                    <span>{text.pointHistoryStartDate}</span>
+                    <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{text.pointHistoryEndDate}</span>
+                    <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+                  </label>
+                  <div className="member-portal-toolbar member-settings-field-wide">
                     <button className="secondary-button" type="button" onClick={() => void loadPoints("custom", fromDate, toDate)} disabled={loading}>
                       {loading ? <Loader2 size={16} /> : <CalendarDays size={16} />}
                       {text.applyFilter}
                     </button>
-                  ) : null}
-                  <button className="secondary-button" type="button" onClick={clearFilter} disabled={loading && periodRange === "latest"}>
-                    {text.clearFilter}
-                  </button>
+                    <button className="secondary-button" type="button" onClick={clearFilter} disabled={loading}>
+                      {text.clearFilter}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </article>
+              </article>
+            ) : null}
             {loading && !data.pointHistory ? (
               <section className="member-portal-login-panel">
                 <Loader2 size={32} />
