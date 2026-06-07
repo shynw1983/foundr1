@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { adjustMemberStamps, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
+import { adjustMemberStamps, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, resendMemberCouponEmail, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +85,19 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, adjustment, ...dashboard });
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "スタンプを補録できませんでした。" }, { status: 400 });
+    }
+  }
+
+  if (normalizeText(body.action) === "resend_coupon_email") {
+    try {
+      const emailResult = await resendMemberCouponEmail({
+        couponId: normalizeText(body.couponId),
+        requestedBy: session.id
+      });
+      const dashboard = await getLoyaltyDashboard();
+      return Response.json({ ok: true, emailResult, ...dashboard });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "メールを送信できませんでした。" }, { status: 400 });
     }
   }
 

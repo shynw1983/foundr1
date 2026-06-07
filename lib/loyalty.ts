@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { sendBirthdayCouponEmail } from "./email";
+import { sendBirthdayCouponEmail, sendCouponEmail } from "./email";
 
 const basePointRateBasis = 100;
 const pointExpiryMonths = 12;
@@ -964,11 +964,68 @@ async function updateCouponEmailStatus(input: { couponId: string; status: string
       emailStatus: input.status,
       emailMessageId: input.messageId ?? "",
       emailError: input.error ?? "",
-      emailSentAt: input.status === "sent" ? new Date().toISOString() : undefined,
+      emailSentAt: input.status === "sent" ? new Date().toISOString() : "",
       emailCheckedAt: new Date().toISOString()
     })}::jsonb
     where id::text = ${input.couponId}
   `;
+}
+
+export async function resendMemberCouponEmail(input: { couponId: string; requestedBy?: string }) {
+  const couponId = normalizeText(input.couponId);
+  if (!couponId) throw new Error("クーポンを選択してください。");
+
+  const rows = await sql`
+    select
+      member_coupons.id::text,
+      member_coupons.coupon_code as "couponCode",
+      member_coupons.name,
+      coalesce(member_coupons.expires_at::text, '') as "expiresAt",
+      member_coupons.status,
+      members.id::text as "memberId",
+      coalesce(nullif(members.display_name, ''), nullif(members.metadata->>'fullName', ''), nullif(members.email, ''), members.member_number) as "memberName",
+      coalesce(members.email, '') as email,
+      coalesce((members.metadata->>'marketingOptIn')::boolean, false) as "marketingOptIn"
+    from member_coupons
+    join members on members.id = member_coupons.member_id
+    where member_coupons.id::text = ${couponId}
+      and members.status = 'active'
+    limit 1
+  `;
+  const coupon = rows[0] as {
+    id: string;
+    couponCode: string;
+    name: string;
+    expiresAt: string;
+    status: string;
+    memberName: string;
+    email: string;
+    marketingOptIn: boolean;
+  } | undefined;
+  if (!coupon?.id) throw new Error("クーポンが見つかりません。");
+  if (!coupon.email) {
+    await updateCouponEmailStatus({ couponId, status: "skipped", error: "Member email is missing." });
+    return { status: "skipped", error: "会員メールが登録されていません。" };
+  }
+  if (!coupon.marketingOptIn) {
+    await updateCouponEmailStatus({ couponId, status: "skipped", error: "marketingOptIn is false." });
+    return { status: "skipped", error: "会員がメール通知を許可していません。" };
+  }
+
+  const emailResult = await sendCouponEmail({
+    to: coupon.email,
+    memberName: coupon.memberName,
+    couponName: coupon.name,
+    couponCode: coupon.couponCode,
+    expiresAt: coupon.expiresAt
+  });
+  await updateCouponEmailStatus({
+    couponId,
+    status: emailResult.status,
+    messageId: emailResult.id,
+    error: emailResult.error
+  });
+  return emailResult;
 }
 
 export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; sendEmails?: boolean } = {}) {
@@ -1594,6 +1651,13 @@ export async function getLoyaltyDashboard() {
         coalesce(member_coupons.expires_at::text, '') as "expiresAt",
         member_coupons.issued_source as "issuedSource",
         member_coupons.issued_at::text as "issuedAt",
+        coalesce(member_coupons.metadata->>'emailStatus', '') as "emailStatus",
+        coalesce(member_coupons.metadata->>'emailMessageId', '') as "emailMessageId",
+        coalesce(member_coupons.metadata->>'emailError', '') as "emailError",
+        coalesce(member_coupons.metadata->>'emailSentAt', '') as "emailSentAt",
+        coalesce(member_coupons.metadata->>'emailCheckedAt', '') as "emailCheckedAt",
+        coalesce(members.email, '') as "memberEmail",
+        coalesce((members.metadata->>'marketingOptIn')::boolean, false) as "marketingOptIn",
         members.member_number as "memberNumber",
         coalesce(nullif(members.display_name, ''), members.phone, members.email, members.member_number) as "memberLabel"
       from member_coupons

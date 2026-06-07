@@ -9,8 +9,10 @@ import {
   Gift,
   Lightbulb,
   LogOut,
+  Mail,
   MenuSquare,
   PackageCheck,
+  RefreshCw,
   Search,
   ShoppingCart,
   Stamp,
@@ -92,6 +94,13 @@ type LoyaltyCoupon = {
   issuedAt: string;
   memberNumber: string;
   memberLabel: string;
+  memberEmail: string;
+  marketingOptIn: boolean;
+  emailStatus: string;
+  emailMessageId: string;
+  emailError: string;
+  emailSentAt: string;
+  emailCheckedAt: string;
 };
 
 type LoyaltyStampCampaign = {
@@ -215,6 +224,31 @@ function getCouponValueLabel(coupon: LoyaltyCoupon) {
   return isExchangeCoupon(coupon) ? "1杯交換" : formatYen(coupon.discountValue);
 }
 
+function getCouponEmailStatusLabel(coupon: LoyaltyCoupon) {
+  if (coupon.emailStatus === "sent") return "送信済み";
+  if (coupon.emailStatus === "failed") return "送信失敗";
+  if (coupon.emailStatus === "skipped") return "未送信";
+  if (coupon.emailStatus === "disabled") return "送信対象外";
+  if (!coupon.memberEmail) return "メールなし";
+  if (!coupon.marketingOptIn) return "通知未同意";
+  return "未送信";
+}
+
+function getCouponEmailStatusClass(coupon: LoyaltyCoupon) {
+  if (coupon.emailStatus === "sent") return "is-sent";
+  if (coupon.emailStatus === "failed") return "is-failed";
+  if (coupon.emailStatus === "disabled" || coupon.emailStatus === "skipped" || !coupon.memberEmail || !coupon.marketingOptIn) return "is-muted";
+  return "is-pending";
+}
+
+function getCouponEmailNote(coupon: LoyaltyCoupon) {
+  if (coupon.emailStatus === "sent") return coupon.emailSentAt ? `${formatDateTime(coupon.emailSentAt)} 送信` : "メール送信済み";
+  if (coupon.emailError) return coupon.emailError;
+  if (!coupon.memberEmail) return "会員メール未登録";
+  if (!coupon.marketingOptIn) return "通知受信の同意なし";
+  return "再送できます";
+}
+
 export default function LoyaltyPage() {
   const [dashboard, setDashboard] = useState<LoyaltyDashboard>({
     summary: emptySummary,
@@ -231,6 +265,7 @@ export default function LoyaltyPage() {
   const [stampSaving, setStampSaving] = useState(false);
   const [ruleSaving, setRuleSaving] = useState(false);
   const [tierSaving, setTierSaving] = useState(false);
+  const [resendingCouponId, setResendingCouponId] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ displayName: "", phone: "", email: "" });
   const [couponForm, setCouponForm] = useState({
@@ -422,6 +457,32 @@ export default function LoyaltyPage() {
       setMessage(error instanceof Error ? error.message : "会員ランクを保存できませんでした。");
     } finally {
       setTierSaving(false);
+    }
+  }
+
+  async function resendCouponEmail(coupon: LoyaltyCoupon) {
+    if (resendingCouponId) return;
+    setResendingCouponId(coupon.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resend_coupon_email",
+          couponId: coupon.id
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "メールを送信できませんでした。");
+      syncDashboard(body);
+      const status = String(body.emailResult?.status ?? "");
+      if (status === "sent") setMessage("クーポン通知メールを送信しました。");
+      else setMessage(body.emailResult?.error || "メール通知は送信されませんでした。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "メールを送信できませんでした。");
+    } finally {
+      setResendingCouponId("");
     }
   }
 
@@ -771,6 +832,8 @@ export default function LoyaltyPage() {
                   <th>クーポン</th>
                   <th>期限</th>
                   <th>状態</th>
+                  <th>メール通知</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -787,10 +850,28 @@ export default function LoyaltyPage() {
                     </td>
                     <td>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "期限なし"}</td>
                     <td>{coupon.status === "available" ? "利用可" : coupon.status === "used" ? "使用済み" : coupon.status}</td>
+                    <td>
+                      <span className={`loyalty-email-pill ${getCouponEmailStatusClass(coupon)}`}>
+                        <Mail size={13} />
+                        {getCouponEmailStatusLabel(coupon)}
+                      </span>
+                      <small>{getCouponEmailNote(coupon)}</small>
+                    </td>
+                    <td>
+                      <button
+                        className="secondary-button loyalty-email-resend-button"
+                        type="button"
+                        onClick={() => void resendCouponEmail(coupon)}
+                        disabled={Boolean(resendingCouponId) || !coupon.memberEmail || !coupon.marketingOptIn}
+                      >
+                        <RefreshCw size={14} />
+                        {resendingCouponId === coupon.id ? "送信中" : "再送"}
+                      </button>
+                    </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5}>クーポン履歴はまだありません。</td>
+                    <td colSpan={7}>クーポン履歴はまだありません。</td>
                   </tr>
                 )}
               </tbody>

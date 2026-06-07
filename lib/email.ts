@@ -9,6 +9,11 @@ type BirthdayCouponEmailInput = {
   memberUrl?: string;
 };
 
+type CouponEmailInput = BirthdayCouponEmailInput & {
+  subject?: string;
+  introText?: string;
+};
+
 let resendClient: Resend | null = null;
 
 function getResendClient() {
@@ -19,7 +24,7 @@ function getResendClient() {
 }
 
 function getFromAddress() {
-  return process.env.RESEND_FROM_EMAIL?.trim() || "Foundr1 Members <members@foundr1.jp>";
+  return process.env.RESEND_FROM_EMAIL?.trim() || "Foundr1 Members <no-reply@foundr1.jp>";
 }
 
 function getMemberUrl() {
@@ -47,19 +52,19 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
+export async function sendCouponEmail(input: CouponEmailInput) {
   const client = getResendClient();
   if (!client) return { status: "skipped", id: "", error: "RESEND_API_KEY is not configured." };
 
   const memberName = input.memberName.trim() || "会員";
   const memberUrl = input.memberUrl?.trim() || getMemberUrl();
   const expiresLabel = formatDate(input.expiresAt);
-  const subject = "お誕生日特典クーポンをお届けしました";
+  const subject = input.subject?.trim() || "クーポンをお届けしました";
+  const introText = input.introText?.trim() || "Foundr1 Members にクーポンをお届けしました。";
   const text = [
     `${memberName} 様`,
     "",
-    "お誕生日月おめでとうございます。",
-    "Foundr1 Members に誕生日特典クーポンをお届けしました。",
+    introText,
     "",
     `クーポン: ${input.couponName}`,
     `クーポンコード: ${input.couponCode}`,
@@ -77,7 +82,7 @@ export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;color:#1f2937;">
           <p>${escapeHtml(memberName)} 様</p>
-          <p>お誕生日月おめでとうございます。<br />Foundr1 Members に誕生日特典クーポンをお届けしました。</p>
+          <p>${escapeHtml(introText)}</p>
           <div style="border:1px solid #dbe3df;border-radius:8px;padding:16px;margin:18px 0;background:#f8fafc;">
             <p style="margin:0 0 8px;color:#64748b;font-size:13px;">クーポン</p>
             <p style="margin:0;font-size:20px;font-weight:700;">${escapeHtml(input.couponName)}</p>
@@ -93,4 +98,12 @@ export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
   } catch (error) {
     return { status: "failed", id: "", error: error instanceof Error ? error.message : "Email send failed." };
   }
+}
+
+export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
+  return sendCouponEmail({
+    ...input,
+    subject: "お誕生日特典クーポンをお届けしました",
+    introText: "お誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。"
+  });
 }
