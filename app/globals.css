@@ -8558,23 +8558,39 @@ body :where(
   gap: 8px;
 }
 
-.store-pos-transaction-items > div {
+.store-pos-transaction-item-choice {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   background: white;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
 }
 
-.store-pos-transaction-items > div.is-refunded {
+.store-pos-transaction-item-choice.is-selected {
+  border-color: rgba(31, 111, 91, 0.42);
+  background: var(--green-soft);
+  box-shadow: 0 0 0 2px rgba(31, 111, 91, 0.08);
+}
+
+.store-pos-transaction-item-choice.is-refunded,
+.store-pos-transaction-item-choice:disabled {
   color: var(--muted);
   background: #f8fafc;
+  cursor: not-allowed;
 }
 
-.store-pos-transaction-items > div > div {
+.store-pos-transaction-item-choice.is-static {
+  cursor: default;
+}
+
+.store-pos-transaction-item-choice > div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -8613,11 +8629,44 @@ body :where(
   gap: 6px;
 }
 
-.store-pos-transaction-item-actions .secondary-button {
-  min-height: 32px;
+.store-pos-transaction-item-actions span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 0 10px;
+  background: white;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.store-pos-transaction-item-choice.is-selected .store-pos-transaction-item-actions span {
+  border-color: rgba(31, 111, 91, 0.38);
+  background: var(--green);
+  color: white;
+}
+
+.store-pos-selected-refund-item {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+}
+
+.store-pos-selected-refund-item.is-selected {
+  border-color: rgba(31, 111, 91, 0.38);
+  background: var(--green-soft);
+}
+
+.store-pos-selected-refund-item strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .store-pos-refund-panel label {
