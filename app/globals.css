@@ -8737,14 +8737,14 @@ body :where(
   border-color: #d6d3d1;
 }
 
-.customer-display-payment > :not(.customer-display-terminal) {
+.customer-display-payment > :not(.customer-display-settlement) {
   flex: 0 0 auto;
 }
 
 .customer-display-total,
 .customer-display-member,
 .customer-display-discount,
-.customer-display-cash > div,
+.customer-display-cash-card,
 .customer-display-terminal,
 .customer-display-complete {
   display: grid;
@@ -8755,6 +8755,7 @@ body :where(
 
 .customer-display-discount {
   grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
   align-items: baseline;
   border: 1px solid #e5e5df;
   padding: 10px 12px;
@@ -8818,7 +8819,7 @@ body :where(
 
 .customer-display-total span,
 .customer-display-total small,
-.customer-display-cash span,
+.customer-display-cash-card span,
 .customer-display-terminal span,
 .customer-display-terminal small,
 .customer-display-complete span {
@@ -8857,35 +8858,53 @@ body :where(
   font-size: clamp(15px, 2vh, 20px);
 }
 
-.customer-display-cash {
+.customer-display-settlement {
+  flex: 1 1 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  margin-top: auto;
+  min-height: 0;
 }
 
-.customer-display-cash > div {
+.customer-display-settlement.is-cash {
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.customer-display-settlement.is-terminal {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.customer-display-settlement.is-terminal.has-promotions {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.customer-display-promotion-group {
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.customer-display-cash-card {
+  align-content: center;
   border: 1px solid #ededeb;
   padding: 12px;
   background: #fff;
 }
 
-.customer-display-cash strong {
+.customer-display-cash-card strong {
   color: #171717;
   font-size: clamp(30px, 5.8vh, 62px);
   font-weight: 500;
   line-height: 1;
 }
 
-.customer-display-cash .is-short strong,
-.customer-display-cash .is-short small {
+.customer-display-cash-card.is-short strong,
+.customer-display-cash-card.is-short small {
   color: #b91c1c;
 }
 
 .customer-display-terminal {
-  flex: 1 1 0;
   align-content: center;
-  min-height: 156px;
   border: 1px solid #ededeb;
   padding: 16px;
   background: #fff;
@@ -8949,11 +8968,7 @@ body :where(
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
-  .customer-display-payment {
-    grid-template-rows: auto auto auto auto;
-  }
-
-  .customer-display-cash {
+  .customer-display-settlement.is-cash {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

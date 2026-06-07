@@ -246,6 +246,10 @@ export default function CustomerDisplayPage() {
     void load(storeId);
   }
 
+  const hasDiscount = Boolean(state.discountName && state.discountAmount > 0);
+  const hasCoupon = Boolean(state.couponName && state.couponDiscountAmount > 0);
+  const hasPromotions = hasDiscount || hasCoupon;
+
   return (
     <main className={advertisingActive ? "customer-display-page is-advertising" : "customer-display-page"}>
       <button
@@ -365,41 +369,65 @@ export default function CustomerDisplayPage() {
             ) : null}
           </div>
 
-          {state.discountName && state.discountAmount > 0 ? (
-            <div className="customer-display-discount">
-              <span>割引適用</span>
-              <strong>{state.discountName}</strong>
-              <b>-{formatYen(state.discountAmount)}</b>
-            </div>
-          ) : null}
+          <div className={`customer-display-settlement is-${state.paymentMethod === "cash" ? "cash" : "terminal"} ${hasPromotions ? "has-promotions" : ""}`}>
+            {state.paymentMethod === "cash" ? (
+              <>
+                {hasDiscount ? (
+                  <div className="customer-display-discount">
+                    <span>割引適用</span>
+                    <strong>{state.discountName}</strong>
+                    <b>-{formatYen(state.discountAmount)}</b>
+                  </div>
+                ) : null}
 
-          {state.couponName && state.couponDiscountAmount > 0 ? (
-            <div className="customer-display-discount">
-              <span>クーポン適用</span>
-              <strong>{state.couponName}</strong>
-              <b>-{formatYen(state.couponDiscountAmount)}</b>
-            </div>
-          ) : null}
+                {hasCoupon ? (
+                  <div className="customer-display-discount">
+                    <span>クーポン適用</span>
+                    <strong>{state.couponName}</strong>
+                    <b>-{formatYen(state.couponDiscountAmount)}</b>
+                  </div>
+                ) : null}
 
-          {state.paymentMethod === "cash" ? (
-            <div className="customer-display-cash">
-              <div>
-                <span>お預り</span>
-                <strong>{state.cashTenderedAmount === null ? "-" : formatYen(state.cashTenderedAmount)}</strong>
-              </div>
-              <div className={changeAmount < 0 ? "is-short" : ""}>
-                <span>お釣り</span>
-                <strong>{state.cashChangeAmount === null ? "-" : formatYen(Math.max(0, changeAmount))}</strong>
-                {changeAmount < 0 ? <small>不足 {formatYen(Math.abs(changeAmount))}</small> : null}
-              </div>
-            </div>
-          ) : (
-            <div className="customer-display-terminal">
-              <span>{state.externalPaymentTerminalBrand || state.paymentLabel || "決済端末"}</span>
-              <strong>決済端末でお支払いください</strong>
-              <small>カード・電子マネー・QR 決済</small>
-            </div>
-          )}
+                <div className="customer-display-cash-card">
+                  <span>お預り</span>
+                  <strong>{state.cashTenderedAmount === null ? "-" : formatYen(state.cashTenderedAmount)}</strong>
+                </div>
+                <div className={`customer-display-cash-card ${changeAmount < 0 ? "is-short" : ""}`}>
+                  <span>お釣り</span>
+                  <strong>{state.cashChangeAmount === null ? "-" : formatYen(Math.max(0, changeAmount))}</strong>
+                  {changeAmount < 0 ? <small>不足 {formatYen(Math.abs(changeAmount))}</small> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                {hasPromotions ? (
+                  <div className="customer-display-promotion-group">
+                    {hasDiscount ? (
+                      <div className="customer-display-discount">
+                        <span>割引適用</span>
+                        <strong>{state.discountName}</strong>
+                        <b>-{formatYen(state.discountAmount)}</b>
+                      </div>
+                    ) : null}
+
+                    {hasCoupon ? (
+                      <div className="customer-display-discount">
+                        <span>クーポン適用</span>
+                        <strong>{state.couponName}</strong>
+                        <b>-{formatYen(state.couponDiscountAmount)}</b>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="customer-display-terminal">
+                  <span>{state.externalPaymentTerminalBrand || state.paymentLabel || "決済端末"}</span>
+                  <strong>決済端末でお支払いください</strong>
+                  <small>カード・電子マネー・QR 決済</small>
+                </div>
+              </>
+            )}
+          </div>
 
           {state.status === "complete" ? (
             <div className="customer-display-complete">
