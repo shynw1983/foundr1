@@ -29,26 +29,24 @@ export function normalizeMemberLanguage(value?: string | null): MemberLanguage {
   return memberLanguageOptions.some((option) => option.value === language) ? language as MemberLanguage : "ja";
 }
 
-function browserLanguage() {
+function browserLanguage(): MemberLanguage {
   if (typeof navigator === "undefined") return "ja";
-  const source = [navigator.language, ...(navigator.languages ?? [])].join(" ").toLowerCase();
-  if (source.includes("zh-hant") || source.includes("zh-tw") || source.includes("zh-hk")) return "zh-Hant";
-  if (source.includes("zh")) return "zh";
-  if (source.includes("ko")) return "ko";
-  if (source.includes("vi")) return "vi";
-  if (source.includes("ne")) return "ne";
-  if (source.includes("en")) return "en";
+  const languages = [navigator.language, ...(navigator.languages ?? [])]
+    .map((language) => language.toLowerCase())
+    .filter(Boolean);
+  if (languages.some((language) => language === "zh-hant" || language.startsWith("zh-hant-") || language === "zh-tw" || language.startsWith("zh-tw-") || language === "zh-hk" || language.startsWith("zh-hk-"))) return "zh-Hant";
+  if (languages.some((language) => language === "zh" || language.startsWith("zh-"))) return "zh";
+  if (languages.some((language) => language === "ko" || language.startsWith("ko-"))) return "ko";
+  if (languages.some((language) => language === "vi" || language.startsWith("vi-"))) return "vi";
+  if (languages.some((language) => language === "ne" || language.startsWith("ne-"))) return "ne";
+  if (languages.some((language) => language === "en" || language.startsWith("en-"))) return "en";
   return "ja";
 }
 
 function initialLanguage() {
   if (typeof window === "undefined") return "ja";
   const params = new URLSearchParams(window.location.search);
-  return normalizeMemberLanguage(
-    params.get("lang") ||
-    window.localStorage.getItem(memberLanguageStorageKey) ||
-    browserLanguage()
-  );
+  return params.get("lang") ? normalizeMemberLanguage(params.get("lang")) : browserLanguage();
 }
 
 function savePreferredLanguage(language: MemberLanguage) {
@@ -61,7 +59,6 @@ function savePreferredLanguage(language: MemberLanguage) {
 
 export function MemberLanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<MemberLanguage>("ja");
-  const [initialized, setInitialized] = useState(false);
   const userSelectedLanguageRef = useRef(false);
 
   useEffect(() => {
@@ -70,7 +67,6 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
     userSelectedLanguageRef.current = Boolean(params.get("lang"));
     setLanguageState(nextLanguage);
     window.localStorage.setItem(memberLanguageStorageKey, nextLanguage);
-    setInitialized(true);
   }, []);
 
   useEffect(() => {
@@ -93,6 +89,7 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
     },
     syncPreferredLanguage: (preferredLanguage) => {
       if (!preferredLanguage) return;
+      if (typeof window !== "undefined" && !new URLSearchParams(window.location.search).get("lang")) return;
       const normalized = normalizeMemberLanguage(preferredLanguage);
       if (userSelectedLanguageRef.current) return;
       setLanguageState(normalized);
@@ -100,7 +97,7 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
         window.localStorage.setItem(memberLanguageStorageKey, normalized);
       }
     }
-  }), [initialized, language]);
+  }), [language]);
 
   return (
     <MemberLanguageContext.Provider value={value}>
