@@ -2,6 +2,7 @@
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, ShoppingBag, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MemberAuthPanel } from "../../components/member/MemberAuthPanel";
 import type { MemberOrderHistory } from "../../components/member/MemberOrderHistoryPanel";
@@ -525,7 +526,7 @@ function ConfiguredMemberPortal() {
                           <strong>{stampCardProgressLabel(card)}</strong>
                         </div>
                       </div>
-                      <div className="member-stamp-slots" aria-label={`${card.name} ${stampCardProgressLabel(card)}`}>
+                      <div className="member-stamp-slots" style={{ "--member-stamp-count": required } as CSSProperties} aria-label={`${card.name} ${stampCardProgressLabel(card)}`}>
                         {Array.from({ length: required }).map((_, index) => (
                           <span key={`${card.id}-${index}`} className={index < current ? "is-filled" : ""}>
                             <i className="member-stamp-mark" aria-hidden="true" />
