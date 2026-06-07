@@ -582,6 +582,14 @@ function ConfiguredMemberPortal() {
             </section>
           ) : null}
 
+          {clerkConfigured && !isLoaded ? (
+            <section className="member-portal-login-panel member-return-panel" aria-live="polite">
+              <Loader2 size={34} />
+              <h2>ログインを読み込んでいます</h2>
+              <p>認証画面の準備をしています。</p>
+            </section>
+          ) : null}
+
           {isLoaded && !isSignedIn ? (
             <MemberAuthPanel
               title={loggedOut ? "ログアウトしました" : "ログインまたは会員登録"}

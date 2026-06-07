@@ -8,6 +8,7 @@ const securityHeaders = [
       [
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
         "https://*.clerk.accounts.dev https://*.clerk.com https://clerk.com",
+        "https://clerk.foundr1.jp https://accounts.foundr1.jp",
         "https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
         "https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/"
       ].join(" "),
@@ -18,6 +19,7 @@ const securityHeaders = [
       [
         "frame-src 'self'",
         "https://*.clerk.accounts.dev https://*.clerk.com https://clerk.com",
+        "https://clerk.foundr1.jp https://accounts.foundr1.jp",
         "https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
         "https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/"
       ].join(" "),
