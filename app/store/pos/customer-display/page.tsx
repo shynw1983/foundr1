@@ -35,6 +35,8 @@ type DisplayState = {
   couponName: string;
   couponDiscountAmount: number;
   subtotal: number;
+  taxLabel: string;
+  taxAmount: number;
   cashTenderedAmount: number | null;
   cashChangeAmount: number | null;
   updatedLabel: string;
@@ -58,6 +60,8 @@ const idleState: DisplayState = {
   couponName: "",
   couponDiscountAmount: 0,
   subtotal: 0,
+  taxLabel: "",
+  taxAmount: 0,
   cashTenderedAmount: null,
   cashChangeAmount: null,
   updatedLabel: "",
@@ -353,6 +357,12 @@ export default function CustomerDisplayPage() {
           <div className="customer-display-total">
             <span>合計</span>
             <strong>{formatYen(state.subtotal)}</strong>
+            {state.taxLabel && state.taxAmount > 0 ? (
+              <small>
+                <em>{state.taxLabel}</em>
+                <b>{formatYen(state.taxAmount)}</b>
+              </small>
+            ) : null}
           </div>
 
           {state.discountName && state.discountAmount > 0 ? (

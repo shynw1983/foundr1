@@ -296,6 +296,27 @@ function getCouponPosStatusLabel(coupon: PosCoupon, discount: number, subtotal: 
   return "対象外";
 }
 
+function getCouponDaysUntilExpiry(coupon: Pick<PosCoupon, "expiresAt">) {
+  if (!coupon.expiresAt) return null;
+  const expiresAt = new Date(coupon.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return null;
+  const now = new Date();
+  return Math.ceil((expiresAt.getTime() - now.getTime()) / 86400000);
+}
+
+function isCouponExpiringSoon(coupon: Pick<PosCoupon, "expiresAt">) {
+  const days = getCouponDaysUntilExpiry(coupon);
+  return days !== null && days >= 0 && days < 14;
+}
+
+function getCouponExpiryLabel(coupon: Pick<PosCoupon, "expiresAt">) {
+  const days = getCouponDaysUntilExpiry(coupon);
+  if (days === null) return "";
+  if (days <= 0) return "本日まで";
+  if (days === 1) return "明日まで";
+  return `あと${days}日`;
+}
+
 function getDiscountEligibleAmount(preset: PosDiscountPreset, cart: PosCartItem[], subtotal: number) {
   if (preset.targetScope === "all") return subtotal;
   return cart.reduce((sum, item) => {
@@ -794,10 +815,30 @@ export default function StorePosPage() {
   };
   const recommendedCoupon = useMemo(() => {
     if (couponBlockedByDiscount || !memberCoupons.length || subtotal <= 0) return undefined;
-    return [...memberCoupons].sort((left, right) => getCouponDiscountAmount(right, subtotal, getExchangeEligibleBodyAmounts(right)) - getCouponDiscountAmount(left, subtotal, getExchangeEligibleBodyAmounts(left)))[0];
+    const usableCoupons = memberCoupons
+      .map((coupon) => ({
+        coupon,
+        discount: getCouponDiscountAmount(coupon, subtotal, getExchangeEligibleBodyAmounts(coupon)),
+        daysUntilExpiry: getCouponDaysUntilExpiry(coupon),
+        expiringSoon: isCouponExpiringSoon(coupon)
+      }))
+      .filter((entry) => entry.discount > 0);
+    if (!usableCoupons.length) return undefined;
+    return usableCoupons.sort((left, right) => {
+      if (left.expiringSoon !== right.expiringSoon) return left.expiringSoon ? -1 : 1;
+      if (left.expiringSoon && right.expiringSoon) return (left.daysUntilExpiry ?? 9999) - (right.daysUntilExpiry ?? 9999);
+      return right.discount - left.discount;
+    })[0]?.coupon;
   }, [cart, couponBlockedByDiscount, memberCoupons, subtotal]);
   const recommendedCouponDiscountAmount = getCouponDiscountAmount(recommendedCoupon, subtotal, getExchangeEligibleBodyAmounts(recommendedCoupon));
   const selectedCouponDiscountAmount = getCouponDiscountAmount(selectedCoupon, subtotal, getExchangeEligibleBodyAmounts(selectedCoupon));
+  const recommendedCouponExpiryLabel = recommendedCoupon ? getCouponExpiryLabel(recommendedCoupon) : "";
+  const recommendedCouponExpiringSoon = recommendedCoupon ? isCouponExpiringSoon(recommendedCoupon) : false;
+  const shouldShowRecommendedCoupon = Boolean(
+    recommendedCoupon &&
+    recommendedCoupon.id !== selectedCouponId &&
+    (recommendedCouponExpiringSoon || recommendedCouponDiscountAmount > selectedCouponDiscountAmount)
+  );
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
   const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - payableAmount : null;
@@ -1004,6 +1045,16 @@ export default function StorePosPage() {
     };
   }
 
+  function getDisplayTaxState(taxAmount: number, rate: number, priceTaxMode = posSettings.priceTaxMode) {
+    const amount = Math.max(0, Math.round(Number(taxAmount) || 0));
+    const normalizedRate = Math.max(0, Number(rate) || 0);
+    const prefix = priceTaxMode === "tax_excluded" ? "消費税" : "内消費税";
+    return {
+      taxLabel: normalizedRate ? `${prefix} ${normalizedRate}%` : prefix,
+      taxAmount: amount
+    };
+  }
+
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
     if (!selectedStoreId) return;
     await fetch("/api/store/pos/customer-display", {
@@ -1030,6 +1081,8 @@ export default function StorePosPage() {
       couponName: "",
       couponDiscountAmount: 0,
       subtotal: 0,
+      taxLabel: "",
+      taxAmount: 0,
       cashTenderedAmount: null,
       cashChangeAmount: null,
       items: []
@@ -1302,6 +1355,7 @@ export default function StorePosPage() {
         ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引"),
         ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン"),
         subtotal: body.amount,
+        ...getDisplayTaxState(body.taxAmount, body.taxRate, body.priceTaxMode),
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
         items: cart.map((item) => ({
@@ -1357,6 +1411,7 @@ export default function StorePosPage() {
         ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount),
         ...getDisplayCouponState(selectedCoupon, couponDiscountAmount),
         subtotal: payableAmount,
+        ...getDisplayTaxState(taxSummary.taxAmount, taxRate),
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
         items: cart.map((item) => ({
@@ -1374,7 +1429,7 @@ export default function StorePosPage() {
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;
@@ -1760,15 +1815,17 @@ export default function StorePosPage() {
                   <div className="store-pos-coupon-panel">
                     <div className="store-pos-coupon-head">
                       <span><Gift size={14} /> 利用可能クーポン</span>
-                      {recommendedCoupon && recommendedCoupon.id !== selectedCouponId && recommendedCouponDiscountAmount > selectedCouponDiscountAmount ? (
+                      {shouldShowRecommendedCoupon && recommendedCoupon ? (
                         <button type="button" onClick={() => setSelectedCouponId(recommendedCoupon.id)}>
                           おすすめを適用
                         </button>
                       ) : null}
                     </div>
-                    {recommendedCoupon && recommendedCoupon.id !== selectedCouponId && recommendedCouponDiscountAmount > selectedCouponDiscountAmount ? (
+                    {shouldShowRecommendedCoupon && recommendedCoupon ? (
                       <p className="store-pos-coupon-recommend">
-                        {recommendedCoupon.name} の方が {formatYen(recommendedCouponDiscountAmount - selectedCouponDiscountAmount)} お得です。
+                        {recommendedCouponExpiringSoon && recommendedCouponExpiryLabel
+                          ? `${recommendedCoupon.name} は ${recommendedCouponExpiryLabel} です。有効期限が近いため優先利用を案内してください。`
+                          : `${recommendedCoupon.name} の方が ${formatYen(Math.max(0, recommendedCouponDiscountAmount - selectedCouponDiscountAmount))} お得です。`}
                       </p>
                     ) : null}
                     <div className="store-pos-coupon-list">
@@ -1778,9 +1835,12 @@ export default function StorePosPage() {
                         const isRecommended = recommendedCoupon?.id === coupon.id && discount > 0;
                         const isCustomerSelected = customerSelectedCouponId === coupon.id;
                         const isUnavailable = couponBlockedByDiscount || (subtotal > 0 && discount <= 0);
+                        const expiryLabel = getCouponExpiryLabel(coupon);
+                        const expiringSoon = isCouponExpiringSoon(coupon);
                         const couponBadges = [
                           couponBlockedByDiscount ? "割引中は併用不可" : "",
                           isCustomerSelected ? "客さま選択済み" : "",
+                          expiringSoon && expiryLabel ? `期限優先 ${expiryLabel}` : expiryLabel ? `期限 ${expiryLabel}` : "",
                           isRecommended ? "おすすめ" : ""
                         ].filter(Boolean);
                         return (

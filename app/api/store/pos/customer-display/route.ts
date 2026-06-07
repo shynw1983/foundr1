@@ -51,6 +51,8 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     couponName: normalizeText(state.couponName).slice(0, 80),
     couponDiscountAmount: Math.max(0, toAmount(state.couponDiscountAmount)),
     subtotal: Math.max(0, toAmount(state.subtotal)),
+    taxLabel: normalizeText(state.taxLabel).slice(0, 40),
+    taxAmount: Math.max(0, toAmount(state.taxAmount)),
     cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
     cashChangeAmount: toNullableAmount(state.cashChangeAmount),
     updatedLabel: normalizeText(state.updatedLabel),

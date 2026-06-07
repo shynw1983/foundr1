@@ -8726,9 +8726,10 @@ body :where(
 }
 
 .customer-display-payment {
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
+  min-height: 0;
   padding: 18px;
 }
 
@@ -8803,6 +8804,8 @@ body :where(
 }
 
 .customer-display-total {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   border: 1px solid #171717;
   padding: 18px;
   background: #171717;
@@ -8810,6 +8813,7 @@ body :where(
 }
 
 .customer-display-total span,
+.customer-display-total small,
 .customer-display-cash span,
 .customer-display-terminal span,
 .customer-display-terminal small,
@@ -8819,16 +8823,41 @@ body :where(
 }
 
 .customer-display-total strong {
+  grid-column: 1;
   font-size: clamp(56px, 11vh, 118px);
   font-weight: 500;
   line-height: 0.98;
   letter-spacing: 0;
 }
 
+.customer-display-total small {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  justify-items: end;
+  align-self: center;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.customer-display-total small em,
+.customer-display-total small b {
+  font-style: normal;
+  font-weight: 450;
+}
+
+.customer-display-total small b {
+  color: #fff;
+  font-size: clamp(15px, 2vh, 20px);
+}
+
 .customer-display-cash {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  margin-top: auto;
 }
 
 .customer-display-cash > div {
@@ -8850,7 +8879,9 @@ body :where(
 }
 
 .customer-display-terminal {
+  flex: 1 1 auto;
   align-content: center;
+  min-height: 156px;
   border: 1px solid #ededeb;
   padding: 16px;
   background: #fff;
