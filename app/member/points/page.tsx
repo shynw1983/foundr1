@@ -1,7 +1,7 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, Home, Loader2, LogOut, RefreshCw, Settings, ShoppingBag } from "lucide-react";
+import { BadgePercent, CalendarDays, Home, Loader2, LogOut, RefreshCw, Settings, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
@@ -34,6 +34,7 @@ type MemberPointsResponse = {
 };
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+type PointHistoryRange = "latest" | "30d" | "90d" | "1y" | "custom";
 
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
@@ -64,12 +65,21 @@ export default function MemberPointsPage() {
   const [data, setData] = useState<MemberPointsResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [periodRange, setPeriodRange] = useState<PointHistoryRange>("latest");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  async function loadPoints() {
+  async function loadPoints(range = periodRange, from = fromDate, to = toDate) {
     setLoading(true);
     setMessage("");
     try {
-      const response = await fetch("/api/public/members/me", { cache: "no-store" });
+      const params = new URLSearchParams({ pointHistoryRange: range });
+      if (range !== "latest") params.set("pointHistoryLimit", "100");
+      if (range === "custom") {
+        if (from) params.set("pointHistoryFrom", from);
+        if (to) params.set("pointHistoryTo", to);
+      }
+      const response = await fetch(`/api/public/members/me?${params.toString()}`, { cache: "no-store" });
       const body = await response.json().catch(() => ({})) as MemberPointsResponse;
       if (!response.ok) {
         setMessage(body.error || text.loadMemberError);
@@ -89,6 +99,19 @@ export default function MemberPointsPage() {
   useEffect(() => {
     if (isLoaded && isSignedIn) void loadPoints();
   }, [isLoaded, isSignedIn]);
+
+  function changePeriodRange(value: string) {
+    const nextRange = ["latest", "30d", "90d", "1y", "custom"].includes(value) ? value as PointHistoryRange : "latest";
+    setPeriodRange(nextRange);
+    if (nextRange !== "custom" && isLoaded && isSignedIn) void loadPoints(nextRange, fromDate, toDate);
+  }
+
+  function clearFilter() {
+    setPeriodRange("latest");
+    setFromDate("");
+    setToDate("");
+    if (isLoaded && isSignedIn) void loadPoints("latest", "", "");
+  }
 
   if (!clerkConfigured) {
     return (
@@ -175,6 +198,47 @@ export default function MemberPointsPage() {
         <>
           {message ? <p className="member-orders-message">{message}</p> : null}
           <section className="member-orders-shell">
+            <article className="member-portal-panel member-point-filter-panel">
+              <div className="member-portal-panel-title">
+                <CalendarDays size={18} />
+                <h3>{text.pointHistoryPeriod}</h3>
+              </div>
+              <div className="member-settings-grid">
+                <label>
+                  <span>{text.pointHistoryPeriod}</span>
+                  <select value={periodRange} onChange={(event) => changePeriodRange(event.target.value)}>
+                    <option value="latest">{text.pointHistoryLatest}</option>
+                    <option value="30d">{text.pointHistoryLast30Days}</option>
+                    <option value="90d">{text.pointHistoryLast90Days}</option>
+                    <option value="1y">{text.pointHistoryLastYear}</option>
+                    <option value="custom">{text.pointHistoryCustom}</option>
+                  </select>
+                </label>
+                {periodRange === "custom" ? (
+                  <>
+                    <label>
+                      <span>{text.pointHistoryStartDate}</span>
+                      <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+                    </label>
+                    <label>
+                      <span>{text.pointHistoryEndDate}</span>
+                      <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+                    </label>
+                  </>
+                ) : null}
+                <div className="member-portal-toolbar member-settings-field-wide">
+                  {periodRange === "custom" ? (
+                    <button className="secondary-button" type="button" onClick={() => void loadPoints("custom", fromDate, toDate)} disabled={loading}>
+                      {loading ? <Loader2 size={16} /> : <CalendarDays size={16} />}
+                      {text.applyFilter}
+                    </button>
+                  ) : null}
+                  <button className="secondary-button" type="button" onClick={clearFilter} disabled={loading && periodRange === "latest"}>
+                    {text.clearFilter}
+                  </button>
+                </div>
+              </div>
+            </article>
             {loading && !data.pointHistory ? (
               <section className="member-portal-login-panel">
                 <Loader2 size={32} />

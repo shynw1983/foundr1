@@ -1538,7 +1538,16 @@ export async function adjustMemberStamps(input: {
   return { ledger: ledgerRows[0] ?? null, issuedRewards };
 }
 
-export async function getMemberPointHistory(memberId: string) {
+export type MemberPointHistoryOptions = {
+  from?: string | null;
+  to?: string | null;
+  limit?: number;
+};
+
+export async function getMemberPointHistory(memberId: string, options: MemberPointHistoryOptions = {}) {
+  const from = normalizeText(options.from) || null;
+  const to = normalizeText(options.to) || null;
+  const limit = clampInteger(options.limit, 30, 1, 200);
   const rows = await sql`
     select
       loyalty_point_ledger.id::text,
@@ -1554,8 +1563,10 @@ export async function getMemberPointHistory(memberId: string) {
     left join brands on brands.id = loyalty_point_ledger.brand_id
     left join stores on stores.id = loyalty_point_ledger.store_id
     where loyalty_point_ledger.member_id::text = ${memberId}
+      and (${from}::timestamptz is null or loyalty_point_ledger.created_at >= ${from}::timestamptz)
+      and (${to}::timestamptz is null or loyalty_point_ledger.created_at < ${to}::timestamptz)
     order by loyalty_point_ledger.created_at desc
-    limit 30
+    limit ${limit}
   `;
 
   return (rows as Array<{

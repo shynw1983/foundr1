@@ -24,6 +24,52 @@ function normalizePreferredLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "ja";
 }
 
+function clampPointHistoryLimit(value: unknown) {
+  const limit = Math.round(Number(value));
+  if (!Number.isFinite(limit)) return 30;
+  return Math.max(1, Math.min(200, limit));
+}
+
+function parseDateParam(value: string | null) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  const date = new Date(`${text}T00:00:00+09:00`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function parseEndDateParam(value: string | null) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  const date = new Date(`${text}T00:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + 1);
+  return date.toISOString();
+}
+
+function pointHistoryOptions(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const range = String(params.get("pointHistoryRange") ?? "").trim();
+  const limit = range === "latest" || !range ? 30 : clampPointHistoryLimit(params.get("pointHistoryLimit") ?? 100);
+  const now = new Date();
+  const fromRelative = (days: number) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() - days);
+    return date.toISOString();
+  };
+
+  if (range === "30d") return { from: fromRelative(30), to: null, limit };
+  if (range === "90d") return { from: fromRelative(90), to: null, limit };
+  if (range === "1y") return { from: fromRelative(365), to: null, limit };
+  if (range === "custom") {
+    return {
+      from: parseDateParam(params.get("pointHistoryFrom")) || null,
+      to: parseEndDateParam(params.get("pointHistoryTo")) || null,
+      limit
+    };
+  }
+  return { from: null, to: null, limit: 30 };
+}
+
 function memberAge(birthday: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return null;
   const birthDate = new Date(`${birthday}T00:00:00`);
@@ -57,7 +103,7 @@ async function getPreferredStoreOptions() {
   }));
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!clerkConfigured()) {
     return Response.json({
       configured: false,
@@ -90,7 +136,7 @@ export async function GET() {
 
   const [coupons, pointHistory, stampCards, orders, preferredStoreOptions] = await Promise.all([
     getMemberAvailableCoupons(member.id),
-    getMemberPointHistory(member.id),
+    getMemberPointHistory(member.id, pointHistoryOptions(request)),
     getMemberStampCards(member.id),
     getMemberOnlineOrderHistory(member.id),
     getPreferredStoreOptions()

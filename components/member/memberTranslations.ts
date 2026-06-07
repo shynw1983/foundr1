@@ -50,6 +50,16 @@ export const memberText: Record<MemberLanguage, {
   use: string;
   allStores: string;
   pointHistory: string;
+  pointHistoryPeriod: string;
+  pointHistoryLatest: string;
+  pointHistoryLast30Days: string;
+  pointHistoryLast90Days: string;
+  pointHistoryLastYear: string;
+  pointHistoryCustom: string;
+  pointHistoryStartDate: string;
+  pointHistoryEndDate: string;
+  applyFilter: string;
+  clearFilter: string;
   noPointHistory: string;
   brand: string;
   notConfiguredTitle: string;
@@ -182,6 +192,16 @@ export const memberText: Record<MemberLanguage, {
     use: "使う",
     allStores: "全店舗適用",
     pointHistory: "ポイント履歴",
+    pointHistoryPeriod: "表示期間",
+    pointHistoryLatest: "最新30件",
+    pointHistoryLast30Days: "最近30日",
+    pointHistoryLast90Days: "最近90日",
+    pointHistoryLastYear: "過去1年",
+    pointHistoryCustom: "期間を指定",
+    pointHistoryStartDate: "開始日",
+    pointHistoryEndDate: "終了日",
+    applyFilter: "絞り込む",
+    clearFilter: "解除",
     noPointHistory: "ポイント履歴はまだありません。",
     brand: "ブランド",
     notConfiguredTitle: "Clerk の環境変数が未設定です。",
@@ -265,7 +285,7 @@ export const memberText: Record<MemberLanguage, {
     codeDigit: (index: number) => `確認コード ${index} 桁目`
   },
   zh: {
-    member: "会员", signedIn: "已登录", memberNumber: "会员编号", memberMenu: "会员菜单", memberCard: "会员卡", editMemberInfo: "编辑会员信息", ordersAndReceipts: "购买记录・收据", backToCard: "返回会员卡", returnToSite: "返回网站", signOut: "退出登录", switchAccount: "使用其他账号登录", refresh: "刷新", loadingAuth: "正在读取登录状态", preparingAuth: "正在准备认证页面。", signedOutTitle: "已退出登录", signedOutDescription: "请重新登录或继续注册新会员。", loginOrRegister: "登录或注册会员", loginDescription: "输入邮箱接收验证码，即可显示会员卡。", memberCardTitle: "会员卡", memberCardDescription: "可查看积分、优惠券和品牌通用会员编号。", pointsCouponsNumber: "可查看积分、优惠券和品牌通用会员编号。", returningTitle: "正在返回网站", checkingMemberTitle: "正在确认会员信息", returningBody: "将自动返回预约页面。", preparingReturnBody: "正在准备与返回网站联动。", syncMemberTitle: "正在同步会员信息", syncMemberBody: "正在根据登录信息创建 Foundr1 会员。", memberNo: "会员编号", presentAtStore: "请在店头出示", couponSelected: "已选择优惠券", availableCoupons: (count: number) => `可用优惠券 ${count} 张`, points: "积分", pointRate: "1 pt = 1 日元", rank: "等级", visits: (count: number) => `到店 ${count.toLocaleString("ja-JP")} 次`, lifetimeSpend: "累计购买", webPosShared: "Web / POS 通用", stampCard: "印章卡", nextStampPreparing: "下一张印章卡准备中。", totalStamps: (count: number) => `累计 ${count.toLocaleString("ja-JP")} stamp`, rewardsAvailable: (count: number) => `特典 ${count.toLocaleString("ja-JP")} 件可用`, stampsRemaining: (count: number) => `还差 ${count.toLocaleString("ja-JP")} stamp`, coupons: "优惠券", noCoupons: "暂无可用优惠券。", selectedForUse: "准备使用", clearSelection: "取消选择", use: "使用", allStores: "全部门店适用", pointHistory: "积分记录", noPointHistory: "暂无积分记录。", brand: "品牌", notConfiguredTitle: "Clerk 环境变量尚未设置。", memberNotConfiguredBody: "设置 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` 和 `CLERK_SECRET_KEY` 后即可启用邮箱登录。", loadMemberError: "无法读取会员信息。", returnPrepareError: "无法准备登录后的返回地址。", networkError: "通信失败。请稍后再试。", dateNoExpiry: "无期限", movementEarn: "获得", movementRedeem: "使用", movementReversal: "取消", couponApplied: "已使用优惠券", oneCupExchange: "兑换 1 杯", purchaseHistory: "购买记录", purchaseHistoryTitle: "购买记录", purchaseHistoryDescription: "可查看 Web 预约和实体店购买记录。Web 预约也可显示收据。", purchaseHistoryLoginTitle: "登录购买记录", purchaseHistoryLoginDescription: "输入邮箱接收验证码，即可查看购买记录。", purchaseHistoryLoading: "正在读取购买记录", pleaseWait: "请稍候。", orderTypeTabs: "购买记录类型", webReservation: "Web预约", storePurchase: "实体店购买", noWebOrders: "暂无 Web 预约记录。", noStoreOrders: "暂无实体店购买记录。", detailsFallback: "明细可在详情中查看", otherItems: (count: number) => `另有 ${count} 件`, receipt: "收据", store: "门店", dateTime: "日期时间", refund: "退款", couponDiscount: "优惠券・折扣", subtotal: "小计", usedCoupon: "使用优惠券", couponDiscountAmount: "优惠券折扣", noCouponDiscount: "此订单未使用优惠券・折扣。", itemDetails: "商品明细", cancelRefundRequest: "申请取消・退款", processing: "处理中...", cancelConfirm: (pickupCode: string, amount: string) => `将取消此 Web 预约；如已付款，将申请退款。\n\n订单号: ${pickupCode}\n金额: ${amount}\n\n确定吗？`, cancelRequestFailed: "无法处理取消申请。", cancelRequestAccepted: "已受理取消・退款申请。", cancelDeadlineAvailable: (minutes: number, deadline: string) => `可在取餐前 ${minutes} 分钟前申请${deadline ? `（截止 ${deadline}）` : ""}。`, cancelUnavailable: "已超过取消受理时间，或已开始制作，无法在此页面申请。", orderAgain: "再次下单", tasteFeedback: "评价・口味反馈", close: "关闭", statusCancelled: "已取消", statusPartialRefunded: "部分退款", statusRefundPending: "退款处理中", statusCompleted: "完成", statusReady: "可取餐", statusPreparing: "准备中", statusPaid: "已支付", statusPending: "待支付", sourceStorePos: "实体店购买", sourceMaamaaWeb: "まぁ麻 Web预约", sourceNanachaWeb: "nanacha Web预约", sourceWeb: "Web预约", authEyebrow: "Foundr1 Member", email: "邮箱地址", sendCode: "发送验证码", legalPrefix: "继续即表示同意", terms: "使用条款", privacy: "隐私政策", legalSuffix: "。未注册邮箱将在验证后注册为会员。", verificationCode: "验证码", sendingCode: "正在发送验证码", showMemberCard: "显示会员卡", changeEmail: "更改邮箱", emailRequired: "请输入邮箱地址。", codeRequired: "请输入验证码。", codeSent: "验证码已发送至邮箱。", authFailed: "认证失败。请确认输入内容。", authNoResponse: "认证服务器没有响应。请确认网络后重试。", authUnavailableEmail: "此邮箱无法使用验证码认证。请尝试其他邮箱。", authCannotComplete: "无法完成会员注册。请重试。", authMissingFields: (fields: string) => `会员注册仍缺少项目: ${fields}`, authStatusCannotComplete: (status: string) => `无法完成会员注册。状态: ${status}`, authPasswordRequired: "此邮箱需要注册密码。请在 Clerk 会员注册设置中将密码设为可选或关闭。", codeDigit: (index: number) => `验证码第 ${index} 位`
+    member: "会员", signedIn: "已登录", memberNumber: "会员编号", memberMenu: "会员菜单", memberCard: "会员卡", editMemberInfo: "编辑会员信息", ordersAndReceipts: "购买记录・收据", backToCard: "返回会员卡", returnToSite: "返回网站", signOut: "退出登录", switchAccount: "使用其他账号登录", refresh: "刷新", loadingAuth: "正在读取登录状态", preparingAuth: "正在准备认证页面。", signedOutTitle: "已退出登录", signedOutDescription: "请重新登录或继续注册新会员。", loginOrRegister: "登录或注册会员", loginDescription: "输入邮箱接收验证码，即可显示会员卡。", memberCardTitle: "会员卡", memberCardDescription: "可查看积分、优惠券和品牌通用会员编号。", pointsCouponsNumber: "可查看积分、优惠券和品牌通用会员编号。", returningTitle: "正在返回网站", checkingMemberTitle: "正在确认会员信息", returningBody: "将自动返回预约页面。", preparingReturnBody: "正在准备与返回网站联动。", syncMemberTitle: "正在同步会员信息", syncMemberBody: "正在根据登录信息创建 Foundr1 会员。", memberNo: "会员编号", presentAtStore: "请在店头出示", couponSelected: "已选择优惠券", availableCoupons: (count: number) => `可用优惠券 ${count} 张`, points: "积分", pointRate: "1 pt = 1 日元", rank: "等级", visits: (count: number) => `到店 ${count.toLocaleString("ja-JP")} 次`, lifetimeSpend: "累计购买", webPosShared: "Web / POS 通用", stampCard: "印章卡", nextStampPreparing: "下一张印章卡准备中。", totalStamps: (count: number) => `累计 ${count.toLocaleString("ja-JP")} stamp`, rewardsAvailable: (count: number) => `特典 ${count.toLocaleString("ja-JP")} 件可用`, stampsRemaining: (count: number) => `还差 ${count.toLocaleString("ja-JP")} stamp`, coupons: "优惠券", noCoupons: "暂无可用优惠券。", selectedForUse: "准备使用", clearSelection: "取消选择", use: "使用", allStores: "全部门店适用", pointHistory: "积分记录", pointHistoryPeriod: "显示期间", pointHistoryLatest: "最新30条", pointHistoryLast30Days: "最近30天", pointHistoryLast90Days: "最近90天", pointHistoryLastYear: "过去1年", pointHistoryCustom: "指定期间", pointHistoryStartDate: "开始日期", pointHistoryEndDate: "结束日期", applyFilter: "筛选", clearFilter: "清除", noPointHistory: "暂无积分记录。", brand: "品牌", notConfiguredTitle: "Clerk 环境变量尚未设置。", memberNotConfiguredBody: "设置 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` 和 `CLERK_SECRET_KEY` 后即可启用邮箱登录。", loadMemberError: "无法读取会员信息。", returnPrepareError: "无法准备登录后的返回地址。", networkError: "通信失败。请稍后再试。", dateNoExpiry: "无期限", movementEarn: "获得", movementRedeem: "使用", movementReversal: "取消", couponApplied: "已使用优惠券", oneCupExchange: "兑换 1 杯", purchaseHistory: "购买记录", purchaseHistoryTitle: "购买记录", purchaseHistoryDescription: "可查看 Web 预约和实体店购买记录。Web 预约也可显示收据。", purchaseHistoryLoginTitle: "登录购买记录", purchaseHistoryLoginDescription: "输入邮箱接收验证码，即可查看购买记录。", purchaseHistoryLoading: "正在读取购买记录", pleaseWait: "请稍候。", orderTypeTabs: "购买记录类型", webReservation: "Web预约", storePurchase: "实体店购买", noWebOrders: "暂无 Web 预约记录。", noStoreOrders: "暂无实体店购买记录。", detailsFallback: "明细可在详情中查看", otherItems: (count: number) => `另有 ${count} 件`, receipt: "收据", store: "门店", dateTime: "日期时间", refund: "退款", couponDiscount: "优惠券・折扣", subtotal: "小计", usedCoupon: "使用优惠券", couponDiscountAmount: "优惠券折扣", noCouponDiscount: "此订单未使用优惠券・折扣。", itemDetails: "商品明细", cancelRefundRequest: "申请取消・退款", processing: "处理中...", cancelConfirm: (pickupCode: string, amount: string) => `将取消此 Web 预约；如已付款，将申请退款。\n\n订单号: ${pickupCode}\n金额: ${amount}\n\n确定吗？`, cancelRequestFailed: "无法处理取消申请。", cancelRequestAccepted: "已受理取消・退款申请。", cancelDeadlineAvailable: (minutes: number, deadline: string) => `可在取餐前 ${minutes} 分钟前申请${deadline ? `（截止 ${deadline}）` : ""}。`, cancelUnavailable: "已超过取消受理时间，或已开始制作，无法在此页面申请。", orderAgain: "再次下单", tasteFeedback: "评价・口味反馈", close: "关闭", statusCancelled: "已取消", statusPartialRefunded: "部分退款", statusRefundPending: "退款处理中", statusCompleted: "完成", statusReady: "可取餐", statusPreparing: "准备中", statusPaid: "已支付", statusPending: "待支付", sourceStorePos: "实体店购买", sourceMaamaaWeb: "まぁ麻 Web预约", sourceNanachaWeb: "nanacha Web预约", sourceWeb: "Web预约", authEyebrow: "Foundr1 Member", email: "邮箱地址", sendCode: "发送验证码", legalPrefix: "继续即表示同意", terms: "使用条款", privacy: "隐私政策", legalSuffix: "。未注册邮箱将在验证后注册为会员。", verificationCode: "验证码", sendingCode: "正在发送验证码", showMemberCard: "显示会员卡", changeEmail: "更改邮箱", emailRequired: "请输入邮箱地址。", codeRequired: "请输入验证码。", codeSent: "验证码已发送至邮箱。", authFailed: "认证失败。请确认输入内容。", authNoResponse: "认证服务器没有响应。请确认网络后重试。", authUnavailableEmail: "此邮箱无法使用验证码认证。请尝试其他邮箱。", authCannotComplete: "无法完成会员注册。请重试。", authMissingFields: (fields: string) => `会员注册仍缺少项目: ${fields}`, authStatusCannotComplete: (status: string) => `无法完成会员注册。状态: ${status}`, authPasswordRequired: "此邮箱需要注册密码。请在 Clerk 会员注册设置中将密码设为可选或关闭。", codeDigit: (index: number) => `验证码第 ${index} 位`
   },
   "zh-Hant": {} as any,
   en: {} as any,
@@ -307,6 +327,16 @@ memberText["zh-Hant"] = {
   clearSelection: "取消選擇",
   allStores: "全部門店適用",
   pointHistory: "點數紀錄",
+  pointHistoryPeriod: "顯示期間",
+  pointHistoryLatest: "最新30筆",
+  pointHistoryLast30Days: "最近30天",
+  pointHistoryLast90Days: "最近90天",
+  pointHistoryLastYear: "過去1年",
+  pointHistoryCustom: "指定期間",
+  pointHistoryStartDate: "開始日期",
+  pointHistoryEndDate: "結束日期",
+  applyFilter: "篩選",
+  clearFilter: "清除",
   noPointHistory: "目前沒有點數紀錄。",
   loadMemberError: "無法讀取會員資料。",
   networkError: "通訊失敗。請稍後再試。",
@@ -409,6 +439,16 @@ memberText.en = {
   use: "Use",
   allStores: "Available at all stores",
   pointHistory: "Point history",
+  pointHistoryPeriod: "Period",
+  pointHistoryLatest: "Latest 30",
+  pointHistoryLast30Days: "Last 30 days",
+  pointHistoryLast90Days: "Last 90 days",
+  pointHistoryLastYear: "Past year",
+  pointHistoryCustom: "Custom period",
+  pointHistoryStartDate: "Start date",
+  pointHistoryEndDate: "End date",
+  applyFilter: "Apply filter",
+  clearFilter: "Clear",
   noPointHistory: "No point history yet.",
   brand: "Brand",
   notConfiguredTitle: "Clerk environment variables are not set.",
@@ -542,6 +582,16 @@ memberText.ko = {
   use: "사용",
   allStores: "전 매장에서 사용 가능",
   pointHistory: "포인트 내역",
+  pointHistoryPeriod: "표시 기간",
+  pointHistoryLatest: "최신 30건",
+  pointHistoryLast30Days: "최근 30일",
+  pointHistoryLast90Days: "최근 90일",
+  pointHistoryLastYear: "지난 1년",
+  pointHistoryCustom: "기간 지정",
+  pointHistoryStartDate: "시작일",
+  pointHistoryEndDate: "종료일",
+  applyFilter: "필터 적용",
+  clearFilter: "해제",
   noPointHistory: "포인트 내역이 아직 없습니다.",
   loadMemberError: "회원 정보를 불러오지 못했습니다.",
   returnPrepareError: "로그인 후 돌아갈 위치를 준비하지 못했습니다.",
@@ -647,6 +697,16 @@ memberText.vi = {
   use: "Dùng",
   allStores: "Dùng tại tất cả cửa hàng",
   pointHistory: "Lịch sử điểm",
+  pointHistoryPeriod: "Thời gian hiển thị",
+  pointHistoryLatest: "30 mục mới nhất",
+  pointHistoryLast30Days: "30 ngày gần đây",
+  pointHistoryLast90Days: "90 ngày gần đây",
+  pointHistoryLastYear: "1 năm qua",
+  pointHistoryCustom: "Chọn khoảng thời gian",
+  pointHistoryStartDate: "Ngày bắt đầu",
+  pointHistoryEndDate: "Ngày kết thúc",
+  applyFilter: "Lọc",
+  clearFilter: "Xóa",
   noPointHistory: "Chưa có lịch sử điểm.",
   loadMemberError: "Không thể tải thông tin thành viên.",
   returnPrepareError: "Không thể chuẩn bị trang quay lại sau đăng nhập.",
@@ -752,6 +812,16 @@ memberText.ne = {
   use: "प्रयोग",
   allStores: "सबै पसलमा प्रयोग गर्न मिल्ने",
   pointHistory: "प्वाइन्ट इतिहास",
+  pointHistoryPeriod: "देखाउने अवधि",
+  pointHistoryLatest: "पछिल्ला 30",
+  pointHistoryLast30Days: "पछिल्ला 30 दिन",
+  pointHistoryLast90Days: "पछिल्ला 90 दिन",
+  pointHistoryLastYear: "गत 1 वर्ष",
+  pointHistoryCustom: "अवधि छान्नुहोस्",
+  pointHistoryStartDate: "सुरु मिति",
+  pointHistoryEndDate: "अन्त्य मिति",
+  applyFilter: "फिल्टर गर्नुहोस्",
+  clearFilter: "हटाउनुहोस्",
   noPointHistory: "अहिलेसम्म प्वाइन्ट इतिहास छैन।",
   loadMemberError: "सदस्य जानकारी लोड गर्न सकेन।",
   returnPrepareError: "लगइनपछिको फर्किने स्थान तयार गर्न सकेन।",
