@@ -1,8 +1,9 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { ChevronDown, Home, Loader2, LogOut, RefreshCw, UserRound } from "lucide-react";
+import { Home, Loader2, LogOut, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
 import { MemberOrderHistoryPanel } from "../../../components/member/MemberOrderHistoryPanel";
@@ -91,21 +92,14 @@ export default function MemberOrdersPage() {
         <div className="member-topbar-actions">
           <MemberLanguageSwitcher />
         {isSignedIn ? (
-          <details className="member-account-menu">
-            <summary aria-label={text.memberMenu}>
-              <span className="member-account-avatar"><UserRound size={18} /></span>
-              <span className="member-account-summary-text">
-                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
-                <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}</small>
-              </span>
-              <ChevronDown size={16} />
-            </summary>
-            <div className="member-account-popover">
-              <div className="member-account-card">
-                <span>{text.signedIn}</span>
-                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
-                {data.member?.memberNumber ? <small>{text.memberNumber} {data.member.memberNumber}</small> : null}
-              </div>
+          <MemberAccountMenu
+            label={text.memberMenu}
+            signedInLabel={text.signedIn}
+            displayName={getAccountDisplayName(data.member, user, text.member)}
+            detail={data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}
+            memberNumberLabel={text.memberNumber}
+            memberNumber={data.member?.memberNumber}
+          >
               <a className="member-account-menu-item" href="/member">
                 <Home size={16} />
                 {text.backToCard}
@@ -116,8 +110,7 @@ export default function MemberOrdersPage() {
                   {text.signOut}
                 </button>
               </SignOutButton>
-            </div>
-          </details>
+          </MemberAccountMenu>
         ) : null}
         </div>
       </header>

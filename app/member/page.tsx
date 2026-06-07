@@ -1,9 +1,10 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, ChevronDown, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, ShoppingBag, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
+import { BadgePercent, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, ShoppingBag, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MemberAccountMenu } from "../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../components/member/MemberLanguageProvider";
 import type { MemberOrderHistory } from "../../components/member/MemberOrderHistoryPanel";
@@ -376,21 +377,14 @@ function ConfiguredMemberPortal() {
         <div className="member-topbar-actions">
           <MemberLanguageSwitcher />
         {clerkConfigured && isSignedIn ? (
-          <details className="member-account-menu">
-            <summary aria-label={text.memberMenu}>
-              <span className="member-account-avatar"><UserRound size={18} /></span>
-              <span className="member-account-summary-text">
-                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
-                <small>{data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}</small>
-              </span>
-              <ChevronDown size={16} />
-            </summary>
-            <div className="member-account-popover">
-              <div className="member-account-card">
-                <span>{text.signedIn}</span>
-                <strong>{getAccountDisplayName(data.member, user, text.member)}</strong>
-                {data.member?.memberNumber ? <small>{text.memberNumber} {data.member.memberNumber}</small> : null}
-              </div>
+          <MemberAccountMenu
+            label={text.memberMenu}
+            signedInLabel={text.signedIn}
+            displayName={getAccountDisplayName(data.member, user, text.member)}
+            detail={data.member?.memberNumber || user?.primaryEmailAddress?.emailAddress || text.signedIn}
+            memberNumberLabel={text.memberNumber}
+            memberNumber={data.member?.memberNumber}
+          >
               <a className="member-account-menu-item" href="/member/settings">
                 <Settings size={16} />
                 {text.editMemberInfo}
@@ -417,8 +411,7 @@ function ConfiguredMemberPortal() {
                   {text.switchAccount}
                 </button>
               </SignOutButton>
-            </div>
-          </details>
+          </MemberAccountMenu>
         ) : null}
         </div>
       </header>
