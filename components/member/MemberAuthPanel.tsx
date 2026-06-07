@@ -12,6 +12,11 @@ type MemberAuthPanelProps = {
 
 type EmailFlow = "sign_in" | "sign_up";
 type EmailCodeFactorLike = { strategy: "email_code"; emailAddressId: string };
+type SignUpCompletionResource = {
+  status: string | null;
+  missingFields?: string[];
+  createdSessionId?: string | null;
+};
 
 const authTimeoutMs = 12000;
 const codeLength = 6;
@@ -52,6 +57,20 @@ function emailCodeFactor(factors: unknown): EmailCodeFactorLike | undefined {
       typeof factor.emailAddressId === "string"
     );
   });
+}
+
+function signUpCompletionMessage(signUpAttempt: SignUpCompletionResource) {
+  const missingFields = signUpAttempt.missingFields || [];
+  if (missingFields.includes("password")) {
+    return "このメールアドレスはパスワード登録が必要な設定になっています。Clerk の会員登録設定でパスワードを任意または無効にしてください。";
+  }
+  if (missingFields.length) {
+    return `会員登録に必要な項目が残っています: ${missingFields.join(", ")}`;
+  }
+  if (signUpAttempt.status) {
+    return `会員登録を完了できませんでした。状態: ${signUpAttempt.status}`;
+  }
+  return "会員登録を完了できませんでした。もう一度お試しください。";
 }
 
 export function MemberAuthPanel({
@@ -185,11 +204,24 @@ export function MemberAuthPanel({
           return;
         }
       } else {
-        const signUpAttempt = await withAuthTimeout(signUp.attemptEmailAddressVerification({ code: verificationCode }));
+        let signUpAttempt = await withAuthTimeout(signUp.attemptEmailAddressVerification({ code: verificationCode }));
+        if (signUpAttempt.status === "missing_requirements") {
+          const missingFields = signUpAttempt.missingFields || [];
+          const canAutoComplete = missingFields.every((field) => field === "first_name" || field === "last_name" || field === "legal_accepted");
+          if (canAutoComplete) {
+            signUpAttempt = await withAuthTimeout(signUp.update({
+              firstName: missingFields.includes("first_name") ? "Foundr1" : undefined,
+              lastName: missingFields.includes("last_name") ? "Member" : undefined,
+              legalAccepted: missingFields.includes("legal_accepted") ? true : undefined
+            }));
+          }
+        }
         if (signUpAttempt.status === "complete" && signUpAttempt.createdSessionId) {
           await withAuthTimeout(setSignUpActive({ session: signUpAttempt.createdSessionId, redirectUrl: afterAuthUrl }));
           return;
         }
+        setMessage(signUpCompletionMessage(signUpAttempt));
+        return;
       }
       setMessage("認証を完了できませんでした。もう一度お試しください。");
     } catch (error) {
