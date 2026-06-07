@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { adjustMemberStamps, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, resendMemberCouponEmail, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
+import { adjustMemberStamps, getEmailNotificationTemplates, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, resendMemberCouponEmail, updateEmailNotificationTemplates, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +12,13 @@ export async function GET() {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!["owner", "manager"].includes(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [dashboard, rewardSettings, tierSettings] = await Promise.all([
+  const [dashboard, rewardSettings, tierSettings, emailTemplates] = await Promise.all([
     getLoyaltyDashboard(),
     getLoyaltyRewardSettings(),
-    getLoyaltyTierSettings()
+    getLoyaltyTierSettings(),
+    getEmailNotificationTemplates()
   ]);
-  return Response.json({ ...dashboard, rewardSettings, tierSettings }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ...dashboard, rewardSettings, tierSettings, emailTemplates }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -49,6 +50,20 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, ...dashboard, rewardSettings, tierSettings });
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "会員ランクを保存できませんでした。" }, { status: 400 });
+    }
+  }
+
+  if (normalizeText(body.action) === "update_email_templates") {
+    try {
+      const emailTemplates = await updateEmailNotificationTemplates(body.emailTemplates, session.id);
+      const [dashboard, rewardSettings, tierSettings] = await Promise.all([
+        getLoyaltyDashboard(),
+        getLoyaltyRewardSettings(),
+        getLoyaltyTierSettings()
+      ]);
+      return Response.json({ ok: true, ...dashboard, rewardSettings, tierSettings, emailTemplates });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "メール通知テンプレートを保存できませんでした。" }, { status: 400 });
     }
   }
 

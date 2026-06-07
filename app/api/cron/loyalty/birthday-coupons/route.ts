@@ -13,7 +13,7 @@ async function runBirthdayCouponCron(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await issueMonthlyBirthdayCoupons();
+  const result = await issueMonthlyBirthdayCoupons({ respectSchedule: true });
   return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }
 

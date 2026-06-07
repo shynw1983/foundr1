@@ -12,6 +12,7 @@ type BirthdayCouponEmailInput = {
 type CouponEmailInput = BirthdayCouponEmailInput & {
   subject?: string;
   introText?: string;
+  bodyText?: string;
 };
 
 let resendClient: Resend | null = null;
@@ -52,6 +53,13 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+function htmlFromText(value: string) {
+  return escapeHtml(value)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
 export async function sendCouponEmail(input: CouponEmailInput) {
   const client = getResendClient();
   if (!client) return { status: "skipped", id: "", error: "RESEND_API_KEY is not configured." };
@@ -61,7 +69,7 @@ export async function sendCouponEmail(input: CouponEmailInput) {
   const expiresLabel = formatDate(input.expiresAt);
   const subject = input.subject?.trim() || "クーポンをお届けしました";
   const introText = input.introText?.trim() || "Foundr1 Members にクーポンをお届けしました。";
-  const text = [
+  const defaultText = [
     `${memberName} 様`,
     "",
     introText,
@@ -72,6 +80,7 @@ export async function sendCouponEmail(input: CouponEmailInput) {
     "",
     memberUrl ? `会員ページ: ${memberUrl}` : "会員ページからご確認ください。"
   ].join("\n");
+  const text = input.bodyText?.trim() || defaultText;
 
   try {
     const response = await client.emails.send({
@@ -79,7 +88,11 @@ export async function sendCouponEmail(input: CouponEmailInput) {
       to: input.to,
       subject,
       text,
-      html: `
+      html: input.bodyText?.trim() ? `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;color:#1f2937;">
+          ${htmlFromText(text)}
+        </div>
+      ` : `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;color:#1f2937;">
           <p>${escapeHtml(memberName)} 様</p>
           <p>${escapeHtml(introText)}</p>

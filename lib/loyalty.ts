@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { sendBirthdayCouponEmail, sendCouponEmail } from "./email";
+import { sendCouponEmail } from "./email";
 
 const basePointRateBasis = 100;
 const pointExpiryMonths = 12;
@@ -78,6 +78,19 @@ export type LoyaltyRewardSettings = {
   dormantCouponExpiresInDays: number;
 };
 
+export type EmailNotificationTemplate = {
+  templateKey: string;
+  category: string;
+  name: string;
+  description: string;
+  subject: string;
+  body: string;
+  isEnabled: boolean;
+  requireOptIn: boolean;
+  sendRule: Record<string, unknown>;
+  variables: string[];
+};
+
 export type LoyaltyTierSetting = {
   id: string;
   tierKey: string;
@@ -120,12 +133,15 @@ function currentTokyoDateParts() {
     timeZone: "Asia/Tokyo",
     year: "numeric",
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
   }).formatToParts(new Date());
   return {
     year: Number(parts.find((part) => part.type === "year")?.value ?? 0),
     month: Number(parts.find((part) => part.type === "month")?.value ?? 0),
-    day: Number(parts.find((part) => part.type === "day")?.value ?? 0)
+    day: Number(parts.find((part) => part.type === "day")?.value ?? 0),
+    hour: Number(parts.find((part) => part.type === "hour")?.value ?? 0)
   };
 }
 
@@ -532,6 +548,137 @@ export async function updateLoyaltyRewardSettings(input: Partial<LoyaltyRewardSe
       updated_at = now()
   `;
   return getLoyaltyRewardSettings();
+}
+
+function normalizeTemplateKey(value: unknown) {
+  return normalizeText(value).replace(/[^a-z0-9_:-]/gi, "").slice(0, 80);
+}
+
+function normalizeTemplateVariables(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => normalizeText(item)).filter(Boolean).slice(0, 30);
+}
+
+function normalizeSendRule(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function applyEmailTemplate(value: string, variables: Record<string, unknown>) {
+  return normalizeText(value).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => normalizeText(variables[key]));
+}
+
+function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate {
+  if (templateKey === "coupon_birthday") {
+    return {
+      templateKey: "coupon_birthday",
+      category: "member",
+      name: "生日优惠券通知",
+      description: "每月生日会员统一发券后发送。",
+      subject: "お誕生日特典クーポンをお届けしました",
+      body: "{{memberName}} 様\n\nお誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
+      isEnabled: true,
+      requireOptIn: true,
+      sendRule: { trigger: "monthly_birthday_coupon", dayOfMonth: 1, hour: 10, timezone: "Asia/Tokyo" },
+      variables: ["memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
+    };
+  }
+  return {
+    templateKey: "coupon_general",
+    category: "member",
+    name: "优惠券通知",
+    description: "手动发券、补发优惠券通知时使用。",
+    subject: "クーポンをお届けしました",
+    body: "{{memberName}} 様\n\nFoundr1 Members にクーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
+    isEnabled: true,
+    requireOptIn: true,
+    sendRule: { trigger: "coupon_issued" },
+    variables: ["memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
+  };
+}
+
+export async function getEmailNotificationTemplates() {
+  const rows = await sql`
+    select
+      template_key as "templateKey",
+      category,
+      name,
+      description,
+      subject,
+      body,
+      is_enabled as "isEnabled",
+      require_opt_in as "requireOptIn",
+      send_rule as "sendRule",
+      variables
+    from email_notification_templates
+    order by
+      case category
+        when 'order' then 10
+        when 'reservation' then 20
+        when 'member' then 30
+        else 90
+      end,
+      template_key
+  `;
+  return (rows as Array<EmailNotificationTemplate>).map((row) => ({
+    ...row,
+    sendRule: normalizeSendRule(row.sendRule),
+    variables: normalizeTemplateVariables(row.variables)
+  }));
+}
+
+async function getEmailNotificationTemplate(templateKey: string) {
+  const key = normalizeTemplateKey(templateKey);
+  const rows = await sql`
+    select
+      template_key as "templateKey",
+      category,
+      name,
+      description,
+      subject,
+      body,
+      is_enabled as "isEnabled",
+      require_opt_in as "requireOptIn",
+      send_rule as "sendRule",
+      variables
+    from email_notification_templates
+    where template_key = ${key}
+    limit 1
+  `;
+  const template = rows[0] as EmailNotificationTemplate | undefined;
+  if (!template) return getDefaultEmailTemplate(key);
+  return {
+    ...template,
+    sendRule: normalizeSendRule(template.sendRule),
+    variables: normalizeTemplateVariables(template.variables)
+  };
+}
+
+export async function updateEmailNotificationTemplates(input: unknown, updatedBy?: string) {
+  const items = Array.isArray(input) ? input : [];
+  for (const item of items) {
+    const raw = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const templateKey = normalizeTemplateKey(raw.templateKey);
+    if (!templateKey) continue;
+    const sendRule = normalizeSendRule(raw.sendRule);
+    const variables = normalizeTemplateVariables(raw.variables);
+    await sql`
+      update email_notification_templates
+      set
+        name = ${normalizeText(raw.name).slice(0, 120) || templateKey},
+        description = ${normalizeText(raw.description).slice(0, 240)},
+        subject = ${normalizeText(raw.subject).slice(0, 200) || "お知らせ"},
+        body = ${normalizeText(raw.body).slice(0, 5000)},
+        is_enabled = ${raw.isEnabled !== false},
+        require_opt_in = ${raw.requireOptIn !== false},
+        send_rule = ${JSON.stringify(sendRule)}::jsonb,
+        variables = ${JSON.stringify(variables)}::jsonb,
+        updated_by = nullif(${normalizeText(updatedBy)}, '')::uuid,
+        updated_at = now()
+      where template_key = ${templateKey}
+    `;
+  }
+  return getEmailNotificationTemplates();
 }
 
 export async function getLoyaltyTierSettings() {
@@ -971,6 +1118,30 @@ async function updateCouponEmailStatus(input: { couponId: string; status: string
   `;
 }
 
+function getConfiguredMemberUrl() {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  return baseUrl ? `${baseUrl}/member` : "";
+}
+
+function formatEmailDate(value: string) {
+  if (!value) return "期限なし";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "期限なし";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+function renderTemplateForCoupon(template: EmailNotificationTemplate, variables: Record<string, unknown>) {
+  return {
+    subject: applyEmailTemplate(template.subject, variables),
+    bodyText: applyEmailTemplate(template.body, variables)
+  };
+}
+
 export async function resendMemberCouponEmail(input: { couponId: string; requestedBy?: string }) {
   const couponId = normalizeText(input.couponId);
   if (!couponId) throw new Error("クーポンを選択してください。");
@@ -1003,21 +1174,35 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
     marketingOptIn: boolean;
   } | undefined;
   if (!coupon?.id) throw new Error("クーポンが見つかりません。");
+  const template = await getEmailNotificationTemplate("coupon_general");
+  if (!template.isEnabled) {
+    await updateCouponEmailStatus({ couponId, status: "disabled", error: "Email template is disabled." });
+    return { status: "skipped", error: "メールテンプレートが無効です。" };
+  }
   if (!coupon.email) {
     await updateCouponEmailStatus({ couponId, status: "skipped", error: "Member email is missing." });
     return { status: "skipped", error: "会員メールが登録されていません。" };
   }
-  if (!coupon.marketingOptIn) {
+  if (template.requireOptIn && !coupon.marketingOptIn) {
     await updateCouponEmailStatus({ couponId, status: "skipped", error: "marketingOptIn is false." });
     return { status: "skipped", error: "会員がメール通知を許可していません。" };
   }
+  const rendered = renderTemplateForCoupon(template, {
+    memberName: coupon.memberName,
+    couponName: coupon.name,
+    couponCode: coupon.couponCode,
+    expiresAt: formatEmailDate(coupon.expiresAt),
+    memberUrl: getConfiguredMemberUrl()
+  });
 
   const emailResult = await sendCouponEmail({
     to: coupon.email,
     memberName: coupon.memberName,
     couponName: coupon.name,
     couponCode: coupon.couponCode,
-    expiresAt: coupon.expiresAt
+    expiresAt: coupon.expiresAt,
+    subject: rendered.subject,
+    bodyText: rendered.bodyText
   });
   await updateCouponEmailStatus({
     couponId,
@@ -1028,17 +1213,26 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
   return emailResult;
 }
 
-export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; sendEmails?: boolean } = {}) {
-  const settings = await getLoyaltyRewardSettings();
+export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; sendEmails?: boolean; respectSchedule?: boolean } = {}) {
+  const [settings, birthdayTemplate] = await Promise.all([
+    getLoyaltyRewardSettings(),
+    getEmailNotificationTemplate("coupon_birthday")
+  ]);
   if (!settings.birthdayCouponEnabled || settings.birthdayCouponDiscountValue <= 0) {
-    return { ok: true, enabled: false, targetMonth: currentTokyoYearMonth(), issuedCount: 0, checkedCount: 0, emailSentCount: 0, emailSkippedCount: 0, emailFailedCount: 0 };
+    return { ok: true, enabled: false, skippedBySchedule: false, targetMonth: currentTokyoYearMonth(), issuedCount: 0, checkedCount: 0, emailSentCount: 0, emailSkippedCount: 0, emailFailedCount: 0 };
   }
 
   const current = currentTokyoDateParts();
+  const rule = birthdayTemplate.sendRule;
+  const scheduledDay = clampInteger(rule.dayOfMonth, 1, 1, 28);
+  const scheduledHour = clampInteger(rule.hour, 10, 0, 23);
+  if (input.respectSchedule && (current.day !== scheduledDay || current.hour !== scheduledHour)) {
+    return { ok: true, enabled: true, skippedBySchedule: true, targetMonth: currentTokyoYearMonth(), scheduledDay, scheduledHour, issuedCount: 0, checkedCount: 0, emailSentCount: 0, emailSkippedCount: 0, emailFailedCount: 0 };
+  }
   const targetMonth = `${current.year}-${String(current.month).padStart(2, "0")}`;
   const rewardKey = `birthday:${targetMonth}`;
   const batchLimit = clampInteger(input.batchLimit, 2000, 1, 10000);
-  const shouldSendEmails = input.sendEmails !== false;
+  const shouldSendEmails = input.sendEmails !== false && birthdayTemplate.isEnabled;
   const memberRows = await sql`
     select
       id::text,
@@ -1076,22 +1270,31 @@ export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; 
     if (!coupon) continue;
     issuedCount += 1;
 
-    if (!shouldSendEmails || !member.marketingOptIn || !member.email) {
+    if (!shouldSendEmails || (birthdayTemplate.requireOptIn && !member.marketingOptIn) || !member.email) {
       emailSkippedCount += 1;
       await updateCouponEmailStatus({
         couponId: String(coupon.id),
         status: shouldSendEmails ? "skipped" : "disabled",
-        error: !shouldSendEmails ? "Email sending disabled." : !member.marketingOptIn ? "marketingOptIn is false." : "Member email is missing."
+        error: !shouldSendEmails ? "Email sending disabled." : birthdayTemplate.requireOptIn && !member.marketingOptIn ? "marketingOptIn is false." : "Member email is missing."
       });
       continue;
     }
+    const rendered = renderTemplateForCoupon(birthdayTemplate, {
+      memberName: member.memberName,
+      couponName: String(coupon.name),
+      couponCode: String(coupon.couponCode),
+      expiresAt: formatEmailDate(String(coupon.expiresAt)),
+      memberUrl: getConfiguredMemberUrl()
+    });
 
-    const emailResult = await sendBirthdayCouponEmail({
+    const emailResult = await sendCouponEmail({
       to: member.email,
       memberName: member.memberName,
       couponName: String(coupon.name),
       couponCode: String(coupon.couponCode),
-      expiresAt: String(coupon.expiresAt)
+      expiresAt: String(coupon.expiresAt),
+      subject: rendered.subject,
+      bodyText: rendered.bodyText
     });
     if (emailResult.status === "sent") emailSentCount += 1;
     else if (emailResult.status === "failed") emailFailedCount += 1;
@@ -1107,7 +1310,10 @@ export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; 
   return {
     ok: true,
     enabled: true,
+    skippedBySchedule: false,
     targetMonth,
+    scheduledDay,
+    scheduledHour,
     issuedCount,
     checkedCount: memberRows.length,
     emailSentCount,

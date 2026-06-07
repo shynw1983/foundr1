@@ -1550,6 +1550,160 @@ insert into loyalty_reward_settings (scope_key)
 values ('global')
 on conflict (scope_key) do nothing;
 
+create table if not exists email_notification_templates (
+  template_key text primary key,
+  category text not null default 'member',
+  name text not null,
+  description text not null default '',
+  subject text not null,
+  body text not null,
+  is_enabled boolean not null default true,
+  require_opt_in boolean not null default true,
+  send_rule jsonb not null default '{}'::jsonb,
+  variables jsonb not null default '[]'::jsonb,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into email_notification_templates (
+  template_key,
+  category,
+  name,
+  description,
+  subject,
+  body,
+  is_enabled,
+  require_opt_in,
+  send_rule,
+  variables
+) values
+  (
+    'order_confirmed',
+    'order',
+    '客户下单确认',
+    '客户完成网络订单或预约订单后发送。',
+    'ご注文を受け付けました',
+    '{{memberName}} 様\n\nご注文ありがとうございます。以下の内容でご注文を受け付けました。\n\n注文番号: {{orderNumber}}\n店舗: {{storeName}}\n受取予定: {{pickupTime}}\n合計金額: {{orderTotal}}\n\nご来店をお待ちしております。\n\n注文状況はこちら:\n{{orderUrl}}',
+    true,
+    false,
+    '{"trigger":"order_paid"}'::jsonb,
+    '["memberName","orderNumber","storeName","pickupTime","orderTotal","orderUrl"]'::jsonb
+  ),
+  (
+    'order_refunded',
+    'order',
+    '客户退款通知',
+    '订单取消并完成退款后发送。',
+    'ご注文の返金が完了しました',
+    '{{memberName}} 様\n\nご注文 {{orderNumber}} の返金が完了しました。\n\n返金金額: {{refundAmount}}\n返金日時: {{refundTime}}\n\nカード会社・決済サービス側の処理状況により、明細への反映まで数日かかる場合があります。\n\nご不明点がありましたら店舗までお問い合わせください。',
+    true,
+    false,
+    '{"trigger":"payment_refunded"}'::jsonb,
+    '["memberName","orderNumber","refundAmount","refundTime"]'::jsonb
+  ),
+  (
+    'reservation_reminder',
+    'reservation',
+    '客户预约提醒',
+    '预约/取餐时间前发送提醒。',
+    'ご予約時間が近づいています',
+    '{{memberName}} 様\n\nご予約時間が近づいています。\n\n店舗: {{storeName}}\n予約日時: {{reservationTime}}\n注文番号: {{orderNumber}}\n\n変更やキャンセルが必要な場合は、お早めに店舗までご連絡ください。\n\n詳細はこちら:\n{{orderUrl}}',
+    true,
+    false,
+    '{"trigger":"reservation_reminder","minutesBefore":60}'::jsonb,
+    '["memberName","storeName","reservationTime","orderNumber","orderUrl"]'::jsonb
+  ),
+  (
+    'coupon_general',
+    'member',
+    '优惠券通知',
+    '手动发券、补发优惠券通知时使用。',
+    'クーポンをお届けしました',
+    '{{memberName}} 様\n\nFoundr1 Members にクーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}',
+    true,
+    true,
+    '{"trigger":"coupon_issued"}'::jsonb,
+    '["memberName","couponName","couponCode","expiresAt","memberUrl"]'::jsonb
+  ),
+  (
+    'coupon_birthday',
+    'member',
+    '生日优惠券通知',
+    '每月生日会员统一发券后发送。',
+    'お誕生日特典クーポンをお届けしました',
+    '{{memberName}} 様\n\nお誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}',
+    true,
+    true,
+    '{"trigger":"monthly_birthday_coupon","dayOfMonth":1,"hour":10,"timezone":"Asia/Tokyo"}'::jsonb,
+    '["memberName","couponName","couponCode","expiresAt","memberUrl"]'::jsonb
+  ),
+  (
+    'member_signup',
+    'member',
+    '会员注册欢迎',
+    '会员首次注册/绑定账号后发送。',
+    '会員登録ありがとうございます',
+    '{{memberName}} 様\n\nFoundr1 Members へのご登録ありがとうございます。\n\n会員番号: {{memberNumber}}\n現在のポイント: {{pointBalance}} pt\n\n会員ページはこちら:\n{{memberUrl}}',
+    true,
+    true,
+    '{"trigger":"member_signup"}'::jsonb,
+    '["memberName","memberNumber","pointBalance","memberUrl"]'::jsonb
+  ),
+  (
+    'dormant_reactivation_coupon',
+    'member',
+    '沉睡会员召回优惠',
+    '长时间未购买会员获得召回优惠券后发送。',
+    'お久しぶり特典をお届けしました',
+    '{{memberName}} 様\n\nまたのご利用をお待ちして、特典クーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}',
+    true,
+    true,
+    '{"trigger":"dormant_coupon_issued"}'::jsonb,
+    '["memberName","couponName","couponCode","expiresAt","memberUrl"]'::jsonb
+  ),
+  (
+    'coupon_expiring_soon',
+    'member',
+    '优惠券到期提醒',
+    '优惠券到期前提醒会员使用。',
+    'クーポンの有効期限が近づいています',
+    '{{memberName}} 様\n\nお持ちのクーポンの有効期限が近づいています。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}',
+    false,
+    true,
+    '{"trigger":"coupon_expiring_soon","daysBefore":3,"hour":10,"timezone":"Asia/Tokyo"}'::jsonb,
+    '["memberName","couponName","couponCode","expiresAt","memberUrl"]'::jsonb
+  ),
+  (
+    'pickup_ready',
+    'order',
+    '取餐完成/准备好通知',
+    '厨房或工作台标记商品准备好后发送。',
+    'ご注文商品の準備ができました',
+    '{{memberName}} 様\n\nご注文商品の準備ができました。\n\n注文番号: {{orderNumber}}\n店舗: {{storeName}}\n\nご来店の際は注文番号をスタッフにお伝えください。',
+    false,
+    false,
+    '{"trigger":"pickup_ready"}'::jsonb,
+    '["memberName","orderNumber","storeName"]'::jsonb
+  ),
+  (
+    'payment_failed',
+    'order',
+    '支付失败通知',
+    '线上支付失败或订单未成立时发送。',
+    'お支払いを完了できませんでした',
+    '{{memberName}} 様\n\nお支払いを完了できなかったため、ご注文は確定していません。\n\n再度ご注文いただくか、店舗までお問い合わせください。\n\n注文番号: {{orderNumber}}',
+    false,
+    false,
+    '{"trigger":"payment_failed"}'::jsonb,
+    '["memberName","orderNumber"]'::jsonb
+  )
+on conflict (template_key) do nothing;
+
+update email_notification_templates
+set body = replace(body, chr(92) || 'n', chr(10))
+where body like '%' || chr(92) || 'n' || '%';
+
 create table if not exists loyalty_point_ledger (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references members(id) on delete cascade,

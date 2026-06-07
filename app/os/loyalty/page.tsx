@@ -142,6 +142,19 @@ type LoyaltyTierSetting = {
   isActive: boolean;
 };
 
+type EmailNotificationTemplate = {
+  templateKey: string;
+  category: string;
+  name: string;
+  description: string;
+  subject: string;
+  body: string;
+  isEnabled: boolean;
+  requireOptIn: boolean;
+  sendRule: Record<string, unknown>;
+  variables: string[];
+};
+
 type LoyaltyDashboard = {
   summary: LoyaltySummary;
   recentMembers: LoyaltyMember[];
@@ -150,6 +163,7 @@ type LoyaltyDashboard = {
   stampCampaigns: LoyaltyStampCampaign[];
   rewardSettings: LoyaltyRewardSettings;
   tierSettings: LoyaltyTierSetting[];
+  emailTemplates: EmailNotificationTemplate[];
 };
 
 const emptySummary: LoyaltySummary = {
@@ -257,7 +271,8 @@ export default function LoyaltyPage() {
     recentCoupons: [],
     stampCampaigns: [],
     rewardSettings: defaultRewardSettings,
-    tierSettings: defaultTierSettings
+    tierSettings: defaultTierSettings,
+    emailTemplates: []
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -283,6 +298,8 @@ export default function LoyaltyPage() {
   });
   const [rewardSettings, setRewardSettings] = useState<LoyaltyRewardSettings>(defaultRewardSettings);
   const [tierSettings, setTierSettings] = useState<LoyaltyTierSetting[]>(defaultTierSettings);
+  const [emailTemplates, setEmailTemplates] = useState<EmailNotificationTemplate[]>([]);
+  const [templateSaving, setTemplateSaving] = useState(false);
 
   const averageSpend = useMemo(() => {
     const visits = dashboard.summary.lifetimeVisits || 0;
@@ -308,6 +325,7 @@ export default function LoyaltyPage() {
       ? { ...defaultRewardSettings, ...body.rewardSettings }
       : rewardSettings;
     const nextTierSettings = body.tierSettings?.length ? body.tierSettings : tierSettings;
+    const nextEmailTemplates = body.emailTemplates?.length ? body.emailTemplates : emailTemplates;
     setDashboard({
       summary: { ...emptySummary, ...(body.summary ?? {}) },
       recentMembers: body.recentMembers ?? [],
@@ -315,10 +333,12 @@ export default function LoyaltyPage() {
       recentCoupons: body.recentCoupons ?? [],
       stampCampaigns: body.stampCampaigns ?? [],
       rewardSettings: nextRewardSettings,
-      tierSettings: nextTierSettings
+      tierSettings: nextTierSettings,
+      emailTemplates: nextEmailTemplates
     });
     setRewardSettings(nextRewardSettings);
     setTierSettings(nextTierSettings);
+    setEmailTemplates(nextEmailTemplates);
   }
 
   async function saveMember() {
@@ -460,6 +480,30 @@ export default function LoyaltyPage() {
     }
   }
 
+  async function saveEmailTemplates() {
+    if (templateSaving) return;
+    setTemplateSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_email_templates",
+          emailTemplates
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "メール通知テンプレートを保存できませんでした。");
+      syncDashboard(body);
+      setMessage("メール通知テンプレートを保存しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "メール通知テンプレートを保存できませんでした。");
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
   async function resendCouponEmail(coupon: LoyaltyCoupon) {
     if (resendingCouponId) return;
     setResendingCouponId(coupon.id);
@@ -488,6 +532,17 @@ export default function LoyaltyPage() {
 
   function updateTier(index: number, patch: Partial<LoyaltyTierSetting>) {
     setTierSettings((current) => current.map((tier, tierIndex) => tierIndex === index ? { ...tier, ...patch } : tier));
+  }
+
+  function updateEmailTemplate(index: number, patch: Partial<EmailNotificationTemplate>) {
+    setEmailTemplates((current) => current.map((template, templateIndex) => templateIndex === index ? { ...template, ...patch } : template));
+  }
+
+  function updateTemplateRule(index: number, key: string, value: unknown) {
+    setEmailTemplates((current) => current.map((template, templateIndex) => {
+      if (templateIndex !== index) return template;
+      return { ...template, sendRule: { ...(template.sendRule ?? {}), [key]: value } };
+    }));
   }
 
   useEffect(() => {
@@ -664,6 +719,88 @@ export default function LoyaltyPage() {
             <button className="primary-button" type="button" onClick={() => void saveTierSettings()} disabled={tierSaving}>
               {tierSaving ? "保存中..." : "ランクを保存"}
             </button>
+          </div>
+        </section>
+
+        <section className="panel loyalty-email-template-panel">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">Email</p>
+              <h3>メール通知テンプレート</h3>
+            </div>
+            <button className="primary-button" type="button" onClick={() => void saveEmailTemplates()} disabled={templateSaving}>
+              {templateSaving ? "保存中..." : "テンプレートを保存"}
+            </button>
+          </div>
+          <div className="loyalty-template-grid">
+            {emailTemplates.length ? emailTemplates.map((template, index) => (
+              <details className="loyalty-template-card" key={template.templateKey} open={index < 3}>
+                <summary>
+                  <div>
+                    <strong>{template.name}</strong>
+                    <small>{template.category} / {template.templateKey}</small>
+                  </div>
+                  <span className={`loyalty-email-pill ${template.isEnabled ? "is-sent" : "is-muted"}`}>{template.isEnabled ? "有効" : "無効"}</span>
+                </summary>
+                <div className="loyalty-template-editor">
+                  <label className="loyalty-toggle-row">
+                    <input type="checkbox" checked={template.isEnabled} onChange={(event) => updateEmailTemplate(index, { isEnabled: event.target.checked })} />
+                    <span>このメール通知を有効にする</span>
+                  </label>
+                  <label className="loyalty-toggle-row">
+                    <input type="checkbox" checked={template.requireOptIn} onChange={(event) => updateEmailTemplate(index, { requireOptIn: event.target.checked })} />
+                    <span>会員の通知同意を必須にする</span>
+                  </label>
+                  <label>
+                    <span>管理名</span>
+                    <input value={template.name} onChange={(event) => updateEmailTemplate(index, { name: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>説明</span>
+                    <input value={template.description} onChange={(event) => updateEmailTemplate(index, { description: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>件名</span>
+                    <input value={template.subject} onChange={(event) => updateEmailTemplate(index, { subject: event.target.value })} />
+                  </label>
+                  <label className="loyalty-template-body-field">
+                    <span>本文</span>
+                    <textarea value={template.body} onChange={(event) => updateEmailTemplate(index, { body: event.target.value })} rows={8} />
+                  </label>
+                  <div className="loyalty-template-rule-grid">
+                    {"dayOfMonth" in (template.sendRule ?? {}) ? (
+                      <label>
+                        <span>送信日</span>
+                        <input value={String(template.sendRule.dayOfMonth ?? 1)} onChange={(event) => updateTemplateRule(index, "dayOfMonth", Number(event.target.value.replace(/[^\d]/g, "")) || 1)} inputMode="numeric" />
+                      </label>
+                    ) : null}
+                    {"hour" in (template.sendRule ?? {}) ? (
+                      <label>
+                        <span>送信時刻</span>
+                        <input value={String(template.sendRule.hour ?? 10)} onChange={(event) => updateTemplateRule(index, "hour", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                      </label>
+                    ) : null}
+                    {"minutesBefore" in (template.sendRule ?? {}) ? (
+                      <label>
+                        <span>何分前</span>
+                        <input value={String(template.sendRule.minutesBefore ?? 60)} onChange={(event) => updateTemplateRule(index, "minutesBefore", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                      </label>
+                    ) : null}
+                    {"daysBefore" in (template.sendRule ?? {}) ? (
+                      <label>
+                        <span>何日前</span>
+                        <input value={String(template.sendRule.daysBefore ?? 3)} onChange={(event) => updateTemplateRule(index, "daysBefore", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                      </label>
+                    ) : null}
+                  </div>
+                  <div className="loyalty-template-variables">
+                    {template.variables.map((variable) => <code key={variable}>{`{{${variable}}}`}</code>)}
+                  </div>
+                </div>
+              </details>
+            )) : (
+              <div className="loyalty-template-empty">テンプレートを読み込み中です。</div>
+            )}
           </div>
         </section>
 
