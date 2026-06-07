@@ -11274,6 +11274,18 @@ body :where(
   overflow-wrap: anywhere;
 }
 
+.member-order-summary {
+  min-width: 0;
+  margin: 0;
+  color: var(--member-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .member-order-items {
   display: flex;
   flex-wrap: wrap;

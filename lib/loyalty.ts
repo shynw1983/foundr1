@@ -1572,16 +1572,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
         jsonb_agg(
           jsonb_build_object(
             'name', store_customer_order_items.item_name,
-            'quantity', store_customer_order_items.quantity,
-            'sizeLabel', store_customer_order_items.size_label,
-            'temperature', store_customer_order_items.temperature,
-            'sweetness', store_customer_order_items.sweetness,
-            'ice', store_customer_order_items.ice,
-            'optionLabel', store_customer_order_items.option_label,
-            'toppingLabels', store_customer_order_items.topping_labels,
-            'measuredQuantity', store_customer_order_items.measured_quantity,
-            'measuredUnit', store_customer_order_items.measured_unit,
-            'amount', store_customer_order_items.amount
+            'quantity', store_customer_order_items.quantity
           )
           order by store_customer_order_items.sort_order, store_customer_order_items.created_at
         ) filter (where store_customer_order_items.id is not null),
@@ -1614,19 +1605,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
     brandName: string;
     storeName: string;
     customerDisplayNames?: unknown;
-    items: Array<{
-      name?: string;
-      quantity?: number;
-      sizeLabel?: string;
-      temperature?: string;
-      sweetness?: string;
-      ice?: string;
-      optionLabel?: string;
-      toppingLabels?: string[];
-      measuredQuantity?: string | number | null;
-      measuredUnit?: string;
-      amount?: number;
-    }> | null;
+    items: Array<{ name?: string; quantity?: number }> | null;
     drink: string;
     size: string;
   }>).map((order) => {
@@ -1642,20 +1621,7 @@ export async function getMemberOnlineOrderHistory(memberId: string) {
             const name = normalizeText(item?.name);
             if (!name) return "";
             const quantity = Math.max(1, Math.round(Number(item?.quantity) || 1));
-            const measuredQuantity = Number(item?.measuredQuantity);
-            const measuredLabel = Number.isFinite(measuredQuantity) && measuredQuantity > 0
-              ? `${measuredQuantity.toLocaleString("ja-JP")} ${normalizeText(item?.measuredUnit)}`
-              : "";
-            const options = [
-              normalizeText(item?.sizeLabel),
-              normalizeText(item?.temperature),
-              normalizeText(item?.sweetness),
-              normalizeText(item?.ice),
-              normalizeText(item?.optionLabel),
-              ...(Array.isArray(item?.toppingLabels) ? item.toppingLabels.map(normalizeText) : [])
-            ].filter(Boolean);
-            const detailLabel = [measuredLabel, ...options].filter(Boolean).join(" / ");
-            return `${name} x ${quantity}${detailLabel ? ` (${detailLabel})` : ""}`;
+            return `${name} x ${quantity}`;
           })
           .filter(Boolean)
       : [];

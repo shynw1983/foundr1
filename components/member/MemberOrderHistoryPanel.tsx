@@ -58,6 +58,13 @@ function getPurchaseChannel(order: MemberOrderHistory) {
   return order.purchaseChannel === "store" || order.orderSource === "store_pos" ? "store" : "online";
 }
 
+function orderItemSummary(items: string[]) {
+  const visibleItems = items.filter(Boolean);
+  if (!visibleItems.length) return "明細は詳細で確認できます";
+  if (visibleItems.length === 1) return visibleItems[0];
+  return `${visibleItems[0]} ほか ${visibleItems.length - 1}件`;
+}
+
 export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrderHistoryPanelProps) {
   const [activeTab, setActiveTab] = useState<"online" | "store">("online");
   const groupedOrders = useMemo(() => ({
@@ -65,7 +72,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
     store: (orders ?? []).filter((order) => getPurchaseChannel(order) === "store")
   }), [orders]);
   const visibleOrders = groupedOrders[activeTab];
-  const emptyMessage = activeTab === "online" ? "ネット購入の履歴はまだありません。" : "店舗購入の履歴はまだありません。";
+  const emptyMessage = activeTab === "online" ? "ネット予約の履歴はまだありません。" : "実店舗購入の履歴はまだありません。";
 
   return (
     <article className={`member-portal-panel member-order-panel${compact ? " is-compact" : ""}`}>
@@ -81,7 +88,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
           className={activeTab === "online" ? "is-active" : ""}
           onClick={() => setActiveTab("online")}
         >
-          ネット購入
+          ネット予約
           <span>{groupedOrders.online.length}</span>
         </button>
         <button
@@ -91,7 +98,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
           className={activeTab === "store" ? "is-active" : ""}
           onClick={() => setActiveTab("store")}
         >
-          店舗購入
+          実店舗購入
           <span>{groupedOrders.store.length}</span>
         </button>
       </div>
@@ -103,9 +110,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false }: MemberOrder
                 <strong>{order.brandName || orderSourceLabel(order.orderSource)}</strong>
                 <span>{order.storeName || orderSourceLabel(order.orderSource)} / {orderSourceLabel(order.orderSource)} / {order.pickupCode}</span>
               </div>
-              <div className="member-order-items">
-                {(order.items.length ? order.items : ["明細なし"]).map((item, index) => <span key={`${order.id}-${index}-${item}`}>{item}</span>)}
-              </div>
+              <p className="member-order-summary">{orderItemSummary(order.items)}</p>
             </div>
             <div className="member-order-meta">
               <span>{formatPickupDate(order.pickupDate)} {order.pickupTime}</span>
