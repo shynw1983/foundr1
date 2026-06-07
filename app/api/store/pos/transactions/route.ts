@@ -204,6 +204,10 @@ export async function POST(request: Request) {
     if (!item) return Response.json({ error: "返金する商品が見つかりません。" }, { status: 404 });
     if (item.refundStatus === "refunded") return Response.json({ error: "この商品はすでに返金済みです。" }, { status: 400 });
     const refundAmount = Math.max(0, Math.round(Number(item.paidAmount) || 0));
+    const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
+    if (refundAmount <= 0 && !hasCouponBenefit) {
+      return Response.json({ error: "この商品には返金またはクーポン復元の対象がありません。" }, { status: 400 });
+    }
     if (target.paymentMethod !== "cash" && refundAmount > 0 && body.externalRefundConfirmed !== true) {
       return Response.json({ error: "外部決済端末で返金操作を完了してから、外部返金済みにチェックしてください。" }, { status: 400 });
     }

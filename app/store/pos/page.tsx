@@ -1934,8 +1934,10 @@ export default function StorePosPage() {
                             ? `${item.measuredQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${item.measuredUnit || "g"} x ${formatYen(item.measuredUnitPrice)}/${item.measuredUnit || "g"}`
                             : "";
                           const paidAmount = Number(item.paidAmount ?? item.amount);
+                          const hasCouponBenefit = Boolean(item.couponId) || Number(item.couponDiscountAmount) > 0;
                           const isItemRefunded = item.refundStatus === "refunded";
-                          const refundDisabled = !canRefundSelectedTransaction || refundSaving || isItemRefunded || (selectedTransaction.paymentMethod !== "cash" && paidAmount > 0 && !externalRefundConfirmed);
+                          const canRecordItemReturn = paidAmount > 0 || hasCouponBenefit;
+                          const refundDisabled = !canRefundSelectedTransaction || refundSaving || isItemRefunded || !canRecordItemReturn || (selectedTransaction.paymentMethod !== "cash" && paidAmount > 0 && !externalRefundConfirmed);
                           return (
                             <div key={item.id} className={isItemRefunded ? "is-refunded" : ""}>
                               <div>
@@ -1950,18 +1952,21 @@ export default function StorePosPage() {
                                     {item.couponDiscountAmount ? `クーポン -${formatYen(item.couponDiscountAmount)}` : ""}
                                   </small>
                                 ) : null}
+                                {hasCouponBenefit && !isItemRefunded ? <small>返品記録時にクーポンを自動復元</small> : null}
                                 {isItemRefunded ? <small>返金済み {formatYen(item.refundedAmount)}{item.refundReason ? ` / ${item.refundReason}` : ""}</small> : null}
                               </div>
                               <div className="store-pos-transaction-item-actions">
                                 <b>{formatYen(paidAmount)}</b>
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() => void refundTransaction(item.id)}
-                                  disabled={refundDisabled}
-                                >
-                                  {refundingItemId === item.id ? "処理中" : paidAmount > 0 ? "商品返金" : "券を戻す"}
-                                </button>
+                                {canRecordItemReturn ? (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() => void refundTransaction(item.id)}
+                                    disabled={refundDisabled}
+                                  >
+                                    {refundingItemId === item.id ? "処理中" : paidAmount > 0 ? "商品返金" : "返品記録"}
+                                  </button>
+                                ) : null}
                               </div>
                             </div>
                           );
