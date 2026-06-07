@@ -10623,6 +10623,12 @@ body :where(
   outline: 2px solid rgba(47, 138, 114, 0.14);
 }
 
+.member-auth-email-form,
+.member-auth-oauth-grid {
+  position: relative;
+  z-index: 1;
+}
+
 .member-auth-link-button {
   justify-self: center;
   border: 0;
@@ -10666,9 +10672,15 @@ body :where(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  font-size: 12px;
-  font-weight: 800;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
+.member-auth-provider-icon svg {
+  display: block;
+  width: 19px;
+  height: 19px;
 }
 
 .member-auth-message {
