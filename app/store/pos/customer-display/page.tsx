@@ -379,6 +379,12 @@ function translateTaxLabel(label: string, language: DisplayLanguage) {
   return rateMatch?.[1] ? `Tax included ${rateMatch[1]}%` : "Tax included";
 }
 
+function formatMemberDisplayName(name: string, language: DisplayLanguage) {
+  const normalizedName = String(name || "").trim();
+  if (language === "ja") return normalizedName;
+  return normalizedName.replace(/様$/u, "").trim();
+}
+
 export default function CustomerDisplayPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -409,6 +415,7 @@ export default function CustomerDisplayPage() {
   const text = customerDisplayText[displayLanguage];
   const topStatusLabel = getStatusLabel(state, text);
   const paymentLabel = state.paymentMethod === "cash" ? text.cash : state.paymentLabel || text.payment;
+  const memberDisplayName = formatMemberDisplayName(state.memberDisplayName, displayLanguage);
   const memberMessage = displayLanguage === "ja" ? state.memberMessage || text.memberMessage : text.memberMessage;
   const showTopStatus = true;
   const clockLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
@@ -694,9 +701,9 @@ export default function CustomerDisplayPage() {
         </div>
 
         <aside className={`customer-display-payment is-${state.status || "idle"}`}>
-          {state.memberDisplayName ? (
+          {memberDisplayName ? (
             <div className="customer-display-member">
-              <span>{state.memberDisplayName}</span>
+              <span>{memberDisplayName}</span>
               <strong>{memberMessage}</strong>
             </div>
           ) : null}

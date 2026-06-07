@@ -8629,21 +8629,26 @@ body :where(
 }
 
 .customer-display-topbar .customer-display-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0;
+  min-width: 180px;
   color: #f8f8f4;
 }
 
 .customer-display-topbar .customer-display-clock span {
   display: block;
-  font-size: clamp(54px, 8.4vh, 104px);
-  line-height: 0.92;
-  padding-bottom: 12px;
-  transform: translateY(-4px);
+  font-size: clamp(52px, 7.8vh, 96px);
+  line-height: 1;
+  margin-top: -4px;
+  margin-bottom: 12px;
 }
 
 .customer-display-topbar .customer-display-clock small {
+  display: block;
   color: rgba(248, 248, 244, 0.58);
-  transform: translateY(2px);
+  line-height: 1.1;
 }
 
 .customer-display-menu select {

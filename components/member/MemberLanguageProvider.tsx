@@ -53,6 +53,7 @@ function savePreferredLanguage(language: MemberLanguage) {
   void fetch("/api/public/members/me", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
+    cache: "no-store",
     body: JSON.stringify({ action: "preferred_language", preferredLanguage: language })
   }).catch(() => undefined);
 }
@@ -67,6 +68,7 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
     userSelectedLanguageRef.current = Boolean(params.get("lang"));
     setLanguageState(nextLanguage);
     window.localStorage.setItem(memberLanguageStorageKey, nextLanguage);
+    if (params.get("lang")) savePreferredLanguage(nextLanguage);
   }, []);
 
   useEffect(() => {
