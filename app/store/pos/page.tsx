@@ -1048,15 +1048,15 @@ export default function StorePosPage() {
     return value || "-";
   }
 
-  function getMemberDisplayName(member: PosMember | null) {
+  function getMemberDisplayName(member: PosMember | null, language = getCustomerDisplayLanguage(member)) {
     if (!member) return "";
     const directLastName = String(member.lastName || "").trim();
-    if (directLastName) return `${directLastName}様`;
+    if (directLastName) return language === "ja" ? `${directLastName}様` : directLastName;
     const fullName = String(member.fullName || member.displayName || "").trim();
     const spacedLastName = fullName.split(/\s+/).filter(Boolean)[0] ?? "";
-    if (spacedLastName) return `${spacedLastName}様`;
+    if (spacedLastName) return language === "ja" ? `${spacedLastName}様` : spacedLastName;
     const fallback = String(member.email || member.memberNumber || "").trim();
-    return fallback ? `${fallback}様` : "";
+    return fallback ? language === "ja" ? `${fallback}様` : fallback : "";
   }
 
   function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number, fallbackName = "", language = "ja") {
@@ -1401,7 +1401,7 @@ export default function StorePosPage() {
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: body.pickupCode,
         preferredLanguage: selectedMember ? customerDisplayLanguage : "",
-        memberDisplayName: getMemberDisplayName(selectedMember),
+        memberDisplayName: getMemberDisplayName(selectedMember, customerDisplayLanguage),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引", customerDisplayLanguage),
         ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン", customerDisplayLanguage),
@@ -1454,7 +1454,7 @@ export default function StorePosPage() {
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: "",
         preferredLanguage: selectedMember ? customerDisplayLanguage : "",
-        memberDisplayName: getMemberDisplayName(selectedMember),
+        memberDisplayName: getMemberDisplayName(selectedMember, customerDisplayLanguage),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount, "", customerDisplayLanguage),
         ...getDisplayCouponState(selectedCoupon, couponDiscountAmount, "", customerDisplayLanguage),
