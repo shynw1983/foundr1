@@ -407,6 +407,7 @@ function ConfiguredMemberPortal() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !data.member || !missingRequiredProfile || profilePromptShownRef.current) return;
     profilePromptShownRef.current = true;
+    setSettingsOpen(true);
     window.setTimeout(() => {
       settingsPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
@@ -751,94 +752,96 @@ function ConfiguredMemberPortal() {
                 </div>
               </article>
 
-              <details
-                ref={settingsPanelRef}
-                className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}
-                open={settingsOpen}
-                onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
-              >
-                <summary className="member-settings-summary">
-                  <div className="member-portal-panel-title">
-                    <Settings size={18} />
-                    <h3>会員情報</h3>
-                  </div>
-                  <div className="member-settings-summary-status">
-                    <span className={missingRequiredProfile ? "is-required" : "is-complete"}>{profileStatusLabel}</span>
-                    <b>{settingsOpen ? "閉じる" : "編集"}</b>
-                  </div>
-                </summary>
-                <div className="member-settings-body">
-                  {missingRequiredProfile ? (
-                    <div className="member-settings-required-alert">
-                      <strong>会員登録を完了してください</strong>
-                      <span>ポイント利用と予約時の自動入力には、表示名・氏名・電話番号が必要です。</span>
+              {settingsOpen || missingRequiredProfile || completeProfileRequested ? (
+                <details
+                  ref={settingsPanelRef}
+                  className={`member-portal-panel member-settings-panel${missingRequiredProfile || completeProfileRequested ? " is-profile-task" : ""}`}
+                  open={settingsOpen}
+                  onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
+                >
+                  <summary className="member-settings-summary">
+                    <div className="member-portal-panel-title">
+                      <Settings size={18} />
+                      <h3>会員情報</h3>
                     </div>
-                  ) : null}
-                  {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
-                  <p className="member-settings-note">表示名、氏名、電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
-                  <div className="member-settings-grid">
-                    <label className="member-settings-field-wide">
-                      <span>表示名・ニックネーム</span>
-                      <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
-                    </label>
-                    <label className="member-settings-field-name">
-                      <span>姓</span>
-                      <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
-                    </label>
-                    <label className="member-settings-field-name">
-                      <span>名</span>
-                      <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
-                    </label>
-                    <label className="member-settings-field-kana">
-                      <span>セイ（任意）</span>
-                      <input value={settingsForm.lastNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, lastNameKana: event.target.value, nameKana: [event.target.value, current.firstNameKana].filter(Boolean).join(" ") }))} placeholder="例: ヤマダ" autoComplete="section-kana family-name" />
-                    </label>
-                    <label className="member-settings-field-kana">
-                      <span>メイ（任意）</span>
-                      <input value={settingsForm.firstNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, firstNameKana: event.target.value, nameKana: [current.lastNameKana, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: タロウ" autoComplete="section-kana given-name" />
-                    </label>
-                    <label>
-                      <span>電話番号</span>
-                      <div className="member-phone-segments">
-                        <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label="電話番号 1" required />
-                        <span>-</span>
-                        <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label="電話番号 2" required />
-                        <span>-</span>
-                        <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label="電話番号 3" required />
+                    <div className="member-settings-summary-status">
+                      <span className={missingRequiredProfile ? "is-required" : "is-complete"}>{profileStatusLabel}</span>
+                      <b>{settingsOpen ? "閉じる" : "編集"}</b>
+                    </div>
+                  </summary>
+                  <div className="member-settings-body">
+                    {missingRequiredProfile ? (
+                      <div className="member-settings-required-alert">
+                        <strong>会員登録を完了してください</strong>
+                        <span>ポイント利用と予約時の自動入力には、表示名・氏名・電話番号が必要です。</span>
                       </div>
-                    </label>
-                    <label>
-                      <span>生年月日（任意）</span>
-                      <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
-                    </label>
-                    <label>
-                      <span>よく利用する店舗（任意）</span>
-                      <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
-                        {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label>
-                      <span>表示言語（任意）</span>
-                      <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))}>
-                        {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
+                    ) : null}
+                    {settingsMessage ? <p className="member-settings-inline-message">{settingsMessage}</p> : null}
+                    <p className="member-settings-note">表示名、氏名、電話番号は会員確認に必要です。その他の項目は任意で設定できます。</p>
+                    <div className="member-settings-grid">
+                      <label className="member-settings-field-wide">
+                        <span>表示名・ニックネーム</span>
+                        <input value={settingsForm.displayName} onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="例: Maamaa fan" />
+                      </label>
+                      <label className="member-settings-field-name">
+                        <span>姓</span>
+                        <input value={settingsForm.lastName} onChange={(event) => setSettingsForm((current) => ({ ...current, lastName: event.target.value, fullName: [event.target.value, current.firstName].filter(Boolean).join(" ") }))} placeholder="例: 山田" autoComplete="family-name" required />
+                      </label>
+                      <label className="member-settings-field-name">
+                        <span>名</span>
+                        <input value={settingsForm.firstName} onChange={(event) => setSettingsForm((current) => ({ ...current, firstName: event.target.value, fullName: [current.lastName, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: 太郎" autoComplete="given-name" required />
+                      </label>
+                      <label className="member-settings-field-kana">
+                        <span>セイ（任意）</span>
+                        <input value={settingsForm.lastNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, lastNameKana: event.target.value, nameKana: [event.target.value, current.firstNameKana].filter(Boolean).join(" ") }))} placeholder="例: ヤマダ" autoComplete="section-kana family-name" />
+                      </label>
+                      <label className="member-settings-field-kana">
+                        <span>メイ（任意）</span>
+                        <input value={settingsForm.firstNameKana} onChange={(event) => setSettingsForm((current) => ({ ...current, firstNameKana: event.target.value, nameKana: [current.lastNameKana, event.target.value].filter(Boolean).join(" ") }))} placeholder="例: タロウ" autoComplete="section-kana given-name" />
+                      </label>
+                      <label>
+                        <span>電話番号</span>
+                        <div className="member-phone-segments">
+                          <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label="電話番号 1" required />
+                          <span>-</span>
+                          <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label="電話番号 2" required />
+                          <span>-</span>
+                          <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label="電話番号 3" required />
+                        </div>
+                      </label>
+                      <label>
+                        <span>生年月日（任意）</span>
+                        <input type="date" value={settingsForm.birthday} onChange={(event) => setSettingsForm((current) => ({ ...current, birthday: event.target.value }))} />
+                      </label>
+                      <label>
+                        <span>よく利用する店舗（任意）</span>
+                        <select value={settingsForm.preferredStoreId} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredStoreId: event.target.value }))}>
+                          {preferredStoreOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <span>表示言語（任意）</span>
+                        <select value={settingsForm.preferredLanguage} onChange={(event) => setSettingsForm((current) => ({ ...current, preferredLanguage: event.target.value }))}>
+                          {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="member-settings-checks">
+                      <label>
+                        <input type="checkbox" checked={settingsForm.marketingOptIn} onChange={(event) => setSettingsForm((current) => ({ ...current, marketingOptIn: event.target.checked }))} />
+                        <span>クーポンやキャンペーンのお知らせを受け取る</span>
+                      </label>
+                      <label>
+                        <input type="checkbox" checked={settingsForm.lineLinked} onChange={(event) => setSettingsForm((current) => ({ ...current, lineLinked: event.target.checked }))} />
+                        <span>LINE連携済みとして記録する（本連携機能は準備中）</span>
+                      </label>
+                    </div>
+                    <button className="primary-button" type="button" onClick={() => void saveSettings()} disabled={settingsSaving}>
+                      {settingsSaving ? "保存中..." : "会員情報を保存"}
+                    </button>
                   </div>
-                  <div className="member-settings-checks">
-                    <label>
-                      <input type="checkbox" checked={settingsForm.marketingOptIn} onChange={(event) => setSettingsForm((current) => ({ ...current, marketingOptIn: event.target.checked }))} />
-                      <span>クーポンやキャンペーンのお知らせを受け取る</span>
-                    </label>
-                    <label>
-                      <input type="checkbox" checked={settingsForm.lineLinked} onChange={(event) => setSettingsForm((current) => ({ ...current, lineLinked: event.target.checked }))} />
-                      <span>LINE連携済みとして記録する（本連携機能は準備中）</span>
-                    </label>
-                  </div>
-                  <button className="primary-button" type="button" onClick={() => void saveSettings()} disabled={settingsSaving}>
-                    {settingsSaving ? "保存中..." : "会員情報を保存"}
-                  </button>
-                </div>
-              </details>
+                </details>
+              ) : null}
 
               <article className="member-portal-panel member-brand-panel">
                 <div className="member-portal-panel-title">
