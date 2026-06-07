@@ -1,13 +1,11 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, Home, Loader2, LogOut, RefreshCw, Settings } from "lucide-react";
+import { BadgePercent, Home, Loader2, LogOut, RefreshCw, Settings, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
-import { MemberOrderHistoryPanel } from "../../../components/member/MemberOrderHistoryPanel";
-import type { MemberOrderHistory } from "../../../components/member/MemberOrderHistoryPanel";
 import { memberText } from "../../../components/member/memberTranslations";
 
 type MemberProfile = {
@@ -17,34 +15,62 @@ type MemberProfile = {
   preferredLanguage?: string;
 };
 
-type MemberOrdersResponse = {
+type PointHistory = {
+  id: string;
+  brandName: string;
+  storeName: string;
+  movementType: string;
+  points: number;
+  eligibleAmount: number;
+  createdAt: string;
+};
+
+type MemberPointsResponse = {
   configured?: boolean;
   authenticated?: boolean;
   member?: MemberProfile | null;
-  orders?: MemberOrderHistory[];
+  pointHistory?: PointHistory[];
   error?: string;
 };
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
+function formatYen(value: number) {
+  return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
+}
+
+function formatDate(value: string, noExpiryLabel = "期限なし") {
+  if (!value) return noExpiryLabel;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return noExpiryLabel;
+  return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function movementLabel(value: string, text: typeof memberText[keyof typeof memberText]) {
+  if (value === "earn") return text.movementEarn;
+  if (value === "refund_reversal") return text.movementReversal;
+  if (value === "redeem") return text.movementRedeem;
+  return value || "-";
+}
+
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
   return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
 }
 
-export default function MemberOrdersPage() {
+export default function MemberPointsPage() {
   const { language, syncPreferredLanguage } = useMemberLanguage();
   const text = memberText[language];
   const { isLoaded, isSignedIn, user } = useUser();
-  const [data, setData] = useState<MemberOrdersResponse>({});
+  const [data, setData] = useState<MemberPointsResponse>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function loadOrders() {
+  async function loadPoints() {
     setLoading(true);
     setMessage("");
     try {
       const response = await fetch("/api/public/members/me", { cache: "no-store" });
-      const body = await response.json().catch(() => ({})) as MemberOrdersResponse;
+      const body = await response.json().catch(() => ({})) as MemberPointsResponse;
       if (!response.ok) {
         setMessage(body.error || text.loadMemberError);
         setData({});
@@ -61,7 +87,7 @@ export default function MemberOrdersPage() {
   }
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) void loadOrders();
+    if (isLoaded && isSignedIn) void loadPoints();
   }, [isLoaded, isSignedIn]);
 
   if (!clerkConfigured) {
@@ -108,9 +134,9 @@ export default function MemberOrdersPage() {
                 <Settings size={16} />
                 {text.editMemberInfo}
               </a>
-              <a className="member-account-menu-item" href="/member/points">
-                <BadgePercent size={16} />
-                {text.pointHistory}
+              <a className="member-account-menu-item" href="/member/orders">
+                <ShoppingBag size={16} />
+                {text.ordersAndReceipts}
               </a>
               <SignOutButton redirectUrl="/member?loggedOut=1">
                 <button className="member-account-menu-item" type="button">
@@ -125,12 +151,12 @@ export default function MemberOrdersPage() {
 
       <section className="member-portal-hero member-orders-hero">
         <div>
-          <p className="eyebrow">{text.purchaseHistory}</p>
-          <h1>{text.purchaseHistoryTitle}</h1>
-          <span>{text.purchaseHistoryDescription}</span>
+          <p className="eyebrow">{text.pointHistory}</p>
+          <h1>{text.pointHistory}</h1>
+          <span>{text.pointsCouponsNumber}</span>
         </div>
         {isLoaded && isSignedIn ? (
-          <button className="secondary-button" type="button" onClick={() => void loadOrders()} disabled={loading}>
+          <button className="secondary-button" type="button" onClick={() => void loadPoints()} disabled={loading}>
             {loading ? <Loader2 size={16} /> : <RefreshCw size={16} />}
             {text.refresh}
           </button>
@@ -139,9 +165,9 @@ export default function MemberOrdersPage() {
 
       {isLoaded && !isSignedIn ? (
         <MemberAuthPanel
-          title={text.purchaseHistoryLoginTitle}
-          description={text.purchaseHistoryLoginDescription}
-          afterAuthUrl="/member/orders"
+          title={text.pointHistory}
+          description={text.loginDescription}
+          afterAuthUrl="/member/points"
         />
       ) : null}
 
@@ -149,14 +175,30 @@ export default function MemberOrdersPage() {
         <>
           {message ? <p className="member-orders-message">{message}</p> : null}
           <section className="member-orders-shell">
-            {loading && !data.orders ? (
+            {loading && !data.pointHistory ? (
               <section className="member-portal-login-panel">
                 <Loader2 size={32} />
                 <h2>{text.purchaseHistoryLoading}</h2>
                 <p>{text.pleaseWait}</p>
               </section>
             ) : (
-              <MemberOrderHistoryPanel orders={data.orders} onRefresh={loadOrders} />
+              <article className="member-portal-panel">
+                <div className="member-portal-panel-title">
+                  <BadgePercent size={18} />
+                  <h3>{text.pointHistory}</h3>
+                </div>
+                <div className="member-portal-list">
+                  {data.pointHistory?.length ? data.pointHistory.map((entry) => (
+                    <div key={entry.id} className="member-portal-list-row">
+                      <div>
+                        <strong>{movementLabel(entry.movementType, text)} / {entry.storeName || entry.brandName || "-"}</strong>
+                        <span>{formatDate(entry.createdAt, text.dateNoExpiry)} / {formatYen(entry.eligibleAmount)}</span>
+                      </div>
+                      <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
+                    </div>
+                  )) : <p>{text.noPointHistory}</p>}
+                </div>
+              </article>
             )}
           </section>
         </>

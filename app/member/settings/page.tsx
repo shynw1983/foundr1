@@ -1,11 +1,12 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { Home, Loader2, LogOut, Save, Settings, ShoppingBag } from "lucide-react";
+import { BadgePercent, Home, Loader2, LogOut, Save, Settings, ShoppingBag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
+import { memberText } from "../../../components/member/memberTranslations";
 
 type MemberProfile = {
   memberNumber: string;
@@ -572,6 +573,7 @@ export default function MemberSettingsPage() {
   const [completeProfileRequested, setCompleteProfileRequested] = useState(false);
   const currentLanguage = normalizeSettingsLanguage(language);
   const text = memberSettingsText[currentLanguage];
+  const sharedText = memberText[language];
   const preferredStoreOptions = useMemo(() => [
     { value: "", label: text.unset },
     ...(data.preferredStoreOptions ?? [])
@@ -721,6 +723,10 @@ export default function MemberSettingsPage() {
               <a className="member-account-menu-item" href="/member/orders">
                 <ShoppingBag size={16} />
                 {text.orderHistory}
+              </a>
+              <a className="member-account-menu-item" href="/member/points">
+                <BadgePercent size={16} />
+                {sharedText.pointHistory}
               </a>
               <SignOutButton redirectUrl="/member?loggedOut=1">
                 <button className="member-account-menu-item" type="button">

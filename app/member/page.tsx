@@ -44,16 +44,6 @@ type MemberCoupon = {
   issuedSource: string;
 };
 
-type PointHistory = {
-  id: string;
-  brandName: string;
-  storeName: string;
-  movementType: string;
-  points: number;
-  eligibleAmount: number;
-  createdAt: string;
-};
-
 type MemberStampCard = {
   id: string;
   campaignKey: string;
@@ -75,7 +65,6 @@ type MemberResponse = {
   authenticated?: boolean;
   member?: MemberProfile | null;
   coupons?: MemberCoupon[];
-  pointHistory?: PointHistory[];
   orders?: MemberOrderHistory[];
   stampCards?: MemberStampCard[];
   error?: string;
@@ -110,13 +99,6 @@ function formatDate(value: string, noExpiryLabel = "期限なし") {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return noExpiryLabel;
   return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
-}
-
-function movementLabel(value: string, text: typeof memberText[keyof typeof memberText]) {
-  if (value === "earn") return text.movementEarn;
-  if (value === "refund_reversal") return text.movementReversal;
-  if (value === "redeem") return text.movementRedeem;
-  return value || "-";
 }
 
 function stampCardProgressLabel(card: MemberStampCard) {
@@ -171,7 +153,7 @@ function withJapaneseHonorific(value: string, language: string) {
   const name = value.trim();
   if (!name) return name;
   if (language !== "ja") return name;
-  return name.endsWith("様") ? name : `${name}様`;
+  return name.endsWith("様") ? name : `${name} 様`;
 }
 
 function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会員", language = "ja") {
@@ -400,6 +382,10 @@ function ConfiguredMemberPortal() {
                 <ShoppingBag size={16} />
                 {text.ordersAndReceipts}
               </a>
+              <a className="member-account-menu-item" href="/member/points">
+                <BadgePercent size={16} />
+                {text.pointHistory}
+              </a>
               {returnWithHandoffUrl ? (
                 <a className="member-account-menu-item" href={returnWithHandoffUrl}>
                   <LogIn size={16} />
@@ -589,24 +575,6 @@ function ConfiguredMemberPortal() {
                       </button>
                     </div>
                   )) : <p>{text.noCoupons}</p>}
-                </div>
-              </article>
-
-              <article className="member-portal-panel">
-                <div className="member-portal-panel-title">
-                  <BadgePercent size={18} />
-                  <h3>{text.pointHistory}</h3>
-                </div>
-                <div className="member-portal-list">
-                  {data.pointHistory?.length ? data.pointHistory.map((entry) => (
-                    <div key={entry.id} className="member-portal-list-row">
-                      <div>
-                        <strong>{movementLabel(entry.movementType, text)} / {entry.storeName || entry.brandName || "-"}</strong>
-                        <span>{formatDate(entry.createdAt, text.dateNoExpiry)} / {formatYen(entry.eligibleAmount)}</span>
-                      </div>
-                      <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
-                    </div>
-                  )) : <p>{text.noPointHistory}</p>}
                 </div>
               </article>
 
