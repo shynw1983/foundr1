@@ -129,7 +129,7 @@ export default function MemberOrdersPage() {
       {isLoaded && !isSignedIn ? (
         <MemberAuthPanel
           title="購入履歴にログイン"
-          description="メールアドレス、Apple、Google、LINE で購入履歴と領収書を確認できます。"
+          description="メールアドレスに確認コードを送信して、購入履歴と領収書を確認できます。"
           afterAuthUrl="/member/orders"
         />
       ) : null}

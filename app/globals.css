@@ -10653,8 +10653,7 @@ body :where(
   line-height: 1;
 }
 
-.member-auth-email-form,
-.member-auth-oauth-grid {
+.member-auth-email-form {
   position: relative;
   z-index: 1;
 }
@@ -10669,48 +10668,6 @@ body :where(
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
-}
-
-.member-auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--member-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.member-auth-divider::before,
-.member-auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--member-soft-line);
-}
-
-.member-auth-oauth-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.member-auth-oauth-button {
-  justify-content: center;
-}
-
-.member-auth-provider-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-}
-
-.member-auth-provider-icon svg {
-  display: block;
-  width: 19px;
-  height: 19px;
 }
 
 .member-auth-message {
@@ -11610,10 +11567,6 @@ body :where(
   }
 
   .member-auth-heading {
-    grid-template-columns: 1fr;
-  }
-
-  .member-auth-oauth-grid {
     grid-template-columns: 1fr;
   }
 

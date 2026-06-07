@@ -11,14 +11,7 @@ type MemberAuthPanelProps = {
 };
 
 type EmailFlow = "sign_in" | "sign_up";
-type OAuthStrategy = "oauth_apple" | "oauth_google" | "oauth_line";
 type EmailCodeFactorLike = { strategy: "email_code"; emailAddressId: string };
-
-const oauthOptions: Array<{ label: string; strategy: OAuthStrategy; icon: "apple" | "google" | "line" }> = [
-  { label: "Apple", strategy: "oauth_apple", icon: "apple" },
-  { label: "Google", strategy: "oauth_google", icon: "google" },
-  { label: "LINE", strategy: "oauth_line", icon: "line" }
-];
 
 const authTimeoutMs = 12000;
 const codeLength = 6;
@@ -34,11 +27,6 @@ function errorMessage(error: unknown) {
   const maybeErrors = (error as { errors?: Array<{ longMessage?: string; message?: string }> })?.errors;
   const first = maybeErrors?.[0];
   return first?.longMessage || first?.message || (error instanceof Error ? error.message : "") || "認証に失敗しました。入力内容を確認してください。";
-}
-
-function absoluteAuthUrl(path: string) {
-  if (typeof window === "undefined") return path;
-  return new URL(path, window.location.origin).toString();
 }
 
 function withAuthTimeout<T>(operation: Promise<T>) {
@@ -66,43 +54,9 @@ function emailCodeFactor(factors: unknown): EmailCodeFactorLike | undefined {
   });
 }
 
-function GoogleProviderIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.4-1.1 2.6-2.3 3.4v2.8h3.7c2.1-2 3.6-4.9 3.6-8.3Z" />
-      <path fill="#34A853" d="M12 24c3.1 0 5.8-1 7.7-2.8L16 18.3c-1 .7-2.3 1.1-4 1.1-3 0-5.6-2-6.5-4.8H1.7v2.9C3.6 21.4 7.5 24 12 24Z" />
-      <path fill="#FBBC05" d="M5.5 14.6c-.2-.7-.4-1.5-.4-2.3s.1-1.6.4-2.3V7.1H1.7C.9 8.7.5 10.5.5 12.3s.4 3.6 1.2 5.2l3.8-2.9Z" />
-      <path fill="#EA4335" d="M12 5.2c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.8 1.4 15.1.2 12 .2 7.5.2 3.6 2.8 1.7 7.1L5.5 10C6.4 7.2 9 5.2 12 5.2Z" />
-    </svg>
-  );
-}
-
-function AppleProviderIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-      <path fill="currentColor" d="M16.6 12.7c0-2.4 2-3.6 2.1-3.7-1.1-1.6-2.8-1.8-3.4-1.9-1.5-.1-2.8.9-3.6.9-.7 0-1.9-.9-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.1-.8s1.8.8 3.1.8 2.1-1.2 2.9-2.4c.9-1.4 1.3-2.7 1.3-2.8 0-.1-2.8-1.1-2.8-3.7ZM14.3 5.6c.7-.8 1.1-1.9 1-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.9-1 3 .9.1 2-.5 2.7-1.4Z" />
-    </svg>
-  );
-}
-
-function LineProviderIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-      <path fill="#06C755" d="M21.5 10.5c0-4.4-4.3-8-9.5-8s-9.5 3.6-9.5 8c0 3.9 3.5 7.2 8.2 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c-.1.3-.2 1.2.8.7 1-.4 5.4-3.2 7.4-5.5 1.2-1.4 1.8-3.1 1.8-5.5Z" />
-      <path fill="#fff" d="M7.2 13.2h2.1c.3 0 .5-.2.5-.5s-.2-.5-.5-.5H7.7V8.7c0-.3-.2-.5-.5-.5s-.5.2-.5.5v4c0 .3.2.5.5.5Zm3.4 0c.3 0 .5-.2.5-.5v-4c0-.3-.2-.5-.5-.5s-.5.2-.5.5v4c0 .3.2.5.5.5Zm1.4 0c.3 0 .5-.2.5-.5v-2.5l2 2.8c.1.1.3.2.4.2h.2c.2-.1.3-.3.3-.5v-4c0-.3-.2-.5-.5-.5s-.5.2-.5.5v2.5l-2-2.8c-.1-.2-.3-.3-.6-.2-.2.1-.3.3-.3.5v4c0 .3.2.5.5.5Zm4.4 0h2.1c.3 0 .5-.2.5-.5s-.2-.5-.5-.5h-1.6v-1h1.6c.3 0 .5-.2.5-.5s-.2-.5-.5-.5h-1.6v-1h1.6c.3 0 .5-.2.5-.5s-.2-.5-.5-.5h-2.1c-.3 0-.5.2-.5.5v4c0 .3.2.5.5.5Z" />
-    </svg>
-  );
-}
-
-function ProviderIcon({ icon }: { icon: "apple" | "google" | "line" }) {
-  if (icon === "apple") return <AppleProviderIcon />;
-  if (icon === "google") return <GoogleProviderIcon />;
-  return <LineProviderIcon />;
-}
-
 export function MemberAuthPanel({
   title = "ログインまたは会員登録",
-  description = "メールアドレス、Apple、Google、LINE で会員カードを表示できます。",
+  description = "メールアドレスに確認コードを送信して、会員カードを表示できます。",
   afterAuthUrl = "/member"
 }: MemberAuthPanelProps) {
   const { isLoaded: signInLoaded, signIn, setActive: setSignInActive } = useSignIn();
@@ -113,11 +67,9 @@ export function MemberAuthPanel({
   const [emailFlow, setEmailFlow] = useState<EmailFlow>("sign_in");
   const [codeSent, setCodeSent] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
-  const [oauthBusy, setOauthBusy] = useState<OAuthStrategy | "">("");
   const [message, setMessage] = useState("");
 
   const authLoaded = signInLoaded && signUpLoaded && Boolean(signIn && signUp);
-  const busy = emailBusy || Boolean(oauthBusy);
   const codeDigits = Array.from({ length: codeLength }, (_, index) => code[index] || "");
 
   function focusCodeInput(index: number) {
@@ -181,7 +133,7 @@ export function MemberAuthPanel({
       const signInAttempt = await withAuthTimeout(signIn.create({ identifier: normalizedEmail }));
       const factor = emailCodeFactor(signInAttempt.supportedFirstFactors);
       if (!factor) {
-        throw new Error("このメールアドレスでは確認コード認証を利用できません。Apple、Google、LINE でログインしてください。");
+        throw new Error("このメールアドレスでは確認コード認証を利用できません。別のメールアドレスでお試しください。");
       }
       await withAuthTimeout(signIn.prepareFirstFactor({
         strategy: "email_code",
@@ -244,24 +196,6 @@ export function MemberAuthPanel({
       setMessage(errorMessage(error));
     } finally {
       setEmailBusy(false);
-    }
-  }
-
-  async function startOAuth(strategy: OAuthStrategy) {
-    if (!authLoaded) return;
-    setOauthBusy(strategy);
-    setMessage("");
-    try {
-      await withAuthTimeout(signIn.authenticateWithRedirect({
-        strategy,
-        redirectUrl: absoluteAuthUrl("/sso-callback"),
-        redirectUrlComplete: absoluteAuthUrl(afterAuthUrl),
-        continueSignIn: true,
-        continueSignUp: true
-      }));
-    } catch (error) {
-      setOauthBusy("");
-      setMessage(errorMessage(error));
     }
   }
 
@@ -340,25 +274,6 @@ export function MemberAuthPanel({
             </button>
           </form>
         )}
-
-        <div className="member-auth-divider"><span>または</span></div>
-
-        <div className="member-auth-oauth-grid">
-          {oauthOptions.map((option) => (
-            <button
-              key={option.strategy}
-              className="secondary-button member-auth-oauth-button"
-              type="button"
-              onClick={() => void startOAuth(option.strategy)}
-              disabled={emailBusy || Boolean(oauthBusy) || !authLoaded}
-            >
-              <span className="member-auth-provider-icon" aria-hidden="true">
-                {oauthBusy === option.strategy ? <Loader2 size={17} /> : <ProviderIcon icon={option.icon} />}
-              </span>
-              {option.label}
-            </button>
-          ))}
-        </div>
 
         {message ? <p className="member-auth-message">{message}</p> : null}
       </div>

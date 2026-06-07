@@ -287,7 +287,7 @@ export default function MemberPage() {
 
         <section className="member-portal-config">
           <strong>Clerk の環境変数が未設定です。</strong>
-          <p>`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` と `CLERK_SECRET_KEY` を設定すると、メール・Google・Apple・LINE ログインを有効化できます。</p>
+          <p>`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` と `CLERK_SECRET_KEY` を設定すると、メールログインを有効化できます。</p>
         </section>
       </main>
     );
@@ -593,7 +593,7 @@ function ConfiguredMemberPortal() {
           {isLoaded && !isSignedIn ? (
             <MemberAuthPanel
               title={loggedOut ? "ログアウトしました" : "ログインまたは会員登録"}
-              description={loggedOut ? "もう一度ログインするか、新しい会員登録を続けてください。" : "メールアドレス、Apple、Google、LINE で会員カードを表示できます。"}
+              description={loggedOut ? "もう一度ログインするか、新しい会員登録を続けてください。" : "メールアドレスに確認コードを送信して、会員カードを表示できます。"}
               afterAuthUrl={profileCompletionUrl}
             />
           ) : null}
