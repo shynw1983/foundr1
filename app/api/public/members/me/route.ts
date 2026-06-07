@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { getMemberAvailableCoupons, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
+import { getMemberAvailableCoupons, getMemberOnlineOrderHistory, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -48,10 +48,11 @@ export async function GET() {
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
   await issueAutomaticLoyaltyRewardsForMember(member.id);
 
-  const [coupons, pointHistory, stampCards] = await Promise.all([
+  const [coupons, pointHistory, stampCards, orders] = await Promise.all([
     getMemberAvailableCoupons(member.id),
     getMemberPointHistory(member.id),
-    getMemberStampCards(member.id)
+    getMemberStampCards(member.id),
+    getMemberOnlineOrderHistory(member.id)
   ]);
 
   return Response.json({
@@ -60,7 +61,8 @@ export async function GET() {
     member,
     coupons,
     pointHistory,
-    stampCards
+    stampCards,
+    orders
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

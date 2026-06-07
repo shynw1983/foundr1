@@ -1517,6 +1517,88 @@ export async function getMemberPointHistory(memberId: string) {
   `;
 }
 
+export async function getMemberOnlineOrderHistory(memberId: string) {
+  const rows = await sql`
+    select
+      store_customer_orders.id::text,
+      store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.order_source as "orderSource",
+      store_customer_orders.status,
+      store_customer_orders.payment_status as "paymentStatus",
+      coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
+      store_customer_orders.amount::int,
+      coalesce(sum(store_customer_order_items.refunded_amount), 0)::int as "refundAmount",
+      store_customer_orders.pickup_date::text as "pickupDate",
+      store_customer_orders.pickup_time as "pickupTime",
+      store_customer_orders.created_at::text as "createdAt",
+      coalesce(brands.name, '') as "brandName",
+      coalesce(stores.name, '') as "storeName",
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'name', store_customer_order_items.item_name,
+            'quantity', store_customer_order_items.quantity
+          )
+          order by store_customer_order_items.sort_order, store_customer_order_items.created_at
+        ) filter (where store_customer_order_items.id is not null),
+        '[]'::jsonb
+      ) as items,
+      store_customer_orders.drink,
+      store_customer_orders.size
+    from store_customer_orders
+    left join brands on brands.id = store_customer_orders.brand_id
+    left join stores on stores.id = store_customer_orders.store_id
+    left join store_customer_order_items on store_customer_order_items.order_id = store_customer_orders.id
+    where store_customer_orders.member_id::text = ${memberId}
+      and store_customer_orders.order_source <> 'store_pos'
+    group by store_customer_orders.id, brands.name, stores.name
+    order by store_customer_orders.created_at desc
+    limit 30
+  `;
+
+  return (rows as Array<{
+    id: string;
+    pickupCode: string;
+    orderSource: string;
+    status: string;
+    paymentStatus: string;
+    paymentRefundStatus: string;
+    amount: number;
+    refundAmount: number;
+    pickupDate: string;
+    pickupTime: string;
+    createdAt: string;
+    brandName: string;
+    storeName: string;
+    items: Array<{ name?: string; quantity?: number }> | null;
+    drink: string;
+    size: string;
+  }>).map((order) => {
+    const receiptEligible = ["paid", "refunded", "partial_refunded"].includes(order.paymentStatus);
+    const receiptParams = new URLSearchParams({
+      orderId: order.id,
+      pickupCode: order.pickupCode
+    });
+    const itemLabels = Array.isArray(order.items)
+      ? order.items
+          .map((item) => {
+            const name = normalizeText(item?.name);
+            if (!name) return "";
+            const quantity = Math.max(1, Math.round(Number(item?.quantity) || 1));
+            return `${name} x ${quantity}`;
+          })
+          .filter(Boolean)
+      : [];
+    const fallbackLabel = [normalizeText(order.drink), normalizeText(order.size)].filter(Boolean).join(" / ");
+    return {
+      ...order,
+      items: itemLabels.length ? itemLabels : fallbackLabel ? [fallbackLabel] : [],
+      receiptPreviewUrl: receiptEligible ? `/public/orders/receipt/preview?${receiptParams.toString()}` : "",
+      receiptPdfUrl: receiptEligible ? `/api/public/orders/receipt?${receiptParams.toString()}` : ""
+    };
+  });
+}
+
 export async function awardLoyaltyForPaidOrder(orderId: string) {
   const orderRows = await sql`
     select
