@@ -15,6 +15,36 @@ function normalizeDisplayLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
 }
 
+function normalizeCustomerDisplayMediaSettings(value: unknown) {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const modeValue = normalizeText(record.mode);
+  const transitionValue = normalizeText(record.transition);
+  const backgroundColor = normalizeText(record.backgroundColor);
+  const assets = Array.isArray(record.assets) ? record.assets : [];
+  return {
+    mode: modeValue === "slideshow" || modeValue === "video" ? modeValue : "default",
+    transition: transitionValue === "slide" || transitionValue === "none" ? transitionValue : "fade",
+    slideDurationSeconds: Math.max(3, Math.min(60, Math.round(Number(record.slideDurationSeconds) || 8))),
+    videoMuted: record.videoMuted !== false,
+    videoLoop: record.videoLoop !== false,
+    backgroundColor: /^#[0-9a-f]{6}$/i.test(backgroundColor) ? backgroundColor : "#fbfbf8",
+    assets: assets.flatMap((item, index) => {
+      const asset = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+      const url = normalizeText(asset.url);
+      if (!url) return [];
+      const type = normalizeText(asset.type) === "video" ? "video" : "image";
+      return [{
+        id: normalizeText(asset.id) || `asset_${index + 1}`,
+        type,
+        url: url.slice(0, 500),
+        name: normalizeText(asset.name).slice(0, 120) || type,
+        durationSeconds: Math.max(3, Math.min(60, Math.round(Number(asset.durationSeconds) || Number(record.slideDurationSeconds) || 8))),
+        fit: normalizeText(asset.fit) === "contain" ? "contain" : "cover"
+      }];
+    }).slice(0, 12)
+  };
+}
+
 async function resolveStoreId(request: Request, session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, bodyStoreId = "") {
   const access = await getStoreOrderAccess(session);
   const requestedStoreId = bodyStoreId || new URL(request.url).searchParams.get("storeId") || "";
@@ -133,6 +163,16 @@ async function getDisplayState(storeId: string) {
   };
 }
 
+async function getCustomerDisplayMediaSettings(storeId: string) {
+  const rows = await sql`
+    select coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings"
+    from pos_store_settings
+    where store_id::text = ${storeId}
+    limit 1
+  `;
+  return normalizeCustomerDisplayMediaSettings(rows[0]?.customerDisplayMediaSettings);
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -143,7 +183,8 @@ export async function GET(request: Request) {
   return Response.json({
     access: { ...access, stores: await getCustomerDisplayStoreOptions(access.stores) },
     selectedStoreId,
-    state: await getDisplayState(selectedStoreId)
+    state: await getDisplayState(selectedStoreId),
+    customerDisplayMediaSettings: await getCustomerDisplayMediaSettings(selectedStoreId)
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

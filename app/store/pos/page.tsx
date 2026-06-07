@@ -29,6 +29,7 @@ type PosMenuItem = {
   brandId: string;
   brandName: string;
   name: string;
+  displayNames?: Record<string, string>;
   itemKind: string;
   category: string;
   imageUrl: string;
@@ -45,6 +46,7 @@ type PosMenuOption = {
   id: string;
   optionKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   priceDelta: number | null;
   sortOrder: number;
 };
@@ -55,6 +57,7 @@ type PosOptionGroup = {
   menuCatalogItemId: string;
   groupKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   selectionType: string;
   ruleJson: Record<string, unknown>;
   sortOrder: number;
@@ -65,6 +68,7 @@ type PosSelectedOption = PosMenuOption & {
   groupId: string;
   groupKey: string;
   groupName: string;
+  groupDisplayNames?: Record<string, string>;
 };
 
 type PosCartItem = PosMenuItem & {
@@ -146,6 +150,7 @@ type PosAccess = {
 type PosDiscountPreset = {
   key: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: "percent" | "amount";
   discountValue: number;
   targetScope: "all" | "category" | "item_kind" | "brand";
@@ -222,6 +227,7 @@ type PosCoupon = {
   brandName: string;
   couponCode: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: string;
   discountValue: number;
   maxDiscountAmount: number | null;
@@ -524,6 +530,16 @@ function getOptionGroupLimit(group: Pick<PosOptionGroup, "groupKey" | "selection
   const limit = Number(group.ruleJson?.limit);
   if (Number.isFinite(limit)) return Math.max(0, Math.floor(limit));
   return getEffectiveSelectionType(group) === "single" ? 1 : 99;
+}
+
+function getCustomerDisplayLanguage(member: PosMember | null) {
+  const language = String(member?.preferredLanguage || "").trim();
+  return member && ["zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "ja";
+}
+
+function getLocalizedDisplayName(name: string, displayNames: Record<string, string> | undefined, language: string) {
+  if (language === "ja") return name;
+  return String(displayNames?.[language] || name || "").trim();
 }
 
 function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], brandId: string) {
@@ -1007,6 +1023,24 @@ export default function StorePosPage() {
       .join(" / ");
   }
 
+  function getCustomerDisplayOptionLabel(options: PosSelectedOption[], language: string) {
+    if (!options.length) return "";
+    const counts = new Map<string, { option: PosSelectedOption; count: number }>();
+    for (const option of options) {
+      const key = `${option.groupId}:${option.id}`;
+      const current = counts.get(key) ?? { option, count: 0 };
+      current.count += 1;
+      counts.set(key, current);
+    }
+    return Array.from(counts.values())
+      .map(({ option, count }) => {
+        const groupName = getLocalizedDisplayName(option.groupName, option.groupDisplayNames, language);
+        const optionName = getLocalizedDisplayName(option.name, option.displayNames, language);
+        return `${groupName}: ${optionName}${count > 1 ? ` x${count}` : ""}`;
+      })
+      .join(" / ");
+  }
+
   function getPaymentDisplayLabel(value: string) {
     if (value === "cash") return "現金";
     if (value === "card") return posSettings.externalPaymentTerminalBrand || "外部決済端末";
@@ -1025,9 +1059,10 @@ export default function StorePosPage() {
     return fallback ? `${fallback}様` : "";
   }
 
-  function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number, fallbackName = "") {
+  function getDisplayCouponState(coupon: PosCoupon | undefined, discountAmount: number, fallbackName = "", language = "ja") {
     const amount = Math.max(0, Math.round(Number(discountAmount) || 0));
-    const couponName = coupon?.name || coupon?.couponCode || fallbackName.trim();
+    const rawCouponName = coupon?.name || coupon?.couponCode || fallbackName.trim();
+    const couponName = coupon ? getLocalizedDisplayName(rawCouponName, coupon.displayNames, language) : rawCouponName;
     if (!couponName || amount <= 0) return { couponName: "", couponDiscountAmount: 0 };
     return {
       couponName,
@@ -1035,9 +1070,24 @@ export default function StorePosPage() {
     };
   }
 
-  function getDisplayDiscountState(discountPreset: typeof selectedDiscountPreset, discountAmount: number, fallbackName = "") {
+  function getCustomerDisplayItems(language: string) {
+    return cart.map((item) => ({
+      name: getLocalizedDisplayName(item.name, item.displayNames, language),
+      optionLabel: getCustomerDisplayOptionLabel(item.selectedOptions, language),
+      quantity: item.quantity,
+      measuredQuantity: item.measuredQuantity,
+      measuredUnit: item.measuredUnit,
+      measuredUnitPrice: item.measuredUnitPrice,
+      weightLabel: getWeightLineLabel(item),
+      unitPrice: getLineUnitPrice(item),
+      amount: getLineUnitPrice(item) * item.quantity
+    }));
+  }
+
+  function getDisplayDiscountState(discountPreset: typeof selectedDiscountPreset, discountAmount: number, fallbackName = "", language = "ja") {
     const amount = Math.max(0, Math.round(Number(discountAmount) || 0));
-    const discountName = discountPreset?.name || fallbackName.trim();
+    const rawDiscountName = discountPreset?.name || fallbackName.trim();
+    const discountName = discountPreset ? getLocalizedDisplayName(rawDiscountName, discountPreset.displayNames, language) : rawDiscountName;
     if (!discountName || amount <= 0) return { discountName: "", discountAmount: 0 };
     return {
       discountName,
@@ -1251,7 +1301,7 @@ export default function StorePosPage() {
       return selectedIds
         .map((optionId) => optionsById.get(optionId))
         .filter(Boolean)
-        .map((option) => ({ ...option, groupId: group.id, groupKey: group.groupKey, groupName: group.name })) as PosSelectedOption[];
+        .map((option) => ({ ...option, groupId: group.id, groupKey: group.groupKey, groupName: group.name, groupDisplayNames: group.displayNames })) as PosSelectedOption[];
     });
     addItem(configuringItem, selectedOptions, weightDraft);
     setConfiguringItem(null);
@@ -1340,6 +1390,7 @@ export default function StorePosPage() {
       const discountLabel = body.discountAmount ? ` / 学割 -${formatYen(body.discountAmount)}` : "";
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
+      const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
       setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}`);
       setCompletedDisplayState({
         status: "complete",
@@ -1349,26 +1400,16 @@ export default function StorePosPage() {
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: body.pickupCode,
-        preferredLanguage: selectedMember?.preferredLanguage || "",
+        preferredLanguage: selectedMember ? customerDisplayLanguage : "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
-        ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引"),
-        ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン"),
+        ...getDisplayDiscountState(selectedDiscountPreset, body.discountAmount, body.discountName || "割引", customerDisplayLanguage),
+        ...getDisplayCouponState(selectedCoupon, body.couponDiscountAmount, body.couponName || body.couponCode || "クーポン", customerDisplayLanguage),
         subtotal: body.amount,
         ...getDisplayTaxState(body.taxAmount, body.taxRate, body.priceTaxMode),
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
-        items: cart.map((item) => ({
-          name: item.name,
-          optionLabel: getOptionLabel(item.selectedOptions),
-          quantity: item.quantity,
-          measuredQuantity: item.measuredQuantity,
-          measuredUnit: item.measuredUnit,
-          measuredUnitPrice: item.measuredUnitPrice,
-          weightLabel: getWeightLineLabel(item),
-          unitPrice: getLineUnitPrice(item),
-          amount: getLineUnitPrice(item) * item.quantity
-        }))
+        items: getCustomerDisplayItems(customerDisplayLanguage)
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
@@ -1380,13 +1421,19 @@ export default function StorePosPage() {
   useEffect(() => {
     if (!selectedStoreId || !canUseRegister) return;
     if (completedDisplayState) {
-      void publishCustomerDisplayState(completedDisplayState);
-      const timer = window.setTimeout(() => {
+      const nextTransactionStarted = cart.length > 0 || Boolean(selectedMember) || memberLookupInput.trim();
+      if (nextTransactionStarted) {
         setCompletedDisplayState(null);
-        setCustomerDisplayMode("advertising");
-        void publishCustomerDisplayState(getAdvertisingDisplayState());
-      }, 9000);
-      return () => window.clearTimeout(timer);
+        setCustomerDisplayMode("business");
+      } else {
+        void publishCustomerDisplayState(completedDisplayState);
+        const timer = window.setTimeout(() => {
+          setCompletedDisplayState(null);
+          setCustomerDisplayMode("advertising");
+          void publishCustomerDisplayState(getAdvertisingDisplayState());
+        }, 10000);
+        return () => window.clearTimeout(timer);
+      }
     }
     if (customerDisplayMode === "advertising" && cart.length === 0 && !selectedMember && !memberLookupInput.trim()) return;
     const status = cart.length === 0
@@ -1397,6 +1444,7 @@ export default function StorePosPage() {
           : "editing"
         : "external_wait";
     const timer = window.setTimeout(() => {
+      const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
       void publishCustomerDisplayState({
         status,
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -1405,26 +1453,16 @@ export default function StorePosPage() {
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         externalPaymentTerminalBrand: posSettings.externalPaymentTerminalBrand,
         pickupCode: "",
-        preferredLanguage: selectedMember?.preferredLanguage || "",
+        preferredLanguage: selectedMember ? customerDisplayLanguage : "",
         memberDisplayName: getMemberDisplayName(selectedMember),
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
-        ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount),
-        ...getDisplayCouponState(selectedCoupon, couponDiscountAmount),
+        ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount, "", customerDisplayLanguage),
+        ...getDisplayCouponState(selectedCoupon, couponDiscountAmount, "", customerDisplayLanguage),
         subtotal: payableAmount,
         ...getDisplayTaxState(taxSummary.taxAmount, taxRate),
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
-        items: cart.map((item) => ({
-          name: item.name,
-          optionLabel: getOptionLabel(item.selectedOptions),
-          quantity: item.quantity,
-          measuredQuantity: item.measuredQuantity,
-          measuredUnit: item.measuredUnit,
-          measuredUnitPrice: item.measuredUnitPrice,
-          weightLabel: getWeightLineLabel(item),
-          unitPrice: getLineUnitPrice(item),
-          amount: getLineUnitPrice(item) * item.quantity
-        }))
+        items: getCustomerDisplayItems(customerDisplayLanguage)
       });
     }, 180);
     return () => window.clearTimeout(timer);

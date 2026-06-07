@@ -12,6 +12,7 @@ const discountTargetScopes = new Set(["all", "category", "item_kind", "brand"]);
 type PosDiscountPreset = {
   key: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: "percent" | "amount";
   discountValue: number;
   targetScope: "all" | "category" | "item_kind" | "brand";
@@ -29,9 +30,47 @@ type PosBrandSetting = {
   posWeightUnitPrice: number | null;
 };
 
+type CustomerDisplayMediaAsset = {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  pathname: string;
+  name: string;
+  durationSeconds: number;
+  fit: "cover" | "contain";
+};
+
+type CustomerDisplayMediaSettings = {
+  mode: "default" | "slideshow" | "video";
+  transition: "fade" | "slide" | "none";
+  slideDurationSeconds: number;
+  videoMuted: boolean;
+  videoLoop: boolean;
+  backgroundColor: string;
+  assets: CustomerDisplayMediaAsset[];
+};
+
+const defaultCustomerDisplayMediaSettings: CustomerDisplayMediaSettings = {
+  mode: "default",
+  transition: "fade",
+  slideDurationSeconds: 8,
+  videoMuted: true,
+  videoLoop: true,
+  backgroundColor: "#fbfbf8",
+  assets: []
+};
+
 const defaultDiscountPresets: PosDiscountPreset[] = [{
   key: "student_20",
   name: "学割 20%OFF",
+  displayNames: {
+    en: "Student discount 20% off",
+    zh: "学生优惠 20%OFF",
+    "zh-Hant": "學生優惠 20%OFF",
+    ko: "학생 할인 20%OFF",
+    vi: "Giảm giá học sinh 20%",
+    ne: "विद्यार्थी छुट 20%OFF"
+  },
   discountType: "percent",
   discountValue: 20,
   targetScope: "all",
@@ -49,6 +88,61 @@ function normalizeRate(value: unknown, fallback: number) {
   const rate = Number(value);
   if (!Number.isFinite(rate)) return fallback;
   return Math.max(0, Math.min(100, Math.round(rate * 100) / 100));
+}
+
+function normalizeDisplayNames(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    ["en", "zh", "zh-Hant", "ko", "vi", "ne"]
+      .map((language) => [language, normalizeText(source[language]).slice(0, 120)])
+      .filter(([, displayName]) => displayName)
+  );
+}
+
+function normalizeCustomerDisplayMediaSettings(value: unknown): CustomerDisplayMediaSettings {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const modeValue = normalizeText(record.mode);
+  const transitionValue = normalizeText(record.transition);
+  const backgroundColor = normalizeText(record.backgroundColor);
+  const assets = Array.isArray(record.assets) ? record.assets : [];
+  return {
+    mode: modeValue === "slideshow" || modeValue === "video" ? modeValue : "default",
+    transition: transitionValue === "slide" || transitionValue === "none" ? transitionValue : "fade",
+    slideDurationSeconds: Math.max(3, Math.min(60, Math.round(Number(record.slideDurationSeconds) || defaultCustomerDisplayMediaSettings.slideDurationSeconds))),
+    videoMuted: record.videoMuted !== false,
+    videoLoop: record.videoLoop !== false,
+    backgroundColor: /^#[0-9a-f]{6}$/i.test(backgroundColor) ? backgroundColor : defaultCustomerDisplayMediaSettings.backgroundColor,
+    assets: assets.flatMap((item, index) => {
+      const asset = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+      const type: CustomerDisplayMediaAsset["type"] = normalizeText(asset.type) === "video" ? "video" : "image";
+      const url = normalizeText(asset.url);
+      if (!url) return [];
+      const fit: CustomerDisplayMediaAsset["fit"] = normalizeText(asset.fit) === "contain" ? "contain" : "cover";
+      return [{
+        id: normalizeText(asset.id) || `asset_${index + 1}`,
+        type,
+        url: url.slice(0, 500),
+        pathname: normalizeText(asset.pathname).slice(0, 240),
+        name: normalizeText(asset.name).slice(0, 120) || (type === "video" ? "video" : "image"),
+        durationSeconds: Math.max(3, Math.min(60, Math.round(Number(asset.durationSeconds) || Number(record.slideDurationSeconds) || defaultCustomerDisplayMediaSettings.slideDurationSeconds))),
+        fit
+      }];
+    }).slice(0, 12)
+  };
+}
+
+function getDefaultDiscountDisplayNames(key: string, name: string) {
+  if (key === "student_20" || name.includes("学割")) {
+    return {
+      en: "Student discount 20% off",
+      zh: "学生优惠 20%OFF",
+      "zh-Hant": "學生優惠 20%OFF",
+      ko: "학생 할인 20%OFF",
+      vi: "Giảm giá học sinh 20%",
+      ne: "विद्यार्थी छुट 20%OFF"
+    };
+  }
+  return {};
 }
 
 function normalizeDiscountPresets(value: unknown) {
@@ -78,6 +172,10 @@ function normalizeDiscountPresets(value: unknown) {
     return [{
       key,
       name: name.slice(0, 80),
+      displayNames: {
+        ...getDefaultDiscountDisplayNames(key, name),
+        ...normalizeDisplayNames(record.displayNames)
+      },
       discountType,
       discountValue,
       targetScope,
@@ -130,6 +228,7 @@ async function getSettings(storeId: string) {
       coalesce(nullif(pos_store_settings.external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(pos_store_settings.discount_presets, '[]'::jsonb) as "discountPresets",
+      coalesce(pos_store_settings.customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings",
       coalesce(pos_store_settings.updated_at::text, '') as "updatedAt"
     from stores
     left join pos_store_settings on pos_store_settings.store_id = stores.id
@@ -155,6 +254,7 @@ async function getSettings(storeId: string) {
   return {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
+    customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings),
     posBrandSettings: brandRows as PosBrandSetting[]
   };
 }
@@ -186,6 +286,7 @@ export async function POST(request: Request) {
     externalPaymentTerminalBrand?: string;
     priceTaxMode?: string;
     discountPresets?: unknown[];
+    customerDisplayMediaSettings?: unknown;
     posBrandSettings?: unknown[];
   };
   const access = await getStoreOrderAccess(session);
@@ -199,6 +300,7 @@ export async function POST(request: Request) {
   const takeoutTaxRate = normalizeRate(body.takeoutTaxRate, 8);
   const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
   const discountPresets = normalizeDiscountPresets(body.discountPresets);
+  const customerDisplayMediaSettings = normalizeCustomerDisplayMediaSettings(body.customerDisplayMediaSettings);
   const brandSettings = normalizeBrandSettings(body.posBrandSettings);
   await sql`
     insert into pos_store_settings (
@@ -209,6 +311,7 @@ export async function POST(request: Request) {
       external_payment_terminal_brand,
       price_tax_mode,
       discount_presets,
+      customer_display_media_settings,
       updated_by,
       updated_at
     )
@@ -220,6 +323,7 @@ export async function POST(request: Request) {
       ${externalPaymentTerminalBrand},
       ${priceTaxMode},
       ${JSON.stringify(discountPresets)}::jsonb,
+      ${JSON.stringify(customerDisplayMediaSettings)}::jsonb,
       ${session.id},
       now()
     )
@@ -231,6 +335,7 @@ export async function POST(request: Request) {
       external_payment_terminal_brand = excluded.external_payment_terminal_brand,
       price_tax_mode = excluded.price_tax_mode,
       discount_presets = excluded.discount_presets,
+      customer_display_media_settings = excluded.customer_display_media_settings,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;

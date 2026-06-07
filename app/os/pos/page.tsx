@@ -106,8 +106,39 @@ type PosTaxSettings = {
   externalPaymentTerminalBrand: string;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
+  customerDisplayMediaSettings: CustomerDisplayMediaSettings;
   posBrandSettings: PosBrandSetting[];
   updatedAt: string;
+};
+
+type CustomerDisplayMediaAsset = {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  pathname?: string;
+  name: string;
+  durationSeconds: number;
+  fit: "cover" | "contain";
+};
+
+type CustomerDisplayMediaSettings = {
+  mode: "default" | "slideshow" | "video";
+  transition: "fade" | "slide" | "none";
+  slideDurationSeconds: number;
+  videoMuted: boolean;
+  videoLoop: boolean;
+  backgroundColor: string;
+  assets: CustomerDisplayMediaAsset[];
+};
+
+const defaultCustomerDisplayMediaSettings: CustomerDisplayMediaSettings = {
+  mode: "default",
+  transition: "fade",
+  slideDurationSeconds: 8,
+  videoMuted: true,
+  videoLoop: true,
+  backgroundColor: "#fbfbf8",
+  assets: []
 };
 
 type PosBrandSetting = {
@@ -121,6 +152,7 @@ type PosBrandSetting = {
 type PosDiscountPreset = {
   key: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: "percent" | "amount";
   discountValue: number;
   targetScope: "all" | "category" | "item_kind" | "brand";
@@ -134,6 +166,7 @@ function createDiscountPreset(): PosDiscountPreset {
   return {
     key: `discount_${Date.now()}`,
     name: "",
+    displayNames: {},
     discountType: "percent",
     discountValue: 10,
     targetScope: "all",
@@ -160,17 +193,20 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; posBrandSettings: PosBrandSetting[] }>({
+  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; posBrandSettings: PosBrandSetting[] }>({
     dineInEnabled: true,
     dineInTaxRate: "10",
     takeoutTaxRate: "8",
     externalPaymentTerminalBrand: "PayCAS",
     priceTaxMode: "tax_included",
     discountPresets: [],
+    customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings,
     posBrandSettings: []
   });
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
+  const [mediaUploadStatus, setMediaUploadStatus] = useState("");
+  const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
     businessDate: "",
     activeSession: null,
@@ -215,6 +251,7 @@ export default function PosPage() {
       externalPaymentTerminalBrand: nextSettings?.externalPaymentTerminalBrand ?? "PayCAS",
       priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included",
       discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : [],
+      customerDisplayMediaSettings: nextSettings?.customerDisplayMediaSettings ?? defaultCustomerDisplayMediaSettings,
       posBrandSettings: Array.isArray(nextSettings?.posBrandSettings) ? nextSettings.posBrandSettings : []
     });
     setReconciliation({
@@ -243,6 +280,7 @@ export default function PosPage() {
           externalPaymentTerminalBrand: taxForm.externalPaymentTerminalBrand,
           priceTaxMode: taxForm.priceTaxMode,
           discountPresets: taxForm.discountPresets,
+          customerDisplayMediaSettings: taxForm.customerDisplayMediaSettings,
           posBrandSettings: taxForm.posBrandSettings
         })
       });
@@ -256,6 +294,7 @@ export default function PosPage() {
         externalPaymentTerminalBrand: body.settings?.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
         priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode,
         discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets,
+        customerDisplayMediaSettings: body.settings?.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings,
         posBrandSettings: Array.isArray(body.settings?.posBrandSettings) ? body.settings.posBrandSettings : taxForm.posBrandSettings
       });
       setMessage("POS 税設定を保存しました。");
@@ -263,6 +302,48 @@ export default function PosPage() {
       setMessage(error instanceof Error ? error.message : "POS 税設定を保存できませんでした。");
     } finally {
       setTaxSaving(false);
+    }
+  }
+
+  async function uploadCustomerDisplayMedia(file: File, type: "image" | "video") {
+    if (!canManagePosSettings || uploadingMediaType) return;
+    setUploadingMediaType(type);
+    setMediaUploadStatus("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", type);
+      formData.append("name", file.name);
+      const response = await fetch("/api/os/pos/customer-display-media", {
+        method: "POST",
+        body: formData
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "アップロードできませんでした。");
+      const asset: CustomerDisplayMediaAsset = {
+        id: `${type}_${Date.now()}`,
+        type,
+        url: body.url,
+        pathname: body.pathname || "",
+        name: body.name || file.name,
+        durationSeconds: taxForm.customerDisplayMediaSettings.slideDurationSeconds,
+        fit: "cover"
+      };
+      setTaxForm((current) => ({
+        ...current,
+        customerDisplayMediaSettings: {
+          ...current.customerDisplayMediaSettings,
+          mode: type === "video" ? "video" : "slideshow",
+          assets: type === "video"
+            ? [asset, ...current.customerDisplayMediaSettings.assets.filter((item) => item.type !== "video")]
+            : [...current.customerDisplayMediaSettings.assets, asset].slice(0, 12)
+        }
+      }));
+      setMediaUploadStatus("アップロードしました。保存すると客席表示に反映されます。");
+    } catch (error) {
+      setMediaUploadStatus(error instanceof Error ? error.message : "アップロードできませんでした。");
+    } finally {
+      setUploadingMediaType("");
     }
   }
 
@@ -444,6 +525,182 @@ export default function PosPage() {
                   </label>
                 </div>
               )) : <p className="pos-admin-discount-empty">この店舗に紐づくブランドはありません。</p>}
+            </div>
+          </div>
+          <div className="pos-admin-display-media-settings">
+            <div className="pos-admin-discount-heading">
+              <div>
+                <h4>客席表示の待機画面</h4>
+                <p>空き時間に表示する画像スライドショー、動画、切り替え効果を店舗ごとに設定します。</p>
+              </div>
+            </div>
+            <div className="pos-admin-display-media-grid">
+              <label>
+                <span>表示モード</span>
+                <select
+                  value={taxForm.customerDisplayMediaSettings.mode}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, mode: event.target.value as CustomerDisplayMediaSettings["mode"] }
+                  }))}
+                  disabled={!canManagePosSettings}
+                >
+                  <option value="default">標準の待機画面</option>
+                  <option value="slideshow">画像スライドショー</option>
+                  <option value="video">動画</option>
+                </select>
+              </label>
+              <label>
+                <span>切り替え効果</span>
+                <select
+                  value={taxForm.customerDisplayMediaSettings.transition}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, transition: event.target.value as CustomerDisplayMediaSettings["transition"] }
+                  }))}
+                  disabled={!canManagePosSettings}
+                >
+                  <option value="fade">フェード</option>
+                  <option value="slide">スライド</option>
+                  <option value="none">なし</option>
+                </select>
+              </label>
+              <label>
+                <span>画像表示秒数</span>
+                <input
+                  inputMode="numeric"
+                  value={String(taxForm.customerDisplayMediaSettings.slideDurationSeconds)}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, slideDurationSeconds: Number(event.target.value.replace(/[^\d]/g, "")) || 8 }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+              </label>
+              <label>
+                <span>背景色</span>
+                <input
+                  type="color"
+                  value={taxForm.customerDisplayMediaSettings.backgroundColor}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, backgroundColor: event.target.value }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.customerDisplayMediaSettings.videoMuted}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, videoMuted: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>動画をミュート再生</span>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.customerDisplayMediaSettings.videoLoop}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, videoLoop: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>動画をループ再生</span>
+              </label>
+            </div>
+            <div className="pos-admin-display-upload-row">
+              <label className={canManagePosSettings ? "secondary-button" : "secondary-button is-disabled"}>
+                画像をアップロード
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  disabled={!canManagePosSettings || Boolean(uploadingMediaType)}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void uploadCustomerDisplayMedia(file, "image");
+                  }}
+                />
+              </label>
+              <label className={canManagePosSettings ? "secondary-button" : "secondary-button is-disabled"}>
+                動画をアップロード
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  disabled={!canManagePosSettings || Boolean(uploadingMediaType)}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void uploadCustomerDisplayMedia(file, "video");
+                  }}
+                />
+              </label>
+              {mediaUploadStatus ? <small>{mediaUploadStatus}</small> : null}
+            </div>
+            <div className="pos-admin-display-asset-list">
+              {taxForm.customerDisplayMediaSettings.assets.length ? taxForm.customerDisplayMediaSettings.assets.map((asset, index) => (
+                <div className="pos-admin-display-asset-row" key={asset.id || index}>
+                  <div>
+                    <strong>{asset.name}</strong>
+                    <span>{asset.type === "video" ? "動画" : "画像"} / {asset.fit === "contain" ? "全体表示" : "画面に合わせる"}</span>
+                  </div>
+                  <label>
+                    <span>表示</span>
+                    <select
+                      value={asset.fit}
+                      onChange={(event) => setTaxForm((current) => ({
+                        ...current,
+                        customerDisplayMediaSettings: {
+                          ...current.customerDisplayMediaSettings,
+                          assets: current.customerDisplayMediaSettings.assets.map((item, itemIndex) => itemIndex === index ? { ...item, fit: event.target.value as CustomerDisplayMediaAsset["fit"] } : item)
+                        }
+                      }))}
+                      disabled={!canManagePosSettings}
+                    >
+                      <option value="cover">画面に合わせる</option>
+                      <option value="contain">全体表示</option>
+                    </select>
+                  </label>
+                  {asset.type === "image" ? (
+                    <label>
+                      <span>秒数</span>
+                      <input
+                        inputMode="numeric"
+                        value={String(asset.durationSeconds)}
+                        onChange={(event) => setTaxForm((current) => ({
+                          ...current,
+                          customerDisplayMediaSettings: {
+                            ...current.customerDisplayMediaSettings,
+                            assets: current.customerDisplayMediaSettings.assets.map((item, itemIndex) => itemIndex === index ? { ...item, durationSeconds: Number(event.target.value.replace(/[^\d]/g, "")) || 8 } : item)
+                          }
+                        }))}
+                        disabled={!canManagePosSettings}
+                      />
+                    </label>
+                  ) : null}
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label="メディアを削除"
+                    onClick={() => setTaxForm((current) => ({
+                      ...current,
+                      customerDisplayMediaSettings: {
+                        ...current.customerDisplayMediaSettings,
+                        assets: current.customerDisplayMediaSettings.assets.filter((_, itemIndex) => itemIndex !== index)
+                      }
+                    }))}
+                    disabled={!canManagePosSettings}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )) : <p className="pos-admin-discount-empty">画像または動画をアップロードすると、客席表示の待機画面に使用できます。</p>}
             </div>
           </div>
           <div className="pos-admin-discount-settings">

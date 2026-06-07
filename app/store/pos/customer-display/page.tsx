@@ -44,6 +44,25 @@ type DisplayState = {
   items: DisplayItem[];
 };
 
+type CustomerDisplayMediaAsset = {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  name: string;
+  durationSeconds: number;
+  fit: "cover" | "contain";
+};
+
+type CustomerDisplayMediaSettings = {
+  mode: "default" | "slideshow" | "video";
+  transition: "fade" | "slide" | "none";
+  slideDurationSeconds: number;
+  videoMuted: boolean;
+  videoLoop: boolean;
+  backgroundColor: string;
+  assets: CustomerDisplayMediaAsset[];
+};
+
 const idleState: DisplayState = {
   status: "idle",
   storeName: "",
@@ -67,6 +86,16 @@ const idleState: DisplayState = {
   updatedLabel: "",
   updatedAt: "",
   items: []
+};
+
+const defaultMediaSettings: CustomerDisplayMediaSettings = {
+  mode: "default",
+  transition: "fade",
+  slideDurationSeconds: 8,
+  videoMuted: true,
+  videoLoop: true,
+  backgroundColor: "#fbfbf8",
+  assets: []
 };
 
 function formatYen(value: number) {
@@ -97,6 +126,8 @@ export default function CustomerDisplayPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "polling">("connecting");
   const [clockDate, setClockDate] = useState(() => new Date());
+  const [mediaSettings, setMediaSettings] = useState<CustomerDisplayMediaSettings>(defaultMediaSettings);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const selectedStoreIdRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
@@ -104,6 +135,14 @@ export default function CustomerDisplayPage() {
   const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";
+  const completeActive = state.status === "complete";
+  const slideshowAssets = useMemo(() => mediaSettings.assets.filter((asset) => asset.type === "image"), [mediaSettings.assets]);
+  const videoAsset = useMemo(() => mediaSettings.assets.find((asset) => asset.type === "video"), [mediaSettings.assets]);
+  const activeSlideshowAsset = slideshowAssets[activeMediaIndex % Math.max(1, slideshowAssets.length)];
+  const useMediaAdvertising = advertisingActive && (
+    (mediaSettings.mode === "slideshow" && slideshowAssets.length > 0) ||
+    (mediaSettings.mode === "video" && Boolean(videoAsset))
+  );
   const topStatusLabel = getStatusLabel(state);
   const showTopStatus = true;
   const clockLabel = useMemo(() => new Intl.DateTimeFormat("ja-JP", {
@@ -126,6 +165,19 @@ export default function CustomerDisplayPage() {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!advertisingActive || mediaSettings.mode !== "slideshow" || slideshowAssets.length <= 1) {
+      setActiveMediaIndex(0);
+      return;
+    }
+    const activeAsset = slideshowAssets[activeMediaIndex % slideshowAssets.length];
+    const duration = Math.max(3, Number(activeAsset?.durationSeconds || mediaSettings.slideDurationSeconds || 8)) * 1000;
+    const timer = window.setTimeout(() => {
+      setActiveMediaIndex((current) => (current + 1) % slideshowAssets.length);
+    }, duration);
+    return () => window.clearTimeout(timer);
+  }, [activeMediaIndex, advertisingActive, mediaSettings.mode, mediaSettings.slideDurationSeconds, slideshowAssets]);
+
   async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
@@ -142,6 +194,7 @@ export default function CustomerDisplayPage() {
     selectedStoreIdRef.current = nextStoreId;
     if (nextStoreId) setStoredStoreSelection(nextStoreId);
     setState({ ...idleState, ...(body.state ?? {}) });
+    setMediaSettings({ ...defaultMediaSettings, ...(body.customerDisplayMediaSettings ?? {}) });
     setMessage("");
     setLoading(false);
   }
@@ -251,7 +304,7 @@ export default function CustomerDisplayPage() {
   const hasPromotions = hasDiscount || hasCoupon;
 
   return (
-    <main className={advertisingActive ? "customer-display-page is-advertising" : "customer-display-page"}>
+    <main className={advertisingActive || completeActive ? "customer-display-page is-advertising" : "customer-display-page"}>
       <button
         className={`store-display-menu-button customer-display-menu-button ${realtimeStatus === "connected" ? "is-realtime" : "is-polling"}`}
         type="button"
@@ -282,15 +335,44 @@ export default function CustomerDisplayPage() {
         </div>
       ) : null}
 
-      {advertisingActive ? (
-        <section className="customer-display-advertising" aria-live="polite">
+      {advertisingActive || completeActive ? (
+        <section
+          className={[
+            "customer-display-advertising",
+            completeActive ? "is-thanks" : "",
+            useMediaAdvertising ? `has-media is-${mediaSettings.transition}` : ""
+          ].filter(Boolean).join(" ")}
+          style={{ backgroundColor: useMediaAdvertising ? mediaSettings.backgroundColor : undefined }}
+          aria-live="polite"
+        >
+          {useMediaAdvertising && mediaSettings.mode === "slideshow" && activeSlideshowAsset ? (
+            <img
+              className="customer-display-advertising-media"
+              key={activeSlideshowAsset.id}
+              src={activeSlideshowAsset.url}
+              alt=""
+              style={{ objectFit: activeSlideshowAsset.fit }}
+            />
+          ) : null}
+          {useMediaAdvertising && mediaSettings.mode === "video" && videoAsset ? (
+            <video
+              className="customer-display-advertising-media"
+              key={videoAsset.id}
+              src={videoAsset.url}
+              autoPlay
+              muted={mediaSettings.videoMuted}
+              loop={mediaSettings.videoLoop}
+              playsInline
+              style={{ objectFit: videoAsset.fit }}
+            />
+          ) : null}
           <div className="customer-display-clock" aria-label={`${clockLabel} ${clockSubLabel}`}>
             <span>{clockLabel}</span>
             <small>{clockSubLabel}</small>
           </div>
-          <div className="customer-display-advertising-copy">
-            <strong>Welcome</strong>
-            <p>ご来店ありがとうございます</p>
+          <div className={useMediaAdvertising ? "customer-display-advertising-copy is-hidden" : "customer-display-advertising-copy"}>
+            <strong>{completeActive ? "ありがとうございました" : "Welcome"}</strong>
+            <p>{completeActive ? "またのご来店をお待ちしております" : "ご来店ありがとうございます"}</p>
           </div>
         </section>
       ) : (
@@ -428,13 +510,6 @@ export default function CustomerDisplayPage() {
               </>
             )}
           </div>
-
-          {state.status === "complete" ? (
-            <div className="customer-display-complete">
-              <strong>ありがとうございました</strong>
-              <span>商品をお受け取りください。</span>
-            </div>
-          ) : null}
         </aside>
       </section>
         </>

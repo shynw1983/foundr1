@@ -30,6 +30,7 @@ export function FloatingFeedbackButton() {
     if (!pathname) return null;
     if (pathname === "/os/login" || pathname.startsWith("/os/logout")) return null;
     if (pathname === "/store/feedback" || pathname === "/os/feedback") return null;
+    if (pathname.startsWith("/store/pos/customer-display")) return null;
     if (pathname.startsWith("/store")) {
       return {
         source: "store" as const,

@@ -8433,6 +8433,51 @@ body :where(
     #fbfbf8;
 }
 
+.customer-display-advertising.has-media {
+  background: #111;
+}
+
+.customer-display-advertising-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation-duration: 640ms;
+  animation-fill-mode: both;
+}
+
+.customer-display-advertising.is-fade .customer-display-advertising-media {
+  animation-name: customerDisplayFadeIn;
+}
+
+.customer-display-advertising.is-slide .customer-display-advertising-media {
+  animation-name: customerDisplaySlideIn;
+}
+
+.customer-display-advertising-copy.is-hidden {
+  display: none;
+}
+
+@keyframes customerDisplayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes customerDisplaySlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .customer-display-clock {
   display: grid;
   align-content: start;
@@ -8462,12 +8507,24 @@ body :where(
   left: 38px;
 }
 
+.customer-display-advertising.has-media .customer-display-clock {
+  z-index: 1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.38);
+  color: #fff;
+}
+
 .customer-display-advertising .customer-display-clock span {
   font-size: clamp(72px, 13vh, 168px);
 }
 
 .customer-display-advertising .customer-display-clock small {
   font-size: clamp(15px, 2.4vh, 24px);
+}
+
+.customer-display-advertising.has-media .customer-display-clock small {
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .customer-display-advertising-copy {
@@ -8495,6 +8552,23 @@ body :where(
   color: #525252;
   font-size: clamp(20px, 3.5vh, 38px);
   font-weight: 400;
+}
+
+.customer-display-advertising.is-thanks .customer-display-advertising-copy {
+  gap: 22px;
+  width: min(1120px, calc(100vw - 64px));
+}
+
+.customer-display-advertising.is-thanks .customer-display-advertising-copy strong {
+  font-family: inherit;
+  font-size: clamp(54px, 9vh, 120px);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.customer-display-advertising.is-thanks .customer-display-advertising-copy p {
+  color: #73736d;
+  font-size: clamp(20px, 3vh, 34px);
 }
 
 .customer-display-topbar {
@@ -10054,6 +10128,98 @@ body :where(
   gap: 10px;
   border-top: 1px solid var(--line);
   padding-top: 12px;
+}
+
+.pos-admin-display-media-settings {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.pos-admin-display-media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pos-admin-display-media-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pos-admin-display-media-grid label > span,
+.pos-admin-display-asset-row label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-admin-display-media-grid input,
+.pos-admin-display-media-grid select,
+.pos-admin-display-asset-row input,
+.pos-admin-display-asset-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-admin-display-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pos-admin-display-upload-row input[type="file"] {
+  display: none;
+}
+
+.pos-admin-display-upload-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pos-admin-display-asset-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pos-admin-display-asset-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 132px 88px 40px;
+  align-items: end;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+}
+
+.pos-admin-display-asset-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pos-admin-display-asset-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pos-admin-display-asset-row div span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pos-admin-display-asset-row label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 
 .pos-admin-brand-pricing-list {
@@ -23013,7 +23179,8 @@ body :where(
   }
 
   .pos-admin-tax-grid,
-  .pos-admin-tax-footer {
+  .pos-admin-tax-footer,
+  .pos-admin-display-media-grid {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -23024,6 +23191,10 @@ body :where(
 
   .pos-admin-brand-pricing-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pos-admin-display-asset-row {
+    grid-template-columns: 1fr;
   }
 
   .pos-admin-discount-row .icon-button {

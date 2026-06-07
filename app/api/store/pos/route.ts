@@ -40,6 +40,7 @@ type PosCheckoutBody = {
 type PosDiscountPreset = {
   key: string;
   name: string;
+  displayNames?: Record<string, string>;
   discountType: "percent" | "amount";
   discountValue: number;
   targetScope: "all" | "category" | "item_kind" | "brand";
@@ -64,6 +65,14 @@ const discountTargetScopes = new Set(["all", "category", "item_kind", "brand"]);
 const defaultDiscountPresets: PosDiscountPreset[] = [{
   key: "student_20",
   name: "学割 20%OFF",
+  displayNames: {
+    en: "Student discount 20% off",
+    zh: "学生优惠 20%OFF",
+    "zh-Hant": "學生優惠 20%OFF",
+    ko: "학생 할인 20%OFF",
+    vi: "Giảm giá học sinh 20%",
+    ne: "विद्यार्थी छुट 20%OFF"
+  },
   discountType: "percent",
   discountValue: 20,
   targetScope: "all",
@@ -72,6 +81,16 @@ const defaultDiscountPresets: PosDiscountPreset[] = [{
   stampEligible: false,
   allowCouponCombination: false
 }];
+
+const defaultCustomerDisplayMediaSettings = {
+  mode: "default",
+  transition: "fade",
+  slideDurationSeconds: 8,
+  videoMuted: true,
+  videoLoop: true,
+  backgroundColor: "#fbfbf8",
+  assets: []
+};
 
 const dineInWeightMalatangOptionGroupKeys = new Set([
   "heat",
@@ -107,6 +126,29 @@ function normalizeMemberLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
 }
 
+function normalizeDisplayNames(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    ["en", "zh", "zh-Hant", "ko", "vi", "ne"]
+      .map((language) => [language, normalizeText(source[language]).slice(0, 120)])
+      .filter(([, displayName]) => displayName)
+  );
+}
+
+function getDefaultDiscountDisplayNames(key: string, name: string) {
+  if (key === "student_20" || name.includes("学割")) {
+    return {
+      en: "Student discount 20% off",
+      zh: "学生优惠 20%OFF",
+      "zh-Hant": "學生優惠 20%OFF",
+      ko: "학생 할인 20%OFF",
+      vi: "Giảm giá học sinh 20%",
+      ne: "विद्यार्थी छुट 20%OFF"
+    };
+  }
+  return {};
+}
+
 function normalizeDiscountPresets(value: unknown) {
   const source = Array.isArray(value) ? value : [];
   const presets = source.flatMap((item) => {
@@ -125,6 +167,10 @@ function normalizeDiscountPresets(value: unknown) {
     return [{
       key,
       name,
+      displayNames: {
+        ...getDefaultDiscountDisplayNames(key, name),
+        ...normalizeDisplayNames(record.displayNames)
+      },
       discountType,
       discountValue,
       targetScope,
@@ -135,6 +181,37 @@ function normalizeDiscountPresets(value: unknown) {
     }];
   });
   return presets.length ? presets : defaultDiscountPresets;
+}
+
+function normalizeCustomerDisplayMediaSettings(value: unknown) {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const modeValue = normalizeText(record.mode);
+  const transitionValue = normalizeText(record.transition);
+  const backgroundColor = normalizeText(record.backgroundColor);
+  const assets = Array.isArray(record.assets) ? record.assets : [];
+  return {
+    mode: modeValue === "slideshow" || modeValue === "video" ? modeValue : "default",
+    transition: transitionValue === "slide" || transitionValue === "none" ? transitionValue : "fade",
+    slideDurationSeconds: Math.max(3, Math.min(60, Math.round(Number(record.slideDurationSeconds) || defaultCustomerDisplayMediaSettings.slideDurationSeconds))),
+    videoMuted: record.videoMuted !== false,
+    videoLoop: record.videoLoop !== false,
+    backgroundColor: /^#[0-9a-f]{6}$/i.test(backgroundColor) ? backgroundColor : defaultCustomerDisplayMediaSettings.backgroundColor,
+    assets: assets.flatMap((item, index) => {
+      const asset = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+      const url = normalizeText(asset.url);
+      if (!url) return [];
+      const type = normalizeText(asset.type) === "video" ? "video" : "image";
+      return [{
+        id: normalizeText(asset.id) || `asset_${index + 1}`,
+        type,
+        url: url.slice(0, 500),
+        pathname: normalizeText(asset.pathname).slice(0, 240),
+        name: normalizeText(asset.name).slice(0, 120) || type,
+        durationSeconds: Math.max(3, Math.min(60, Math.round(Number(asset.durationSeconds) || Number(record.slideDurationSeconds) || defaultCustomerDisplayMediaSettings.slideDurationSeconds))),
+        fit: normalizeText(asset.fit) === "contain" ? "contain" : "cover"
+      }];
+    }).slice(0, 12)
+  };
 }
 
 function getDiscountEligibleAmount(preset: PosDiscountPreset, items: PosDiscountItem[], subtotalAmount: number) {
@@ -325,6 +402,7 @@ async function getPosMenu(selectedStoreId: string) {
         menu_catalog_items.brand_id::text as "brandId",
         brands.name as "brandName",
         menu_catalog_items.name,
+        coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         menu_catalog_items.item_kind as "itemKind",
         coalesce(menu_catalog_items.category, '未分類') as category,
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
@@ -364,6 +442,7 @@ async function getPosMenu(selectedStoreId: string) {
         coalesce(menu_option_groups.menu_catalog_item_id::text, '') as "menuCatalogItemId",
         menu_option_groups.group_key as "groupKey",
         menu_option_groups.name,
+        coalesce(menu_option_groups.display_names, '{}'::jsonb) as "displayNames",
         menu_option_groups.selection_type as "selectionType",
         menu_option_groups.rule_json as "ruleJson",
         menu_option_groups.sort_order as "sortOrder",
@@ -373,6 +452,7 @@ async function getPosMenu(selectedStoreId: string) {
               'id', menu_options.id::text,
               'optionKey', menu_options.option_key,
               'name', menu_options.name,
+              'displayNames', coalesce(menu_options.display_names, '{}'::jsonb),
               'priceDelta', menu_options.price_delta::float,
               'sortOrder', menu_options.sort_order
             )
@@ -455,7 +535,7 @@ async function getOpenCashSessionId(selectedStoreId: string) {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets };
+  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings };
   if (!selectedStoreId) return defaults;
   const rows = await sql`
     select
@@ -464,13 +544,14 @@ async function getPosSettings(selectedStoreId: string) {
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode",
-      coalesce(discount_presets, '[]'::jsonb) as "discountPresets"
+      coalesce(discount_presets, '[]'::jsonb) as "discountPresets",
+      coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings"
     from pos_store_settings
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
   const settings = rows[0] as (typeof defaults & { discountPresets?: unknown }) | undefined;
-  return settings ? { ...settings, discountPresets: normalizeDiscountPresets(settings.discountPresets) } : defaults;
+  return settings ? { ...settings, discountPresets: normalizeDiscountPresets(settings.discountPresets), customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings) } : defaults;
 }
 
 export async function GET(request: Request) {
