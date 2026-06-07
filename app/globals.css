@@ -1099,13 +1099,22 @@ input[type="file"] {
   margin: 0;
 }
 
+.online-receipt-footer > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .online-receipt-footer p + p {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .online-receipt-footer span {
+  flex: 0 0 auto;
   color: var(--receipt-accent);
   font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .online-receipt-empty {

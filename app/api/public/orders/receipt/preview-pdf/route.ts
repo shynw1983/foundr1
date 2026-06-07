@@ -181,7 +181,7 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
       <section class="online-receipt-hero" aria-label="金額">
         <div>
           <p class="online-receipt-recipient${receiptWithAssets.recipientName ? "" : " is-blank"}">
-            <span>${escapeHtml(receiptWithAssets.recipientName || "\u00a0")}</span>
+            <span>${escapeHtml(receiptWithAssets.recipientName || "\u3000")}</span>
             <em>様</em>
           </p>
           <span>但し ${escapeHtml(receiptWithAssets.purposeText)}として</span>
@@ -234,8 +234,10 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
       </section>
 
       <footer class="online-receipt-footer">
-        <p>${escapeHtml(footerNotice)}</p>
-        ${receiptWithAssets.refundedAt ? `<p>返金記録日時: ${escapeHtml(receiptWithAssets.refundedAt)}</p>` : ""}
+        <div>
+          <p>${escapeHtml(footerNotice)}</p>
+          ${receiptWithAssets.refundedAt ? `<p>返金記録日時: ${escapeHtml(receiptWithAssets.refundedAt)}</p>` : ""}
+        </div>
         <span>${escapeHtml(getFooterBrandText())}</span>
       </footer>
     </article>

@@ -57,7 +57,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
       <section className="online-receipt-hero" aria-label="金額">
         <div>
           <p className={`online-receipt-recipient${receipt.recipientName ? "" : " is-blank"}`}>
-            <span>{receipt.recipientName || "\u00a0"}</span>
+            <span>{receipt.recipientName || "\u3000"}</span>
             <em>様</em>
           </p>
           <span>但し {receipt.purposeText}として</span>
@@ -194,14 +194,16 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
       </section>
 
       <footer className="online-receipt-footer">
-        <p>
-          {receipt.receiptStatus === "cancelled"
-            ? "この領収書は取消済みです。返金記録として保存してください。"
-            : receipt.receiptStatus === "partially_refunded"
-              ? "この領収書には一部返金が記録されています。"
-              : "この領収書は電子的に発行されています。"}
-        </p>
-        {receipt.refundedAt ? <p>返金記録日時: {receipt.refundedAt}</p> : null}
+        <div>
+          <p>
+            {receipt.receiptStatus === "cancelled"
+              ? "この領収書は取消済みです。返金記録として保存してください。"
+              : receipt.receiptStatus === "partially_refunded"
+                ? "この領収書には一部返金が記録されています。"
+                : "この領収書は電子的に発行されています。"}
+          </p>
+          {receipt.refundedAt ? <p>返金記録日時: {receipt.refundedAt}</p> : null}
+        </div>
         <span>{getFooterBrandText()}</span>
       </footer>
     </article>
