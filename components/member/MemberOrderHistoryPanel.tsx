@@ -2,6 +2,7 @@
 
 import { MessageSquareText, ReceiptText, RotateCcw, ShoppingBag, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { localizedMemberStoreName } from "./memberDisplayLocalization";
 import { useMemberLanguage } from "./MemberLanguageProvider";
 import { memberText } from "./memberTranslations";
 
@@ -243,7 +244,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
             <div className="member-order-main">
               <div>
                 <strong>{order.brandName || orderSourceLabel(order.orderSource, text)}</strong>
-                <span>{order.storeName || orderSourceLabel(order.orderSource, text)} / {orderSourceLabel(order.orderSource, text)} / {order.pickupCode}</span>
+                <span>{localizedMemberStoreName(order.storeName, language) || orderSourceLabel(order.orderSource, text)} / {orderSourceLabel(order.orderSource, text)} / {order.pickupCode}</span>
               </div>
               <p className="member-order-summary">{orderItemSummary(order, text, language)}</p>
             </div>
@@ -291,7 +292,7 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
             </div>
 
             <dl className="member-order-modal-info">
-              <div><dt>{text.store}</dt><dd>{selectedOrder.storeName || "-"}</dd></div>
+              <div><dt>{text.store}</dt><dd>{localizedMemberStoreName(selectedOrder.storeName, language) || "-"}</dd></div>
               <div><dt>{text.dateTime}</dt><dd>{formatPickupDate(selectedOrder.pickupDate)} {selectedOrder.pickupTime}</dd></div>
               {selectedOrder.refundAmount > 0 ? <div><dt>{text.refund}</dt><dd>{formatYen(selectedOrder.refundAmount)}</dd></div> : null}
             </dl>

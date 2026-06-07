@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu";
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
+import { localizedMemberStoreName } from "../../../components/member/memberDisplayLocalization";
 import { memberText } from "../../../components/member/memberTranslations";
 
 type MemberProfile = {
@@ -249,7 +250,7 @@ export default function MemberPointsPage() {
                   {data.pointHistory?.length ? data.pointHistory.map((entry) => (
                     <div key={entry.id} className="member-portal-list-row">
                       <div>
-                        <strong>{movementLabel(entry.movementType, text)} / {entry.storeName || entry.brandName || "-"}</strong>
+                        <strong>{movementLabel(entry.movementType, text)} / {localizedMemberStoreName(entry.storeName, language) || entry.brandName || "-"}</strong>
                         <span>{formatDate(entry.createdAt, text.dateNoExpiry)} / {formatYen(entry.eligibleAmount)}</span>
                       </div>
                       <b className={entry.points < 0 ? "is-negative" : ""}>{entry.points.toLocaleString("ja-JP")} pt</b>
