@@ -1,8 +1,8 @@
 "use client";
 
-import { useSignIn, useSignUp } from "@clerk/nextjs";
+import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { KeyRound, Loader2, Mail } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { ClipboardEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
 
 type MemberAuthPanelProps = {
   title?: string;
@@ -12,6 +12,7 @@ type MemberAuthPanelProps = {
 
 type EmailFlow = "sign_in" | "sign_up";
 type OAuthStrategy = "oauth_apple" | "oauth_google" | "oauth_line";
+type EmailCodeFactorLike = { strategy: "email_code"; emailAddressId: string };
 
 const oauthOptions: Array<{ label: string; strategy: OAuthStrategy; icon: "apple" | "google" | "line" }> = [
   { label: "Apple", strategy: "oauth_apple", icon: "apple" },
@@ -20,6 +21,7 @@ const oauthOptions: Array<{ label: string; strategy: OAuthStrategy; icon: "apple
 ];
 
 const authTimeoutMs = 12000;
+const codeLength = 6;
 
 class AuthTimeoutError extends Error {
   constructor() {
@@ -47,6 +49,20 @@ function withAuthTimeout<T>(operation: Promise<T>) {
 
   return Promise.race([operation, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function emailCodeFactor(factors: unknown): EmailCodeFactorLike | undefined {
+  if (!Array.isArray(factors)) return undefined;
+  return factors.find((factor): factor is EmailCodeFactorLike => {
+    return Boolean(
+      factor &&
+      typeof factor === "object" &&
+      "strategy" in factor &&
+      factor.strategy === "email_code" &&
+      "emailAddressId" in factor &&
+      typeof factor.emailAddressId === "string"
+    );
   });
 }
 
@@ -89,8 +105,9 @@ export function MemberAuthPanel({
   description = "メールアドレス、Apple、Google、LINE で会員カードを表示できます。",
   afterAuthUrl = "/member"
 }: MemberAuthPanelProps) {
-  const { fetchStatus: signInFetchStatus, signIn } = useSignIn();
-  const { fetchStatus: signUpFetchStatus, signUp } = useSignUp();
+  const { isLoaded: signInLoaded, signIn, setActive: setSignInActive } = useSignIn();
+  const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
+  const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [emailFlow, setEmailFlow] = useState<EmailFlow>("sign_in");
@@ -99,9 +116,54 @@ export function MemberAuthPanel({
   const [oauthBusy, setOauthBusy] = useState<OAuthStrategy | "">("");
   const [message, setMessage] = useState("");
 
-  const authLoaded = Boolean(signIn && signUp);
-  const clerkBusy = signInFetchStatus === "fetching" || signUpFetchStatus === "fetching";
+  const authLoaded = signInLoaded && signUpLoaded && Boolean(signIn && signUp);
   const busy = emailBusy || Boolean(oauthBusy);
+  const codeDigits = Array.from({ length: codeLength }, (_, index) => code[index] || "");
+
+  function focusCodeInput(index: number) {
+    codeInputRefs.current[index]?.focus();
+    codeInputRefs.current[index]?.select();
+  }
+
+  function applyCodeValue(nextCode: string, focusIndex?: number) {
+    const normalizedCode = nextCode.replace(/\D/g, "").slice(0, codeLength);
+    setCode(normalizedCode);
+    if (typeof focusIndex === "number") {
+      window.requestAnimationFrame(() => focusCodeInput(Math.max(0, Math.min(codeLength - 1, focusIndex))));
+    }
+  }
+
+  function handleCodeInput(index: number, value: string) {
+    const digits = value.replace(/\D/g, "");
+    if (!digits) {
+      applyCodeValue(code.slice(0, index) + code.slice(index + 1), index);
+      return;
+    }
+    const nextCode = `${code.slice(0, index)}${digits}${code.slice(index + digits.length)}`;
+    applyCodeValue(nextCode, Math.min(index + digits.length, codeLength - 1));
+  }
+
+  function handleCodeKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Backspace" && !codeDigits[index] && index > 0) {
+      event.preventDefault();
+      applyCodeValue(code.slice(0, index - 1) + code.slice(index), index - 1);
+    }
+    if (event.key === "ArrowLeft" && index > 0) {
+      event.preventDefault();
+      focusCodeInput(index - 1);
+    }
+    if (event.key === "ArrowRight" && index < codeLength - 1) {
+      event.preventDefault();
+      focusCodeInput(index + 1);
+    }
+  }
+
+  function handleCodePaste(event: ClipboardEvent<HTMLInputElement>) {
+    const pastedCode = event.clipboardData.getData("text");
+    if (!pastedCode) return;
+    event.preventDefault();
+    applyCodeValue(pastedCode, codeLength - 1);
+  }
 
   async function sendEmailCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,29 +178,24 @@ export function MemberAuthPanel({
     setMessage("");
     let sent = false;
     try {
-      const signInResult = await withAuthTimeout(signIn.create({ identifier: normalizedEmail, signUpIfMissing: true }));
-      if (signInResult.error) throw signInResult.error;
-      if (signIn.isTransferable) {
-        const signUpResult = await withAuthTimeout(signUp.create({ transfer: true }));
-        if (signUpResult.error) throw signUpResult.error;
-        const sendResult = await withAuthTimeout(signUp.verifications.sendEmailCode());
-        if (sendResult.error) throw sendResult.error;
-        setEmailFlow("sign_up");
-      } else {
-        const sendResult = await withAuthTimeout(signIn.emailCode.sendCode());
-        if (sendResult.error) throw sendResult.error;
-        setEmailFlow("sign_in");
+      const signInAttempt = await withAuthTimeout(signIn.create({ identifier: normalizedEmail }));
+      const factor = emailCodeFactor(signInAttempt.supportedFirstFactors);
+      if (!factor) {
+        throw new Error("このメールアドレスでは確認コード認証を利用できません。Apple、Google、LINE でログインしてください。");
       }
+      await withAuthTimeout(signIn.prepareFirstFactor({
+        strategy: "email_code",
+        emailAddressId: factor.emailAddressId
+      }));
+      setEmailFlow("sign_in");
       sent = true;
     } catch (error) {
       if (error instanceof AuthTimeoutError) {
         setMessage(errorMessage(error));
       } else {
         try {
-          const signUpResult = await withAuthTimeout(signUp.create({ emailAddress: normalizedEmail }));
-          if (signUpResult.error) throw signUpResult.error;
-          const sendResult = await withAuthTimeout(signUp.verifications.sendEmailCode());
-          if (sendResult.error) throw sendResult.error;
+          await withAuthTimeout(signUp.create({ emailAddress: normalizedEmail }));
+          await withAuthTimeout(signUp.prepareEmailAddressVerification({ strategy: "email_code" }));
           setEmailFlow("sign_up");
           sent = true;
         } catch (signUpError) {
@@ -167,21 +224,18 @@ export function MemberAuthPanel({
     setMessage("");
     try {
       if (emailFlow === "sign_in") {
-        const verifyResult = await withAuthTimeout(signIn.emailCode.verifyCode({ code: verificationCode }));
-        if (verifyResult.error) throw verifyResult.error;
-        if (signIn.status === "complete") {
-          const finalizeResult = await withAuthTimeout(signIn.finalize());
-          if (finalizeResult.error) throw finalizeResult.error;
-          window.location.assign(afterAuthUrl);
+        const signInAttempt = await withAuthTimeout(signIn.attemptFirstFactor({
+          strategy: "email_code",
+          code: verificationCode
+        }));
+        if (signInAttempt.status === "complete" && signInAttempt.createdSessionId) {
+          await withAuthTimeout(setSignInActive({ session: signInAttempt.createdSessionId, redirectUrl: afterAuthUrl }));
           return;
         }
       } else {
-        const verifyResult = await withAuthTimeout(signUp.verifications.verifyEmailCode({ code: verificationCode }));
-        if (verifyResult.error) throw verifyResult.error;
-        if (signUp.status === "complete") {
-          const finalizeResult = await withAuthTimeout(signUp.finalize());
-          if (finalizeResult.error) throw finalizeResult.error;
-          window.location.assign(afterAuthUrl);
+        const signUpAttempt = await withAuthTimeout(signUp.attemptEmailAddressVerification({ code: verificationCode }));
+        if (signUpAttempt.status === "complete" && signUpAttempt.createdSessionId) {
+          await withAuthTimeout(setSignUpActive({ session: signUpAttempt.createdSessionId, redirectUrl: afterAuthUrl }));
           return;
         }
       }
@@ -198,12 +252,13 @@ export function MemberAuthPanel({
     setOauthBusy(strategy);
     setMessage("");
     try {
-      const result = await withAuthTimeout(signIn.sso({
+      await withAuthTimeout(signIn.authenticateWithRedirect({
         strategy,
-        redirectUrl: absoluteAuthUrl(afterAuthUrl),
-        redirectCallbackUrl: absoluteAuthUrl("/sso-callback")
+        redirectUrl: absoluteAuthUrl("/sso-callback"),
+        redirectUrlComplete: absoluteAuthUrl(afterAuthUrl),
+        continueSignIn: true,
+        continueSignUp: true
       }));
-      if (result.error) throw result.error;
     } catch (error) {
       setOauthBusy("");
       setMessage(errorMessage(error));
@@ -237,26 +292,37 @@ export function MemberAuthPanel({
                 disabled={emailBusy}
               />
             </label>
-            <button className="primary-button" type="submit" disabled={emailBusy || clerkBusy || !authLoaded}>
+            <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded}>
               {emailBusy ? <Loader2 size={16} /> : <Mail size={16} />}
               確認コードを送る
             </button>
           </form>
         ) : (
           <form className="member-auth-email-form" onSubmit={(event) => void verifyEmailCode(event)}>
-            <label>
+            <div className="member-auth-code-field">
               <span>確認コード</span>
-              <input
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\s/g, "").slice(0, 8))}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="6桁のコード"
-                disabled={emailBusy}
-                autoFocus
-              />
-            </label>
-            <button className="primary-button" type="submit" disabled={emailBusy || clerkBusy || !authLoaded}>
+              <div className="member-auth-code-inputs" role="group" aria-label="確認コード">
+                {codeDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(element) => {
+                      codeInputRefs.current[index] = element;
+                    }}
+                    value={digit}
+                    onChange={(event) => handleCodeInput(index, event.target.value)}
+                    onKeyDown={(event) => handleCodeKeyDown(index, event)}
+                    onPaste={handleCodePaste}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete={index === 0 ? "one-time-code" : "off"}
+                    aria-label={`確認コード ${index + 1} 桁目`}
+                    disabled={emailBusy}
+                    autoFocus={index === 0}
+                  />
+                ))}
+              </div>
+            </div>
+            <button className="primary-button" type="submit" disabled={emailBusy || !authLoaded || code.length !== codeLength}>
               {emailBusy ? <Loader2 size={16} /> : <KeyRound size={16} />}
               会員カードを表示
             </button>
@@ -284,7 +350,7 @@ export function MemberAuthPanel({
               className="secondary-button member-auth-oauth-button"
               type="button"
               onClick={() => void startOAuth(option.strategy)}
-              disabled={emailBusy || Boolean(oauthBusy) || clerkBusy || !authLoaded}
+              disabled={emailBusy || Boolean(oauthBusy) || !authLoaded}
             >
               <span className="member-auth-provider-icon" aria-hidden="true">
                 {oauthBusy === option.strategy ? <Loader2 size={17} /> : <ProviderIcon icon={option.icon} />}

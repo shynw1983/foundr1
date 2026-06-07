@@ -10610,6 +10610,14 @@ body :where(
   font-weight: 500;
 }
 
+.member-auth-code-field {
+  display: grid;
+  gap: 8px;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .member-auth-email-form input {
   width: 100%;
   min-height: 46px;
@@ -10625,6 +10633,24 @@ body :where(
 .member-auth-email-form input:focus {
   border-color: var(--member-logo-accent);
   outline: 2px solid rgba(47, 138, 114, 0.14);
+}
+
+.member-auth-code-inputs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.member-auth-email-form .member-auth-code-inputs input {
+  width: 100%;
+  min-width: 0;
+  height: 50px;
+  min-height: 50px;
+  padding: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .member-auth-email-form,
