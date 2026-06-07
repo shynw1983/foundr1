@@ -8737,6 +8737,10 @@ body :where(
   border-color: #d6d3d1;
 }
 
+.customer-display-payment > :not(.customer-display-terminal) {
+  flex: 0 0 auto;
+}
+
 .customer-display-total,
 .customer-display-member,
 .customer-display-discount,
@@ -8879,7 +8883,7 @@ body :where(
 }
 
 .customer-display-terminal {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-content: center;
   min-height: 156px;
   border: 1px solid #ededeb;
