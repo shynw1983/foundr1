@@ -8505,6 +8505,7 @@ body :where(
   position: absolute;
   top: 34px;
   left: 38px;
+  gap: 12px;
 }
 
 .customer-display-advertising.has-media .customer-display-clock {
@@ -8521,6 +8522,7 @@ body :where(
 
 .customer-display-advertising .customer-display-clock small {
   font-size: clamp(15px, 2.4vh, 24px);
+  transform: translateY(2px);
 }
 
 .customer-display-advertising.has-media .customer-display-clock small {
