@@ -5348,7 +5348,7 @@ body :where(
 .store-workbench-shell {
   min-height: 100vh;
   padding: 18px;
-  background: #eef2f6;
+  background: #ffffff;
 }
 
 .store-workbench-topbar,
@@ -21805,6 +21805,10 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(247, 248, 250, 0) 180px),
     var(--color-bg);
+}
+
+body:has(.store-workbench-shell) {
+  background: #ffffff;
 }
 
 .sidebar {
