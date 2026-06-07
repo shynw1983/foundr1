@@ -2,6 +2,7 @@ import { sql } from "./db";
 import { orderSourceToCustomerDisplayPlatform, resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { sendCouponEmail } from "./email";
 
+const DEFAULT_EMAIL_BRAND_NAME = "Foundr1 Members";
 const basePointRateBasis = 100;
 const pointExpiryMonths = 12;
 
@@ -569,6 +570,10 @@ function applyEmailTemplate(value: string, variables: Record<string, unknown>) {
   return normalizeText(value).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => normalizeText(variables[key]));
 }
 
+function getEmailBrandName(value: unknown) {
+  return normalizeText(value) || DEFAULT_EMAIL_BRAND_NAME;
+}
+
 function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate {
   if (templateKey === "coupon_birthday") {
     return {
@@ -576,12 +581,12 @@ function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate
       category: "member",
       name: "誕生日クーポン通知",
       description: "毎月、誕生日月の会員へクーポンを一括発行した後に送信します。",
-      subject: "お誕生日特典クーポンをお届けしました",
+      subject: "【{{brandName}}】お誕生日特典クーポンをお届けしました",
       body: "{{memberName}} 様\n\nお誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
       isEnabled: true,
       requireOptIn: true,
       sendRule: { trigger: "monthly_birthday_coupon", dayOfMonth: 1, hour: 10, timezone: "Asia/Tokyo" },
-      variables: ["memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
+      variables: ["brandName", "memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
     };
   }
   return {
@@ -589,12 +594,12 @@ function getDefaultEmailTemplate(templateKey: string): EmailNotificationTemplate
     category: "member",
     name: "クーポン通知",
     description: "手動発行や再送時のクーポン通知に使用します。",
-    subject: "クーポンをお届けしました",
+    subject: "【{{brandName}}】クーポンをお届けしました",
     body: "{{memberName}} 様\n\nFoundr1 Members にクーポンをお届けしました。\n\nクーポン: {{couponName}}\nクーポンコード: {{couponCode}}\n有効期限: {{expiresAt}}\n\n会員ページはこちら:\n{{memberUrl}}",
     isEnabled: true,
     requireOptIn: true,
     sendRule: { trigger: "coupon_issued" },
-    variables: ["memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
+    variables: ["brandName", "memberName", "couponName", "couponCode", "expiresAt", "memberUrl"]
   };
 }
 
@@ -1154,12 +1159,14 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
       member_coupons.name,
       coalesce(member_coupons.expires_at::text, '') as "expiresAt",
       member_coupons.status,
+      coalesce(brands.name, '') as "brandName",
       members.id::text as "memberId",
       coalesce(nullif(members.display_name, ''), nullif(members.metadata->>'fullName', ''), nullif(members.email, ''), members.member_number) as "memberName",
       coalesce(members.email, '') as email,
       coalesce((members.metadata->>'marketingOptIn')::boolean, false) as "marketingOptIn"
     from member_coupons
     join members on members.id = member_coupons.member_id
+    left join brands on brands.id = member_coupons.brand_id
     where member_coupons.id::text = ${couponId}
       and members.status = 'active'
     limit 1
@@ -1170,6 +1177,7 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
     name: string;
     expiresAt: string;
     status: string;
+    brandName: string;
     memberName: string;
     email: string;
     marketingOptIn: boolean;
@@ -1189,6 +1197,7 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
     return { status: "skipped", error: "会員がメール通知を許可していません。" };
   }
   const rendered = renderTemplateForCoupon(template, {
+    brandName: getEmailBrandName(coupon.brandName),
     memberName: coupon.memberName,
     couponName: coupon.name,
     couponCode: coupon.couponCode,
@@ -1199,6 +1208,7 @@ export async function resendMemberCouponEmail(input: { couponId: string; request
   const emailResult = await sendCouponEmail({
     to: coupon.email,
     memberName: coupon.memberName,
+    brandName: getEmailBrandName(coupon.brandName),
     couponName: coupon.name,
     couponCode: coupon.couponCode,
     expiresAt: coupon.expiresAt,
@@ -1281,6 +1291,7 @@ export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; 
       continue;
     }
     const rendered = renderTemplateForCoupon(birthdayTemplate, {
+      brandName: DEFAULT_EMAIL_BRAND_NAME,
       memberName: member.memberName,
       couponName: String(coupon.name),
       couponCode: String(coupon.couponCode),
@@ -1291,6 +1302,7 @@ export async function issueMonthlyBirthdayCoupons(input: { batchLimit?: number; 
     const emailResult = await sendCouponEmail({
       to: member.email,
       memberName: member.memberName,
+      brandName: DEFAULT_EMAIL_BRAND_NAME,
       couponName: String(coupon.name),
       couponCode: String(coupon.couponCode),
       expiresAt: String(coupon.expiresAt),

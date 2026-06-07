@@ -6,6 +6,7 @@ type BirthdayCouponEmailInput = {
   couponName: string;
   couponCode: string;
   expiresAt: string;
+  brandName?: string;
   memberUrl?: string;
 };
 
@@ -16,6 +17,7 @@ type CouponEmailInput = BirthdayCouponEmailInput & {
 };
 
 let resendClient: Resend | null = null;
+const DEFAULT_EMAIL_BRAND_NAME = "Foundr1 Members";
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -65,9 +67,10 @@ export async function sendCouponEmail(input: CouponEmailInput) {
   if (!client) return { status: "skipped", id: "", error: "RESEND_API_KEY is not configured." };
 
   const memberName = input.memberName.trim() || "会員";
+  const brandName = input.brandName?.trim() || DEFAULT_EMAIL_BRAND_NAME;
   const memberUrl = input.memberUrl?.trim() || getMemberUrl();
   const expiresLabel = formatDate(input.expiresAt);
-  const subject = input.subject?.trim() || "クーポンをお届けしました";
+  const subject = input.subject?.trim() || `【${brandName}】クーポンをお届けしました`;
   const introText = input.introText?.trim() || "Foundr1 Members にクーポンをお届けしました。";
   const defaultText = [
     `${memberName} 様`,
@@ -116,7 +119,7 @@ export async function sendCouponEmail(input: CouponEmailInput) {
 export async function sendBirthdayCouponEmail(input: BirthdayCouponEmailInput) {
   return sendCouponEmail({
     ...input,
-    subject: "お誕生日特典クーポンをお届けしました",
+    subject: `【${input.brandName?.trim() || DEFAULT_EMAIL_BRAND_NAME}】お誕生日特典クーポンをお届けしました`,
     introText: "お誕生日月おめでとうございます。Foundr1 Members に誕生日特典クーポンをお届けしました。"
   });
 }
