@@ -25,6 +25,7 @@ Current customer-facing menu languages:
 - `ne` Nepali
 
 Japanese is the source/default language and does not need to be duplicated into `displayNames`.
+Simplified Chinese (`zh`) and Traditional Chinese (`zh-Hant`) are separate customer languages. Do not populate `zh-Hant` by copying `zh`; leave it empty until a real Traditional Chinese translation is available.
 
 ## Menu Data Contract
 
