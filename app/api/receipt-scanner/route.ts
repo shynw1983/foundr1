@@ -912,15 +912,36 @@ type EdgeLine = {
 
 function fitEdgeLine(points: Point[]): EdgeLine | undefined {
   if (points.length < 6) return undefined;
-  const sorted = [...points].sort((a, b) => a.x - b.x);
-  const trim = Math.floor(sorted.length * 0.18);
-  const trimmed = sorted.slice(trim, sorted.length - trim);
-  if (trimmed.length < 6) return undefined;
-  const meanY = trimmed.reduce((sum, point) => sum + point.y, 0) / trimmed.length;
-  const meanX = trimmed.reduce((sum, point) => sum + point.x, 0) / trimmed.length;
+  let candidates = [...points].sort((a, b) => a.y - b.y);
+  let line = fitLeastSquaresEdgeLine(candidates);
+  if (!line) return undefined;
+
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    const currentLine = line;
+    const residuals = candidates
+      .map((point) => ({
+        point,
+        residual: Math.abs(point.x - (currentLine.slope * point.y + currentLine.intercept))
+      }))
+      .sort((a, b) => a.residual - b.residual);
+    const keepCount = Math.max(6, Math.ceil(residuals.length * 0.72));
+    const nextCandidates = residuals.slice(0, keepCount).map((item) => item.point);
+    const nextLine = fitLeastSquaresEdgeLine(nextCandidates);
+    if (!nextLine) break;
+    candidates = nextCandidates;
+    line = nextLine;
+  }
+
+  return line;
+}
+
+function fitLeastSquaresEdgeLine(points: Point[]): EdgeLine | undefined {
+  if (points.length < 6) return undefined;
+  const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+  const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
   let numerator = 0;
   let denominator = 0;
-  for (const point of trimmed) {
+  for (const point of points) {
     numerator += (point.y - meanY) * (point.x - meanX);
     denominator += (point.y - meanY) ** 2;
   }
@@ -930,8 +951,8 @@ function fitEdgeLine(points: Point[]): EdgeLine | undefined {
   return {
     slope,
     intercept,
-    minY: Math.min(...trimmed.map((point) => point.y)),
-    maxY: Math.max(...trimmed.map((point) => point.y))
+    minY: Math.min(...points.map((point) => point.y)),
+    maxY: Math.max(...points.map((point) => point.y))
   };
 }
 
@@ -1156,8 +1177,8 @@ function refineShapeWithPaperMask(
     quad: contour.refinedQuad,
     edgeProfile: aiShape.documentType === "long_receipt" && contour.leftPoints.length >= 8 && contour.rightPoints.length >= 8
       ? {
-        leftEdge: smoothEdge(contour.leftPoints, width, height),
-        rightEdge: smoothEdge(contour.rightPoints, width, height),
+        leftEdge: contour.leftLine ? sampleEdgeLine(contour.leftLine, contour.leftPoints.length, width, height) : smoothEdge(contour.leftPoints, width, height),
+        rightEdge: contour.rightLine ? sampleEdgeLine(contour.rightLine, contour.rightPoints.length, width, height) : smoothEdge(contour.rightPoints, width, height),
         source: "local",
         crop: mask.crop
       }
@@ -1194,13 +1215,40 @@ function extractPaperMaskContour(mask: PaperMask): MaskContour {
   const leftLine = fitEdgeLine(leftPoints);
   const rightLine = fitEdgeLine(rightPoints);
   const refinedQuad = buildQuadFromMaskContour(quad, leftLine, rightLine);
+  const cleanLeftPoints = cleanEdgePoints(leftPoints, leftLine, mask.width, mask.height, Math.max(10, metrics.width * 0.09));
+  const cleanRightPoints = cleanEdgePoints(rightPoints, rightLine, mask.width, mask.height, Math.max(10, metrics.width * 0.09));
   return {
-    leftPoints: smoothEdge(leftPoints, mask.width, mask.height),
-    rightPoints: smoothEdge(rightPoints, mask.width, mask.height),
+    leftPoints: cleanLeftPoints,
+    rightPoints: cleanRightPoints,
     leftLine,
     rightLine,
     refinedQuad
   };
+}
+
+function cleanEdgePoints(
+  points: Point[],
+  line: EdgeLine | undefined,
+  width: number,
+  height: number,
+  maxResidual: number
+) {
+  if (!line) return smoothEdge(points, width, height);
+  const filtered = points.filter((point) => Math.abs(point.x - (line.slope * point.y + line.intercept)) <= maxResidual);
+  return smoothEdge(filtered.length >= 6 ? filtered : points, width, height);
+}
+
+function sampleEdgeLine(line: EdgeLine, count: number, width: number, height: number) {
+  const samples = Math.max(8, Math.min(28, count));
+  return Array.from({ length: samples }, (_, index) => {
+    const ratio = samples === 1 ? 0 : index / (samples - 1);
+    const y = line.minY + (line.maxY - line.minY) * ratio;
+    const point = pointOnLineAtY(line, y);
+    return {
+      x: Math.max(0, Math.min(width - 1, point.x)),
+      y: Math.max(0, Math.min(height - 1, point.y))
+    };
+  });
 }
 
 function findMaskEdgeNearX(mask: PaperMask, y: number, referenceX: number, side: -1 | 1, searchPadding: number) {
