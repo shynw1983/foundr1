@@ -47,7 +47,17 @@ type PaperMask = {
   data: Uint8Array;
   width: number;
   height: number;
+  crop: sharp.Region;
+  sourceQuad: [Point, Point, Point, Point];
   coverageRatio: number;
+};
+
+type MaskContour = {
+  leftPoints: Point[];
+  rightPoints: Point[];
+  leftLine?: EdgeLine;
+  rightLine?: EdgeLine;
+  refinedQuad?: [Point, Point, Point, Point];
 };
 
 export async function POST(request: Request) {
@@ -105,6 +115,7 @@ export async function POST(request: Request) {
 
     if (outputMode === "paper_mask") {
       const mask = buildPaperMask(raw, width, height, aiShape, localDetection);
+      const contour = extractPaperMaskContour(mask);
       const overlay = await renderPaperMaskOverlay(raw, width, height, mask, aiShape, localDetection);
       return new Response(overlay, {
         headers: {
@@ -115,20 +126,24 @@ export async function POST(request: Request) {
           "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard",
           "X-Receipt-Scanner-Debug": "paper_mask",
           "X-Receipt-Scanner-Mask-Coverage": mask.coverageRatio.toFixed(4),
+          "X-Receipt-Scanner-Mask-Contour": `${contour.leftPoints.length}/${contour.rightPoints.length}`,
           "X-Receipt-Scanner-Size": `${width}x${height}`
         }
       });
     }
 
+    const maskRefinedShape = aiShape?.quad
+      ? refineShapeWithPaperMask(raw, width, height, aiShape, localDetection)
+      : aiShape;
     const straightened = useLongReceipt
       ? await unwarpLongReceipt(
         raw,
         width,
         height,
-        aiShape?.edgeProfile ?? localEdgeProfile,
-        aiShape?.quad
+        maskRefinedShape?.edgeProfile ?? localEdgeProfile,
+        maskRefinedShape?.quad
       )
-      : await straightenStandardReceipt(raw, width, height, aiShape?.quad, localDetection);
+      : await straightenStandardReceipt(raw, width, height, maskRefinedShape?.quad, localDetection);
     const processed = await renderScannerStyleImage(straightened, contrastMode);
     const boundarySource = useLongReceipt
       ? (aiShape?.edgeProfile?.source ?? "local")
@@ -1119,8 +1134,138 @@ function buildPaperMask(
     data: smoothPaperMask(data, width, height, crop),
     width,
     height,
+    crop,
+    sourceQuad: quad,
     coverageRatio: coveredPixels / Math.max(1, crop.width * crop.height)
   };
+}
+
+function refineShapeWithPaperMask(
+  raw: Buffer,
+  width: number,
+  height: number,
+  aiShape: AiReceiptShape,
+  localDetection: ReceiptDetection
+): AiReceiptShape {
+  if (!aiShape.quad) return aiShape;
+  const mask = buildPaperMask(raw, width, height, aiShape, localDetection);
+  const contour = extractPaperMaskContour(mask);
+  if (!contour.refinedQuad) return aiShape;
+  return {
+    ...aiShape,
+    quad: contour.refinedQuad,
+    edgeProfile: aiShape.documentType === "long_receipt" && contour.leftPoints.length >= 8 && contour.rightPoints.length >= 8
+      ? {
+        leftEdge: smoothEdge(contour.leftPoints, width, height),
+        rightEdge: smoothEdge(contour.rightPoints, width, height),
+        source: "local",
+        crop: mask.crop
+      }
+      : aiShape.edgeProfile
+  };
+}
+
+function extractPaperMaskContour(mask: PaperMask): MaskContour {
+  const quad = mask.sourceQuad;
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  const metrics = quadMetrics(quad);
+  if (metrics.width < mask.width * 0.08 || metrics.height < mask.height * 0.08) {
+    return { leftPoints: [], rightPoints: [] };
+  }
+
+  const rowCount = Math.max(26, Math.min(96, Math.round(metrics.height / 18)));
+  const leftPoints: Point[] = [];
+  const rightPoints: Point[] = [];
+  for (let index = 0; index < rowCount; index += 1) {
+    const ratio = rowCount === 1 ? 0 : index / (rowCount - 1);
+    const leftReference = interpolatePoint(topLeft, bottomLeft, ratio);
+    const rightReference = interpolatePoint(topRight, bottomRight, ratio);
+    const rowWidth = distance(leftReference, rightReference);
+    if (rowWidth < mask.width * 0.08) continue;
+
+    const y = Math.round((leftReference.y + rightReference.y) / 2);
+    const searchPadding = Math.max(18, Math.round(rowWidth * 0.16));
+    const left = findMaskEdgeNearX(mask, y, leftReference.x, -1, searchPadding);
+    const right = findMaskEdgeNearX(mask, y, rightReference.x, 1, searchPadding);
+    if (left !== null) leftPoints.push({ x: left, y });
+    if (right !== null) rightPoints.push({ x: right, y });
+  }
+
+  const leftLine = fitEdgeLine(leftPoints);
+  const rightLine = fitEdgeLine(rightPoints);
+  const refinedQuad = buildQuadFromMaskContour(quad, leftLine, rightLine);
+  return {
+    leftPoints: smoothEdge(leftPoints, mask.width, mask.height),
+    rightPoints: smoothEdge(rightPoints, mask.width, mask.height),
+    leftLine,
+    rightLine,
+    refinedQuad
+  };
+}
+
+function findMaskEdgeNearX(mask: PaperMask, y: number, referenceX: number, side: -1 | 1, searchPadding: number) {
+  if (y < mask.crop.top || y >= mask.crop.top + mask.crop.height) return null;
+  const start = Math.max(mask.crop.left, Math.round(referenceX - searchPadding));
+  const end = Math.min(mask.crop.left + mask.crop.width - 1, Math.round(referenceX + searchPadding));
+  const reference = Math.max(start, Math.min(end, Math.round(referenceX)));
+  const rowOffset = y * mask.width;
+
+  let bestX: number | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let x = start; x <= end; x += 1) {
+    const current = mask.data[rowOffset + x] ?? 0;
+    const neighborX = x + side;
+    if (neighborX < start || neighborX > end) continue;
+    const neighbor = mask.data[rowOffset + neighborX] ?? 0;
+    const isBoundary = current === 1 && neighbor === 0;
+    if (!isBoundary) continue;
+    const score = Math.abs(x - reference);
+    if (score < bestScore) {
+      bestScore = score;
+      bestX = x;
+    }
+  }
+
+  if (bestX !== null) return bestX;
+
+  const fallback = nearestMaskPixel(mask, y, reference, start, end);
+  return fallback;
+}
+
+function nearestMaskPixel(mask: PaperMask, y: number, referenceX: number, start: number, end: number) {
+  const rowOffset = y * mask.width;
+  let bestX: number | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let x = start; x <= end; x += 1) {
+    if (!mask.data[rowOffset + x]) continue;
+    const score = Math.abs(x - referenceX);
+    if (score < bestScore) {
+      bestScore = score;
+      bestX = x;
+    }
+  }
+  return bestX;
+}
+
+function buildQuadFromMaskContour(
+  quad: [Point, Point, Point, Point],
+  leftLine: EdgeLine | undefined,
+  rightLine: EdgeLine | undefined
+): [Point, Point, Point, Point] | undefined {
+  if (!leftLine && !rightLine) return undefined;
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  const nextTopLeft = leftLine ? pointOnLineAtY(leftLine, topLeft.y) : topLeft;
+  const nextBottomLeft = leftLine ? pointOnLineAtY(leftLine, bottomLeft.y) : bottomLeft;
+  const nextTopRight = rightLine ? pointOnLineAtY(rightLine, topRight.y) : topRight;
+  const nextBottomRight = rightLine ? pointOnLineAtY(rightLine, bottomRight.y) : bottomRight;
+  const refined: [Point, Point, Point, Point] = [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft];
+  const originalMetrics = quadMetrics(quad);
+  const refinedMetrics = quadMetrics(refined);
+  if (refinedMetrics.width < originalMetrics.width * 0.76) return undefined;
+  if (refinedMetrics.width > originalMetrics.width * 1.08) return undefined;
+  if (refinedMetrics.area < originalMetrics.area * 0.72) return undefined;
+  if (refinedMetrics.area > originalMetrics.area * 1.1) return undefined;
+  return refined;
 }
 
 async function renderPaperMaskOverlay(
@@ -1150,7 +1295,8 @@ async function renderPaperMaskOverlay(
     .modulate({ brightness: 0.82, saturation: 0.92 })
     .png()
     .toBuffer();
-  const geometry = Buffer.from(buildPaperMaskOverlaySvg(width, height, aiShape, localDetection));
+  const contour = extractPaperMaskContour(mask);
+  const geometry = Buffer.from(buildPaperMaskOverlaySvg(width, height, aiShape, localDetection, contour));
   return sharp(base)
     .composite([
       {
@@ -1172,13 +1318,32 @@ function buildPaperMaskOverlaySvg(
   width: number,
   height: number,
   aiShape: AiReceiptShape | undefined,
-  localDetection: ReceiptDetection
+  localDetection: ReceiptDetection,
+  contour: MaskContour
 ) {
   const strokeWidth = Math.max(3, Math.round(Math.min(width, height) * 0.005));
+  const pointRadius = Math.max(5, Math.round(Math.min(width, height) * 0.007));
   const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     `<rect x="0" y="0" width="${width}" height="${height}" fill="none"/>`
   ];
+  if (contour.leftPoints.length >= 2) {
+    parts.push(polyline(contour.leftPoints, "#2563eb", strokeWidth, "MASK LEFT"));
+    parts.push(...pointMarkers(sampleDebugPoints(contour.leftPoints), "#2563eb", pointRadius));
+  }
+  if (contour.rightPoints.length >= 2) {
+    parts.push(polyline(contour.rightPoints, "#06b6d4", strokeWidth, "MASK RIGHT"));
+    parts.push(...pointMarkers(sampleDebugPoints(contour.rightPoints), "#06b6d4", pointRadius));
+  }
+  if (contour.leftLine) {
+    parts.push(edgeLineSvg(contour.leftLine, "#1d4ed8", strokeWidth + 2, "LEFT TREND"));
+  }
+  if (contour.rightLine) {
+    parts.push(edgeLineSvg(contour.rightLine, "#0891b2", strokeWidth + 2, "RIGHT TREND"));
+  }
+  if (contour.refinedQuad) {
+    parts.push(polygon(contour.refinedQuad, "#a855f7", Math.max(2, Math.round(strokeWidth * 0.8)), "MASK REFINED"));
+  }
   if (aiShape?.quad) {
     parts.push(polygon(aiShape.quad, "#ef4444", strokeWidth, "GEOMETRY"));
   } else if (localDetection.quad) {
@@ -1187,6 +1352,18 @@ function buildPaperMaskOverlaySvg(
   parts.push(textLabel("PAPER MASK", strokeWidth * 3, strokeWidth * 8, "#10b981", Math.max(24, strokeWidth * 5)));
   parts.push("</svg>");
   return parts.join("");
+}
+
+function sampleDebugPoints(points: Point[]) {
+  if (points.length <= 18) return points;
+  const step = Math.max(1, Math.floor(points.length / 18));
+  return points.filter((_, index) => index % step === 0);
+}
+
+function edgeLineSvg(line: EdgeLine, color: string, strokeWidth: number, label: string) {
+  const start = pointOnLineAtY(line, line.minY);
+  const end = pointOnLineAtY(line, line.maxY);
+  return polyline([start, end], color, strokeWidth, label);
 }
 
 type PaperSeed = {
