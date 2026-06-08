@@ -452,25 +452,29 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
               {
                 type: "input_text",
                 text: [
-                  "You detect document boundaries in receipt photos.",
-                  "Do not transcribe, rewrite, enhance, or infer receipt text.",
-                  "Return only geometric boundary data for the visible main receipt paper.",
-                  "Your task is geometric document scanning, like a mobile scanner app.",
+                  "You are planning geometry for a mobile document scanner.",
+                  "Do not transcribe, rewrite, enhance, or infer receipt text. Return geometry only.",
+                  "The final processed image must be a clean scanner-style receipt image:",
+                  "1. The receipt/document is horizontally and vertically straight after correction.",
+                  "2. No background objects, laptop keyboard, table, tray, other papers, hands, or shadows remain inside the crop.",
+                  "3. The crop is tight to the selected paper surface, with only a small safety margin if needed.",
+                  "4. The paper area will later be rendered as pure white background with pure black text/graphics, so your coordinates must preserve all printed content.",
                   "Use the displayed image orientation.",
                   "Coordinates must be normalized between 0 and 1 relative to image width and height.",
-                  "Find the outer boundary of the white thermal receipt paper, not the printed text column.",
-                  "Ignore black printed text, shadows, folds, the tray, table edges, and other papers in the background.",
-                  "If multiple white papers or receipts are visible, choose the largest foreground document/receipt as the scan target.",
-                  "The scan target is the visually dominant continuous paper surface, usually the largest paper area closest to the camera.",
+                  "Select the scan target by visual dominance: choose the largest foreground continuous receipt/document surface in the photo.",
+                  "Do not rely on any store name, logo, brand, language, or printed content to choose the target.",
                   "Exclude smaller, partially hidden, background, or separate papers even if they contain text.",
-                  "Do not rely on a specific store name, logo, brand, or receipt content to choose the target.",
-                  "The top edge should be the top edge of the selected largest foreground paper, not the top of a separate background paper.",
-                  "For ordinary short receipts or documents, provide four outer paper corner points.",
-                  "For long receipts, provide 16 to 24 leftEdge and rightEdge control points at increasing y positions from the top paper edge to the bottom paper edge.",
-                  "For long receipts, each leftEdge point must sit on the left outer paper edge and each rightEdge point must sit on the right outer paper edge at the same approximate vertical level.",
-                  "If a small part of the paper edge is outside the image or hidden by shadow, estimate the continuation of the visible paper edge.",
-                  "Use documentType long_receipt when the receipt is long, narrow, curved, rolled, or has non-straight left/right edges.",
-                  "Be aggressive about using long_receipt for tall Japanese supermarket receipts."
+                  "Return corner points for the selected paper only: top_left, top_right, bottom_right, bottom_left.",
+                  "Corner points should be the ideal scanner crop corners for flattening the selected paper, not the corners of the whole camera photo.",
+                  "If the paper is tilted, choose points so a perspective transform makes the paper vertical and horizontal.",
+                  "If the paper is curled, rolled, wavy, or a long receipt, still return the outer ideal corners, then provide leftEdge and rightEdge control points to flatten the curve.",
+                  "For ordinary short receipts/documents with straight sides, documentType may be standard and edge arrays may be empty.",
+                  "For long, narrow, curved, rolled, or non-straight receipts, documentType must be long_receipt.",
+                  "For long_receipt, provide 16 to 24 leftEdge and rightEdge control points from top to bottom.",
+                  "Each leftEdge point must be on the physical left outer paper edge; each rightEdge point must be on the physical right outer paper edge at the matching vertical level.",
+                  "The edge points are used to unwarp curvature segment by segment, so do not place them on printed text columns, shadows, laptop edges, or background objects.",
+                  "If a small part of a paper edge is hidden or outside the photo, estimate the continuation of the selected paper edge conservatively.",
+                  "Prefer long_receipt when uncertain for tall receipt photos, because curved long receipts require perspective correction and edge-based flattening."
                 ].join("\n")
               }
             ]
@@ -478,7 +482,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
           {
             role: "user",
             content: [
-              { type: "input_text", text: "Detect the outline of the largest foreground receipt/document in the photo. Exclude smaller, hidden, or background papers. Return many leftEdge and rightEdge control points on the true outer paper edges, plus the four outer receipt/document corners." },
+              { type: "input_text", text: "Return geometry for making the largest foreground receipt/document into a scanner-style output: straight, tightly cropped, no background, and ready for white-background/black-text rendering. For long or curved receipts, include enough leftEdge and rightEdge points to flatten the paper curvature." },
               { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" }
             ]
           }
