@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FileText,
   Gauge,
+  Globe2,
   ChartColumn,
   Lightbulb,
   LineChart,
@@ -49,10 +50,10 @@ const orderModulePaths = new Set([
   "/os/reports"
 ]);
 const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
-const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/products"]);
+const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/brand-sites", "/os/products"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
 const posModulePaths = new Set(["/os/pos", "/os/loyalty", "/os/menus", "/os/products", "/os/stores"]);
-const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus", "/os/loyalty"]);
+const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
 const canonicalNavItems: OsNavItem[] = [
@@ -78,6 +79,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
   { label: "商品マスタ", href: "/os/products", icon: Boxes },
   { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
+  { label: "ブランドサイト", href: "/os/brand-sites", icon: Globe2 },
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
@@ -154,6 +156,7 @@ const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/procedures" },
       { href: "/os/menus", isShortcut: true },
+      { href: "/os/brand-sites", isShortcut: true },
       { href: "/os/products", isShortcut: true }
     ]
   },
@@ -189,6 +192,7 @@ const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/products" },
       { href: "/os/menus" },
+      { href: "/os/brand-sites" },
       { href: "/os/loyalty" },
       { href: "/os/stores" },
       { href: "/os/staff" },
@@ -203,7 +207,7 @@ function getModuleNavPaths(pathname: string) {
     return storeOperationsModulePaths;
   }
 
-  if (pathname === "/os/menus" || pathname.startsWith("/os/menus/")) {
+  if (pathname === "/os/menus" || pathname.startsWith("/os/menus/") || pathname === "/os/brand-sites" || pathname.startsWith("/os/brand-sites/")) {
     return sharedDataPaths;
   }
 
@@ -242,7 +246,7 @@ function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
   if (item.href === "/os/field-notes") return true;
   if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
-  if (item.href === "/os/menus") return ["owner", "manager"].includes(role);
+  if (item.href === "/os/menus" || item.href === "/os/brand-sites") return ["owner", "manager"].includes(role);
   if (item.href === "/os/pos" || item.href === "/os/loyalty") return ["owner", "manager"].includes(role);
   if (item.href === "/os/products") return productViewerRoles.has(role);
   if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);

@@ -1,0 +1,718 @@
+"use client";
+
+import {
+  Boxes,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  FileText,
+  Globe2,
+  Languages,
+  Lightbulb,
+  LogOut,
+  MenuSquare,
+  PackageCheck,
+  Plus,
+  Save,
+  Search,
+  Sparkles,
+  Store,
+  Trash2,
+  Truck,
+  UserCog,
+  WalletCards
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { MobileNavMenu } from "../components/MobileNavMenu";
+import { OsNavList } from "../components/OsNavList";
+import { UserBadge } from "../components/UserBadge";
+
+type Brand = {
+  id: string;
+  name: string;
+};
+
+type BrandSiteSection = {
+  id: string;
+  brandId: string;
+  pageKey: string;
+  sectionKey: string;
+  sectionType: string;
+  title: string;
+  subtitle: string;
+  body: string;
+  imageUrl: string;
+  imageAlt: string;
+  actionLabel: string;
+  actionUrl: string;
+  tags: string[];
+  fields: Record<string, unknown>;
+  titleDisplayNames: Record<string, string>;
+  subtitleDisplayNames: Record<string, string>;
+  bodyDisplayNames: Record<string, string>;
+  actionLabelDisplayNames: Record<string, string>;
+  tagDisplayNames: Record<string, Record<string, string>>;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type BrandSiteTranslationDraftEntry = {
+  key: string;
+  sectionId: string;
+  sectionLabel: string;
+  pageKey: string;
+  field: "title" | "subtitle" | "body" | "actionLabel" | "tag";
+  tagIndex: number | null;
+  language: string;
+  sourceText: string;
+  currentText: string;
+  suggestedText: string;
+};
+
+type BrandSiteTranslationPreview = {
+  entries: BrandSiteTranslationDraftEntry[];
+  model: string;
+};
+
+type OsNavItem = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+};
+
+const navItems: OsNavItem[] = [
+  { label: "OS ホーム", href: "/os", icon: ClipboardList },
+  { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
+  { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
+  { label: "発注履歴", href: "/os/history", icon: FileText },
+  { label: "商品マスタ", href: "/os/products", icon: Boxes },
+  { label: "メニュー管理", href: "/os/menus", icon: MenuSquare },
+  { label: "ブランドサイト", href: "/os/brand-sites", icon: Globe2 },
+  { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
+  { label: "店舗・ブランド", href: "/os/stores", icon: Store },
+  { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
+  { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
+  { label: "発注先管理", href: "/os/suppliers", icon: Truck },
+  { label: "会員・ポイント", href: "/os/loyalty", icon: WalletCards },
+  { label: "ログアウト", href: "/os/logout", icon: LogOut }
+];
+
+const languageOptions = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "简体中文" },
+  { value: "zh-Hant", label: "繁體中文" },
+  { value: "ko", label: "한국어" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "ne", label: "नेपाली" }
+];
+
+const pageLabels: Record<string, string> = {
+  home: "トップページ",
+  menu: "メニュー・予約",
+  footer: "フッター",
+  legal: "法務ページ"
+};
+
+const fieldLabels: Record<BrandSiteTranslationDraftEntry["field"], string> = {
+  title: "タイトル",
+  subtitle: "補助タイトル",
+  body: "本文",
+  actionLabel: "ボタン",
+  tag: "タグ"
+};
+
+function emptySection(brandId = ""): BrandSiteSection {
+  return {
+    id: "",
+    brandId,
+    pageKey: "home",
+    sectionKey: "",
+    sectionType: "content",
+    title: "",
+    subtitle: "",
+    body: "",
+    imageUrl: "",
+    imageAlt: "",
+    actionLabel: "",
+    actionUrl: "",
+    tags: [],
+    fields: {},
+    titleDisplayNames: {},
+    subtitleDisplayNames: {},
+    bodyDisplayNames: {},
+    actionLabelDisplayNames: {},
+    tagDisplayNames: {},
+    sortOrder: 100,
+    isActive: true
+  };
+}
+
+function textValue(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function asEditableJson(value: Record<string, unknown>) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function normalizeSection(section: BrandSiteSection, activeBrandId: string): BrandSiteSection {
+  return {
+    ...emptySection(activeBrandId),
+    ...section,
+    tags: Array.isArray(section.tags) ? section.tags.map(String) : [],
+    fields: section.fields && typeof section.fields === "object" ? section.fields : {},
+    titleDisplayNames: section.titleDisplayNames ?? {},
+    subtitleDisplayNames: section.subtitleDisplayNames ?? {},
+    bodyDisplayNames: section.bodyDisplayNames ?? {},
+    actionLabelDisplayNames: section.actionLabelDisplayNames ?? {},
+    tagDisplayNames: section.tagDisplayNames ?? {}
+  };
+}
+
+export default function BrandSitesPage() {
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [sections, setSections] = useState<BrandSiteSection[]>([]);
+  const [activeBrandId, setActiveBrandId] = useState("");
+  const [activePageKey, setActivePageKey] = useState("home");
+  const [activeSectionId, setActiveSectionId] = useState("");
+  const [draft, setDraft] = useState<BrandSiteSection>(emptySection());
+  const [fieldsText, setFieldsText] = useState("{}");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState("");
+  const [status, setStatus] = useState("");
+  const [translationLanguages, setTranslationLanguages] = useState<string[]>(languageOptions.map((language) => language.value));
+  const [translationOverwriteExisting, setTranslationOverwriteExisting] = useState(false);
+  const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
+  const [translationPreview, setTranslationPreview] = useState<BrandSiteTranslationPreview | null>(null);
+
+  const activeBrand = useMemo(() => brands.find((brand) => brand.id === activeBrandId) ?? null, [activeBrandId, brands]);
+  const brandSections = useMemo(() => sections.filter((section) => section.brandId === activeBrandId), [activeBrandId, sections]);
+  const pageKeys = useMemo(() => uniqueValues(["home", "menu", "footer", ...brandSections.map((section) => section.pageKey)]), [brandSections]);
+  const visibleSections = useMemo(
+    () => brandSections.filter((section) => section.pageKey === activePageKey).sort((a, b) => a.sortOrder - b.sortOrder || a.sectionKey.localeCompare(b.sectionKey)),
+    [activePageKey, brandSections]
+  );
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!activeBrandId && brands[0]) setActiveBrandId(brands[0].id);
+  }, [activeBrandId, brands]);
+
+  useEffect(() => {
+    const nextPage = pageKeys.includes(activePageKey) ? activePageKey : pageKeys[0] || "home";
+    if (nextPage !== activePageKey) setActivePageKey(nextPage);
+  }, [activePageKey, pageKeys]);
+
+  useEffect(() => {
+    const current = visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0];
+    if (current) {
+      setActiveSectionId(current.id);
+      const normalized = normalizeSection(current, activeBrandId);
+      setDraft(normalized);
+      setFieldsText(asEditableJson(normalized.fields));
+    } else {
+      const blank = emptySection(activeBrandId);
+      blank.pageKey = activePageKey;
+      blank.sectionKey = "";
+      setActiveSectionId("");
+      setDraft(blank);
+      setFieldsText("{}");
+    }
+  }, [activeBrandId, activePageKey, activeSectionId, visibleSections]);
+
+  async function loadData() {
+    setLoading(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/brand-sites", { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as { brands?: Brand[]; sections?: BrandSiteSection[]; error?: string };
+      if (!response.ok) throw new Error(body.error || "読み込みに失敗しました。");
+      setBrands(body.brands ?? []);
+      setSections((body.sections ?? []).map((section) => normalizeSection(section, section.brandId)));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "読み込みに失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateDraft(patch: Partial<BrandSiteSection>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function updateTranslation(field: "titleDisplayNames" | "subtitleDisplayNames" | "bodyDisplayNames" | "actionLabelDisplayNames", language: string, value: string) {
+    setDraft((current) => ({
+      ...current,
+      [field]: {
+        ...(current[field] ?? {}),
+        [language]: value
+      }
+    }));
+  }
+
+  function updateTagTranslation(index: number, language: string, value: string) {
+    setDraft((current) => ({
+      ...current,
+      tagDisplayNames: {
+        ...(current.tagDisplayNames ?? {}),
+        [index]: {
+          ...(current.tagDisplayNames?.[String(index)] ?? {}),
+          [language]: value
+        }
+      }
+    }));
+  }
+
+  function createSection() {
+    const blank = emptySection(activeBrandId);
+    blank.pageKey = activePageKey;
+    blank.sectionKey = `section-${Date.now().toString(36)}`;
+    blank.sortOrder = (visibleSections.at(-1)?.sortOrder ?? 0) + 10;
+    setActiveSectionId("");
+    setDraft(blank);
+    setFieldsText("{}");
+  }
+
+  async function saveSection() {
+    if (!draft.brandId) {
+      setStatus("ブランドを選択してください。");
+      return;
+    }
+    setSaving("save");
+    setStatus("");
+    let fields: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(fieldsText || "{}") as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("拡張フィールドは JSON object で入力してください。");
+      fields = parsed as Record<string, unknown>;
+    } catch (error) {
+      setSaving("");
+      setStatus(error instanceof Error ? error.message : "拡張フィールドの JSON が不正です。");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/brand-sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...draft, fields })
+      });
+      const body = await response.json().catch(() => ({})) as { id?: string; error?: string };
+      if (!response.ok) throw new Error(body.error || "保存できませんでした。");
+      setStatus("保存しました。");
+      await loadData();
+      if (body.id) setActiveSectionId(body.id);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "保存できませんでした。");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function deleteSection() {
+    if (!draft.id) return;
+    const confirmed = window.confirm("このセクションを削除しますか？");
+    if (!confirmed) return;
+    setSaving("delete");
+    setStatus("");
+    try {
+      const response = await fetch("/api/brand-sites", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: draft.id })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "削除できませんでした。");
+      setStatus("削除しました。");
+      setActiveSectionId("");
+      await loadData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "削除できませんでした。");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function createTranslationPreview() {
+    if (!activeBrandId) {
+      setStatus("ブランドを選択してください。");
+      return;
+    }
+    if (!translationLanguages.length) {
+      setStatus("翻訳先の言語を選択してください。");
+      return;
+    }
+    setTranslationBusy("preview");
+    setStatus("");
+    try {
+      const response = await fetch("/api/brand-sites/auto-translate/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandId: activeBrandId,
+          languages: translationLanguages,
+          overwriteExisting: translationOverwriteExisting
+        })
+      });
+      const body = await response.json().catch(() => ({})) as BrandSiteTranslationPreview & { error?: string };
+      if (!response.ok) throw new Error(body.error || "翻訳プレビューを作成できませんでした。");
+      setTranslationPreview({ entries: body.entries ?? [], model: body.model ?? "" });
+      setStatus((body.entries ?? []).length ? `${body.entries.length}件の翻訳候補を作成しました。` : "翻訳が必要な項目はありません。");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "翻訳プレビューを作成できませんでした。");
+    } finally {
+      setTranslationBusy("");
+    }
+  }
+
+  async function applyTranslationPreview() {
+    if (!translationPreview) return;
+    const entries = translationPreview.entries.filter((entry) => entry.suggestedText.trim());
+    if (!entries.length) return;
+    setTranslationBusy("apply");
+    setStatus("");
+    try {
+      const response = await fetch("/api/brand-sites/auto-translate/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: activeBrandId, entries })
+      });
+      const body = await response.json().catch(() => ({})) as { updated?: number; error?: string };
+      if (!response.ok) throw new Error(body.error || "翻訳を書き込めませんでした。");
+      setTranslationPreview(null);
+      setStatus(`${body.updated ?? entries.length}件の翻訳を書き込みました。`);
+      await loadData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "翻訳を書き込めませんでした。");
+    } finally {
+      setTranslationBusy("");
+    }
+  }
+
+  return (
+    <div className="dashboard-shell">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div>
+            <p className="eyebrow">Foundr1 OS</p>
+            <h1>ブランドサイト</h1>
+          </div>
+        </div>
+        <OsNavList navItems={navItems} />
+        <UserBadge />
+      </aside>
+
+      <main className="content brand-site-admin-page">
+        <MobileNavMenu navItems={navItems} />
+
+        <section className="page-header">
+          <div>
+            <p className="eyebrow">Website content studio</p>
+            <h2>ブランドサイト管理</h2>
+            <p>前台サイトの画像・文案・タグ・多言語表示を、ブランドごとに構造化して管理します。</p>
+          </div>
+          <div className="page-actions">
+            <button className="secondary-button" type="button" onClick={() => void loadData()} disabled={loading}>
+              {loading ? "読み込み中" : "再読み込み"}
+            </button>
+            <button className="primary-button" type="button" onClick={createSection} disabled={!activeBrandId}>
+              <Plus size={16} /> セクション追加
+            </button>
+          </div>
+        </section>
+
+        <section className="brand-site-toolbar">
+          <label>
+            <span>ブランド</span>
+            <select value={activeBrandId} onChange={(event) => setActiveBrandId(event.target.value)}>
+              {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+            </select>
+          </label>
+          <div className="brand-site-page-tabs">
+            {pageKeys.map((pageKey) => (
+              <button
+                type="button"
+                className={pageKey === activePageKey ? "is-active" : ""}
+                onClick={() => setActivePageKey(pageKey)}
+                key={pageKey}
+              >
+                {pageLabels[pageKey] ?? pageKey}
+              </button>
+            ))}
+          </div>
+          {activeBrand ? (
+            <a className="secondary-button compact-button" href={`/api/public/brand-sites?brand=${encodeURIComponent(activeBrand.name)}`} target="_blank" rel="noreferrer">
+              公開API
+            </a>
+          ) : null}
+        </section>
+
+        {status ? <p className="menu-auto-translation-status">{status}</p> : null}
+
+        <section className="menu-auto-translation-panel brand-site-translation-panel">
+          <div>
+            <strong><Languages size={17} /> AI翻訳</strong>
+            <span>未翻訳のページ文案・タグを、メニュー翻訳と同じくプレビュー確認後に書き込みます。</span>
+          </div>
+          <div className="menu-auto-translation-body">
+            <div className="menu-auto-translation-controls">
+              {languageOptions.map((language) => (
+                <label key={language.value}>
+                  <input
+                    type="checkbox"
+                    checked={translationLanguages.includes(language.value)}
+                    onChange={(event) => setTranslationLanguages((current) => (
+                      event.target.checked ? uniqueValues([...current, language.value]) : current.filter((value) => value !== language.value)
+                    ))}
+                  />
+                  {language.label}
+                </label>
+              ))}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={translationOverwriteExisting}
+                  onChange={(event) => setTranslationOverwriteExisting(event.target.checked)}
+                />
+                既存翻訳も上書き
+              </label>
+            </div>
+            <button className="primary-button" type="button" onClick={() => void createTranslationPreview()} disabled={!activeBrandId || translationBusy === "preview"}>
+              <Sparkles size={16} /> {translationBusy === "preview" ? "作成中" : "翻訳プレビュー"}
+            </button>
+          </div>
+        </section>
+
+        <section className="brand-site-editor-grid">
+          <aside className="brand-site-section-list">
+            <div className="management-subsection-title">
+              <div>
+                <h4>{pageLabels[activePageKey] ?? activePageKey}</h4>
+                <p>{visibleSections.length} セクション</p>
+              </div>
+            </div>
+            {visibleSections.map((section) => (
+              <button
+                type="button"
+                className={section.id === draft.id ? "is-active" : ""}
+                onClick={() => setActiveSectionId(section.id)}
+                key={section.id}
+              >
+                <span>{section.sectionType}</span>
+                <strong>{section.title || section.sectionKey}</strong>
+                <small>{section.sectionKey}</small>
+              </button>
+            ))}
+            {!visibleSections.length ? <p className="empty-state">このページにはまだセクションがありません。</p> : null}
+          </aside>
+
+          <section className="brand-site-editor-panel">
+            <div className="brand-site-editor-header">
+              <div>
+                <p className="eyebrow">{draft.id ? "Edit section" : "New section"}</p>
+                <h3>{draft.title || "新しいセクション"}</h3>
+              </div>
+              <div className="row-actions">
+                {draft.id ? (
+                  <button className="danger-button" type="button" onClick={() => void deleteSection()} disabled={saving === "delete"}>
+                    <Trash2 size={16} /> 削除
+                  </button>
+                ) : null}
+                <button className="primary-button" type="button" onClick={() => void saveSection()} disabled={saving === "save"}>
+                  <Save size={16} /> {saving === "save" ? "保存中" : "保存"}
+                </button>
+              </div>
+            </div>
+
+            <div className="brand-site-form-grid">
+              <label>
+                <span>ページキー</span>
+                <input value={draft.pageKey} onChange={(event) => updateDraft({ pageKey: event.target.value })} />
+              </label>
+              <label>
+                <span>セクションキー</span>
+                <input value={draft.sectionKey} onChange={(event) => updateDraft({ sectionKey: event.target.value })} />
+              </label>
+              <label>
+                <span>種類</span>
+                <input value={draft.sectionType} onChange={(event) => updateDraft({ sectionType: event.target.value })} />
+              </label>
+              <label>
+                <span>並び順</span>
+                <input type="number" value={draft.sortOrder} onChange={(event) => updateDraft({ sortOrder: Number(event.target.value) })} />
+              </label>
+            </div>
+
+            <div className="brand-site-form-grid">
+              <label>
+                <span>タイトル</span>
+                <input value={draft.title} onChange={(event) => updateDraft({ title: event.target.value })} />
+              </label>
+              <label>
+                <span>補助タイトル</span>
+                <input value={draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} />
+              </label>
+            </div>
+
+            <label className="brand-site-wide-label">
+              <span>本文</span>
+              <textarea value={draft.body} onChange={(event) => updateDraft({ body: event.target.value })} />
+            </label>
+
+            <div className="brand-site-form-grid">
+              <label>
+                <span>画像 URL</span>
+                <input value={draft.imageUrl} onChange={(event) => updateDraft({ imageUrl: event.target.value })} placeholder="/images/..." />
+              </label>
+              <label>
+                <span>画像代替テキスト</span>
+                <input value={draft.imageAlt} onChange={(event) => updateDraft({ imageAlt: event.target.value })} />
+              </label>
+              <label>
+                <span>ボタン文言</span>
+                <input value={draft.actionLabel} onChange={(event) => updateDraft({ actionLabel: event.target.value })} />
+              </label>
+              <label>
+                <span>ボタン URL</span>
+                <input value={draft.actionUrl} onChange={(event) => updateDraft({ actionUrl: event.target.value })} />
+              </label>
+            </div>
+
+            <label className="brand-site-wide-label">
+              <span>タグ（一行に一つ）</span>
+              <textarea
+                value={draft.tags.join("\n")}
+                onChange={(event) => updateDraft({ tags: event.target.value.split("\n").map(textValue).filter(Boolean) })}
+              />
+            </label>
+
+            <label className="brand-site-wide-label">
+              <span>拡張フィールド JSON</span>
+              <textarea className="code-textarea" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} />
+            </label>
+
+            <div className="brand-site-state-row">
+              <label>
+                <input type="checkbox" checked={draft.isActive} onChange={(event) => updateDraft({ isActive: event.target.checked })} />
+                公開中
+              </label>
+            </div>
+
+            <section className="menu-translation-panel brand-site-field-translations">
+              <div>
+                <strong><Globe2 size={16} /> 多言語表示</strong>
+                <span>空欄の場合は日本語へフォールバックします。</span>
+              </div>
+              <div className="brand-site-translation-matrix">
+                {languageOptions.map((language) => (
+                  <article key={language.value}>
+                    <h4>{language.label}</h4>
+                    <label>
+                      <span>タイトル</span>
+                      <input value={draft.titleDisplayNames?.[language.value] ?? ""} onChange={(event) => updateTranslation("titleDisplayNames", language.value, event.target.value)} />
+                    </label>
+                    <label>
+                      <span>補助タイトル</span>
+                      <input value={draft.subtitleDisplayNames?.[language.value] ?? ""} onChange={(event) => updateTranslation("subtitleDisplayNames", language.value, event.target.value)} />
+                    </label>
+                    <label>
+                      <span>ボタン</span>
+                      <input value={draft.actionLabelDisplayNames?.[language.value] ?? ""} onChange={(event) => updateTranslation("actionLabelDisplayNames", language.value, event.target.value)} />
+                    </label>
+                    <label>
+                      <span>本文</span>
+                      <textarea value={draft.bodyDisplayNames?.[language.value] ?? ""} onChange={(event) => updateTranslation("bodyDisplayNames", language.value, event.target.value)} />
+                    </label>
+                    {draft.tags.length ? (
+                      <div className="brand-site-tag-translation-list">
+                        {draft.tags.map((tag, index) => (
+                          <label key={`${tag}-${index}`}>
+                            <span>{tag}</span>
+                            <input
+                              value={draft.tagDisplayNames?.[String(index)]?.[language.value] ?? ""}
+                              onChange={(event) => updateTagTranslation(index, language.value, event.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          </section>
+        </section>
+
+        {translationPreview ? (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="ブランドサイトAI翻訳プレビュー">
+            <section className="edit-modal menu-translation-preview-modal">
+              <div className="modal-header">
+                <div>
+                  <p className="eyebrow">AI translation preview</p>
+                  <h3>翻訳プレビュー</h3>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => setTranslationPreview(null)}>閉じる</button>
+              </div>
+              <div className="menu-translation-preview-summary">
+                <span><Languages size={15} /> {translationPreview.entries.length}件</span>
+                <span>Model: {translationPreview.model}</span>
+              </div>
+              <div className="menu-translation-preview-list">
+                {translationPreview.entries.map((entry, index) => (
+                  <article className="menu-translation-preview-row" key={entry.key}>
+                    <div className="menu-translation-preview-meta">
+                      <strong>{entry.sectionLabel}</strong>
+                      <span>{fieldLabels[entry.field]} / {languageOptions.find((language) => language.value === entry.language)?.label ?? entry.language}</span>
+                    </div>
+                    <div className="menu-translation-preview-source">
+                      <span>日本語</span>
+                      <p>{entry.sourceText}</p>
+                      {entry.currentText ? <small>現在: {entry.currentText}</small> : null}
+                    </div>
+                    <label className="menu-translation-preview-edit">
+                      <span>書き込み内容</span>
+                      <textarea
+                        value={entry.suggestedText}
+                        onChange={(event) => setTranslationPreview((current) => {
+                          if (!current) return current;
+                          return {
+                            ...current,
+                            entries: current.entries.map((item, itemIndex) => itemIndex === index ? { ...item, suggestedText: event.target.value } : item)
+                          };
+                        })}
+                      />
+                    </label>
+                  </article>
+                ))}
+                {!translationPreview.entries.length ? <p className="empty-state">書き込む候補はありません。</p> : null}
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={() => setTranslationPreview(null)}>キャンセル</button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void applyTranslationPreview()}
+                  disabled={translationBusy === "apply" || !translationPreview.entries.some((entry) => entry.suggestedText.trim())}
+                >
+                  <CheckCircle2 size={16} /> {translationBusy === "apply" ? "書き込み中" : "確認して書き込む"}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+}

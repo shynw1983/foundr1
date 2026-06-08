@@ -69,6 +69,40 @@ create table if not exists brands (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists brand_site_sections (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  page_key text not null,
+  section_key text not null,
+  section_type text not null default 'content',
+  title text not null default '',
+  subtitle text not null default '',
+  body text not null default '',
+  image_url text not null default '',
+  image_alt text not null default '',
+  action_label text not null default '',
+  action_url text not null default '',
+  tags jsonb not null default '[]'::jsonb,
+  fields jsonb not null default '{}'::jsonb,
+  title_display_names jsonb not null default '{}'::jsonb,
+  subtitle_display_names jsonb not null default '{}'::jsonb,
+  body_display_names jsonb not null default '{}'::jsonb,
+  action_label_display_names jsonb not null default '{}'::jsonb,
+  tag_display_names jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 100,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_id, page_key, section_key)
+);
+
+alter table brand_site_sections add column if not exists image_alt text not null default '';
+alter table brand_site_sections add column if not exists title_display_names jsonb not null default '{}'::jsonb;
+alter table brand_site_sections add column if not exists subtitle_display_names jsonb not null default '{}'::jsonb;
+alter table brand_site_sections add column if not exists body_display_names jsonb not null default '{}'::jsonb;
+alter table brand_site_sections add column if not exists action_label_display_names jsonb not null default '{}'::jsonb;
+alter table brand_site_sections add column if not exists tag_display_names jsonb not null default '{}'::jsonb;
+
 create table if not exists store_brands (
   store_id uuid not null references stores(id) on delete cascade,
   brand_id uuid not null references brands(id) on delete cascade,
