@@ -34,6 +34,18 @@ function normalizeSearchValue(value: string | null) {
   return String(value ?? "").trim();
 }
 
+function brandAliases(value: string) {
+  const normalized = value.toLowerCase();
+  return Array.from(new Set([
+    value,
+    normalized === "maamaa" ? "まぁ麻" : "",
+    normalized === "maaamaa" ? "まぁ麻" : "",
+    normalized === "maama" ? "まぁ麻" : "",
+    normalized === "nanacha" ? "nanacha" : "",
+    normalized === "nanacha" ? "奈奈茶" : "",
+  ].map((entry) => entry.trim()).filter(Boolean)));
+}
+
 function publicUrl(value: unknown, requestUrl: string) {
   const url = String(value ?? "").trim();
   if (!url) return "";
@@ -50,11 +62,19 @@ export async function GET(request: Request) {
     return Response.json({ error: "brand is required" }, { status: 400 });
   }
 
+  const aliases = brandAliases(brandQuery);
+  const lowerAliases = aliases.map((alias) => alias.toLowerCase());
   const brands = await sql`
     select id::text, name
     from brands
     where status = 'active'
-      and (id::text = ${brandQuery} or lower(name) = lower(${brandQuery}))
+      and (id::text = ${brandQuery} or lower(name) = any(${lowerAliases}))
+    order by
+      case
+        when id::text = ${brandQuery} then 0
+        when lower(name) = lower(${brandQuery}) then 1
+        else 2
+      end
     limit 1
   `;
 
