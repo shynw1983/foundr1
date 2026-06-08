@@ -8,13 +8,19 @@ export type ReceiptOcrItem = {
   unit: string;
   unitPrice: number | null;
   taxRate: string;
+  taxMode: string;
   category: string;
+  accountTitle: string;
   amount: number | null;
 };
 
 export type ReceiptOcrResult = {
   storeName: string;
+  companyName: string;
+  brandName: string;
+  locationName: string;
   purchaseDate: string;
+  purchaseTime: string;
   subtotal: number | null;
   tax: number | null;
   total: number | null;
@@ -27,6 +33,7 @@ export type ReceiptOcrSource = {
   storeId?: string;
   supplierName?: string;
   receiptPhotoUrl: string;
+  createProductCandidates?: boolean;
 };
 
 const receiptOcrSchema = {
@@ -34,7 +41,11 @@ const receiptOcrSchema = {
   additionalProperties: false,
   properties: {
     storeName: { type: "string" },
+    companyName: { type: "string", description: "Legal company or operating company name when visible, otherwise empty string" },
+    brandName: { type: "string", description: "Retail chain, supermarket, restaurant, gas station, or public-facing brand name when visible, otherwise empty string" },
+    locationName: { type: "string", description: "Store, branch, gas station, or location name when visible, otherwise empty string" },
     purchaseDate: { type: "string", description: "YYYY-MM-DD when visible, otherwise empty string" },
+    purchaseTime: { type: "string", description: "HH:mm when visible, otherwise empty string" },
     subtotal: nullableNumberSchema(),
     tax: nullableNumberSchema(),
     total: nullableNumberSchema(),
@@ -49,14 +60,16 @@ const receiptOcrSchema = {
           unit: { type: "string" },
           unitPrice: nullableNumberSchema(),
           taxRate: { type: "string" },
+          taxMode: { type: "string", description: "内税, 外税, or 不明" },
           category: { type: "string" },
+          accountTitle: { type: "string" },
           amount: nullableNumberSchema()
         },
-        required: ["name", "quantity", "unit", "unitPrice", "taxRate", "category", "amount"]
+        required: ["name", "quantity", "unit", "unitPrice", "taxRate", "taxMode", "category", "accountTitle", "amount"]
       }
     }
   },
-  required: ["storeName", "purchaseDate", "subtotal", "tax", "total", "items"]
+  required: ["storeName", "companyName", "brandName", "locationName", "purchaseDate", "purchaseTime", "subtotal", "tax", "total", "items"]
 };
 
 function nullableNumberSchema() {
@@ -105,9 +118,23 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
                 "You extract Japanese restaurant purchase receipt data.",
                 "Return JSON only and follow the schema exactly.",
                 "Use visible receipt text only. Do not invent missing values.",
+                "Separate companyName, brandName, and locationName when receipts show legal/operating company, public chain brand, and branch/store/site name.",
+                "For example, if the receipt shows 相光石油株式会社 and セルフステーション平尾, set companyName to 相光石油株式会社, brandName to empty string, and locationName to セルフステーション平尾.",
+                "For example, if the receipt shows 株式会社G-7スーパーマート, 業務スーパー, and 春吉店, set companyName to 株式会社G-7スーパーマート, brandName to 業務スーパー, and locationName to 春吉店.",
+                "Set storeName to the best human-readable combined display name, usually brandName + locationName when brandName is visible, otherwise companyName + locationName.",
                 "Ignore payment method lines, subtotal labels, discounts, points, and tax-only rows as items.",
                 "For item category, choose one of: 食材, 包材, 消耗品, 清掃用品, 設備, 雑費, 未分類.",
-                "Use YYYY-MM-DD for purchaseDate when the date is visible."
+                "For accountTitle, choose one Japanese accounting account from: 租税公課, 荷造運賃, 水道光熱費, 旅費交通費, 通信費, 広告宣伝費, 接待交際費, 損害保険料, 修繕費, 消耗品費, 減価償却費, 福利厚生費, 給料賃金, 外注工賃, 利子割引料, 地代家賃, 貸倒金, 支払手数料, 車両費, リース料, 新聞図書費, 研修採用費, 会議費, 諸会費, 衛生管理費, 雑費.",
+                "Use 車両費 for gasoline, parking, tolls, vehicle maintenance, car-related purchases, and fuel station receipts when business vehicle use is likely.",
+                "Use 旅費交通費 for trains, buses, taxis, business travel fares, and non-vehicle transportation.",
+                "Use 消耗品費 for store supplies, stationery, packaging materials, small equipment under normal expense treatment, and daily-use consumables.",
+                "Use 衛生管理費 for cleaning supplies, sanitation, pest control, waste disposal, and hygiene-related restaurant expenses.",
+                "Use 支払手数料 for payment, banking, platform, delivery app, or transfer fees.",
+                "Use 雑費 only when no other listed account clearly fits.",
+                "Use YYYY-MM-DD for purchaseDate when the date is visible.",
+                "Use HH:mm for purchaseTime when the time is visible.",
+                "For each item taxRate, preserve visible 8% or 10% markers when present.",
+                "For each item taxMode, use 内税 if tax is included in the displayed amount, 外税 if tax is added separately, otherwise 不明."
               ].join("\n")
             }
           ]
@@ -177,7 +204,11 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       model,
       raw_result,
       vendor_name,
+      company_name,
+      brand_name,
+      location_name,
       purchase_date,
+      purchase_time,
       subtotal,
       tax,
       total,
@@ -195,7 +226,11 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       ${model},
       ${JSON.stringify(result ?? {})}::jsonb,
       ${result?.storeName || source.supplierName || ""},
+      ${result?.companyName || ""},
+      ${result?.brandName || ""},
+      ${result?.locationName || ""},
       ${coerceDate(result?.purchaseDate) || null},
+      ${coerceTime(result?.purchaseTime) || null},
       ${result?.subtotal ?? null},
       ${result?.tax ?? null},
       ${result?.total ?? null},
@@ -207,18 +242,18 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
   `;
   const ocrResultId = String(rows[0]?.id ?? "");
   if (ocrResultId && result && !errorMessage) {
-    await saveReceiptOcrItems(ocrResultId, result.items, source.supplierName || result.storeName, session);
+    await saveReceiptOcrItems(ocrResultId, result.items, source.supplierName || result.storeName, session, Boolean(source.createProductCandidates));
   }
   return ocrResultId;
 }
 
-async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[], supplierName: string, session: EmployeeSession) {
+async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[], supplierName: string, session: EmployeeSession, createProductCandidates: boolean) {
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     const rawName = String(item.name ?? "").trim();
     if (!rawName) continue;
     const normalizedName = normalizeReceiptProductName(rawName);
-    const match = await findProductMatch(supplierName, normalizedName);
+    const match = createProductCandidates ? await findProductMatch(supplierName, normalizedName) : { productId: "" };
     const itemRows = await sql`
       insert into receipt_ocr_items (
         receipt_ocr_result_id,
@@ -229,7 +264,9 @@ async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[],
         unit,
         unit_price,
         tax_rate,
+        tax_mode,
         category,
+        account_title,
         amount,
         matched_product_id,
         match_status,
@@ -244,15 +281,17 @@ async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[],
         ${item.unit || ""},
         ${item.unitPrice ?? null},
         ${item.taxRate || ""},
+        ${item.taxMode || ""},
         ${item.category || ""},
+        ${item.accountTitle || ""},
         ${item.amount ?? null},
         ${match.productId || null},
-        ${match.productId ? "matched" : "unmatched"},
+        ${createProductCandidates ? match.productId ? "matched" : "unmatched" : "not_applicable"},
         now()
       )
       returning id::text
     `;
-    if (!match.productId) {
+    if (createProductCandidates && !match.productId) {
       await createProductCandidate(String(itemRows[0]?.id ?? ""), item, normalizedName, supplierName, session);
     }
   }
@@ -320,7 +359,11 @@ async function createProductCandidate(itemId: string, item: ReceiptOcrItem, norm
 function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
   return {
     storeName: String(value.storeName ?? "").trim(),
+    companyName: String(value.companyName ?? "").trim(),
+    brandName: String(value.brandName ?? "").trim(),
+    locationName: String(value.locationName ?? "").trim(),
     purchaseDate: coerceDate(value.purchaseDate) || "",
+    purchaseTime: coerceTime(value.purchaseTime) || "",
     subtotal: coerceMoney(value.subtotal),
     tax: coerceMoney(value.tax),
     total: coerceMoney(value.total),
@@ -330,7 +373,9 @@ function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
       unit: String(item.unit ?? "").trim(),
       unitPrice: coerceMoney(item.unitPrice),
       taxRate: String(item.taxRate ?? "").trim(),
+      taxMode: normalizeTaxMode(item.taxMode),
       category: String(item.category ?? "").trim() || "未分類",
+      accountTitle: normalizeAccountTitle(item.accountTitle),
       amount: coerceMoney(item.amount)
     })).filter((item) => item.name) : []
   };
@@ -358,3 +403,52 @@ function coerceDate(value: unknown) {
   const text = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
+
+function coerceTime(value: unknown) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function normalizeTaxMode(value: unknown) {
+  const mode = String(value ?? "").trim();
+  return mode === "内税" || mode === "外税" ? mode : "不明";
+}
+
+function normalizeAccountTitle(value: unknown) {
+  const title = String(value ?? "").trim();
+  return accountTitles.has(title) ? title : "雑費";
+}
+
+const accountTitles = new Set([
+  "租税公課",
+  "荷造運賃",
+  "水道光熱費",
+  "旅費交通費",
+  "通信費",
+  "広告宣伝費",
+  "接待交際費",
+  "損害保険料",
+  "修繕費",
+  "消耗品費",
+  "減価償却費",
+  "福利厚生費",
+  "給料賃金",
+  "外注工賃",
+  "利子割引料",
+  "地代家賃",
+  "貸倒金",
+  "支払手数料",
+  "車両費",
+  "リース料",
+  "新聞図書費",
+  "研修採用費",
+  "会議費",
+  "諸会費",
+  "衛生管理費",
+  "雑費"
+]);

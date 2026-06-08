@@ -76,7 +76,7 @@ export default async function ReceiptPreviewPage({ searchParams }: ReceiptPrevie
       <main className="online-receipt-preview-shell">
         <section className="online-receipt-empty">
           <h1>領収書を表示できません</h1>
-          <p>注文番号、取餐番号、または決済状態を確認してください。</p>
+          <p>注文番号、受取番号、または決済状態を確認してください。</p>
           <p className="online-receipt-empty-example">
             例: /public/orders/receipt/preview?orderId=実際の注文ID&amp;pickupCode=N-1234
           </p>

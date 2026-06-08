@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Ban, Boxes, CheckCircle, ClipboardList, FileText, Lightbulb, Link2, MessageSquareWarning, PackageCheck, Plus, RefreshCw, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -39,6 +39,29 @@ type ProductEditTarget = { type: "product"; value: ProductDraft; originalName?: 
 type CategoryItem = { name: string; sortOrder?: number };
 type SubcategoryItem = { category: string; name: string; sortOrder?: number };
 type EditingCategory = { type: "category"; currentName: string; name: string } | { type: "subcategory"; currentCategory: string; currentName: string; category: string; name: string };
+type ProductCandidate = {
+  id: string;
+  rawName: string;
+  suggestedName: string;
+  category: string;
+  subcategory: string;
+  unit: string;
+  referencePrice: number;
+  supplierName: string;
+  vendorName: string;
+  purchaseDate: string;
+  createdLabel: string;
+};
+type ProductOption = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+};
+type ProductCandidatesPayload = {
+  candidates: ProductCandidate[];
+  products: ProductOption[];
+};
 type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice" | "unitPrice";
 type SortDirection = "asc" | "desc";
 const productUsageTypeOptions = [
@@ -352,6 +375,11 @@ export default function ProductsPage() {
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editTarget, setEditTarget] = useState<ProductEditTarget | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
+  const [isProductCandidatePanelOpen, setIsProductCandidatePanelOpen] = useState(false);
+  const [productCandidates, setProductCandidates] = useState<ProductCandidate[]>([]);
+  const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+  const [candidateProductIds, setCandidateProductIds] = useState<Record<string, string>>({});
+  const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
   const canManageProducts = productManagerRoles.has(currentRole);
 
   useCloseOnOutside(productSummaryPickerRef, () => setIsProductSummaryPickerOpen(false), isProductSummaryPickerOpen);
@@ -407,6 +435,11 @@ export default function ProductsPage() {
   useEffect(() => {
     void loadProductData();
   }, []);
+
+  useEffect(() => {
+    if (!canManageProducts) return;
+    void loadProductCandidates();
+  }, [canManageProducts]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -540,6 +573,54 @@ export default function ProductsPage() {
     await loadProductData();
     setEditTarget(null);
     showNotice(returnToOrdersAfterProduct ? "商品を保存しました。発注依頼に戻ると作成中の内容を続けられます。" : "商品を保存しました。");
+  }
+
+  async function loadProductCandidates() {
+    const response = await fetch("/api/product-candidates", { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json() as ProductCandidatesPayload;
+    setProductCandidates(body.candidates);
+    setProductOptions(body.products);
+    setCandidateEdits(Object.fromEntries(body.candidates.map((candidate) => [candidate.id, {
+      suggestedName: candidate.suggestedName,
+      category: candidate.category,
+      subcategory: candidate.subcategory,
+      unit: candidate.unit,
+      referencePrice: candidate.referencePrice
+    }])));
+    if (body.candidates.length > 0) setIsProductCandidatePanelOpen(true);
+  }
+
+  async function reviewCandidate(candidate: ProductCandidate, action: "create_product" | "link_product" | "ignore") {
+    const edit = candidateEdits[candidate.id] ?? {};
+    const productId = candidateProductIds[candidate.id] ?? "";
+    if (action === "link_product" && !productId) {
+      window.alert("紐付ける既存商品を選択してください。");
+      return;
+    }
+
+    const response = await fetch("/api/product-candidates", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: candidate.id,
+        action,
+        productId,
+        name: edit.suggestedName ?? candidate.suggestedName,
+        category: edit.category ?? candidate.category,
+        subcategory: edit.subcategory ?? candidate.subcategory,
+        unit: edit.unit ?? candidate.unit,
+        referencePrice: edit.referencePrice ?? candidate.referencePrice
+      })
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "候補を更新できませんでした。");
+      return;
+    }
+
+    await Promise.all([loadProductData(), loadProductCandidates()]);
+    showNotice(action === "create_product" ? "候補から商品を追加しました。" : action === "link_product" ? "候補を既存商品に紐付けました。" : "候補を無視しました。");
   }
 
   function openNewProductEditor() {
@@ -807,13 +888,91 @@ export default function ProductsPage() {
               />
             </label>
             {canManageProducts ? (
-              <button type="button" className="primary-button" onClick={openNewProductEditor}>
-                <Plus size={18} />
-                商品を追加
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setIsProductCandidatePanelOpen((current) => !current);
+                    void loadProductCandidates();
+                  }}
+                >
+                  <RefreshCw size={18} />
+                  レシート候補{productCandidates.length ? ` ${productCandidates.length}` : ""}
+                </button>
+                <button type="button" className="primary-button" onClick={openNewProductEditor}>
+                  <Plus size={18} />
+                  商品を追加
+                </button>
+              </>
             ) : null}
           </div>
         </header>
+
+        {canManageProducts && isProductCandidatePanelOpen ? (
+          <section className="panel product-master-page-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>レシート候補から補登</h3>
+                <p>購入管理でアップロードしたレシート明細から、商品マスタ未登録の候補だけを確認します。経費レシートはここには入りません。</p>
+              </div>
+              <span className="source-indicator">{productCandidates.length} 件</span>
+            </div>
+            <div className="product-candidate-list">
+              {productCandidates.map((candidate) => {
+                const edit = candidateEdits[candidate.id] ?? {};
+                return (
+                  <article className="product-candidate-row" key={candidate.id}>
+                    <div className="product-candidate-source">
+                      <span>{candidate.supplierName || candidate.vendorName || "発注先未読取"}</span>
+                      <strong>{candidate.rawName}</strong>
+                      <p>{candidate.purchaseDate || candidate.createdLabel}</p>
+                    </div>
+                    <div className="product-candidate-fields">
+                      <input
+                        aria-label="商品名"
+                        value={String(edit.suggestedName ?? candidate.suggestedName)}
+                        onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], suggestedName: event.target.value } }))}
+                      />
+                      <input
+                        aria-label="分類"
+                        value={String(edit.category ?? candidate.category)}
+                        onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], category: event.target.value } }))}
+                      />
+                      <input
+                        aria-label="単位"
+                        value={String(edit.unit ?? candidate.unit)}
+                        onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], unit: event.target.value } }))}
+                      />
+                      <input
+                        aria-label="参考価格"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={Number(edit.referencePrice ?? candidate.referencePrice)}
+                        onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], referencePrice: Number(event.target.value) } }))}
+                      />
+                    </div>
+                    <div className="product-candidate-link">
+                      <select value={candidateProductIds[candidate.id] ?? ""} onChange={(event) => setCandidateProductIds((current) => ({ ...current, [candidate.id]: event.target.value }))}>
+                        <option value="">既存商品を選択</option>
+                        {productOptions.map((product) => (
+                          <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="product-candidate-actions">
+                      <button className="secondary-button" type="button" onClick={() => void reviewCandidate(candidate, "link_product")}><Link2 size={15} />紐付け</button>
+                      <button className="primary-button" type="button" onClick={() => void reviewCandidate(candidate, "create_product")}><CheckCircle size={15} />新規追加</button>
+                      <button className="text-button" type="button" onClick={() => void reviewCandidate(candidate, "ignore")}><Ban size={15} />無視</button>
+                    </div>
+                  </article>
+                );
+              })}
+              {!productCandidates.length ? <p className="empty-state-text">購入レシート由来の未登録商品候補はありません。</p> : null}
+            </div>
+          </section>
+        ) : null}
 
         <section className="panel product-master-page-panel">
           <div className="panel-title product-master-title">

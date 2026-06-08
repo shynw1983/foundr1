@@ -842,8 +842,16 @@ create table if not exists analytics_expenses (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id) on delete cascade,
   category text not null default 'misc',
+  account_title text not null default '',
   name text not null default '',
   amount numeric(12, 2) not null default 0,
+  tax_rate text not null default '',
+  tax_mode text not null default '',
+  tax_amount numeric(12, 2) not null default 0,
+  vendor_name text not null default '',
+  transaction_date date,
+  transaction_time time,
+  expense_receipt_id uuid,
   start_month text not null default '2026-01',
   end_month text,
   note text not null default '',
@@ -854,8 +862,16 @@ create table if not exists analytics_expenses (
 );
 
 alter table analytics_expenses add column if not exists category text not null default 'misc';
+alter table analytics_expenses add column if not exists account_title text not null default '';
 alter table analytics_expenses add column if not exists name text not null default '';
 alter table analytics_expenses add column if not exists amount numeric(12, 2) not null default 0;
+alter table analytics_expenses add column if not exists tax_rate text not null default '';
+alter table analytics_expenses add column if not exists tax_mode text not null default '';
+alter table analytics_expenses add column if not exists tax_amount numeric(12, 2) not null default 0;
+alter table analytics_expenses add column if not exists vendor_name text not null default '';
+alter table analytics_expenses add column if not exists transaction_date date;
+alter table analytics_expenses add column if not exists transaction_time time;
+alter table analytics_expenses add column if not exists expense_receipt_id uuid;
 alter table analytics_expenses add column if not exists start_month text not null default '2026-01';
 alter table analytics_expenses add column if not exists end_month text;
 alter table analytics_expenses add column if not exists note text not null default '';
@@ -869,8 +885,13 @@ create table if not exists expense_receipts (
   receipt_photo_url text not null default '',
   receipt_ocr_result_id uuid,
   vendor_name text not null default '',
+  company_name text not null default '',
+  brand_name text not null default '',
+  location_name text not null default '',
   purchase_date date,
+  purchase_time time,
   category text not null default 'misc',
+  account_title text not null default '',
   subtotal numeric(12, 2),
   tax numeric(12, 2),
   total numeric(12, 2) not null default 0,
@@ -886,8 +907,13 @@ create table if not exists expense_receipts (
 alter table expense_receipts add column if not exists receipt_photo_url text not null default '';
 alter table expense_receipts add column if not exists receipt_ocr_result_id uuid;
 alter table expense_receipts add column if not exists vendor_name text not null default '';
+alter table expense_receipts add column if not exists company_name text not null default '';
+alter table expense_receipts add column if not exists brand_name text not null default '';
+alter table expense_receipts add column if not exists location_name text not null default '';
 alter table expense_receipts add column if not exists purchase_date date;
+alter table expense_receipts add column if not exists purchase_time time;
 alter table expense_receipts add column if not exists category text not null default 'misc';
+alter table expense_receipts add column if not exists account_title text not null default '';
 alter table expense_receipts add column if not exists subtotal numeric(12, 2);
 alter table expense_receipts add column if not exists tax numeric(12, 2);
 alter table expense_receipts add column if not exists total numeric(12, 2) not null default 0;
@@ -1338,7 +1364,11 @@ create table if not exists receipt_ocr_results (
   model text not null default '',
   raw_result jsonb not null default '{}'::jsonb,
   vendor_name text not null default '',
+  company_name text not null default '',
+  brand_name text not null default '',
+  location_name text not null default '',
   purchase_date date,
+  purchase_time time,
   subtotal numeric(12, 2),
   tax numeric(12, 2),
   total numeric(12, 2),
@@ -1359,7 +1389,11 @@ alter table receipt_ocr_results add column if not exists status text not null de
 alter table receipt_ocr_results add column if not exists model text not null default '';
 alter table receipt_ocr_results add column if not exists raw_result jsonb not null default '{}'::jsonb;
 alter table receipt_ocr_results add column if not exists vendor_name text not null default '';
+alter table receipt_ocr_results add column if not exists company_name text not null default '';
+alter table receipt_ocr_results add column if not exists brand_name text not null default '';
+alter table receipt_ocr_results add column if not exists location_name text not null default '';
 alter table receipt_ocr_results add column if not exists purchase_date date;
+alter table receipt_ocr_results add column if not exists purchase_time time;
 alter table receipt_ocr_results add column if not exists subtotal numeric(12, 2);
 alter table receipt_ocr_results add column if not exists tax numeric(12, 2);
 alter table receipt_ocr_results add column if not exists total numeric(12, 2);
@@ -1380,7 +1414,9 @@ create table if not exists receipt_ocr_items (
   unit text not null default '',
   unit_price numeric(12, 2),
   tax_rate text not null default '',
+  tax_mode text not null default '',
   category text not null default '',
+  account_title text not null default '',
   amount numeric(12, 2),
   matched_product_id uuid references products(id) on delete set null,
   match_status text not null default 'unmatched',
@@ -1389,6 +1425,14 @@ create table if not exists receipt_ocr_items (
 );
 
 alter table receipt_ocr_items add column if not exists normalized_name text not null default '';
+alter table receipt_ocr_items add column if not exists quantity numeric(12, 3);
+alter table receipt_ocr_items add column if not exists unit text not null default '';
+alter table receipt_ocr_items add column if not exists unit_price numeric(12, 2);
+alter table receipt_ocr_items add column if not exists tax_rate text not null default '';
+alter table receipt_ocr_items add column if not exists tax_mode text not null default '';
+alter table receipt_ocr_items add column if not exists category text not null default '';
+alter table receipt_ocr_items add column if not exists account_title text not null default '';
+alter table receipt_ocr_items add column if not exists amount numeric(12, 2);
 alter table receipt_ocr_items add column if not exists matched_product_id uuid references products(id) on delete set null;
 alter table receipt_ocr_items add column if not exists match_status text not null default 'unmatched';
 create index if not exists receipt_ocr_items_result_idx on receipt_ocr_items (receipt_ocr_result_id);

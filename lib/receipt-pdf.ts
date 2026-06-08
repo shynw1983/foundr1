@@ -90,7 +90,7 @@ export function createReceiptPdf(input: ReceiptPdfInput) {
     textLine(`内消費税等 ${taxRate}%対象 ${formatCurrency(taxIncluded)} / 税込`, 56, 622, 10),
     horizontalLine(56, 605, 540),
     textLine("ご注文内容", 56, detailTop, 13),
-    textLine(`取餐番号: ${input.pickupCode}`, 56, detailTop - 26, 11),
+    textLine(`受取番号: ${input.pickupCode}`, 56, detailTop - 26, 11),
     textLine(`受取日時: ${input.pickupDate} ${input.pickupTime}`, 56, detailTop - 44, 11),
     textLine(`支払方法: ${input.paymentProvider.toUpperCase()}`, 56, detailTop - 62, 11),
     textLine(`支払日時: ${input.paidAt || input.issuedAt}`, 56, detailTop - 80, 11),

@@ -40,14 +40,30 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const filename = sanitizeFilename(request.nextUrl.searchParams.get("filename") ?? "");
+  const isDownload = request.nextUrl.searchParams.get("download") === "1";
+  const headers: Record<string, string> = {
+    "Content-Type": result.blob.contentType,
+    "X-Content-Type-Options": "nosniff",
+    ETag: result.blob.etag,
+    "Cache-Control": "private, no-cache"
+  };
+  if (filename) {
+    headers["Content-Disposition"] = `${isDownload ? "attachment" : "inline"}; filename="${filename}"`;
+  }
+
   return new NextResponse(result.stream, {
-    headers: {
-      "Content-Type": result.blob.contentType,
-      "X-Content-Type-Options": "nosniff",
-      ETag: result.blob.etag,
-      "Cache-Control": "private, no-cache"
-    }
+    headers
   });
+}
+
+function sanitizeFilename(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
 }
 
 async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, pathname: string) {

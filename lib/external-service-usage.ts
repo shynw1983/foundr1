@@ -116,7 +116,7 @@ const metricDefinitions: ServiceMetricDefinition[] = [
     periodKind: "month",
     limitValue: 200000 * daysInPusherMonthAllowance,
     includedLabel: "Sandbox: 200k messages / day",
-    paidTrigger: "厨房・取餐・POS 客显のリアルタイム配信が日次上限に近づいた時。",
+    paidTrigger: "厨房・受取表示・POS客席表示のリアルタイム配信が日次上限に近づいた時。",
     sourceLabel: "Pusher trigger 台帳"
   },
   {

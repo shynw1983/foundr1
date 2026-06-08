@@ -3692,6 +3692,110 @@ body :where(
   justify-self: end;
 }
 
+.receipt-ledger-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+}
+
+.receipt-ledger-summary {
+  min-width: 0;
+}
+
+.receipt-confirm-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.receipt-confirm-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.receipt-confirm-form span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.receipt-confirm-form input,
+.receipt-confirm-form select {
+  width: 100%;
+  min-height: 42px;
+}
+
+.receipt-note-field {
+  grid-column: span 2;
+}
+
+.receipt-line-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+}
+
+.receipt-line-editor-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.receipt-line-editor-title span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.receipt-expense-line {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.receipt-line-note {
+  min-width: 0;
+}
+
+.receipt-confirm-form .primary-button {
+  align-self: end;
+  min-height: 42px;
+}
+
+.expense-edit-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.expense-edit-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.expense-edit-form span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.expense-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .product-candidate-list {
   display: grid;
   gap: 12px;
@@ -24303,12 +24407,17 @@ body :where(
   }
 
   .expense-form,
-  .expense-row {
+  .expense-row,
+  .receipt-confirm-form,
+  .expense-edit-form {
     grid-template-columns: 1fr;
   }
 
   .expense-form .primary-button,
-  .expense-row .icon-button {
+  .expense-row .icon-button,
+  .receipt-confirm-form .primary-button,
+  .expense-edit-actions .primary-button,
+  .expense-edit-actions .secondary-button {
     width: 100%;
   }
 
@@ -24318,6 +24427,23 @@ body :where(
 
   .receipt-ledger-row .text-button {
     justify-self: stretch;
+  }
+
+  .receipt-note-field {
+    grid-column: auto;
+  }
+
+  .receipt-line-editor-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .receipt-expense-line {
+    grid-template-columns: 1fr;
+  }
+
+  .expense-edit-actions {
+    flex-direction: column;
   }
 
   .product-candidate-row,

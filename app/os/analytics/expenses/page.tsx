@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Boxes, Camera, CheckCircle, Link2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Boxes, Camera, Pencil, Plus, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { AnalyticsShell } from "../components/AnalyticsShell";
 
@@ -9,8 +9,16 @@ type ExpenseCategory = "fixed" | "variable" | "misc";
 type ExpenseItem = {
   id: string;
   category: ExpenseCategory;
+  accountTitle: string;
   name: string;
   amount: number;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: number;
+  vendorName: string;
+  transactionDate: string;
+  transactionTime: string;
+  expenseReceiptId: string;
   startMonth: string;
   endMonth: string;
   note: string;
@@ -20,33 +28,29 @@ type ExpenseReceipt = {
   receiptPhotoUrl: string;
   ocrResultId: string;
   vendorName: string;
+  companyName: string;
+  brandName: string;
+  locationName: string;
   purchaseDate: string;
+  purchaseTime: string;
   category: ExpenseCategory;
+  accountTitle: string;
   subtotal: number;
   tax: number;
   total: number;
   note: string;
   status: string;
   createdLabel: string;
+  downloadFileName: string;
+  items: ExpenseReceiptOcrItem[];
 };
-type ProductCandidate = {
-  id: string;
+type ExpenseReceiptOcrItem = {
   rawName: string;
-  suggestedName: string;
+  taxRate: string;
+  taxMode: string;
   category: string;
-  subcategory: string;
-  unit: string;
-  referencePrice: number;
-  supplierName: string;
-  vendorName: string;
-  purchaseDate: string;
-  createdLabel: string;
-};
-type ProductOption = {
-  id: string;
-  name: string;
-  category: string;
-  unit: string;
+  accountTitle: string;
+  amount: number;
 };
 type ExpensesPayload = {
   month: string;
@@ -65,16 +69,75 @@ type ExpenseReceiptsPayload = {
   canEditExpenseReceipts: boolean;
   receipts: ExpenseReceipt[];
 };
-type ProductCandidatesPayload = {
-  candidates: ProductCandidate[];
-  products: ProductOption[];
+type ExpenseReceiptDraft = {
+  note: string;
+  vendorName: string;
+  companyName: string;
+  brandName: string;
+  locationName: string;
+  transactionDate: string;
+  transactionTime: string;
+  lines: ExpenseReceiptDraftLine[];
 };
-
+type ExpenseReceiptDraftLine = {
+  id: string;
+  accountTitle: string;
+  amount: string;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: string;
+  note: string;
+};
+type ExpenseEditDraft = {
+  category: ExpenseCategory;
+  accountTitle: string;
+  name: string;
+  amount: string;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: string;
+  vendorName: string;
+  transactionDate: string;
+  transactionTime: string;
+  startMonth: string;
+  endMonth: string;
+  note: string;
+};
 const categoryLabels: Record<ExpenseCategory, string> = {
   fixed: "固定費",
   variable: "変動費",
   misc: "雑費"
 };
+const accountTitleOptions = [
+  "租税公課",
+  "荷造運賃",
+  "水道光熱費",
+  "旅費交通費",
+  "通信費",
+  "広告宣伝費",
+  "接待交際費",
+  "損害保険料",
+  "修繕費",
+  "消耗品費",
+  "減価償却費",
+  "福利厚生費",
+  "給料賃金",
+  "外注工賃",
+  "利子割引料",
+  "地代家賃",
+  "貸倒金",
+  "支払手数料",
+  "車両費",
+  "リース料",
+  "新聞図書費",
+  "研修採用費",
+  "会議費",
+  "諸会費",
+  "衛生管理費",
+  "雑費"
+];
+const taxRateOptions = ["", "8%", "10%", "非課税"];
+const taxModeOptions = ["内税", "外税", "不明"];
 
 function getCurrentMonth() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -115,6 +178,149 @@ function storeAnalyticsSelection(nextMonth: string, nextStoreId: string) {
   if (nextStoreId) window.localStorage.setItem(analyticsStoreStorageKey, nextStoreId);
 }
 
+function getCurrentDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function buildReceiptDraft(receipt?: ExpenseReceipt): ExpenseReceiptDraft {
+  return {
+    note: receipt?.note || "",
+    vendorName: receipt?.vendorName || "",
+    companyName: receipt?.companyName || "",
+    brandName: receipt?.brandName || "",
+    locationName: receipt?.locationName || "",
+    transactionDate: receipt?.purchaseDate || getCurrentDate(),
+    transactionTime: receipt?.purchaseTime || "",
+    lines: buildReceiptDraftLines(receipt)
+  };
+}
+
+function buildReceiptDraftLines(receipt?: ExpenseReceipt): ExpenseReceiptDraftLine[] {
+  const grouped = new Map<string, {
+    accountTitle: string;
+    taxRate: string;
+    taxMode: string;
+    amount: number;
+    itemNames: string[];
+  }>();
+  for (const item of receipt?.items ?? []) {
+    const amount = Math.round(Number(item.amount ?? 0));
+    if (!amount) continue;
+    const accountTitle = item.accountTitle || getDefaultAccountTitle(item.category);
+    const taxRate = normalizeDraftTaxRate(item.taxRate);
+    const taxMode = normalizeDraftTaxMode(item.taxMode);
+    const key = `${accountTitle}:${taxRate}:${taxMode}`;
+    const current = grouped.get(key) ?? { accountTitle, taxRate, taxMode, amount: 0, itemNames: [] };
+    current.amount += amount;
+    if (item.rawName) current.itemNames.push(item.rawName);
+    grouped.set(key, current);
+  }
+
+  const lines = Array.from(grouped.values()).map((line, index) => {
+    const amount = Math.round(line.amount);
+    return {
+      id: `ocr-${index}`,
+      accountTitle: line.accountTitle,
+      amount: String(amount || ""),
+      taxRate: line.taxRate,
+      taxMode: line.taxMode,
+      taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, line.taxMode)),
+      note: line.itemNames.slice(0, 4).join("、")
+    };
+  });
+  if (lines.length) return lines;
+
+  const amount = Math.round(receipt?.total ?? 0);
+  const taxAmount = Math.round(receipt?.tax ?? 0);
+  return [{
+    id: "manual-0",
+    accountTitle: receipt?.accountTitle || "雑費",
+    amount: String(amount || ""),
+    taxRate: "",
+    taxMode: "不明",
+    taxAmount: String(taxAmount),
+    note: receipt?.note || ""
+  }];
+}
+
+function getDefaultAccountTitle(category: string) {
+  if (category === "清掃用品" || category === "消耗品" || category === "包材") return "消耗品費";
+  if (category === "設備") return "修繕費";
+  return "雑費";
+}
+
+function normalizeDraftTaxRate(value: string) {
+  const text = String(value ?? "").replace("%", "").trim();
+  if (text === "8" || text === "8.0") return "8%";
+  if (text === "10" || text === "10.0") return "10%";
+  if (text === "非課税" || text === "0") return "非課税";
+  return "";
+}
+
+function normalizeDraftTaxMode(value: string) {
+  return value === "内税" || value === "外税" ? value : "不明";
+}
+
+function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: string) {
+  const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
+  if (!rate || amount <= 0) return 0;
+  if (taxMode === "外税") return Math.round(amount * rate / 100);
+  return Math.round(amount * rate / (100 + rate));
+}
+
+function buildNewReceiptLine(index: number): ExpenseReceiptDraftLine {
+  return {
+    id: `manual-${Date.now()}-${index}`,
+    accountTitle: "雑費",
+    amount: "",
+    taxRate: "",
+    taxMode: "不明",
+    taxAmount: "0",
+    note: ""
+  };
+}
+
+function buildExpenseEditDraft(item: ExpenseItem): ExpenseEditDraft {
+  return {
+    category: item.category,
+    accountTitle: item.accountTitle || "",
+    name: item.name,
+    amount: String(Math.round(item.amount) || ""),
+    taxRate: item.taxRate || "",
+    taxMode: item.taxMode || "不明",
+    taxAmount: String(Math.round(item.taxAmount) || 0),
+    vendorName: item.vendorName || "",
+    transactionDate: item.transactionDate || "",
+    transactionTime: item.transactionTime || "",
+    startMonth: item.startMonth,
+    endMonth: item.endMonth,
+    note: item.note
+  };
+}
+
+function appendReceiptDownloadParams(receiptPhotoUrl: string, filename: string, download: boolean) {
+  try {
+    const url = new URL(receiptPhotoUrl, "https://foundr1.local");
+    if (filename) url.searchParams.set("filename", filename);
+    if (download) url.searchParams.set("download", "1");
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return receiptPhotoUrl;
+  }
+}
+
+function getReceiptDisplayName(receipt: Pick<ExpenseReceipt, "vendorName" | "companyName" | "brandName" | "locationName">) {
+  const primary = receipt.brandName
+    ? [receipt.brandName, receipt.locationName]
+    : [receipt.companyName, receipt.locationName];
+  return primary.map((value) => value.trim()).filter(Boolean).join(" ") || receipt.vendorName || "店舗名未読取";
+}
+
 export default function ExpensesPage() {
   const [month, setMonth] = useState(getStoredAnalyticsMonth);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -125,11 +331,10 @@ export default function ExpensesPage() {
   const [message, setMessage] = useState("");
   const [receiptMessage, setReceiptMessage] = useState("");
   const [expenseReceipts, setExpenseReceipts] = useState<ExpenseReceipt[]>([]);
+  const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ExpenseReceiptDraft>>({});
+  const [editingExpenseId, setEditingExpenseId] = useState("");
+  const [expenseEditDraft, setExpenseEditDraft] = useState<ExpenseEditDraft | null>(null);
   const [canEditExpenseReceipts, setCanEditExpenseReceipts] = useState(false);
-  const [productCandidates, setProductCandidates] = useState<ProductCandidate[]>([]);
-  const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
-  const [candidateProductIds, setCandidateProductIds] = useState<Record<string, string>>({});
-  const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
 
   async function loadExpenses(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -155,10 +360,6 @@ export default function ExpensesPage() {
     void loadExpenseReceipts(selectedStoreId);
   }, [selectedStoreId]);
 
-  useEffect(() => {
-    void loadProductCandidates();
-  }, []);
-
   async function createExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedStoreId) return;
@@ -170,7 +371,7 @@ export default function ExpensesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         storeId: selectedStoreId,
-        category: formData.get("category"),
+        accountTitle: formData.get("accountTitle"),
         name: formData.get("name"),
         amount: formData.get("amount"),
         startMonth: formData.get("startMonth"),
@@ -201,28 +402,54 @@ export default function ExpensesPage() {
     }
   }
 
+  function startEditExpense(item: ExpenseItem) {
+    setEditingExpenseId(item.id);
+    setExpenseEditDraft(buildExpenseEditDraft(item));
+  }
+
+  function updateExpenseEditDraft(patch: Partial<ExpenseEditDraft>) {
+    setExpenseEditDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      if ("amount" in patch || "taxRate" in patch || "taxMode" in patch) {
+        next.taxAmount = String(calculateDraftTaxAmount(Number(next.amount), next.taxRate, next.taxMode));
+      }
+      return next;
+    });
+  }
+
+  async function saveExpenseEdit(id: string) {
+    if (!expenseEditDraft) return;
+    const response = await fetch("/api/analytics/expenses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...expenseEditDraft })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (response.ok) {
+      setMessage("経費を更新しました。");
+      setEditingExpenseId("");
+      setExpenseEditDraft(null);
+      await loadExpenses(month, selectedStoreId);
+    } else {
+      setMessage(body.error ?? "経費を更新できませんでした。");
+    }
+  }
+
   async function loadExpenseReceipts(storeId = selectedStoreId) {
     if (!storeId) return;
     const response = await fetch(`/api/analytics/expense-receipts?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json() as ExpenseReceiptsPayload;
     setExpenseReceipts(body.receipts);
+    setReceiptDrafts((current) => {
+      const next = { ...current };
+      for (const receipt of body.receipts) {
+        if (!next[receipt.id]) next[receipt.id] = buildReceiptDraft(receipt);
+      }
+      return next;
+    });
     setCanEditExpenseReceipts(body.canEditExpenseReceipts);
-  }
-
-  async function loadProductCandidates() {
-    const response = await fetch("/api/product-candidates", { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json() as ProductCandidatesPayload;
-    setProductCandidates(body.candidates);
-    setProductOptions(body.products);
-    setCandidateEdits(Object.fromEntries(body.candidates.map((candidate) => [candidate.id, {
-      suggestedName: candidate.suggestedName,
-      category: candidate.category,
-      subcategory: candidate.subcategory,
-      unit: candidate.unit,
-      referencePrice: candidate.referencePrice
-    }])));
   }
 
   async function uploadExpenseReceipt(event: FormEvent<HTMLFormElement>) {
@@ -247,7 +474,7 @@ export default function ExpensesPage() {
       if (!response.ok) throw new Error(body.error ?? "経費レシートを保存できませんでした。");
       form.reset();
       setReceiptMessage(body.ocrError ? `レシート写真を保存しました。OCR: ${body.ocrError}` : "レシートを読み取りました。内容を確認してください。");
-      await Promise.all([loadExpenseReceipts(selectedStoreId), loadProductCandidates()]);
+      await loadExpenseReceipts(selectedStoreId);
     } catch (error) {
       setReceiptMessage(error instanceof Error ? error.message : "経費レシートを保存できませんでした。");
     } finally {
@@ -255,32 +482,107 @@ export default function ExpensesPage() {
     }
   }
 
-  async function reviewCandidate(candidate: ProductCandidate, action: "create_product" | "link_product" | "ignore") {
-    const edit = candidateEdits[candidate.id] ?? {};
-    const productId = candidateProductIds[candidate.id] ?? "";
-    if (action === "link_product" && !productId) {
-      window.alert("紐付ける既存商品を選択してください。");
-      return;
+  async function deleteExpenseReceipt(id: string) {
+    if (!window.confirm("この経費レシートを削除しますか？ テスト登録の場合のみ削除してください。")) return;
+    const response = await fetch(`/api/analytics/expense-receipts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (response.ok) {
+      setReceiptMessage("経費レシートを削除しました。");
+      await loadExpenseReceipts(selectedStoreId);
+    } else {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setReceiptMessage(body.error ?? "経費レシートを削除できませんでした。");
     }
-    const response = await fetch("/api/product-candidates", {
+  }
+
+  function updateReceiptDraft(id: string, patch: Partial<ExpenseReceiptDraft>) {
+    setReceiptDrafts((current) => ({
+      ...current,
+      [id]: {
+        ...(current[id] ?? buildReceiptDraft(expenseReceipts.find((receipt) => receipt.id === id))),
+        ...patch
+      }
+    }));
+  }
+
+  function updateReceiptDraftLine(receiptId: string, lineId: string, patch: Partial<ExpenseReceiptDraftLine>) {
+    setReceiptDrafts((current) => {
+      const draft = current[receiptId] ?? buildReceiptDraft(expenseReceipts.find((receipt) => receipt.id === receiptId));
+      return {
+        ...current,
+        [receiptId]: {
+          ...draft,
+          lines: draft.lines.map((line) => {
+            if (line.id !== lineId) return line;
+            const nextLine = { ...line, ...patch };
+            if ("amount" in patch || "taxRate" in patch || "taxMode" in patch) {
+              nextLine.taxAmount = String(calculateDraftTaxAmount(Number(nextLine.amount), nextLine.taxRate, nextLine.taxMode));
+            }
+            return nextLine;
+          })
+        }
+      };
+    });
+  }
+
+  function addReceiptDraftLine(receiptId: string) {
+    setReceiptDrafts((current) => {
+      const draft = current[receiptId] ?? buildReceiptDraft(expenseReceipts.find((receipt) => receipt.id === receiptId));
+      return {
+        ...current,
+        [receiptId]: {
+          ...draft,
+          lines: [...draft.lines, buildNewReceiptLine(draft.lines.length)]
+        }
+      };
+    });
+  }
+
+  function removeReceiptDraftLine(receiptId: string, lineId: string) {
+    setReceiptDrafts((current) => {
+      const draft = current[receiptId] ?? buildReceiptDraft(expenseReceipts.find((receipt) => receipt.id === receiptId));
+      return {
+        ...current,
+        [receiptId]: {
+          ...draft,
+          lines: draft.lines.length > 1 ? draft.lines.filter((line) => line.id !== lineId) : draft.lines
+        }
+      };
+    });
+  }
+
+  async function confirmExpenseReceipt(receipt: ExpenseReceipt) {
+    const draft = receiptDrafts[receipt.id] ?? buildReceiptDraft(receipt);
+    const vendorName = draft.brandName
+      ? [draft.brandName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ")
+      : [draft.companyName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ");
+    const response = await fetch("/api/analytics/expense-receipts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: candidate.id,
-        action,
-        productId,
-        name: edit.suggestedName ?? candidate.suggestedName,
-        category: edit.category ?? candidate.category,
-        subcategory: edit.subcategory ?? candidate.subcategory,
-        unit: edit.unit ?? candidate.unit,
-        referencePrice: edit.referencePrice ?? candidate.referencePrice
+        id: receipt.id,
+        lines: draft.lines.map((line) => ({
+          accountTitle: line.accountTitle,
+          amount: line.amount,
+          taxRate: line.taxRate,
+          taxMode: line.taxMode,
+          taxAmount: line.taxAmount,
+          note: line.note
+        })),
+        vendorName: vendorName || draft.vendorName,
+        companyName: draft.companyName,
+        brandName: draft.brandName,
+        locationName: draft.locationName,
+        transactionDate: draft.transactionDate,
+        transactionTime: draft.transactionTime,
+        note: draft.note
       })
     });
+    const body = await response.json().catch(() => ({})) as { error?: string };
     if (response.ok) {
-      await loadProductCandidates();
+      setReceiptMessage("経費に登録しました。");
+      await Promise.all([loadExpenseReceipts(selectedStoreId), loadExpenses(month, selectedStoreId)]);
     } else {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      window.alert(body.error ?? "候補を更新できませんでした。");
+      setReceiptMessage(body.error ?? "経費に登録できませんでした。");
     }
   }
 
@@ -289,6 +591,17 @@ export default function ExpensesPage() {
   const selectedStoreName = stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗";
   const expenses = data?.expenses ?? [];
   const activeExpenses = expenses.filter((item) => isActiveInMonth(item, month));
+  const accountTotals = activeExpenses.reduce((totals, item) => {
+    const title = item.accountTitle || item.name || "雑費";
+    totals.set(title, (totals.get(title) ?? 0) + item.amount);
+    return totals;
+  }, new Map<string, number>());
+  const visibleAccountTotals = Array.from(accountTotals.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
+    .slice(0, 4);
+  const accountMetricCards: Array<[string, number]> = visibleAccountTotals.length
+    ? visibleAccountTotals
+    : [["経費合計", data?.monthlyTotals.total ?? 0]];
 
   return (
     <AnalyticsShell eyebrow="Expense Settings" title="経費設定" sourceLabel={isLoading ? "読み込み中" : `${selectedStoreName} / ${month}`}>
@@ -297,7 +610,7 @@ export default function ExpensesPage() {
           <Boxes size={18} />
           <div>
             <h3>月次経費を管理</h3>
-            <p>固定費、変動費、雑費を店舗別に設定します。開始月から終了月まで、選択月の月次損益に反映します。</p>
+            <p>勘定科目別に経費を管理します。開始月から終了月まで、選択月の月次損益に反映します。</p>
           </div>
         </div>
         <div className="analytics-control-row">
@@ -333,25 +646,17 @@ export default function ExpensesPage() {
       </section>
 
       <section className="metric-grid analytics-metric-grid">
-        <article className="metric-card">
-          <span>固定費</span>
-          <strong>{formatMoney(data?.monthlyTotals.fixed ?? 0)}</strong>
-          <p>家賃、設備リース</p>
-        </article>
-        <article className="metric-card">
-          <span>変動費</span>
-          <strong>{formatMoney(data?.monthlyTotals.variable ?? 0)}</strong>
-          <p>水道光熱費、通信費</p>
-        </article>
-        <article className="metric-card">
-          <span>雑費</span>
-          <strong>{formatMoney(data?.monthlyTotals.misc ?? 0)}</strong>
-          <p>ごみ処理、その他の店舗費用</p>
-        </article>
+        {accountMetricCards.map(([title, total]) => (
+          <article className="metric-card" key={title}>
+            <span>{title}</span>
+            <strong>{formatMoney(total)}</strong>
+            <p>選択月の勘定科目別集計</p>
+          </article>
+        ))}
         <article className="metric-card">
           <span>当月経費</span>
           <strong>{formatMoney(data?.monthlyTotals.total ?? 0)}</strong>
-          <p>選択月に有効な経費 {activeExpenses.length}件</p>
+          <p>選択月に有効な経費 {activeExpenses.length}件 / {accountTotals.size}科目</p>
         </article>
       </section>
 
@@ -360,16 +665,16 @@ export default function ExpensesPage() {
           <Plus size={18} />
           <div>
             <h3>経費を追加</h3>
-            <p>終了月を空にすると、開始月以降ずっと毎月計上します。</p>
+            <p>勘定科目を選んで登録します。固定費/変動費などの分析分類は科目から自動判定します。</p>
           </div>
         </div>
         <form className="expense-form" key={`${selectedStoreId}-${month}`} onSubmit={createExpense}>
           <label>
-            <span>分類</span>
-            <select name="category" defaultValue="fixed" disabled={!canEdit}>
-              <option value="fixed">固定費</option>
-              <option value="variable">変動費</option>
-              <option value="misc">雑費</option>
+            <span>勘定科目</span>
+            <select name="accountTitle" defaultValue="雑費" disabled={!canEdit}>
+              {accountTitleOptions.map((option) => (
+                <option value={option} key={option}>{option}</option>
+              ))}
             </select>
           </label>
           <label>
@@ -404,7 +709,7 @@ export default function ExpensesPage() {
           <Camera size={18} />
           <div>
             <h3>経費レシート OCR</h3>
-            <p>日常経費のレシートを撮影し、AI 読み取り後に台帳へ仮登録します。最終反映前に内容を確認してください。</p>
+            <p>日常経費のレシートを撮影し、OCR結果を確認してから勘定科目別に経費台帳へ登録します。</p>
           </div>
         </div>
         <form className="expense-form" onSubmit={uploadExpenseReceipt}>
@@ -418,81 +723,120 @@ export default function ExpensesPage() {
         </form>
         {receiptMessage ? <p className="empty-state-text">{receiptMessage}</p> : null}
         <div className="expense-list receipt-ledger-list">
-          {expenseReceipts.map((receipt) => (
-            <article className="expense-row receipt-ledger-row" key={receipt.id}>
-              <div>
-                <span>{receipt.status === "ocr_failed" ? "OCR未完了" : "確認待ち"}</span>
-                <strong>{receipt.vendorName || "店舗名未読取"}</strong>
-                <p>{receipt.purchaseDate || "日付未読取"} / {receipt.createdLabel}{receipt.tax ? ` / 税 ${formatMoney(receipt.tax)}` : ""}</p>
-              </div>
-              <b>{formatMoney(receipt.total)}</b>
-              <a className="text-button" href={receipt.receiptPhotoUrl} target="_blank" rel="noreferrer">レシートを見る</a>
-            </article>
-          ))}
-          {!expenseReceipts.length ? <p className="empty-state-text">経費レシートはまだありません。</p> : null}
-        </div>
-      </section>
-
-      <section className="panel analytics-overview-panel">
-        <div className="panel-title">
-          <RefreshCw size={18} />
-          <div>
-            <h3>未登録商品候補</h3>
-            <p>OCR 明細で商品マスタに見つからなかった品目を確認します。承認後、商品マスタと小票名辞書に反映します。</p>
-          </div>
-        </div>
-        <div className="product-candidate-list">
-          {productCandidates.map((candidate) => {
-            const edit = candidateEdits[candidate.id] ?? {};
+          {expenseReceipts.map((receipt) => {
+            const draft = receiptDrafts[receipt.id] ?? buildReceiptDraft(receipt);
+            const canConfirm = canEditExpenseReceipts && receipt.status !== "confirmed" && receipt.status !== "ocr_failed";
             return (
-              <article className="product-candidate-row" key={candidate.id}>
-                <div className="product-candidate-source">
-                  <span>{candidate.supplierName || candidate.vendorName || "発注先未読取"}</span>
-                  <strong>{candidate.rawName}</strong>
-                  <p>{candidate.purchaseDate || candidate.createdLabel}</p>
+              <article className="expense-row receipt-ledger-row" key={receipt.id}>
+                <div className="receipt-ledger-summary">
+                  <span>{receipt.status === "confirmed" ? "登録済み" : receipt.status === "ocr_failed" ? "OCR未完了" : "確認待ち"}</span>
+                  <strong>{getReceiptDisplayName(receipt)}</strong>
+                  <p>{receipt.purchaseDate || "日付未読取"} {receipt.purchaseTime || ""} / {receipt.createdLabel}{receipt.tax ? ` / OCR税 ${formatMoney(receipt.tax)}` : ""}</p>
                 </div>
-                <div className="product-candidate-fields">
-                  <input
-                    aria-label="商品名"
-                    value={String(edit.suggestedName ?? candidate.suggestedName)}
-                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], suggestedName: event.target.value } }))}
-                  />
-                  <input
-                    aria-label="分類"
-                    value={String(edit.category ?? candidate.category)}
-                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], category: event.target.value } }))}
-                  />
-                  <input
-                    aria-label="単位"
-                    value={String(edit.unit ?? candidate.unit)}
-                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], unit: event.target.value } }))}
-                  />
-                  <input
-                    aria-label="参考価格"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={Number(edit.referencePrice ?? candidate.referencePrice)}
-                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], referencePrice: Number(event.target.value) } }))}
-                  />
-                </div>
-                <div className="product-candidate-link">
-                  <select value={candidateProductIds[candidate.id] ?? ""} onChange={(event) => setCandidateProductIds((current) => ({ ...current, [candidate.id]: event.target.value }))}>
-                    <option value="">既存商品を選択</option>
-                    {productOptions.map((product) => (
-                      <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="product-candidate-actions">
-                  <button className="secondary-button" type="button" onClick={() => void reviewCandidate(candidate, "link_product")}><Link2 size={15} />紐付け</button>
-                  <button className="primary-button" type="button" onClick={() => void reviewCandidate(candidate, "create_product")}><CheckCircle size={15} />新規追加</button>
-                  <button className="text-button" type="button" onClick={() => void reviewCandidate(candidate, "ignore")}><Ban size={15} />無視</button>
-                </div>
+                <b>{formatMoney(receipt.total)}</b>
+                <a className="text-button" href={appendReceiptDownloadParams(receipt.receiptPhotoUrl, receipt.downloadFileName, false)} target="_blank" rel="noreferrer">レシートを見る</a>
+                <a className="text-button" href={appendReceiptDownloadParams(receipt.receiptPhotoUrl, receipt.downloadFileName, true)} download={receipt.downloadFileName}>ダウンロード</a>
+                {canEditExpenseReceipts ? (
+                  <button className="text-button danger-button" type="button" onClick={() => void deleteExpenseReceipt(receipt.id)}>
+                    削除
+                  </button>
+                ) : null}
+                {canConfirm ? (
+                  <div className="receipt-confirm-form">
+                    <label>
+                      <span>会社名</span>
+                      <input value={draft.companyName} onChange={(event) => updateReceiptDraft(receipt.id, { companyName: event.target.value })} placeholder="例: 株式会社G-7スーパーマート" />
+                    </label>
+                    <label>
+                      <span>ブランド名</span>
+                      <input value={draft.brandName} onChange={(event) => updateReceiptDraft(receipt.id, { brandName: event.target.value })} placeholder="例: 業務スーパー" />
+                    </label>
+                    <label>
+                      <span>店舗名</span>
+                      <input value={draft.locationName} onChange={(event) => updateReceiptDraft(receipt.id, { locationName: event.target.value })} placeholder="例: 春吉店" />
+                    </label>
+                    <label>
+                      <span>日付</span>
+                      <input type="date" value={draft.transactionDate} onChange={(event) => updateReceiptDraft(receipt.id, { transactionDate: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>時刻</span>
+                      <input type="time" value={draft.transactionTime} onChange={(event) => updateReceiptDraft(receipt.id, { transactionTime: event.target.value })} />
+                    </label>
+                    <label className="receipt-note-field">
+                      <span>備考</span>
+                      <input value={draft.note} onChange={(event) => updateReceiptDraft(receipt.id, { note: event.target.value })} placeholder="例: 打合せ用、車両燃料、店舗用品" />
+                    </label>
+                    <div className="receipt-line-editor">
+                      <div className="receipt-line-editor-title">
+                        <span>AI 推奨の経費明細</span>
+                        <button className="secondary-button" type="button" onClick={() => addReceiptDraftLine(receipt.id)}>明細を追加</button>
+                      </div>
+                      {draft.lines.map((line, index) => (
+                        <div className="receipt-expense-line" key={line.id}>
+                          <label>
+                            <span>勘定科目</span>
+                            <select value={line.accountTitle} onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { accountTitle: event.target.value })}>
+                              {accountTitleOptions.map((option) => (
+                                <option value={option} key={option}>{option}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>金額（税込）</span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.amount}
+                              onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { amount: event.target.value })}
+                            />
+                          </label>
+                          <label>
+                            <span>税率</span>
+                            <select value={line.taxRate} onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { taxRate: event.target.value })}>
+                              {taxRateOptions.map((option) => (
+                                <option value={option} key={option}>{option || "不明"}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>税区分</span>
+                            <select value={line.taxMode} onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { taxMode: event.target.value })}>
+                              {taxModeOptions.map((option) => (
+                                <option value={option} key={option}>{option}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>消費税</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={line.taxAmount}
+                              onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { taxAmount: event.target.value })}
+                            />
+                          </label>
+                          <label className="receipt-line-note">
+                            <span>明細メモ</span>
+                            <input value={line.note} onChange={(event) => updateReceiptDraftLine(receipt.id, line.id, { note: event.target.value })} placeholder={`明細 ${index + 1}`} />
+                          </label>
+                          <button className="text-button danger-button" type="button" onClick={() => removeReceiptDraftLine(receipt.id, line.id)} disabled={draft.lines.length <= 1}>
+                            削除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="primary-button" type="button" onClick={() => void confirmExpenseReceipt(receipt)}>
+                      この内容で経費登録
+                    </button>
+                  </div>
+                ) : null}
               </article>
             );
           })}
-          {!productCandidates.length ? <p className="empty-state-text">未登録商品候補はありません。</p> : null}
+          {!expenseReceipts.length ? <p className="empty-state-text">経費レシートはまだありません。</p> : null}
         </div>
       </section>
 
@@ -510,15 +854,93 @@ export default function ExpensesPage() {
             return (
               <article className={`expense-row${isActive ? " is-active" : ""}`} key={item.id}>
                 <div>
-                  <span>{categoryLabels[item.category]}</span>
+                  <span>{item.accountTitle || categoryLabels[item.category]}</span>
                   <strong>{item.name}</strong>
-                  <p>{item.startMonth} - {item.endMonth || "継続"}{item.note ? ` / ${item.note}` : ""}</p>
+                  <p>
+                    {item.transactionDate || item.startMonth}{item.transactionTime ? ` ${item.transactionTime}` : ""} / {item.startMonth} - {item.endMonth || "継続"}
+                    {item.taxRate ? ` / ${item.taxRate}` : ""}{item.taxMode ? ` ${item.taxMode}` : ""}{item.taxAmount ? ` / 税 ${formatMoney(item.taxAmount)}` : ""}
+                    {item.note ? ` / ${item.note}` : ""}
+                  </p>
                 </div>
                 <b>{formatMoney(item.amount)}</b>
                 {canEdit ? (
-                  <button className="icon-button" type="button" aria-label="削除" onClick={() => void deleteExpense(item.id)}>
-                    <Trash2 size={16} />
-                  </button>
+                  <>
+                    <button className="icon-button" type="button" aria-label="編集" onClick={() => startEditExpense(item)}>
+                      <Pencil size={16} />
+                    </button>
+                    <button className="icon-button" type="button" aria-label="削除" onClick={() => void deleteExpense(item.id)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                ) : null}
+                {editingExpenseId === item.id && expenseEditDraft ? (
+                  <div className="expense-edit-form">
+                    <label>
+                      <span>勘定科目</span>
+                      <select value={expenseEditDraft.accountTitle} onChange={(event) => updateExpenseEditDraft({ accountTitle: event.target.value })}>
+                        <option value="">未設定</option>
+                        {accountTitleOptions.map((option) => (
+                          <option value={option} key={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>経費名</span>
+                      <input value={expenseEditDraft.name} onChange={(event) => updateExpenseEditDraft({ name: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>金額（税込）</span>
+                      <input type="number" min="1" step="1" value={expenseEditDraft.amount} onChange={(event) => updateExpenseEditDraft({ amount: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>税率</span>
+                      <select value={expenseEditDraft.taxRate} onChange={(event) => updateExpenseEditDraft({ taxRate: event.target.value })}>
+                        {taxRateOptions.map((option) => (
+                          <option value={option} key={option}>{option || "不明"}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>税区分</span>
+                      <select value={expenseEditDraft.taxMode} onChange={(event) => updateExpenseEditDraft({ taxMode: event.target.value })}>
+                        {taxModeOptions.map((option) => (
+                          <option value={option} key={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>消費税</span>
+                      <input type="number" min="0" step="1" value={expenseEditDraft.taxAmount} onChange={(event) => updateExpenseEditDraft({ taxAmount: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>支払先</span>
+                      <input value={expenseEditDraft.vendorName} onChange={(event) => updateExpenseEditDraft({ vendorName: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>日付</span>
+                      <input type="date" value={expenseEditDraft.transactionDate} onChange={(event) => updateExpenseEditDraft({ transactionDate: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>時刻</span>
+                      <input type="time" value={expenseEditDraft.transactionTime} onChange={(event) => updateExpenseEditDraft({ transactionTime: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>開始月</span>
+                      <input type="month" value={expenseEditDraft.startMonth} onChange={(event) => updateExpenseEditDraft({ startMonth: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>終了月</span>
+                      <input type="month" value={expenseEditDraft.endMonth} onChange={(event) => updateExpenseEditDraft({ endMonth: event.target.value })} />
+                    </label>
+                    <label className="receipt-note-field">
+                      <span>メモ</span>
+                      <input value={expenseEditDraft.note} onChange={(event) => updateExpenseEditDraft({ note: event.target.value })} />
+                    </label>
+                    <div className="expense-edit-actions">
+                      <button className="primary-button" type="button" onClick={() => void saveExpenseEdit(item.id)}>保存</button>
+                      <button className="secondary-button" type="button" onClick={() => { setEditingExpenseId(""); setExpenseEditDraft(null); }}>キャンセル</button>
+                    </div>
+                  </div>
                 ) : null}
               </article>
             );

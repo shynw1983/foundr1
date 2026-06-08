@@ -70,7 +70,7 @@ export function OnlineOrderReceipt({ receipt }: OnlineOrderReceiptProps) {
           <h2>注文情報</h2>
           <dl>
             <div>
-              <dt>取餐番号</dt>
+              <dt>受取番号</dt>
               <dd>{receipt.pickupCode}</dd>
             </div>
             <div>

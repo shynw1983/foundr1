@@ -80,7 +80,8 @@ export async function POST(request: Request) {
         sourceId: fulfillmentId,
         storeId: String(order.storeId),
         supplierName,
-        receiptPhotoUrl: receiptUrl
+        receiptPhotoUrl: receiptUrl,
+        createProductCandidates: true
       }, analyzed.result, analyzed.model, session);
     } catch (error) {
       ocrError = error instanceof Error ? error.message : "レシート OCR に失敗しました。";

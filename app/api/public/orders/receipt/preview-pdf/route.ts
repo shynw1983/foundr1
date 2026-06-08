@@ -193,7 +193,7 @@ function getReceiptHtml(receipt: OnlineReceiptViewModel) {
         <div>
           <h2>注文情報</h2>
           <dl>
-            <div><dt>取餐番号</dt><dd>${escapeHtml(receiptWithAssets.pickupCode)}</dd></div>
+            <div><dt>受取番号</dt><dd>${escapeHtml(receiptWithAssets.pickupCode)}</dd></div>
             <div><dt>受取日時</dt><dd>${escapeHtml(`${receiptWithAssets.pickupDate} ${receiptWithAssets.pickupTime}`)}</dd></div>
             <div><dt>支払方法</dt><dd>${escapeHtml(receiptWithAssets.paymentProvider || "決済済み")}</dd></div>
             <div><dt>支払日時</dt><dd>${escapeHtml(receiptWithAssets.paidAt)}</dd></div>
