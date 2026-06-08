@@ -41,7 +41,14 @@ type StraightenedImage = {
 
 type ScanMode = "auto" | "standard" | "long_receipt";
 type ContrastMode = "standard" | "strong";
-type OutputMode = "scan" | "debug_overlay";
+type OutputMode = "scan" | "debug_overlay" | "paper_mask";
+
+type PaperMask = {
+  data: Uint8Array;
+  width: number;
+  height: number;
+  coverageRatio: number;
+};
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
     const boundaryMode = formData.get("boundaryMode") === "ai" ? "ai" : "auto";
     const scanMode = normalizeScanMode(formData.get("scanMode"));
     const contrastMode = formData.get("contrastMode") === "standard" ? "standard" : "strong";
-    const outputMode: OutputMode = formData.get("outputMode") === "debug_overlay" ? "debug_overlay" : "scan";
+    const outputMode = normalizeOutputMode(formData.get("outputMode"));
 
     const input = Buffer.from(await file.arrayBuffer());
     const normalized = sharp(input, { failOn: "none" }).rotate().resize({
@@ -91,6 +98,23 @@ export async function POST(request: Request) {
           "X-Receipt-Scanner-AI": aiStatus,
           "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard",
           "X-Receipt-Scanner-Debug": "overlay",
+          "X-Receipt-Scanner-Size": `${width}x${height}`
+        }
+      });
+    }
+
+    if (outputMode === "paper_mask") {
+      const mask = buildPaperMask(raw, width, height, aiShape, localDetection);
+      const overlay = await renderPaperMaskOverlay(raw, width, height, mask, aiShape, localDetection);
+      return new Response(overlay, {
+        headers: {
+          "Content-Type": "image/png",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+          "X-Receipt-Scanner-AI": aiStatus,
+          "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard",
+          "X-Receipt-Scanner-Debug": "paper_mask",
+          "X-Receipt-Scanner-Mask-Coverage": mask.coverageRatio.toFixed(4),
           "X-Receipt-Scanner-Size": `${width}x${height}`
         }
       });
@@ -132,6 +156,10 @@ export async function POST(request: Request) {
 
 function normalizeScanMode(value: FormDataEntryValue | null): ScanMode {
   return value === "standard" || value === "long_receipt" ? value : "auto";
+}
+
+function normalizeOutputMode(value: FormDataEntryValue | null): OutputMode {
+  return value === "debug_overlay" || value === "paper_mask" ? value : "scan";
 }
 
 function shouldUseLongReceiptMode(scanMode: ScanMode, aiShape: AiReceiptShape | undefined, width: number, height: number) {
@@ -1062,6 +1090,227 @@ async function renderDebugOverlay(
     .composite([{ input: overlay, blend: "over" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
+}
+
+function buildPaperMask(
+  raw: Buffer,
+  width: number,
+  height: number,
+  aiShape: AiReceiptShape | undefined,
+  localDetection: ReceiptDetection
+): PaperMask {
+  const quad = aiShape?.quad ?? localDetection.quad ?? rectToQuad(localDetection.crop);
+  const crop = padRegion(cropFromQuad(quad, width, height), width, height, Math.round(Math.min(width, height) * 0.018));
+  const seed = samplePaperSeed(raw, width, height, quad);
+  const data = new Uint8Array(width * height);
+  let coveredPixels = 0;
+
+  for (let y = crop.top; y < crop.top + crop.height; y += 1) {
+    for (let x = crop.left; x < crop.left + crop.width; x += 1) {
+      if (!pointNearQuad({ x, y }, quad, Math.max(18, Math.min(width, height) * 0.025))) continue;
+      const score = paperPixelScore(raw, width, height, x, y, seed);
+      if (score < 0.62) continue;
+      data[y * width + x] = 1;
+      coveredPixels += 1;
+    }
+  }
+
+  return {
+    data: smoothPaperMask(data, width, height, crop),
+    width,
+    height,
+    coverageRatio: coveredPixels / Math.max(1, crop.width * crop.height)
+  };
+}
+
+async function renderPaperMaskOverlay(
+  raw: Buffer,
+  width: number,
+  height: number,
+  mask: PaperMask,
+  aiShape: AiReceiptShape | undefined,
+  localDetection: ReceiptDetection
+) {
+  const overlay = Buffer.alloc(width * height * 4, 0);
+  for (let index = 0; index < width * height; index += 1) {
+    if (!mask.data[index]) continue;
+    const offset = index * 4;
+    overlay[offset] = 16;
+    overlay[offset + 1] = 185;
+    overlay[offset + 2] = 129;
+    overlay[offset + 3] = 120;
+  }
+  const base = await sharp(raw, {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .modulate({ brightness: 0.82, saturation: 0.92 })
+    .png()
+    .toBuffer();
+  const geometry = Buffer.from(buildPaperMaskOverlaySvg(width, height, aiShape, localDetection));
+  return sharp(base)
+    .composite([
+      {
+        input: overlay,
+        raw: {
+          width,
+          height,
+          channels: 4
+        },
+        blend: "over"
+      },
+      { input: geometry, blend: "over" }
+    ])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function buildPaperMaskOverlaySvg(
+  width: number,
+  height: number,
+  aiShape: AiReceiptShape | undefined,
+  localDetection: ReceiptDetection
+) {
+  const strokeWidth = Math.max(3, Math.round(Math.min(width, height) * 0.005));
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<rect x="0" y="0" width="${width}" height="${height}" fill="none"/>`
+  ];
+  if (aiShape?.quad) {
+    parts.push(polygon(aiShape.quad, "#ef4444", strokeWidth, "GEOMETRY"));
+  } else if (localDetection.quad) {
+    parts.push(polygon(localDetection.quad, "#f97316", strokeWidth, "LOCAL GEOMETRY"));
+  }
+  parts.push(textLabel("PAPER MASK", strokeWidth * 3, strokeWidth * 8, "#10b981", Math.max(24, strokeWidth * 5)));
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+type PaperSeed = {
+  red: number;
+  green: number;
+  blue: number;
+  luminance: number;
+  saturation: number;
+};
+
+function samplePaperSeed(raw: Buffer, width: number, height: number, quad: [Point, Point, Point, Point]): PaperSeed {
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  const samples: Array<{ red: number; green: number; blue: number; luminance: number; saturation: number }> = [];
+  for (let yStep = 0; yStep < 9; yStep += 1) {
+    const verticalRatio = 0.18 + yStep * 0.08;
+    const left = interpolatePoint(topLeft, bottomLeft, verticalRatio);
+    const right = interpolatePoint(topRight, bottomRight, verticalRatio);
+    for (let xStep = 0; xStep < 7; xStep += 1) {
+      const horizontalRatio = 0.24 + xStep * 0.08;
+      const point = interpolatePoint(left, right, horizontalRatio);
+      samples.push(readPixelStats(raw, width, height, point.x, point.y));
+    }
+  }
+  const paperLikeSamples = samples
+    .filter((sample) => sample.luminance > 120 && sample.saturation < 0.55)
+    .sort((a, b) => b.luminance - a.luminance)
+    .slice(0, Math.max(8, Math.ceil(samples.length * 0.55)));
+  const source = paperLikeSamples.length ? paperLikeSamples : samples;
+  return {
+    red: mean(source.map((sample) => sample.red)),
+    green: mean(source.map((sample) => sample.green)),
+    blue: mean(source.map((sample) => sample.blue)),
+    luminance: mean(source.map((sample) => sample.luminance)),
+    saturation: mean(source.map((sample) => sample.saturation))
+  };
+}
+
+function paperPixelScore(raw: Buffer, width: number, height: number, x: number, y: number, seed: PaperSeed) {
+  const pixel = readPixelStats(raw, width, height, x, y);
+  const luminanceFloor = Math.max(104, seed.luminance - 72);
+  const luminanceScore = clampUnit((pixel.luminance - luminanceFloor) / Math.max(30, seed.luminance - luminanceFloor));
+  const saturationLimit = Math.min(0.62, Math.max(0.42, seed.saturation + 0.28));
+  const saturationScore = clampUnit((saturationLimit - pixel.saturation) / Math.max(0.08, saturationLimit));
+  const colorDistance = Math.hypot(pixel.red - seed.red, pixel.green - seed.green, pixel.blue - seed.blue);
+  const colorScore = clampUnit(1 - colorDistance / 118);
+  return luminanceScore * 0.42 + saturationScore * 0.22 + colorScore * 0.36;
+}
+
+function readPixelStats(raw: Buffer, width: number, height: number, x: number, y: number) {
+  const roundedX = Math.max(0, Math.min(width - 1, Math.round(x)));
+  const roundedY = Math.max(0, Math.min(height - 1, Math.round(y)));
+  const offset = (roundedY * width + roundedX) * 3;
+  const red = raw[offset] ?? 0;
+  const green = raw[offset + 1] ?? 0;
+  const blue = raw[offset + 2] ?? 0;
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  return {
+    red,
+    green,
+    blue,
+    luminance: 0.299 * red + 0.587 * green + 0.114 * blue,
+    saturation: max ? (max - min) / max : 0
+  };
+}
+
+function smoothPaperMask(mask: Uint8Array, width: number, height: number, crop: sharp.Region) {
+  const output = new Uint8Array(mask);
+  const left = Math.max(1, crop.left);
+  const top = Math.max(1, crop.top);
+  const right = Math.min(width - 2, crop.left + crop.width - 1);
+  const bottom = Math.min(height - 2, crop.top + crop.height - 1);
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
+      let count = 0;
+      for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+        for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+          count += mask[(y + yOffset) * width + x + xOffset] ?? 0;
+        }
+      }
+      output[y * width + x] = count >= 5 ? 1 : 0;
+    }
+  }
+  return output;
+}
+
+function pointNearQuad(point: Point, quad: [Point, Point, Point, Point], margin: number) {
+  const crop = cropFromQuad(quad, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+  if (point.x < crop.left - margin || point.x > crop.left + crop.width + margin) return false;
+  if (point.y < crop.top - margin || point.y > crop.top + crop.height + margin) return false;
+  return true;
+}
+
+function padRegion(region: sharp.Region, imageWidth: number, imageHeight: number, padding: number): sharp.Region {
+  const left = Math.max(0, region.left - padding);
+  const top = Math.max(0, region.top - padding);
+  const right = Math.min(imageWidth - 1, region.left + region.width - 1 + padding);
+  const bottom = Math.min(imageHeight - 1, region.top + region.height - 1 + padding);
+  return {
+    left,
+    top,
+    width: Math.max(1, right - left + 1),
+    height: Math.max(1, bottom - top + 1)
+  };
+}
+
+function rectToQuad(region: sharp.Region): [Point, Point, Point, Point] {
+  const right = region.left + region.width - 1;
+  const bottom = region.top + region.height - 1;
+  return [
+    { x: region.left, y: region.top },
+    { x: right, y: region.top },
+    { x: right, y: bottom },
+    { x: region.left, y: bottom }
+  ];
+}
+
+function mean(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+}
+
+function clampUnit(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
 }
 
 async function renderAiReviewOverlay(raw: Buffer, width: number, height: number, aiShape: AiReceiptShape) {

@@ -9,8 +9,10 @@ export default function ReceiptScannerTestPage() {
   const [originalUrl, setOriginalUrl] = useState("");
   const [scannedUrl, setScannedUrl] = useState("");
   const [debugUrl, setDebugUrl] = useState("");
+  const [maskUrl, setMaskUrl] = useState("");
   const [message, setMessage] = useState("");
   const [debugMessage, setDebugMessage] = useState("");
+  const [maskMessage, setMaskMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiBoundary, setUseAiBoundary] = useState(true);
   const [scanMode, setScanMode] = useState("auto");
@@ -18,12 +20,14 @@ export default function ReceiptScannerTestPage() {
   const originalUrlRef = useRef("");
   const scannedUrlRef = useRef("");
   const debugUrlRef = useRef("");
+  const maskUrlRef = useRef("");
 
   useEffect(() => {
     return () => {
       if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
       if (scannedUrlRef.current) URL.revokeObjectURL(scannedUrlRef.current);
       if (debugUrlRef.current) URL.revokeObjectURL(debugUrlRef.current);
+      if (maskUrlRef.current) URL.revokeObjectURL(maskUrlRef.current);
     };
   }, []);
 
@@ -39,9 +43,11 @@ export default function ReceiptScannerTestPage() {
     setIsProcessing(true);
     setMessage("");
     setDebugMessage("");
+    setMaskMessage("");
     replaceObjectUrl(originalUrlRef, setOriginalUrl, URL.createObjectURL(file));
     replaceObjectUrl(scannedUrlRef, setScannedUrl, "");
     replaceObjectUrl(debugUrlRef, setDebugUrl, "");
+    replaceObjectUrl(maskUrlRef, setMaskUrl, "");
 
     try {
       setMessage("検出輪郭を作成しています。");
@@ -67,6 +73,30 @@ export default function ReceiptScannerTestPage() {
       const debugSize = debugResponse.headers.get("X-Receipt-Scanner-Size");
       const debugAiStatus = debugResponse.headers.get("X-Receipt-Scanner-AI");
       setDebugMessage(`検出輪郭を表示しました。${debugSize ? `画像 ${debugSize} / ` : ""}${formatAiStatus(debugAiStatus)}`);
+      setMessage("紙面マスクを作成しています。");
+
+      const maskResponse = await requestScannerImage(file, {
+        boundaryMode: useAiBoundary ? "ai" : "auto",
+        scanMode,
+        contrastMode: useStrongContrast ? "strong" : "standard",
+        outputMode: "paper_mask"
+      });
+      if (!maskResponse.ok) {
+        const body = await maskResponse.json().catch(() => null);
+        throw new Error(body?.error ?? "紙面マスクの作成に失敗しました。");
+      }
+      const maskContentType = maskResponse.headers.get("content-type") ?? "";
+      if (!maskContentType.includes("image/")) {
+        throw new Error(`紙面マスクが画像として返りませんでした。content-type: ${maskContentType || "unknown"}`);
+      }
+      const maskBlob = await maskResponse.blob();
+      if (maskBlob.size <= 0) {
+        throw new Error("紙面マスクの画像データが空でした。");
+      }
+      replaceObjectUrl(maskUrlRef, setMaskUrl, URL.createObjectURL(maskBlob));
+      const maskSize = maskResponse.headers.get("X-Receipt-Scanner-Size");
+      const maskCoverage = maskResponse.headers.get("X-Receipt-Scanner-Mask-Coverage");
+      setMaskMessage(`紙面マスクを表示しました。${maskSize ? `画像 ${maskSize}` : ""}${maskCoverage ? ` / coverage ${maskCoverage}` : ""}`);
       setMessage("スキャン補正画像を作成しています。");
 
       const response = await requestScannerImage(file, {
@@ -165,6 +195,18 @@ export default function ReceiptScannerTestPage() {
           }}
         />
         <ReceiptPreview
+          title="紙面マスク"
+          imageUrl={maskUrl}
+          emptyText="検出した紙面領域が表示されます。"
+          downloadUrl={maskUrl}
+          downloadName="receipt-scan-mask.png"
+          statusText={maskMessage}
+          onImageError={() => {
+            setMaskMessage("紙面マスクの画像を読み込めませんでした。もう一度実行してください。");
+            replaceObjectUrl(maskUrlRef, setMaskUrl, "");
+          }}
+        />
+        <ReceiptPreview
           title="補正後"
           imageUrl={scannedUrl}
           emptyText="スキャン補正後の画像が表示されます。"
@@ -230,7 +272,7 @@ function requestScannerImage(
     boundaryMode: "ai" | "auto";
     scanMode: string;
     contrastMode: "strong" | "standard";
-    outputMode: "scan" | "debug_overlay";
+    outputMode: "scan" | "debug_overlay" | "paper_mask";
   }
 ) {
   const uploadData = new FormData();
