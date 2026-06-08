@@ -42,7 +42,10 @@ async function loadDictionary(localeDir, language) {
 async function loadBrandDictionaries(localeDir) {
   const languages = ["en", "zh", "ko", "vi", "ne"];
   const dictionaries = await Promise.all(languages.map((language) => loadDictionary(localeDir, language)));
-  return Object.fromEntries(languages.map((language, index) => [language, dictionaries[index]]));
+  const result = Object.fromEntries(languages.map((language, index) => [language, dictionaries[index]]));
+  result["zh-Hant"] = await loadDictionary(localeDir, "zh-Hant");
+  if (!Object.keys(result["zh-Hant"]).length) result["zh-Hant"] = result.zh ?? {};
+  return result;
 }
 
 function translateText(value, dictionary) {
@@ -182,6 +185,7 @@ async function upsertItem({
   name,
   category,
   description,
+  descriptionDisplayNames = {},
   imageUrl,
   basePrice,
   variableSchema,
@@ -208,6 +212,7 @@ async function upsertItem({
         display_names = ${JSON.stringify(displayNames)}::jsonb,
         category = ${category},
         description = ${description},
+        description_display_names = ${JSON.stringify(descriptionDisplayNames)}::jsonb,
         image_url = ${imageUrl},
         base_price = ${basePrice},
         variable_schema = ${schema}::jsonb,
@@ -229,6 +234,7 @@ async function upsertItem({
       display_names,
       category,
       description,
+      description_display_names,
       image_url,
       base_price,
       variable_schema,
@@ -244,6 +250,7 @@ async function upsertItem({
       ${JSON.stringify(displayNames)}::jsonb,
       ${category},
       ${description},
+      ${JSON.stringify(descriptionDisplayNames)}::jsonb,
       ${imageUrl},
       ${basePrice},
       ${schema}::jsonb,
@@ -465,6 +472,7 @@ async function importNanacha() {
 
   for (const drink of menu.drinks) {
     const category = categoriesById.get(drink.category);
+    const description = drink.description ?? category?.note ?? "";
     await upsertItem({
       brandId: brand.id,
       sourceId,
@@ -472,7 +480,8 @@ async function importNanacha() {
       itemKind: "fixed_product",
       name: drink.name,
       category: category?.label ?? drink.category,
-      description: drink.description ?? category?.note ?? "",
+      description,
+      descriptionDisplayNames: displayNamesFor(description, dictionaries),
       imageUrl: drink.imageUrl ?? "",
       basePrice: drink.price ?? null,
       displayNames: displayNamesFor(drink.name, dictionaries),
@@ -549,6 +558,7 @@ async function importMaamaa() {
     name: menu.baseSoup.name,
     category: "マーラータン",
     description: menu.baseSoup.note ?? "",
+    descriptionDisplayNames: displayNamesFor(menu.baseSoup.note ?? "", dictionaries),
     imageUrl: "",
     basePrice: menu.baseSoup.price ?? null,
     displayNames: displayNamesFor(menu.baseSoup.name, dictionaries),

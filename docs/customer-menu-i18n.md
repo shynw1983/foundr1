@@ -31,6 +31,7 @@ Japanese is the source/default language and does not need to be duplicated into 
 Menu records that can appear to customers must carry translated display names:
 
 - `menu_catalog_items.display_names`
+- `menu_catalog_items.description_display_names`
 - `menu_option_groups.display_names`
 - `menu_options.display_names`
 - Coupon, reward, discount, and exchange-ticket customer labels should use the same pattern when they have stable IDs.
@@ -48,6 +49,8 @@ type PublicMenuItem = {
   id: string;
   name: string;
   displayNames: DisplayNames;
+  description: string;
+  descriptionDisplayNames: DisplayNames;
 };
 
 type PublicMenuOptionGroup = {

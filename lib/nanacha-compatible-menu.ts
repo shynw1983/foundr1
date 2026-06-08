@@ -17,6 +17,7 @@ export type NanachaDrink = {
   category: string;
   price: number;
   description: string;
+  descriptionDisplayNames?: Record<string, string>;
   imageUrl: string;
   temperatures: string[];
   isRecommended: boolean;
@@ -65,6 +66,7 @@ type MenuItemRow = {
   displayNames?: Record<string, string>;
   category: string;
   description: string;
+  descriptionDisplayNames?: Record<string, string>;
   imageUrl: string;
   basePrice: number | null;
   variableSchema: Record<string, unknown>;
@@ -164,6 +166,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
         coalesce(menu_catalog_items.description, '') as description,
+        coalesce(menu_catalog_items.description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
         menu_catalog_items.variable_schema as "variableSchema",
@@ -282,6 +285,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         category: publicCategoryId,
         price: item.basePrice ?? 0,
         description: item.description,
+        descriptionDisplayNames: item.descriptionDisplayNames,
         imageUrl: publicUrl(item.imageUrl, requestUrl),
         temperatures: asStringArray(schema.temperatures).length ? asStringArray(schema.temperatures) : ["ICE"],
         isRecommended: asBoolean(schema.isRecommended),

@@ -110,6 +110,7 @@ export async function GET(request: Request) {
       coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
       coalesce(menu_catalog_items.category, '') as category,
       coalesce(menu_catalog_items.description, '') as description,
+      coalesce(menu_catalog_items.description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
       coalesce(menu_catalog_items.image_url, '') as "imageUrl",
       menu_catalog_items.base_price::float as "basePrice",
       menu_catalog_items.variable_schema as "variableSchema",

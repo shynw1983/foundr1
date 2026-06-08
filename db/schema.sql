@@ -1301,6 +1301,7 @@ create table if not exists menu_catalog_items (
   display_names jsonb not null default '{}'::jsonb,
   category text,
   description text,
+  description_display_names jsonb not null default '{}'::jsonb,
   image_url text,
   base_price numeric(12, 2),
   variable_schema jsonb not null default '{}'::jsonb,
@@ -1346,6 +1347,7 @@ create table if not exists menu_options (
 );
 
 alter table menu_catalog_items add column if not exists display_names jsonb not null default '{}'::jsonb;
+alter table menu_catalog_items add column if not exists description_display_names jsonb not null default '{}'::jsonb;
 alter table menu_option_groups add column if not exists display_names jsonb not null default '{}'::jsonb;
 alter table menu_options add column if not exists display_names jsonb not null default '{}'::jsonb;
 
@@ -2284,6 +2286,7 @@ alter table menu_catalog_items add column if not exists external_id text;
 alter table menu_catalog_items add column if not exists item_kind text not null default 'fixed_product';
 alter table menu_catalog_items add column if not exists category text;
 alter table menu_catalog_items add column if not exists description text;
+alter table menu_catalog_items add column if not exists description_display_names jsonb not null default '{}'::jsonb;
 alter table menu_catalog_items add column if not exists image_url text;
 alter table menu_catalog_items add column if not exists base_price numeric(12, 2);
 alter table menu_catalog_items add column if not exists variable_schema jsonb not null default '{}'::jsonb;

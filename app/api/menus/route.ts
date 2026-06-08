@@ -107,6 +107,7 @@ async function readMenuAdminData() {
         coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
         coalesce(menu_catalog_items.description, '') as description,
+        coalesce(menu_catalog_items.description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
         menu_catalog_items.base_price::float as "basePrice",
         menu_catalog_items.variable_schema as "variableSchema",
@@ -799,6 +800,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
   if (!brandId || !name) throw new Error("ブランドとメニュー名を入力してください。");
   const variableSchema = JSON.stringify(parseJsonObject(body.variableSchema));
   const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
+  const descriptionDisplayNames = JSON.stringify(normalizeDisplayNames(body.descriptionDisplayNames));
   const previousRows = id
     ? await sql`
         select name, base_price::float as "basePrice", is_active as "isActive"
@@ -822,6 +824,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           display_names = ${displayNames}::jsonb,
           category = ${String(body.category ?? "").trim()},
           description = ${String(body.description ?? "").trim()},
+          description_display_names = ${descriptionDisplayNames}::jsonb,
           image_url = ${String(body.imageUrl ?? "").trim()},
           base_price = ${parseOptionalNumber(body.basePrice)},
           variable_schema = ${variableSchema}::jsonb,
@@ -842,6 +845,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           display_names,
           category,
           description,
+          description_display_names,
           image_url,
           base_price,
           variable_schema,
@@ -859,6 +863,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           ${displayNames}::jsonb,
           ${String(body.category ?? "").trim()},
           ${String(body.description ?? "").trim()},
+          ${descriptionDisplayNames}::jsonb,
           ${String(body.imageUrl ?? "").trim()},
           ${parseOptionalNumber(body.basePrice)},
           ${variableSchema}::jsonb,

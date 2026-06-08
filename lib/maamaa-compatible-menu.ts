@@ -25,6 +25,7 @@ export type MaamaaCompatibleMenu = {
     displayNames?: Record<string, string>;
     price: number;
     note: string;
+    noteDisplayNames?: Record<string, string>;
     isAvailable: boolean;
     websiteEnabled: boolean;
   };
@@ -50,6 +51,7 @@ type MenuItemRow = {
   name: string;
   displayNames?: Record<string, string>;
   description: string;
+  descriptionDisplayNames?: Record<string, string>;
   basePrice: number | null;
   variableSchema: Record<string, unknown>;
 };
@@ -115,6 +117,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         name,
         coalesce(display_names, '{}'::jsonb) as "displayNames",
         coalesce(description, '') as description,
+        coalesce(description_display_names, '{}'::jsonb) as "descriptionDisplayNames",
         base_price::float as "basePrice",
         variable_schema as "variableSchema"
       from menu_catalog_items
@@ -284,6 +287,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         displayNames: base.displayNames,
         price: baseSetting?.priceOverride ?? base.basePrice ?? 0,
         note: base.description,
+        noteDisplayNames: base.descriptionDisplayNames,
         isAvailable: baseSetting?.isAvailable ?? true,
         websiteEnabled: baseSetting?.websiteEnabled ?? true
       },

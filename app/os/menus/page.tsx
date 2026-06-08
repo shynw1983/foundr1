@@ -71,6 +71,7 @@ type MenuItem = {
   displayNames?: Record<string, string>;
   category: string;
   description: string;
+  descriptionDisplayNames?: Record<string, string>;
   imageUrl: string;
   basePrice: number | null;
   variableSchema: Record<string, unknown>;
@@ -174,6 +175,7 @@ const emptyItem: MenuItem = {
   displayNames: {},
   category: "",
   description: "",
+  descriptionDisplayNames: {},
   imageUrl: "",
   basePrice: null,
   variableSchema: {},
@@ -348,6 +350,16 @@ function updateDisplayName<T extends { displayNames?: Record<string, string> }>(
     ...draft,
     displayNames: {
       ...(draft.displayNames ?? {}),
+      [language]: value
+    }
+  };
+}
+
+function updateDescriptionDisplayName<T extends { descriptionDisplayNames?: Record<string, string> }>(draft: T, language: string, value: string): T {
+  return {
+    ...draft,
+    descriptionDisplayNames: {
+      ...(draft.descriptionDisplayNames ?? {}),
       [language]: value
     }
   };
@@ -1465,6 +1477,25 @@ export default function MenuAdminPage() {
 	                <span>説明</span>
 	                <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
               </label>
+              <div className="menu-translation-panel">
+                <div>
+                  <strong>客表示・会員・ブランドサイト用説明</strong>
+                  <span>未入力の言語は English、最後に日本語説明へフォールバックします。</span>
+                </div>
+                <div className="menu-translation-grid">
+                  {customerMenuLanguageOptions.map((language) => (
+                    <label key={language.value}>
+                      <span>{language.label}</span>
+                      <textarea
+                        value={itemDraft.descriptionDisplayNames?.[language.value] ?? ""}
+                        onChange={(event) => setItemDraft(updateDescriptionDisplayName(itemDraft, language.value, event.target.value))}
+                        placeholder={itemDraft.description || "説明"}
+                        rows={2}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div className="photo-upload-box menu-photo-upload">
                 <div className="product-photo-preview">
                   {itemDraft.imageUrl ? <img src={itemDraft.imageUrl} alt="" /> : <span>No image</span>}
