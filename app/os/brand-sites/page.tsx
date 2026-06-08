@@ -10,6 +10,7 @@ import {
   Languages,
   Lightbulb,
   LogOut,
+  ImageUp,
   MenuSquare,
   PackageCheck,
   Plus,
@@ -164,10 +165,6 @@ function emptySection(brandId = ""): BrandSiteSection {
   };
 }
 
-function textValue(value: unknown) {
-  return String(value ?? "").trim();
-}
-
 function uniqueValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
@@ -178,6 +175,28 @@ function asEditableJson(value: Record<string, unknown>) {
   } catch {
     return "{}";
   }
+}
+
+function getSectionUsageHint(section: BrandSiteSection) {
+  const key = `${section.pageKey}:${section.sectionKey}`.toLowerCase();
+  const type = section.sectionType.toLowerCase();
+  if (key.includes("hero") || type.includes("hero")) return "サイトの最初に見える主役エリアです。大きな見出し、メイン画像、短い訴求タグ、主要ボタンに使われます。";
+  if (key.includes("step") || key.includes("flow") || key.includes("how")) return "予約や注文の流れを説明するエリアです。タグは各ステップ名として使われることがあります。";
+  if (key.includes("feature") || key.includes("point") || key.includes("about")) return "ブランド紹介や特徴説明のエリアです。タグは素材、こだわり、店舗特徴などの短い見出しとして使われます。";
+  if (key.includes("faq")) return "FAQやヘルプのエリアです。タグは質問カテゴリや入口として使われることがあります。";
+  if (key.includes("footer")) return "ページ下部のエリアです。タグはSNS、ページリンク、店舗情報などとして使われることがあります。";
+  if (section.pageKey === "menu") return "メニュー・予約ページのエリアです。タグは予約パネル、メニュー分類、操作案内として使われることがあります。";
+  return "通常のコンテンツエリアです。タグは前台サイト側の実装に合わせて、短いラベル、リンク、グループ名として表示されます。";
+}
+
+function getTagUsageLabel(section: BrandSiteSection, index: number) {
+  const key = `${section.pageKey}:${section.sectionKey}`.toLowerCase();
+  if (key.includes("step") || key.includes("flow") || key.includes("how")) return `ステップ ${index + 1}`;
+  if (key.includes("faq")) return `FAQ分類 ${index + 1}`;
+  if (key.includes("footer")) return `フッター項目 ${index + 1}`;
+  if (key.includes("hero")) return `ファーストビュー訴求 ${index + 1}`;
+  if (section.pageKey === "menu") return `メニュー・予約タグ ${index + 1}`;
+  return `タグ ${index + 1}`;
 }
 
 function normalizeSection(section: BrandSiteSection, activeBrandId: string): BrandSiteSection {
@@ -211,6 +230,7 @@ export default function BrandSitesPage() {
   const [translationOverwriteExisting, setTranslationOverwriteExisting] = useState(false);
   const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
   const [translationPreview, setTranslationPreview] = useState<BrandSiteTranslationPreview | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const activeBrand = useMemo(() => brands.find((brand) => brand.id === activeBrandId) ?? null, [activeBrandId, brands]);
   const canPublish = currentRole === "owner";
@@ -305,6 +325,57 @@ export default function BrandSitesPage() {
     setActiveSectionId("");
     setDraft(blank);
     setFieldsText("{}");
+  }
+
+  function updateTag(index: number, value: string) {
+    setDraft((current) => ({
+      ...current,
+      tags: current.tags.map((tag, tagIndex) => (tagIndex === index ? value : tag))
+    }));
+  }
+
+  function addTag() {
+    setDraft((current) => ({
+      ...current,
+      tags: [...current.tags, ""]
+    }));
+  }
+
+  function removeTag(index: number) {
+    setDraft((current) => {
+      const nextTags = current.tags.filter((_, tagIndex) => tagIndex !== index);
+      const nextTagDisplayNames: Record<string, Record<string, string>> = {};
+      nextTags.forEach((_, nextIndex) => {
+        const sourceIndex = nextIndex >= index ? nextIndex + 1 : nextIndex;
+        const sourceRecord = current.tagDisplayNames?.[String(sourceIndex)];
+        if (sourceRecord) nextTagDisplayNames[String(nextIndex)] = sourceRecord;
+      });
+      return { ...current, tags: nextTags, tagDisplayNames: nextTagDisplayNames };
+    });
+  }
+
+  async function uploadSectionImage(file: File) {
+    if (!file) return;
+    setImageUploading(true);
+    setStatus("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("brandName", activeBrand?.name ?? "brand-site");
+      formData.append("sectionKey", draft.sectionKey || draft.title || "section");
+      const response = await fetch("/api/brand-sites/photo", {
+        method: "POST",
+        body: formData
+      });
+      const body = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!response.ok || !body.url) throw new Error(body.error || "画像をアップロードできませんでした。");
+      updateDraft({ imageUrl: body.url });
+      setStatus("画像をアップロードしました。保存すると公開内容に反映されます。");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "画像をアップロードできませんでした。");
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   async function saveSection() {
@@ -580,6 +651,14 @@ export default function BrandSitesPage() {
               </div>
             </div>
 
+            <section className="brand-site-section-guide">
+              <div>
+                <span>表示位置</span>
+                <strong>{pageLabels[draft.pageKey] ?? draft.pageKey} / {draft.sectionKey || "未設定"}</strong>
+              </div>
+              <p>{getSectionUsageHint(draft)}</p>
+            </section>
+
             <div className="brand-site-form-grid">
               <label>
                 <span>ページキー</span>
@@ -616,10 +695,30 @@ export default function BrandSitesPage() {
             </label>
 
             <div className="brand-site-form-grid">
-              <label>
-                <span>画像 URL</span>
-                <input value={draft.imageUrl} onChange={(event) => updateDraft({ imageUrl: event.target.value })} placeholder="/images/..." />
-              </label>
+              <div className="brand-site-image-editor">
+                <span>画像</span>
+                <div className="brand-site-image-upload-row">
+                  <label className="secondary-button compact-button">
+                    <ImageUp size={16} /> {imageUploading ? "アップロード中" : "画像をアップロード"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      disabled={imageUploading}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadSectionImage(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {draft.imageUrl ? <small>{draft.imageUrl}</small> : <small>未設定</small>}
+                </div>
+                {draft.imageUrl ? (
+                  <div className="brand-site-image-preview">
+                    <img src={draft.imageUrl} alt={draft.imageAlt || ""} />
+                  </div>
+                ) : null}
+              </div>
               <label>
                 <span>画像代替テキスト</span>
                 <input value={draft.imageAlt} onChange={(event) => updateDraft({ imageAlt: event.target.value })} />
@@ -634,13 +733,29 @@ export default function BrandSitesPage() {
               </label>
             </div>
 
-            <label className="brand-site-wide-label">
-              <span>タグ（一行に一つ）</span>
-              <textarea
-                value={draft.tags.join("\n")}
-                onChange={(event) => updateDraft({ tags: event.target.value.split("\n").map(textValue).filter(Boolean) })}
-              />
-            </label>
+            <section className="brand-site-tag-editor">
+              <div className="brand-site-tag-editor-header">
+                <div>
+                  <span>タグ</span>
+                  <p>タグは前台サイト側で、訴求、手順、分類、フッター項目などとして表示されます。追加はサイト上で必要な場合だけ行ってください。</p>
+                </div>
+                <button className="secondary-button compact-button" type="button" onClick={addTag}>
+                  <Plus size={15} /> タグ追加
+                </button>
+              </div>
+              <div className="brand-site-tag-rows">
+                {draft.tags.map((tag, index) => (
+                  <div className="brand-site-tag-row" key={`tag-${index}`}>
+                    <small>{getTagUsageLabel(draft, index)}</small>
+                    <input value={tag} onChange={(event) => updateTag(index, event.target.value)} placeholder="タグ文言" />
+                    <button className="secondary-button compact-button" type="button" onClick={() => removeTag(index)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+                {!draft.tags.length ? <p className="empty-state">このセクションにはタグがありません。</p> : null}
+              </div>
+            </section>
 
             <label className="brand-site-wide-label">
               <span>拡張フィールド JSON</span>
