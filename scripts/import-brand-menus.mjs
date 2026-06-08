@@ -40,12 +40,9 @@ async function loadDictionary(localeDir, language) {
 }
 
 async function loadBrandDictionaries(localeDir) {
-  const [en, zh, ko] = await Promise.all([
-    loadDictionary(localeDir, "en"),
-    loadDictionary(localeDir, "zh"),
-    loadDictionary(localeDir, "ko")
-  ]);
-  return { en, zh, ko };
+  const languages = ["en", "zh", "ko", "vi", "ne"];
+  const dictionaries = await Promise.all(languages.map((language) => loadDictionary(localeDir, language)));
+  return Object.fromEntries(languages.map((language, index) => [language, dictionaries[index]]));
 }
 
 function translateText(value, dictionary) {

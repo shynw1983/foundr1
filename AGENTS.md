@@ -21,17 +21,21 @@ Foundr1 OS is connected to two separate brand website projects on this machine. 
 - nanacha milk tea site: `/Users/wushengyin/Desktop/nanacha New HP`.
   - Main pickup reservation UI: `components/reservation-form.js`.
   - Checkout proxy: `app/api/create-checkout/route.js` and `server/create-checkout.js`.
-  - Menu data imported into Foundr1 OS from `published/menu.json` via `scripts/import-brand-menus.mjs`.
-  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/nanacha/checkout` and Square payment.
+- Menu data imported into Foundr1 OS from `published/menu.json` via `scripts/import-brand-menus.mjs`.
+- Uses Foundr1 OS public checkout endpoint `/api/public/orders/nanacha/checkout` and Square payment.
+- The brand site may own non-menu UI translations, but menu/catalog translations are owned by Foundr1 OS. See `docs/customer-menu-i18n.md`.
 - maamaa / まぁ麻 malatang site: `/Users/wushengyin/Desktop/maamaa`.
   - Main pickup reservation UI: `src/components/malatang-order-builder.tsx`.
   - Checkout proxy: `src/app/api/orders/route.js`.
-  - Menu data imported into Foundr1 OS from `src/data/malatang-menu.ts` via `scripts/import-brand-menus.mjs`.
-  - Uses Foundr1 OS public checkout endpoint `/api/public/orders/maamaa/checkout` and KOMOJU payment.
+- Menu data imported into Foundr1 OS from `src/data/malatang-menu.ts` via `scripts/import-brand-menus.mjs`.
+- Uses Foundr1 OS public checkout endpoint `/api/public/orders/maamaa/checkout` and KOMOJU payment.
+- The brand site may own non-menu UI translations, but menu/catalog translations are owned by Foundr1 OS. See `docs/customer-menu-i18n.md`.
 
 Foundr1 OS already owns shared menu/catalog data, store operations status, public checkout APIs, order records, kitchen/production data, POS linkage, and member/loyalty records. The brand sites are the customer-facing frontends and should pass structured order and member fields to Foundr1 OS rather than duplicating backend business logic.
 
 When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either nanacha or maamaa, check and update the other brand site in the same pass unless the business owner explicitly scopes the change to one brand only. Keep customer-facing flow behavior aligned across both websites.
+
+When changing multilingual behavior for the brand websites, keep this ownership boundary clear: Foundr1 OS owns menu/catalog translations and IDs, while the brand websites may own their page UI, form, navigation, validation, help, and static-copy translations. Do not fork product, topping, option, size, sweetness, heat/numb, or category translations into brand-site UI dictionaries as a long-term source.
 
 Customer-facing brand websites must consume the standard Foundr1 OS public menu API (`/api/public/menus?brand=...`) and render menu names/options from the menu master `displayNames` fields. Do not build new brand websites on `*-compatible` menu endpoints or hard-coded local translated menu lists. See `docs/customer-menu-i18n.md` before adding or changing any public ordering, POS customer display, member card, coupon, or menu translation flow.
 

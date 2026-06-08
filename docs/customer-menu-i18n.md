@@ -102,6 +102,16 @@ When building or changing a brand website:
 - Do not create local translated copies of product names, toppings, sizes, heat/numb levels, sweetness, ice, or drink options.
 - If a required customer-facing label cannot be translated from menu data, add it to `/os/menus` or the relevant OS master data first.
 
+## Brand Project Ownership Boundary
+
+Brand websites may own their non-menu UI translations directly in their own projects. This includes navigation, page headings, reservation form labels, checkout help text, validation messages, member-card UI, legal/static copy, and other text that is not a menu/catalog entity.
+
+Menu/catalog translations must stay owned by Foundr1 OS. Drink names, malatang ingredients, sizes, sweetness, ice, heat/numb levels, toppings, categories, coupons/rewards with stable IDs, and any customer-facing product option labels must be edited in OS menu/master data and delivered through `displayNames`.
+
+The current brand-site locale dictionaries may contain menu-label seed data only to bootstrap/import Foundr1 OS menu translations. After menu data exists in OS, those seed dictionaries are not the long-term source of truth and must not be treated as separate website-owned catalogs.
+
+If a brand project changes UI translation independently, it must keep rendering menu text from the OS public menu API. If a menu translation looks wrong on the website, fix the OS menu translation/import source rather than patching the website UI dictionary.
+
 ## POS Customer Display
 
 The POS customer display must follow the same language contract:
