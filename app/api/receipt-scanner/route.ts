@@ -751,7 +751,7 @@ function refineShapeToVisiblePaper(raw: Buffer, width: number, height: number, s
   const nextBottomRight = interpolatePoint(topRight, bottomRight, nextBottomRatio);
   const nextBottomLeft = interpolatePoint(topLeft, bottomLeft, nextBottomRatio);
   const verticalRefinedQuad = [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft] as [Point, Point, Point, Point];
-  const edgeRefinedQuad = refineQuadHorizontalEdges(raw, width, height, verticalRefinedQuad);
+  const edgeRefinedQuad = refineQuadEdgesByTrend(raw, width, height, verticalRefinedQuad);
 
   return {
     ...shape,
@@ -759,7 +759,7 @@ function refineShapeToVisiblePaper(raw: Buffer, width: number, height: number, s
   };
 }
 
-function refineQuadHorizontalEdges(
+function refineQuadEdgesByTrend(
   raw: Buffer,
   width: number,
   height: number,
@@ -770,56 +770,133 @@ function refineQuadHorizontalEdges(
   const horizontalDistance = (distance(topLeft, topRight) + distance(bottomLeft, bottomRight)) / 2;
   if (verticalDistance < height * 0.12 || horizontalDistance < width * 0.12) return quad;
 
-  const sampleColumns = Math.max(80, Math.min(220, Math.round(horizontalDistance / 5)));
-  const columnScores = Array.from({ length: sampleColumns }, (_, index) => {
-    const ratio = sampleColumns === 1 ? 0 : index / (sampleColumns - 1);
-    return {
-      ratio,
-      score: visiblePaperColumnScore(raw, width, height, topLeft, topRight, bottomRight, bottomLeft, ratio)
-    };
-  });
-  const leftRatio = findVisiblePaperStartRatio(columnScores);
-  const rightRatio = findVisiblePaperEndRatio(columnScores);
-  if (leftRatio === null && rightRatio === null) return quad;
+  const sampleRows = Math.max(28, Math.min(80, Math.round(verticalDistance / 24)));
+  const leftPoints: Point[] = [];
+  const rightPoints: Point[] = [];
+  for (let index = 0; index < sampleRows; index += 1) {
+    const verticalRatio = 0.06 + (index / Math.max(1, sampleRows - 1)) * 0.88;
+    const rowEdges = detectPaperEdgesOnRow(raw, width, height, quad, verticalRatio);
+    const left = interpolatePoint(topLeft, bottomLeft, verticalRatio);
+    const right = interpolatePoint(topRight, bottomRight, verticalRatio);
+    if (rowEdges.leftRatio !== null) leftPoints.push(interpolatePoint(left, right, rowEdges.leftRatio));
+    if (rowEdges.rightRatio !== null) rightPoints.push(interpolatePoint(left, right, rowEdges.rightRatio));
+  }
 
-  const safetyRatio = Math.min(0.018, Math.max(0.006, 8 / Math.max(1, horizontalDistance)));
-  const nextLeftRatio = leftRatio === null ? 0 : Math.max(0, leftRatio - safetyRatio);
-  const nextRightRatio = rightRatio === null ? 1 : Math.min(1, rightRatio + safetyRatio);
-  if (nextRightRatio - nextLeftRatio < 0.35) return quad;
-  if (nextLeftRatio < 0.045 && nextRightRatio > 0.955) return quad;
+  const leftLine = fitEdgeLine(leftPoints);
+  const rightLine = fitEdgeLine(rightPoints);
+  if (!leftLine && !rightLine) return quad;
 
-  return [
-    interpolatePoint(topLeft, topRight, nextLeftRatio),
-    interpolatePoint(topLeft, topRight, nextRightRatio),
-    interpolatePoint(bottomLeft, bottomRight, nextRightRatio),
-    interpolatePoint(bottomLeft, bottomRight, nextLeftRatio)
-  ];
+  const nextTopLeft = leftLine ? pointOnLineAtY(leftLine, topLeft.y) : topLeft;
+  const nextBottomLeft = leftLine ? pointOnLineAtY(leftLine, bottomLeft.y) : bottomLeft;
+  const nextTopRight = rightLine ? pointOnLineAtY(rightLine, topRight.y) : topRight;
+  const nextBottomRight = rightLine ? pointOnLineAtY(rightLine, bottomRight.y) : bottomRight;
+  const refined: [Point, Point, Point, Point] = [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft];
+  const originalMetrics = quadMetrics(quad);
+  const refinedMetrics = quadMetrics(refined);
+  if (refinedMetrics.width < originalMetrics.width * 0.62) return quad;
+  if (refinedMetrics.width > originalMetrics.width * 1.04) return quad;
+  if (refinedMetrics.area < originalMetrics.area * 0.58) return quad;
+  if (refinedMetrics.area > originalMetrics.area * 1.06) return quad;
+  return refined;
 }
 
-function visiblePaperColumnScore(
+function detectPaperEdgesOnRow(
   raw: Buffer,
   width: number,
   height: number,
-  topLeft: Point,
-  topRight: Point,
-  bottomRight: Point,
-  bottomLeft: Point,
-  horizontalRatio: number
+  quad: [Point, Point, Point, Point],
+  verticalRatio: number
 ) {
-  const top = interpolatePoint(topLeft, topRight, horizontalRatio);
-  const bottom = interpolatePoint(bottomLeft, bottomRight, horizontalRatio);
-  const columnHeight = distance(top, bottom);
-  if (columnHeight < height * 0.08) return 0;
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  const left = interpolatePoint(topLeft, bottomLeft, verticalRatio);
+  const right = interpolatePoint(topRight, bottomRight, verticalRatio);
+  const rowWidth = distance(left, right);
+  if (rowWidth < width * 0.08) return { leftRatio: null, rightRatio: null };
 
-  const samples = Math.max(32, Math.min(120, Math.round(columnHeight / 18)));
-  let paperPixels = 0;
-  for (let index = 0; index < samples; index += 1) {
-    const verticalRatio = 0.08 + (index / Math.max(1, samples - 1)) * 0.84;
-    const x = top.x + (bottom.x - top.x) * verticalRatio;
-    const y = top.y + (bottom.y - top.y) * verticalRatio;
-    if (isVisiblePaperPixel(raw, width, height, x, y)) paperPixels += 1;
+  const samples = Math.max(90, Math.min(210, Math.round(rowWidth / 4)));
+  const scores = Array.from({ length: samples }, (_, index) => {
+    const ratio = index / Math.max(1, samples - 1);
+    const point = interpolatePoint(left, right, ratio);
+    return paperNeighborhoodScore(raw, width, height, point.x, point.y, rowWidth);
+  });
+  const center = Math.floor(samples / 2);
+  const leftIndex = findEdgeIndexFromCenter(scores, center, -1);
+  const rightIndex = findEdgeIndexFromCenter(scores, center, 1);
+  return {
+    leftRatio: leftIndex === null ? null : Math.max(0, (leftIndex + 2) / Math.max(1, samples - 1)),
+    rightRatio: rightIndex === null ? null : Math.min(1, (rightIndex - 2) / Math.max(1, samples - 1))
+  };
+}
+
+function paperNeighborhoodScore(raw: Buffer, width: number, height: number, x: number, y: number, rowWidth: number) {
+  const radius = Math.max(2, Math.min(7, Math.round(rowWidth * 0.008)));
+  let score = 0;
+  let count = 0;
+  for (let yOffset = -radius; yOffset <= radius; yOffset += radius || 1) {
+    for (let xOffset = -radius; xOffset <= radius; xOffset += radius || 1) {
+      score += isVisiblePaperPixel(raw, width, height, x + xOffset, y + yOffset) ? 1 : 0;
+      count += 1;
+    }
   }
-  return paperPixels / samples;
+  return score / Math.max(1, count);
+}
+
+function findEdgeIndexFromCenter(scores: number[], center: number, direction: -1 | 1) {
+  const paperThreshold = 0.44;
+  const nonPaperThreshold = 0.28;
+  let hasInteriorPaper = false;
+  let nonPaperRun = 0;
+  for (let index = center; index >= 0 && index < scores.length; index += direction) {
+    const score = scores[index] ?? 0;
+    if (score >= paperThreshold) {
+      hasInteriorPaper = true;
+      nonPaperRun = 0;
+      continue;
+    }
+    if (!hasInteriorPaper || score > nonPaperThreshold) continue;
+    nonPaperRun += 1;
+    if (nonPaperRun >= 3) return index - direction * (nonPaperRun - 1);
+  }
+  return null;
+}
+
+type EdgeLine = {
+  slope: number;
+  intercept: number;
+  minY: number;
+  maxY: number;
+};
+
+function fitEdgeLine(points: Point[]): EdgeLine | undefined {
+  if (points.length < 6) return undefined;
+  const sorted = [...points].sort((a, b) => a.x - b.x);
+  const trim = Math.floor(sorted.length * 0.18);
+  const trimmed = sorted.slice(trim, sorted.length - trim);
+  if (trimmed.length < 6) return undefined;
+  const meanY = trimmed.reduce((sum, point) => sum + point.y, 0) / trimmed.length;
+  const meanX = trimmed.reduce((sum, point) => sum + point.x, 0) / trimmed.length;
+  let numerator = 0;
+  let denominator = 0;
+  for (const point of trimmed) {
+    numerator += (point.y - meanY) * (point.x - meanX);
+    denominator += (point.y - meanY) ** 2;
+  }
+  if (denominator < 1) return undefined;
+  const slope = numerator / denominator;
+  const intercept = meanX - slope * meanY;
+  return {
+    slope,
+    intercept,
+    minY: Math.min(...trimmed.map((point) => point.y)),
+    maxY: Math.max(...trimmed.map((point) => point.y))
+  };
+}
+
+function pointOnLineAtY(line: EdgeLine, y: number) {
+  return {
+    x: line.slope * y + line.intercept,
+    y
+  };
 }
 
 function visiblePaperRowScore(
