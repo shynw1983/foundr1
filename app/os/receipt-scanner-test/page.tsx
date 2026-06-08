@@ -10,6 +10,7 @@ export default function ReceiptScannerTestPage() {
   const [scannedUrl, setScannedUrl] = useState("");
   const [message, setMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useAiBoundary, setUseAiBoundary] = useState(true);
   const originalUrlRef = useRef("");
   const scannedUrlRef = useRef("");
 
@@ -37,6 +38,7 @@ export default function ReceiptScannerTestPage() {
     try {
       const uploadData = new FormData();
       uploadData.set("receipt", file);
+      uploadData.set("boundaryMode", useAiBoundary ? "ai" : "auto");
       const response = await fetch("/api/receipt-scanner", {
         method: "POST",
         body: uploadData
@@ -47,7 +49,8 @@ export default function ReceiptScannerTestPage() {
       }
       const imageBlob = await response.blob();
       replaceObjectUrl(scannedUrlRef, setScannedUrl, URL.createObjectURL(imageBlob));
-      setMessage("スキャン補正が完了しました。");
+      const boundarySource = response.headers.get("X-Receipt-Scanner-Boundary");
+      setMessage(boundarySource === "ai" ? "AI紙面検出でスキャン補正が完了しました。" : "スキャン補正が完了しました。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "スキャン補正に失敗しました。");
     } finally {
@@ -75,6 +78,14 @@ export default function ReceiptScannerTestPage() {
           <label>
             <span>レシート写真</span>
             <input type="file" name="receipt" accept="image/*" />
+          </label>
+          <label className="receipt-scanner-ai-toggle">
+            <span>AI紙面検出</span>
+            <input
+              type="checkbox"
+              checked={useAiBoundary}
+              onChange={(event) => setUseAiBoundary(event.currentTarget.checked)}
+            />
           </label>
           <button className="primary-button" type="submit" disabled={isProcessing}>
             <RefreshCw size={18} aria-hidden="true" />

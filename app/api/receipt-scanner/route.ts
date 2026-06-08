@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { requireOsSession } from "../../../lib/api-auth";
+import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../lib/upload-security";
 
 const maxImageSizeBytes = 8 * 1024 * 1024;
@@ -16,6 +17,13 @@ type Point = {
 type ReceiptDetection = {
   crop: sharp.Region;
   quad?: [Point, Point, Point, Point];
+  source: "local" | "ai";
+};
+
+type StraightenedImage = {
+  buffer: Buffer;
+  width: number;
+  height: number;
 };
 
 export async function POST(request: Request) {
@@ -29,6 +37,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "レシート写真を選択してください。" }, { status: 400 });
     }
     validateImageUpload(file, maxImageSizeBytes, "レシート写真");
+    const boundaryMode = formData.get("boundaryMode") === "ai" ? "ai" : "auto";
 
     const input = Buffer.from(await file.arrayBuffer());
     const normalized = sharp(input, { failOn: "none" }).rotate().resize({
@@ -37,6 +46,7 @@ export async function POST(request: Request) {
       fit: "inside",
       withoutEnlargement: true
     });
+    const aiImage = boundaryMode === "ai" ? await normalized.clone().jpeg({ quality: 82 }).toBuffer() : null;
     const {
       data: raw,
       info: { width, height }
@@ -45,29 +55,21 @@ export async function POST(request: Request) {
       return Response.json({ error: "画像を読み込めませんでした。" }, { status: 400 });
     }
 
-    const detection = detectReceipt(raw, width, height);
+    const aiQuad = aiImage ? await detectReceiptQuadWithAi(aiImage, width, height) : undefined;
+    const detection = aiQuad
+      ? { crop: cropFromQuad(aiQuad, width, height), quad: aiQuad, source: "ai" as const }
+      : detectReceipt(raw, width, height);
     const straightened = detection.quad
       ? await warpPerspective(raw, width, height, detection.quad)
       : await cropRaw(raw, width, detection.crop);
-    const processed = await sharp(straightened.buffer, {
-      raw: {
-        width: straightened.width,
-        height: straightened.height,
-        channels: 3
-      }
-    })
-      .greyscale()
-      .normalize()
-      .linear(1.35, -18)
-      .threshold(176)
-      .png({ compressionLevel: 9 })
-      .toBuffer();
+    const processed = await renderScannerStyleImage(straightened);
 
     return new Response(processed, {
       headers: {
         "Content-Type": "image/png",
         "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store"
+        "Cache-Control": "no-store",
+        "X-Receipt-Scanner-Boundary": detection.source
       }
     });
   } catch (error) {
@@ -128,7 +130,7 @@ function detectReceipt(raw: Buffer, width: number, height: number): ReceiptDetec
   const detectedWidth = right - left + 1;
   const detectedHeight = bottom - top + 1;
   if (detectedWidth < width * minDetectedReceiptRatio || detectedHeight < height * minDetectedReceiptRatio) {
-    return { crop: { left: 0, top: 0, width, height } };
+    return { crop: { left: 0, top: 0, width, height }, source: "local" };
   }
 
   const padding = Math.max(8, Math.round(Math.min(width, height) * 0.02));
@@ -143,7 +145,7 @@ function detectReceipt(raw: Buffer, width: number, height: number): ReceiptDetec
     height: Math.max(1, paddedBottom - paddedTop + 1)
   };
   const quad = detectReceiptQuad(mask, width, left, top, right, bottom);
-  return quad ? { crop, quad } : { crop };
+  return quad ? { crop, quad, source: "local" } : { crop, source: "local" };
 }
 
 function countColumn(mask: Uint8Array, width: number, height: number, x: number) {
@@ -171,6 +173,229 @@ async function cropRaw(raw: Buffer, sourceWidth: number, crop: sharp.Region) {
     raw.copy(buffer, outputStart, sourceStart, sourceStart + crop.width * 3);
   }
   return { buffer, width: crop.width, height: crop.height };
+}
+
+function cropFromQuad(quad: [Point, Point, Point, Point], imageWidth: number, imageHeight: number): sharp.Region {
+  const xs = quad.map((point) => point.x);
+  const ys = quad.map((point) => point.y);
+  const left = Math.max(0, Math.floor(Math.min(...xs)));
+  const top = Math.max(0, Math.floor(Math.min(...ys)));
+  const right = Math.min(imageWidth - 1, Math.ceil(Math.max(...xs)));
+  const bottom = Math.min(imageHeight - 1, Math.ceil(Math.max(...ys)));
+  return {
+    left,
+    top,
+    width: Math.max(1, right - left + 1),
+    height: Math.max(1, bottom - top + 1)
+  };
+}
+
+async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, height: number) {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return undefined;
+
+  try {
+    const model = process.env.OPENAI_RECEIPT_SCANNER_MODEL || process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text: [
+                  "You detect document boundaries in receipt photos.",
+                  "Do not transcribe, rewrite, enhance, or infer receipt text.",
+                  "Return only the visible main receipt paper boundary as four corner points.",
+                  "Use the displayed image orientation.",
+                  "Coordinates must be normalized between 0 and 1 relative to image width and height.",
+                  "If the exact paper edge is hidden, estimate the nearest visible paper rectangle conservatively.",
+                  "Return points in this order: top_left, top_right, bottom_right, bottom_left."
+                ].join("\n")
+              }
+            ]
+          },
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "Detect the receipt paper boundary. Return normalized corner coordinates only." },
+              { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" }
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "receipt_boundary",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                hasReceipt: { type: "boolean" },
+                confidence: { type: "number" },
+                points: {
+                  type: "array",
+                  minItems: 4,
+                  maxItems: 4,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      role: { type: "string", enum: ["top_left", "top_right", "bottom_right", "bottom_left"] },
+                      x: { type: "number" },
+                      y: { type: "number" }
+                    },
+                    required: ["role", "x", "y"]
+                  }
+                }
+              },
+              required: ["hasReceipt", "confidence", "points"]
+            }
+          }
+        },
+        max_output_tokens: 700
+      })
+    });
+    const body = await response.json().catch(() => ({})) as {
+      error?: { message?: string };
+      output_text?: string;
+      output?: Array<{ content?: Array<{ text?: string }> }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      };
+    };
+    if (!response.ok) throw new Error(body.error?.message || "AI 紙面検出に失敗しました。");
+    const content = body.output_text
+      ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
+      ?? "";
+    const parsed = JSON.parse(content) as {
+      hasReceipt: boolean;
+      confidence: number;
+      points: Array<{ role: string; x: number; y: number }>;
+    };
+    await recordExternalServiceUsage({
+      serviceKey: "openai",
+      metricKey: "tokens",
+      quantity: Number(body.usage?.total_tokens ?? 0),
+      unit: "tokens",
+      source: "receipt_scanner_boundary",
+      metadata: {
+        model,
+        inputTokens: body.usage?.input_tokens ?? null,
+        outputTokens: body.usage?.output_tokens ?? null
+      }
+    });
+    if (!parsed.hasReceipt || parsed.confidence < 0.35 || parsed.points.length !== 4) return undefined;
+
+    const pointMap = new Map(parsed.points.map((point) => [point.role, point]));
+    const orderedRoles = ["top_left", "top_right", "bottom_right", "bottom_left"];
+    const quad = orderedRoles.map((role) => {
+      const point = pointMap.get(role);
+      if (!point) return null;
+      return {
+        x: normalizeAiCoordinate(point.x, width),
+        y: normalizeAiCoordinate(point.y, height)
+      };
+    });
+    if (quad.some((point) => !point)) return undefined;
+    const typedQuad = quad as [Point, Point, Point, Point];
+    const area = polygonArea(typedQuad);
+    if (area < width * height * 0.12) return undefined;
+    return typedQuad;
+  } catch (error) {
+    console.warn("AI receipt boundary detection skipped", error);
+    return undefined;
+  }
+}
+
+function normalizeAiCoordinate(value: number, size: number) {
+  if (!Number.isFinite(value)) return 0;
+  if (value >= 0 && value <= 1) return Math.max(0, Math.min(size - 1, value * (size - 1)));
+  return Math.max(0, Math.min(size - 1, value));
+}
+
+async function renderScannerStyleImage(image: StraightenedImage) {
+  const { data: grayscale } = await sharp(image.buffer, {
+    raw: {
+      width: image.width,
+      height: image.height,
+      channels: 3
+    }
+  })
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const background = boxBlurGrayscale(grayscale, image.width, image.height, Math.max(18, Math.round(Math.min(image.width, image.height) * 0.08)));
+  const output = Buffer.alloc(image.width * image.height * 3, 255);
+
+  for (let index = 0; index < image.width * image.height; index += 1) {
+    const paperLevel = Math.max(18, background[index] ?? 255);
+    const localValue = (grayscale[index] ?? 255) / paperLevel;
+    let value = clampByte(localValue * 255);
+    value = clampByte((value - 128) * 1.18 + 128);
+    value = value < 190
+      ? clampByte(value * 0.72)
+      : clampByte(245 + (value - 245) * 0.28);
+    const offset = index * 3;
+    output[offset] = value;
+    output[offset + 1] = value;
+    output[offset + 2] = value;
+  }
+
+  return sharp(output, {
+    raw: {
+      width: image.width,
+      height: image.height,
+      channels: 3
+    }
+  })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function boxBlurGrayscale(input: Buffer, width: number, height: number, radius: number) {
+  const integralWidth = width + 1;
+  const integral = new Float64Array((width + 1) * (height + 1));
+  for (let y = 0; y < height; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < width; x += 1) {
+      rowSum += input[y * width + x] ?? 0;
+      const integralIndex = (y + 1) * integralWidth + x + 1;
+      integral[integralIndex] = integral[y * integralWidth + x + 1] + rowSum;
+    }
+  }
+
+  const output = new Float32Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    const top = Math.max(0, y - radius);
+    const bottom = Math.min(height - 1, y + radius);
+    for (let x = 0; x < width; x += 1) {
+      const left = Math.max(0, x - radius);
+      const right = Math.min(width - 1, x + radius);
+      const area = (right - left + 1) * (bottom - top + 1);
+      const sum = integral[(bottom + 1) * integralWidth + right + 1]
+        - integral[top * integralWidth + right + 1]
+        - integral[(bottom + 1) * integralWidth + left]
+        + integral[top * integralWidth + left];
+      output[y * width + x] = sum / area;
+    }
+  }
+  return output;
+}
+
+function clampByte(value: number) {
+  if (!Number.isFinite(value)) return 255;
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
 function detectReceiptQuad(
