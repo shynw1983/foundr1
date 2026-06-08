@@ -55,8 +55,12 @@ export default function ReceiptScannerTestPage() {
       replaceObjectUrl(scannedUrlRef, setScannedUrl, URL.createObjectURL(imageBlob));
       const boundarySource = response.headers.get("X-Receipt-Scanner-Boundary");
       const resolvedMode = response.headers.get("X-Receipt-Scanner-Mode");
+      const aiStatus = response.headers.get("X-Receipt-Scanner-AI");
+      const outputSize = response.headers.get("X-Receipt-Scanner-Size");
       const modeLabel = resolvedMode === "long_receipt" ? "長レシート補正" : "標準補正";
-      setMessage(boundarySource === "ai" ? `AI紙面検出 / ${modeLabel}でスキャン補正が完了しました。` : `${modeLabel}でスキャン補正が完了しました。`);
+      const aiLabel = aiStatus === "used" ? "AI使用" : aiStatus === "failed" ? "AI検出失敗・ローカル補正" : "AIなし";
+      const sourceLabel = boundarySource === "ai" ? "AI紙面検出" : "ローカル紙面検出";
+      setMessage(`${sourceLabel} / ${modeLabel} / ${aiLabel}${outputSize ? ` / ${outputSize}` : ""}で完了しました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "スキャン補正に失敗しました。");
     } finally {

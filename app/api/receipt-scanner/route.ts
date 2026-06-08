@@ -4,7 +4,7 @@ import { recordExternalServiceUsage } from "../../../lib/external-service-usage"
 import { validateImageUpload } from "../../../lib/upload-security";
 
 const maxImageSizeBytes = 8 * 1024 * 1024;
-const maxScanEdge = 1800;
+const maxScanEdge = 4096;
 const minDetectedReceiptRatio = 0.2;
 
 export const runtime = "nodejs";
@@ -24,6 +24,7 @@ type EdgeProfile = {
   leftEdge: Point[];
   rightEdge: Point[];
   source: "local" | "ai";
+  crop?: sharp.Region;
 };
 
 type AiReceiptShape = {
@@ -74,19 +75,21 @@ export async function POST(request: Request) {
 
     const aiShape = aiImage ? await detectReceiptShapeWithAi(aiImage, width, height) : undefined;
     const localDetection = detectReceipt(raw, width, height);
+    const localEdgeProfile = detectReceiptEdges(raw, width, height, localDetection.crop);
     const useLongReceipt = shouldUseLongReceiptMode(scanMode, aiShape, width, height);
     const straightened = useLongReceipt
       ? await unwarpLongReceipt(
         raw,
         width,
         height,
-        aiShape?.edgeProfile ?? detectReceiptEdges(raw, width, height, localDetection.crop)
+        aiShape?.edgeProfile ?? localEdgeProfile
       )
       : await straightenStandardReceipt(raw, width, height, aiShape?.quad, localDetection);
     const processed = await renderScannerStyleImage(straightened, contrastMode);
     const boundarySource = useLongReceipt
       ? (aiShape?.edgeProfile?.source ?? "local")
       : (aiShape?.quad ? "ai" : localDetection.source);
+    const aiStatus = !aiImage ? "off" : aiShape ? "used" : "failed";
 
     return new Response(processed, {
       headers: {
@@ -94,7 +97,9 @@ export async function POST(request: Request) {
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
         "X-Receipt-Scanner-Boundary": boundarySource,
-        "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard"
+        "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard",
+        "X-Receipt-Scanner-AI": aiStatus,
+        "X-Receipt-Scanner-Size": `${straightened.width}x${straightened.height}`
       }
     });
   } catch (error) {
@@ -289,7 +294,8 @@ function detectReceiptEdges(raw: Buffer, width: number, height: number, crop: sh
   return {
     leftEdge: smoothEdge(leftEdge, width, height),
     rightEdge: smoothEdge(rightEdge, width, height),
-    source: "local"
+    source: "local",
+    crop
   };
 }
 
@@ -338,7 +344,8 @@ async function unwarpLongReceipt(raw: Buffer, width: number, height: number, edg
     const ratio = index / 8;
     return distance(interpolateEdge(leftEdge, ratio), interpolateEdge(rightEdge, ratio));
   }).sort((a, b) => a - b);
-  const targetWidth = Math.max(1, Math.round(widths[Math.floor(widths.length / 2)]));
+  const cropWidthFloor = edgeProfile.crop?.width ? Math.round(edgeProfile.crop.width * 0.92) : 1;
+  const targetWidth = Math.max(cropWidthFloor, Math.round(widths[Math.floor(widths.length / 2)]));
   const output = Buffer.alloc(targetWidth * targetHeight * 3, 255);
 
   for (let y = 0; y < targetHeight; y += 1) {
@@ -391,7 +398,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
   if (!apiKey) return undefined;
 
   try {
-    const model = process.env.OPENAI_RECEIPT_SCANNER_MODEL || process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
+    const model = process.env.OPENAI_RECEIPT_SCANNER_MODEL || "gpt-4.1";
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -410,12 +417,17 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
                   "You detect document boundaries in receipt photos.",
                   "Do not transcribe, rewrite, enhance, or infer receipt text.",
                   "Return only geometric boundary data for the visible main receipt paper.",
+                  "Your task is geometric document scanning, like a mobile scanner app.",
                   "Use the displayed image orientation.",
                   "Coordinates must be normalized between 0 and 1 relative to image width and height.",
-                  "If the exact paper edge is hidden, estimate the nearest visible paper edge conservatively.",
-                  "For ordinary short receipts or documents, provide four corner points.",
-                  "For long receipts, also provide multiple left_edge and right_edge points at increasing y positions from top to bottom.",
-                  "Use documentType long_receipt when the receipt is long, narrow, curved, or has non-straight left/right edges."
+                  "Find the outer boundary of the white thermal receipt paper, not the printed text column.",
+                  "Ignore black printed text, shadows, folds, the tray, table edges, and other papers in the background.",
+                  "For ordinary short receipts or documents, provide four outer paper corner points.",
+                  "For long receipts, provide 16 to 24 leftEdge and rightEdge control points at increasing y positions from the top paper edge to the bottom paper edge.",
+                  "For long receipts, each leftEdge point must sit on the left outer paper edge and each rightEdge point must sit on the right outer paper edge at the same approximate vertical level.",
+                  "If a small part of the paper edge is outside the image or hidden by shadow, estimate the continuation of the visible paper edge.",
+                  "Use documentType long_receipt when the receipt is long, narrow, curved, rolled, or has non-straight left/right edges.",
+                  "Be aggressive about using long_receipt for tall Japanese supermarket receipts."
                 ].join("\n")
               }
             ]
@@ -423,7 +435,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
           {
             role: "user",
             content: [
-              { type: "input_text", text: "Detect receipt geometry. Return corners and, for long receipts, left/right edge control points." },
+              { type: "input_text", text: "Detect the full white receipt paper outline. For this long receipt, return many leftEdge and rightEdge control points on the true outer paper edges, not on the printed text." },
               { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" }
             ]
           }
@@ -442,8 +454,6 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
                 documentType: { type: "string", enum: ["standard", "long_receipt"] },
                 points: {
                   type: "array",
-                  minItems: 4,
-                  maxItems: 4,
                   items: {
                     type: "object",
                     additionalProperties: false,
@@ -457,14 +467,10 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
                 },
                 leftEdge: {
                   type: "array",
-                  minItems: 0,
-                  maxItems: 32,
                   items: edgePointSchema()
                 },
                 rightEdge: {
                   type: "array",
-                  minItems: 0,
-                  maxItems: 32,
                   items: edgePointSchema()
                 }
               },
@@ -509,7 +515,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
         outputTokens: body.usage?.output_tokens ?? null
       }
     });
-    if (!parsed.hasReceipt || parsed.confidence < 0.35 || parsed.points.length !== 4) return undefined;
+    if (!parsed.hasReceipt || parsed.confidence < 0.35 || parsed.points.length < 4) return undefined;
 
     const pointMap = new Map(parsed.points.map((point) => [point.role, point]));
     const orderedRoles = ["top_left", "top_right", "bottom_right", "bottom_left"];
