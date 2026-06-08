@@ -8,6 +8,7 @@ import { AnalyticsShell } from "../analytics/components/AnalyticsShell";
 export default function ReceiptScannerTestPage() {
   const [originalUrl, setOriginalUrl] = useState("");
   const [scannedUrl, setScannedUrl] = useState("");
+  const [debugUrl, setDebugUrl] = useState("");
   const [message, setMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiBoundary, setUseAiBoundary] = useState(true);
@@ -15,11 +16,13 @@ export default function ReceiptScannerTestPage() {
   const [useStrongContrast, setUseStrongContrast] = useState(true);
   const originalUrlRef = useRef("");
   const scannedUrlRef = useRef("");
+  const debugUrlRef = useRef("");
 
   useEffect(() => {
     return () => {
       if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
       if (scannedUrlRef.current) URL.revokeObjectURL(scannedUrlRef.current);
+      if (debugUrlRef.current) URL.revokeObjectURL(debugUrlRef.current);
     };
   }, []);
 
@@ -36,16 +39,14 @@ export default function ReceiptScannerTestPage() {
     setMessage("");
     replaceObjectUrl(originalUrlRef, setOriginalUrl, URL.createObjectURL(file));
     replaceObjectUrl(scannedUrlRef, setScannedUrl, "");
+    replaceObjectUrl(debugUrlRef, setDebugUrl, "");
 
     try {
-      const uploadData = new FormData();
-      uploadData.set("receipt", file);
-      uploadData.set("boundaryMode", useAiBoundary ? "ai" : "auto");
-      uploadData.set("scanMode", scanMode);
-      uploadData.set("contrastMode", useStrongContrast ? "strong" : "standard");
-      const response = await fetch("/api/receipt-scanner", {
-        method: "POST",
-        body: uploadData
+      const response = await requestScannerImage(file, {
+        boundaryMode: useAiBoundary ? "ai" : "auto",
+        scanMode,
+        contrastMode: useStrongContrast ? "strong" : "standard",
+        outputMode: "scan"
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -60,7 +61,19 @@ export default function ReceiptScannerTestPage() {
       const modeLabel = resolvedMode === "long_receipt" ? "長レシート補正" : "標準補正";
       const aiLabel = aiStatus === "used" ? "AI使用" : aiStatus === "failed" ? "AI検出失敗・ローカル補正" : "AIなし";
       const sourceLabel = boundarySource === "ai" ? "AI紙面検出" : "ローカル紙面検出";
-      setMessage(`${sourceLabel} / ${modeLabel} / ${aiLabel}${outputSize ? ` / ${outputSize}` : ""}で完了しました。`);
+      const debugResponse = await requestScannerImage(file, {
+        boundaryMode: useAiBoundary ? "ai" : "auto",
+        scanMode,
+        contrastMode: useStrongContrast ? "strong" : "standard",
+        outputMode: "debug_overlay"
+      });
+      if (!debugResponse.ok) {
+        const body = await debugResponse.json().catch(() => null);
+        throw new Error(body?.error ?? "検出輪郭の作成に失敗しました。");
+      }
+      const debugBlob = await debugResponse.blob();
+      replaceObjectUrl(debugUrlRef, setDebugUrl, URL.createObjectURL(debugBlob));
+      setMessage(`${sourceLabel} / ${modeLabel} / ${aiLabel}${outputSize ? ` / ${outputSize}` : ""}で完了しました。検出輪郭も確認できます。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "スキャン補正に失敗しました。");
     } finally {
@@ -125,10 +138,18 @@ export default function ReceiptScannerTestPage() {
       <section className="receipt-scanner-preview-grid" aria-label="スキャン補正プレビュー">
         <ReceiptPreview title="元の写真" imageUrl={originalUrl} emptyText="写真を選択すると元画像が表示されます。" />
         <ReceiptPreview
+          title="検出輪郭"
+          imageUrl={debugUrl}
+          emptyText="AIとローカル検出の輪郭が表示されます。"
+          downloadUrl={debugUrl}
+          downloadName="receipt-scan-debug.png"
+        />
+        <ReceiptPreview
           title="補正後"
           imageUrl={scannedUrl}
           emptyText="スキャン補正後の画像が表示されます。"
           downloadUrl={scannedUrl}
+          downloadName="receipt-scan-test.png"
         />
       </section>
     </AnalyticsShell>
@@ -139,12 +160,14 @@ function ReceiptPreview({
   title,
   imageUrl,
   emptyText,
-  downloadUrl
+  downloadUrl,
+  downloadName = "receipt-scan-test.png"
 }: {
   title: string;
   imageUrl: string;
   emptyText: string;
   downloadUrl?: string;
+  downloadName?: string;
 }) {
   return (
     <article className="panel receipt-scanner-preview-card">
@@ -153,7 +176,7 @@ function ReceiptPreview({
           <h3>{title}</h3>
         </div>
         {downloadUrl ? (
-          <a className="secondary-button" href={downloadUrl} download="receipt-scan-test.png">
+          <a className="secondary-button" href={downloadUrl} download={downloadName}>
             <Download size={16} aria-hidden="true" />
             ダウンロード
           </a>
@@ -174,4 +197,25 @@ function replaceObjectUrl(
   if (ref.current) URL.revokeObjectURL(ref.current);
   ref.current = nextUrl;
   setter(nextUrl);
+}
+
+function requestScannerImage(
+  file: File,
+  options: {
+    boundaryMode: "ai" | "auto";
+    scanMode: string;
+    contrastMode: "strong" | "standard";
+    outputMode: "scan" | "debug_overlay";
+  }
+) {
+  const uploadData = new FormData();
+  uploadData.set("receipt", file);
+  uploadData.set("boundaryMode", options.boundaryMode);
+  uploadData.set("scanMode", options.scanMode);
+  uploadData.set("contrastMode", options.contrastMode);
+  uploadData.set("outputMode", options.outputMode);
+  return fetch("/api/receipt-scanner", {
+    method: "POST",
+    body: uploadData
+  });
 }

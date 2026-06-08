@@ -41,6 +41,7 @@ type StraightenedImage = {
 
 type ScanMode = "auto" | "standard" | "long_receipt";
 type ContrastMode = "standard" | "strong";
+type OutputMode = "scan" | "debug_overlay";
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
     const boundaryMode = formData.get("boundaryMode") === "ai" ? "ai" : "auto";
     const scanMode = normalizeScanMode(formData.get("scanMode"));
     const contrastMode = formData.get("contrastMode") === "standard" ? "standard" : "strong";
+    const outputMode: OutputMode = formData.get("outputMode") === "debug_overlay" ? "debug_overlay" : "scan";
 
     const input = Buffer.from(await file.arrayBuffer());
     const normalized = sharp(input, { failOn: "none" }).rotate().resize({
@@ -77,6 +79,23 @@ export async function POST(request: Request) {
     const localDetection = detectReceipt(raw, width, height);
     const localEdgeProfile = detectReceiptEdges(raw, width, height, localDetection.crop);
     const useLongReceipt = shouldUseLongReceiptMode(scanMode, aiShape, width, height);
+    const aiStatus = !aiImage ? "off" : aiShape ? "used" : "failed";
+
+    if (outputMode === "debug_overlay") {
+      const overlay = await renderDebugOverlay(raw, width, height, aiShape, localDetection, localEdgeProfile);
+      return new Response(overlay, {
+        headers: {
+          "Content-Type": "image/png",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+          "X-Receipt-Scanner-AI": aiStatus,
+          "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard",
+          "X-Receipt-Scanner-Debug": "overlay",
+          "X-Receipt-Scanner-Size": `${width}x${height}`
+        }
+      });
+    }
+
     const straightened = useLongReceipt
       ? await unwarpLongReceipt(
         raw,
@@ -90,7 +109,6 @@ export async function POST(request: Request) {
     const boundarySource = useLongReceipt
       ? (aiShape?.edgeProfile?.source ?? "local")
       : (aiShape?.quad ? "ai" : localDetection.source);
-    const aiStatus = !aiImage ? "off" : aiShape ? "used" : "failed";
 
     return new Response(processed, {
       headers: {
@@ -627,6 +645,118 @@ function normalizeAiEdgeProfile(
     rightEdge: smoothEdge(right, width, height),
     source: "ai"
   };
+}
+
+async function renderDebugOverlay(
+  raw: Buffer,
+  width: number,
+  height: number,
+  aiShape: AiReceiptShape | undefined,
+  localDetection: ReceiptDetection,
+  localEdgeProfile: EdgeProfile
+) {
+  const base = await sharp(raw, {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .png()
+    .toBuffer();
+  const overlay = Buffer.from(buildDebugOverlaySvg(width, height, aiShape, localDetection, localEdgeProfile));
+  return sharp(base)
+    .composite([{ input: overlay, blend: "over" }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function buildDebugOverlaySvg(
+  width: number,
+  height: number,
+  aiShape: AiReceiptShape | undefined,
+  localDetection: ReceiptDetection,
+  localEdgeProfile: EdgeProfile
+) {
+  const strokeWidth = Math.max(3, Math.round(Math.min(width, height) * 0.005));
+  const pointRadius = Math.max(8, Math.round(Math.min(width, height) * 0.012));
+  const labelSize = Math.max(24, Math.round(Math.min(width, height) * 0.026));
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<rect x="0" y="0" width="${width}" height="${height}" fill="none"/>`
+  ];
+
+  const localCrop = localDetection.crop;
+  parts.push(
+    `<rect x="${localCrop.left}" y="${localCrop.top}" width="${localCrop.width}" height="${localCrop.height}" fill="none" stroke="#f59e0b" stroke-width="${strokeWidth}" stroke-dasharray="${strokeWidth * 3} ${strokeWidth * 2}"/>`,
+    textLabel("LOCAL CROP", localCrop.left + strokeWidth, Math.max(labelSize, localCrop.top - strokeWidth), "#f59e0b", labelSize)
+  );
+  if (localDetection.quad) {
+    parts.push(polygon(localDetection.quad, "#f97316", strokeWidth, "LOCAL QUAD"));
+    parts.push(...pointMarkers(localDetection.quad, "#f97316", pointRadius));
+  }
+  if (localEdgeProfile.leftEdge.length || localEdgeProfile.rightEdge.length) {
+    parts.push(polyline(localEdgeProfile.leftEdge, "#f59e0b", strokeWidth, "LOCAL LEFT"));
+    parts.push(polyline(localEdgeProfile.rightEdge, "#f59e0b", strokeWidth, "LOCAL RIGHT"));
+  }
+
+  if (aiShape?.quad) {
+    parts.push(polygon(aiShape.quad, "#ef4444", strokeWidth, "AI QUAD"));
+    parts.push(...pointMarkers(aiShape.quad, "#ef4444", pointRadius));
+  }
+  if (aiShape?.edgeProfile) {
+    parts.push(polyline(aiShape.edgeProfile.leftEdge, "#2563eb", strokeWidth, "AI LEFT"));
+    parts.push(polyline(aiShape.edgeProfile.rightEdge, "#06b6d4", strokeWidth, "AI RIGHT"));
+    parts.push(...pointMarkers(aiShape.edgeProfile.leftEdge, "#2563eb", Math.max(4, Math.round(pointRadius * 0.62))));
+    parts.push(...pointMarkers(aiShape.edgeProfile.rightEdge, "#06b6d4", Math.max(4, Math.round(pointRadius * 0.62))));
+  }
+
+  if (!aiShape) {
+    parts.push(textLabel("AI NOT USED OR FAILED", strokeWidth * 3, labelSize * 1.4, "#ef4444", labelSize));
+  }
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+function polygon(points: [Point, Point, Point, Point], color: string, strokeWidth: number, label: string) {
+  const path = [...points, points[0]].map((point) => `${round(point.x)},${round(point.y)}`).join(" ");
+  const first = points[0];
+  return [
+    `<polyline points="${path}" fill="rgba(239,68,68,0.08)" stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`,
+    textLabel(label, first.x + strokeWidth, Math.max(strokeWidth * 3, first.y - strokeWidth), color, Math.max(18, strokeWidth * 5))
+  ].join("");
+}
+
+function polyline(points: Point[], color: string, strokeWidth: number, label: string) {
+  if (points.length < 2) return "";
+  const path = points.map((point) => `${round(point.x)},${round(point.y)}`).join(" ");
+  const first = points[0];
+  return [
+    `<polyline points="${path}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    textLabel(label, first.x + strokeWidth, first.y + strokeWidth * 4, color, Math.max(18, strokeWidth * 4))
+  ].join("");
+}
+
+function pointMarkers(points: Point[], color: string, radius: number) {
+  return points.map((point) => (
+    `<circle cx="${round(point.x)}" cy="${round(point.y)}" r="${radius}" fill="${color}" fill-opacity="0.88" stroke="#ffffff" stroke-width="${Math.max(2, Math.round(radius * 0.22))}"/>`
+  ));
+}
+
+function textLabel(text: string, x: number, y: number, color: string, fontSize: number) {
+  return `<text x="${round(x)}" y="${round(y)}" fill="${color}" stroke="#ffffff" stroke-width="${Math.max(2, Math.round(fontSize * 0.12))}" paint-order="stroke" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700">${escapeXml(text)}</text>`;
+}
+
+function round(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function normalizeAiCoordinate(value: number, size: number) {
