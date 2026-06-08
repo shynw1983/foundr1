@@ -58,6 +58,15 @@ type MaskContour = {
   leftLine?: EdgeLine;
   rightLine?: EdgeLine;
   refinedQuad?: [Point, Point, Point, Point];
+  inkBounds?: InkBounds;
+};
+
+type InkBounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  count: number;
 };
 
 export async function POST(request: Request) {
@@ -115,7 +124,7 @@ export async function POST(request: Request) {
 
     if (outputMode === "paper_mask") {
       const mask = buildPaperMask(raw, width, height, aiShape, localDetection);
-      const contour = extractPaperMaskContour(mask);
+      const contour = extractPaperMaskContour(mask, raw);
       const overlay = await renderPaperMaskOverlay(raw, width, height, mask, aiShape, localDetection);
       return new Response(overlay, {
         headers: {
@@ -1170,7 +1179,7 @@ function refineShapeWithPaperMask(
 ): AiReceiptShape {
   if (!aiShape.quad) return aiShape;
   const mask = buildPaperMask(raw, width, height, aiShape, localDetection);
-  const contour = extractPaperMaskContour(mask);
+  const contour = extractPaperMaskContour(mask, raw);
   if (!contour.refinedQuad) return aiShape;
   return {
     ...aiShape,
@@ -1186,7 +1195,7 @@ function refineShapeWithPaperMask(
   };
 }
 
-function extractPaperMaskContour(mask: PaperMask): MaskContour {
+function extractPaperMaskContour(mask: PaperMask, raw?: Buffer): MaskContour {
   const quad = mask.sourceQuad;
   const [topLeft, topRight, bottomRight, bottomLeft] = quad;
   const metrics = quadMetrics(quad);
@@ -1212,8 +1221,19 @@ function extractPaperMaskContour(mask: PaperMask): MaskContour {
     if (right !== null) rightPoints.push({ x: right, y });
   }
 
-  const leftLine = fitEdgeLine(leftPoints);
-  const rightLine = fitEdgeLine(rightPoints);
+  const inkBounds = raw ? estimateInkBounds(raw, mask) : undefined;
+  const leftLine = constrainEdgeLineWithInkBounds(
+    fitEdgeLine(leftPoints),
+    "left",
+    inkBounds,
+    metrics
+  );
+  const rightLine = constrainEdgeLineWithInkBounds(
+    fitEdgeLine(rightPoints),
+    "right",
+    inkBounds,
+    metrics
+  );
   const refinedQuad = buildQuadFromMaskContour(quad, leftLine, rightLine);
   const cleanLeftPoints = cleanEdgePoints(leftPoints, leftLine, mask.width, mask.height, Math.max(10, metrics.width * 0.09));
   const cleanRightPoints = cleanEdgePoints(rightPoints, rightLine, mask.width, mask.height, Math.max(10, metrics.width * 0.09));
@@ -1222,7 +1242,8 @@ function extractPaperMaskContour(mask: PaperMask): MaskContour {
     rightPoints: cleanRightPoints,
     leftLine,
     rightLine,
-    refinedQuad
+    refinedQuad,
+    inkBounds
   };
 }
 
@@ -1236,6 +1257,76 @@ function cleanEdgePoints(
   if (!line) return smoothEdge(points, width, height);
   const filtered = points.filter((point) => Math.abs(point.x - (line.slope * point.y + line.intercept)) <= maxResidual);
   return smoothEdge(filtered.length >= 6 ? filtered : points, width, height);
+}
+
+function estimateInkBounds(raw: Buffer, mask: PaperMask): InkBounds | undefined {
+  let left = mask.width - 1;
+  let right = 0;
+  let top = mask.height - 1;
+  let bottom = 0;
+  let count = 0;
+  const yEnd = mask.crop.top + mask.crop.height;
+  const xEnd = mask.crop.left + mask.crop.width;
+
+  for (let y = mask.crop.top; y < yEnd; y += 2) {
+    for (let x = mask.crop.left; x < xEnd; x += 2) {
+      if (!pointNearQuad({ x, y }, mask.sourceQuad, 2)) continue;
+      if (!isHighContrastInkPixel(raw, mask.width, mask.height, x, y)) continue;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+      count += 1;
+    }
+  }
+
+  if (count < 24 || right <= left || bottom <= top) return undefined;
+  return { left, top, right, bottom, count };
+}
+
+function isHighContrastInkPixel(raw: Buffer, width: number, height: number, x: number, y: number) {
+  const pixel = readPixelStats(raw, width, height, x, y);
+  if (pixel.luminance > 150) return false;
+  const radius = 7;
+  let surrounding = 0;
+  let samples = 0;
+  for (let yOffset = -radius; yOffset <= radius; yOffset += radius) {
+    for (let xOffset = -radius; xOffset <= radius; xOffset += radius) {
+      if (xOffset === 0 && yOffset === 0) continue;
+      surrounding += readPixelStats(raw, width, height, x + xOffset, y + yOffset).luminance;
+      samples += 1;
+    }
+  }
+  const surroundingMean = surrounding / Math.max(1, samples);
+  return surroundingMean > 118 && surroundingMean - pixel.luminance > 24;
+}
+
+function constrainEdgeLineWithInkBounds(
+  line: EdgeLine | undefined,
+  side: "left" | "right",
+  inkBounds: InkBounds | undefined,
+  metrics: ReturnType<typeof quadMetrics>
+) {
+  if (!line || !inkBounds) return line;
+  const midY = (line.minY + line.maxY) / 2;
+  const currentX = line.slope * midY + line.intercept;
+  const inkWidth = Math.max(1, inkBounds.right - inkBounds.left);
+  const maxMargin = Math.max(18, Math.min(96, metrics.width * 0.14, inkWidth * 0.26));
+  if (side === "left") {
+    const minAllowedX = inkBounds.left - maxMargin;
+    if (currentX < minAllowedX) return shiftEdgeLine(line, minAllowedX - currentX);
+    return line;
+  }
+  const maxAllowedX = inkBounds.right + maxMargin;
+  if (currentX > maxAllowedX) return shiftEdgeLine(line, maxAllowedX - currentX);
+  return line;
+}
+
+function shiftEdgeLine(line: EdgeLine, offsetX: number): EdgeLine {
+  return {
+    ...line,
+    intercept: line.intercept + offsetX
+  };
 }
 
 function sampleEdgeLine(line: EdgeLine, count: number, width: number, height: number) {
@@ -1343,7 +1434,7 @@ async function renderPaperMaskOverlay(
     .modulate({ brightness: 0.82, saturation: 0.92 })
     .png()
     .toBuffer();
-  const contour = extractPaperMaskContour(mask);
+  const contour = extractPaperMaskContour(mask, raw);
   const geometry = Buffer.from(buildPaperMaskOverlaySvg(width, height, aiShape, localDetection, contour));
   return sharp(base)
     .composite([
@@ -1375,6 +1466,9 @@ function buildPaperMaskOverlaySvg(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     `<rect x="0" y="0" width="${width}" height="${height}" fill="none"/>`
   ];
+  if (contour.inkBounds) {
+    parts.push(inkBoundsSvg(contour.inkBounds, "#eab308", Math.max(2, Math.round(strokeWidth * 0.75))));
+  }
   if (contour.leftPoints.length >= 2) {
     parts.push(polyline(contour.leftPoints, "#2563eb", strokeWidth, "MASK LEFT"));
     parts.push(...pointMarkers(sampleDebugPoints(contour.leftPoints), "#2563eb", pointRadius));
@@ -1412,6 +1506,15 @@ function edgeLineSvg(line: EdgeLine, color: string, strokeWidth: number, label: 
   const start = pointOnLineAtY(line, line.minY);
   const end = pointOnLineAtY(line, line.maxY);
   return polyline([start, end], color, strokeWidth, label);
+}
+
+function inkBoundsSvg(bounds: InkBounds, color: string, strokeWidth: number) {
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  return [
+    `<rect x="${bounds.left}" y="${bounds.top}" width="${width}" height="${height}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeWidth * 3} ${strokeWidth * 2}"/>`,
+    textLabel("INK GUIDE", bounds.left + strokeWidth, Math.max(strokeWidth * 5, bounds.top - strokeWidth), color, Math.max(18, strokeWidth * 5))
+  ].join("");
 }
 
 type PaperSeed = {
