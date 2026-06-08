@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/loyalty/birthday-coupons",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/system-usage",
+      "schedule": "20 1 * * *"
     }
   ]
 }

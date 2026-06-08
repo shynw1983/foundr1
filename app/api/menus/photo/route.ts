@@ -1,5 +1,6 @@
 import { put } from "@vercel/blob";
 import { requireOsSession } from "../../../../lib/api-auth";
+import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
 const menuEditorRoles = new Set(["owner", "manager"]);
@@ -32,6 +33,14 @@ export async function POST(request: Request) {
     const safeName = itemName.replace(/[^\w.-]+/g, "-").toLowerCase() || "menu-item";
     const blob = await put(`menu-items/${safeName}-${Date.now()}.${extension}`, file, {
       access: "private"
+    });
+    await recordExternalServiceUsage({
+      serviceKey: "vercel_blob",
+      metricKey: "storage_bytes",
+      quantity: file.size,
+      unit: "bytes",
+      source: "menu_photo",
+      metadata: { pathname: blob.pathname }
     });
     const photoUrl = `/api/public/menu-image?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 

@@ -1116,6 +1116,44 @@ create table if not exists os_notifications (
 alter table os_notifications add column if not exists lark_sent_at timestamptz;
 alter table os_notifications add column if not exists lark_error text;
 
+create table if not exists external_service_usage_events (
+  id uuid primary key default gen_random_uuid(),
+  service_key text not null,
+  metric_key text not null,
+  quantity numeric(14, 3) not null default 1,
+  unit text not null default 'count',
+  source text not null default 'app',
+  metadata jsonb not null default '{}'::jsonb,
+  recorded_at timestamptz not null default now()
+);
+
+create table if not exists external_service_alert_rules (
+  id uuid primary key default gen_random_uuid(),
+  service_key text not null,
+  metric_key text not null,
+  limit_value numeric(14, 3) not null,
+  warn_ratio numeric(5, 3) not null default 0.7,
+  critical_ratio numeric(5, 3) not null default 0.85,
+  is_enabled boolean not null default true,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(service_key, metric_key)
+);
+
+create table if not exists external_service_alert_events (
+  id uuid primary key default gen_random_uuid(),
+  service_key text not null,
+  metric_key text not null,
+  period_key text not null,
+  alert_level text not null,
+  usage_value numeric(14, 3) not null,
+  limit_value numeric(14, 3) not null,
+  notification_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique(service_key, metric_key, period_key, alert_level)
+);
+
 create table if not exists web_push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid not null references employees(id) on delete cascade,
@@ -2464,6 +2502,10 @@ create index if not exists idx_delivery_batches_order_status on delivery_batches
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);
 create index if not exists idx_price_records_product_recorded on price_records(product_id, recorded_at desc);
 create index if not exists idx_os_notifications_recipient_read on os_notifications(recipient_employee_id, read_at, created_at desc);
+create index if not exists idx_external_service_usage_events_metric_recorded
+  on external_service_usage_events(service_key, metric_key, recorded_at desc);
+create index if not exists idx_external_service_alert_events_period
+  on external_service_alert_events(period_key, alert_level, created_at desc);
 create index if not exists idx_web_push_subscriptions_employee on web_push_subscriptions(employee_id, revoked_at, updated_at desc);
 create index if not exists idx_timecard_punches_employee_punched on timecard_punches(employee_id, punched_at desc);
 create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);

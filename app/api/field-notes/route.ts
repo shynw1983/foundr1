@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../lib/upload-security";
 
 const allowedRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
@@ -266,6 +267,14 @@ async function uploadPhotoIfNeeded(file: FormDataEntryValue | null, name: string
   const safeName = name.replace(/[^\w.-]+/g, "-").toLowerCase() || "note";
   const blob = await put(`${folder}/${safeName}-${Date.now()}.${extension}`, file, {
     access: "private"
+  });
+  await recordExternalServiceUsage({
+    serviceKey: "vercel_blob",
+    metricKey: "storage_bytes",
+    quantity: file.size,
+    unit: "bytes",
+    source: "field_note_photo",
+    metadata: { pathname: blob.pathname }
   });
 
   return `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;

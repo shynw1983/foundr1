@@ -1,6 +1,7 @@
 import Pusher from "pusher";
 import { type CustomerOrderRow, toPublicCustomerOrder } from "./customer-orders";
 import { getAppVersion, getShortAppVersion } from "./app-version";
+import { recordExternalServiceUsage } from "./external-service-usage";
 
 let pusherClient: Pusher | null = null;
 
@@ -30,6 +31,14 @@ export async function publishCustomerOrderEvent(eventName: "order.created" | "or
     pusher.trigger(`private-store-orders-${order.storeId}`, eventName, { order }),
     pusher.trigger(`order-${order.id}`, eventName, { order: toPublicCustomerOrder(order) })
   ]);
+  await recordExternalServiceUsage({
+    serviceKey: "pusher",
+    metricKey: "messages",
+    quantity: 2,
+    unit: "count",
+    source: "customer_order_event",
+    metadata: { eventName, storeId: order.storeId, orderId: order.id }
+  });
 }
 
 export async function publishPosCustomerDisplayEvent(storeId: string, state: Record<string, unknown>) {
@@ -39,6 +48,14 @@ export async function publishPosCustomerDisplayEvent(storeId: string, state: Rec
   await pusher.trigger(`private-store-orders-${storeId}`, "pos.customer-display.updated", {
     storeId,
     state
+  });
+  await recordExternalServiceUsage({
+    serviceKey: "pusher",
+    metricKey: "messages",
+    quantity: 1,
+    unit: "count",
+    source: "pos_customer_display",
+    metadata: { storeId }
   });
 }
 
@@ -50,5 +67,13 @@ export async function publishStoreVersionUpdatedEvent(version = getAppVersion())
     version,
     shortVersion: getShortAppVersion(version),
     publishedAt: new Date().toISOString()
+  });
+  await recordExternalServiceUsage({
+    serviceKey: "pusher",
+    metricKey: "messages",
+    quantity: 1,
+    unit: "count",
+    source: "store_version",
+    metadata: { version }
   });
 }

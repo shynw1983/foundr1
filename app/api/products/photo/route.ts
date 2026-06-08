@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { requireMasterOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
@@ -30,6 +31,14 @@ export async function POST(request: Request) {
     const safeName = productName.replace(/[^\w.-]+/g, "-").toLowerCase() || "product";
     const blob = await put(`products/${safeName}-${Date.now()}.${extension}`, file, {
       access: "private"
+    });
+    await recordExternalServiceUsage({
+      serviceKey: "vercel_blob",
+      metricKey: "storage_bytes",
+      quantity: file.size,
+      unit: "bytes",
+      source: "product_photo",
+      metadata: { pathname: blob.pathname }
     });
     const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 

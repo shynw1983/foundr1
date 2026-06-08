@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { recordExternalServiceUsage } from "./external-service-usage";
 
 type BirthdayCouponEmailInput = {
   to: string;
@@ -110,6 +111,17 @@ export async function sendCouponEmail(input: CouponEmailInput) {
       `
     });
     if (response.error) return { status: "failed", id: "", error: response.error.message };
+    await recordExternalServiceUsage({
+      serviceKey: "resend",
+      metricKey: "emails_sent",
+      quantity: 1,
+      unit: "count",
+      source: "coupon_email",
+      metadata: {
+        subject,
+        recipientDomain: input.to.includes("@") ? input.to.split("@").pop() : ""
+      }
+    });
     return { status: "sent", id: response.data?.id ?? "", error: "" };
   } catch (error) {
     return { status: "failed", id: "", error: error instanceof Error ? error.message : "Email send failed." };

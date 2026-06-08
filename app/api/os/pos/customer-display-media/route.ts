@@ -1,5 +1,6 @@
 import { put } from "@vercel/blob";
 import { requireOsSession } from "../../../../../lib/api-auth";
+import { recordExternalServiceUsage } from "../../../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../../../lib/upload-security";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,14 @@ export async function POST(request: Request) {
 
     const blob = await put(`customer-display/${safeFilename(fileName)}-${Date.now()}.${extension}`, file, {
       access: "private"
+    });
+    await recordExternalServiceUsage({
+      serviceKey: "vercel_blob",
+      metricKey: "storage_bytes",
+      quantity: file.size,
+      unit: "bytes",
+      source: "pos_customer_display_media",
+      metadata: { pathname: blob.pathname, mediaType }
     });
     const url = `/api/public/customer-display-media?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 

@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
@@ -146,6 +147,14 @@ async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: stri
   const safeName = name.replace(/[^\w.-]+/g, "-").toLowerCase() || "receipt";
   const blob = await put(`purchase-receipts/${safeName}-${Date.now()}.${extension}`, file, {
     access: "private"
+  });
+  await recordExternalServiceUsage({
+    serviceKey: "vercel_blob",
+    metricKey: "storage_bytes",
+    quantity: file.size,
+    unit: "bytes",
+    source: "purchase_receipt",
+    metadata: { pathname: blob.pathname }
   });
 
   return `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;

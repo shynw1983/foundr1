@@ -10,6 +10,7 @@ import {
   Clock3,
   ExternalLink,
   FileText,
+  Gauge,
   ChartColumn,
   Lightbulb,
   LineChart,
@@ -53,6 +54,7 @@ const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/
 const posModulePaths = new Set(["/os/pos", "/os/loyalty", "/os/menus", "/os/products", "/os/stores"]);
 const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus", "/os/loyalty"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
+const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
 const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "店舗ワークベンチ", href: "/store", icon: Store },
@@ -81,6 +83,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
   { label: "会員・ポイント", href: "/os/loyalty", icon: BadgePercent },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
+  systemUsageNavItem,
   settingsNavItem
 ];
 
@@ -189,6 +192,7 @@ const navModules: OsNavModule[] = [
       { href: "/os/loyalty" },
       { href: "/os/stores" },
       { href: "/os/staff" },
+      { href: "/os/system-usage" },
       { href: "/os/settings" }
     ]
   }
@@ -215,8 +219,8 @@ function getModuleNavPaths(pathname: string) {
     return posModulePaths;
   }
 
-  if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff") {
-    return sharedDataPaths;
+  if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff" || pathname === "/os/system-usage" || pathname === "/os/settings") {
+    return new Set([...sharedDataPaths, "/os/system-usage", "/os/settings"]);
   }
 
   return orderModulePaths;
@@ -231,6 +235,7 @@ function canShowInCurrentModule(pathname: string, item: OsNavItem) {
 function canShowNavItem(role: string, item: OsNavItem) {
   if (item.href === "/os/logout") return false;
   if (item.href === "/os/settings") return masterRoles.has(role);
+  if (item.href === "/os/system-usage") return masterRoles.has(role);
   if (item.href === "/os/feedback") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
   if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
   if (item.href === "/os/staff") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
