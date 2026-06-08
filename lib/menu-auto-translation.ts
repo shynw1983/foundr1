@@ -26,7 +26,7 @@ type TranslationRequestEntry = {
   targetType: MenuTranslationTargetType;
 };
 
-type DeepSeekTranslationResult = {
+type OpenAiTranslationResult = {
   key?: unknown;
   text?: unknown;
 };
@@ -223,12 +223,11 @@ function chunkEntries<T>(entries: T[], size: number) {
 }
 
 export async function generateMenuTranslationPreview(entries: MenuTranslationDraftEntry[]) {
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) throw new Error("DEEPSEEK_API_KEY が設定されていません。");
-  if (!entries.length) return { entries, model: process.env.DEEPSEEK_TRANSLATION_MODEL || "deepseek-chat" };
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY が設定されていません。");
+  if (!entries.length) return { entries, model: process.env.OPENAI_MENU_TRANSLATION_MODEL || "gpt-5.4-mini" };
 
-  const model = process.env.DEEPSEEK_TRANSLATION_MODEL || "deepseek-chat";
-  const apiBase = process.env.DEEPSEEK_API_BASE?.trim() || "https://api.deepseek.com";
+  const model = process.env.OPENAI_MENU_TRANSLATION_MODEL || "gpt-5.4-mini";
   const suggestedByKey = new Map<string, string>();
 
   for (const chunk of chunkEntries(entries, 40)) {
@@ -239,7 +238,7 @@ export async function generateMenuTranslationPreview(entries: MenuTranslationDra
       targetLabel: entry.targetLabel,
       targetType: entry.targetType
     }));
-    const response = await fetch(`${apiBase.replace(/\/$/, "")}/chat/completions`, {
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -247,39 +246,52 @@ export async function generateMenuTranslationPreview(entries: MenuTranslationDra
       },
       body: JSON.stringify({
         model,
-        temperature: 0.2,
-        messages: [
+        input: [
           {
             role: "system",
             content: [
-              "You translate restaurant menu data from Japanese into customer-facing menu text.",
-              "Return only a JSON array. Do not include markdown.",
-              "Each output item must be {\"key\":\"...\",\"text\":\"...\"}.",
-              "Use natural, concise wording for menus, option names, and descriptions.",
-              "Keep product identity stable. Translate ingredients and option meanings clearly.",
-              "Treat zh as Simplified Chinese and zh-Hant as Traditional Chinese. Never copy Simplified Chinese into Traditional Chinese.",
-              "For Korean, Vietnamese, and Nepali, use the target language script naturally."
-            ].join("\n")
+              {
+                type: "input_text",
+                text: [
+                  "You translate restaurant menu data from Japanese into customer-facing menu text.",
+                  "Return only a JSON array. Do not include markdown.",
+                  "Each output item must be {\"key\":\"...\",\"text\":\"...\"}.",
+                  "Use natural, concise wording for menus, option names, and descriptions.",
+                  "Keep product identity stable. Translate ingredients and option meanings clearly.",
+                  "Treat zh as Simplified Chinese and zh-Hant as Traditional Chinese. Never copy Simplified Chinese into Traditional Chinese.",
+                  "For Korean, Vietnamese, and Nepali, use the target language script naturally."
+                ].join("\n")
+              }
+            ]
           },
           {
             role: "user",
-            content: JSON.stringify({
-              sourceLanguage: "Japanese",
-              targetLanguageLabels,
-              entries: requestEntries
-            })
+            content: [
+              {
+                type: "input_text",
+                text: JSON.stringify({
+                  sourceLanguage: "Japanese",
+                  targetLanguageLabels,
+                  entries: requestEntries
+                })
+              }
+            ]
           }
-        ]
+        ],
+        max_output_tokens: 6000
       })
     });
     const body = await response.json().catch(() => ({})) as {
       error?: { message?: string };
-      choices?: Array<{ message?: { content?: string } }>;
+      output_text?: string;
+      output?: Array<{ content?: Array<{ text?: string; type?: string }> }>;
     };
-    if (!response.ok) throw new Error(body.error?.message || "DeepSeek 翻訳に失敗しました。");
+    if (!response.ok) throw new Error(body.error?.message || "OpenAI 翻訳に失敗しました。");
 
-    const content = body.choices?.[0]?.message?.content ?? "";
-    const parsed = JSON.parse(extractJsonArray(content)) as DeepSeekTranslationResult[];
+    const content = body.output_text
+      ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
+      ?? "";
+    const parsed = JSON.parse(extractJsonArray(content)) as OpenAiTranslationResult[];
     for (const result of parsed) {
       const key = String(result.key ?? "");
       const text = String(result.text ?? "").trim();

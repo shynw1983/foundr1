@@ -83,7 +83,7 @@ Never map English to Chinese as a fallback. Never translate only product names w
 OS menu management can generate missing customer-facing translations with AI. The workflow must stay review-first:
 
 1. Scan menu items, item descriptions, option groups, and options for missing language fields.
-2. Call the configured AI provider, currently DeepSeek via `DEEPSEEK_API_KEY`, to create candidate translations.
+2. Call OpenAI via `OPENAI_API_KEY` to create candidate translations. The menu translation model defaults to `gpt-5.4-mini` and can be overridden with `OPENAI_MENU_TRANSLATION_MODEL`.
 3. Show candidates in a preview UI where staff can edit or exclude each row.
 4. Write to `displayNames` / `descriptionDisplayNames` only after explicit confirmation.
 
