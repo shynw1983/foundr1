@@ -550,7 +550,8 @@ async function detectReceiptShapeWithAi(
     });
     const initialShape = normalizeAiShape(parsed, width, height);
     if (!initialShape) return undefined;
-    return await reviewReceiptShapeWithAi(apiKey, model, imageBuffer, raw, width, height, initialShape) ?? initialShape;
+    const reviewedShape = await reviewReceiptShapeWithAi(apiKey, model, imageBuffer, raw, width, height, initialShape);
+    return refineShapeToVisiblePaper(raw, width, height, reviewedShape ?? initialShape);
   } catch (error) {
     console.warn("AI receipt boundary detection skipped", error);
     return undefined;
@@ -694,6 +695,109 @@ function normalizeAiShape(parsed: AiBoundaryResponse, width: number, height: num
     documentType: parsed.documentType,
     quad: area >= width * height * 0.12 ? typedQuad : undefined,
     edgeProfile
+  };
+}
+
+function refineShapeToVisiblePaper(raw: Buffer, width: number, height: number, shape: AiReceiptShape): AiReceiptShape {
+  if (shape.documentType !== "standard" || !shape.quad) return shape;
+  const [topLeft, topRight, bottomRight, bottomLeft] = shape.quad;
+  const verticalDistance = (distance(topLeft, bottomLeft) + distance(topRight, bottomRight)) / 2;
+  const horizontalDistance = (distance(topLeft, topRight) + distance(bottomLeft, bottomRight)) / 2;
+  if (verticalDistance < height * 0.12 || horizontalDistance < width * 0.12) return shape;
+
+  const sampleRows = Math.max(80, Math.min(220, Math.round(verticalDistance / 6)));
+  const rowScores = Array.from({ length: sampleRows }, (_, index) => {
+    const ratio = sampleRows === 1 ? 0 : index / (sampleRows - 1);
+    return {
+      ratio,
+      score: visiblePaperRowScore(raw, width, height, topLeft, topRight, bottomRight, bottomLeft, ratio)
+    };
+  });
+  const topRatio = findVisiblePaperStartRatio(rowScores);
+  const bottomRatio = findVisiblePaperEndRatio(rowScores);
+  if (topRatio === null && bottomRatio === null) return shape;
+
+  const safetyRatio = Math.min(0.018, Math.max(0.006, 10 / Math.max(1, verticalDistance)));
+  const nextTopRatio = topRatio === null ? 0 : Math.max(0, topRatio - safetyRatio);
+  const nextBottomRatio = bottomRatio === null ? 1 : Math.min(1, bottomRatio + safetyRatio);
+  if (nextBottomRatio - nextTopRatio < 0.22) return shape;
+  if (nextTopRatio < 0.045 && nextBottomRatio > 0.955) return shape;
+
+  const nextTopLeft = interpolatePoint(topLeft, bottomLeft, nextTopRatio);
+  const nextTopRight = interpolatePoint(topRight, bottomRight, nextTopRatio);
+  const nextBottomRight = interpolatePoint(topRight, bottomRight, nextBottomRatio);
+  const nextBottomLeft = interpolatePoint(topLeft, bottomLeft, nextBottomRatio);
+
+  return {
+    ...shape,
+    quad: [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft]
+  };
+}
+
+function visiblePaperRowScore(
+  raw: Buffer,
+  width: number,
+  height: number,
+  topLeft: Point,
+  topRight: Point,
+  bottomRight: Point,
+  bottomLeft: Point,
+  verticalRatio: number
+) {
+  const left = interpolatePoint(topLeft, bottomLeft, verticalRatio);
+  const right = interpolatePoint(topRight, bottomRight, verticalRatio);
+  const rowWidth = distance(left, right);
+  if (rowWidth < width * 0.08) return 0;
+
+  const samples = Math.max(28, Math.min(96, Math.round(rowWidth / 18)));
+  let paperPixels = 0;
+  for (let index = 0; index < samples; index += 1) {
+    const horizontalRatio = 0.08 + (index / Math.max(1, samples - 1)) * 0.84;
+    const x = left.x + (right.x - left.x) * horizontalRatio;
+    const y = left.y + (right.y - left.y) * horizontalRatio;
+    if (isVisiblePaperPixel(raw, width, height, x, y)) paperPixels += 1;
+  }
+  return paperPixels / samples;
+}
+
+function isVisiblePaperPixel(raw: Buffer, width: number, height: number, x: number, y: number) {
+  const roundedX = Math.max(0, Math.min(width - 1, Math.round(x)));
+  const roundedY = Math.max(0, Math.min(height - 1, Math.round(y)));
+  const offset = (roundedY * width + roundedX) * 3;
+  const red = raw[offset] ?? 0;
+  const green = raw[offset + 1] ?? 0;
+  const blue = raw[offset + 2] ?? 0;
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+  const saturation = max ? (max - min) / max : 0;
+  return luminance > 142 && saturation < 0.5;
+}
+
+function findVisiblePaperStartRatio(rows: Array<{ ratio: number; score: number }>) {
+  const threshold = 0.5;
+  const consecutiveRows = 3;
+  for (let index = 0; index <= rows.length - consecutiveRows; index += 1) {
+    const window = rows.slice(index, index + consecutiveRows);
+    if (window.every((row) => row.score >= threshold)) return rows[index].ratio;
+  }
+  return null;
+}
+
+function findVisiblePaperEndRatio(rows: Array<{ ratio: number; score: number }>) {
+  const threshold = 0.5;
+  const consecutiveRows = 3;
+  for (let index = rows.length - consecutiveRows; index >= 0; index -= 1) {
+    const window = rows.slice(index, index + consecutiveRows);
+    if (window.every((row) => row.score >= threshold)) return rows[index + consecutiveRows - 1].ratio;
+  }
+  return null;
+}
+
+function interpolatePoint(start: Point, end: Point, ratio: number) {
+  return {
+    x: start.x + (end.x - start.x) * ratio,
+    y: start.y + (end.y - start.y) * ratio
   };
 }
 
