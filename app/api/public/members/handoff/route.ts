@@ -119,6 +119,7 @@ function serializeMember(member: Awaited<ReturnType<typeof upsertMember>>) {
     id: member.id,
     memberNumber: member.memberNumber,
     publicToken: member.publicToken,
+    preferredLanguage: member.preferredLanguage,
     displayName: member.displayName,
     lastName: member.lastName,
     firstName: member.firstName,
