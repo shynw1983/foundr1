@@ -551,7 +551,8 @@ async function detectReceiptShapeWithAi(
     const initialShape = normalizeAiShape(parsed, width, height);
     if (!initialShape) return undefined;
     const reviewedShape = await reviewReceiptShapeWithAi(apiKey, model, imageBuffer, raw, width, height, initialShape);
-    return refineShapeToVisiblePaper(raw, width, height, reviewedShape ?? initialShape);
+    const acceptedShape = acceptReviewedShape(initialShape, reviewedShape) ? reviewedShape : initialShape;
+    return refineShapeToVisiblePaper(raw, width, height, acceptedShape);
   } catch (error) {
     console.warn("AI receipt boundary detection skipped", error);
     return undefined;
@@ -695,6 +696,28 @@ function normalizeAiShape(parsed: AiBoundaryResponse, width: number, height: num
     documentType: parsed.documentType,
     quad: area >= width * height * 0.12 ? typedQuad : undefined,
     edgeProfile
+  };
+}
+
+function acceptReviewedShape(initialShape: AiReceiptShape, reviewedShape: AiReceiptShape | undefined): reviewedShape is AiReceiptShape {
+  if (!reviewedShape) return false;
+  if (!initialShape.quad || !reviewedShape.quad) return true;
+  if (initialShape.documentType !== reviewedShape.documentType) return true;
+
+  const initialMetrics = quadMetrics(initialShape.quad);
+  const reviewedMetrics = quadMetrics(reviewedShape.quad);
+  if (reviewedMetrics.area < initialMetrics.area * 0.58) return false;
+  if (reviewedMetrics.width < initialMetrics.width * 0.72) return false;
+  if (reviewedMetrics.height < initialMetrics.height * 0.58) return false;
+  return true;
+}
+
+function quadMetrics(quad: [Point, Point, Point, Point]) {
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  return {
+    area: polygonArea(quad),
+    width: (distance(topLeft, topRight) + distance(bottomLeft, bottomRight)) / 2,
+    height: (distance(topLeft, bottomLeft) + distance(topRight, bottomRight)) / 2
   };
 }
 
