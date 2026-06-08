@@ -82,7 +82,8 @@ export async function POST(request: Request) {
         raw,
         width,
         height,
-        aiShape?.edgeProfile ?? localEdgeProfile
+        aiShape?.edgeProfile ?? localEdgeProfile,
+        aiShape?.quad
       )
       : await straightenStandardReceipt(raw, width, height, aiShape?.quad, localDetection);
     const processed = await renderScannerStyleImage(straightened, contrastMode);
@@ -334,27 +335,50 @@ function smoothEdge(points: Point[], width: number, height: number) {
   });
 }
 
-async function unwarpLongReceipt(raw: Buffer, width: number, height: number, edgeProfile: EdgeProfile): Promise<StraightenedImage> {
+async function unwarpLongReceipt(
+  raw: Buffer,
+  width: number,
+  height: number,
+  edgeProfile: EdgeProfile,
+  quad?: [Point, Point, Point, Point]
+): Promise<StraightenedImage> {
   const leftEdge = ensureEdgeEndpoints(edgeProfile.leftEdge, height);
   const rightEdge = ensureEdgeEndpoints(edgeProfile.rightEdge, height);
-  const topY = Math.max(0, Math.min(interpolateEdge(leftEdge, 0).y, interpolateEdge(rightEdge, 0).y));
-  const bottomY = Math.min(height - 1, Math.max(interpolateEdge(leftEdge, 1).y, interpolateEdge(rightEdge, 1).y));
-  const targetHeight = Math.max(1, Math.round(bottomY - topY + 1));
-  const widths = Array.from({ length: 9 }, (_, index) => {
-    const ratio = index / 8;
-    return distance(interpolateEdge(leftEdge, ratio), interpolateEdge(rightEdge, ratio));
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad ?? [
+    interpolateEdge(leftEdge, 0),
+    interpolateEdge(rightEdge, 0),
+    interpolateEdge(rightEdge, 1),
+    interpolateEdge(leftEdge, 1)
+  ];
+  const targetHeight = Math.max(
+    1,
+    Math.round((distance(topLeft, bottomLeft) + distance(topRight, bottomRight)) / 2)
+  );
+  const widths = Array.from({ length: 11 }, (_, index) => {
+    const ratio = index / 10;
+    const leftY = topLeft.y + (bottomLeft.y - topLeft.y) * ratio;
+    const rightY = topRight.y + (bottomRight.y - topRight.y) * ratio;
+    const left = { x: interpolateEdgeXAtY(leftEdge, leftY), y: leftY };
+    const right = { x: interpolateEdgeXAtY(rightEdge, rightY), y: rightY };
+    return distance(left, right);
   }).sort((a, b) => a - b);
   const cropWidthFloor = edgeProfile.crop?.width ? Math.round(edgeProfile.crop.width * 0.92) : 1;
-  const targetWidth = Math.max(cropWidthFloor, Math.round(widths[Math.floor(widths.length / 2)]));
+  const quadWidthFloor = Math.round(((distance(topLeft, topRight) + distance(bottomLeft, bottomRight)) / 2) * 0.94);
+  const targetWidth = Math.max(cropWidthFloor, quadWidthFloor, Math.round(widths[Math.floor(widths.length / 2)]));
   const output = Buffer.alloc(targetWidth * targetHeight * 3, 255);
 
   for (let y = 0; y < targetHeight; y += 1) {
     const ratio = targetHeight === 1 ? 0 : y / (targetHeight - 1);
-    const left = interpolateEdge(leftEdge, ratio);
-    const right = interpolateEdge(rightEdge, ratio);
-    const verticalY = topY + ratio * (bottomY - topY);
-    const leftPoint = { x: left.x, y: verticalY * 0.3 + left.y * 0.7 };
-    const rightPoint = { x: right.x, y: verticalY * 0.3 + right.y * 0.7 };
+    const leftY = topLeft.y + (bottomLeft.y - topLeft.y) * ratio;
+    const rightY = topRight.y + (bottomRight.y - topRight.y) * ratio;
+    const leftPoint = {
+      x: interpolateEdgeXAtY(leftEdge, leftY),
+      y: leftY
+    };
+    const rightPoint = {
+      x: interpolateEdgeXAtY(rightEdge, rightY),
+      y: rightY
+    };
     for (let x = 0; x < targetWidth; x += 1) {
       const horizontalRatio = targetWidth === 1 ? 0 : x / (targetWidth - 1);
       const sourceX = leftPoint.x + (rightPoint.x - leftPoint.x) * horizontalRatio;
@@ -393,6 +417,20 @@ function interpolateEdge(points: Point[], ratio: number) {
   return { x: last.x, y: targetY };
 }
 
+function interpolateEdgeXAtY(points: Point[], targetY: number) {
+  if (!points.length) return 0;
+  if (targetY <= points[0].y) return points[0].x;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const next = points[index];
+    if (targetY <= next.y) {
+      const ratio = (targetY - previous.y) / Math.max(1, next.y - previous.y);
+      return previous.x + (next.x - previous.x) * ratio;
+    }
+  }
+  return points[points.length - 1].x;
+}
+
 async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, height: number): Promise<AiReceiptShape | undefined> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return undefined;
@@ -422,6 +460,9 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
                   "Coordinates must be normalized between 0 and 1 relative to image width and height.",
                   "Find the outer boundary of the white thermal receipt paper, not the printed text column.",
                   "Ignore black printed text, shadows, folds, the tray, table edges, and other papers in the background.",
+                  "If multiple white papers are visible, choose the main long thermal receipt that contains the store logo/header and many purchase line items.",
+                  "Exclude any separate paper behind the receipt, including paper visible above the receipt top edge.",
+                  "The top edge should be the top edge of the receipt being scanned, not the top of another background paper.",
                   "For ordinary short receipts or documents, provide four outer paper corner points.",
                   "For long receipts, provide 16 to 24 leftEdge and rightEdge control points at increasing y positions from the top paper edge to the bottom paper edge.",
                   "For long receipts, each leftEdge point must sit on the left outer paper edge and each rightEdge point must sit on the right outer paper edge at the same approximate vertical level.",
@@ -435,7 +476,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
           {
             role: "user",
             content: [
-              { type: "input_text", text: "Detect the full white receipt paper outline. For this long receipt, return many leftEdge and rightEdge control points on the true outer paper edges, not on the printed text." },
+              { type: "input_text", text: "Detect only the main long supermarket thermal receipt outline. Exclude the separate paper visible behind/above it. Return many leftEdge and rightEdge control points on the true outer paper edges, plus the four outer receipt corners." },
               { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" }
             ]
           }
