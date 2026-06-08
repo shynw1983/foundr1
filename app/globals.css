@@ -3633,11 +3633,15 @@ body :where(
 }
 
 .receipt-scanner-form label {
-  grid-column: span 4;
+  grid-column: span 3;
+}
+
+.receipt-scanner-form .receipt-scanner-mode-select {
+  grid-column: span 3;
 }
 
 .receipt-scanner-form .receipt-scanner-ai-toggle {
-  grid-column: span 2;
+  grid-column: span 3;
   align-content: end;
 }
 
@@ -24011,6 +24015,10 @@ body :where(
   }
 
   .receipt-scanner-form label {
+    grid-column: span 1;
+  }
+
+  .receipt-scanner-form .receipt-scanner-mode-select {
     grid-column: span 1;
   }
 

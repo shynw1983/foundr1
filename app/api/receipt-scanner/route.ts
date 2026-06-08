@@ -20,11 +20,26 @@ type ReceiptDetection = {
   source: "local" | "ai";
 };
 
+type EdgeProfile = {
+  leftEdge: Point[];
+  rightEdge: Point[];
+  source: "local" | "ai";
+};
+
+type AiReceiptShape = {
+  documentType: "standard" | "long_receipt";
+  quad?: [Point, Point, Point, Point];
+  edgeProfile?: EdgeProfile;
+};
+
 type StraightenedImage = {
   buffer: Buffer;
   width: number;
   height: number;
 };
+
+type ScanMode = "auto" | "standard" | "long_receipt";
+type ContrastMode = "standard" | "strong";
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
@@ -38,6 +53,8 @@ export async function POST(request: Request) {
     }
     validateImageUpload(file, maxImageSizeBytes, "レシート写真");
     const boundaryMode = formData.get("boundaryMode") === "ai" ? "ai" : "auto";
+    const scanMode = normalizeScanMode(formData.get("scanMode"));
+    const contrastMode = formData.get("contrastMode") === "standard" ? "standard" : "strong";
 
     const input = Buffer.from(await file.arrayBuffer());
     const normalized = sharp(input, { failOn: "none" }).rotate().resize({
@@ -55,21 +72,29 @@ export async function POST(request: Request) {
       return Response.json({ error: "画像を読み込めませんでした。" }, { status: 400 });
     }
 
-    const aiQuad = aiImage ? await detectReceiptQuadWithAi(aiImage, width, height) : undefined;
-    const detection = aiQuad
-      ? { crop: cropFromQuad(aiQuad, width, height), quad: aiQuad, source: "ai" as const }
-      : detectReceipt(raw, width, height);
-    const straightened = detection.quad
-      ? await warpPerspective(raw, width, height, detection.quad)
-      : await cropRaw(raw, width, detection.crop);
-    const processed = await renderScannerStyleImage(straightened);
+    const aiShape = aiImage ? await detectReceiptShapeWithAi(aiImage, width, height) : undefined;
+    const localDetection = detectReceipt(raw, width, height);
+    const useLongReceipt = shouldUseLongReceiptMode(scanMode, aiShape, width, height);
+    const straightened = useLongReceipt
+      ? await unwarpLongReceipt(
+        raw,
+        width,
+        height,
+        aiShape?.edgeProfile ?? detectReceiptEdges(raw, width, height, localDetection.crop)
+      )
+      : await straightenStandardReceipt(raw, width, height, aiShape?.quad, localDetection);
+    const processed = await renderScannerStyleImage(straightened, contrastMode);
+    const boundarySource = useLongReceipt
+      ? (aiShape?.edgeProfile?.source ?? "local")
+      : (aiShape?.quad ? "ai" : localDetection.source);
 
     return new Response(processed, {
       headers: {
         "Content-Type": "image/png",
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
-        "X-Receipt-Scanner-Boundary": detection.source
+        "X-Receipt-Scanner-Boundary": boundarySource,
+        "X-Receipt-Scanner-Mode": useLongReceipt ? "long_receipt" : "standard"
       }
     });
   } catch (error) {
@@ -79,6 +104,30 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+}
+
+function normalizeScanMode(value: FormDataEntryValue | null): ScanMode {
+  return value === "standard" || value === "long_receipt" ? value : "auto";
+}
+
+function shouldUseLongReceiptMode(scanMode: ScanMode, aiShape: AiReceiptShape | undefined, width: number, height: number) {
+  if (scanMode === "long_receipt") return true;
+  if (scanMode === "standard") return false;
+  if (aiShape?.documentType === "long_receipt") return true;
+  return height / Math.max(1, width) >= 2.2;
+}
+
+async function straightenStandardReceipt(
+  raw: Buffer,
+  width: number,
+  height: number,
+  aiQuad: [Point, Point, Point, Point] | undefined,
+  localDetection: ReceiptDetection
+) {
+  if (aiQuad) return warpPerspective(raw, width, height, aiQuad);
+  return localDetection.quad
+    ? warpPerspective(raw, width, height, localDetection.quad)
+    : cropRaw(raw, width, localDetection.crop);
 }
 
 function detectReceipt(raw: Buffer, width: number, height: number): ReceiptDetection {
@@ -190,7 +239,154 @@ function cropFromQuad(quad: [Point, Point, Point, Point], imageWidth: number, im
   };
 }
 
-async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, height: number) {
+function detectReceiptEdges(raw: Buffer, width: number, height: number, crop: sharp.Region): EdgeProfile {
+  const mask = buildReceiptMask(raw, width, height);
+  const bandCount = Math.max(12, Math.min(36, Math.round(crop.height / 56)));
+  const leftEdge: Point[] = [];
+  const rightEdge: Point[] = [];
+  let previousLeft = crop.left;
+  let previousRight = crop.left + crop.width - 1;
+
+  for (let index = 0; index < bandCount; index += 1) {
+    const ratio = bandCount === 1 ? 0 : index / (bandCount - 1);
+    const centerY = Math.round(crop.top + ratio * (crop.height - 1));
+    const halfBand = Math.max(4, Math.round(crop.height / bandCount / 2));
+    const top = Math.max(crop.top, centerY - halfBand);
+    const bottom = Math.min(crop.top + crop.height - 1, centerY + halfBand);
+    const rowThreshold = Math.max(2, Math.round((bottom - top + 1) * 0.2));
+    let left = -1;
+    let right = -1;
+
+    for (let x = crop.left; x < crop.left + crop.width; x += 1) {
+      let count = 0;
+      for (let y = top; y <= bottom; y += 1) count += mask[y * width + x] ?? 0;
+      if (count >= rowThreshold) {
+        left = x;
+        break;
+      }
+    }
+    for (let x = crop.left + crop.width - 1; x >= crop.left; x -= 1) {
+      let count = 0;
+      for (let y = top; y <= bottom; y += 1) count += mask[y * width + x] ?? 0;
+      if (count >= rowThreshold) {
+        right = x;
+        break;
+      }
+    }
+
+    if (left < 0) left = previousLeft;
+    if (right < 0) right = previousRight;
+    if (right - left < crop.width * 0.35) {
+      left = previousLeft;
+      right = previousRight;
+    }
+    previousLeft = left;
+    previousRight = right;
+    leftEdge.push({ x: left, y: centerY });
+    rightEdge.push({ x: right, y: centerY });
+  }
+
+  return {
+    leftEdge: smoothEdge(leftEdge, width, height),
+    rightEdge: smoothEdge(rightEdge, width, height),
+    source: "local"
+  };
+}
+
+function buildReceiptMask(raw: Buffer, width: number, height: number) {
+  const mask = new Uint8Array(width * height);
+  for (let index = 0; index < width * height; index += 1) {
+    const offset = index * 3;
+    const red = raw[offset] ?? 0;
+    const green = raw[offset + 1] ?? 0;
+    const blue = raw[offset + 2] ?? 0;
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+    const saturation = max ? (max - min) / max : 0;
+    if (luminance > 128 && saturation < 0.45) mask[index] = 1;
+  }
+  return mask;
+}
+
+function smoothEdge(points: Point[], width: number, height: number) {
+  return points.map((point, index) => {
+    const start = Math.max(0, index - 2);
+    const end = Math.min(points.length - 1, index + 2);
+    let x = 0;
+    let y = 0;
+    let count = 0;
+    for (let cursor = start; cursor <= end; cursor += 1) {
+      x += points[cursor].x;
+      y += points[cursor].y;
+      count += 1;
+    }
+    return {
+      x: Math.max(0, Math.min(width - 1, x / count)),
+      y: Math.max(0, Math.min(height - 1, y / count))
+    };
+  });
+}
+
+async function unwarpLongReceipt(raw: Buffer, width: number, height: number, edgeProfile: EdgeProfile): Promise<StraightenedImage> {
+  const leftEdge = ensureEdgeEndpoints(edgeProfile.leftEdge, height);
+  const rightEdge = ensureEdgeEndpoints(edgeProfile.rightEdge, height);
+  const topY = Math.max(0, Math.min(interpolateEdge(leftEdge, 0).y, interpolateEdge(rightEdge, 0).y));
+  const bottomY = Math.min(height - 1, Math.max(interpolateEdge(leftEdge, 1).y, interpolateEdge(rightEdge, 1).y));
+  const targetHeight = Math.max(1, Math.round(bottomY - topY + 1));
+  const widths = Array.from({ length: 9 }, (_, index) => {
+    const ratio = index / 8;
+    return distance(interpolateEdge(leftEdge, ratio), interpolateEdge(rightEdge, ratio));
+  }).sort((a, b) => a - b);
+  const targetWidth = Math.max(1, Math.round(widths[Math.floor(widths.length / 2)]));
+  const output = Buffer.alloc(targetWidth * targetHeight * 3, 255);
+
+  for (let y = 0; y < targetHeight; y += 1) {
+    const ratio = targetHeight === 1 ? 0 : y / (targetHeight - 1);
+    const left = interpolateEdge(leftEdge, ratio);
+    const right = interpolateEdge(rightEdge, ratio);
+    const verticalY = topY + ratio * (bottomY - topY);
+    const leftPoint = { x: left.x, y: verticalY * 0.3 + left.y * 0.7 };
+    const rightPoint = { x: right.x, y: verticalY * 0.3 + right.y * 0.7 };
+    for (let x = 0; x < targetWidth; x += 1) {
+      const horizontalRatio = targetWidth === 1 ? 0 : x / (targetWidth - 1);
+      const sourceX = leftPoint.x + (rightPoint.x - leftPoint.x) * horizontalRatio;
+      const sourceY = leftPoint.y + (rightPoint.y - leftPoint.y) * horizontalRatio;
+      sampleBilinear(raw, width, height, sourceX, sourceY, output, (y * targetWidth + x) * 3);
+    }
+  }
+
+  return { buffer: output, width: targetWidth, height: targetHeight };
+}
+
+function ensureEdgeEndpoints(points: Point[], height: number) {
+  const sorted = [...points].sort((a, b) => a.y - b.y);
+  if (!sorted.length) return [{ x: 0, y: 0 }, { x: 0, y: height - 1 }];
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first.y > 0) sorted.unshift({ x: first.x, y: 0 });
+  if (last.y < height - 1) sorted.push({ x: last.x, y: height - 1 });
+  return sorted;
+}
+
+function interpolateEdge(points: Point[], ratio: number) {
+  const targetY = ratio * (points[points.length - 1].y - points[0].y) + points[0].y;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const next = points[index];
+    if (targetY <= next.y) {
+      const segmentRatio = (targetY - previous.y) / Math.max(1, next.y - previous.y);
+      return {
+        x: previous.x + (next.x - previous.x) * segmentRatio,
+        y: targetY
+      };
+    }
+  }
+  const last = points[points.length - 1];
+  return { x: last.x, y: targetY };
+}
+
+async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, height: number): Promise<AiReceiptShape | undefined> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return undefined;
 
@@ -213,11 +409,13 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
                 text: [
                   "You detect document boundaries in receipt photos.",
                   "Do not transcribe, rewrite, enhance, or infer receipt text.",
-                  "Return only the visible main receipt paper boundary as four corner points.",
+                  "Return only geometric boundary data for the visible main receipt paper.",
                   "Use the displayed image orientation.",
                   "Coordinates must be normalized between 0 and 1 relative to image width and height.",
-                  "If the exact paper edge is hidden, estimate the nearest visible paper rectangle conservatively.",
-                  "Return points in this order: top_left, top_right, bottom_right, bottom_left."
+                  "If the exact paper edge is hidden, estimate the nearest visible paper edge conservatively.",
+                  "For ordinary short receipts or documents, provide four corner points.",
+                  "For long receipts, also provide multiple left_edge and right_edge points at increasing y positions from top to bottom.",
+                  "Use documentType long_receipt when the receipt is long, narrow, curved, or has non-straight left/right edges."
                 ].join("\n")
               }
             ]
@@ -225,7 +423,7 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
           {
             role: "user",
             content: [
-              { type: "input_text", text: "Detect the receipt paper boundary. Return normalized corner coordinates only." },
+              { type: "input_text", text: "Detect receipt geometry. Return corners and, for long receipts, left/right edge control points." },
               { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" }
             ]
           }
@@ -241,6 +439,7 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
               properties: {
                 hasReceipt: { type: "boolean" },
                 confidence: { type: "number" },
+                documentType: { type: "string", enum: ["standard", "long_receipt"] },
                 points: {
                   type: "array",
                   minItems: 4,
@@ -255,13 +454,25 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
                     },
                     required: ["role", "x", "y"]
                   }
+                },
+                leftEdge: {
+                  type: "array",
+                  minItems: 0,
+                  maxItems: 32,
+                  items: edgePointSchema()
+                },
+                rightEdge: {
+                  type: "array",
+                  minItems: 0,
+                  maxItems: 32,
+                  items: edgePointSchema()
                 }
               },
-              required: ["hasReceipt", "confidence", "points"]
+              required: ["hasReceipt", "confidence", "documentType", "points", "leftEdge", "rightEdge"]
             }
           }
         },
-        max_output_tokens: 700
+        max_output_tokens: 1500
       })
     });
     const body = await response.json().catch(() => ({})) as {
@@ -281,7 +492,10 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
     const parsed = JSON.parse(content) as {
       hasReceipt: boolean;
       confidence: number;
+      documentType: "standard" | "long_receipt";
       points: Array<{ role: string; x: number; y: number }>;
+      leftEdge: Array<{ x: number; y: number }>;
+      rightEdge: Array<{ x: number; y: number }>;
     };
     await recordExternalServiceUsage({
       serviceKey: "openai",
@@ -310,12 +524,56 @@ async function detectReceiptQuadWithAi(imageBuffer: Buffer, width: number, heigh
     if (quad.some((point) => !point)) return undefined;
     const typedQuad = quad as [Point, Point, Point, Point];
     const area = polygonArea(typedQuad);
-    if (area < width * height * 0.12) return undefined;
-    return typedQuad;
+    const edgeProfile = normalizeAiEdgeProfile(parsed.leftEdge, parsed.rightEdge, width, height);
+    return {
+      documentType: parsed.documentType,
+      quad: area >= width * height * 0.12 ? typedQuad : undefined,
+      edgeProfile
+    };
   } catch (error) {
     console.warn("AI receipt boundary detection skipped", error);
     return undefined;
   }
+}
+
+function edgePointSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      x: { type: "number" },
+      y: { type: "number" }
+    },
+    required: ["x", "y"]
+  };
+}
+
+function normalizeAiEdgeProfile(
+  leftEdge: Array<{ x: number; y: number }>,
+  rightEdge: Array<{ x: number; y: number }>,
+  width: number,
+  height: number
+): EdgeProfile | undefined {
+  if (leftEdge.length < 4 || rightEdge.length < 4) return undefined;
+  const left = leftEdge.map((point) => ({
+    x: normalizeAiCoordinate(point.x, width),
+    y: normalizeAiCoordinate(point.y, height)
+  })).sort((a, b) => a.y - b.y);
+  const right = rightEdge.map((point) => ({
+    x: normalizeAiCoordinate(point.x, width),
+    y: normalizeAiCoordinate(point.y, height)
+  })).sort((a, b) => a.y - b.y);
+  const sampleCount = Math.min(left.length, right.length);
+  let validPairs = 0;
+  for (let index = 0; index < sampleCount; index += 1) {
+    if ((right[index].x - left[index].x) > width * 0.25) validPairs += 1;
+  }
+  if (validPairs < Math.max(3, sampleCount * 0.65)) return undefined;
+  return {
+    leftEdge: smoothEdge(left, width, height),
+    rightEdge: smoothEdge(right, width, height),
+    source: "ai"
+  };
 }
 
 function normalizeAiCoordinate(value: number, size: number) {
@@ -324,7 +582,7 @@ function normalizeAiCoordinate(value: number, size: number) {
   return Math.max(0, Math.min(size - 1, value));
 }
 
-async function renderScannerStyleImage(image: StraightenedImage) {
+async function renderScannerStyleImage(image: StraightenedImage, contrastMode: ContrastMode) {
   const { data: grayscale } = await sharp(image.buffer, {
     raw: {
       width: image.width,
@@ -336,20 +594,29 @@ async function renderScannerStyleImage(image: StraightenedImage) {
     .raw()
     .toBuffer({ resolveWithObject: true });
   const background = boxBlurGrayscale(grayscale, image.width, image.height, Math.max(18, Math.round(Math.min(image.width, image.height) * 0.08)));
-  const output = Buffer.alloc(image.width * image.height * 3, 255);
+  const corrected = Buffer.alloc(image.width * image.height, 255);
 
   for (let index = 0; index < image.width * image.height; index += 1) {
     const paperLevel = Math.max(18, background[index] ?? 255);
     const localValue = (grayscale[index] ?? 255) / paperLevel;
     let value = clampByte(localValue * 255);
-    value = clampByte((value - 128) * 1.18 + 128);
-    value = value < 190
-      ? clampByte(value * 0.72)
-      : clampByte(245 + (value - 245) * 0.28);
+    const contrast = contrastMode === "strong" ? 1.34 : 1.18;
+    value = clampByte((value - 128) * contrast + 128);
+    corrected[index] = value;
+  }
+
+  const localMean = boxBlurGrayscale(corrected, image.width, image.height, Math.max(10, Math.round(Math.min(image.width, image.height) * 0.028)));
+  const output = Buffer.alloc(image.width * image.height * 3, 255);
+  for (let index = 0; index < image.width * image.height; index += 1) {
+    const value = corrected[index] ?? 255;
+    const mean = localMean[index] ?? 255;
+    const thresholdOffset = contrastMode === "strong" ? 19 : 13;
+    const threshold = Math.max(118, Math.min(238, mean - thresholdOffset));
+    const binary = value < threshold ? 0 : 255;
     const offset = index * 3;
-    output[offset] = value;
-    output[offset + 1] = value;
-    output[offset + 2] = value;
+    output[offset] = binary;
+    output[offset + 1] = binary;
+    output[offset + 2] = binary;
   }
 
   return sharp(output, {

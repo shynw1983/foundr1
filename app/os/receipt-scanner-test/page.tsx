@@ -11,6 +11,8 @@ export default function ReceiptScannerTestPage() {
   const [message, setMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiBoundary, setUseAiBoundary] = useState(true);
+  const [scanMode, setScanMode] = useState("auto");
+  const [useStrongContrast, setUseStrongContrast] = useState(true);
   const originalUrlRef = useRef("");
   const scannedUrlRef = useRef("");
 
@@ -39,6 +41,8 @@ export default function ReceiptScannerTestPage() {
       const uploadData = new FormData();
       uploadData.set("receipt", file);
       uploadData.set("boundaryMode", useAiBoundary ? "ai" : "auto");
+      uploadData.set("scanMode", scanMode);
+      uploadData.set("contrastMode", useStrongContrast ? "strong" : "standard");
       const response = await fetch("/api/receipt-scanner", {
         method: "POST",
         body: uploadData
@@ -50,7 +54,9 @@ export default function ReceiptScannerTestPage() {
       const imageBlob = await response.blob();
       replaceObjectUrl(scannedUrlRef, setScannedUrl, URL.createObjectURL(imageBlob));
       const boundarySource = response.headers.get("X-Receipt-Scanner-Boundary");
-      setMessage(boundarySource === "ai" ? "AI紙面検出でスキャン補正が完了しました。" : "スキャン補正が完了しました。");
+      const resolvedMode = response.headers.get("X-Receipt-Scanner-Mode");
+      const modeLabel = resolvedMode === "long_receipt" ? "長レシート補正" : "標準補正";
+      setMessage(boundarySource === "ai" ? `AI紙面検出 / ${modeLabel}でスキャン補正が完了しました。` : `${modeLabel}でスキャン補正が完了しました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "スキャン補正に失敗しました。");
     } finally {
@@ -79,12 +85,28 @@ export default function ReceiptScannerTestPage() {
             <span>レシート写真</span>
             <input type="file" name="receipt" accept="image/*" />
           </label>
+          <label className="receipt-scanner-mode-select">
+            <span>補正モード</span>
+            <select value={scanMode} onChange={(event) => setScanMode(event.currentTarget.value)}>
+              <option value="auto">自動</option>
+              <option value="standard">標準スキャン</option>
+              <option value="long_receipt">長レシート補正</option>
+            </select>
+          </label>
           <label className="receipt-scanner-ai-toggle">
             <span>AI紙面検出</span>
             <input
               type="checkbox"
               checked={useAiBoundary}
               onChange={(event) => setUseAiBoundary(event.currentTarget.checked)}
+            />
+          </label>
+          <label className="receipt-scanner-ai-toggle">
+            <span>コントラスト強</span>
+            <input
+              type="checkbox"
+              checked={useStrongContrast}
+              onChange={(event) => setUseStrongContrast(event.currentTarget.checked)}
             />
           </label>
           <button className="primary-button" type="submit" disabled={isProcessing}>
