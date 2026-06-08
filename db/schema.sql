@@ -103,6 +103,24 @@ alter table brand_site_sections add column if not exists body_display_names json
 alter table brand_site_sections add column if not exists action_label_display_names jsonb not null default '{}'::jsonb;
 alter table brand_site_sections add column if not exists tag_display_names jsonb not null default '{}'::jsonb;
 
+create table if not exists brand_site_section_revisions (
+  id uuid primary key default gen_random_uuid(),
+  section_id uuid references brand_site_sections(id) on delete set null,
+  brand_id uuid not null references brands(id) on delete cascade,
+  page_key text not null,
+  section_key text not null,
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending',
+  submitted_by uuid references employees(id) on delete set null,
+  reviewed_by uuid references employees(id) on delete set null,
+  review_note text not null default '',
+  submitted_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter table brand_site_section_revisions add column if not exists review_note text not null default '';
+
 create table if not exists store_brands (
   store_id uuid not null references stores(id) on delete cascade,
   brand_id uuid not null references brands(id) on delete cascade,

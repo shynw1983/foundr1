@@ -75,6 +75,22 @@ type BrandSiteTranslationPreview = {
   model: string;
 };
 
+type BrandSiteRevision = {
+  id: string;
+  sectionId: string;
+  brandId: string;
+  pageKey: string;
+  sectionKey: string;
+  payload: Partial<BrandSiteSection>;
+  status: string;
+  submittedByName: string;
+  reviewedByName: string;
+  reviewNote: string;
+  submittedAt: string;
+  reviewedAt: string | null;
+  updatedAt: string;
+};
+
 type OsNavItem = {
   label: string;
   href: string;
@@ -181,6 +197,8 @@ function normalizeSection(section: BrandSiteSection, activeBrandId: string): Bra
 export default function BrandSitesPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [sections, setSections] = useState<BrandSiteSection[]>([]);
+  const [revisions, setRevisions] = useState<BrandSiteRevision[]>([]);
+  const [currentRole, setCurrentRole] = useState("");
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activePageKey, setActivePageKey] = useState("home");
   const [activeSectionId, setActiveSectionId] = useState("");
@@ -195,7 +213,9 @@ export default function BrandSitesPage() {
   const [translationPreview, setTranslationPreview] = useState<BrandSiteTranslationPreview | null>(null);
 
   const activeBrand = useMemo(() => brands.find((brand) => brand.id === activeBrandId) ?? null, [activeBrandId, brands]);
+  const canPublish = currentRole === "owner";
   const brandSections = useMemo(() => sections.filter((section) => section.brandId === activeBrandId), [activeBrandId, sections]);
+  const pendingRevisions = useMemo(() => revisions.filter((revision) => revision.brandId === activeBrandId && revision.status === "pending"), [activeBrandId, revisions]);
   const pageKeys = useMemo(() => uniqueValues(["home", "menu", "footer", ...brandSections.map((section) => section.pageKey)]), [brandSections]);
   const visibleSections = useMemo(
     () => brandSections.filter((section) => section.pageKey === activePageKey).sort((a, b) => a.sortOrder - b.sortOrder || a.sectionKey.localeCompare(b.sectionKey)),
@@ -237,10 +257,12 @@ export default function BrandSitesPage() {
     setStatus("");
     try {
       const response = await fetch("/api/brand-sites", { cache: "no-store" });
-      const body = await response.json().catch(() => ({})) as { brands?: Brand[]; sections?: BrandSiteSection[]; error?: string };
+      const body = await response.json().catch(() => ({})) as { brands?: Brand[]; sections?: BrandSiteSection[]; revisions?: BrandSiteRevision[]; currentRole?: string; error?: string };
       if (!response.ok) throw new Error(body.error || "読み込みに失敗しました。");
       setBrands(body.brands ?? []);
       setSections((body.sections ?? []).map((section) => normalizeSection(section, section.brandId)));
+      setRevisions(body.revisions ?? []);
+      setCurrentRole(body.currentRole ?? "");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "読み込みに失敗しました。");
     } finally {
@@ -309,9 +331,9 @@ export default function BrandSitesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...draft, fields })
       });
-      const body = await response.json().catch(() => ({})) as { id?: string; error?: string };
+      const body = await response.json().catch(() => ({})) as { id?: string; reviewRequired?: boolean; error?: string };
       if (!response.ok) throw new Error(body.error || "保存できませんでした。");
-      setStatus("保存しました。");
+      setStatus(body.reviewRequired ? "審査依頼を作成しました。老板の承認後に公開されます。" : "保存して公開しました。");
       await loadData();
       if (body.id) setActiveSectionId(body.id);
     } catch (error) {
@@ -340,6 +362,26 @@ export default function BrandSitesPage() {
       await loadData();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "削除できませんでした。");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function reviewRevision(id: string, action: "approve" | "reject") {
+    setSaving(action);
+    setStatus("");
+    try {
+      const response = await fetch("/api/brand-sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reviewRevision", id, reviewAction: action })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "審査を完了できませんでした。");
+      setStatus(action === "approve" ? "承認して公開しました。" : "修訂を差し戻しました。");
+      await loadData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "審査を完了できませんでした。");
     } finally {
       setSaving("");
     }
@@ -531,7 +573,7 @@ export default function BrandSitesPage() {
                   </button>
                 ) : null}
                 <button className="primary-button" type="button" onClick={() => void saveSection()} disabled={saving === "save"}>
-                  <Save size={16} /> {saving === "save" ? "保存中" : "保存"}
+                  <Save size={16} /> {saving === "save" ? "保存中" : canPublish ? "保存して公開" : "審査依頼"}
                 </button>
               </div>
             </div>
@@ -655,6 +697,38 @@ export default function BrandSitesPage() {
           </section>
         </section>
 
+        <section className="brand-site-review-panel">
+          <div className="management-subsection-title">
+            <div>
+              <h4>审核待ち</h4>
+              <p>{canPublish ? "老板が承認すると公開 API に反映されます。" : "经理の変更はここに入り、老板の承認後に公開されます。"}</p>
+            </div>
+            <span>{pendingRevisions.length} 件</span>
+          </div>
+          <div className="brand-site-review-list">
+            {pendingRevisions.map((revision) => (
+              <article key={revision.id}>
+                <div>
+                  <span>{pageLabels[revision.pageKey] ?? revision.pageKey} / {revision.sectionKey}</span>
+                  <strong>{revision.payload?.title || "無題のセクション"}</strong>
+                  <small>申請者: {revision.submittedByName || "-"} / {new Date(revision.submittedAt).toLocaleString("ja-JP")}</small>
+                </div>
+                {canPublish ? (
+                  <div className="row-actions">
+                    <button className="secondary-button compact-button" type="button" onClick={() => void reviewRevision(revision.id, "reject")} disabled={saving === "reject"}>
+                      差し戻し
+                    </button>
+                    <button className="primary-button compact-button" type="button" onClick={() => void reviewRevision(revision.id, "approve")} disabled={saving === "approve"}>
+                      承認して公開
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+            {!pendingRevisions.length ? <p className="empty-state">現在、审核待ちの変更はありません。</p> : null}
+          </div>
+        </section>
+
         {translationPreview ? (
           <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="ブランドサイトAI翻訳プレビュー">
             <section className="edit-modal menu-translation-preview-modal">
@@ -704,7 +778,7 @@ export default function BrandSitesPage() {
                   type="button"
                   className="primary-button"
                   onClick={() => void applyTranslationPreview()}
-                  disabled={translationBusy === "apply" || !translationPreview.entries.some((entry) => entry.suggestedText.trim())}
+                  disabled={!canPublish || translationBusy === "apply" || !translationPreview.entries.some((entry) => entry.suggestedText.trim())}
                 >
                   <CheckCircle2 size={16} /> {translationBusy === "apply" ? "書き込み中" : "確認して書き込む"}
                 </button>

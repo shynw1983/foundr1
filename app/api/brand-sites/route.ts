@@ -1,8 +1,11 @@
 import { requireOsSession } from "../../../lib/api-auth";
 import {
+  canApproveBrandSiteContent,
   canEditBrandSiteContent,
   deleteBrandSiteSection,
   readBrandSiteContent,
+  reviewBrandSiteSectionRevision,
+  submitBrandSiteSectionRevision,
   upsertBrandSiteSection
 } from "../../../lib/brand-site-content";
 
@@ -12,7 +15,7 @@ export async function GET() {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
-  return Response.json(await readBrandSiteContent());
+  return Response.json({ ...(await readBrandSiteContent()), currentRole: session.role });
 }
 
 export async function POST(request: Request) {
@@ -23,6 +26,20 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   try {
+    if (String(body.action ?? "") === "reviewRevision") {
+      if (!canApproveBrandSiteContent(session)) {
+        return Response.json({ error: "老板の承認が必要です。" }, { status: 403 });
+      }
+      return Response.json(await reviewBrandSiteSectionRevision({
+        id: body.id,
+        action: body.reviewAction,
+        reviewNote: body.reviewNote,
+        reviewerId: session.id
+      }));
+    }
+    if (!canApproveBrandSiteContent(session)) {
+      return Response.json(await submitBrandSiteSectionRevision(body, session.id));
+    }
     return Response.json(await upsertBrandSiteSection(body));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存できませんでした。" }, { status: 400 });

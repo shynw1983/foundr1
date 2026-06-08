@@ -18,6 +18,30 @@ export type BrandSiteTranslationDraftEntry = {
   suggestedText: string;
 };
 
+type BrandSiteSectionPayload = {
+  id?: string;
+  brandId: string;
+  pageKey: string;
+  sectionKey: string;
+  sectionType: string;
+  title: string;
+  subtitle: string;
+  body: string;
+  imageUrl: string;
+  imageAlt: string;
+  actionLabel: string;
+  actionUrl: string;
+  tags: string[];
+  fields: Record<string, unknown>;
+  titleDisplayNames: Record<string, unknown>;
+  subtitleDisplayNames: Record<string, unknown>;
+  bodyDisplayNames: Record<string, unknown>;
+  actionLabelDisplayNames: Record<string, unknown>;
+  tagDisplayNames: Record<string, unknown>;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 type BrandSiteSectionSeed = {
   pageKey: string;
   sectionKey: string;
@@ -40,6 +64,7 @@ type OpenAiTranslationResult = {
 };
 
 const editorRoles = new Set(["owner", "manager"]);
+const approverRoles = new Set(["owner"]);
 
 export const brandSiteLanguageLabels: Record<BrandSiteLanguage, string> = {
   en: "English",
@@ -288,6 +313,10 @@ export function canEditBrandSiteContent(session: EmployeeSession) {
   return editorRoles.has(session.role);
 }
 
+export function canApproveBrandSiteContent(session: EmployeeSession) {
+  return approverRoles.has(session.role);
+}
+
 function defaultSectionsForBrand(name: string) {
   const normalized = name.toLowerCase();
   if (normalized.includes("nanacha") || name.includes("奶茶")) return nanachaSections;
@@ -302,6 +331,39 @@ function normalizeDisplayRecord(value: unknown) {
 function normalizeTags(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, 20);
+}
+
+function normalizePayload(body: Record<string, unknown>): BrandSiteSectionPayload {
+  const brandId = cleanId(body.brandId);
+  const pageKey = cleanText(body.pageKey, 80);
+  const sectionKey = cleanText(body.sectionKey, 120);
+  if (!brandId || !pageKey || !sectionKey) throw new Error("ブランド、ページ、板块キーを入力してください。");
+  const fields = body.fields && typeof body.fields === "object" && !Array.isArray(body.fields)
+    ? body.fields as Record<string, unknown>
+    : {};
+  return {
+    id: cleanId(body.id) ?? undefined,
+    brandId,
+    pageKey,
+    sectionKey,
+    sectionType: cleanText(body.sectionType, 80) || "content",
+    title: cleanText(body.title, 500),
+    subtitle: cleanText(body.subtitle, 500),
+    body: cleanText(body.body),
+    imageUrl: cleanText(body.imageUrl, 1000),
+    imageAlt: cleanText(body.imageAlt, 500),
+    actionLabel: cleanText(body.actionLabel, 300),
+    actionUrl: cleanText(body.actionUrl, 1000),
+    tags: normalizeTags(body.tags),
+    fields,
+    titleDisplayNames: normalizeDisplayRecord(body.titleDisplayNames),
+    subtitleDisplayNames: normalizeDisplayRecord(body.subtitleDisplayNames),
+    bodyDisplayNames: normalizeDisplayRecord(body.bodyDisplayNames),
+    actionLabelDisplayNames: normalizeDisplayRecord(body.actionLabelDisplayNames),
+    tagDisplayNames: normalizeDisplayRecord(body.tagDisplayNames),
+    sortOrder: Math.max(0, Math.round(Number(body.sortOrder) || 100)),
+    isActive: body.isActive !== false
+  };
 }
 
 function cleanText(value: unknown, maxLength = 4000) {
@@ -400,7 +462,7 @@ async function ensureDefaultBrandSiteSections() {
 export async function readBrandSiteContent() {
   await ensureDefaultBrandSiteSections();
 
-  const [brands, sections] = await Promise.all([
+  const [brands, sections, revisions] = await Promise.all([
     sql`
       select id::text, name
       from brands
@@ -433,50 +495,64 @@ export async function readBrandSiteContent() {
         updated_at as "updatedAt"
       from brand_site_sections
       order by page_key, sort_order, section_key
+    `,
+    sql`
+      select
+        brand_site_section_revisions.id::text,
+        coalesce(brand_site_section_revisions.section_id::text, '') as "sectionId",
+        brand_site_section_revisions.brand_id::text as "brandId",
+        brand_site_section_revisions.page_key as "pageKey",
+        brand_site_section_revisions.section_key as "sectionKey",
+        coalesce(brand_site_section_revisions.payload, '{}'::jsonb) as payload,
+        brand_site_section_revisions.status,
+        coalesce(submitted_employee.name, '') as "submittedByName",
+        coalesce(reviewed_employee.name, '') as "reviewedByName",
+        brand_site_section_revisions.review_note as "reviewNote",
+        brand_site_section_revisions.submitted_at as "submittedAt",
+        brand_site_section_revisions.reviewed_at as "reviewedAt",
+        brand_site_section_revisions.updated_at as "updatedAt"
+      from brand_site_section_revisions
+      left join employees submitted_employee on submitted_employee.id = brand_site_section_revisions.submitted_by
+      left join employees reviewed_employee on reviewed_employee.id = brand_site_section_revisions.reviewed_by
+      where brand_site_section_revisions.status = 'pending'
+         or brand_site_section_revisions.submitted_at > now() - interval '30 days'
+      order by
+        case when brand_site_section_revisions.status = 'pending' then 0 else 1 end,
+        brand_site_section_revisions.submitted_at desc
     `
   ]);
 
-  return { brands, sections };
+  return { brands, sections, revisions };
 }
 
 export async function upsertBrandSiteSection(body: Record<string, unknown>) {
-  const id = cleanId(body.id);
-  const brandId = cleanId(body.brandId);
-  const pageKey = cleanText(body.pageKey, 80);
-  const sectionKey = cleanText(body.sectionKey, 120);
-  if (!brandId || !pageKey || !sectionKey) throw new Error("ブランド、ページ、板块キーを入力してください。");
-
-  const tags = normalizeTags(body.tags);
-  const fields = body.fields && typeof body.fields === "object" && !Array.isArray(body.fields)
-    ? body.fields as Record<string, unknown>
-    : {};
-
-  const rows = id
+  const payload = normalizePayload(body);
+  const rows = payload.id
     ? await sql`
         update brand_site_sections
         set
-          brand_id = ${brandId},
-          page_key = ${pageKey},
-          section_key = ${sectionKey},
-          section_type = ${cleanText(body.sectionType, 80) || "content"},
-          title = ${cleanText(body.title, 500)},
-          subtitle = ${cleanText(body.subtitle, 500)},
-          body = ${cleanText(body.body)},
-          image_url = ${cleanText(body.imageUrl, 1000)},
-          image_alt = ${cleanText(body.imageAlt, 500)},
-          action_label = ${cleanText(body.actionLabel, 300)},
-          action_url = ${cleanText(body.actionUrl, 1000)},
-          tags = ${JSON.stringify(tags)}::jsonb,
-          fields = ${JSON.stringify(fields)}::jsonb,
-          title_display_names = ${JSON.stringify(normalizeDisplayRecord(body.titleDisplayNames))}::jsonb,
-          subtitle_display_names = ${JSON.stringify(normalizeDisplayRecord(body.subtitleDisplayNames))}::jsonb,
-          body_display_names = ${JSON.stringify(normalizeDisplayRecord(body.bodyDisplayNames))}::jsonb,
-          action_label_display_names = ${JSON.stringify(normalizeDisplayRecord(body.actionLabelDisplayNames))}::jsonb,
-          tag_display_names = ${JSON.stringify(normalizeDisplayRecord(body.tagDisplayNames))}::jsonb,
-          sort_order = ${Math.max(0, Math.round(Number(body.sortOrder) || 100))},
-          is_active = ${body.isActive !== false},
+          brand_id = ${payload.brandId},
+          page_key = ${payload.pageKey},
+          section_key = ${payload.sectionKey},
+          section_type = ${payload.sectionType},
+          title = ${payload.title},
+          subtitle = ${payload.subtitle},
+          body = ${payload.body},
+          image_url = ${payload.imageUrl},
+          image_alt = ${payload.imageAlt},
+          action_label = ${payload.actionLabel},
+          action_url = ${payload.actionUrl},
+          tags = ${JSON.stringify(payload.tags)}::jsonb,
+          fields = ${JSON.stringify(payload.fields)}::jsonb,
+          title_display_names = ${JSON.stringify(payload.titleDisplayNames)}::jsonb,
+          subtitle_display_names = ${JSON.stringify(payload.subtitleDisplayNames)}::jsonb,
+          body_display_names = ${JSON.stringify(payload.bodyDisplayNames)}::jsonb,
+          action_label_display_names = ${JSON.stringify(payload.actionLabelDisplayNames)}::jsonb,
+          tag_display_names = ${JSON.stringify(payload.tagDisplayNames)}::jsonb,
+          sort_order = ${payload.sortOrder},
+          is_active = ${payload.isActive},
           updated_at = now()
-        where id = ${id}
+        where id = ${payload.id}
         returning id::text
       `
     : await sql`
@@ -504,26 +580,26 @@ export async function upsertBrandSiteSection(body: Record<string, unknown>) {
           updated_at
         )
         values (
-          ${brandId},
-          ${pageKey},
-          ${sectionKey},
-          ${cleanText(body.sectionType, 80) || "content"},
-          ${cleanText(body.title, 500)},
-          ${cleanText(body.subtitle, 500)},
-          ${cleanText(body.body)},
-          ${cleanText(body.imageUrl, 1000)},
-          ${cleanText(body.imageAlt, 500)},
-          ${cleanText(body.actionLabel, 300)},
-          ${cleanText(body.actionUrl, 1000)},
-          ${JSON.stringify(tags)}::jsonb,
-          ${JSON.stringify(fields)}::jsonb,
-          ${JSON.stringify(normalizeDisplayRecord(body.titleDisplayNames))}::jsonb,
-          ${JSON.stringify(normalizeDisplayRecord(body.subtitleDisplayNames))}::jsonb,
-          ${JSON.stringify(normalizeDisplayRecord(body.bodyDisplayNames))}::jsonb,
-          ${JSON.stringify(normalizeDisplayRecord(body.actionLabelDisplayNames))}::jsonb,
-          ${JSON.stringify(normalizeDisplayRecord(body.tagDisplayNames))}::jsonb,
-          ${Math.max(0, Math.round(Number(body.sortOrder) || 100))},
-          ${body.isActive !== false},
+          ${payload.brandId},
+          ${payload.pageKey},
+          ${payload.sectionKey},
+          ${payload.sectionType},
+          ${payload.title},
+          ${payload.subtitle},
+          ${payload.body},
+          ${payload.imageUrl},
+          ${payload.imageAlt},
+          ${payload.actionLabel},
+          ${payload.actionUrl},
+          ${JSON.stringify(payload.tags)}::jsonb,
+          ${JSON.stringify(payload.fields)}::jsonb,
+          ${JSON.stringify(payload.titleDisplayNames)}::jsonb,
+          ${JSON.stringify(payload.subtitleDisplayNames)}::jsonb,
+          ${JSON.stringify(payload.bodyDisplayNames)}::jsonb,
+          ${JSON.stringify(payload.actionLabelDisplayNames)}::jsonb,
+          ${JSON.stringify(payload.tagDisplayNames)}::jsonb,
+          ${payload.sortOrder},
+          ${payload.isActive},
           now()
         )
         on conflict (brand_id, page_key, section_key)
@@ -550,6 +626,88 @@ export async function upsertBrandSiteSection(body: Record<string, unknown>) {
       `;
 
   return { ok: true, id: rows[0]?.id };
+}
+
+export async function submitBrandSiteSectionRevision(body: Record<string, unknown>, employeeId: string) {
+  const payload = normalizePayload(body);
+  const rows = await sql`
+    insert into brand_site_section_revisions (
+      section_id,
+      brand_id,
+      page_key,
+      section_key,
+      payload,
+      status,
+      submitted_by,
+      submitted_at,
+      updated_at
+    )
+    values (
+      ${payload.id ?? null},
+      ${payload.brandId},
+      ${payload.pageKey},
+      ${payload.sectionKey},
+      ${JSON.stringify(payload)}::jsonb,
+      'pending',
+      ${employeeId},
+      now(),
+      now()
+    )
+    returning id::text
+  `;
+
+  return { ok: true, reviewRequired: true, id: rows[0]?.id };
+}
+
+export async function reviewBrandSiteSectionRevision(input: {
+  id: unknown;
+  action: unknown;
+  reviewNote?: unknown;
+  reviewerId: string;
+}) {
+  const id = cleanId(input.id);
+  if (!id) throw new Error("审核対象を選択してください。");
+  const action = String(input.action ?? "").trim();
+  if (action !== "approve" && action !== "reject") throw new Error("審査アクションが不正です。");
+
+  const rows = await sql`
+    select id::text, payload, status
+    from brand_site_section_revisions
+    where id = ${id}
+    limit 1
+  `;
+  const revision = rows[0];
+  if (!revision || revision.status !== "pending") throw new Error("待审核の修訂が見つかりません。");
+
+  if (action === "reject") {
+    await sql`
+      update brand_site_section_revisions
+      set
+        status = 'rejected',
+        reviewed_by = ${input.reviewerId},
+        reviewed_at = now(),
+        review_note = ${cleanText(input.reviewNote, 1000)},
+        updated_at = now()
+      where id = ${id}
+    `;
+    return { ok: true, status: "rejected" };
+  }
+
+  const payload = normalizePayload(revision.payload as Record<string, unknown>);
+  const applied = await upsertBrandSiteSection(payload as unknown as Record<string, unknown>);
+  await sql`
+    update brand_site_section_revisions
+    set
+      section_id = ${applied.id ?? payload.id ?? null},
+      status = 'approved',
+      reviewed_by = ${input.reviewerId},
+      reviewed_at = now(),
+      review_note = ${cleanText(input.reviewNote, 1000)},
+      updated_at = now()
+    where id = ${id}
+  `;
+
+  return { ok: true, status: "approved", sectionId: applied.id };
 }
 
 export async function deleteBrandSiteSection(id: unknown) {
