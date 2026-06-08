@@ -5,6 +5,7 @@ import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMe
 export type NanachaPricedOption = {
   id: string;
   label: string;
+  displayNames?: Record<string, string>;
   price: number;
 };
 
@@ -12,6 +13,7 @@ export type NanachaDrink = {
   id: string;
   menuCatalogItemId: string;
   name: string;
+  displayNames?: Record<string, string>;
   category: string;
   price: number;
   description: string;
@@ -60,6 +62,7 @@ type MenuItemRow = {
   id: string;
   externalId: string;
   name: string;
+  displayNames?: Record<string, string>;
   category: string;
   description: string;
   imageUrl: string;
@@ -79,6 +82,7 @@ type MenuGroupRow = {
   id: string;
   groupKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   ruleJson: Record<string, unknown>;
 };
 
@@ -96,6 +100,7 @@ type MenuOptionRow = {
   optionGroupId: string;
   optionKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   priceDelta: number | null;
 };
 
@@ -119,6 +124,7 @@ function optionObjects(options: MenuOptionRow[]) {
   return options.map((option) => ({
     id: option.optionKey,
     label: option.name,
+    displayNames: option.displayNames,
     price: option.priceDelta ?? 0
   }));
 }
@@ -155,6 +161,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         menu_catalog_items.id::text,
         coalesce(menu_catalog_items.external_id, '') as "externalId",
         menu_catalog_items.name,
+        coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
         coalesce(menu_catalog_items.description, '') as description,
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
@@ -189,6 +196,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         id::text,
         group_key as "groupKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         rule_json as "ruleJson",
         sort_order as "sortOrder"
       from menu_option_groups
@@ -202,6 +210,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         option_group_id::text as "optionGroupId",
         option_key as "optionKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         price_delta::float as "priceDelta",
         sort_order as "sortOrder"
       from menu_options
@@ -269,6 +278,7 @@ export async function getNanachaCompatibleMenu(requestUrl: string, storeQuery = 
         id: item.externalId || item.id,
         menuCatalogItemId: item.id,
         name: item.name,
+        displayNames: item.displayNames,
         category: publicCategoryId,
         price: item.basePrice ?? 0,
         description: item.description,

@@ -10,18 +10,35 @@ function normalizeText(value: unknown) {
 
 function normalizeMemberCode(value: unknown) {
   const text = normalizeText(value);
-  const foundr1Match = text.match(/^foundr1:member:([^:]+)(?::coupon:([^:]+))?$/i);
-  if (foundr1Match?.[1]) return { code: foundr1Match[1].trim(), couponId: foundr1Match[2]?.trim() ?? "" };
+  const foundr1Match = text.match(/^foundr1:member:([^:]+)(?::(.+))?$/i);
+  if (foundr1Match?.[1]) {
+    const parts = (foundr1Match[2] ?? "").split(":").filter(Boolean);
+    const extras = parts.reduce((record, part, index) => {
+      if (index % 2 === 0) record[part.toLowerCase()] = parts[index + 1] ?? "";
+      return record;
+    }, {} as Record<string, string>);
+    return {
+      code: foundr1Match[1].trim(),
+      couponId: normalizeText(extras.coupon),
+      language: normalizeMemberLanguage(extras.lang)
+    };
+  }
 
   try {
     const url = new URL(text);
     return {
       code: url.searchParams.get("member")?.trim() || url.searchParams.get("memberToken")?.trim() || text,
-      couponId: url.searchParams.get("coupon")?.trim() || url.searchParams.get("couponId")?.trim() || ""
+      couponId: url.searchParams.get("coupon")?.trim() || url.searchParams.get("couponId")?.trim() || "",
+      language: normalizeMemberLanguage(url.searchParams.get("lang"))
     };
   } catch {
-    return { code: text, couponId: "" };
+    return { code: text, couponId: "", language: "" };
   }
+}
+
+function normalizeMemberLanguage(value: unknown) {
+  const language = normalizeText(value);
+  return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
 }
 
 export async function GET(request: Request) {
@@ -30,7 +47,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const storeId = normalizeText(url.searchParams.get("storeId"));
-  const { code, couponId } = normalizeMemberCode(url.searchParams.get("code"));
+  const { code, couponId, language } = normalizeMemberCode(url.searchParams.get("code"));
   if (!storeId || !code) {
     return Response.json({ error: "店舗と会員コードを入力してください。" }, { status: 400 });
   }
@@ -48,5 +65,5 @@ export async function GET(request: Request) {
 
   await issueAutomaticLoyaltyRewardsForMember(member.id);
   const coupons = await getMemberAvailableCoupons(member.id);
-  return Response.json({ member, coupons, selectedCouponId: couponId });
+  return Response.json({ member, coupons, selectedCouponId: couponId, selectedLanguage: language });
 }

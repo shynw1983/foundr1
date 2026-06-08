@@ -5,12 +5,14 @@ import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMe
 export type MaamaaPricedOption = {
   id: string;
   name: string;
+  displayNames?: Record<string, string>;
   price: number;
 };
 
 export type MaamaaMenuSection = {
   id: string;
   title: string;
+  displayNames?: Record<string, string>;
   limit: number;
   items: MaamaaPricedOption[];
 };
@@ -20,6 +22,7 @@ export type MaamaaCompatibleMenu = {
     id: string;
     menuCatalogItemId: string;
     name: string;
+    displayNames?: Record<string, string>;
     price: number;
     note: string;
     isAvailable: boolean;
@@ -45,6 +48,7 @@ type MenuItemRow = {
   id: string;
   externalId: string;
   name: string;
+  displayNames?: Record<string, string>;
   description: string;
   basePrice: number | null;
   variableSchema: Record<string, unknown>;
@@ -54,6 +58,7 @@ type MenuGroupRow = {
   id: string;
   groupKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   ruleJson: Record<string, unknown>;
   sortOrder: number;
 };
@@ -62,6 +67,7 @@ type MenuOptionRow = {
   optionGroupId: string;
   optionKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   priceDelta: number | null;
   sortOrder: number;
 };
@@ -77,6 +83,7 @@ function choice(option: MenuOptionRow): MaamaaPricedOption {
   return {
     id: option.optionKey,
     name: option.name,
+    displayNames: option.displayNames,
     price: option.priceDelta ?? 0
   };
 }
@@ -106,6 +113,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         id::text,
         coalesce(external_id, '') as "externalId",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         coalesce(description, '') as description,
         base_price::float as "basePrice",
         variable_schema as "variableSchema"
@@ -121,6 +129,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         id::text,
         group_key as "groupKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         rule_json as "ruleJson",
         sort_order as "sortOrder"
       from menu_option_groups
@@ -133,6 +142,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         option_group_id::text as "optionGroupId",
         option_key as "optionKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         price_delta::float as "priceDelta",
         sort_order as "sortOrder"
       from menu_options
@@ -222,6 +232,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
     .map((group) => ({
       id: group.groupKey,
       title: group.name,
+      displayNames: group.displayNames,
       limit: Number(group.ruleJson?.limit ?? 99),
       items: (optionsByGroup.get(group.id) ?? [])
         .filter((option) => !unavailableOptionKeys.has(option.optionKey))
@@ -270,6 +281,7 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
         id: base.externalId || "mala-soup",
         menuCatalogItemId: base.id,
         name: base.name,
+        displayNames: base.displayNames,
         price: baseSetting?.priceOverride ?? base.basePrice ?? 0,
         note: base.description,
         isAvailable: baseSetting?.isAvailable ?? true,

@@ -539,7 +539,7 @@ function getCustomerDisplayLanguage(member: PosMember | null) {
 
 function getLocalizedDisplayName(name: string, displayNames: Record<string, string> | undefined, language: string) {
   if (language === "ja") return name;
-  return String(displayNames?.[language] || name || "").trim();
+  return String(displayNames?.[language] || displayNames?.en || name || "").trim();
 }
 
 function getCategories(items: PosMenuItem[], categories: PosMenuCategory[], brandId: string) {
@@ -968,7 +968,9 @@ export default function StorePosPage() {
       const response = await fetch(`/api/store/pos/member?${params.toString()}`, { cache: "no-store" });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "会員を確認できませんでした。");
-      setSelectedMember(body.member as PosMember);
+      const scannedLanguage = String(body.selectedLanguage || "").trim();
+      const member = body.member as PosMember;
+      setSelectedMember(scannedLanguage ? { ...member, preferredLanguage: scannedLanguage } : member);
       const coupons = Array.isArray(body.coupons) ? body.coupons as PosCoupon[] : [];
       setMemberCoupons(coupons);
       const scannedCouponId = typeof body.selectedCouponId === "string" ? body.selectedCouponId : "";
@@ -1468,6 +1470,17 @@ export default function StorePosPage() {
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister]);
+
+  useEffect(() => {
+    if (!selectedStoreId || !canUseRegister) return;
+    if (customerDisplayMode !== "business" || completedDisplayState || hasCurrentTransaction) return;
+    const timer = window.setTimeout(() => {
+      setCustomerDisplayMode("advertising");
+      void publishCustomerDisplayState(getAdvertisingDisplayState());
+    }, 10000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseRegister, completedDisplayState, customerDisplayMode, hasCurrentTransaction, orderType, paymentMethod, selectedStoreId]);
 
   async function submitCashAction(action: "open" | "movement" | "close") {
     if (!selectedStoreId || cashSaving) return;

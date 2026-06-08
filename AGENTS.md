@@ -33,6 +33,8 @@ Foundr1 OS already owns shared menu/catalog data, store operations status, publi
 
 When changing online ordering, checkout, member/loyalty, completion, receipt, or pickup-status flows for either nanacha or maamaa, check and update the other brand site in the same pass unless the business owner explicitly scopes the change to one brand only. Keep customer-facing flow behavior aligned across both websites.
 
+Customer-facing brand websites must consume the standard Foundr1 OS public menu API (`/api/public/menus?brand=...`) and render menu names/options from the menu master `displayNames` fields. Do not build new brand websites on `*-compatible` menu endpoints or hard-coded local translated menu lists. See `docs/customer-menu-i18n.md` before adding or changing any public ordering, POS customer display, member card, coupon, or menu translation flow.
+
 maamaa Web予約 supports customer-side cancellation/refund requests until 30 minutes before pickup, before preparation starts. Keep this action available from the member order detail modal and reuse the shared order cancellation/refund rules instead of duplicating a separate policy.
 
 ## Commands
@@ -222,13 +224,22 @@ When editing UI:
 
 ## Translation
 
-The app supports Japanese, Simplified Chinese, and Traditional Chinese UI text.
+Foundr1 has two separate translation layers:
 
-When adding new visible text:
+- Backoffice/store operation UI text is local application UI. Add translations where the local translation system expects them. Include labels, placeholders, select options, button text, empty states, notices, and errors.
+- Customer-facing menu/catalog text is data owned by `/os/menus`, not local UI copy. Product names, option group names, option names, coupon/reward display names, and any menu text shown on brand websites, member pages, POS customer display, receipts, kitchen/customer summaries, or checkout must come from structured IDs plus `displayNames`.
 
-- Add translations where the local translation system expects them.
-- Include labels, placeholders, select options, button text, empty states, notices, and errors.
-- Product names and product master content are data and are not automatically translated.
+Customer-facing language rules:
+
+- Japanese is the operational/default source language.
+- If no member/customer language is known, customer-facing surfaces display Japanese.
+- If a member card or customer context includes a language, use that language for all customer-facing copy that supports it.
+- Current customer menu display languages are English, Simplified Chinese, Traditional Chinese, Korean, Vietnamese, and Nepali, with Japanese as the source fallback.
+- Fallback order for menu data is requested language, then English, then the Japanese/source name. Never silently map English users to Chinese or mix languages across product names, options, tax labels, and member greetings.
+- Member card language comes from the global language selector encoded with the member identity, not from a legacy profile preference field.
+- Do not translate product names/options only in one frontend. Update OS menu `displayNames` and let POS, customer display, public menu APIs, and brand websites consume the same data.
+
+See `docs/customer-menu-i18n.md` for the required data/API structure and brand website integration pattern.
 
 ## Data Compatibility
 

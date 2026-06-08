@@ -68,6 +68,7 @@ type MenuItem = {
   externalId: string;
   itemKind: string;
   name: string;
+  displayNames?: Record<string, string>;
   category: string;
   description: string;
   imageUrl: string;
@@ -84,6 +85,7 @@ type MenuGroup = {
   externalId: string;
   groupKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   selectionType: string;
   affectsProcedure: boolean;
   ruleJson: Record<string, unknown>;
@@ -97,6 +99,7 @@ type MenuOption = {
   externalId: string;
   optionKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   priceDelta: number | null;
   affectsProcedure: boolean;
   sortOrder: number;
@@ -168,6 +171,7 @@ const emptyItem: MenuItem = {
   externalId: "",
   itemKind: "fixed_product",
   name: "",
+  displayNames: {},
   category: "",
   description: "",
   imageUrl: "",
@@ -196,6 +200,7 @@ const emptyGroup: MenuGroup = {
   externalId: "",
   groupKey: "",
   name: "",
+  displayNames: {},
   selectionType: "single",
   affectsProcedure: true,
   ruleJson: {},
@@ -209,6 +214,7 @@ const emptyOption: MenuOption = {
   externalId: "",
   optionKey: "",
   name: "",
+  displayNames: {},
   priceDelta: null,
   affectsProcedure: true,
   sortOrder: 100,
@@ -226,6 +232,15 @@ const selectionTypeOptions = [
   { value: "single", label: "1つ選ぶ" },
   { value: "multiple", label: "複数選べる" },
   { value: "quantity", label: "数量で選ぶ" }
+];
+
+const customerMenuLanguageOptions = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "简体中文" },
+  { value: "zh-Hant", label: "繁體中文" },
+  { value: "ko", label: "한국어" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "ne", label: "नेपाली" }
 ];
 
 const choiceSettingsCategory = "__choice_settings__";
@@ -326,6 +341,16 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
   const [moved] = nextItems.splice(fromIndex, 1);
   nextItems.splice(toIndex, 0, moved);
   return nextItems;
+}
+
+function updateDisplayName<T extends { displayNames?: Record<string, string> }>(draft: T, language: string, value: string): T {
+  return {
+    ...draft,
+    displayNames: {
+      ...(draft.displayNames ?? {}),
+      [language]: value
+    }
+  };
 }
 
 export default function MenuAdminPage() {
@@ -1187,14 +1212,32 @@ export default function MenuAdminPage() {
                             {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                           </select>
                         </label>
-                        <label>
-                          <span>並び順</span>
-                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-                        </label>
+	                        <label>
+	                          <span>並び順</span>
+	                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+	                        </label>
+	                      </div>
+                      <div className="menu-translation-panel">
+                        <div>
+                          <strong>客表示・会員・ブランドサイト用表示名</strong>
+                          <span>選択グループ名も多言語表示時に使います。</span>
+                        </div>
+                        <div className="menu-translation-grid">
+                          {customerMenuLanguageOptions.map((language) => (
+                            <label key={language.value}>
+                              <span>{language.label}</span>
+                              <input
+                                value={groupDraft.displayNames?.[language.value] ?? ""}
+                                onChange={(event) => setGroupDraft(updateDisplayName(groupDraft, language.value, event.target.value))}
+                                placeholder={groupDraft.name || "表示名"}
+                              />
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                      <label className="checkbox-group menu-inline-check">
-                        <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
-                        <span>手順に影響する</span>
+	                      <label className="checkbox-group menu-inline-check">
+	                        <input type="checkbox" checked={groupDraft.affectsProcedure} onChange={(event) => setGroupDraft({ ...groupDraft, affectsProcedure: event.target.checked })} />
+	                        <span>手順に影響する</span>
                       </label>
                       <label className="checkbox-group menu-inline-check">
                         <input type="checkbox" checked={groupDraft.isActive} onChange={(event) => setGroupDraft({ ...groupDraft, isActive: event.target.checked })} />
@@ -1250,14 +1293,32 @@ export default function MenuAdminPage() {
                           <span>価格差額</span>
                           <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
                         </label>
-                        <label>
-                          <span>並び順</span>
-                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
-                        </label>
+	                        <label>
+	                          <span>並び順</span>
+	                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+	                        </label>
+	                      </div>
+                      <div className="menu-translation-panel">
+                        <div>
+                          <strong>客表示・会員・ブランドサイト用表示名</strong>
+                          <span>サイズ、温度、辛さ、追加オプション名にも使います。</span>
+                        </div>
+                        <div className="menu-translation-grid">
+                          {customerMenuLanguageOptions.map((language) => (
+                            <label key={language.value}>
+                              <span>{language.label}</span>
+                              <input
+                                value={optionDraft.displayNames?.[language.value] ?? ""}
+                                onChange={(event) => setOptionDraft(updateDisplayName(optionDraft, language.value, event.target.value))}
+                                placeholder={optionDraft.name || "表示名"}
+                              />
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                      <label className="checkbox-group menu-inline-check">
-                        <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
-                        <span>手順に影響する</span>
+	                      <label className="checkbox-group menu-inline-check">
+	                        <input type="checkbox" checked={optionDraft.affectsProcedure} onChange={(event) => setOptionDraft({ ...optionDraft, affectsProcedure: event.target.checked })} />
+	                        <span>手順に影響する</span>
                       </label>
                       <label className="checkbox-group menu-inline-check">
                         <input type="checkbox" checked={optionDraft.isActive} onChange={(event) => setOptionDraft({ ...optionDraft, isActive: event.target.checked })} />
@@ -1377,14 +1438,32 @@ export default function MenuAdminPage() {
                   <span>基本価格</span>
                   <input value={itemDraft.basePrice ?? ""} onChange={(event) => setItemDraft({ ...itemDraft, basePrice: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
                 </label>
-                <label className="checkbox-group menu-inline-check">
-                  <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
-                  <span>公開中</span>
-                </label>
+	                <label className="checkbox-group menu-inline-check">
+	                  <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
+	                  <span>公開中</span>
+	                </label>
+	              </div>
+              <div className="menu-translation-panel">
+                <div>
+                  <strong>客表示・会員・ブランドサイト用表示名</strong>
+                  <span>未入力の言語は English、最後に日本語名へフォールバックします。</span>
+                </div>
+                <div className="menu-translation-grid">
+                  {customerMenuLanguageOptions.map((language) => (
+                    <label key={language.value}>
+                      <span>{language.label}</span>
+                      <input
+                        value={itemDraft.displayNames?.[language.value] ?? ""}
+                        onChange={(event) => setItemDraft(updateDisplayName(itemDraft, language.value, event.target.value))}
+                        placeholder={itemDraft.name || "商品名"}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
-              <label className="menu-full-field">
-                <span>説明</span>
-                <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
+	              <label className="menu-full-field">
+	                <span>説明</span>
+	                <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
               </label>
               <div className="photo-upload-box menu-photo-upload">
                 <div className="product-photo-preview">

@@ -619,6 +619,7 @@ export async function POST(request: Request) {
       menu_catalog_items.id::text,
       menu_catalog_items.brand_id::text as "brandId",
       menu_catalog_items.name,
+      coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
       menu_catalog_items.item_kind as "itemKind",
       coalesce(menu_catalog_items.category, '') as category,
       menu_catalog_items.variable_schema as "variableSchema",
@@ -643,6 +644,7 @@ export async function POST(request: Request) {
     id: string;
     brandId: string;
     name: string;
+    displayNames?: Record<string, string>;
     itemKind: string;
     category: string;
     posPricingMode: string;
@@ -656,12 +658,14 @@ export async function POST(request: Request) {
       menu_options.id::text,
       menu_options.option_key as "optionKey",
       menu_options.name,
+      coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
       coalesce(menu_options.price_delta, 0)::int as "priceDelta",
       menu_option_groups.id::text as "groupId",
       menu_option_groups.brand_id::text as "brandId",
       coalesce(menu_option_groups.menu_catalog_item_id::text, '') as "menuCatalogItemId",
       menu_option_groups.group_key as "groupKey",
       menu_option_groups.name as "groupName",
+      coalesce(menu_option_groups.display_names, '{}'::jsonb) as "groupDisplayNames",
       menu_option_groups.selection_type as "selectionType",
       menu_option_groups.rule_json as "ruleJson"
     from menu_options
@@ -684,12 +688,14 @@ export async function POST(request: Request) {
     id: string;
     optionKey: string;
     name: string;
+    displayNames?: Record<string, string>;
     priceDelta: number;
     groupId: string;
     brandId: string;
     menuCatalogItemId: string;
     groupKey: string;
     groupName: string;
+    groupDisplayNames?: Record<string, string>;
     selectionType: string;
     ruleJson: Record<string, unknown>;
   }>).map((option) => [option.id, option]));
@@ -698,6 +704,7 @@ export async function POST(request: Request) {
     id: string;
     brandId: string;
     name: string;
+    displayNames?: Record<string, string>;
     itemKind: string;
     category: string;
     posPricingMode: string;

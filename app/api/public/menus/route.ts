@@ -10,6 +10,7 @@ type MenuOption = {
   externalId: string;
   optionKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   priceDelta: number | null;
   affectsProcedure: boolean;
   sortOrder: number;
@@ -21,6 +22,7 @@ type MenuOptionGroup = {
   externalId: string;
   groupKey: string;
   name: string;
+  displayNames?: Record<string, string>;
   selectionType: string;
   affectsProcedure: boolean;
   ruleJson: Record<string, unknown>;
@@ -85,6 +87,7 @@ export async function GET(request: Request) {
       coalesce(menu_catalog_items.external_id, '') as "externalId",
       menu_catalog_items.item_kind as "itemKind",
       menu_catalog_items.name,
+      coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
       coalesce(menu_catalog_items.category, '') as category,
       coalesce(menu_catalog_items.description, '') as description,
       coalesce(menu_catalog_items.image_url, '') as "imageUrl",
@@ -148,6 +151,7 @@ export async function GET(request: Request) {
       coalesce(external_id, '') as "externalId",
       group_key as "groupKey",
       name,
+      coalesce(display_names, '{}'::jsonb) as "displayNames",
       selection_type as "selectionType",
       affects_procedure as "affectsProcedure",
       rule_json as "ruleJson",
@@ -165,6 +169,7 @@ export async function GET(request: Request) {
       coalesce(menu_options.external_id, '') as "externalId",
       menu_options.option_key as "optionKey",
       menu_options.name,
+      coalesce(menu_options.display_names, '{}'::jsonb) as "displayNames",
       menu_options.price_delta::float as "priceDelta",
       menu_options.affects_procedure as "affectsProcedure",
       menu_options.sort_order as "sortOrder"
@@ -256,6 +261,7 @@ export async function GET(request: Request) {
     store,
     storeOperation,
     categories,
+    optionGroups: [...globalGroups, ...Array.from(groupsByItem.values()).flat()],
     items: items.map((item) => {
       const setting = settingsByItemId.get(item.id);
       return {

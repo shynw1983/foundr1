@@ -373,10 +373,21 @@ function getOrderTypeLabel(value: string, text: (typeof customerDisplayText)[Dis
   return "";
 }
 
+const customerDisplayTaxText: Record<DisplayLanguage, { included: string; excluded: string }> = {
+  ja: { included: "内消費税", excluded: "消費税" },
+  zh: { included: "内含消费税", excluded: "消费税" },
+  "zh-Hant": { included: "內含消費稅", excluded: "消費稅" },
+  en: { included: "Tax included", excluded: "Tax" },
+  ko: { included: "내부 소비세", excluded: "소비세" },
+  vi: { included: "Đã gồm thuế", excluded: "Thuế" },
+  ne: { included: "कर समावेश", excluded: "कर" }
+};
+
 function translateTaxLabel(label: string, language: DisplayLanguage) {
   if (language === "ja") return label;
   const rateMatch = label.match(/(\d+(?:\.\d+)?)%/);
-  return rateMatch?.[1] ? `Tax included ${rateMatch[1]}%` : "Tax included";
+  const prefix = label.startsWith("消費税") ? customerDisplayTaxText[language].excluded : customerDisplayTaxText[language].included;
+  return rateMatch?.[1] ? `${prefix} ${rateMatch[1]}%` : prefix;
 }
 
 function formatMemberDisplayName(name: string, language: DisplayLanguage) {

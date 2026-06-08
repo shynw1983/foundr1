@@ -225,8 +225,11 @@ function ConfiguredMemberPortal() {
 
   const qrValue = useMemo(() => {
     if (!data.member?.publicToken) return "";
-    return selectedCouponId ? `foundr1:member:${data.member.publicToken}:coupon:${selectedCouponId}` : `foundr1:member:${data.member.publicToken}`;
-  }, [data.member?.publicToken, selectedCouponId]);
+    const languageSegment = language ? `:lang:${language}` : "";
+    return selectedCouponId
+      ? `foundr1:member:${data.member.publicToken}${languageSegment}:coupon:${selectedCouponId}`
+      : `foundr1:member:${data.member.publicToken}${languageSegment}`;
+  }, [data.member?.publicToken, language, selectedCouponId]);
 
   const returnWithHandoffUrl = useMemo(() => {
     if (!returnTo || handoffEnabled) return "";

@@ -20,6 +20,309 @@
   --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
+.system-usage-workspace {
+  --system-usage-gap: 18px;
+}
+
+.system-usage-workspace > * + * {
+  margin-top: var(--system-usage-gap);
+}
+
+.system-usage-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.system-usage-actions label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.system-usage-actions input {
+  width: 150px;
+  min-height: 38px;
+}
+
+.system-usage-actions .secondary-button,
+.system-usage-actions .primary-button {
+  min-height: 38px;
+  gap: 7px;
+}
+
+.system-usage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--system-usage-gap);
+}
+
+.system-usage-chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: var(--system-usage-gap);
+}
+
+.system-usage-meter-list,
+.system-usage-trend-list,
+.system-usage-service-list {
+  display: grid;
+  gap: 12px;
+}
+
+.system-usage-meter-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.system-usage-meter-row:last-child {
+  border-bottom: 0;
+}
+
+.system-usage-meter-heading,
+.system-usage-meter-foot,
+.system-usage-service-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-usage-meter-heading strong,
+.system-usage-service-head h3 {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.system-usage-meter-heading span,
+.system-usage-meter-foot,
+.system-usage-service-metrics small,
+.system-usage-service-metrics em,
+.system-usage-risk-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.system-usage-meter-track {
+  position: relative;
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--soft);
+}
+
+.system-usage-meter-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+}
+
+.system-usage-meter-track i.is-watch {
+  background: #5f8f7a;
+}
+
+.system-usage-meter-track i.is-warning {
+  background: #b98118;
+}
+
+.system-usage-meter-track i.is-critical {
+  background: #b42318;
+}
+
+.system-usage-meter-track i.is-unknown {
+  background: #6b7280;
+}
+
+.status-pill.is-safe {
+  color: var(--green);
+  background: rgba(31, 111, 85, 0.1);
+}
+
+.status-pill.is-watch {
+  color: #3f6f5d;
+  background: rgba(95, 143, 122, 0.14);
+}
+
+.status-pill.is-warning {
+  color: #8a5b05;
+  background: rgba(185, 129, 24, 0.14);
+}
+
+.status-pill.is-critical {
+  color: #9b1c13;
+  background: rgba(180, 35, 24, 0.12);
+}
+
+.status-pill.is-unknown {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.12);
+}
+
+.system-usage-trend-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.system-usage-trend-row > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.system-usage-trend-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.system-usage-trend-row i {
+  display: block;
+  height: 8px;
+  min-width: 10px;
+  border-radius: 999px;
+}
+
+.system-usage-trend-row i.is-email,
+.system-usage-legend i.is-email {
+  background: var(--green);
+}
+
+.system-usage-trend-row i.is-pusher,
+.system-usage-legend i.is-pusher {
+  background: #2563eb;
+}
+
+.system-usage-trend-row i.is-blob,
+.system-usage-legend i.is-blob {
+  background: #b98118;
+}
+
+.system-usage-trend-row i.is-payment,
+.system-usage-legend i.is-payment {
+  background: #64748b;
+}
+
+.system-usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.system-usage-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.system-usage-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.system-usage-risk-grid,
+.system-usage-service-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.system-usage-risk-grid > div,
+.system-usage-service-metrics > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.system-usage-risk-grid b,
+.system-usage-service-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.system-usage-risk-grid strong,
+.system-usage-service-metrics strong {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.system-usage-service-card {
+  display: grid;
+  gap: 14px;
+}
+
+.system-usage-service-metrics p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.system-usage-service-metrics em {
+  display: block;
+}
+
+@media (max-width: 1180px) {
+  .system-usage-summary-grid,
+  .system-usage-risk-grid,
+  .system-usage-service-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-usage-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .system-usage-actions {
+    justify-content: stretch;
+  }
+
+  .system-usage-actions label,
+  .system-usage-actions input,
+  .system-usage-actions .secondary-button,
+  .system-usage-actions .primary-button {
+    width: 100%;
+  }
+
+  .system-usage-summary-grid,
+  .system-usage-risk-grid,
+  .system-usage-service-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .system-usage-meter-heading,
+  .system-usage-meter-foot,
+  .system-usage-service-head {
+    display: grid;
+  }
+}
+
 .store-feedback-shell,
 .feedback-management-shell {
   display: grid;
@@ -4978,6 +5281,7 @@ body :where(
 
 .menu-form-grid input,
 .menu-form-grid select,
+.menu-translation-grid input,
 .menu-full-field input,
 .menu-full-field textarea,
 .menu-option-form input,
@@ -5003,6 +5307,48 @@ body :where(
   min-height: 88px;
   padding-top: 10px;
   resize: vertical;
+}
+
+.menu-translation-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfbf8;
+}
+
+.menu-translation-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.menu-translation-panel strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.menu-translation-panel > div:first-child span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.menu-translation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.menu-translation-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.menu-translation-grid label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .menu-photo-upload {
@@ -20962,6 +21308,7 @@ body :where(
 
   .menu-editor-layout,
   .menu-form-grid,
+  .menu-translation-grid,
   .menu-option-editor,
   .menu-choice-editor,
   .menu-option-group-row,

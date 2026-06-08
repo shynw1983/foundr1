@@ -8,6 +8,7 @@ const defaultExternalPlatforms = [
   { key: "wolt", name: "Wolt" },
   { key: "demae_can", name: "出前館" }
 ];
+const customerDisplayLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"];
 
 function canEditMenus(session: EmployeeSession) {
   return menuEditorRoles.has(session.role);
@@ -35,6 +36,15 @@ function parseJsonObject(value: unknown) {
   } catch {
     return {};
   }
+}
+
+function normalizeDisplayNames(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    customerDisplayLanguages
+      .map((language) => [language, String(source[language] ?? "").trim().slice(0, 160)])
+      .filter(([, displayName]) => displayName)
+  );
 }
 
 async function readMenuAdminData() {
@@ -94,6 +104,7 @@ async function readMenuAdminData() {
         coalesce(menu_catalog_items.external_id, '') as "externalId",
         menu_catalog_items.item_kind as "itemKind",
         menu_catalog_items.name,
+        coalesce(menu_catalog_items.display_names, '{}'::jsonb) as "displayNames",
         coalesce(menu_catalog_items.category, '') as category,
         coalesce(menu_catalog_items.description, '') as description,
         coalesce(menu_catalog_items.image_url, '') as "imageUrl",
@@ -117,6 +128,7 @@ async function readMenuAdminData() {
         coalesce(external_id, '') as "externalId",
         group_key as "groupKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         selection_type as "selectionType",
         affects_procedure as "affectsProcedure",
         rule_json as "ruleJson",
@@ -132,6 +144,7 @@ async function readMenuAdminData() {
         coalesce(external_id, '') as "externalId",
         option_key as "optionKey",
         name,
+        coalesce(display_names, '{}'::jsonb) as "displayNames",
         price_delta::float as "priceDelta",
         affects_procedure as "affectsProcedure",
         sort_order as "sortOrder",
@@ -785,6 +798,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
   const name = String(body.name ?? "").trim();
   if (!brandId || !name) throw new Error("ブランドとメニュー名を入力してください。");
   const variableSchema = JSON.stringify(parseJsonObject(body.variableSchema));
+  const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
   const previousRows = id
     ? await sql`
         select name, base_price::float as "basePrice", is_active as "isActive"
@@ -805,6 +819,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           external_id = ${String(body.externalId ?? "").trim()},
           item_kind = ${String(body.itemKind ?? "fixed_product").trim() || "fixed_product"},
           name = ${name},
+          display_names = ${displayNames}::jsonb,
           category = ${String(body.category ?? "").trim()},
           description = ${String(body.description ?? "").trim()},
           image_url = ${String(body.imageUrl ?? "").trim()},
@@ -824,6 +839,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           external_id,
           item_kind,
           name,
+          display_names,
           category,
           description,
           image_url,
@@ -840,6 +856,7 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
           ${String(body.externalId ?? "").trim()},
           ${String(body.itemKind ?? "fixed_product").trim() || "fixed_product"},
           ${name},
+          ${displayNames}::jsonb,
           ${String(body.category ?? "").trim()},
           ${String(body.description ?? "").trim()},
           ${String(body.imageUrl ?? "").trim()},
@@ -874,6 +891,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
   const groupKey = String(body.groupKey ?? "").trim();
   const name = String(body.name ?? "").trim();
   if (!brandId || !groupKey || !name) throw new Error("ブランド、キー、名称を入力してください。");
+  const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
 
   const rows = id
     ? await sql`
@@ -884,6 +902,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
           external_id = ${String(body.externalId ?? "").trim()},
           group_key = ${groupKey},
           name = ${name},
+          display_names = ${displayNames}::jsonb,
           selection_type = ${String(body.selectionType ?? "single").trim() || "single"},
           affects_procedure = ${body.affectsProcedure !== false},
           rule_json = ${JSON.stringify(parseJsonObject(body.ruleJson))}::jsonb,
@@ -900,6 +919,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
           external_id,
           group_key,
           name,
+          display_names,
           selection_type,
           affects_procedure,
           rule_json,
@@ -913,6 +933,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
           ${String(body.externalId ?? "").trim()},
           ${groupKey},
           ${name},
+          ${displayNames}::jsonb,
           ${String(body.selectionType ?? "single").trim() || "single"},
           ${body.affectsProcedure !== false},
           ${JSON.stringify(parseJsonObject(body.ruleJson))}::jsonb,
@@ -942,6 +963,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
   const optionKey = String(body.optionKey ?? "").trim();
   const name = String(body.name ?? "").trim();
   if (!optionGroupId || !optionKey || !name) throw new Error("グループ、キー、名称を入力してください。");
+  const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
   const groupRows = await sql`
     select brand_id::text as "brandId", name
     from menu_option_groups
@@ -959,6 +981,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
           external_id = ${String(body.externalId ?? "").trim()},
           option_key = ${optionKey},
           name = ${name},
+          display_names = ${displayNames}::jsonb,
           price_delta = ${parseOptionalNumber(body.priceDelta)},
           affects_procedure = ${body.affectsProcedure !== false},
           sort_order = ${Math.round(parseOptionalNumber(body.sortOrder) ?? 0)},
@@ -973,6 +996,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
           external_id,
           option_key,
           name,
+          display_names,
           price_delta,
           affects_procedure,
           sort_order,
@@ -984,6 +1008,7 @@ async function upsertOption(body: Record<string, unknown>, employeeId: string) {
           ${String(body.externalId ?? "").trim()},
           ${optionKey},
           ${name},
+          ${displayNames}::jsonb,
           ${parseOptionalNumber(body.priceDelta)},
           ${body.affectsProcedure !== false},
           ${Math.round(parseOptionalNumber(body.sortOrder) ?? 0)},
