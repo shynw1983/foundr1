@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileText,
+  Languages,
   Lightbulb,
   LogOut,
   MenuSquare,
@@ -13,6 +14,7 @@ import {
   Plus,
   Save,
   Search,
+  Sparkles,
   Store,
   Trash2,
   Truck,
@@ -146,6 +148,25 @@ type MenuAdminData = {
   options: MenuOption[];
   externalPlatforms: MenuExternalPlatform[];
   syncTasks: MenuSyncTask[];
+};
+
+type MenuTranslationDraftEntry = {
+  key: string;
+  targetType: "item" | "item_description" | "group" | "option";
+  targetId: string;
+  field: "displayNames" | "descriptionDisplayNames";
+  language: string;
+  sourceText: string;
+  currentText: string;
+  suggestedText: string;
+  targetLabel: string;
+};
+
+type MenuTranslationPreview = {
+  entries: MenuTranslationDraftEntry[];
+  model: string;
+  generatedAt: string;
+  targetCount: number;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -393,6 +414,11 @@ export default function MenuAdminPage() {
   const [draggingCategory, setDraggingCategory] = useState("");
   const [draggingItemId, setDraggingItemId] = useState("");
   const [syncCompletionNotes, setSyncCompletionNotes] = useState<Record<string, string>>({});
+  const [translationLanguages, setTranslationLanguages] = useState<string[]>(customerMenuLanguageOptions.map((language) => language.value));
+  const [translationOverwriteExisting, setTranslationOverwriteExisting] = useState(false);
+  const [translationPreview, setTranslationPreview] = useState<MenuTranslationPreview | null>(null);
+  const [translationStatus, setTranslationStatus] = useState("");
+  const [translationBusy, setTranslationBusy] = useState<"preview" | "apply" | "">("");
 
   async function loadMenus(nextSelectedItemId = selectedItemId) {
     setLoading(true);
@@ -680,6 +706,97 @@ export default function MenuAdminPage() {
     await loadMenus(selectedItemId);
   }
 
+  function toggleTranslationLanguage(language: string, checked: boolean) {
+    setTranslationLanguages((current) => (
+      checked
+        ? Array.from(new Set([...current, language]))
+        : current.filter((entry) => entry !== language)
+    ));
+  }
+
+  async function createTranslationPreview() {
+    if (!activeBrandId) {
+      setTranslationStatus("ブランドを選択してください。");
+      return;
+    }
+    if (!translationLanguages.length) {
+      setTranslationStatus("翻訳対象の言語を選択してください。");
+      return;
+    }
+
+    setTranslationBusy("preview");
+    setTranslationStatus("");
+    setTranslationPreview(null);
+    try {
+      const response = await fetch("/api/menus/auto-translate/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandId: activeBrandId,
+          languages: translationLanguages,
+          overwriteExisting: translationOverwriteExisting
+        })
+      });
+      const result = await response.json().catch(() => ({})) as MenuTranslationPreview & { error?: string };
+      if (!response.ok) {
+        setTranslationStatus(result.error || "翻訳プレビューを作成できませんでした。");
+        return;
+      }
+      setTranslationPreview(result);
+      setTranslationStatus(result.entries.length ? `${result.entries.length}件の翻訳候補を作成しました。` : "翻訳が必要な空欄はありません。");
+    } catch {
+      setTranslationStatus("通信エラーで翻訳プレビューを作成できませんでした。");
+    } finally {
+      setTranslationBusy("");
+    }
+  }
+
+  function updateTranslationSuggestion(key: string, value: string) {
+    setTranslationPreview((current) => current ? {
+      ...current,
+      entries: current.entries.map((entry) => entry.key === key ? { ...entry, suggestedText: value } : entry)
+    } : current);
+  }
+
+  function removeTranslationSuggestion(key: string) {
+    setTranslationPreview((current) => current ? {
+      ...current,
+      entries: current.entries.filter((entry) => entry.key !== key)
+    } : current);
+  }
+
+  async function applyTranslationPreview() {
+    if (!translationPreview || !activeBrandId) return;
+    const entries = translationPreview.entries.filter((entry) => entry.suggestedText.trim());
+    if (!entries.length) {
+      setTranslationStatus("書き込む翻訳がありません。");
+      return;
+    }
+    if (!confirm(`${entries.length}件の翻訳をメニューに書き込みますか。`)) return;
+
+    setTranslationBusy("apply");
+    setTranslationStatus("");
+    try {
+      const response = await fetch("/api/menus/auto-translate/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: activeBrandId, entries })
+      });
+      const result = await response.json().catch(() => ({})) as { updated?: number; error?: string };
+      if (!response.ok) {
+        setTranslationStatus(result.error || "翻訳を書き込めませんでした。");
+        return;
+      }
+      setTranslationStatus(`${result.updated ?? entries.length}件の翻訳を書き込みました。`);
+      setTranslationPreview(null);
+      await loadMenus(selectedItemId);
+    } catch {
+      setTranslationStatus("通信エラーで翻訳を書き込めませんでした。");
+    } finally {
+      setTranslationBusy("");
+    }
+  }
+
   function reorderCategories(targetCategory: string) {
     if (!draggingCategory || draggingCategory === targetCategory) return;
     const categoryNames = moveItem(
@@ -934,6 +1051,51 @@ export default function MenuAdminPage() {
             OS ではブランドの標準メニューを管理します。店舗ごとの販売可否は店舗画面で切り替え、
             ここでは分類、商品名、価格、公開状態、選択可否を中心に編集します。
           </p>
+        </section>
+
+        <section className="menu-auto-translation-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">AI Translation</p>
+              <h3>一括自動翻訳</h3>
+            </div>
+            <button
+              className="primary-button compact-button"
+              type="button"
+              disabled={translationBusy === "preview" || !activeBrandId}
+              onClick={() => void createTranslationPreview()}
+            >
+              <Sparkles size={15} />
+              {translationBusy === "preview" ? "作成中" : "翻訳プレビュー"}
+            </button>
+          </div>
+          <div className="menu-auto-translation-body">
+            <div>
+              <strong>対象</strong>
+              <span>商品名、商品説明、選択グループ、選択肢の未翻訳欄を AI で候補作成します。確認するまで書き込みません。</span>
+            </div>
+            <div className="menu-auto-translation-controls">
+              {customerMenuLanguageOptions.map((language) => (
+                <label className="checkbox-group menu-inline-check" key={language.value}>
+                  <input
+                    type="checkbox"
+                    checked={translationLanguages.includes(language.value)}
+                    onChange={(event) => toggleTranslationLanguage(language.value, event.target.checked)}
+                  />
+                  <span>{language.label}</span>
+                </label>
+              ))}
+              <label className="checkbox-group menu-inline-check">
+                <input
+                  type="checkbox"
+                  checked={translationOverwriteExisting}
+                  onChange={(event) => setTranslationOverwriteExisting(event.target.checked)}
+                />
+                <span>入力済みも候補作成</span>
+              </label>
+            </div>
+          </div>
+          {translationStatus ? <p className="menu-auto-translation-status">{translationStatus}</p> : null}
         </section>
 
         <section className="menu-sync-panel">
@@ -1639,6 +1801,71 @@ export default function MenuAdminPage() {
           </section>
         </div>
       </section>
+      {translationPreview ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="AI翻訳プレビュー">
+          <section className="edit-modal menu-translation-preview-modal">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">AI Translation Preview</p>
+                <h3>翻訳候補を確認</h3>
+              </div>
+              <button className="secondary-button compact-button" type="button" onClick={() => setTranslationPreview(null)}>
+                閉じる
+              </button>
+            </div>
+            <div className="menu-translation-preview-summary">
+              <span><Languages size={15} /> {translationPreview.entries.length}件</span>
+              <span>Model: {translationPreview.model}</span>
+              <span>確認後にのみ書き込みます</span>
+            </div>
+            <div className="menu-translation-preview-list">
+              {translationPreview.entries.map((entry) => (
+                <article className="menu-translation-preview-row" key={entry.key}>
+                  <div className="menu-translation-preview-meta">
+                    <strong>{entry.targetLabel}</strong>
+                    <span>
+                      {entry.targetType === "item" ? "商品名" : entry.targetType === "item_description" ? "商品説明" : entry.targetType === "group" ? "選択グループ" : "選択肢"}
+                      {" / "}
+                      {customerMenuLanguageOptions.find((language) => language.value === entry.language)?.label ?? entry.language}
+                    </span>
+                  </div>
+                  <div className="menu-translation-preview-source">
+                    <span>日本語</span>
+                    <p>{entry.sourceText}</p>
+                    {entry.currentText ? <small>現在: {entry.currentText}</small> : null}
+                  </div>
+                  <label className="menu-translation-preview-edit">
+                    <span>AI 候補・手修正</span>
+                    <textarea
+                      value={entry.suggestedText}
+                      onChange={(event) => updateTranslationSuggestion(entry.key, event.target.value)}
+                      rows={entry.field === "descriptionDisplayNames" ? 4 : 2}
+                    />
+                  </label>
+                  <button className="secondary-button compact-button" type="button" onClick={() => removeTranslationSuggestion(entry.key)}>
+                    除外
+                  </button>
+                </article>
+              ))}
+              {!translationPreview.entries.length ? <p className="empty-state">書き込む候補はありません。</p> : null}
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setTranslationPreview(null)}>
+                キャンセル
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={translationBusy === "apply" || !translationPreview.entries.some((entry) => entry.suggestedText.trim())}
+                onClick={() => void applyTranslationPreview()}
+              >
+                <Save size={16} />
+                {translationBusy === "apply" ? "書き込み中" : "確認して書き込む"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

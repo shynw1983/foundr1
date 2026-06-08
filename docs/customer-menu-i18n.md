@@ -78,6 +78,17 @@ Every customer-facing renderer should resolve menu text in this order:
 
 Never map English to Chinese as a fallback. Never translate only product names while leaving options, tax labels, member suffixes, or payment text in a different language.
 
+## AI Translation Workflow
+
+OS menu management can generate missing customer-facing translations with AI. The workflow must stay review-first:
+
+1. Scan menu items, item descriptions, option groups, and options for missing language fields.
+2. Call the configured AI provider, currently DeepSeek via `DEEPSEEK_API_KEY`, to create candidate translations.
+3. Show candidates in a preview UI where staff can edit or exclude each row.
+4. Write to `displayNames` / `descriptionDisplayNames` only after explicit confirmation.
+
+Do not write AI output directly into menu tables without a preview and manual confirmation step.
+
 ## Public Menu API
 
 Brand websites and new customer-facing projects must consume the standard Foundr1 OS public menu API:
