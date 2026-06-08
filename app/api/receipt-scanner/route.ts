@@ -750,11 +750,76 @@ function refineShapeToVisiblePaper(raw: Buffer, width: number, height: number, s
   const nextTopRight = interpolatePoint(topRight, bottomRight, nextTopRatio);
   const nextBottomRight = interpolatePoint(topRight, bottomRight, nextBottomRatio);
   const nextBottomLeft = interpolatePoint(topLeft, bottomLeft, nextBottomRatio);
+  const verticalRefinedQuad = [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft] as [Point, Point, Point, Point];
+  const edgeRefinedQuad = refineQuadHorizontalEdges(raw, width, height, verticalRefinedQuad);
 
   return {
     ...shape,
-    quad: [nextTopLeft, nextTopRight, nextBottomRight, nextBottomLeft]
+    quad: edgeRefinedQuad
   };
+}
+
+function refineQuadHorizontalEdges(
+  raw: Buffer,
+  width: number,
+  height: number,
+  quad: [Point, Point, Point, Point]
+): [Point, Point, Point, Point] {
+  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
+  const verticalDistance = (distance(topLeft, bottomLeft) + distance(topRight, bottomRight)) / 2;
+  const horizontalDistance = (distance(topLeft, topRight) + distance(bottomLeft, bottomRight)) / 2;
+  if (verticalDistance < height * 0.12 || horizontalDistance < width * 0.12) return quad;
+
+  const sampleColumns = Math.max(80, Math.min(220, Math.round(horizontalDistance / 5)));
+  const columnScores = Array.from({ length: sampleColumns }, (_, index) => {
+    const ratio = sampleColumns === 1 ? 0 : index / (sampleColumns - 1);
+    return {
+      ratio,
+      score: visiblePaperColumnScore(raw, width, height, topLeft, topRight, bottomRight, bottomLeft, ratio)
+    };
+  });
+  const leftRatio = findVisiblePaperStartRatio(columnScores);
+  const rightRatio = findVisiblePaperEndRatio(columnScores);
+  if (leftRatio === null && rightRatio === null) return quad;
+
+  const safetyRatio = Math.min(0.018, Math.max(0.006, 8 / Math.max(1, horizontalDistance)));
+  const nextLeftRatio = leftRatio === null ? 0 : Math.max(0, leftRatio - safetyRatio);
+  const nextRightRatio = rightRatio === null ? 1 : Math.min(1, rightRatio + safetyRatio);
+  if (nextRightRatio - nextLeftRatio < 0.35) return quad;
+  if (nextLeftRatio < 0.045 && nextRightRatio > 0.955) return quad;
+
+  return [
+    interpolatePoint(topLeft, topRight, nextLeftRatio),
+    interpolatePoint(topLeft, topRight, nextRightRatio),
+    interpolatePoint(bottomLeft, bottomRight, nextRightRatio),
+    interpolatePoint(bottomLeft, bottomRight, nextLeftRatio)
+  ];
+}
+
+function visiblePaperColumnScore(
+  raw: Buffer,
+  width: number,
+  height: number,
+  topLeft: Point,
+  topRight: Point,
+  bottomRight: Point,
+  bottomLeft: Point,
+  horizontalRatio: number
+) {
+  const top = interpolatePoint(topLeft, topRight, horizontalRatio);
+  const bottom = interpolatePoint(bottomLeft, bottomRight, horizontalRatio);
+  const columnHeight = distance(top, bottom);
+  if (columnHeight < height * 0.08) return 0;
+
+  const samples = Math.max(32, Math.min(120, Math.round(columnHeight / 18)));
+  let paperPixels = 0;
+  for (let index = 0; index < samples; index += 1) {
+    const verticalRatio = 0.08 + (index / Math.max(1, samples - 1)) * 0.84;
+    const x = top.x + (bottom.x - top.x) * verticalRatio;
+    const y = top.y + (bottom.y - top.y) * verticalRatio;
+    if (isVisiblePaperPixel(raw, width, height, x, y)) paperPixels += 1;
+  }
+  return paperPixels / samples;
 }
 
 function visiblePaperRowScore(
