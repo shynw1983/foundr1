@@ -3632,6 +3632,59 @@ body :where(
   justify-self: end;
 }
 
+.receipt-scanner-form label {
+  grid-column: span 4;
+}
+
+.receipt-scanner-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.receipt-scanner-preview-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.receipt-scanner-preview-card .panel-title {
+  align-items: center;
+}
+
+.receipt-scanner-preview-card .secondary-button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.receipt-scanner-preview-frame {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.receipt-scanner-preview-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.receipt-scanner-preview-frame p {
+  max-width: 260px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
 .expense-list {
   display: grid;
   gap: 10px;
@@ -23944,6 +23997,14 @@ body :where(
 
   .expense-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .receipt-scanner-form label {
+    grid-column: span 1;
+  }
+
+  .receipt-scanner-preview-grid {
+    grid-template-columns: 1fr;
   }
 }
 
