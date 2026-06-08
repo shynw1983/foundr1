@@ -1,0 +1,226 @@
+import { requireMasterOsSession } from "../../../lib/api-auth";
+import { sql } from "../../../lib/db";
+import { normalizeReceiptProductName } from "../../../lib/receipt-ocr";
+
+type CandidateAction = "create_product" | "link_product" | "ignore";
+
+export async function GET() {
+  const session = await requireMasterOsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
+  const [candidateRows, productRows] = await Promise.all([
+    sql`
+      select
+        product_candidates.id::text,
+        product_candidates.raw_name as "rawName",
+        product_candidates.normalized_name as "normalizedName",
+        product_candidates.suggested_name as "suggestedName",
+        product_candidates.category,
+        product_candidates.subcategory,
+        product_candidates.unit,
+        product_candidates.reference_price::float as "referencePrice",
+        product_candidates.supplier_name as "supplierName",
+        product_candidates.status,
+        coalesce(to_char(product_candidates.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI'), '') as "createdLabel",
+        receipt_ocr_results.receipt_photo_url as "receiptPhotoUrl",
+        receipt_ocr_results.vendor_name as "vendorName",
+        coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate"
+      from product_candidates
+      left join receipt_ocr_items on receipt_ocr_items.id = product_candidates.receipt_ocr_item_id
+      left join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+      where product_candidates.status = 'pending'
+      order by product_candidates.created_at desc
+      limit 100
+    `,
+    sql`
+      select id::text, name, category, unit
+      from products
+      order by name asc
+      limit 500
+    `
+  ]);
+
+  return Response.json({
+    candidates: candidateRows.map((row) => ({
+      id: String(row.id),
+      rawName: String(row.rawName ?? ""),
+      normalizedName: String(row.normalizedName ?? ""),
+      suggestedName: String(row.suggestedName ?? ""),
+      category: String(row.category ?? "未分類"),
+      subcategory: String(row.subcategory ?? "未分類"),
+      unit: String(row.unit ?? "個"),
+      referencePrice: Number(row.referencePrice ?? 0),
+      supplierName: String(row.supplierName ?? ""),
+      status: String(row.status ?? "pending"),
+      createdLabel: String(row.createdLabel ?? ""),
+      receiptPhotoUrl: String(row.receiptPhotoUrl ?? ""),
+      vendorName: String(row.vendorName ?? ""),
+      purchaseDate: String(row.purchaseDate ?? "")
+    })),
+    products: productRows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      category: String(row.category ?? ""),
+      unit: String(row.unit ?? "")
+    }))
+  });
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireMasterOsSession();
+  if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+
+  const body = await request.json().catch(() => ({})) as {
+    id?: string;
+    action?: CandidateAction;
+    productId?: string;
+    name?: string;
+    category?: string;
+    subcategory?: string;
+    unit?: string;
+    referencePrice?: number;
+  };
+  const id = String(body.id ?? "").trim();
+  const action = String(body.action ?? "") as CandidateAction;
+  if (!id) return Response.json({ error: "候補 ID がありません。" }, { status: 400 });
+
+  const rows = await sql`
+    select
+      product_candidates.id::text,
+      product_candidates.receipt_ocr_item_id::text as "itemId",
+      product_candidates.raw_name as "rawName",
+      product_candidates.normalized_name as "normalizedName",
+      product_candidates.suggested_name as "suggestedName",
+      product_candidates.category,
+      product_candidates.subcategory,
+      product_candidates.unit,
+      product_candidates.reference_price::float as "referencePrice",
+      product_candidates.supplier_name as "supplierName"
+    from product_candidates
+    where id::text = ${id}
+      and status = 'pending'
+    limit 1
+  `;
+  const candidate = rows[0];
+  if (!candidate) return Response.json({ error: "候補が見つかりません。" }, { status: 404 });
+
+  if (action === "ignore") {
+    await sql`
+      update product_candidates
+      set status = 'ignored', reviewed_by = ${session.id}, reviewed_at = now(), updated_at = now()
+      where id::text = ${id}
+    `;
+    if (candidate.itemId) {
+      await sql`update receipt_ocr_items set match_status = 'ignored', updated_at = now() where id::text = ${String(candidate.itemId)}`;
+    }
+    return Response.json({ ok: true });
+  }
+
+  const productId = action === "create_product"
+    ? await createProductFromCandidate(candidate, body, session.id)
+    : String(body.productId ?? "").trim();
+  if (!productId) return Response.json({ error: "紐付ける商品を選択してください。" }, { status: 400 });
+
+  await sql`
+    insert into product_match_dictionary (
+      supplier_name,
+      raw_name,
+      normalized_name,
+      product_id,
+      category,
+      unit,
+      created_by,
+      updated_at
+    )
+    values (
+      ${String(candidate.supplierName ?? "")},
+      ${String(candidate.rawName ?? "")},
+      ${normalizeReceiptProductName(String(candidate.rawName ?? ""))},
+      ${productId},
+      ${String(body.category ?? candidate.category ?? "")},
+      ${String(body.unit ?? candidate.unit ?? "")},
+      ${session.id},
+      now()
+    )
+    on conflict (supplier_name, normalized_name)
+    do update set
+      product_id = excluded.product_id,
+      category = excluded.category,
+      unit = excluded.unit,
+      updated_at = now()
+  `;
+
+  await sql`
+    update product_candidates
+    set
+      status = ${action === "create_product" ? "created" : "linked"},
+      product_id = ${productId},
+      reviewed_by = ${session.id},
+      reviewed_at = now(),
+      updated_at = now()
+    where id::text = ${id}
+  `;
+  if (candidate.itemId) {
+    await sql`
+      update receipt_ocr_items
+      set matched_product_id = ${productId}, match_status = 'matched', updated_at = now()
+      where id::text = ${String(candidate.itemId)}
+    `;
+  }
+
+  return Response.json({ ok: true, productId });
+}
+
+async function createProductFromCandidate(candidate: Record<string, unknown>, body: Record<string, unknown>, employeeId: string) {
+  const name = String(body.name ?? candidate.suggestedName ?? candidate.rawName ?? "").trim();
+  if (!name) throw new Error("商品名を入力してください。");
+  const category = String(body.category ?? candidate.category ?? "未分類").trim() || "未分類";
+  const subcategory = String(body.subcategory ?? candidate.subcategory ?? "未分類").trim() || "未分類";
+  const unit = String(body.unit ?? candidate.unit ?? "個").trim() || "個";
+  const referencePrice = Number(body.referencePrice ?? candidate.referencePrice ?? 0);
+
+  const productRows = await sql`
+    insert into products (
+      name,
+      category,
+      subcategory,
+      unit,
+      reference_price,
+      brand_scope,
+      usage_type,
+      japanese_note,
+      updated_at
+    )
+    values (
+      ${name},
+      ${category},
+      ${subcategory},
+      ${unit},
+      ${Number.isFinite(referencePrice) ? referencePrice : 0},
+      ${"unset"},
+      ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
+      ${`レシート OCR から追加: ${String(candidate.rawName ?? "")}`},
+      now()
+    )
+    returning id::text
+  `;
+  const productId = String(productRows[0]?.id ?? "");
+  const supplierName = String(candidate.supplierName ?? "").trim();
+  if (productId && supplierName) {
+    await sql`
+      insert into product_supplier_options (product_id, supplier_id, role, reference_price, is_active)
+      select ${productId}, suppliers.id, ${"メイン"}, ${Number.isFinite(referencePrice) ? referencePrice : 0}, true
+      from suppliers
+      where suppliers.name = ${supplierName}
+      on conflict (product_id, supplier_id, role)
+      do update set reference_price = excluded.reference_price, is_active = true
+    `;
+    await sql`
+      insert into price_records (product_id, supplier_id, price, unit, source, receipt_note, recorded_by)
+      select ${productId}, suppliers.id, ${Number.isFinite(referencePrice) ? referencePrice : 0}, ${unit}, ${"receipt_ocr"}, ${String(candidate.rawName ?? "")}, ${employeeId}
+      from suppliers
+      where suppliers.name = ${supplierName}
+    `;
+  }
+  return productId;
+}

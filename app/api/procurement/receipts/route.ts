@@ -2,6 +2,7 @@ import { put } from "@vercel/blob";
 import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
+import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/receipt-ocr";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
       limit 1
     `;
 
-    await sql`
+    const fulfillmentRows = await sql`
       insert into purchase_order_supplier_fulfillments (
         purchase_order_id,
         supplier_id,
@@ -67,9 +68,32 @@ export async function POST(request: Request) {
         supplier_id = excluded.supplier_id,
         receipt_photo_url = excluded.receipt_photo_url,
         updated_at = now()
+      returning id::text
     `;
+    const fulfillmentId = String(fulfillmentRows[0]?.id ?? "");
+    let ocrResultId = "";
+    let ocrError = "";
+    try {
+      const analyzed = await analyzeReceiptImage(file as File);
+      ocrResultId = await saveReceiptOcrResult({
+        sourceType: "procurement",
+        sourceId: fulfillmentId,
+        storeId: String(order.storeId),
+        supplierName,
+        receiptPhotoUrl: receiptUrl
+      }, analyzed.result, analyzed.model, session);
+    } catch (error) {
+      ocrError = error instanceof Error ? error.message : "レシート OCR に失敗しました。";
+      ocrResultId = await saveReceiptOcrResult({
+        sourceType: "procurement",
+        sourceId: fulfillmentId,
+        storeId: String(order.storeId),
+        supplierName,
+        receiptPhotoUrl: receiptUrl
+      }, null, process.env.OPENAI_RECEIPT_OCR_MODEL || "", session, ocrError);
+    }
 
-    return Response.json({ ok: true, receiptUrl });
+    return Response.json({ ok: true, receiptUrl, ocrResultId, ocrError });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "レシート写真を保存できませんでした。" },

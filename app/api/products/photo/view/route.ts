@@ -67,5 +67,16 @@ async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof re
     return canAccessStore(session, rows[0]?.storeId);
   }
 
+  if (pathname.startsWith("expense-receipts/")) {
+    const encodedPathname = encodeURIComponent(pathname);
+    const rows = await sql`
+      select store_id::text as "storeId"
+      from expense_receipts
+      where receipt_photo_url like ${`%${encodedPathname}%`}
+      limit 1
+    `;
+    return canAccessStore(session, rows[0]?.storeId);
+  }
+
   return false;
 }

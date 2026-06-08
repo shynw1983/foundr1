@@ -863,6 +863,41 @@ alter table analytics_expenses add column if not exists created_by uuid referenc
 alter table analytics_expenses add column if not exists updated_by uuid references employees(id) on delete set null;
 create index if not exists analytics_expenses_store_month_idx on analytics_expenses (store_id, start_month, end_month);
 
+create table if not exists expense_receipts (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  receipt_photo_url text not null default '',
+  receipt_ocr_result_id uuid,
+  vendor_name text not null default '',
+  purchase_date date,
+  category text not null default 'misc',
+  subtotal numeric(12, 2),
+  tax numeric(12, 2),
+  total numeric(12, 2) not null default 0,
+  note text not null default '',
+  status text not null default 'draft',
+  confirmed_at timestamptz,
+  confirmed_by uuid references employees(id) on delete set null,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table expense_receipts add column if not exists receipt_photo_url text not null default '';
+alter table expense_receipts add column if not exists receipt_ocr_result_id uuid;
+alter table expense_receipts add column if not exists vendor_name text not null default '';
+alter table expense_receipts add column if not exists purchase_date date;
+alter table expense_receipts add column if not exists category text not null default 'misc';
+alter table expense_receipts add column if not exists subtotal numeric(12, 2);
+alter table expense_receipts add column if not exists tax numeric(12, 2);
+alter table expense_receipts add column if not exists total numeric(12, 2) not null default 0;
+alter table expense_receipts add column if not exists note text not null default '';
+alter table expense_receipts add column if not exists status text not null default 'draft';
+alter table expense_receipts add column if not exists confirmed_at timestamptz;
+alter table expense_receipts add column if not exists confirmed_by uuid references employees(id) on delete set null;
+alter table expense_receipts add column if not exists created_by uuid references employees(id) on delete set null;
+create index if not exists expense_receipts_store_date_idx on expense_receipts (store_id, purchase_date desc);
+
 create table if not exists product_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -1291,6 +1326,110 @@ create table if not exists price_records (
   recorded_at timestamptz not null default now(),
   recorded_by uuid references employees(id)
 );
+
+create table if not exists receipt_ocr_results (
+  id uuid primary key default gen_random_uuid(),
+  source_type text not null,
+  source_id uuid,
+  store_id uuid references stores(id) on delete set null,
+  supplier_name text not null default '',
+  receipt_photo_url text not null default '',
+  status text not null default 'draft',
+  model text not null default '',
+  raw_result jsonb not null default '{}'::jsonb,
+  vendor_name text not null default '',
+  purchase_date date,
+  subtotal numeric(12, 2),
+  tax numeric(12, 2),
+  total numeric(12, 2),
+  error_message text not null default '',
+  confirmed_at timestamptz,
+  confirmed_by uuid references employees(id) on delete set null,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table receipt_ocr_results add column if not exists source_type text not null default 'unknown';
+alter table receipt_ocr_results add column if not exists source_id uuid;
+alter table receipt_ocr_results add column if not exists store_id uuid references stores(id) on delete set null;
+alter table receipt_ocr_results add column if not exists supplier_name text not null default '';
+alter table receipt_ocr_results add column if not exists receipt_photo_url text not null default '';
+alter table receipt_ocr_results add column if not exists status text not null default 'draft';
+alter table receipt_ocr_results add column if not exists model text not null default '';
+alter table receipt_ocr_results add column if not exists raw_result jsonb not null default '{}'::jsonb;
+alter table receipt_ocr_results add column if not exists vendor_name text not null default '';
+alter table receipt_ocr_results add column if not exists purchase_date date;
+alter table receipt_ocr_results add column if not exists subtotal numeric(12, 2);
+alter table receipt_ocr_results add column if not exists tax numeric(12, 2);
+alter table receipt_ocr_results add column if not exists total numeric(12, 2);
+alter table receipt_ocr_results add column if not exists error_message text not null default '';
+alter table receipt_ocr_results add column if not exists confirmed_at timestamptz;
+alter table receipt_ocr_results add column if not exists confirmed_by uuid references employees(id) on delete set null;
+alter table receipt_ocr_results add column if not exists created_by uuid references employees(id) on delete set null;
+create index if not exists receipt_ocr_results_source_idx on receipt_ocr_results (source_type, source_id);
+create index if not exists receipt_ocr_results_store_date_idx on receipt_ocr_results (store_id, purchase_date desc);
+
+create table if not exists receipt_ocr_items (
+  id uuid primary key default gen_random_uuid(),
+  receipt_ocr_result_id uuid not null references receipt_ocr_results(id) on delete cascade,
+  line_index integer not null default 0,
+  raw_name text not null default '',
+  normalized_name text not null default '',
+  quantity numeric(12, 3),
+  unit text not null default '',
+  unit_price numeric(12, 2),
+  tax_rate text not null default '',
+  category text not null default '',
+  amount numeric(12, 2),
+  matched_product_id uuid references products(id) on delete set null,
+  match_status text not null default 'unmatched',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table receipt_ocr_items add column if not exists normalized_name text not null default '';
+alter table receipt_ocr_items add column if not exists matched_product_id uuid references products(id) on delete set null;
+alter table receipt_ocr_items add column if not exists match_status text not null default 'unmatched';
+create index if not exists receipt_ocr_items_result_idx on receipt_ocr_items (receipt_ocr_result_id);
+create index if not exists receipt_ocr_items_match_idx on receipt_ocr_items (match_status, normalized_name);
+
+create table if not exists product_match_dictionary (
+  id uuid primary key default gen_random_uuid(),
+  supplier_name text not null default '',
+  raw_name text not null,
+  normalized_name text not null,
+  product_id uuid not null references products(id) on delete cascade,
+  category text not null default '',
+  unit text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (supplier_name, normalized_name)
+);
+
+create table if not exists product_candidates (
+  id uuid primary key default gen_random_uuid(),
+  receipt_ocr_item_id uuid references receipt_ocr_items(id) on delete set null,
+  raw_name text not null,
+  normalized_name text not null,
+  suggested_name text not null,
+  category text not null default '未分類',
+  subcategory text not null default '未分類',
+  unit text not null default '個',
+  reference_price numeric(12, 2),
+  supplier_name text not null default '',
+  status text not null default 'pending',
+  product_id uuid references products(id) on delete set null,
+  reviewed_by uuid references employees(id) on delete set null,
+  reviewed_at timestamptz,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (normalized_name, supplier_name, status)
+);
+
+create index if not exists product_candidates_status_idx on product_candidates (status, created_at desc);
 
 create table if not exists procedure_books (
   id uuid primary key default gen_random_uuid(),

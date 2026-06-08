@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Plus, Trash2 } from "lucide-react";
+import { Ban, Boxes, Camera, CheckCircle, Link2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { AnalyticsShell } from "../components/AnalyticsShell";
 
@@ -15,6 +15,39 @@ type ExpenseItem = {
   endMonth: string;
   note: string;
 };
+type ExpenseReceipt = {
+  id: string;
+  receiptPhotoUrl: string;
+  ocrResultId: string;
+  vendorName: string;
+  purchaseDate: string;
+  category: ExpenseCategory;
+  subtotal: number;
+  tax: number;
+  total: number;
+  note: string;
+  status: string;
+  createdLabel: string;
+};
+type ProductCandidate = {
+  id: string;
+  rawName: string;
+  suggestedName: string;
+  category: string;
+  subcategory: string;
+  unit: string;
+  referencePrice: number;
+  supplierName: string;
+  vendorName: string;
+  purchaseDate: string;
+  createdLabel: string;
+};
+type ProductOption = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+};
 type ExpensesPayload = {
   month: string;
   stores: StoreOption[];
@@ -27,6 +60,14 @@ type ExpensesPayload = {
     misc: number;
     total: number;
   };
+};
+type ExpenseReceiptsPayload = {
+  canEditExpenseReceipts: boolean;
+  receipts: ExpenseReceipt[];
+};
+type ProductCandidatesPayload = {
+  candidates: ProductCandidate[];
+  products: ProductOption[];
 };
 
 const categoryLabels: Record<ExpenseCategory, string> = {
@@ -53,6 +94,9 @@ function isActiveInMonth(item: ExpenseItem, month: string) {
 
 const analyticsMonthStorageKey = "foundr1:analytics:selected-month";
 const analyticsStoreStorageKey = "foundr1:analytics:selected-store-id";
+const receiptCompressionTargetBytes = 2 * 1024 * 1024;
+const receiptCompressionEdges = [1800, 1400, 1100];
+const receiptCompressionQualities = [0.82, 0.72, 0.62];
 
 function getStoredAnalyticsMonth() {
   if (typeof window === "undefined") return getCurrentMonth();
@@ -77,7 +121,15 @@ export default function ExpensesPage() {
   const [data, setData] = useState<ExpensesPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
   const [message, setMessage] = useState("");
+  const [receiptMessage, setReceiptMessage] = useState("");
+  const [expenseReceipts, setExpenseReceipts] = useState<ExpenseReceipt[]>([]);
+  const [canEditExpenseReceipts, setCanEditExpenseReceipts] = useState(false);
+  const [productCandidates, setProductCandidates] = useState<ProductCandidate[]>([]);
+  const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+  const [candidateProductIds, setCandidateProductIds] = useState<Record<string, string>>({});
+  const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
 
   async function loadExpenses(nextMonth = month, nextStoreId = selectedStoreId) {
     setIsLoading(true);
@@ -96,6 +148,15 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     void loadExpenses(getStoredAnalyticsMonth(), getStoredAnalyticsStoreId());
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStoreId) return;
+    void loadExpenseReceipts(selectedStoreId);
+  }, [selectedStoreId]);
+
+  useEffect(() => {
+    void loadProductCandidates();
   }, []);
 
   async function createExpense(event: FormEvent<HTMLFormElement>) {
@@ -137,6 +198,89 @@ export default function ExpensesPage() {
     } else {
       const body = await response.json().catch(() => ({})) as { error?: string };
       setMessage(body.error ?? "経費を削除できませんでした。");
+    }
+  }
+
+  async function loadExpenseReceipts(storeId = selectedStoreId) {
+    if (!storeId) return;
+    const response = await fetch(`/api/analytics/expense-receipts?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json() as ExpenseReceiptsPayload;
+    setExpenseReceipts(body.receipts);
+    setCanEditExpenseReceipts(body.canEditExpenseReceipts);
+  }
+
+  async function loadProductCandidates() {
+    const response = await fetch("/api/product-candidates", { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json() as ProductCandidatesPayload;
+    setProductCandidates(body.candidates);
+    setProductOptions(body.products);
+    setCandidateEdits(Object.fromEntries(body.candidates.map((candidate) => [candidate.id, {
+      suggestedName: candidate.suggestedName,
+      category: candidate.category,
+      subcategory: candidate.subcategory,
+      unit: candidate.unit,
+      referencePrice: candidate.referencePrice
+    }])));
+  }
+
+  async function uploadExpenseReceipt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedStoreId) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const file = formData.get("receipt");
+    if (!(file instanceof File) || file.size === 0) return;
+
+    setIsUploadingReceipt(true);
+    setReceiptMessage("");
+    try {
+      const uploadData = new FormData();
+      uploadData.set("storeId", selectedStoreId);
+      uploadData.set("receipt", await compressReceiptImage(file));
+      const response = await fetch("/api/analytics/expense-receipts", {
+        method: "POST",
+        body: uploadData
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string; ocrError?: string };
+      if (!response.ok) throw new Error(body.error ?? "経費レシートを保存できませんでした。");
+      form.reset();
+      setReceiptMessage(body.ocrError ? `レシート写真を保存しました。OCR: ${body.ocrError}` : "レシートを読み取りました。内容を確認してください。");
+      await Promise.all([loadExpenseReceipts(selectedStoreId), loadProductCandidates()]);
+    } catch (error) {
+      setReceiptMessage(error instanceof Error ? error.message : "経費レシートを保存できませんでした。");
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  }
+
+  async function reviewCandidate(candidate: ProductCandidate, action: "create_product" | "link_product" | "ignore") {
+    const edit = candidateEdits[candidate.id] ?? {};
+    const productId = candidateProductIds[candidate.id] ?? "";
+    if (action === "link_product" && !productId) {
+      window.alert("紐付ける既存商品を選択してください。");
+      return;
+    }
+    const response = await fetch("/api/product-candidates", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: candidate.id,
+        action,
+        productId,
+        name: edit.suggestedName ?? candidate.suggestedName,
+        category: edit.category ?? candidate.category,
+        subcategory: edit.subcategory ?? candidate.subcategory,
+        unit: edit.unit ?? candidate.unit,
+        referencePrice: edit.referencePrice ?? candidate.referencePrice
+      })
+    });
+    if (response.ok) {
+      await loadProductCandidates();
+    } else {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "候補を更新できませんでした。");
     }
   }
 
@@ -257,6 +401,103 @@ export default function ExpensesPage() {
 
       <section className="panel analytics-overview-panel">
         <div className="panel-title">
+          <Camera size={18} />
+          <div>
+            <h3>経費レシート OCR</h3>
+            <p>日常経費のレシートを撮影し、AI 読み取り後に台帳へ仮登録します。最終反映前に内容を確認してください。</p>
+          </div>
+        </div>
+        <form className="expense-form" onSubmit={uploadExpenseReceipt}>
+          <label>
+            <span>レシート写真</span>
+            <input name="receipt" type="file" accept="image/*" capture="environment" disabled={!canEditExpenseReceipts || isUploadingReceipt} required />
+          </label>
+          <button className="primary-button" type="submit" disabled={!canEditExpenseReceipts || isUploadingReceipt}>
+            {isUploadingReceipt ? "読み取り中..." : "レシートを読み取る"}
+          </button>
+        </form>
+        {receiptMessage ? <p className="empty-state-text">{receiptMessage}</p> : null}
+        <div className="expense-list receipt-ledger-list">
+          {expenseReceipts.map((receipt) => (
+            <article className="expense-row receipt-ledger-row" key={receipt.id}>
+              <div>
+                <span>{receipt.status === "ocr_failed" ? "OCR未完了" : "確認待ち"}</span>
+                <strong>{receipt.vendorName || "店舗名未読取"}</strong>
+                <p>{receipt.purchaseDate || "日付未読取"} / {receipt.createdLabel}{receipt.tax ? ` / 税 ${formatMoney(receipt.tax)}` : ""}</p>
+              </div>
+              <b>{formatMoney(receipt.total)}</b>
+              <a className="text-button" href={receipt.receiptPhotoUrl} target="_blank" rel="noreferrer">レシートを見る</a>
+            </article>
+          ))}
+          {!expenseReceipts.length ? <p className="empty-state-text">経費レシートはまだありません。</p> : null}
+        </div>
+      </section>
+
+      <section className="panel analytics-overview-panel">
+        <div className="panel-title">
+          <RefreshCw size={18} />
+          <div>
+            <h3>未登録商品候補</h3>
+            <p>OCR 明細で商品マスタに見つからなかった品目を確認します。承認後、商品マスタと小票名辞書に反映します。</p>
+          </div>
+        </div>
+        <div className="product-candidate-list">
+          {productCandidates.map((candidate) => {
+            const edit = candidateEdits[candidate.id] ?? {};
+            return (
+              <article className="product-candidate-row" key={candidate.id}>
+                <div className="product-candidate-source">
+                  <span>{candidate.supplierName || candidate.vendorName || "発注先未読取"}</span>
+                  <strong>{candidate.rawName}</strong>
+                  <p>{candidate.purchaseDate || candidate.createdLabel}</p>
+                </div>
+                <div className="product-candidate-fields">
+                  <input
+                    aria-label="商品名"
+                    value={String(edit.suggestedName ?? candidate.suggestedName)}
+                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], suggestedName: event.target.value } }))}
+                  />
+                  <input
+                    aria-label="分類"
+                    value={String(edit.category ?? candidate.category)}
+                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], category: event.target.value } }))}
+                  />
+                  <input
+                    aria-label="単位"
+                    value={String(edit.unit ?? candidate.unit)}
+                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], unit: event.target.value } }))}
+                  />
+                  <input
+                    aria-label="参考価格"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={Number(edit.referencePrice ?? candidate.referencePrice)}
+                    onChange={(event) => setCandidateEdits((current) => ({ ...current, [candidate.id]: { ...current[candidate.id], referencePrice: Number(event.target.value) } }))}
+                  />
+                </div>
+                <div className="product-candidate-link">
+                  <select value={candidateProductIds[candidate.id] ?? ""} onChange={(event) => setCandidateProductIds((current) => ({ ...current, [candidate.id]: event.target.value }))}>
+                    <option value="">既存商品を選択</option>
+                    {productOptions.map((product) => (
+                      <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="product-candidate-actions">
+                  <button className="secondary-button" type="button" onClick={() => void reviewCandidate(candidate, "link_product")}><Link2 size={15} />紐付け</button>
+                  <button className="primary-button" type="button" onClick={() => void reviewCandidate(candidate, "create_product")}><CheckCircle size={15} />新規追加</button>
+                  <button className="text-button" type="button" onClick={() => void reviewCandidate(candidate, "ignore")}><Ban size={15} />無視</button>
+                </div>
+              </article>
+            );
+          })}
+          {!productCandidates.length ? <p className="empty-state-text">未登録商品候補はありません。</p> : null}
+        </div>
+      </section>
+
+      <section className="panel analytics-overview-panel">
+        <div className="panel-title">
           <Boxes size={18} />
           <div>
             <h3>登録済み経費</h3>
@@ -287,4 +528,48 @@ export default function ExpensesPage() {
       </section>
     </AnalyticsShell>
   );
+}
+
+async function compressReceiptImage(file: File) {
+  if (file.size <= receiptCompressionTargetBytes && file.type === "image/jpeg") return file;
+  const image = await loadImage(file);
+  for (const maxEdge of receiptCompressionEdges) {
+    const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) continue;
+    context.drawImage(image, 0, 0, width, height);
+    for (const quality of receiptCompressionQualities) {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+      if (blob && blob.size <= receiptCompressionTargetBytes) {
+        return new File([blob], buildReceiptFileName(file), { type: "image/jpeg" });
+      }
+    }
+  }
+  return file;
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("レシート写真を読み込めませんでした。別の画像を選択してください。"));
+    };
+    image.src = url;
+  });
+}
+
+function buildReceiptFileName(originalFile: File) {
+  const baseName = originalFile.name.replace(/\.[^.]+$/, "") || "receipt";
+  return `${baseName}.jpg`;
 }

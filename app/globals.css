@@ -3688,6 +3688,83 @@ body :where(
   white-space: nowrap;
 }
 
+.receipt-ledger-row .text-button {
+  justify-self: end;
+}
+
+.product-candidate-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.product-candidate-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr) minmax(180px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.product-candidate-source {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.product-candidate-source span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-candidate-source strong {
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.product-candidate-source p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.product-candidate-fields {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) minmax(90px, 0.8fr) minmax(64px, 0.5fr) minmax(80px, 0.7fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.product-candidate-fields input,
+.product-candidate-link select {
+  width: 100%;
+  min-height: 38px;
+}
+
+.product-candidate-link {
+  min-width: 0;
+}
+
+.product-candidate-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.product-candidate-actions .primary-button,
+.product-candidate-actions .secondary-button,
+.product-candidate-actions .text-button {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
 .metric-icon {
   display: grid;
   flex: 0 0 auto;
@@ -24237,6 +24314,25 @@ body :where(
 
   .expense-row b {
     white-space: normal;
+  }
+
+  .receipt-ledger-row .text-button {
+    justify-self: stretch;
+  }
+
+  .product-candidate-row,
+  .product-candidate-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .product-candidate-actions {
+    justify-content: stretch;
+  }
+
+  .product-candidate-actions .primary-button,
+  .product-candidate-actions .secondary-button,
+  .product-candidate-actions .text-button {
+    width: 100%;
   }
 
   .workload-settings-actions {
