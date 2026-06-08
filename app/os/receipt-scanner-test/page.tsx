@@ -74,7 +74,7 @@ export default function ReceiptScannerTestPage() {
         <form className="expense-form receipt-scanner-form" onSubmit={handleSubmit}>
           <label>
             <span>レシート写真</span>
-            <input type="file" name="receipt" accept="image/*" capture="environment" />
+            <input type="file" name="receipt" accept="image/*" />
           </label>
           <button className="primary-button" type="submit" disabled={isProcessing}>
             <RefreshCw size={18} aria-hidden="true" />
