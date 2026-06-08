@@ -3700,6 +3700,13 @@ body :where(
   text-align: center;
 }
 
+.receipt-scanner-preview-status {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .expense-list {
   display: grid;
   gap: 10px;

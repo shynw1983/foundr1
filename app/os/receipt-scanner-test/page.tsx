@@ -10,6 +10,7 @@ export default function ReceiptScannerTestPage() {
   const [scannedUrl, setScannedUrl] = useState("");
   const [debugUrl, setDebugUrl] = useState("");
   const [message, setMessage] = useState("");
+  const [debugMessage, setDebugMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiBoundary, setUseAiBoundary] = useState(true);
   const [scanMode, setScanMode] = useState("auto");
@@ -37,11 +38,37 @@ export default function ReceiptScannerTestPage() {
 
     setIsProcessing(true);
     setMessage("");
+    setDebugMessage("");
     replaceObjectUrl(originalUrlRef, setOriginalUrl, URL.createObjectURL(file));
     replaceObjectUrl(scannedUrlRef, setScannedUrl, "");
     replaceObjectUrl(debugUrlRef, setDebugUrl, "");
 
     try {
+      setMessage("検出輪郭を作成しています。");
+      const debugResponse = await requestScannerImage(file, {
+        boundaryMode: useAiBoundary ? "ai" : "auto",
+        scanMode,
+        contrastMode: useStrongContrast ? "strong" : "standard",
+        outputMode: "debug_overlay"
+      });
+      if (!debugResponse.ok) {
+        const body = await debugResponse.json().catch(() => null);
+        throw new Error(body?.error ?? "検出輪郭の作成に失敗しました。");
+      }
+      const debugContentType = debugResponse.headers.get("content-type") ?? "";
+      if (!debugContentType.includes("image/")) {
+        throw new Error(`検出輪郭が画像として返りませんでした。content-type: ${debugContentType || "unknown"}`);
+      }
+      const debugBlob = await debugResponse.blob();
+      if (debugBlob.size <= 0) {
+        throw new Error("検出輪郭の画像データが空でした。");
+      }
+      replaceObjectUrl(debugUrlRef, setDebugUrl, URL.createObjectURL(debugBlob));
+      const debugSize = debugResponse.headers.get("X-Receipt-Scanner-Size");
+      const debugAiStatus = debugResponse.headers.get("X-Receipt-Scanner-AI");
+      setDebugMessage(`検出輪郭を表示しました。${debugSize ? `画像 ${debugSize} / ` : ""}${formatAiStatus(debugAiStatus)}`);
+      setMessage("スキャン補正画像を作成しています。");
+
       const response = await requestScannerImage(file, {
         boundaryMode: useAiBoundary ? "ai" : "auto",
         scanMode,
@@ -61,18 +88,6 @@ export default function ReceiptScannerTestPage() {
       const modeLabel = resolvedMode === "long_receipt" ? "長レシート補正" : "標準補正";
       const aiLabel = aiStatus === "used" ? "AI使用" : aiStatus === "failed" ? "AI検出失敗・ローカル補正" : "AIなし";
       const sourceLabel = boundarySource === "ai" ? "AI紙面検出" : "ローカル紙面検出";
-      const debugResponse = await requestScannerImage(file, {
-        boundaryMode: useAiBoundary ? "ai" : "auto",
-        scanMode,
-        contrastMode: useStrongContrast ? "strong" : "standard",
-        outputMode: "debug_overlay"
-      });
-      if (!debugResponse.ok) {
-        const body = await debugResponse.json().catch(() => null);
-        throw new Error(body?.error ?? "検出輪郭の作成に失敗しました。");
-      }
-      const debugBlob = await debugResponse.blob();
-      replaceObjectUrl(debugUrlRef, setDebugUrl, URL.createObjectURL(debugBlob));
       setMessage(`${sourceLabel} / ${modeLabel} / ${aiLabel}${outputSize ? ` / ${outputSize}` : ""}で完了しました。検出輪郭も確認できます。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "スキャン補正に失敗しました。");
@@ -143,6 +158,11 @@ export default function ReceiptScannerTestPage() {
           emptyText="AIとローカル検出の輪郭が表示されます。"
           downloadUrl={debugUrl}
           downloadName="receipt-scan-debug.png"
+          statusText={debugMessage}
+          onImageError={() => {
+            setDebugMessage("検出輪郭の画像を読み込めませんでした。もう一度実行してください。");
+            replaceObjectUrl(debugUrlRef, setDebugUrl, "");
+          }}
         />
         <ReceiptPreview
           title="補正後"
@@ -161,13 +181,17 @@ function ReceiptPreview({
   imageUrl,
   emptyText,
   downloadUrl,
-  downloadName = "receipt-scan-test.png"
+  downloadName = "receipt-scan-test.png",
+  statusText,
+  onImageError
 }: {
   title: string;
   imageUrl: string;
   emptyText: string;
   downloadUrl?: string;
   downloadName?: string;
+  statusText?: string;
+  onImageError?: () => void;
 }) {
   return (
     <article className="panel receipt-scanner-preview-card">
@@ -183,8 +207,9 @@ function ReceiptPreview({
         ) : null}
       </div>
       <div className="receipt-scanner-preview-frame">
-        {imageUrl ? <img src={imageUrl} alt={`${title}プレビュー`} /> : <p>{emptyText}</p>}
+        {imageUrl ? <img src={imageUrl} alt={`${title}プレビュー`} onError={onImageError} /> : <p>{emptyText}</p>}
       </div>
+      {statusText ? <p className="receipt-scanner-preview-status">{statusText}</p> : null}
     </article>
   );
 }
@@ -218,4 +243,10 @@ function requestScannerImage(
     method: "POST",
     body: uploadData
   });
+}
+
+function formatAiStatus(status: string | null) {
+  if (status === "used") return "AI使用";
+  if (status === "failed") return "AI検出失敗";
+  return "AIなし";
 }
