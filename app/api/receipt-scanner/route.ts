@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "画像を読み込めませんでした。" }, { status: 400 });
     }
 
-    const aiShape = aiImage ? await detectReceiptShapeWithAi(aiImage, width, height) : undefined;
+    const aiShape = aiImage ? await detectReceiptShapeWithAi(aiImage, raw, width, height) : undefined;
     const localDetection = detectReceipt(raw, width, height);
     const localEdgeProfile = detectReceiptEdges(raw, width, height, localDetection.crop);
     const useLongReceipt = shouldUseLongReceiptMode(scanMode, aiShape, width, height);
@@ -449,7 +449,12 @@ function interpolateEdgeXAtY(points: Point[], targetY: number) {
   return points[points.length - 1].x;
 }
 
-async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, height: number): Promise<AiReceiptShape | undefined> {
+async function detectReceiptShapeWithAi(
+  imageBuffer: Buffer,
+  raw: Buffer,
+  width: number,
+  height: number
+): Promise<AiReceiptShape | undefined> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return undefined;
 
@@ -474,24 +479,27 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
                   "Do not transcribe, rewrite, enhance, or infer receipt text. Return geometry only.",
                   "The final processed image must be a clean scanner-style receipt image:",
                   "1. The receipt/document is horizontally and vertically straight after correction.",
-                  "2. No background objects, laptop keyboard, table, tray, other papers, hands, or shadows remain inside the crop.",
+                  "2. No non-target background, surrounding objects, separate papers, hands, strong shadows, or unrelated surfaces remain inside the crop.",
                   "3. The crop is tight to the selected paper surface, with only a small safety margin if needed.",
                   "4. The paper area will later be rendered as pure white background with pure black text/graphics, so your coordinates must preserve all printed content.",
                   "Use the displayed image orientation.",
                   "Coordinates must be normalized between 0 and 1 relative to image width and height.",
-                  "Select the scan target by visual dominance: choose the largest foreground continuous receipt/document surface in the photo.",
+                  "Select the scan target by visual dominance: choose the main foreground continuous receipt/document surface that is substantially visible and contains the transaction/item/total content.",
                   "Do not rely on any store name, logo, brand, language, or printed content to choose the target.",
-                  "Exclude smaller, partially hidden, background, or separate papers even if they contain text.",
+                  "Exclude partially hidden, background, separate, rotated-away, or secondary papers even if they contain text.",
                   "Return corner points for the selected paper only: top_left, top_right, bottom_right, bottom_left.",
-                  "Corner points should be the ideal scanner crop corners for flattening the selected paper, not the corners of the whole camera photo.",
+                  "Corner points must lie on the visible physical outer boundary of the selected paper.",
+                  "Do not invent or extend paper edges beyond what is visible in the image.",
+                  "If a paper edge is torn, curved, uneven, or angled, place the corner on that visible edge, not on a rectangular area around the text.",
+                  "Corner points should be the scanner crop corners for flattening the selected paper, not the corners of the whole camera photo.",
                   "If the paper is tilted, choose points so a perspective transform makes the paper vertical and horizontal.",
                   "If the paper is curled, rolled, wavy, or a long receipt, still return the outer ideal corners, then provide leftEdge and rightEdge control points to flatten the curve.",
                   "For ordinary short receipts/documents with straight sides, documentType may be standard and edge arrays may be empty.",
                   "For long, narrow, curved, rolled, or non-straight receipts, documentType must be long_receipt.",
                   "For long_receipt, provide 16 to 24 leftEdge and rightEdge control points from top to bottom.",
                   "Each leftEdge point must be on the physical left outer paper edge; each rightEdge point must be on the physical right outer paper edge at the matching vertical level.",
-                  "The edge points are used to unwarp curvature segment by segment, so do not place them on printed text columns, shadows, laptop edges, or background objects.",
-                  "If a small part of a paper edge is hidden or outside the photo, estimate the continuation of the selected paper edge conservatively.",
+                  "The edge points are used to unwarp curvature segment by segment, so do not place them on printed text columns, shadows, unrelated surfaces, or other objects.",
+                  "If a paper edge is hidden or outside the photo, do not estimate far beyond the visible paper; keep the crop on the visible selected paper surface.",
                   "Prefer long_receipt when uncertain for tall receipt photos, because curved long receipts require perspective correction and edge-based flattening."
                 ].join("\n")
               }
@@ -510,37 +518,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
             type: "json_schema",
             name: "receipt_boundary",
             strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                hasReceipt: { type: "boolean" },
-                confidence: { type: "number" },
-                documentType: { type: "string", enum: ["standard", "long_receipt"] },
-                points: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      role: { type: "string", enum: ["top_left", "top_right", "bottom_right", "bottom_left"] },
-                      x: { type: "number" },
-                      y: { type: "number" }
-                    },
-                    required: ["role", "x", "y"]
-                  }
-                },
-                leftEdge: {
-                  type: "array",
-                  items: edgePointSchema()
-                },
-                rightEdge: {
-                  type: "array",
-                  items: edgePointSchema()
-                }
-              },
-              required: ["hasReceipt", "confidence", "documentType", "points", "leftEdge", "rightEdge"]
-            }
+            schema: receiptBoundarySchema()
           }
         },
         max_output_tokens: 1500
@@ -557,17 +535,7 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
       };
     };
     if (!response.ok) throw new Error(body.error?.message || "AI 紙面検出に失敗しました。");
-    const content = body.output_text
-      ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
-      ?? "";
-    const parsed = JSON.parse(content) as {
-      hasReceipt: boolean;
-      confidence: number;
-      documentType: "standard" | "long_receipt";
-      points: Array<{ role: string; x: number; y: number }>;
-      leftEdge: Array<{ x: number; y: number }>;
-      rightEdge: Array<{ x: number; y: number }>;
-    };
+    const parsed = parseAiBoundaryResponse(body);
     await recordExternalServiceUsage({
       serviceKey: "openai",
       metricKey: "tokens",
@@ -580,31 +548,187 @@ async function detectReceiptShapeWithAi(imageBuffer: Buffer, width: number, heig
         outputTokens: body.usage?.output_tokens ?? null
       }
     });
-    if (!parsed.hasReceipt || parsed.confidence < 0.35 || parsed.points.length < 4) return undefined;
-
-    const pointMap = new Map(parsed.points.map((point) => [point.role, point]));
-    const orderedRoles = ["top_left", "top_right", "bottom_right", "bottom_left"];
-    const quad = orderedRoles.map((role) => {
-      const point = pointMap.get(role);
-      if (!point) return null;
-      return {
-        x: normalizeAiCoordinate(point.x, width),
-        y: normalizeAiCoordinate(point.y, height)
-      };
-    });
-    if (quad.some((point) => !point)) return undefined;
-    const typedQuad = quad as [Point, Point, Point, Point];
-    const area = polygonArea(typedQuad);
-    const edgeProfile = normalizeAiEdgeProfile(parsed.leftEdge, parsed.rightEdge, width, height);
-    return {
-      documentType: parsed.documentType,
-      quad: area >= width * height * 0.12 ? typedQuad : undefined,
-      edgeProfile
-    };
+    const initialShape = normalizeAiShape(parsed, width, height);
+    if (!initialShape) return undefined;
+    return await reviewReceiptShapeWithAi(apiKey, model, imageBuffer, raw, width, height, initialShape) ?? initialShape;
   } catch (error) {
     console.warn("AI receipt boundary detection skipped", error);
     return undefined;
   }
+}
+
+async function reviewReceiptShapeWithAi(
+  apiKey: string,
+  model: string,
+  imageBuffer: Buffer,
+  raw: Buffer,
+  width: number,
+  height: number,
+  initialShape: AiReceiptShape
+): Promise<AiReceiptShape | undefined> {
+  if (!initialShape.quad) return undefined;
+
+  try {
+    const overlay = await renderAiReviewOverlay(raw, width, height, initialShape);
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text: [
+                  "You are reviewing and correcting document scanner geometry.",
+                  "You will see the original photo and a second image with the previous proposed crop drawn in red.",
+                  "Return geometry only. Do not transcribe text.",
+                  "The selected target is the main foreground receipt/document surface that is substantially visible and contains transaction/item/total content.",
+                  "Do not rely on any store name, logo, brand, language, or specific printed word.",
+                  "The final crop must include only the selected paper surface and a tiny safety margin.",
+                  "It is invalid if the red crop includes non-target background, unrelated objects, separate paper, shadows outside the paper, or blank space beyond the visible physical paper boundary.",
+                  "It is invalid if any red corner is not on the visible physical outer edge of the selected paper.",
+                  "It is invalid if the top edge, bottom edge, left edge, or right edge floats outside the selected paper surface.",
+                  "If the red crop is invalid, return corrected corners on the visible physical boundary of the selected paper.",
+                  "Do not extend hidden or ambiguous paper edges far into surrounding background.",
+                  "If the visible paper edge is torn, curved, uneven, or angled, use the visible edge rather than an imagined perfect rectangle.",
+                  "For short receipts with mostly straight sides, documentType should be standard and edge arrays can be empty.",
+                  "For long, narrow, curled, rolled, or wavy receipts, documentType should be long_receipt and must include leftEdge and rightEdge points on the physical paper edges.",
+                  "Coordinates must be normalized between 0 and 1 relative to the image width and height."
+                ].join("\n")
+              }
+            ]
+          },
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "First image: original photo. Second image: previous crop drawn in red. Correct the crop so the final scanner output contains only the visible selected paper surface, with no unrelated surrounding area. Return the final geometry." },
+              { type: "input_image", image_url: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`, detail: "high" },
+              { type: "input_image", image_url: `data:image/png;base64,${overlay.toString("base64")}`, detail: "high" }
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "receipt_boundary_review",
+            strict: true,
+            schema: receiptBoundarySchema()
+          }
+        },
+        max_output_tokens: 1500
+      })
+    });
+    const body = await response.json().catch(() => ({})) as AiResponseBody;
+    if (!response.ok) throw new Error(body.error?.message || "AI 紙面検出レビューに失敗しました。");
+    const parsed = parseAiBoundaryResponse(body);
+    await recordExternalServiceUsage({
+      serviceKey: "openai",
+      metricKey: "tokens",
+      quantity: Number(body.usage?.total_tokens ?? 0),
+      unit: "tokens",
+      source: "receipt_scanner_boundary_review",
+      metadata: {
+        model,
+        inputTokens: body.usage?.input_tokens ?? null,
+        outputTokens: body.usage?.output_tokens ?? null
+      }
+    });
+    return normalizeAiShape(parsed, width, height);
+  } catch (error) {
+    console.warn("AI receipt boundary review skipped", error);
+    return undefined;
+  }
+}
+
+type AiBoundaryResponse = {
+  hasReceipt: boolean;
+  confidence: number;
+  documentType: "standard" | "long_receipt";
+  points: Array<{ role: string; x: number; y: number }>;
+  leftEdge: Array<{ x: number; y: number }>;
+  rightEdge: Array<{ x: number; y: number }>;
+};
+
+type AiResponseBody = {
+  error?: { message?: string };
+  output_text?: string;
+  output?: Array<{ content?: Array<{ text?: string }> }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
+function parseAiBoundaryResponse(body: AiResponseBody): AiBoundaryResponse {
+  const content = body.output_text
+    ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
+    ?? "";
+  return JSON.parse(content) as AiBoundaryResponse;
+}
+
+function normalizeAiShape(parsed: AiBoundaryResponse, width: number, height: number): AiReceiptShape | undefined {
+  if (!parsed.hasReceipt || parsed.confidence < 0.35 || parsed.points.length < 4) return undefined;
+
+  const pointMap = new Map(parsed.points.map((point) => [point.role, point]));
+  const orderedRoles = ["top_left", "top_right", "bottom_right", "bottom_left"];
+  const quad = orderedRoles.map((role) => {
+    const point = pointMap.get(role);
+    if (!point) return null;
+    return {
+      x: normalizeAiCoordinate(point.x, width),
+      y: normalizeAiCoordinate(point.y, height)
+    };
+  });
+  if (quad.some((point) => !point)) return undefined;
+  const typedQuad = quad as [Point, Point, Point, Point];
+  const area = polygonArea(typedQuad);
+  const edgeProfile = normalizeAiEdgeProfile(parsed.leftEdge, parsed.rightEdge, width, height);
+  return {
+    documentType: parsed.documentType,
+    quad: area >= width * height * 0.12 ? typedQuad : undefined,
+    edgeProfile
+  };
+}
+
+function receiptBoundarySchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      hasReceipt: { type: "boolean" },
+      confidence: { type: "number" },
+      documentType: { type: "string", enum: ["standard", "long_receipt"] },
+      points: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            role: { type: "string", enum: ["top_left", "top_right", "bottom_right", "bottom_left"] },
+            x: { type: "number" },
+            y: { type: "number" }
+          },
+          required: ["role", "x", "y"]
+        }
+      },
+      leftEdge: {
+        type: "array",
+        items: edgePointSchema()
+      },
+      rightEdge: {
+        type: "array",
+        items: edgePointSchema()
+      }
+    },
+    required: ["hasReceipt", "confidence", "documentType", "points", "leftEdge", "rightEdge"]
+  };
 }
 
 function edgePointSchema() {
@@ -667,6 +791,38 @@ async function renderDebugOverlay(
   const overlay = Buffer.from(buildDebugOverlaySvg(width, height, aiShape, localDetection, localEdgeProfile));
   return sharp(base)
     .composite([{ input: overlay, blend: "over" }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function renderAiReviewOverlay(raw: Buffer, width: number, height: number, aiShape: AiReceiptShape) {
+  const base = await sharp(raw, {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .png()
+    .toBuffer();
+  const strokeWidth = Math.max(4, Math.round(Math.min(width, height) * 0.006));
+  const pointRadius = Math.max(10, Math.round(Math.min(width, height) * 0.014));
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<rect x="0" y="0" width="${width}" height="${height}" fill="none"/>`
+  ];
+  if (aiShape.quad) {
+    parts.push(polygon(aiShape.quad, "#ef4444", strokeWidth, "PREVIOUS AI CROP"));
+    parts.push(...pointMarkers(aiShape.quad, "#ef4444", pointRadius));
+  }
+  if (aiShape.edgeProfile) {
+    parts.push(polyline(aiShape.edgeProfile.leftEdge, "#2563eb", strokeWidth, "PREVIOUS LEFT EDGE"));
+    parts.push(polyline(aiShape.edgeProfile.rightEdge, "#06b6d4", strokeWidth, "PREVIOUS RIGHT EDGE"));
+  }
+  parts.push("</svg>");
+
+  return sharp(base)
+    .composite([{ input: Buffer.from(parts.join("")), blend: "over" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
