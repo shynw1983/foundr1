@@ -5479,10 +5479,6 @@ body :where(
   font-weight: 650;
 }
 
-.brand-site-admin-page {
-  gap: 20px;
-}
-
 .brand-site-toolbar {
   align-items: end;
   background: var(--surface);

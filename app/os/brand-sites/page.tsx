@@ -444,28 +444,30 @@ export default function BrandSitesPage() {
   }
 
   return (
-    <div className="dashboard-shell">
-      <aside className="sidebar">
-        <div className="sidebar-header">
+    <main className="shell">
+      <aside className="sidebar" aria-label="管理画面ナビゲーション">
+        <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
+          <div className="brand-mark">F1</div>
           <div>
             <p className="eyebrow">Foundr1 OS</p>
             <h1>ブランドサイト</h1>
           </div>
+        </a>
+        <MobileNavMenu navItems={navItems} />
+        <div className="sidebar-user">
+          <UserBadge />
         </div>
         <OsNavList navItems={navItems} />
-        <UserBadge />
       </aside>
 
-      <main className="content brand-site-admin-page">
-        <MobileNavMenu navItems={navItems} />
-
-        <section className="page-header">
+      <section className="workspace brand-site-admin-page">
+        <div className="workspace-heading">
           <div>
             <p className="eyebrow">Website content studio</p>
             <h2>ブランドサイト管理</h2>
             <p>前台サイトの画像・文案・タグ・多言語表示を、ブランドごとに構造化して管理します。</p>
           </div>
-          <div className="page-actions">
+          <div className="topbar-actions">
             <button className="secondary-button" type="button" onClick={() => void loadData()} disabled={loading}>
               {loading ? "読み込み中" : "再読み込み"}
             </button>
@@ -473,7 +475,7 @@ export default function BrandSitesPage() {
               <Plus size={16} /> セクション追加
             </button>
           </div>
-        </section>
+        </div>
 
         <section className="brand-site-toolbar">
           <label>
@@ -786,7 +788,7 @@ export default function BrandSitesPage() {
             </section>
           </div>
         ) : null}
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }
