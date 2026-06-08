@@ -22,59 +22,61 @@ export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const formData = await request.formData();
-  const file = formData.get("receipt");
-  if (!(file instanceof File) || file.size === 0) {
-    return Response.json({ error: "レシート写真を選択してください。" }, { status: 400 });
-  }
-  validateImageUpload(file, maxImageSizeBytes, "レシート写真");
+  try {
+    const formData = await request.formData();
+    const file = formData.get("receipt");
+    if (!(file instanceof File) || file.size === 0) {
+      return Response.json({ error: "レシート写真を選択してください。" }, { status: 400 });
+    }
+    validateImageUpload(file, maxImageSizeBytes, "レシート写真");
 
-  const input = Buffer.from(await file.arrayBuffer());
-  const normalized = sharp(input, { failOn: "none" })
-    .rotate()
-    .resize({
+    const input = Buffer.from(await file.arrayBuffer());
+    const normalized = sharp(input, { failOn: "none" }).rotate().resize({
       width: maxScanEdge,
       height: maxScanEdge,
       fit: "inside",
       withoutEnlargement: true
     });
-  const metadata = await normalized.metadata();
-  const width = metadata.width ?? 0;
-  const height = metadata.height ?? 0;
-  if (!width || !height) {
-    return Response.json({ error: "画像を読み込めませんでした。" }, { status: 400 });
+    const {
+      data: raw,
+      info: { width, height }
+    } = await normalized.clone().removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    if (!width || !height) {
+      return Response.json({ error: "画像を読み込めませんでした。" }, { status: 400 });
+    }
+
+    const detection = detectReceipt(raw, width, height);
+    const straightened = detection.quad
+      ? await warpPerspective(raw, width, height, detection.quad)
+      : await cropRaw(raw, width, detection.crop);
+    const processed = await sharp(straightened.buffer, {
+      raw: {
+        width: straightened.width,
+        height: straightened.height,
+        channels: 3
+      }
+    })
+      .greyscale()
+      .normalize()
+      .linear(1.35, -18)
+      .threshold(176)
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+
+    return new Response(processed, {
+      headers: {
+        "Content-Type": "image/png",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store"
+      }
+    });
+  } catch (error) {
+    console.error("Receipt scanner failed", error);
+    return Response.json(
+      { error: error instanceof Error ? error.message : "レシート写真の補正に失敗しました。" },
+      { status: 400 }
+    );
   }
-
-  const raw = await normalized
-    .clone()
-    .removeAlpha()
-    .raw()
-    .toBuffer();
-  const detection = detectReceipt(raw, width, height);
-  const straightened = detection.quad
-    ? await warpPerspective(raw, width, height, detection.quad)
-    : await cropRaw(raw, width, detection.crop);
-  const processed = await sharp(straightened.buffer, {
-    raw: {
-      width: straightened.width,
-      height: straightened.height,
-      channels: 3
-    }
-  })
-    .greyscale()
-    .normalize()
-    .linear(1.35, -18)
-    .threshold(176)
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-
-  return new Response(processed, {
-    headers: {
-      "Content-Type": "image/png",
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "no-store"
-    }
-  });
 }
 
 function detectReceipt(raw: Buffer, width: number, height: number): ReceiptDetection {
