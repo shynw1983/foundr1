@@ -53,6 +53,7 @@ type VoucherRecord = {
 };
 
 type VoucherOcrItem = {
+  id: string;
   rawName: string;
   taxRate: string;
   taxMode: string;
@@ -667,41 +668,24 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
 
 function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccountingLine[] {
   const isShiire = voucher?.usageType === "shiire";
-  const grouped = new Map<string, {
-    accountTitle: string;
-    subAccountTitle: string;
-    taxRate: string;
-    taxMode: string;
-    amount: number;
-    itemNames: string[];
-  }>();
 
-  for (const item of voucher?.items ?? []) {
+  const lines = (voucher?.items ?? []).flatMap((item, index) => {
     const amount = Math.round(Number(item.amount ?? 0));
-    if (!amount) continue;
+    if (!amount) return [];
     const accountTitle = isShiire ? "仕入高" : item.accountTitle || getDefaultAccountTitle(item.category);
     const subAccountTitle = getDefaultSubAccountTitle(voucher?.usageType ?? "unclassified", item.category, item.accountTitle);
     const taxRate = normalizeDraftTaxRate(item.taxRate);
     const taxMode = normalizeDraftTaxMode(item.taxMode);
-    const key = `${accountTitle}:${subAccountTitle}:${taxRate}:${taxMode}`;
-    const current = grouped.get(key) ?? { accountTitle, subAccountTitle, taxRate, taxMode, amount: 0, itemNames: [] };
-    current.amount += amount;
-    if (item.rawName) current.itemNames.push(item.rawName);
-    grouped.set(key, current);
-  }
-
-  const lines = Array.from(grouped.values()).map((line, index) => {
-    const amount = Math.round(line.amount);
-    return {
-      id: `ocr-${index}`,
-      accountTitle: line.accountTitle,
-      subAccountTitle: line.subAccountTitle,
+    return [{
+      id: `ocr-${index}-${item.id}`,
+      accountTitle,
+      subAccountTitle,
       amount: String(amount || ""),
-      taxRate: line.taxRate,
-      taxMode: line.taxMode,
-      taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, line.taxMode)),
-      note: line.itemNames.slice(0, 4).join("、")
-    };
+      taxRate,
+      taxMode,
+      taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
+      note: item.rawName || ""
+    }];
   });
   if (lines.length) return lines;
 

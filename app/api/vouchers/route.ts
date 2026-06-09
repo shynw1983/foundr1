@@ -98,7 +98,7 @@ export async function POST(request: Request) {
           uploadedFileName: file.name || "",
           usageType,
           paymentType,
-          createProductCandidates: usageType === "shiire"
+          createProductCandidates: false
         }, analyzed.result, analyzed.model, session);
       } catch (error) {
         ocrError = error instanceof Error ? error.message : "OCRに失敗しました。";
@@ -428,6 +428,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
   const ocrResultIds = rows.map((row) => String(row.id ?? "")).filter(Boolean);
   const itemRows = ocrResultIds.length ? await sql`
     select
+      id::text,
       receipt_ocr_result_id::text as "ocrResultId",
       raw_name as "rawName",
       coalesce(tax_rate, '') as "taxRate",
@@ -440,6 +441,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     order by receipt_ocr_result_id, line_index
   ` : [];
   const itemsByResultId = new Map<string, Array<{
+    id: string;
     rawName: string;
     taxRate: string;
     taxMode: string;
@@ -451,6 +453,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     const ocrResultId = String(item.ocrResultId ?? "");
     const items = itemsByResultId.get(ocrResultId) ?? [];
     items.push({
+      id: String(item.id ?? ""),
       rawName: String(item.rawName ?? ""),
       taxRate: String(item.taxRate ?? ""),
       taxMode: String(item.taxMode ?? ""),
