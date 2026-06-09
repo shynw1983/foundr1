@@ -141,7 +141,11 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     <main className="login-shell">
       <section className="login-card">
         <OsLanguagePicker />
-        <div className="brand-mark">F1</div>
+        {surface === "store" ? (
+          <img className="login-app-icon" src="/icons/foundr1-store-192.png" alt="Foundr1 STORE" />
+        ) : (
+          <div className="brand-mark">F1</div>
+        )}
         <div>
           <p className="eyebrow">{productName}</p>
           <h1>{mode === "forgot" ? "パスワード再設定" : mode === "initialChange" ? "新しいパスワード設定" : "スタッフログイン"}</h1>
