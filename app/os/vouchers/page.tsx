@@ -731,7 +731,6 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
-  const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf");
   const previewUrl = buildVoucherPreviewUrl(voucher);
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
@@ -740,17 +739,15 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <span>証憑プレビュー</span>
           <strong>{title}</strong>
         </div>
+        <a className="voucher-preview-open-link" href={previewUrl} target="_blank" rel="noreferrer">開く</a>
         <button type="button" onClick={onClose} aria-label="プレビューを閉じる">
           <X size={18} />
         </button>
       </div>
       <div className="voucher-preview-panel-body">
-        {isPdf ? (
-          <iframe src={previewUrl} title={title} />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt={title} />
-        )}
+        <object data={previewUrl} title={title} aria-label={title}>
+          <a href={previewUrl} target="_blank" rel="noreferrer">証憑を開く</a>
+        </object>
       </div>
     </aside>
   );
