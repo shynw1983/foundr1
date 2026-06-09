@@ -732,7 +732,7 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
   const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf");
-  const previewUrl = normalizeVoucherPreviewUrl(voucher.receiptPhotoUrl);
+  const previewUrl = buildVoucherPreviewUrl(voucher.receiptPhotoUrl, voucher.uploadedFileName);
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
       <div className="voucher-preview-panel-head">
@@ -756,16 +756,43 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
   );
 }
 
-function normalizeVoucherPreviewUrl(value: string) {
-  if (!value) return "";
+function buildVoucherPreviewUrl(value: string, filename = "") {
+  const pathname = extractVoucherBlobPathname(value);
+  if (pathname) {
+    const params = new URLSearchParams({ pathname });
+    if (filename) params.set("filename", filename);
+    return `/api/products/photo/view?${params.toString()}`;
+  }
+  return normalizeVoucherPreviewUrl(value);
+}
+
+function extractVoucherBlobPathname(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("voucher-documents/")) return trimmed;
   try {
-    const url = new URL(value, window.location.origin);
+    const url = new URL(trimmed, window.location.origin);
+    const proxiedPathname = url.searchParams.get("pathname");
+    if (proxiedPathname) return proxiedPathname;
+    const path = url.pathname.replace(/^\/+/, "");
+    if (path.startsWith("voucher-documents/")) return decodeURIComponent(path);
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function normalizeVoucherPreviewUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed, window.location.origin);
     if (url.hostname.endsWith("foundr1.jp")) {
       return `${url.pathname}${url.search}${url.hash}`;
     }
     return url.href;
   } catch {
-    return value;
+    return trimmed;
   }
 }
 
