@@ -17511,6 +17511,54 @@ body :where(
   gap: 12px;
 }
 
+.voucher-upload-progress {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.voucher-upload-progress-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voucher-upload-progress-heading strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.voucher-upload-progress-heading span,
+.voucher-upload-progress p {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.voucher-upload-progress p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.voucher-upload-progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.voucher-upload-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 180ms ease;
+}
+
 .voucher-row {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) auto minmax(260px, 0.9fr) auto;

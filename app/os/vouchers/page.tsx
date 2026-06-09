@@ -95,6 +95,14 @@ type VoucherAccountingSummaryLine = {
   note: string;
 };
 
+type VoucherUploadProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  currentFile: string;
+  phase: string;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "証憑管理", href: "/os/vouchers", icon: ReceiptText },
@@ -165,6 +173,7 @@ export default function VouchersPage() {
   const [message, setMessage] = useState("");
   const [accountingDrafts, setAccountingDrafts] = useState<Record<string, VoucherAccountingDraft>>({});
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
+  const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
 
   useEffect(() => {
     void loadVouchers();
@@ -197,7 +206,7 @@ export default function VouchersPage() {
   async function uploadVouchers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const files = new FormData(form)
+    let files = new FormData(form)
       .getAll("receipts")
       .filter((file): file is File => file instanceof File && file.size > 0);
     if (!selectedStoreId) {
@@ -208,31 +217,64 @@ export default function VouchersPage() {
       setMessage("写真またはPDFを選択してください。");
       return;
     }
+    const pdfFiles = files.filter((file) => isPdfUploadFile(file));
+    if (pdfFiles.length > 1 || (pdfFiles.length === 1 && files.length > 1)) {
+      setMessage("PDFは単体でアップロードしてください。写真は複数枚を順番に処理します。");
+      return;
+    }
 
     setIsUploading(true);
-    setMessage("証憑を読み取り中...");
-    const formData = new FormData();
-    formData.set("storeId", selectedStoreId);
-    formData.set("usageType", usageType);
-    formData.set("paymentType", paymentType);
-    for (const file of files) formData.append("receipts", file);
+    try {
+      if (pdfFiles.length === 1) {
+        setMessage("PDFをページごとに分割しています。");
+        setUploadProgress({ total: 1, completed: 0, failed: 0, currentFile: pdfFiles[0].name || "PDF", phase: "PDF分割中" });
+        files = await splitPdfIntoPageFiles(pdfFiles[0]);
+      }
 
-    const response = await fetch("/api/vouchers", { method: "POST", body: formData });
-    const body = await response.json().catch(() => ({})) as {
-      error?: string;
-      results?: Array<{ ok?: boolean; ocrError?: string; error?: string }>;
-    };
-    if (!response.ok) {
-      setMessage(body.error ?? "証憑をアップロードできませんでした。");
-    } else {
-      const failed = (body.results ?? []).filter((result) => !result.ok || result.ocrError);
-      setMessage(failed.length
-        ? `保存しました。一部OCR結果を確認してください（${failed.length}件）。`
+      setMessage("証憑を順番に処理しています。");
+      setUploadProgress({ total: files.length, completed: 0, failed: 0, currentFile: files[0]?.name || "", phase: "準備中" });
+
+      let failedCount = 0;
+      let savedCount = 0;
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const fileName = file.name || `file-${index + 1}`;
+        setUploadProgress({ total: files.length, completed: index, failed: failedCount, currentFile: fileName, phase: "アップロード・OCR中" });
+
+        const formData = new FormData();
+        formData.set("storeId", selectedStoreId);
+        formData.set("usageType", usageType);
+        formData.set("paymentType", paymentType);
+        formData.append("receipts", file);
+
+        try {
+          const response = await fetch("/api/vouchers", { method: "POST", body: formData });
+          const body = await response.json().catch(() => ({})) as {
+            error?: string;
+            results?: Array<{ ok?: boolean; ocrError?: string; error?: string }>;
+          };
+          const result = body.results?.[0];
+          if (!response.ok || !result?.ok || result.ocrError) {
+            failedCount += 1;
+          } else {
+            savedCount += 1;
+          }
+        } catch {
+          failedCount += 1;
+        }
+        setUploadProgress({ total: files.length, completed: index + 1, failed: failedCount, currentFile: fileName, phase: "完了" });
+      }
+
+      setMessage(failedCount
+        ? `保存処理が完了しました。一部OCR結果を確認してください（成功 ${savedCount}件 / 失敗 ${failedCount}件）。`
         : "証憑を読み取りました。内容を確認してください。");
       form.reset();
       await loadVouchers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "証憑をアップロードできませんでした。");
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   }
 
   async function updateVoucher(voucher: VoucherRecord, next: Partial<VoucherRecord>) {
@@ -434,9 +476,10 @@ export default function VouchersPage() {
               <input name="receipts" type="file" accept="application/pdf,.pdf" disabled={!canUpload || isUploading} />
             </label>
             <button className="primary-button" type="submit" disabled={!canUpload || isUploading || !stores.length}>
-              {isUploading ? "読み取り中..." : "アップロードしてOCR"}
+              {isUploading ? "処理中..." : "アップロードしてOCR"}
             </button>
           </form>
+          {uploadProgress ? <VoucherUploadProgressView progress={uploadProgress} /> : null}
           {message ? <p className="form-status">{message}</p> : null}
         </section>
 
@@ -573,6 +616,25 @@ function buildVoucherTitle(voucher: VoucherRecord) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgress }) {
+  const percentage = progress.total > 0 ? Math.round(progress.completed / progress.total * 100) : 0;
+  return (
+    <div className="voucher-upload-progress" aria-live="polite">
+      <div className="voucher-upload-progress-heading">
+        <strong>{percentage}%</strong>
+        <span>{progress.completed}/{progress.total}件</span>
+      </div>
+      <div className="voucher-upload-progress-bar" aria-hidden="true">
+        <span style={{ width: `${percentage}%` }} />
+      </div>
+      <p>
+        {progress.phase}：{progress.currentFile || "証憑"}
+        {progress.failed ? ` / 要確認 ${progress.failed}件` : ""}
+      </p>
+    </div>
+  );
 }
 
 function VoucherAccountingEditor({
@@ -801,4 +863,26 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   if (!rate || amount <= 0) return 0;
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   return Math.round(amount * rate / (100 + rate));
+}
+
+function isPdfUploadFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+async function splitPdfIntoPageFiles(file: File) {
+  const { PDFDocument } = await import("pdf-lib");
+  const sourcePdf = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+  const pageCount = sourcePdf.getPageCount();
+  if (pageCount <= 0) throw new Error("PDFページを読み取れませんでした。");
+
+  const baseName = (file.name || "receipt.pdf").replace(/\.pdf$/i, "");
+  const pageFiles: File[] = [];
+  for (let index = 0; index < pageCount; index += 1) {
+    const pagePdf = await PDFDocument.create();
+    const [page] = await pagePdf.copyPages(sourcePdf, [index]);
+    pagePdf.addPage(page);
+    const bytes = await pagePdf.save();
+    pageFiles.push(new File([bytes], `${baseName}-page-${String(index + 1).padStart(3, "0")}.pdf`, { type: "application/pdf" }));
+  }
+  return pageFiles;
 }
