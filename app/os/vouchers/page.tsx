@@ -250,8 +250,8 @@ export default function VouchersPage() {
               <input name="receipts" type="file" accept="image/*" multiple disabled={!canUpload || isUploading} />
             </label>
             <label className="voucher-file-field">
-              <span>ファイル / PDF</span>
-              <input name="receipts" type="file" accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple disabled={!canUpload || isUploading} />
+              <span>PDFファイル</span>
+              <input name="receipts" type="file" accept="application/pdf,.pdf" disabled={!canUpload || isUploading} />
             </label>
             <button className="primary-button" type="submit" disabled={!canUpload || isUploading || !stores.length}>
               {isUploading ? "読み取り中..." : "アップロードしてOCR"}
