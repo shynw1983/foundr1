@@ -875,16 +875,24 @@ function StaffFormFields({
           </label>
         ) : null}
         <label>
-          <span>{member ? "新しいパスワード" : "初期パスワード"}</span>
-          <input name="password" type="password" placeholder={member ? "変更時のみ入力" : "必須"} required={!member} />
-        </label>
-        <label>
           <span>権限</span>
           <select name="role" value={selectedRole} onChange={(event) => updateSelectedRole(event.target.value)}>
             {shownRoleOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
+        </label>
+        <div className="staff-payroll-guide">
+          <strong>パスワード運用</strong>
+          <p>
+            {member
+              ? "既にログイン済みのスタッフでも、下のチェックを入れて保存すると次回ログイン時に新しいパスワード設定を求めます。初期パスワードを再発行する場合だけ入力してください。"
+              : "作成後、対象ロールは初回ログイン時にこの初期パスワードから変更します。"}
+          </p>
+        </div>
+        <label>
+          <span>{member ? "再発行する初期パスワード" : "初期パスワード"}</span>
+          <input name="password" type="password" placeholder={member ? "再発行時のみ入力" : "必須"} required={!member} />
         </label>
         {canForcePasswordChange(selectedRole) ? (
           <label className="staff-checkbox-field">
@@ -895,7 +903,7 @@ function StaffFormFields({
               checked={forcePasswordChange}
               onChange={(event) => setForcePasswordChange(event.currentTarget.checked)}
             />
-            <span>次回ログイン時にパスワード変更を強制</span>
+            <span>次回ログイン時に強制的にパスワードを再設定させる</span>
           </label>
         ) : (
           <input name="passwordMustChange" type="hidden" value="false" readOnly />
