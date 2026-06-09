@@ -1,6 +1,6 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
-import { normalizeReceiptProductName } from "../../../lib/receipt-ocr";
+import { normalizeReceiptProductName, recordReceiptItemPrice } from "../../../lib/receipt-ocr";
 
 type CandidateAction = "create_product" | "link_product" | "ignore";
 
@@ -170,12 +170,32 @@ export async function PATCH(request: Request) {
       updated_at = now()
     where id::text = ${id}
   `;
-  if (candidate.itemId) {
+
+  const itemRows = await sql`
+    select receipt_ocr_items.id::text as id
+    from receipt_ocr_items
+    join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    where receipt_ocr_items.normalized_name = ${String(candidate.normalizedName ?? "")}
+      and receipt_ocr_items.match_status in ('unmatched', 'not_applicable')
+      and (
+        ${String(candidate.supplierName ?? "")} = ''
+        or coalesce(receipt_ocr_results.supplier_name, '') = ${String(candidate.supplierName ?? "")}
+        or coalesce(receipt_ocr_results.vendor_name, '') = ${String(candidate.supplierName ?? "")}
+      )
+      and (
+        receipt_ocr_results.source_type = 'procurement'
+        or receipt_ocr_results.usage_type = 'shiire'
+      )
+  `;
+  const itemIds = new Set(itemRows.map((row) => String(row.id ?? "")).filter(Boolean));
+  if (candidate.itemId) itemIds.add(String(candidate.itemId));
+  for (const itemId of itemIds) {
     await sql`
       update receipt_ocr_items
       set matched_product_id = ${productId}, match_status = 'matched', updated_at = now()
-      where id::text = ${String(candidate.itemId)}
+      where id::text = ${itemId}
     `;
+    await recordReceiptItemPrice(itemId, productId, session.id);
   }
 
   return Response.json({ ok: true, productId });
@@ -224,12 +244,6 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       where suppliers.name = ${supplierName}
       on conflict (product_id, supplier_id, role)
       do update set reference_price = excluded.reference_price, is_active = true
-    `;
-    await sql`
-      insert into price_records (product_id, supplier_id, price, unit, source, receipt_note, recorded_by)
-      select ${productId}, suppliers.id, ${Number.isFinite(referencePrice) ? referencePrice : 0}, ${unit}, ${"receipt_ocr"}, ${String(candidate.rawName ?? "")}, ${employeeId}
-      from suppliers
-      where suppliers.name = ${supplierName}
     `;
   }
   return productId;

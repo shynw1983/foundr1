@@ -348,6 +348,7 @@ export async function createProductCandidatesForOcrResult(ocrResultId: string, s
         set matched_product_id = ${match.productId}, match_status = 'matched', updated_at = now()
         where id::text = ${String(row.id)}
       `;
+      await recordReceiptItemPrice(String(row.id), String(match.productId), session.id);
       continue;
     }
 
@@ -416,8 +417,64 @@ async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[],
     `;
     if (createProductCandidates && !match.productId) {
       await createProductCandidate(String(itemRows[0]?.id ?? ""), item, normalizedName, supplierName, session);
+    } else if (createProductCandidates && match.productId) {
+      await recordReceiptItemPrice(String(itemRows[0]?.id ?? ""), String(match.productId), session.id);
     }
   }
+}
+
+export async function recordReceiptItemPrice(itemId: string, productId: string, employeeId: string) {
+  if (!itemId || !productId) return;
+
+  const rows = await sql`
+    select
+      receipt_ocr_items.id::text as "itemId",
+      receipt_ocr_items.unit,
+      receipt_ocr_items.unit_price::float as "unitPrice",
+      receipt_ocr_items.amount::float,
+      coalesce(receipt_ocr_results.supplier_name, '') as "supplierName",
+      coalesce(receipt_ocr_results.vendor_name, '') as "vendorName"
+    from receipt_ocr_items
+    join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    where receipt_ocr_items.id::text = ${itemId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return;
+
+  const price = Number(row.unitPrice ?? row.amount ?? 0);
+  if (!Number.isFinite(price) || price <= 0) return;
+  const unit = String(row.unit ?? "").trim() || "個";
+  const supplierName = String(row.supplierName || row.vendorName || "").trim();
+
+  await sql`
+    delete from price_records
+    where source = 'receipt_ocr'
+      and receipt_note = ${itemId}
+  `;
+
+  await sql`
+    insert into price_records (
+      product_id,
+      supplier_id,
+      price,
+      unit,
+      source,
+      receipt_note,
+      recorded_by
+    )
+    select
+      ${productId},
+      suppliers.id,
+      ${price},
+      ${unit},
+      'receipt_ocr',
+      ${itemId},
+      ${employeeId}
+    from (select 1) seed
+    left join suppliers on suppliers.name = ${supplierName}
+    limit 1
+  `;
 }
 
 async function findProductMatch(supplierName: string, normalizedName: string) {
