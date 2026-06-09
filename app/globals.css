@@ -14630,6 +14630,16 @@ body :where(
   font-weight: 800;
 }
 
+.timecard-store-name {
+  display: block;
+  min-width: 0;
+  padding: 9px 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
 .store-timecard-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);

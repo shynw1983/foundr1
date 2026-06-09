@@ -930,6 +930,14 @@ export async function GET(request: Request) {
     punchedAt: new Date(String(row.punchedAt)).toISOString()
   }));
   const latestPunch = latestPunches.find((punch) => punch.employeeId === session.id) ?? null;
+  const isStoreTerminalSession = session.role === storeTerminalRole;
+  const responseLatestPunches = isStoreTerminalSession
+    ? latestPunches.map((punch) => ({
+      employeeId: punch.employeeId,
+      punchType: punch.punchType,
+      punchedAt: ""
+    }))
+    : latestPunches;
 
   return Response.json({
     month,
@@ -941,8 +949,8 @@ export async function GET(request: Request) {
     selectedStoreId,
     payrollPeriod: { startDate, endDate },
     employees: responseEmployees,
-    punches: typedPunches,
-    shifts: shifts.map((row) => ({
+    punches: isStoreTerminalSession ? [] : typedPunches,
+    shifts: isStoreTerminalSession ? [] : shifts.map((row) => ({
       id: String(row.id),
       employeeId: String(row.employeeId),
       employeeName: String(row.employeeName),
@@ -954,12 +962,12 @@ export async function GET(request: Request) {
       breakMinutes: Number(row.breakMinutes ?? 0),
       note: row.note ? String(row.note) : null
     })),
-    latestPunch,
-    latestPunches,
-    dailySummaries,
-    payrollConfirmation,
-    payrollRows: payroll.rows,
-    payrollTotals: payroll.totals
+    latestPunch: isStoreTerminalSession ? null : latestPunch,
+    latestPunches: responseLatestPunches,
+    dailySummaries: isStoreTerminalSession ? [] : dailySummaries,
+    payrollConfirmation: isStoreTerminalSession ? null : payrollConfirmation,
+    payrollRows: isStoreTerminalSession ? [] : payroll.rows,
+    payrollTotals: isStoreTerminalSession ? emptyPayrollTotals : payroll.totals
   });
 }
 

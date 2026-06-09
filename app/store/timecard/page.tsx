@@ -182,11 +182,20 @@ export default function StoreTimecardPage() {
       setData(body);
       setSelectedStoreId(body.selectedStoreId);
       if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
-      setSelectedShiftStoreId((current) => {
-        const next = body.stores.some((store) => store.id === current) ? current : body.selectedStoreId;
-        void loadShiftRequests(next);
-        return next;
-      });
+      if (body.currentEmployeeRole === "store_terminal") {
+        setSelectedShiftStoreId(body.selectedStoreId);
+        setShiftRequests([]);
+        setMyShifts([]);
+        setSchedulingPeriod(null);
+        setSubmissionPeriod(null);
+        setAvailabilityDrafts([]);
+      } else {
+        setSelectedShiftStoreId((current) => {
+          const next = body.stores.some((store) => store.id === current) ? current : body.selectedStoreId;
+          void loadShiftRequests(next);
+          return next;
+        });
+      }
       const storeEmployees = getEmployeesForStore(body.employees ?? [], body.selectedStoreId);
       setSelectedEmployeeId((current) => {
         if (body.currentEmployeeRole === "staff") return body.currentEmployeeId;
@@ -501,18 +510,25 @@ export default function StoreTimecardPage() {
           </div>
 
           <div className="timecard-store-select">
-            <label>
-              <span>打刻店舗</span>
-              <select value={selectedStoreId} onChange={(event) => {
-                setSelectedStoreId(event.target.value);
-                setStoredStoreSelection(event.target.value);
-                void loadTimecard(event.target.value);
-              }}>
-                {data?.stores.map((store) => (
-                  <option value={store.id} key={store.id}>{store.name}</option>
-                ))}
-              </select>
-            </label>
+            {isStoreTerminal ? (
+              <label>
+                <span>打刻店舗</span>
+                <strong className="timecard-store-name">{selectedStoreName}</strong>
+              </label>
+            ) : (
+              <label>
+                <span>打刻店舗</span>
+                <select value={selectedStoreId} onChange={(event) => {
+                  setSelectedStoreId(event.target.value);
+                  setStoredStoreSelection(event.target.value);
+                  void loadTimecard(event.target.value);
+                }}>
+                  {data?.stores.map((store) => (
+                    <option value={store.id} key={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button className="secondary-button" type="button" onClick={() => loadTimecard(selectedStoreId)}>
               <RefreshCw size={16} />
               更新
@@ -550,7 +566,7 @@ export default function StoreTimecardPage() {
                   <span className="timecard-employee-avatar">{employee.name.slice(0, 1)}</span>
                   <span>
                     <strong>{employee.name}</strong>
-                    <small>{employeeStatus}{latestPunch ? `・${formatJstDateTime(latestPunch.punchedAt)}` : ""}</small>
+                    <small>{employeeStatus}{!isStoreTerminal && latestPunch ? `・${formatJstDateTime(latestPunch.punchedAt)}` : ""}</small>
                   </span>
                 </button>
               );
@@ -561,7 +577,7 @@ export default function StoreTimecardPage() {
 
           <div className={`timecard-status is-${state}`}>
             <span>{selectedEmployee?.name ?? "従業員未選択"} / {statusLabel}</span>
-            <strong>{selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
+            <strong>{isStoreTerminal ? "打刻操作を選択してください" : selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
           </div>
 
           {message ? <div className="timecard-message">{message}</div> : null}
