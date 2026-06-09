@@ -73,11 +73,13 @@ async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof re
 
   if (pathname.startsWith("purchase-receipts/")) {
     const encodedPathname = encodeURIComponent(pathname);
+    const rawPathname = pathname;
     const rows = await sql`
       select purchase_orders.store_id::text as "storeId"
       from purchase_order_supplier_fulfillments
       join purchase_orders on purchase_orders.id = purchase_order_supplier_fulfillments.purchase_order_id
       where purchase_order_supplier_fulfillments.receipt_photo_url like ${`%${encodedPathname}%`}
+         or purchase_order_supplier_fulfillments.receipt_photo_url like ${`%${rawPathname}%`}
       limit 1
     `;
     return canAccessStore(session, rows[0]?.storeId);
@@ -85,10 +87,12 @@ async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof re
 
   if (pathname.startsWith("expense-receipts/")) {
     const encodedPathname = encodeURIComponent(pathname);
+    const rawPathname = pathname;
     const rows = await sql`
       select store_id::text as "storeId"
       from expense_receipts
       where receipt_photo_url like ${`%${encodedPathname}%`}
+         or receipt_photo_url like ${`%${rawPathname}%`}
       limit 1
     `;
     return canAccessStore(session, rows[0]?.storeId);
@@ -96,15 +100,18 @@ async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof re
 
   if (pathname.startsWith("voucher-documents/")) {
     const encodedPathname = encodeURIComponent(pathname);
+    const rawPathname = pathname;
     const rows = await sql`
       select
         store_id::text as "storeId",
         created_by::text as "createdBy"
       from receipt_ocr_results
       where receipt_photo_url like ${`%${encodedPathname}%`}
+         or receipt_photo_url like ${`%${rawPathname}%`}
       limit 1
     `;
     if (String(rows[0]?.createdBy ?? "") === session.id) return true;
+    if (!rows.length && (session.role === "owner" || session.role === "manager")) return true;
     return canAccessStore(session, rows[0]?.storeId);
   }
 
