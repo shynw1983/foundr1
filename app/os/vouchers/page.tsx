@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDown,
   ClipboardList,
   FileText,
   LogOut,
@@ -163,6 +164,7 @@ export default function VouchersPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [accountingDrafts, setAccountingDrafts] = useState<Record<string, VoucherAccountingDraft>>({});
+  const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     void loadVouchers();
@@ -310,6 +312,10 @@ export default function VouchersPage() {
     });
   }
 
+  function toggleVoucherExpanded(voucherId: string) {
+    setExpandedVoucherIds((current) => ({ ...current, [voucherId]: !current[voucherId] }));
+  }
+
   async function confirmVoucherAccounting(voucher: VoucherRecord) {
     const draft = accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher);
     const vendorName = draft.brandName
@@ -445,91 +451,113 @@ export default function VouchersPage() {
           {isLoading ? <p className="empty-state">読み込み中...</p> : null}
           {!isLoading && !sortedVouchers.length ? <p className="empty-state">登録済みの証憑はありません。</p> : null}
           <div className="voucher-list">
-            {sortedVouchers.map((voucher) => (
-              <article className="voucher-row" key={voucher.id}>
-                <div className="voucher-row-main">
-                  <div className="voucher-row-heading">
-                    <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : "is-active"}`}>
-                      {voucher.status === "failed" ? "OCR失敗" : voucher.status === "confirmed" ? "確定済み" : "確認待ち"}
-                    </span>
-                    <strong>{buildVoucherTitle(voucher)}</strong>
+            {sortedVouchers.map((voucher) => {
+              const isConfirmed = voucher.status === "confirmed";
+              const isExpanded = !isConfirmed || expandedVoucherIds[voucher.id];
+              return (
+                <article className={`voucher-row ${isConfirmed && !isExpanded ? "is-collapsed" : ""}`} key={voucher.id}>
+                  <div className="voucher-row-main">
+                    <div className="voucher-row-heading">
+                      <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : "is-active"}`}>
+                        {voucher.status === "failed" ? "OCR失敗" : isConfirmed ? "確定済み" : "確認待ち"}
+                      </span>
+                      <strong>{buildVoucherTitle(voucher)}</strong>
+                    </div>
+                    <p>
+                      {voucher.storeName || "店舗未設定"} / {voucher.purchaseDate || "日付未読取"} {voucher.purchaseTime || ""} / {voucher.itemCount}行 / 税 {formatMoney(voucher.tax)}
+                    </p>
+                    <div className="voucher-row-meta">
+                      <span>{usageLabels[voucher.usageType]}</span>
+                      <span>{paymentLabels[voucher.paymentType]}</span>
+                      {voucher.paymentType === "reimbursement" ? <span>{reimbursementLabels[voucher.reimbursementStatus]}</span> : null}
+                      <span>{voucher.sourceType === "voucher" ? "証憑管理" : voucher.sourceType === "procurement" ? "購入管理" : "経費OCR"}</span>
+                      <span>{voucher.createdByName || "作成者不明"}</span>
+                      <span>{voucher.createdLabel}</span>
+                    </div>
                   </div>
-                  <p>
-                    {voucher.storeName || "店舗未設定"} / {voucher.purchaseDate || "日付未読取"} {voucher.purchaseTime || ""} / {voucher.itemCount}行 / 税 {formatMoney(voucher.tax)}
-                  </p>
-                  <div className="voucher-row-meta">
-                    <span>{voucher.sourceType === "voucher" ? "証憑管理" : voucher.sourceType === "procurement" ? "購入管理" : "経費OCR"}</span>
-                    <span>{voucher.createdByName || "作成者不明"}</span>
-                    <span>{voucher.createdLabel}</span>
-                  </div>
-                </div>
-                <strong className="voucher-total">{formatMoney(voucher.total)}</strong>
-                <div className="voucher-controls">
-                  <label>
-                    <span>用途</span>
-                    <select
-                      value={voucher.usageType}
-                      onChange={(event) => void updateVoucher(voucher, { usageType: event.target.value as VoucherUsageType })}
+                  <strong className="voucher-total">{formatMoney(voucher.total)}</strong>
+                  {isConfirmed ? (
+                    <button
+                      className={`voucher-expand-button ${isExpanded ? "is-open" : ""}`}
+                      type="button"
+                      onClick={() => toggleVoucherExpanded(voucher.id)}
+                      aria-expanded={isExpanded}
                     >
-                      <option value="unclassified">未分類</option>
-                      <option value="shiire">仕入</option>
-                      <option value="keihi">経費</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>支払</span>
-                    <select
-                      value={voucher.paymentType}
-                      onChange={(event) => {
-                        const nextPaymentType = event.target.value as VoucherPaymentType;
-                        void updateVoucher(voucher, {
-                          paymentType: nextPaymentType,
-                          reimbursementStatus: nextPaymentType === "reimbursement" ? "pending" : "none"
-                        });
-                      }}
-                    >
-                      <option value="company">会社支払</option>
-                      <option value="reimbursement">立替</option>
-                    </select>
-                  </label>
-                  {voucher.paymentType === "reimbursement" ? (
-                    <label>
-                      <span>精算</span>
-                      <select
-                        value={voucher.reimbursementStatus}
-                        onChange={(event) => void updateVoucher(voucher, { reimbursementStatus: event.target.value as VoucherReimbursementStatus })}
-                      >
-                        <option value="pending">精算待ち</option>
-                        <option value="paid">精算済み</option>
-                        <option value="rejected">却下</option>
-                      </select>
-                    </label>
-                  ) : (
-                    <span className="voucher-reimbursement-placeholder">{reimbursementLabels.none}</span>
-                  )}
-                </div>
-                <div className="voucher-actions">
-                  <a className="text-button" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
-                  {voucher.canDelete ? (
-                    <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)}>削除</button>
+                      <ChevronDown size={16} />
+                      {isExpanded ? "閉じる" : "詳細"}
+                    </button>
                   ) : null}
-                </div>
-                {voucher.sourceType === "voucher" && voucher.status !== "confirmed" && voucher.status !== "failed" ? (
-                  <VoucherAccountingEditor
-                    voucher={voucher}
-                    draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
-                    onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
-                    onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
-                    onAddLine={() => addAccountingLine(voucher.id)}
-                    onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
-                    onConfirm={() => void confirmVoucherAccounting(voucher)}
-                  />
-                ) : null}
-                {voucher.accountingLines?.length ? (
-                  <VoucherAccountingSummary lines={voucher.accountingLines} />
-                ) : null}
-              </article>
-            ))}
+                  {isExpanded ? (
+                    <>
+                      <div className="voucher-controls">
+                        <label>
+                          <span>用途</span>
+                          <select
+                            value={voucher.usageType}
+                            onChange={(event) => void updateVoucher(voucher, { usageType: event.target.value as VoucherUsageType })}
+                          >
+                            <option value="unclassified">未分類</option>
+                            <option value="shiire">仕入</option>
+                            <option value="keihi">経費</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>支払</span>
+                          <select
+                            value={voucher.paymentType}
+                            onChange={(event) => {
+                              const nextPaymentType = event.target.value as VoucherPaymentType;
+                              void updateVoucher(voucher, {
+                                paymentType: nextPaymentType,
+                                reimbursementStatus: nextPaymentType === "reimbursement" ? "pending" : "none"
+                              });
+                            }}
+                          >
+                            <option value="company">会社支払</option>
+                            <option value="reimbursement">立替</option>
+                          </select>
+                        </label>
+                        {voucher.paymentType === "reimbursement" ? (
+                          <label>
+                            <span>精算</span>
+                            <select
+                              value={voucher.reimbursementStatus}
+                              onChange={(event) => void updateVoucher(voucher, { reimbursementStatus: event.target.value as VoucherReimbursementStatus })}
+                            >
+                              <option value="pending">精算待ち</option>
+                              <option value="paid">精算済み</option>
+                              <option value="rejected">却下</option>
+                            </select>
+                          </label>
+                        ) : (
+                          <span className="voucher-reimbursement-placeholder">{reimbursementLabels.none}</span>
+                        )}
+                      </div>
+                      <div className="voucher-actions">
+                        <a className="text-button" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
+                        {voucher.canDelete ? (
+                          <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)}>削除</button>
+                        ) : null}
+                      </div>
+                      {voucher.sourceType === "voucher" && voucher.status !== "confirmed" && voucher.status !== "failed" ? (
+                        <VoucherAccountingEditor
+                          voucher={voucher}
+                          draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
+                          onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
+                          onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
+                          onAddLine={() => addAccountingLine(voucher.id)}
+                          onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
+                          onConfirm={() => void confirmVoucherAccounting(voucher)}
+                        />
+                      ) : null}
+                      {voucher.accountingLines?.length ? (
+                        <VoucherAccountingSummary lines={voucher.accountingLines} />
+                      ) : null}
+                    </>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
         </section>
       </section>

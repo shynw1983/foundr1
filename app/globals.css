@@ -17522,6 +17522,10 @@ body :where(
   background: var(--surface);
 }
 
+.voucher-row.is-collapsed {
+  background: #ffffff;
+}
+
 .voucher-row-main {
   display: grid;
   gap: 6px;
@@ -17568,6 +17572,36 @@ body :where(
   font-size: 1.1rem;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.voucher-expand-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.voucher-expand-button svg {
+  transition: transform 160ms ease;
+}
+
+.voucher-expand-button.is-open svg {
+  transform: rotate(180deg);
+}
+
+.voucher-expand-button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .voucher-controls {
@@ -17620,6 +17654,10 @@ body :where(
   }
 
   .voucher-total {
+    justify-self: start;
+  }
+
+  .voucher-expand-button {
     justify-self: start;
   }
 
