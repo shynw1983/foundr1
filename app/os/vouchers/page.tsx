@@ -5,7 +5,9 @@ import {
   FileText,
   LogOut,
   PackageCheck,
+  Plus,
   ReceiptText,
+  Trash2,
   Upload
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -46,6 +48,37 @@ type VoucherRecord = {
   createdByName: string;
   createdLabel: string;
   canDelete: boolean;
+  items: VoucherOcrItem[];
+};
+
+type VoucherOcrItem = {
+  rawName: string;
+  taxRate: string;
+  taxMode: string;
+  category: string;
+  accountTitle: string;
+  amount: number;
+};
+
+type VoucherAccountingDraft = {
+  note: string;
+  vendorName: string;
+  companyName: string;
+  brandName: string;
+  locationName: string;
+  transactionDate: string;
+  transactionTime: string;
+  lines: VoucherAccountingLine[];
+};
+
+type VoucherAccountingLine = {
+  id: string;
+  accountTitle: string;
+  amount: string;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: string;
+  note: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -75,6 +108,37 @@ const reimbursementLabels: Record<VoucherReimbursementStatus, string> = {
   rejected: "却下"
 };
 
+const expenseAccountTitleOptions = [
+  "租税公課",
+  "荷造運賃",
+  "水道光熱費",
+  "旅費交通費",
+  "通信費",
+  "広告宣伝費",
+  "接待交際費",
+  "損害保険料",
+  "修繕費",
+  "消耗品費",
+  "減価償却費",
+  "福利厚生費",
+  "給料賃金",
+  "外注工賃",
+  "利子割引料",
+  "地代家賃",
+  "貸倒金",
+  "支払手数料",
+  "車両費",
+  "リース料",
+  "新聞図書費",
+  "研修採用費",
+  "会議費",
+  "諸会費",
+  "衛生管理費",
+  "雑費"
+];
+const taxRateOptions = ["", "8%", "10%", "非課税"];
+const taxModeOptions = ["内税", "外税", "不明"];
+
 export default function VouchersPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -85,6 +149,7 @@ export default function VouchersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [accountingDrafts, setAccountingDrafts] = useState<Record<string, VoucherAccountingDraft>>({});
 
   useEffect(() => {
     void loadVouchers();
@@ -175,6 +240,96 @@ export default function VouchersPage() {
       return;
     }
     setMessage(nextVoucher.usageType === "shiire" ? "証憑を更新しました。仕入の明細は商品候補にも反映されます。" : "証憑を更新しました。");
+  }
+
+  function updateAccountingDraft(voucherId: string, next: Partial<VoucherAccountingDraft>) {
+    setAccountingDrafts((current) => {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      return { ...current, [voucherId]: { ...draft, ...next } };
+    });
+  }
+
+  function updateAccountingLine(voucherId: string, lineId: string, next: Partial<VoucherAccountingLine>) {
+    setAccountingDrafts((current) => {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      return {
+        ...current,
+        [voucherId]: {
+          ...draft,
+          lines: draft.lines.map((line) => line.id === lineId ? { ...line, ...next } : line)
+        }
+      };
+    });
+  }
+
+  function addAccountingLine(voucherId: string) {
+    setAccountingDrafts((current) => {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      return {
+        ...current,
+        [voucherId]: {
+          ...draft,
+          lines: [...draft.lines, buildNewAccountingLine(draft.lines.length)]
+        }
+      };
+    });
+  }
+
+  function removeAccountingLine(voucherId: string, lineId: string) {
+    setAccountingDrafts((current) => {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      return {
+        ...current,
+        [voucherId]: {
+          ...draft,
+          lines: draft.lines.length > 1 ? draft.lines.filter((line) => line.id !== lineId) : draft.lines
+        }
+      };
+    });
+  }
+
+  async function confirmVoucherAccounting(voucher: VoucherRecord) {
+    const draft = accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher);
+    const vendorName = draft.brandName
+      ? [draft.brandName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ")
+      : [draft.companyName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ");
+    const response = await fetch("/api/vouchers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "confirm_accounting",
+        id: voucher.id,
+        usageType: voucher.usageType,
+        paymentType: voucher.paymentType,
+        reimbursementStatus: voucher.reimbursementStatus,
+        lines: draft.lines.map((line) => ({
+          accountTitle: voucher.usageType === "shiire" ? "仕入高" : line.accountTitle,
+          amount: line.amount,
+          taxRate: line.taxRate,
+          taxMode: line.taxMode,
+          taxAmount: line.taxAmount,
+          note: line.note
+        })),
+        vendorName: vendorName || draft.vendorName,
+        companyName: draft.companyName,
+        brandName: draft.brandName,
+        locationName: draft.locationName,
+        transactionDate: draft.transactionDate,
+        transactionTime: draft.transactionTime,
+        note: draft.note
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setMessage(body.error ?? "証憑を登録できませんでした。");
+      return;
+    }
+    setMessage(voucher.usageType === "keihi" ? "経費として登録しました。" : "仕入として確認しました。商品候補にも反映されます。");
+    await loadVouchers();
   }
 
   async function deleteVoucher(voucher: VoucherRecord) {
@@ -340,6 +495,17 @@ export default function VouchersPage() {
                     <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)}>削除</button>
                   ) : null}
                 </div>
+                {voucher.sourceType === "voucher" && voucher.status !== "confirmed" && voucher.status !== "failed" ? (
+                  <VoucherAccountingEditor
+                    voucher={voucher}
+                    draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
+                    onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
+                    onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
+                    onAddLine={() => addAccountingLine(voucher.id)}
+                    onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
+                    onConfirm={() => void confirmVoucherAccounting(voucher)}
+                  />
+                ) : null}
               </article>
             ))}
           </div>
@@ -357,4 +523,214 @@ function buildVoucherTitle(voucher: VoucherRecord) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+function VoucherAccountingEditor({
+  voucher,
+  draft,
+  onDraftChange,
+  onLineChange,
+  onAddLine,
+  onRemoveLine,
+  onConfirm
+}: {
+  voucher: VoucherRecord;
+  draft: VoucherAccountingDraft;
+  onDraftChange: (next: Partial<VoucherAccountingDraft>) => void;
+  onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
+  onAddLine: () => void;
+  onRemoveLine: (lineId: string) => void;
+  onConfirm: () => void;
+}) {
+  const isShiire = voucher.usageType === "shiire";
+  return (
+    <div className="receipt-confirm-form voucher-accounting-form">
+      <label>
+        <span>会社名</span>
+        <input value={draft.companyName} onChange={(event) => onDraftChange({ companyName: event.target.value })} placeholder="例: 株式会社G-7スーパーマート" />
+      </label>
+      <label>
+        <span>ブランド名</span>
+        <input value={draft.brandName} onChange={(event) => onDraftChange({ brandName: event.target.value })} placeholder="例: 業務スーパー" />
+      </label>
+      <label>
+        <span>店舗名</span>
+        <input value={draft.locationName} onChange={(event) => onDraftChange({ locationName: event.target.value })} placeholder="例: 春吉店" />
+      </label>
+      <label>
+        <span>日付</span>
+        <input type="date" value={draft.transactionDate} onChange={(event) => onDraftChange({ transactionDate: event.target.value })} />
+      </label>
+      <label>
+        <span>時刻</span>
+        <input type="time" value={draft.transactionTime} onChange={(event) => onDraftChange({ transactionTime: event.target.value })} />
+      </label>
+      <label className="receipt-note-field">
+        <span>備考</span>
+        <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" />
+      </label>
+      <div className="receipt-line-editor">
+        <div className="receipt-line-editor-title">
+          <span>{isShiire ? "仕入会計明細" : "Money Forward式 会計明細"}</span>
+          <button className="secondary-button" type="button" onClick={onAddLine}>
+            <Plus size={16} />
+            明細を追加
+          </button>
+        </div>
+        {draft.lines.map((line) => (
+          <div className="receipt-expense-line" key={line.id}>
+            <label>
+              <span>勘定科目</span>
+              {isShiire ? (
+                <input value="仕入高" readOnly />
+              ) : (
+                <select value={line.accountTitle} onChange={(event) => onLineChange(line.id, { accountTitle: event.target.value })}>
+                  {expenseAccountTitleOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+                </select>
+              )}
+            </label>
+            <label>
+              <span>金額（税込）</span>
+              <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} />
+            </label>
+            <label>
+              <span>税率</span>
+              <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })}>
+                {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>税区分</span>
+              <select value={line.taxMode} onChange={(event) => onLineChange(line.id, { taxMode: event.target.value })}>
+                {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>消費税</span>
+              <input type="number" min="0" step="1" value={line.taxAmount} onChange={(event) => onLineChange(line.id, { taxAmount: event.target.value })} />
+            </label>
+            <label className="receipt-line-note">
+              <span>明細メモ</span>
+              <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} />
+            </label>
+            <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={draft.lines.length <= 1}>
+              <Trash2 size={16} />
+              削除
+            </button>
+          </div>
+        ))}
+      </div>
+      <button className="primary-button" type="button" onClick={onConfirm} disabled={voucher.usageType === "unclassified"}>
+        {voucher.usageType === "unclassified" ? "用途を選択してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
+      </button>
+    </div>
+  );
+}
+
+function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccountingDraft {
+  return {
+    note: "",
+    vendorName: voucher?.vendorName || "",
+    companyName: voucher?.companyName || "",
+    brandName: voucher?.brandName || "",
+    locationName: voucher?.locationName || "",
+    transactionDate: voucher?.purchaseDate || getCurrentDate(),
+    transactionTime: voucher?.purchaseTime || "",
+    lines: buildVoucherAccountingLines(voucher)
+  };
+}
+
+function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccountingLine[] {
+  const isShiire = voucher?.usageType === "shiire";
+  const grouped = new Map<string, {
+    accountTitle: string;
+    taxRate: string;
+    taxMode: string;
+    amount: number;
+    itemNames: string[];
+  }>();
+
+  for (const item of voucher?.items ?? []) {
+    const amount = Math.round(Number(item.amount ?? 0));
+    if (!amount) continue;
+    const accountTitle = isShiire ? "仕入高" : item.accountTitle || getDefaultAccountTitle(item.category);
+    const taxRate = normalizeDraftTaxRate(item.taxRate);
+    const taxMode = normalizeDraftTaxMode(item.taxMode);
+    const key = `${accountTitle}:${taxRate}:${taxMode}`;
+    const current = grouped.get(key) ?? { accountTitle, taxRate, taxMode, amount: 0, itemNames: [] };
+    current.amount += amount;
+    if (item.rawName) current.itemNames.push(item.rawName);
+    grouped.set(key, current);
+  }
+
+  const lines = Array.from(grouped.values()).map((line, index) => {
+    const amount = Math.round(line.amount);
+    return {
+      id: `ocr-${index}`,
+      accountTitle: line.accountTitle,
+      amount: String(amount || ""),
+      taxRate: line.taxRate,
+      taxMode: line.taxMode,
+      taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, line.taxMode)),
+      note: line.itemNames.slice(0, 4).join("、")
+    };
+  });
+  if (lines.length) return lines;
+
+  const amount = Math.round(voucher?.total ?? 0);
+  return [{
+    id: "manual-0",
+    accountTitle: isShiire ? "仕入高" : "雑費",
+    amount: String(amount || ""),
+    taxRate: "",
+    taxMode: "不明",
+    taxAmount: String(Math.round(voucher?.tax ?? 0)),
+    note: ""
+  }];
+}
+
+function buildNewAccountingLine(index: number): VoucherAccountingLine {
+  return {
+    id: `manual-${Date.now()}-${index}`,
+    accountTitle: "雑費",
+    amount: "",
+    taxRate: "",
+    taxMode: "不明",
+    taxAmount: "0",
+    note: ""
+  };
+}
+
+function getCurrentDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function getDefaultAccountTitle(category: string) {
+  if (category === "清掃用品" || category === "消耗品" || category === "包材") return "消耗品費";
+  if (category === "設備") return "修繕費";
+  return "雑費";
+}
+
+function normalizeDraftTaxRate(value: string) {
+  const text = String(value ?? "").replace("%", "").trim();
+  if (text === "8" || text === "8.0") return "8%";
+  if (text === "10" || text === "10.0") return "10%";
+  if (text === "非課税" || text === "0") return "非課税";
+  return "";
+}
+
+function normalizeDraftTaxMode(value: string) {
+  return value === "内税" || value === "外税" ? value : "不明";
+}
+
+function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: string) {
+  const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
+  if (!rate || amount <= 0) return 0;
+  if (taxMode === "外税") return Math.round(amount * rate / 100);
+  return Math.round(amount * rate / (100 + rate));
 }

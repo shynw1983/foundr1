@@ -11,6 +11,36 @@ type VoucherPaymentType = "company" | "reimbursement";
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
 const maxReceiptPdfSizeBytes = 50 * 1024 * 1024;
 const managerRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
+const validExpenseAccountTitles = new Set([
+  "租税公課",
+  "荷造運賃",
+  "水道光熱費",
+  "旅費交通費",
+  "通信費",
+  "広告宣伝費",
+  "接待交際費",
+  "損害保険料",
+  "修繕費",
+  "消耗品費",
+  "減価償却費",
+  "福利厚生費",
+  "給料賃金",
+  "外注工賃",
+  "利子割引料",
+  "地代家賃",
+  "貸倒金",
+  "支払手数料",
+  "車両費",
+  "リース料",
+  "新聞図書費",
+  "研修採用費",
+  "会議費",
+  "諸会費",
+  "衛生管理費",
+  "雑費"
+]);
+const fixedAccountTitles = new Set(["地代家賃", "リース料", "損害保険料", "減価償却費", "利子割引料"]);
+const variableAccountTitles = new Set(["水道光熱費", "通信費", "旅費交通費", "車両費", "荷造運賃", "支払手数料"]);
 
 export async function GET() {
   const session = await requireOsSession();
@@ -100,10 +130,26 @@ export async function PATCH(request: Request) {
   if (!session) return Response.json({ error: "証憑を更新する権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as {
+    action?: string;
     id?: string;
     usageType?: string;
     paymentType?: string;
     reimbursementStatus?: string;
+    lines?: Array<{
+      accountTitle?: string;
+      amount?: string | number;
+      taxRate?: string;
+      taxMode?: string;
+      taxAmount?: string | number;
+      note?: string;
+    }>;
+    vendorName?: string;
+    companyName?: string;
+    brandName?: string;
+    locationName?: string;
+    transactionDate?: string;
+    transactionTime?: string;
+    note?: string;
   };
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "証憑IDがありません。" }, { status: 400 });
@@ -113,7 +159,19 @@ export async function PATCH(request: Request) {
       id::text,
       store_id::text as "storeId",
       created_by::text as "createdBy",
-      usage_type as "usageType"
+      usage_type as "usageType",
+      payment_type as "paymentType",
+      reimbursement_status as "reimbursementStatus",
+      source_type as "sourceType",
+      vendor_name as "vendorName",
+      company_name as "companyName",
+      brand_name as "brandName",
+      location_name as "locationName",
+      coalesce(to_char(purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+      coalesce(to_char(purchase_time, 'HH24:MI'), '') as "purchaseTime",
+      tax::float,
+      total::float,
+      status
     from receipt_ocr_results
     where id::text = ${id}
     limit 1
@@ -129,6 +187,124 @@ export async function PATCH(request: Request) {
   const nextReimbursementStatus = nextPaymentType === "reimbursement"
     ? normalizeReimbursementStatus(String(body.reimbursementStatus ?? "pending"))
     : "none";
+
+  if (body.action === "confirm_accounting") {
+    if (String(voucher.sourceType ?? "") !== "voucher") {
+      return Response.json({ error: "購入管理または経費台帳に紐付いた証憑は元の画面で登録してください。" }, { status: 400 });
+    }
+    if (String(voucher.status ?? "") === "confirmed") {
+      return Response.json({ error: "この証憑は登録済みです。" }, { status: 400 });
+    }
+    if (nextUsageType === "unclassified") {
+      return Response.json({ error: "用途を仕入または経費にしてください。" }, { status: 400 });
+    }
+
+    const lines = normalizeAccountingLines(body.lines, voucher, nextUsageType);
+    const amount = lines.reduce((sum, line) => sum + line.amount, 0);
+    const taxAmount = lines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const transactionDate = normalizeDate(body.transactionDate) || normalizeDate(String(voucher.purchaseDate ?? ""));
+    const transactionTime = normalizeTime(body.transactionTime) || normalizeTime(String(voucher.purchaseTime ?? ""));
+    const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
+    const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
+    const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
+    const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
+    const receiptNote = String(body.note ?? "").trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return Response.json({ error: "会計明細の金額を入力してください。" }, { status: 400 });
+    }
+    if (!Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > amount) {
+      return Response.json({ error: "消費税は税込金額以下で入力してください。" }, { status: 400 });
+    }
+    if (!transactionDate) {
+      return Response.json({ error: "日付を入力してください。" }, { status: 400 });
+    }
+
+    if (nextUsageType === "keihi") {
+      const startMonth = transactionDate.slice(0, 7);
+      for (const [index, line] of lines.entries()) {
+        const category = getExpenseCategoryFromAccountTitle(line.accountTitle);
+        const name = vendorName ? `${line.accountTitle} / ${vendorName}` : line.accountTitle;
+        const noteParts = [
+          line.note,
+          line.taxRate ? `税率 ${line.taxRate}` : "",
+          line.taxMode,
+          lines.length > 1 ? `証憑分割 ${index + 1}/${lines.length}` : "",
+          `証憑ID ${id}`,
+          receiptNote
+        ].map((part) => part.trim()).filter(Boolean);
+
+        await sql`
+          insert into analytics_expenses (
+            store_id,
+            category,
+            account_title,
+            name,
+            amount,
+            tax_rate,
+            tax_mode,
+            tax_amount,
+            vendor_name,
+            transaction_date,
+            transaction_time,
+            start_month,
+            end_month,
+            note,
+            created_by,
+            updated_by,
+            updated_at
+          )
+          values (
+            ${String(voucher.storeId)},
+            ${category},
+            ${line.accountTitle},
+            ${name},
+            ${line.amount},
+            ${line.taxRate},
+            ${line.taxMode},
+            ${line.taxAmount},
+            ${vendorName},
+            ${transactionDate},
+            ${transactionTime || null},
+            ${startMonth},
+            ${startMonth},
+            ${noteParts.join(" / ")},
+            ${session.id},
+            ${session.id},
+            now()
+          )
+        `;
+      }
+    }
+
+    await sql`
+      update receipt_ocr_results
+      set
+        usage_type = ${nextUsageType},
+        payment_type = ${nextPaymentType},
+        reimbursement_status = ${nextReimbursementStatus},
+        status = 'confirmed',
+        vendor_name = ${vendorName},
+        company_name = ${companyName},
+        brand_name = ${brandName},
+        location_name = ${locationName},
+        purchase_date = ${transactionDate},
+        purchase_time = ${transactionTime || null},
+        tax = ${taxAmount},
+        total = ${amount},
+        raw_result = jsonb_set(raw_result, '{accountingLines}', ${JSON.stringify(lines)}::jsonb, true),
+        confirmed_at = now(),
+        confirmed_by = ${session.id},
+        updated_at = now()
+      where id::text = ${id}
+    `;
+
+    if (nextUsageType === "shiire") {
+      await createProductCandidatesForOcrResult(id, session);
+    }
+
+    return Response.json({ ok: true, lineCount: lines.length, amount });
+  }
 
   await sql`
     update receipt_ocr_results
@@ -249,6 +425,41 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     order by receipt_ocr_results.created_at desc
     limit 100
   `;
+  const ocrResultIds = rows.map((row) => String(row.id ?? "")).filter(Boolean);
+  const itemRows = ocrResultIds.length ? await sql`
+    select
+      receipt_ocr_result_id::text as "ocrResultId",
+      raw_name as "rawName",
+      coalesce(tax_rate, '') as "taxRate",
+      coalesce(tax_mode, '') as "taxMode",
+      coalesce(category, '') as category,
+      coalesce(account_title, '') as "accountTitle",
+      amount::float
+    from receipt_ocr_items
+    where receipt_ocr_result_id::text = any(${ocrResultIds})
+    order by receipt_ocr_result_id, line_index
+  ` : [];
+  const itemsByResultId = new Map<string, Array<{
+    rawName: string;
+    taxRate: string;
+    taxMode: string;
+    category: string;
+    accountTitle: string;
+    amount: number;
+  }>>();
+  for (const item of itemRows) {
+    const ocrResultId = String(item.ocrResultId ?? "");
+    const items = itemsByResultId.get(ocrResultId) ?? [];
+    items.push({
+      rawName: String(item.rawName ?? ""),
+      taxRate: String(item.taxRate ?? ""),
+      taxMode: String(item.taxMode ?? ""),
+      category: String(item.category ?? ""),
+      accountTitle: String(item.accountTitle ?? ""),
+      amount: Number(item.amount ?? 0)
+    });
+    itemsByResultId.set(ocrResultId, items);
+  }
 
   return rows.map((row) => ({
     id: String(row.id),
@@ -272,7 +483,8 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     itemCount: Number(row.itemCount ?? 0),
     createdByName: String(row.createdByName ?? ""),
     createdLabel: String(row.createdLabel ?? ""),
-    canDelete: String(row.sourceType ?? "") === "voucher"
+    canDelete: String(row.sourceType ?? "") === "voucher",
+    items: itemsByResultId.get(String(row.id ?? "")) ?? []
   }));
 }
 
@@ -298,6 +510,91 @@ function normalizePaymentType(value: string): VoucherPaymentType {
 function normalizeReimbursementStatus(value: string) {
   if (value === "paid" || value === "rejected") return value;
   return "pending";
+}
+
+function normalizeAccountingLines(lines: Array<{
+  accountTitle?: string;
+  amount?: string | number;
+  taxRate?: string;
+  taxMode?: string;
+  taxAmount?: string | number;
+  note?: string;
+}> | undefined, voucher: { total?: unknown; tax?: unknown }, usageType: VoucherUsageType) {
+  const fallbackAccountTitle = usageType === "shiire" ? "仕入高" : "雑費";
+  const inputLines = Array.isArray(lines) && lines.length ? lines : [{
+    accountTitle: fallbackAccountTitle,
+    amount: voucher.total,
+    taxRate: "",
+    taxMode: "不明",
+    taxAmount: voucher.tax,
+    note: ""
+  }];
+
+  return inputLines.map((line) => {
+    const amount = Math.round(Number(line.amount ?? 0));
+    const taxRate = normalizeTaxRate(line.taxRate);
+    const taxMode = normalizeTaxMode(line.taxMode);
+    const rawTaxAmount = Number(line.taxAmount);
+    const taxAmount = Number.isFinite(rawTaxAmount)
+      ? Math.max(0, Math.round(rawTaxAmount))
+      : calculateTaxAmount(amount, taxRate, taxMode);
+    return {
+      accountTitle: normalizeAccountTitle(line.accountTitle, usageType),
+      amount,
+      taxRate,
+      taxMode,
+      taxAmount,
+      note: String(line.note ?? "").trim()
+    };
+  }).filter((line) => line.amount > 0);
+}
+
+function normalizeAccountTitle(value: unknown, usageType: VoucherUsageType) {
+  const title = String(value ?? "").trim();
+  if (usageType === "shiire") return title === "仕入高" ? "仕入高" : "仕入高";
+  return validExpenseAccountTitles.has(title) ? title : "雑費";
+}
+
+function normalizeTaxRate(value: unknown) {
+  const text = String(value ?? "").replace("%", "").trim();
+  if (text === "8" || text === "8.0") return "8%";
+  if (text === "10" || text === "10.0") return "10%";
+  if (text === "非課税" || text === "0") return "非課税";
+  return "";
+}
+
+function normalizeTaxMode(value: unknown) {
+  const mode = String(value ?? "").trim();
+  return mode === "内税" || mode === "外税" ? mode : "不明";
+}
+
+function calculateTaxAmount(amount: number, taxRate: string, taxMode: string) {
+  const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
+  if (!rate || amount <= 0) return 0;
+  if (taxMode === "外税") return Math.round(amount * rate / 100);
+  return Math.round(amount * rate / (100 + rate));
+}
+
+function normalizeDate(value: unknown) {
+  const date = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  return "";
+}
+
+function normalizeTime(value: unknown) {
+  const time = String(value ?? "").trim();
+  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function getExpenseCategoryFromAccountTitle(accountTitle: string) {
+  if (fixedAccountTitles.has(accountTitle)) return "fixed";
+  if (variableAccountTitles.has(accountTitle)) return "variable";
+  return "misc";
 }
 
 function isPdfFile(file: File) {
