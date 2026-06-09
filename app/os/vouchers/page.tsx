@@ -183,24 +183,28 @@ export default function VouchersPage() {
 
   async function loadVouchers() {
     setIsLoading(true);
-    const response = await fetch("/api/vouchers", { cache: "no-store" });
-    const body = await response.json().catch(() => ({})) as {
-      error?: string;
-      canUpload?: boolean;
-      stores?: StoreOption[];
-      vouchers?: VoucherRecord[];
-    };
-    if (!response.ok) {
-      setMessage(body.error ?? "証憑を読み込めませんでした。");
+    try {
+      const response = await fetch("/api/vouchers", { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as {
+        error?: string;
+        canUpload?: boolean;
+        stores?: StoreOption[];
+        vouchers?: VoucherRecord[];
+      };
+      if (!response.ok) {
+        setMessage(body.error ?? "証憑を読み込めませんでした。");
+        return;
+      }
+      const nextStores = body.stores ?? [];
+      setStores(nextStores);
+      setCanUpload(Boolean(body.canUpload));
+      setVouchers(body.vouchers ?? []);
+      setSelectedStoreId((current) => current || nextStores[0]?.id || "");
+    } catch {
+      setMessage("証憑一覧を再読み込みできませんでした。時間をおいて更新してください。");
+    } finally {
       setIsLoading(false);
-      return;
     }
-    const nextStores = body.stores ?? [];
-    setStores(nextStores);
-    setCanUpload(Boolean(body.canUpload));
-    setVouchers(body.vouchers ?? []);
-    setSelectedStoreId((current) => current || nextStores[0]?.id || "");
-    setIsLoading(false);
   }
 
   async function uploadVouchers(event: FormEvent<HTMLFormElement>) {
@@ -247,29 +251,27 @@ export default function VouchersPage() {
         formData.set("paymentType", paymentType);
         formData.append("receipts", file);
 
-        try {
-          const response = await fetch("/api/vouchers", { method: "POST", body: formData });
-          const body = await response.json().catch(() => ({})) as {
-            error?: string;
-            results?: Array<{ ok?: boolean; ocrError?: string; error?: string }>;
-          };
-          const result = body.results?.[0];
-          if (!response.ok || !result?.ok || result.ocrError) {
-            failedCount += 1;
-          } else {
-            savedCount += 1;
-          }
-        } catch {
+        const result = await uploadVoucherFileWithRetry(formData);
+        if (!result.ok || result.ocrError) {
           failedCount += 1;
+        } else {
+          savedCount += 1;
         }
         setUploadProgress({ total: files.length, completed: index + 1, failed: failedCount, currentFile: fileName, phase: "完了" });
+        if (index < files.length - 1) await sleep(800);
       }
 
-      setMessage(failedCount
+      const finalMessage = failedCount
         ? `保存処理が完了しました。一部OCR結果を確認してください（成功 ${savedCount}件 / 失敗 ${failedCount}件）。`
-        : "証憑を読み取りました。内容を確認してください。");
+        : "証憑を読み取りました。内容を確認してください。";
+      setMessage(finalMessage);
       form.reset();
-      await loadVouchers();
+      try {
+        await loadVouchers();
+        setMessage(finalMessage);
+      } catch {
+        setMessage(`${finalMessage} 証憑一覧は時間をおいて更新してください。`);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "証憑をアップロードできませんでした。");
     } finally {
@@ -869,6 +871,28 @@ function isPdfUploadFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+async function uploadVoucherFileWithRetry(formData: FormData) {
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch("/api/vouchers", { method: "POST", body: formData });
+      const body = await response.json().catch(() => ({})) as {
+        error?: string;
+        results?: Array<{ ok?: boolean; ocrError?: string; error?: string }>;
+      };
+      const result = body.results?.[0];
+      if (response.ok && result?.ok) {
+        return { ok: true, ocrError: result.ocrError || "" };
+      }
+      lastError = body.error || result?.error || "証憑をアップロードできませんでした。";
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "通信に失敗しました。";
+    }
+    await sleep(1200 * (attempt + 1));
+  }
+  return { ok: false, ocrError: lastError || "証憑をアップロードできませんでした。" };
+}
+
 async function splitPdfIntoPageFiles(file: File) {
   const { PDFDocument } = await import("pdf-lib");
   const sourcePdf = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
@@ -885,4 +909,8 @@ async function splitPdfIntoPageFiles(file: File) {
     pageFiles.push(new File([bytes], `${baseName}-page-${String(index + 1).padStart(3, "0")}.pdf`, { type: "application/pdf" }));
   }
   return pageFiles;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

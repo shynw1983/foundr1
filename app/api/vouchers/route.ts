@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       let ocrResultId = "";
       let ocrError = "";
       try {
-        const analyzed = await analyzeReceiptImage(file);
+        const analyzed = await analyzeReceiptWithRetry(file);
         const supplierName = buildVendorName(analyzed.result.companyName, analyzed.result.brandName, analyzed.result.locationName, analyzed.result.storeName);
         ocrResultId = await saveReceiptOcrResult({
           sourceType: "voucher",
@@ -636,6 +636,19 @@ function isPdfFile(file: File) {
   return file.type.toLowerCase() === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+async function analyzeReceiptWithRetry(file: File) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await analyzeReceiptImage(file);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(1200 * (attempt + 1));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("OCRに失敗しました。");
+}
+
 async function uploadVoucherDocument(file: File, storeId: string, index: number) {
   const extension = validateReceiptUpload(file, maxReceiptSizeBytes, maxReceiptPdfSizeBytes, "証憑");
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -655,6 +668,10 @@ async function uploadVoucherDocument(file: File, storeId: string, index: number)
     metadata: { pathname: blob.pathname }
   });
   return `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function sanitizeFileStem(value: string) {
