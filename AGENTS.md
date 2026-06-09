@@ -65,6 +65,79 @@ Schema changes are made in `db/schema.sql` and applied with:
 npm run db:push
 ```
 
+## Build & Execution Rules
+
+Never wait indefinitely for commands.
+
+If a command produces no output for 30 seconds:
+
+1. Stop waiting.
+2. Diagnose the cause.
+3. Do not remain blocked.
+
+Never wait more than 60 seconds without taking action.
+
+For Next.js projects, do not repeatedly run:
+
+- `npm run build`
+- `next build`
+- `npm run dev`
+
+Use diagnostics first:
+
+- `npm run lint`
+- `npx tsc --noEmit`
+
+Only run a full build when necessary.
+
+If a Next.js build appears frozen:
+
+1. Stop the process.
+2. Check TypeScript errors.
+3. Check ESLint errors.
+4. Check Next.js configuration.
+5. Check Server Components and fetch calls.
+6. Clear cache before retrying.
+
+Cache clear commands:
+
+```bash
+rm -rf .next
+rm -rf node_modules/.cache
+```
+
+Do not enter build loops.
+
+Bad:
+
+```text
+build -> wait -> build -> wait -> build
+```
+
+Good:
+
+```text
+build -> diagnose -> fix -> build
+```
+
+Minimize token and time consumption.
+
+Avoid:
+
+- repeated full builds
+- repeated project-wide scans
+- repeated reading of unchanged files
+
+Read only files relevant to the current task. Make focused edits.
+
+When a command appears stuck, explain:
+
+- probable cause
+- diagnostic steps
+- next action
+
+Do not simply continue waiting. Waiting is not debugging. If there is no output for 30 seconds, investigate instead of waiting.
+
 ## Important Product Language
 
 Keep Japanese UI terminology consistent.
