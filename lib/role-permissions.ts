@@ -210,10 +210,11 @@ export async function roleHasPermission(role: string, permissionKey: string) {
 }
 
 export function getNavPathsForPermissions(permissionKeys: Iterable<string>) {
-  const paths = new Set(["/os"]);
+  const paths = new Set<string>();
   for (const key of permissionKeys) {
     const definition = permissionByKey.get(key);
     for (const path of definition?.navPaths ?? []) paths.add(path);
   }
+  if (Array.from(paths).some((path) => path.startsWith("/os/"))) paths.add("/os");
   return Array.from(paths);
 }

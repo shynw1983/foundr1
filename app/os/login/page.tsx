@@ -3,13 +3,25 @@
 import { FormEvent, useState } from "react";
 import { OsLanguagePicker } from "../components/OsTranslationProvider";
 
-function getDefaultPathForRole(role?: string) {
+function getDefaultPathForRole(role?: string, permittedNavPaths?: string[]) {
+  if (permittedNavPaths) {
+    const firstOsPath = permittedNavPaths.find((path) => path.startsWith("/os/"));
+    if (firstOsPath) return firstOsPath;
+    if (permittedNavPaths.includes("/store")) return "/store";
+    return "/store";
+  }
   if (role === "store_terminal") return "/store";
   if (role === "buyer") return "/os/procurement";
   if (role === "staff") return "/os/orders";
   if (role === "store_owner" || role === "store_manager") return "/os";
 
   return "/os";
+}
+
+function isPathPermitted(pathname: string, permittedNavPaths?: string[]) {
+  if (pathname === "/os/logout" || pathname === "/os/privacy-consent") return true;
+  if (!permittedNavPaths) return pathname === "/os" || pathname.startsWith("/os/");
+  return permittedNavPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 export default function OsLoginPage() {
@@ -25,9 +37,14 @@ export default function OsLoginPage() {
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function redirectAfterLogin(role?: string) {
+  function redirectAfterLogin(role?: string, permittedNavPaths?: string[]) {
     const params = new URLSearchParams(window.location.search);
-    window.location.href = params.get("next") || getDefaultPathForRole(role);
+    const requestedNext = params.get("next") || "";
+    const nextPath = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "";
+    const nextUrl = nextPath ? new URL(nextPath, window.location.origin) : null;
+    window.location.href = nextUrl && isPathPermitted(nextUrl.pathname, permittedNavPaths)
+      ? `${nextUrl.pathname}${nextUrl.search}`
+      : getDefaultPathForRole(role, permittedNavPaths);
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -52,7 +69,7 @@ export default function OsLoginPage() {
     const body = await response.json().catch(() => ({})) as {
       requiresPasswordChange?: boolean;
       passwordChangeToken?: string;
-      employee?: { role?: string };
+      employee?: { role?: string; permittedNavPaths?: string[] };
     };
     if (body.requiresPasswordChange && body.passwordChangeToken) {
       setPasswordChangeToken(body.passwordChangeToken);
@@ -66,7 +83,7 @@ export default function OsLoginPage() {
       return;
     }
 
-    redirectAfterLogin(body.employee?.role);
+    redirectAfterLogin(body.employee?.role, body.employee?.permittedNavPaths);
   }
 
   async function submitInitialPasswordChange(event: FormEvent<HTMLFormElement>) {
@@ -94,8 +111,8 @@ export default function OsLoginPage() {
       return;
     }
 
-    const body = await response.json().catch(() => ({})) as { employee?: { role?: string } };
-    redirectAfterLogin(body.employee?.role ?? pendingRole);
+    const body = await response.json().catch(() => ({})) as { employee?: { role?: string; permittedNavPaths?: string[] } };
+    redirectAfterLogin(body.employee?.role ?? pendingRole, body.employee?.permittedNavPaths);
   }
 
   async function submitPasswordReset(event: FormEvent<HTMLFormElement>) {

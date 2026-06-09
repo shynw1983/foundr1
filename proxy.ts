@@ -79,10 +79,13 @@ const storeTerminalAllowedPaths = [
   "/store/orders",
   "/store/kitchen",
   "/store/pickup-display",
+  "/store/display/kitchen",
+  "/store/display/pickup",
   "/store/menu",
   "/store/timecard",
   "/store/pos",
-  "/store/procedures"
+  "/store/procedures",
+  "/store/feedback"
 ];
 
 type ProxySession = {
@@ -141,8 +144,15 @@ function getPermittedPagePaths(session: ProxySession) {
 }
 
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
-  if (pathname === "/os" || pathname === "/os/logout") return true;
-  return Array.from(permittedPaths).some((path) => path !== "/os" && (pathname === path || pathname.startsWith(`${path}/`)));
+  if (pathname === "/os/logout" || pathname === "/os/privacy-consent") return true;
+  if (pathname === "/os") return permittedPaths.has("/os");
+  return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function getFallbackPagePath(permittedPaths: Set<string>) {
+  if (permittedPaths.has("/store")) return "/store";
+  if (permittedPaths.has("/os")) return "/os";
+  return Array.from(permittedPaths).find((path) => path.startsWith("/os/")) ?? "/store";
 }
 
 const clerkKeysConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
@@ -191,9 +201,11 @@ async function runFoundr1Proxy(request: NextRequest) {
       }
     }
 
-    if (isOsPath && !isPermittedPagePath(pathname, getPermittedPagePaths(session))) {
+    const permittedPaths = getPermittedPagePaths(session);
+
+    if (isOsPath && !isPermittedPagePath(pathname, permittedPaths)) {
       const url = request.nextUrl.clone();
-      url.pathname = "/os";
+      url.pathname = getFallbackPagePath(permittedPaths);
       url.search = "";
       return NextResponse.redirect(url);
     }
