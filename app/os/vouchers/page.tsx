@@ -117,8 +117,9 @@ export default function VouchersPage() {
   async function uploadVouchers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const input = form.elements.namedItem("receipts") as HTMLInputElement | null;
-    const files = Array.from(input?.files ?? []);
+    const files = new FormData(form)
+      .getAll("receipts")
+      .filter((file): file is File => file instanceof File && file.size > 0);
     if (!selectedStoreId) {
       setMessage("店舗を選択してください。");
       return;
@@ -245,8 +246,12 @@ export default function VouchersPage() {
               </select>
             </label>
             <label className="voucher-file-field">
-              <span>証憑ファイル</span>
-              <input name="receipts" type="file" accept="image/*,application/pdf,.pdf" multiple disabled={!canUpload || isUploading} />
+              <span>撮影・写真</span>
+              <input name="receipts" type="file" accept="image/*" multiple disabled={!canUpload || isUploading} />
+            </label>
+            <label className="voucher-file-field">
+              <span>ファイル / PDF</span>
+              <input name="receipts" type="file" accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple disabled={!canUpload || isUploading} />
             </label>
             <button className="primary-button" type="submit" disabled={!canUpload || isUploading || !stores.length}>
               {isUploading ? "読み取り中..." : "アップロードしてOCR"}
