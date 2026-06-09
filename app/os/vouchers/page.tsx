@@ -235,6 +235,9 @@ export default function VouchersPage() {
   async function updateVoucher(voucher: VoucherRecord, next: Partial<VoucherRecord>) {
     const nextVoucher = { ...voucher, ...next };
     setVouchers((current) => current.map((item) => item.id === voucher.id ? nextVoucher : item));
+    if (next.usageType && next.usageType !== voucher.usageType && voucher.sourceType === "voucher" && voucher.status !== "confirmed") {
+      setAccountingDrafts((current) => ({ ...current, [voucher.id]: buildVoucherAccountingDraft(nextVoucher) }));
+    }
     const response = await fetch("/api/vouchers", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -251,7 +254,9 @@ export default function VouchersPage() {
       await loadVouchers();
       return;
     }
-    setMessage(nextVoucher.usageType === "shiire" ? "証憑を更新しました。仕入の明細は商品候補にも反映されます。" : "証憑を更新しました。");
+    setMessage(next.usageType
+      ? "用途を更新しました。内容を確認してから登録してください。"
+      : "証憑を更新しました。");
   }
 
   function updateAccountingDraft(voucherId: string, next: Partial<VoucherAccountingDraft>) {

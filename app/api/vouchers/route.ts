@@ -319,10 +319,6 @@ export async function PATCH(request: Request) {
     where id::text = ${id}
   `;
 
-  if (nextUsageType === "shiire" && String(voucher.usageType ?? "") !== "shiire") {
-    await createProductCandidatesForOcrResult(id, session);
-  }
-
   return Response.json({ ok: true });
 }
 
