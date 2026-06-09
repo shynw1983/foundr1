@@ -18129,6 +18129,36 @@ body :where(
   background: #ffffff;
 }
 
+.voucher-preview-status {
+  min-height: calc(100dvh - 92px);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 18px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.voucher-preview-status strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.voucher-preview-status span {
+  overflow-wrap: anywhere;
+}
+
+.voucher-preview-status a {
+  color: var(--primary);
+  font-weight: 650;
+}
+
 .voucher-accounting-form {
   grid-column: 1 / -1;
   margin-top: 4px;

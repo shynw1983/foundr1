@@ -732,6 +732,47 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
   const previewUrl = buildVoucherPreviewUrl(voucher);
+  const [previewMeta, setPreviewMeta] = useState({
+    loading: true,
+    error: "",
+    contentType: ""
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewMeta({ loading: true, error: "", contentType: "" });
+    fetch(`${previewUrl}?meta=1`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || `HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setPreviewMeta({
+          loading: false,
+          error: "",
+          contentType: String(data.contentType ?? "")
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPreviewMeta({
+          loading: false,
+          error: error instanceof Error ? error.message : "証憑を読み込めませんでした。",
+          contentType: ""
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewUrl]);
+
+  const shouldRenderImage = isVoucherPreviewImage(previewMeta.contentType, voucher.uploadedFileName);
+
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
       <div className="voucher-preview-panel-head">
@@ -745,9 +786,19 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
         </button>
       </div>
       <div className="voucher-preview-panel-body">
-        <object data={previewUrl} title={title} aria-label={title}>
-          <a href={previewUrl} target="_blank" rel="noreferrer">証憑を開く</a>
-        </object>
+        {previewMeta.loading ? (
+          <div className="voucher-preview-status">読み込み中...</div>
+        ) : previewMeta.error ? (
+          <div className="voucher-preview-status is-error">
+            <strong>証憑を読み込めません</strong>
+            <span>{previewMeta.error}</span>
+            <a href={previewUrl} target="_blank" rel="noreferrer">新しいタブで開く</a>
+          </div>
+        ) : shouldRenderImage ? (
+          <img src={previewUrl} alt={title} />
+        ) : (
+          <iframe src={previewUrl} title={title} />
+        )}
       </div>
     </aside>
   );
@@ -755,6 +806,12 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
 
 function buildVoucherPreviewUrl(voucher: VoucherRecord) {
   return `/api/vouchers/${encodeURIComponent(voucher.id)}/preview`;
+}
+
+function isVoucherPreviewImage(contentType: string, filename: string) {
+  const normalized = contentType.toLowerCase();
+  if (normalized.startsWith("image/")) return true;
+  return /\.(gif|jpe?g|png|webp)$/i.test(filename);
 }
 
 function VoucherAccountingEditor({

@@ -44,6 +44,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const filename = sanitizeFilename(String(voucher.uploadedFileName ?? "")) || "voucher";
+  if (request.nextUrl.searchParams.get("meta") === "1") {
+    return NextResponse.json({
+      ok: true,
+      contentType: result.blob.contentType,
+      filename
+    });
+  }
+
   return new NextResponse(result.stream, {
     headers: {
       "Content-Type": result.blob.contentType,
