@@ -1260,28 +1260,52 @@ function cleanEdgePoints(
 }
 
 function estimateInkBounds(raw: Buffer, mask: PaperMask): InkBounds | undefined {
-  let left = mask.width - 1;
-  let right = 0;
-  let top = mask.height - 1;
-  let bottom = 0;
-  let count = 0;
+  const xs: number[] = [];
+  const ys: number[] = [];
   const yEnd = mask.crop.top + mask.crop.height;
   const xEnd = mask.crop.left + mask.crop.width;
 
   for (let y = mask.crop.top; y < yEnd; y += 2) {
     for (let x = mask.crop.left; x < xEnd; x += 2) {
-      if (!pointNearQuad({ x, y }, mask.sourceQuad, 2)) continue;
+      if (!mask.data[y * mask.width + x]) continue;
+      if (paperMaskNeighborhoodCoverage(mask, x, y, 3) < 0.52) continue;
       if (!isHighContrastInkPixel(raw, mask.width, mask.height, x, y)) continue;
-      left = Math.min(left, x);
-      right = Math.max(right, x);
-      top = Math.min(top, y);
-      bottom = Math.max(bottom, y);
-      count += 1;
+      xs.push(x);
+      ys.push(y);
     }
   }
 
-  if (count < 24 || right <= left || bottom <= top) return undefined;
-  return { left, top, right, bottom, count };
+  if (xs.length < 24 || ys.length < 24) return undefined;
+  xs.sort((a, b) => a - b);
+  ys.sort((a, b) => a - b);
+  const left = percentile(xs, 0.03);
+  const right = percentile(xs, 0.97);
+  const top = percentile(ys, 0.03);
+  const bottom = percentile(ys, 0.97);
+  if (right <= left || bottom <= top) return undefined;
+  return { left, top, right, bottom, count: xs.length };
+}
+
+function paperMaskNeighborhoodCoverage(mask: PaperMask, x: number, y: number, radius: number) {
+  let covered = 0;
+  let total = 0;
+  const left = Math.max(mask.crop.left, x - radius);
+  const right = Math.min(mask.crop.left + mask.crop.width - 1, x + radius);
+  const top = Math.max(mask.crop.top, y - radius);
+  const bottom = Math.min(mask.crop.top + mask.crop.height - 1, y + radius);
+  for (let cursorY = top; cursorY <= bottom; cursorY += 1) {
+    for (let cursorX = left; cursorX <= right; cursorX += 1) {
+      total += 1;
+      covered += mask.data[cursorY * mask.width + cursorX] ?? 0;
+    }
+  }
+  return covered / Math.max(1, total);
+}
+
+function percentile(values: number[], ratio: number) {
+  if (!values.length) return 0;
+  const index = Math.max(0, Math.min(values.length - 1, Math.round((values.length - 1) * ratio)));
+  return values[index] ?? 0;
 }
 
 function isHighContrastInkPixel(raw: Buffer, width: number, height: number, x: number, y: number) {
