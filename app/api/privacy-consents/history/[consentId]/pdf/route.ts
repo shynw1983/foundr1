@@ -9,8 +9,17 @@ function sanitizeFilename(value: string) {
   return (value || "privacy-document").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-").slice(0, 120);
 }
 
+function asciiFilename(value: string) {
+  return sanitizeFilename(value)
+    .replace(/[^\x20-\x7e]+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "privacy-document.pdf";
+}
+
 function contentDispositionFileName(filename: string) {
-  return `attachment; filename="${sanitizeFilename(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return `attachment; filename="${asciiFilename(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ consentId: string }> }) {

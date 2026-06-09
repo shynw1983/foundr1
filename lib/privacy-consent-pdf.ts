@@ -155,9 +155,10 @@ export function createPrivacyConsentPdf(input: PrivacyConsentPdfInput) {
   const pageCount = pageContents.length;
   const fontObjectId = 3 + pageCount * 2;
   const cidFontObjectId = fontObjectId + 1;
+  const pageKids = pageContents.map((_, index) => `${3 + index * 2} 0 R`).join(" ");
   const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Kids ${pageContents.map((_, index) => `${3 + index * 2} 0 R`).join(" ")} ] /Count ${pageCount} >>`.replace("/Kids ", "/Kids [")
+    `<< /Type /Pages /Kids [${pageKids}] /Count ${pageCount} >>`
   ];
 
   pageContents.forEach((content, index) => {
