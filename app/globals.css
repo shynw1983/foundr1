@@ -3839,6 +3839,52 @@ body :where(
   min-width: 0;
 }
 
+.receipt-line-ocr-meta {
+  grid-column: 1 / -2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.receipt-line-ocr-meta span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.voucher-accounting-check {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.voucher-accounting-check strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.voucher-accounting-check span,
+.voucher-accounting-check small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.voucher-accounting-check.is-warning {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.voucher-accounting-check.is-warning strong {
+  color: var(--color-warning);
+}
+
 .receipt-confirm-form .primary-button {
   align-self: end;
   min-height: 42px;

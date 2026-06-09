@@ -433,6 +433,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       raw_name as "rawName",
       coalesce(tax_rate, '') as "taxRate",
       coalesce(tax_mode, '') as "taxMode",
+      quantity::float,
+      coalesce(unit, '') as unit,
+      unit_price::float as "unitPrice",
       coalesce(category, '') as category,
       coalesce(account_title, '') as "accountTitle",
       amount::float
@@ -445,6 +448,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     rawName: string;
     taxRate: string;
     taxMode: string;
+    quantity: number | null;
+    unit: string;
+    unitPrice: number | null;
     category: string;
     accountTitle: string;
     amount: number;
@@ -457,6 +463,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       rawName: String(item.rawName ?? ""),
       taxRate: String(item.taxRate ?? ""),
       taxMode: String(item.taxMode ?? ""),
+      quantity: item.quantity === null || item.quantity === undefined ? null : Number(item.quantity),
+      unit: String(item.unit ?? ""),
+      unitPrice: item.unitPrice === null || item.unitPrice === undefined ? null : Number(item.unitPrice),
       category: String(item.category ?? ""),
       accountTitle: String(item.accountTitle ?? ""),
       amount: Number(item.amount ?? 0)

@@ -58,6 +58,9 @@ type VoucherOcrItem = {
   rawName: string;
   taxRate: string;
   taxMode: string;
+  quantity: number | null;
+  unit: string;
+  unitPrice: number | null;
   category: string;
   accountTitle: string;
   amount: number;
@@ -82,6 +85,9 @@ type VoucherAccountingLine = {
   taxRate: string;
   taxMode: string;
   taxAmount: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
   note: string;
 };
 
@@ -93,6 +99,16 @@ type VoucherAccountingSummaryLine = {
   taxMode: string;
   taxAmount: number;
   note: string;
+};
+
+type VoucherAccountingValidation = {
+  ok: boolean;
+  taxIncomplete: boolean;
+  receiptTotal: number;
+  lineAmountTotal: number;
+  taxTotal: number;
+  expectedTotal: number;
+  difference: number;
 };
 
 type VoucherUploadProgress = {
@@ -596,6 +612,7 @@ export default function VouchersPage() {
                         <VoucherAccountingEditor
                           voucher={voucher}
                           draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
+                          validation={validateVoucherAccounting(voucher, accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher))}
                           onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
                           onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
                           onAddLine={() => addAccountingLine(voucher.id)}
@@ -650,6 +667,7 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 function VoucherAccountingEditor({
   voucher,
   draft,
+  validation,
   onDraftChange,
   onLineChange,
   onAddLine,
@@ -658,6 +676,7 @@ function VoucherAccountingEditor({
 }: {
   voucher: VoucherRecord;
   draft: VoucherAccountingDraft;
+  validation: VoucherAccountingValidation;
   onDraftChange: (next: Partial<VoucherAccountingDraft>) => void;
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
   onAddLine: () => void;
@@ -739,12 +758,35 @@ function VoucherAccountingEditor({
               <span>明細メモ</span>
               <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} />
             </label>
+            <div className="receipt-line-ocr-meta">
+              <span>数量 {line.quantity || "-"}</span>
+              <span>単位 {line.unit || "-"}</span>
+              <span>単価 {line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}</span>
+            </div>
             <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={draft.lines.length <= 1}>
               <Trash2 size={16} />
               削除
             </button>
           </div>
         ))}
+        <div className={`voucher-accounting-check ${validation.ok ? "is-ok" : "is-warning"}`}>
+          <strong>{validation.ok ? "金額チェックOK" : "金額を確認してください"}</strong>
+          <span>
+            明細合計 {formatMoney(validation.lineAmountTotal)}
+            {" / "}
+            消費税 {formatMoney(validation.taxTotal)}
+            {" / "}
+            計算上の総額 {formatMoney(validation.expectedTotal)}
+            {" / "}
+            レシート総額 {formatMoney(validation.receiptTotal)}
+          </span>
+          {!validation.ok ? (
+            <small>
+              {validation.taxIncomplete ? "税率・税区分が未確認の明細があります。 " : ""}
+              差額 {formatMoney(validation.difference)}。税区分・税率・金額が正しいか確認してください。
+            </small>
+          ) : null}
+        </div>
       </div>
       <button className="primary-button" type="button" onClick={onConfirm} disabled={voucher.usageType === "unclassified"}>
         {voucher.usageType === "unclassified" ? "用途を選択してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
@@ -784,6 +826,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       taxRate,
       taxMode,
       taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
+      quantity: item.quantity === null || item.quantity === undefined ? "" : String(item.quantity),
+      unit: item.unit || "",
+      unitPrice: item.unitPrice === null || item.unitPrice === undefined ? "" : String(item.unitPrice),
       note: item.rawName || ""
     }];
   });
@@ -798,6 +843,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     taxRate: "",
     taxMode: "不明",
     taxAmount: String(Math.round(voucher?.tax ?? 0)),
+    quantity: "",
+    unit: "",
+    unitPrice: "",
     note: ""
   }];
 }
@@ -811,7 +859,32 @@ function buildNewAccountingLine(index: number): VoucherAccountingLine {
     taxRate: "",
     taxMode: "不明",
     taxAmount: "0",
+    quantity: "",
+    unit: "",
+    unitPrice: "",
     note: ""
+  };
+}
+
+function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccountingDraft): VoucherAccountingValidation {
+  const lineAmountTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.amount || 0)), 0);
+  const taxTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
+  const expectedTotal = draft.lines.reduce((sum, line) => {
+    const amount = Math.round(Number(line.amount || 0));
+    const taxAmount = Math.round(Number(line.taxAmount || 0));
+    return sum + (line.taxMode === "外税" ? amount + taxAmount : amount);
+  }, 0);
+  const receiptTotal = Math.round(Number(voucher.total || 0));
+  const difference = expectedTotal - receiptTotal;
+  const taxIncomplete = draft.lines.some((line) => !line.taxRate || line.taxMode === "不明");
+  return {
+    ok: Math.abs(difference) <= 1 && !taxIncomplete,
+    taxIncomplete,
+    receiptTotal,
+    lineAmountTotal,
+    taxTotal,
+    expectedTotal,
+    difference
   };
 }
 
