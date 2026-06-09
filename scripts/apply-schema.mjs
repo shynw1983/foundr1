@@ -20,6 +20,16 @@ await sql.query("alter table purchase_orders add column if not exists deadline_l
 await sql.query("alter table purchase_orders add column if not exists requested_item_count integer not null default 0");
 await sql.query("alter table employees add column if not exists login_id text unique");
 await sql.query("alter table employees add column if not exists password_hash text");
+await sql.query("alter table employees add column if not exists password_must_change boolean not null default false");
+await sql.query("alter table employees add column if not exists password_changed_at timestamptz");
+await sql.query(`
+  update employees
+  set password_must_change = true
+  where role in ('store_owner', 'store_manager', 'staff')
+    and password_hash is not null
+    and password_changed_at is null
+    and password_must_change = false
+`);
 await sql.query("alter table employees add column if not exists session_version integer not null default 1");
 
 const tables = await sql`

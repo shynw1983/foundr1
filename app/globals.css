@@ -20496,6 +20496,35 @@ body :where(
   font-weight: 800;
 }
 
+.login-notice {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-weight: 700;
+}
+
+.login-help {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.login-text-button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.login-text-button:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 1440px) {
   .recommendations-grid {
     grid-template-columns: 1fr;

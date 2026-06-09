@@ -1,6 +1,6 @@
 import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../lib/audit-log";
-import { hashPassword, validatePasswordStrength } from "../../../lib/auth";
+import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 
 type StaffPayload = {
@@ -399,6 +399,7 @@ export async function POST(request: Request) {
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
   const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
+  const passwordMustChange = shouldRequirePasswordChangeForRole(role);
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
@@ -434,6 +435,8 @@ export async function POST(request: Request) {
       payroll_subject,
       status,
       password_hash,
+      password_must_change,
+      password_changed_at,
       updated_at
     )
     values (
@@ -452,6 +455,8 @@ export async function POST(request: Request) {
       ${effectivePayrollSubject},
       ${status},
       ${hashPassword(password)},
+      ${passwordMustChange},
+      null,
       now()
     )
     returning id

@@ -1,4 +1,4 @@
-import { authCookieName, createSessionToken, sessionCookieMaxAge, verifyPassword } from "../../../../lib/auth";
+import { authCookieName, createPasswordActionToken, createSessionToken, sessionCookieMaxAge, shouldRequirePasswordChangeForRole, verifyPassword } from "../../../../lib/auth";
 import { touchEmployeeLastSeen } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
@@ -11,6 +11,7 @@ type EmployeeRow = {
   email: string | null;
   role: string;
   password_hash: string | null;
+  password_must_change: boolean;
   session_version: number;
 };
 
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   const rows = await sql`
-    select id, name, login_id, email, role, password_hash, session_version
+    select id, name, login_id, email, role, password_hash, coalesce(password_must_change, false) as password_must_change, session_version
     from employees
     where status = 'active'
       and (login_id = ${loginId} or email = ${loginId})
@@ -90,13 +91,36 @@ export async function POST(request: Request) {
     return Response.json({ error: "ログイン情報が正しくありません。" }, { status: 401 });
   }
   loginAttempts.delete(rateLimitKey);
+
+  const loginIdForSession = employee.login_id || employee.email || loginId;
+
+  if (employee.password_must_change && shouldRequirePasswordChangeForRole(employee.role)) {
+    await writeAuditLog({
+      actorEmployeeId: employee.id,
+      action: "auth.password_change_required",
+      targetType: "employee",
+      targetId: employee.id,
+      request
+    });
+    return Response.json({
+      ok: true,
+      requiresPasswordChange: true,
+      passwordChangeToken: createPasswordActionToken({ id: employee.id, sessionVersion: employee.session_version }, "initial_change"),
+      employee: {
+        name: employee.name,
+        loginId: loginIdForSession,
+        role: employee.role
+      }
+    });
+  }
+
   const permissionSet = await getPermissionsForRole(employee.role);
   const permissions = Array.from(permissionSet);
 
   const token = createSessionToken({
     id: employee.id,
     name: employee.name,
-    loginId: employee.login_id || employee.email || loginId,
+    loginId: loginIdForSession,
     role: employee.role,
     sessionVersion: employee.session_version,
     permissions,
@@ -115,7 +139,7 @@ export async function POST(request: Request) {
     ok: true,
     employee: {
       name: employee.name,
-      loginId: employee.login_id || employee.email || loginId,
+      loginId: loginIdForSession,
       role: employee.role,
       permissions,
       permittedNavPaths: getNavPathsForPermissions(permissions)

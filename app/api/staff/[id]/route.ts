@@ -1,6 +1,6 @@
 import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../../lib/audit-log";
-import { hashPassword, validatePasswordStrength } from "../../../../lib/auth";
+import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../../lib/auth";
 import { sql } from "../../../../lib/db";
 
 type StaffPayload = {
@@ -241,6 +241,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
   const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
+  const passwordMustChange = shouldRequirePasswordChangeForRole(role);
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -279,6 +280,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           payroll_subject = ${effectivePayrollSubject},
           status = ${status},
           password_hash = ${hashPassword(password)},
+          password_must_change = ${passwordMustChange},
+          password_changed_at = null,
           session_version = session_version + 1,
           updated_at = now()
       where id = ${id}
@@ -300,6 +303,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           staff_category = ${effectiveStaffCategory},
           payroll_subject = ${effectivePayrollSubject},
           status = ${status},
+          password_must_change = case when ${passwordMustChange} then password_must_change else false end,
           session_version = session_version + 1,
           updated_at = now()
       where id = ${id}

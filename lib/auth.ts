@@ -11,7 +11,9 @@ export type EmployeeSession = {
 };
 
 export const authCookieName = "foundr1_os_session";
+export const passwordChangeRequiredRoles = new Set(["store_owner", "store_manager", "staff"]);
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
+const passwordActionTokenMaxAgeSeconds = 15 * 60;
 const hashIterations = 210_000;
 const hashKeyLength = 32;
 const hashDigest = "sha256";
@@ -65,6 +67,53 @@ export function createSessionToken(employee: EmployeeSession) {
   const expiresAt = Date.now() + sessionMaxAgeSeconds * 1000;
   const payload = base64Url(JSON.stringify({ ...employee, expiresAt }));
   return `${payload}.${signPayload(payload)}`;
+}
+
+export function shouldRequirePasswordChangeForRole(role: string) {
+  return passwordChangeRequiredRoles.has(role);
+}
+
+export function createPasswordActionToken(employee: Pick<EmployeeSession, "id" | "sessionVersion">, purpose: "initial_change") {
+  const expiresAt = Date.now() + passwordActionTokenMaxAgeSeconds * 1000;
+  const payload = base64Url(JSON.stringify({ id: employee.id, sessionVersion: employee.sessionVersion, purpose, expiresAt }));
+  return `${payload}.${signPayload(payload)}`;
+}
+
+export function readPasswordActionToken(token?: string | null, purpose?: "initial_change") {
+  if (!token) return null;
+
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return null;
+
+  const expectedSignature = signPayload(payload);
+  const actual = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+
+  try {
+    const action = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      id?: string;
+      sessionVersion?: number;
+      purpose?: string;
+      expiresAt?: number;
+    };
+    if (
+      !action.id ||
+      !Number.isInteger(action.sessionVersion) ||
+      !action.purpose ||
+      typeof action.expiresAt !== "number" ||
+      !Number.isInteger(action.expiresAt) ||
+      Date.now() > action.expiresAt ||
+      (purpose && action.purpose !== purpose)
+    ) return null;
+    return {
+      id: action.id,
+      sessionVersion: action.sessionVersion,
+      purpose: action.purpose
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function readSessionToken(token?: string | null): (EmployeeSession & { expiresAt: number }) | null {

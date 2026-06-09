@@ -184,6 +184,8 @@ create table if not exists employees (
   lark_open_id text,
   lark_user_id text,
   password_hash text,
+  password_must_change boolean not null default false,
+  password_changed_at timestamptz,
   role text not null,
   status text not null default 'active',
   session_version integer not null default 1,
@@ -197,6 +199,14 @@ alter table employees add column if not exists last_seen_at timestamptz;
 alter table employees add column if not exists ui_preferences jsonb not null default '{}'::jsonb;
 alter table employees add column if not exists lark_open_id text;
 alter table employees add column if not exists lark_user_id text;
+alter table employees add column if not exists password_must_change boolean not null default false;
+alter table employees add column if not exists password_changed_at timestamptz;
+update employees
+set password_must_change = true
+where role in ('store_owner', 'store_manager', 'staff')
+  and password_hash is not null
+  and password_changed_at is null
+  and password_must_change = false;
 alter table employees add column if not exists session_version integer not null default 1;
 alter table employees add column if not exists staff_category text not null default 'working';
 alter table employees add column if not exists payroll_subject text not null default 'none';
