@@ -541,7 +541,8 @@ function normalizeAccountingLines(lines: Array<{
     const taxRate = normalizeTaxRate(line.taxRate);
     const taxMode = normalizeTaxMode(line.taxMode);
     const rawTaxAmount = Number(line.taxAmount);
-    const taxAmount = Number.isFinite(rawTaxAmount)
+    const shouldCalculateTax = !Number.isFinite(rawTaxAmount) || rawTaxAmount <= 0;
+    const taxAmount = !shouldCalculateTax
       ? Math.max(0, Math.round(rawTaxAmount))
       : calculateTaxAmount(amount, taxRate, taxMode);
     return {
@@ -607,7 +608,8 @@ function calculateTaxAmount(amount: number, taxRate: string, taxMode: string) {
   const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
   if (!rate || amount <= 0) return 0;
   if (taxMode === "外税") return Math.round(amount * rate / 100);
-  return Math.round(amount * rate / (100 + rate));
+  if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
+  return 0;
 }
 
 function normalizeDate(value: unknown) {

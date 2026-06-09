@@ -322,7 +322,15 @@ export default function VouchersPage() {
         ...current,
         [voucherId]: {
           ...draft,
-          lines: draft.lines.map((line) => line.id === lineId ? { ...line, ...next } : line)
+          lines: draft.lines.map((line) => {
+            if (line.id !== lineId) return line;
+            const updated = { ...line, ...next };
+            if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next || "taxMode" in next)) {
+              const amount = Math.round(Number(updated.amount || 0));
+              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, updated.taxMode));
+            }
+            return updated;
+          })
         }
       };
     });
@@ -708,7 +716,7 @@ function VoucherAccountingEditor({
               <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} />
             </label>
             <label>
-              <span>金額（税込）</span>
+              <span>金額</span>
               <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} />
             </label>
             <label>
@@ -864,7 +872,8 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
   if (!rate || amount <= 0) return 0;
   if (taxMode === "外税") return Math.round(amount * rate / 100);
-  return Math.round(amount * rate / (100 + rate));
+  if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
+  return 0;
 }
 
 function isPdfUploadFile(file: File) {
