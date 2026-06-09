@@ -664,7 +664,7 @@ export default function VouchersPage() {
                       </div>
                       <div className="voucher-actions">
                         <button className="text-button voucher-preview-open" type="button" onClick={() => setPreviewVoucher(voucher)}>証憑を見る</button>
-                        <a className="text-button voucher-preview-link" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
+                        <a className="text-button voucher-preview-link" href={buildVoucherPreviewUrl(voucher)} target="_blank" rel="noreferrer">証憑を見る</a>
                         {voucher.canDelete ? (
                           <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)} disabled={isVoucherBusy}>
                             {pendingAction === "delete" ? "削除中..." : "削除"}
@@ -732,7 +732,7 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
   const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf");
-  const previewUrl = buildVoucherPreviewUrl(voucher.receiptPhotoUrl, voucher.uploadedFileName);
+  const previewUrl = buildVoucherPreviewUrl(voucher);
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
       <div className="voucher-preview-panel-head">
@@ -756,44 +756,8 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
   );
 }
 
-function buildVoucherPreviewUrl(value: string, filename = "") {
-  const pathname = extractVoucherBlobPathname(value);
-  if (pathname) {
-    const params = new URLSearchParams({ pathname });
-    if (filename) params.set("filename", filename);
-    return `/api/products/photo/view?${params.toString()}`;
-  }
-  return normalizeVoucherPreviewUrl(value);
-}
-
-function extractVoucherBlobPathname(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (trimmed.startsWith("voucher-documents/")) return trimmed;
-  try {
-    const url = new URL(trimmed, window.location.origin);
-    const proxiedPathname = url.searchParams.get("pathname");
-    if (proxiedPathname) return proxiedPathname;
-    const path = url.pathname.replace(/^\/+/, "");
-    if (path.startsWith("voucher-documents/")) return decodeURIComponent(path);
-  } catch {
-    return "";
-  }
-  return "";
-}
-
-function normalizeVoucherPreviewUrl(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  try {
-    const url = new URL(trimmed, window.location.origin);
-    if (url.hostname.endsWith("foundr1.jp")) {
-      return `${url.pathname}${url.search}${url.hash}`;
-    }
-    return url.href;
-  } catch {
-    return trimmed;
-  }
+function buildVoucherPreviewUrl(voucher: VoucherRecord) {
+  return `/api/vouchers/${encodeURIComponent(voucher.id)}/preview`;
 }
 
 function VoucherAccountingEditor({
