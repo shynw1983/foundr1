@@ -44,20 +44,6 @@ function buildDownloadText(record: PrivacyConsentRecord) {
   ].join("\n");
 }
 
-function downloadConsent(record: PrivacyConsentRecord) {
-  const text = buildDownloadText(record);
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const companyName = (record.companyLegalName || "company").replace(/[\\/:*?"<>|]/g, "-");
-  link.href = url;
-  link.download = `${companyName}-個人情報文書-${record.version}.txt`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
-}
-
 export default function StorePrivacyDocumentsPage() {
   const [records, setRecords] = useState<PrivacyConsentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,10 +111,10 @@ export default function StorePrivacyDocumentsPage() {
                   <strong>{record.companyLegalName || "会社未設定"}</strong>
                   <small>{record.title} / {record.version} / 同意日時 {formatDateTime(record.agreedAt)}</small>
                 </span>
-                <button className="secondary-button" type="button" onClick={() => downloadConsent(record)}>
+                <a className="secondary-button" href={`/api/privacy-consents/history/${record.consentId}/pdf`}>
                   <Download size={16} />
-                  ダウンロード
-                </button>
+                  PDFダウンロード
+                </a>
               </div>
               <div className="privacy-consent-document-body">
                 <pre>{buildDownloadText(record)}</pre>
