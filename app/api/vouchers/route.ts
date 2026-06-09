@@ -137,6 +137,7 @@ export async function PATCH(request: Request) {
     reimbursementStatus?: string;
     lines?: Array<{
       accountTitle?: string;
+      subAccountTitle?: string;
       amount?: string | number;
       taxRate?: string;
       taxMode?: string;
@@ -239,6 +240,7 @@ export async function PATCH(request: Request) {
             store_id,
             category,
             account_title,
+            sub_account_title,
             name,
             amount,
             tax_rate,
@@ -258,6 +260,7 @@ export async function PATCH(request: Request) {
             ${String(voucher.storeId)},
             ${category},
             ${line.accountTitle},
+            ${line.subAccountTitle},
             ${name},
             ${line.amount},
             ${line.taxRate},
@@ -408,6 +411,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
       receipt_ocr_results.total::float,
       receipt_ocr_results.tax::float,
+      coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb) as "accountingLines",
       coalesce(item_counts.item_count, 0)::int as "itemCount",
       coalesce(employees.name, '') as "createdByName",
       coalesce(to_char(receipt_ocr_results.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI'), '') as "createdLabel"
@@ -480,6 +484,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     purchaseTime: String(row.purchaseTime ?? ""),
     total: Number(row.total ?? 0),
     tax: Number(row.tax ?? 0),
+    accountingLines: normalizeStoredAccountingLines(row.accountingLines),
     itemCount: Number(row.itemCount ?? 0),
     createdByName: String(row.createdByName ?? ""),
     createdLabel: String(row.createdLabel ?? ""),
@@ -514,6 +519,7 @@ function normalizeReimbursementStatus(value: string) {
 
 function normalizeAccountingLines(lines: Array<{
   accountTitle?: string;
+  subAccountTitle?: string;
   amount?: string | number;
   taxRate?: string;
   taxMode?: string;
@@ -523,6 +529,7 @@ function normalizeAccountingLines(lines: Array<{
   const fallbackAccountTitle = usageType === "shiire" ? "仕入高" : "雑費";
   const inputLines = Array.isArray(lines) && lines.length ? lines : [{
     accountTitle: fallbackAccountTitle,
+    subAccountTitle: "",
     amount: voucher.total,
     taxRate: "",
     taxMode: "不明",
@@ -540,6 +547,7 @@ function normalizeAccountingLines(lines: Array<{
       : calculateTaxAmount(amount, taxRate, taxMode);
     return {
       accountTitle: normalizeAccountTitle(line.accountTitle, usageType),
+      subAccountTitle: normalizeSubAccountTitle(line.subAccountTitle),
       amount,
       taxRate,
       taxMode,
@@ -549,10 +557,38 @@ function normalizeAccountingLines(lines: Array<{
   }).filter((line) => line.amount > 0);
 }
 
+function normalizeStoredAccountingLines(value: unknown) {
+  let parsedValue = value;
+  if (typeof value === "string") {
+    try {
+      parsedValue = JSON.parse(value);
+    } catch {
+      parsedValue = [];
+    }
+  }
+  const lines = Array.isArray(parsedValue) ? parsedValue : [];
+  return lines.map((line) => {
+    const row = line as Record<string, unknown>;
+    return {
+      accountTitle: String(row.accountTitle ?? ""),
+      subAccountTitle: String(row.subAccountTitle ?? ""),
+      amount: Number(row.amount ?? 0),
+      taxRate: String(row.taxRate ?? ""),
+      taxMode: String(row.taxMode ?? ""),
+      taxAmount: Number(row.taxAmount ?? 0),
+      note: String(row.note ?? "")
+    };
+  }).filter((line) => line.amount > 0);
+}
+
 function normalizeAccountTitle(value: unknown, usageType: VoucherUsageType) {
   const title = String(value ?? "").trim();
   if (usageType === "shiire") return title === "仕入高" ? "仕入高" : "仕入高";
   return validExpenseAccountTitles.has(title) ? title : "雑費";
+}
+
+function normalizeSubAccountTitle(value: unknown) {
+  return String(value ?? "").trim().slice(0, 80);
 }
 
 function normalizeTaxRate(value: unknown) {

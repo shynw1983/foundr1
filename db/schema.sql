@@ -854,6 +854,7 @@ create table if not exists analytics_expenses (
   store_id uuid not null references stores(id) on delete cascade,
   category text not null default 'misc',
   account_title text not null default '',
+  sub_account_title text not null default '',
   name text not null default '',
   amount numeric(12, 2) not null default 0,
   tax_rate text not null default '',
@@ -874,6 +875,7 @@ create table if not exists analytics_expenses (
 
 alter table analytics_expenses add column if not exists category text not null default 'misc';
 alter table analytics_expenses add column if not exists account_title text not null default '';
+alter table analytics_expenses add column if not exists sub_account_title text not null default '';
 alter table analytics_expenses add column if not exists name text not null default '';
 alter table analytics_expenses add column if not exists amount numeric(12, 2) not null default 0;
 alter table analytics_expenses add column if not exists tax_rate text not null default '';

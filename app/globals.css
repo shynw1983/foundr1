@@ -3826,7 +3826,7 @@ body :where(
 
 .receipt-expense-line {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
   align-items: end;
   gap: 10px;
   padding: 10px;
@@ -3842,6 +3842,55 @@ body :where(
 .receipt-confirm-form .primary-button {
   align-self: end;
   min-height: 42px;
+}
+
+.voucher-accounting-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.voucher-accounting-summary > span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.voucher-accounting-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, auto) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.voucher-accounting-summary-row strong,
+.voucher-accounting-summary-row small {
+  min-width: 0;
+}
+
+.voucher-accounting-summary-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.voucher-accounting-summary-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.voucher-accounting-summary-row b {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .expense-edit-form {

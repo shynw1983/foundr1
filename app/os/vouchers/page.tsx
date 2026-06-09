@@ -44,6 +44,7 @@ type VoucherRecord = {
   purchaseTime: string;
   total: number;
   tax: number;
+  accountingLines: VoucherAccountingSummaryLine[];
   itemCount: number;
   createdByName: string;
   createdLabel: string;
@@ -74,10 +75,21 @@ type VoucherAccountingDraft = {
 type VoucherAccountingLine = {
   id: string;
   accountTitle: string;
+  subAccountTitle: string;
   amount: string;
   taxRate: string;
   taxMode: string;
   taxAmount: string;
+  note: string;
+};
+
+type VoucherAccountingSummaryLine = {
+  accountTitle: string;
+  subAccountTitle: string;
+  amount: number;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: number;
   note: string;
 };
 
@@ -308,6 +320,7 @@ export default function VouchersPage() {
         reimbursementStatus: voucher.reimbursementStatus,
         lines: draft.lines.map((line) => ({
           accountTitle: voucher.usageType === "shiire" ? "仕入高" : line.accountTitle,
+          subAccountTitle: line.subAccountTitle,
           amount: line.amount,
           taxRate: line.taxRate,
           taxMode: line.taxMode,
@@ -506,6 +519,9 @@ export default function VouchersPage() {
                     onConfirm={() => void confirmVoucherAccounting(voucher)}
                   />
                 ) : null}
+                {voucher.accountingLines?.length ? (
+                  <VoucherAccountingSummary lines={voucher.accountingLines} />
+                ) : null}
               </article>
             ))}
           </div>
@@ -590,6 +606,10 @@ function VoucherAccountingEditor({
               )}
             </label>
             <label>
+              <span>補助科目</span>
+              <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} />
+            </label>
+            <label>
               <span>金額（税込）</span>
               <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} />
             </label>
@@ -644,6 +664,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   const isShiire = voucher?.usageType === "shiire";
   const grouped = new Map<string, {
     accountTitle: string;
+    subAccountTitle: string;
     taxRate: string;
     taxMode: string;
     amount: number;
@@ -654,10 +675,11 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     const amount = Math.round(Number(item.amount ?? 0));
     if (!amount) continue;
     const accountTitle = isShiire ? "仕入高" : item.accountTitle || getDefaultAccountTitle(item.category);
+    const subAccountTitle = getDefaultSubAccountTitle(voucher?.usageType ?? "unclassified", item.category, item.accountTitle);
     const taxRate = normalizeDraftTaxRate(item.taxRate);
     const taxMode = normalizeDraftTaxMode(item.taxMode);
-    const key = `${accountTitle}:${taxRate}:${taxMode}`;
-    const current = grouped.get(key) ?? { accountTitle, taxRate, taxMode, amount: 0, itemNames: [] };
+    const key = `${accountTitle}:${subAccountTitle}:${taxRate}:${taxMode}`;
+    const current = grouped.get(key) ?? { accountTitle, subAccountTitle, taxRate, taxMode, amount: 0, itemNames: [] };
     current.amount += amount;
     if (item.rawName) current.itemNames.push(item.rawName);
     grouped.set(key, current);
@@ -668,6 +690,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     return {
       id: `ocr-${index}`,
       accountTitle: line.accountTitle,
+      subAccountTitle: line.subAccountTitle,
       amount: String(amount || ""),
       taxRate: line.taxRate,
       taxMode: line.taxMode,
@@ -681,6 +704,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   return [{
     id: "manual-0",
     accountTitle: isShiire ? "仕入高" : "雑費",
+    subAccountTitle: "",
     amount: String(amount || ""),
     taxRate: "",
     taxMode: "不明",
@@ -693,12 +717,28 @@ function buildNewAccountingLine(index: number): VoucherAccountingLine {
   return {
     id: `manual-${Date.now()}-${index}`,
     accountTitle: "雑費",
+    subAccountTitle: "",
     amount: "",
     taxRate: "",
     taxMode: "不明",
     taxAmount: "0",
     note: ""
   };
+}
+
+function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLine[] }) {
+  return (
+    <div className="voucher-accounting-summary">
+      <span>会計集計</span>
+      {lines.map((line, index) => (
+        <div className="voucher-accounting-summary-row" key={`${line.accountTitle}-${line.subAccountTitle}-${line.taxRate}-${line.taxMode}-${index}`}>
+          <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
+          <small>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</small>
+          <b>{formatMoney(line.amount)}</b>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function getCurrentDate() {
@@ -714,6 +754,17 @@ function getDefaultAccountTitle(category: string) {
   if (category === "清掃用品" || category === "消耗品" || category === "包材") return "消耗品費";
   if (category === "設備") return "修繕費";
   return "雑費";
+}
+
+function getDefaultSubAccountTitle(usageType: VoucherUsageType, category: string, accountTitle: string) {
+  if (usageType === "shiire") {
+    if (category === "包材") return "包材";
+    if (category === "消耗品" || category === "清掃用品") return "消耗品";
+    return "食材";
+  }
+  if (category && category !== "未分類") return category;
+  if (accountTitle === "車両費") return "車両関連";
+  return "";
 }
 
 function normalizeDraftTaxRate(value: string) {
