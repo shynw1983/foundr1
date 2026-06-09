@@ -735,26 +735,30 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
   const [previewMeta, setPreviewMeta] = useState({
     loading: true,
     error: "",
-    contentType: ""
+    contentType: "",
+    objectUrl: ""
   });
 
   useEffect(() => {
     let cancelled = false;
-    setPreviewMeta({ loading: true, error: "", contentType: "" });
-    fetch(`${previewUrl}?meta=1`)
+    let objectUrl = "";
+    setPreviewMeta({ loading: true, error: "", contentType: "", objectUrl: "" });
+    fetch(previewUrl)
       .then(async (response) => {
         if (!response.ok) {
           const message = await response.text();
           throw new Error(message || `HTTP ${response.status}`);
         }
-        return response.json();
+        return response.blob();
       })
-      .then((data) => {
+      .then((blob) => {
         if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
         setPreviewMeta({
           loading: false,
           error: "",
-          contentType: String(data.contentType ?? "")
+          contentType: blob.type,
+          objectUrl
         });
       })
       .catch((error) => {
@@ -762,12 +766,14 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
         setPreviewMeta({
           loading: false,
           error: error instanceof Error ? error.message : "証憑を読み込めませんでした。",
-          contentType: ""
+          contentType: "",
+          objectUrl: ""
         });
       });
 
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [previewUrl]);
 
@@ -795,9 +801,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
             <a href={previewUrl} target="_blank" rel="noreferrer">新しいタブで開く</a>
           </div>
         ) : shouldRenderImage ? (
-          <img src={previewUrl} alt={title} />
+          <img src={previewMeta.objectUrl} alt={title} />
         ) : (
-          <iframe src={previewUrl} title={title} />
+          <iframe src={previewMeta.objectUrl} title={title} />
         )}
       </div>
     </aside>
