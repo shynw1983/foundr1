@@ -17767,6 +17767,93 @@ body :where(
   justify-content: center;
 }
 
+.voucher-preview-link {
+  display: none;
+}
+
+.voucher-preview-panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 80;
+  width: min(430px, 36vw);
+  min-width: 360px;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid var(--border);
+  background: #f8faf9;
+  box-shadow: -16px 0 36px rgb(15 23 42 / 0.18);
+}
+
+.voucher-preview-panel-head {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.voucher-preview-panel-head div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.voucher-preview-panel-head span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.voucher-preview-panel-head strong {
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.voucher-preview-panel-head button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  background: #ffffff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.voucher-preview-panel-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.voucher-preview-panel-body img {
+  display: block;
+  width: 100%;
+  min-height: calc(100dvh - 92px);
+  object-fit: contain;
+  object-position: top center;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.voucher-preview-panel-body iframe {
+  display: block;
+  width: 100%;
+  height: calc(100dvh - 92px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
 .voucher-accounting-form {
   grid-column: 1 / -1;
   margin-top: 4px;
@@ -17797,6 +17884,15 @@ body :where(
 
   .voucher-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-preview-open,
+  .voucher-preview-panel {
+    display: none;
+  }
+
+  .voucher-preview-link {
+    display: inline-flex;
   }
 }
 

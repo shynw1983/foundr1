@@ -9,7 +9,8 @@ import {
   Plus,
   ReceiptText,
   Trash2,
-  Upload
+  Upload,
+  X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -190,6 +191,7 @@ export default function VouchersPage() {
   const [accountingDrafts, setAccountingDrafts] = useState<Record<string, VoucherAccountingDraft>>({});
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
+  const [previewVoucher, setPreviewVoucher] = useState<VoucherRecord | null>(null);
 
   useEffect(() => {
     void loadVouchers();
@@ -603,7 +605,8 @@ export default function VouchersPage() {
                         )}
                       </div>
                       <div className="voucher-actions">
-                        <a className="text-button" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
+                        <button className="text-button voucher-preview-open" type="button" onClick={() => setPreviewVoucher(voucher)}>証憑を見る</button>
+                        <a className="text-button voucher-preview-link" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
                         {voucher.canDelete ? (
                           <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)}>削除</button>
                         ) : null}
@@ -631,6 +634,7 @@ export default function VouchersPage() {
           </div>
         </section>
       </section>
+      {previewVoucher ? <VoucherPreviewPanel voucher={previewVoucher} onClose={() => setPreviewVoucher(null)} /> : null}
     </main>
   );
 }
@@ -661,6 +665,32 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
         {progress.failed ? ` / 要確認 ${progress.failed}件` : ""}
       </p>
     </div>
+  );
+}
+
+function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
+  const title = buildVoucherTitle(voucher);
+  const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf") || voucher.receiptPhotoUrl.toLowerCase().includes(".pdf");
+  return (
+    <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
+      <div className="voucher-preview-panel-head">
+        <div>
+          <span>証憑プレビュー</span>
+          <strong>{title}</strong>
+        </div>
+        <button type="button" onClick={onClose} aria-label="プレビューを閉じる">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="voucher-preview-panel-body">
+        {isPdf ? (
+          <iframe src={voucher.receiptPhotoUrl} title={title} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={voucher.receiptPhotoUrl} alt={title} />
+        )}
+      </div>
+    </aside>
   );
 }
 
