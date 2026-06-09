@@ -2,7 +2,6 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { FloatingFeedbackButton } from "../components/feedback/FloatingFeedbackButton";
 import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
-import { PrivacyConsentGate } from "./os/components/PrivacyConsentGate";
 import { PwaRegister } from "./os/components/PwaRegister";
 import "./globals.css";
 
@@ -41,7 +40,6 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <PwaRegister />
-        <PrivacyConsentGate />
         <OsTranslationProvider>{children}</OsTranslationProvider>
         <FloatingFeedbackButton />
       </body>

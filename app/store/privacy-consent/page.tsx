@@ -1,5 +1,5 @@
 import { EmployeePrivacyConsentPage } from "../../../components/privacy/EmployeePrivacyConsentPage";
 
-export default function PrivacyConsentPage() {
+export default function StorePrivacyConsentPage() {
   return <EmployeePrivacyConsentPage />;
 }

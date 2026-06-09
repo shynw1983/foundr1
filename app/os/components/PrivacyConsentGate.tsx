@@ -9,9 +9,7 @@ type AuthMeResponse = {
 };
 
 const allowedPaths = new Set([
-  "/os/login",
-  "/os/logout",
-  "/os/privacy-consent"
+  "/store/privacy-consent"
 ]);
 
 export function PrivacyConsentGate() {
@@ -20,7 +18,7 @@ export function PrivacyConsentGate() {
 
     async function checkPendingConsents() {
       const pathname = window.location.pathname;
-      if (allowedPaths.has(pathname) || pathname.startsWith("/member")) return;
+      if (!pathname.startsWith("/store") || allowedPaths.has(pathname)) return;
 
       const response = await fetch("/api/auth/me", { cache: "no-store" });
       if (!response.ok) return;
@@ -30,7 +28,7 @@ export function PrivacyConsentGate() {
 
       if ((body.employee?.pendingPrivacyConsentCount ?? 0) > 0) {
         const nextPath = `${window.location.pathname}${window.location.search}`;
-        window.location.href = `/os/privacy-consent?next=${encodeURIComponent(nextPath)}`;
+        window.location.href = `/store/privacy-consent?next=${encodeURIComponent(nextPath)}`;
       }
     }
 

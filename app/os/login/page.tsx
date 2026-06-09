@@ -19,7 +19,7 @@ function getDefaultPathForRole(role?: string, permittedNavPaths?: string[]) {
 }
 
 function isPathPermitted(pathname: string, permittedNavPaths?: string[]) {
-  if (pathname === "/os/logout" || pathname === "/os/privacy-consent") return true;
+  if (pathname === "/os/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent") return true;
   if (!permittedNavPaths) return pathname === "/os" || pathname.startsWith("/os/");
   return permittedNavPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
