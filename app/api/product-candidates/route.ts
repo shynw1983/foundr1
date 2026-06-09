@@ -209,7 +209,7 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       ${Number.isFinite(referencePrice) ? referencePrice : 0},
       ${"unset"},
       ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
-      ${`レシート OCR から追加: ${String(candidate.rawName ?? "")}`},
+      ${`[情報未補完] レシート OCR から追加: ${String(candidate.rawName ?? "")}`},
       now()
     )
     returning id::text

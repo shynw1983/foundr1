@@ -106,6 +106,7 @@ const addSupplierOption = "__add_supplier__";
 const productManagerRoles = new Set(["owner", "manager"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
+  { value: "receiptIncomplete", label: "情報未補完" },
   { value: "spec", label: "規格未設定" },
   { value: "supplier", label: "発注先未設定" },
   { value: "mainSupplier", label: "メイン発注先未設定" },
@@ -228,7 +229,7 @@ function formatProductUnitPrice(product: ProductWithCategory) {
 }
 
 function getProductSummaryFieldValue(product: ProductWithCategory, field: string, unitPriceLabel: string) {
-  if (field === "japaneseNote") return product.japaneseNote || "";
+  if (field === "japaneseNote") return getDisplayJapaneseNote(product);
   if (field === "productBrandName") return product.productBrandName || "";
   if (field === "manufacturer") return product.manufacturer || "";
   if (field === "category") return product.category || "";
@@ -251,6 +252,14 @@ function getProductUsageTypeLabel(value?: string) {
 
 function isProductSpecMissing(product: ProductWithCategory) {
   return isBlankValue(product.packageSpec) && !hasPackageQuantity(product);
+}
+
+function isReceiptIncompleteProduct(product: ProductWithCategory) {
+  return String(product.japaneseNote ?? "").includes("[情報未補完]");
+}
+
+function getDisplayJapaneseNote(product: ProductWithCategory) {
+  return String(product.japaneseNote ?? "").replace("[情報未補完]", "").trim();
 }
 
 function hasAnySupplier(product: ProductWithCategory) {
@@ -321,6 +330,7 @@ function productMatchesStore(product: ProductWithCategory, store: StoreItem | un
 
 function productMatchesMissingInfo(product: ProductWithCategory, missingInfoFilter: string) {
   if (missingInfoFilter === "すべて") return true;
+  if (missingInfoFilter === "receiptIncomplete") return isReceiptIncompleteProduct(product);
   if (missingInfoFilter === "spec") return isProductSpecMissing(product);
   if (missingInfoFilter === "supplier") return !hasAnySupplier(product);
   if (missingInfoFilter === "mainSupplier") return isBlankValue(product.mainSupplier);
@@ -497,7 +507,7 @@ export default function ProductsPage() {
       product.mainSupplier,
       product.backupSupplier,
       product.storageType,
-      product.japaneseNote,
+      getDisplayJapaneseNote(product),
       product.specNote
     ].join(" ");
 
@@ -1153,8 +1163,9 @@ export default function ProductsPage() {
                       <div className="product-name-line">
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
+                        {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                       </div>
-                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
+                      <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
                   <div className="mobile-product-head">
@@ -1170,8 +1181,9 @@ export default function ProductsPage() {
                       <div className="product-name-line">
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
+                        {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                       </div>
-                      <p>{product.japaneseNote || product.productBrandName || "商品ブランド未設定"}</p>
+                      <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
                     </div>
                   </div>
                   <div className="product-master-info-grid" aria-label="商品情報">
@@ -1238,7 +1250,7 @@ export default function ProductsPage() {
                         </div>
                         <div>
                           <dt>日本語メモ</dt>
-                          <dd>{product.japaneseNote || "未設定"}</dd>
+                          <dd>{getDisplayJapaneseNote(product) || "未設定"}</dd>
                         </div>
                         <div>
                           <dt>メイン発注先</dt>
@@ -1851,7 +1863,7 @@ function ProductEditDialog({
             <label className="product-spec-note">
               <span>日本語メモ</span>
               <textarea
-                value={target.value.japaneseNote ?? ""}
+                value={String(target.value.japaneseNote ?? "").replace("[情報未補完]", "").trim()}
                 placeholder="例: 日本スタッフ向けの商品説明、読み方、用途"
                 onChange={(event) =>
                   onChange({
