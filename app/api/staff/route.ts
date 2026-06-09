@@ -22,6 +22,7 @@ type StaffPayload = {
   larkUserId?: string;
   password?: string;
   passwordMustChange?: boolean;
+  privacyConsentResetRequired?: boolean;
   role?: string;
   staffCategory?: string;
   payrollSubject?: string;
@@ -192,6 +193,7 @@ export async function GET() {
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
       coalesce(employees.password_must_change, false) as "passwordMustChange",
+      coalesce(employees.privacy_consent_reset_required, false) as "privacyConsentResetRequired",
       employees.role,
       employees.staff_category as "staffCategory",
       employees.payroll_subject as "payrollSubject",

@@ -18,6 +18,11 @@ export type PrivacyDocumentSummary = {
   storeNames: string[];
 };
 
+export type PrivacyConsentRecord = PrivacyDocumentSummary & {
+  consentId: string;
+  agreedAt: string;
+};
+
 type CompanyRow = {
   companyId: string;
   companyName: string;
@@ -37,6 +42,14 @@ type DocumentRow = {
   title: string;
   body: string;
   effectiveDate: string;
+};
+
+type ConsentRecordRow = DocumentRow & {
+  consentId: string;
+  agreedAt: string;
+  documentTitle: string | null;
+  documentBody: string | null;
+  companyLegalNameSnapshot: string | null;
 };
 
 const allCompanyRoles = new Set(["owner", "manager"]);
@@ -260,6 +273,13 @@ export async function getPendingPrivacyConsents(session: EmployeeSession): Promi
   await ensureActivePrivacyDocuments(companyIds);
   if (!companyIds.length) return [];
 
+  const resetRows = await sql`
+    select coalesce(privacy_consent_reset_required, false) as "resetRequired"
+    from employees
+    where id = ${session.id}
+    limit 1
+  `;
+  const resetRequired = resetRows[0]?.resetRequired === true;
   const documentRows = await sql`
     select
       privacy_documents.id::text as "documentId",
@@ -271,16 +291,23 @@ export async function getPendingPrivacyConsents(session: EmployeeSession): Promi
     from privacy_documents
     where privacy_documents.company_id::text = any(${companyIds})
       and privacy_documents.is_active = true
-      and not exists (
+      and (
+        ${resetRequired}
+        or not exists (
         select 1
         from privacy_consents
         where privacy_consents.employee_id = ${session.id}
           and privacy_consents.company_id = privacy_documents.company_id
           and privacy_consents.document_id = privacy_documents.id
+        )
       )
     order by privacy_documents.effective_date, privacy_documents.created_at
   ` as DocumentRow[];
 
+  return buildPrivacyDocumentSummaries(documentRows, companies);
+}
+
+function buildPrivacyDocumentSummaries(documentRows: DocumentRow[], companies: CompanyRow[]): PrivacyDocumentSummary[] {
   const companyById = new Map(companies.map((company) => [company.companyId, company]));
   return documentRows.map((document) => {
     const company = companyById.get(document.companyId);
@@ -315,6 +342,48 @@ export async function getPendingPrivacyConsents(session: EmployeeSession): Promi
   });
 }
 
+export async function getAgreedPrivacyConsents(session: EmployeeSession): Promise<PrivacyConsentRecord[]> {
+  const companies = await getEmployeeConsentCompanies(session);
+  const companyIds = companies.map((company) => company.companyId);
+  if (!companyIds.length) return [];
+
+  const consentRows = await sql`
+    select
+      privacy_consents.id::text as "consentId",
+      privacy_consents.agreed_at::text as "agreedAt",
+      privacy_consents.document_title as "documentTitle",
+      privacy_consents.document_body as "documentBody",
+      privacy_consents.company_legal_name_snapshot as "companyLegalNameSnapshot",
+      privacy_documents.id::text as "documentId",
+      privacy_consents.company_id::text as "companyId",
+      privacy_consents.document_version as "version",
+      privacy_documents.title,
+      privacy_documents.body,
+      privacy_documents.effective_date::text as "effectiveDate"
+    from privacy_consents
+    join privacy_documents on privacy_documents.id = privacy_consents.document_id
+    where privacy_consents.employee_id = ${session.id}
+      and privacy_consents.company_id::text = any(${companyIds})
+    order by privacy_consents.agreed_at desc
+  ` as ConsentRecordRow[];
+
+  const summaries = buildPrivacyDocumentSummaries(consentRows, companies);
+  return summaries.map((summary, index) => {
+    const row = consentRows[index];
+    const title = clean(row.documentTitle) || summary.title;
+    const companyLegalName = clean(row.companyLegalNameSnapshot) || summary.companyLegalName;
+    const body = clean(row.documentBody) || summary.body;
+    return {
+      ...summary,
+      consentId: row.consentId,
+      agreedAt: row.agreedAt,
+      title,
+      companyLegalName,
+      body
+    };
+  });
+}
+
 export async function hasPendingPrivacyConsents(session: EmployeeSession) {
   const pending = await getPendingPrivacyConsents(session);
   return pending.length > 0;
@@ -335,6 +404,9 @@ export async function recordPrivacyConsents(session: EmployeeSession, documentId
         company_id,
         document_id,
         document_version,
+        document_title,
+        document_body,
+        company_legal_name_snapshot,
         employee_name_snapshot,
         ip_address,
         user_agent
@@ -344,13 +416,31 @@ export async function recordPrivacyConsents(session: EmployeeSession, documentId
         ${document.companyId},
         ${document.documentId},
         ${document.version},
+        ${document.title},
+        ${document.body},
+        ${document.companyLegalName},
         ${session.name},
         ${getClientIp(request)},
         ${request?.headers.get("user-agent") ?? null}
       )
-      on conflict do nothing
+      on conflict (employee_id, company_id, document_id) do update set
+        document_version = excluded.document_version,
+        document_title = excluded.document_title,
+        document_body = excluded.document_body,
+        company_legal_name_snapshot = excluded.company_legal_name_snapshot,
+        employee_name_snapshot = excluded.employee_name_snapshot,
+        agreed_at = now(),
+        ip_address = excluded.ip_address,
+        user_agent = excluded.user_agent
     `;
   }
+
+  await sql`
+    update employees
+    set privacy_consent_reset_required = false,
+        updated_at = now()
+    where id = ${session.id}
+  `;
 
   return pending.length;
 }

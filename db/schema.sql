@@ -193,6 +193,7 @@ create table if not exists employees (
   lark_user_id text,
   password_hash text,
   password_must_change boolean not null default false,
+  privacy_consent_reset_required boolean not null default false,
   password_changed_at timestamptz,
   role text not null,
   status text not null default 'active',
@@ -208,6 +209,7 @@ alter table employees add column if not exists ui_preferences jsonb not null def
 alter table employees add column if not exists lark_open_id text;
 alter table employees add column if not exists lark_user_id text;
 alter table employees add column if not exists password_must_change boolean not null default false;
+alter table employees add column if not exists privacy_consent_reset_required boolean not null default false;
 alter table employees add column if not exists password_changed_at timestamptz;
 update employees
 set password_must_change = true
@@ -439,6 +441,9 @@ create table if not exists privacy_consents (
   company_id uuid not null references companies(id) on delete cascade,
   document_id uuid not null references privacy_documents(id) on delete restrict,
   document_version text not null,
+  document_title text not null default '',
+  document_body text not null default '',
+  company_legal_name_snapshot text not null default '',
   employee_name_snapshot text not null default '',
   agreed_at timestamptz not null default now(),
   ip_address text,
@@ -449,6 +454,10 @@ create table if not exists privacy_consents (
 
 create index if not exists privacy_consents_employee_company_idx
   on privacy_consents(employee_id, company_id, agreed_at desc);
+
+alter table privacy_consents add column if not exists document_title text not null default '';
+alter table privacy_consents add column if not exists document_body text not null default '';
+alter table privacy_consents add column if not exists company_legal_name_snapshot text not null default '';
 
 insert into privacy_documents (company_id, version, body)
 select companies.id, 'v1.0', ''

@@ -22,6 +22,7 @@ type StaffPayload = {
   larkUserId?: string;
   password?: string;
   passwordMustChange?: boolean;
+  privacyConsentResetRequired?: boolean;
   role?: string;
   staffCategory?: string;
   payrollSubject?: string;
@@ -250,6 +251,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ? true
         : currentPasswordMustChange
   );
+  const privacyConsentResetRequired = role !== "store_terminal" && body.privacyConsentResetRequired === true;
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -289,6 +291,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           status = ${status},
           password_hash = ${hashPassword(password)},
           password_must_change = ${passwordMustChange},
+          privacy_consent_reset_required = ${privacyConsentResetRequired},
           password_changed_at = case when ${passwordMustChange} then null else password_changed_at end,
           session_version = session_version + 1,
           updated_at = now()
@@ -312,6 +315,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           payroll_subject = ${effectivePayrollSubject},
           status = ${status},
           password_must_change = ${passwordMustChange},
+          privacy_consent_reset_required = ${privacyConsentResetRequired},
           password_changed_at = case when ${passwordMustChange} then null else password_changed_at end,
           session_version = session_version + 1,
           updated_at = now()
@@ -602,7 +606,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), privacyConsentResetRequired, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

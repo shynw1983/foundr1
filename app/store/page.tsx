@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, FileText, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -55,6 +55,13 @@ const storeModules = [
     status: "利用可能"
   },
   {
+    title: "個人情報文書",
+    description: "同意済みの個人情報・マイナンバー取扱文書を確認し、必要に応じてダウンロードします。",
+    href: "/store/privacy-documents",
+    icon: FileText,
+    status: "利用可能"
+  },
+  {
     title: "問題報告",
     description: "日常業務で見つけた操作不明、データ違い、POS・注文・勤怠の問題を送信します。",
     href: "/store/feedback",
@@ -78,7 +85,7 @@ export default function StoreHomePage() {
     employeeRole === "store_terminal"
       ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
       : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/feedback" || module.href === "/os")
+        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/privacy-documents" || module.href === "/store/feedback" || module.href === "/os")
         : storeModules
   ), [employeeRole, isMobileViewport, isTimecardEmployee]);
 

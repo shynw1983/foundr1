@@ -82,6 +82,7 @@ type StaffMember = {
   larkOpenId?: string | null;
   larkUserId?: string | null;
   passwordMustChange?: boolean | null;
+  privacyConsentResetRequired?: boolean | null;
   role: string;
   staffCategory: string;
   payrollSubject: string;
@@ -329,6 +330,7 @@ export default function StaffPage() {
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
       passwordMustChange: formData.get("passwordMustChange") === "true",
+      privacyConsentResetRequired: formData.get("privacyConsentResetRequired") === "true",
       role: String(formData.get("role") ?? "staff"),
       staffCategory: String(formData.get("staffCategory") ?? "working"),
       payrollSubject,
@@ -554,6 +556,7 @@ export default function StaffPage() {
                           ? `${member.status === "active" ? "有効" : "停止中"} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
                           : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: ${getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`}
                         {member.passwordMustChange ? " ・ 初回パスワード変更待ち" : ""}
+                        {member.privacyConsentResetRequired ? " ・ 個人情報文書の再同意待ち" : ""}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -678,6 +681,9 @@ function StaffFormFields({
   const [forcePasswordChange, setForcePasswordChange] = useState(() => (
     member ? Boolean(member.passwordMustChange) : canForcePasswordChange(selectedRole)
   ));
+  const [forcePrivacyConsentReset, setForcePrivacyConsentReset] = useState(() => (
+    member ? Boolean(member.privacyConsentResetRequired) : false
+  ));
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -687,6 +693,7 @@ function StaffFormFields({
     setSelectedWorkStoreIdList(member ? getWorkStores(member).map((store) => store.id) : []);
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
+    setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
   }, [member]);
 
   useEffect(() => {
@@ -907,6 +914,28 @@ function StaffFormFields({
           </label>
         ) : (
           <input name="passwordMustChange" type="hidden" value="false" readOnly />
+        )}
+        {!isStoreTerminal ? (
+          <>
+            <div className="staff-payroll-guide">
+              <strong>個人情報文書</strong>
+              <p>
+                文書の新版が有効になった場合は自動的に再同意を求めます。下のチェックは、テストや個別の補足確認が必要なスタッフだけに使います。
+              </p>
+            </div>
+            <label className="staff-checkbox-field">
+              <input
+                name="privacyConsentResetRequired"
+                type="checkbox"
+                value="true"
+                checked={forcePrivacyConsentReset}
+                onChange={(event) => setForcePrivacyConsentReset(event.currentTarget.checked)}
+              />
+              <span>次回 Store 利用時に個人情報文書へ再同意させる</span>
+            </label>
+          </>
+        ) : (
+          <input name="privacyConsentResetRequired" type="hidden" value="false" readOnly />
         )}
         {!isStoreTerminal ? (
           <label>
