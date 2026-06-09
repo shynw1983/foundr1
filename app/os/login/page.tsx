@@ -18,6 +18,7 @@ export default function OsLoginPage() {
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
   const [passwordChangeToken, setPasswordChangeToken] = useState("");
   const [pendingRole, setPendingRole] = useState("");
   const [error, setError] = useState("");
@@ -58,6 +59,7 @@ export default function OsLoginPage() {
       setPendingRole(body.employee?.role ?? "");
       setPassword("");
       setNewPassword("");
+      setNewPasswordConfirmation("");
       setMode("initialChange");
       setIsSubmitting(false);
       setNotice("初期パスワードを確認しました。続けて新しいパスワードを設定してください。");
@@ -71,12 +73,18 @@ export default function OsLoginPage() {
     event.preventDefault();
     setError("");
     setNotice("");
+
+    if (!newPassword || newPassword !== newPasswordConfirmation) {
+      setError("新しいパスワードと確認用パスワードが一致しません。");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const response = await fetch("/api/auth/change-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: passwordChangeToken, newPassword })
+      body: JSON.stringify({ token: passwordChangeToken, newPassword, newPasswordConfirmation })
     });
 
     if (!response.ok) {
@@ -94,12 +102,18 @@ export default function OsLoginPage() {
     event.preventDefault();
     setError("");
     setNotice("");
+
+    if (!newPassword || newPassword !== newPasswordConfirmation) {
+      setError("新しいパスワードと確認用パスワードが一致しません。");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const response = await fetch("/api/auth/reset-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loginId, email: resetEmail, newPassword })
+      body: JSON.stringify({ loginId, email: resetEmail, newPassword, newPasswordConfirmation })
     });
 
     if (!response.ok) {
@@ -111,6 +125,7 @@ export default function OsLoginPage() {
 
     setPassword("");
     setNewPassword("");
+    setNewPasswordConfirmation("");
     setResetEmail("");
     setMode("login");
     setIsSubmitting(false);
@@ -165,6 +180,7 @@ export default function OsLoginPage() {
                 setNotice("");
                 setPassword("");
                 setNewPassword("");
+                setNewPasswordConfirmation("");
                 setMode("forgot");
               }}
             >
@@ -184,6 +200,15 @@ export default function OsLoginPage() {
                 onChange={(event) => setNewPassword(event.target.value)}
               />
             </label>
+            <label>
+              <span>新しいパスワード（確認）</span>
+              <input
+                value={newPasswordConfirmation}
+                type="password"
+                autoComplete="new-password"
+                onChange={(event) => setNewPasswordConfirmation(event.target.value)}
+              />
+            </label>
             {notice ? <div className="login-notice">{notice}</div> : null}
             {error ? <div className="login-error">{error}</div> : null}
             <button className="primary-button" type="submit" disabled={isSubmitting}>
@@ -196,6 +221,7 @@ export default function OsLoginPage() {
                 setMode("login");
                 setPasswordChangeToken("");
                 setNewPassword("");
+                setNewPasswordConfirmation("");
                 setError("");
                 setNotice("");
               }}
@@ -233,6 +259,15 @@ export default function OsLoginPage() {
                 onChange={(event) => setNewPassword(event.target.value)}
               />
             </label>
+            <label>
+              <span>新しいパスワード（確認）</span>
+              <input
+                value={newPasswordConfirmation}
+                type="password"
+                autoComplete="new-password"
+                onChange={(event) => setNewPasswordConfirmation(event.target.value)}
+              />
+            </label>
             <p className="login-help">登録メールがないアカウントは、管理者に初期パスワードの再発行を依頼してください。</p>
             {notice ? <div className="login-notice">{notice}</div> : null}
             {error ? <div className="login-error">{error}</div> : null}
@@ -245,6 +280,7 @@ export default function OsLoginPage() {
               onClick={() => {
                 setMode("login");
                 setNewPassword("");
+                setNewPasswordConfirmation("");
                 setResetEmail("");
                 setError("");
                 setNotice("");

@@ -16,13 +16,18 @@ type EmployeeRow = {
 };
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { token?: string; newPassword?: string };
+  const body = await request.json().catch(() => ({})) as { token?: string; newPassword?: string; newPasswordConfirmation?: string };
   const token = String(body.token ?? "");
   const newPassword = String(body.newPassword ?? "");
+  const newPasswordConfirmation = String(body.newPasswordConfirmation ?? "");
   const action = readPasswordActionToken(token, "initial_change");
 
   if (!action) {
     return Response.json({ error: "パスワード変更の有効期限が切れました。もう一度ログインしてください。" }, { status: 401 });
+  }
+
+  if (!newPassword || newPassword !== newPasswordConfirmation) {
+    return Response.json({ error: "新しいパスワードと確認用パスワードが一致しません。" }, { status: 400 });
   }
 
   const passwordError = validatePasswordStrength(newPassword);

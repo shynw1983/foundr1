@@ -45,13 +45,18 @@ function checkResetRateLimit(key: string) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { loginId?: string; email?: string; newPassword?: string };
+  const body = await request.json().catch(() => ({})) as { loginId?: string; email?: string; newPassword?: string; newPasswordConfirmation?: string };
   const loginId = String(body.loginId ?? "").trim();
   const email = String(body.email ?? "").trim().toLowerCase();
   const newPassword = String(body.newPassword ?? "");
+  const newPasswordConfirmation = String(body.newPasswordConfirmation ?? "");
 
-  if (!loginId || !email || !newPassword) {
-    return Response.json({ error: "ログインID、登録メールアドレス、新しいパスワードを入力してください。" }, { status: 400 });
+  if (!loginId || !email || !newPassword || !newPasswordConfirmation) {
+    return Response.json({ error: "ログインID、登録メールアドレス、新しいパスワード、確認用パスワードを入力してください。" }, { status: 400 });
+  }
+
+  if (newPassword !== newPasswordConfirmation) {
+    return Response.json({ error: "新しいパスワードと確認用パスワードが一致しません。" }, { status: 400 });
   }
 
   const rateLimitKey = getResetRateLimitKey(request, loginId);
