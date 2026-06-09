@@ -9,7 +9,7 @@ type VoucherUsageType = "unclassified" | "shiire" | "keihi";
 type VoucherPaymentType = "company" | "reimbursement";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
-const maxReceiptPdfSizeBytes = 20 * 1024 * 1024;
+const maxReceiptPdfSizeBytes = 50 * 1024 * 1024;
 const managerRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 
 export async function GET() {

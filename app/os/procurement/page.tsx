@@ -139,7 +139,7 @@ const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
 const purchaseQuantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 const procurementOrderRenderBatchSize = 20;
 const maxReceiptUploadBytes = 4 * 1024 * 1024;
-const maxReceiptPdfUploadBytes = 20 * 1024 * 1024;
+const maxReceiptPdfUploadBytes = 50 * 1024 * 1024;
 const receiptCompressionTargetBytes = 2 * 1024 * 1024;
 const receiptCompressionEdges = [1800, 1400, 1100];
 const receiptCompressionQualities = [0.82, 0.72, 0.62];
@@ -830,7 +830,7 @@ export default function ProcurementPage() {
         const maxBytes = isPdfReceiptFile(uploadFile) ? maxReceiptPdfUploadBytes : maxReceiptUploadBytes;
         if (uploadFile.size > maxBytes) {
           if (isPdfReceiptFile(uploadFile)) {
-            throw new Error("レシートPDFは20MB以下にしてください。");
+            throw new Error("レシートPDFは50MB以下にしてください。");
           }
           throw new Error("レシート写真を自動圧縮しても4MBを超えています。少し離れて全体を撮り直してください。");
         }

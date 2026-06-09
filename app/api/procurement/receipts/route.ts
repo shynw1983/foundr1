@@ -6,7 +6,7 @@ import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/recei
 import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
-const maxReceiptPdfSizeBytes = 20 * 1024 * 1024;
+const maxReceiptPdfSizeBytes = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();

@@ -6,7 +6,7 @@ import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/recei
 import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
-const maxReceiptPdfSizeBytes = 20 * 1024 * 1024;
+const maxReceiptPdfSizeBytes = 50 * 1024 * 1024;
 const expenseEditRoles = new Set(["owner", "manager"]);
 
 export async function GET(request: Request) {
