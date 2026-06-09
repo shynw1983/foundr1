@@ -566,7 +566,9 @@ export default function StoreTimecardPage() {
                   <span className="timecard-employee-avatar">{employee.name.slice(0, 1)}</span>
                   <span>
                     <strong>{employee.name}</strong>
-                    <small>{employeeStatus}{!isStoreTerminal && latestPunch ? `・${formatJstDateTime(latestPunch.punchedAt)}` : ""}</small>
+                    <small className={`timecard-employee-status is-${employeeState}`}>
+                      {employeeStatus}{!isStoreTerminal && latestPunch ? `・${formatJstDateTime(latestPunch.punchedAt)}` : ""}
+                    </small>
                   </span>
                 </button>
               );
