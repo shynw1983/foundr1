@@ -20707,6 +20707,185 @@ body :where(
   text-decoration: underline;
 }
 
+.privacy-consent-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  background: #f4f7fb;
+}
+
+.privacy-consent-panel {
+  display: grid;
+  gap: 18px;
+  width: min(980px, 100%);
+  margin: auto;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.privacy-consent-heading {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.privacy-consent-heading .brand-mark {
+  flex: 0 0 auto;
+  color: white;
+}
+
+.privacy-consent-heading h1,
+.privacy-consent-heading p {
+  margin: 0;
+}
+
+.privacy-consent-heading h1 {
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: 0;
+}
+
+.privacy-consent-heading p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.privacy-consent-loading,
+.privacy-consent-summary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.privacy-consent-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.privacy-consent-list {
+  display: grid;
+  gap: 12px;
+}
+
+.privacy-consent-document {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.privacy-consent-document-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.privacy-consent-document-header span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.privacy-consent-document-header strong {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.privacy-consent-document-header small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.privacy-consent-document-body {
+  max-height: min(58vh, 640px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.privacy-consent-document-body pre {
+  margin: 0;
+  padding: 16px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.privacy-consent-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.privacy-consent-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+  flex: 0 0 auto;
+}
+
+.privacy-consent-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.privacy-consent-actions .primary-button,
+.privacy-consent-actions .secondary-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+}
+
+@media (max-width: 760px) {
+  .privacy-consent-shell {
+    padding: 12px;
+  }
+
+  .privacy-consent-panel {
+    padding: 16px;
+  }
+
+  .privacy-consent-heading {
+    flex-direction: column;
+  }
+
+  .privacy-consent-document-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .privacy-consent-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1440px) {
   .recommendations-grid {
     grid-template-columns: 1fr;

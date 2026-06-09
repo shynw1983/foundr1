@@ -6,6 +6,7 @@ export type CurrentEmployee = {
   role: string;
   permissions?: string[];
   permittedNavPaths?: string[];
+  pendingPrivacyConsentCount?: number;
 };
 
 let cachedEmployee: CurrentEmployee | null = null;

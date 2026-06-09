@@ -21,50 +21,70 @@ async function normalizeStoreBrands(brandNames: string[]) {
 async function resolveCompanyId(input: {
   name: string;
   legalName?: string;
+  representativeName?: string;
   invoiceRegistrationNumber?: string;
   receiptPurposeText?: string;
   receiptTaxRate?: number;
   address?: string;
   phone?: string;
+  privacyContactName?: string;
+  privacyContactEmail?: string;
+  privacyContactPhone?: string;
 }) {
   const companyName = input.name.trim();
   const legalName = String(input.legalName ?? "").trim();
+  const representativeName = String(input.representativeName ?? "").trim();
   const invoiceRegistrationNumber = String(input.invoiceRegistrationNumber ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(input.receiptPurposeText);
   const receiptTaxRate = normalizeReceiptTaxRate(input.receiptTaxRate);
   const address = String(input.address ?? "").trim();
   const phone = String(input.phone ?? "").trim();
+  const privacyContactName = String(input.privacyContactName ?? "").trim();
+  const privacyContactEmail = String(input.privacyContactEmail ?? "").trim();
+  const privacyContactPhone = String(input.privacyContactPhone ?? "").trim();
   if (!companyName) return null;
 
   const rows = await sql`
     insert into companies (
       name,
       legal_name,
+      representative_name,
       invoice_registration_number,
       receipt_purpose_text,
       receipt_tax_rate,
       address,
       phone,
+      privacy_contact_name,
+      privacy_contact_email,
+      privacy_contact_phone,
       updated_at
     )
     values (
       ${companyName},
       ${legalName || null},
+      ${representativeName || null},
       ${invoiceRegistrationNumber},
       ${receiptPurposeText},
       ${receiptTaxRate},
       ${address},
       ${phone},
+      ${privacyContactName},
+      ${privacyContactEmail},
+      ${privacyContactPhone},
       now()
     )
     on conflict (name)
     do update set
       legal_name = coalesce(nullif(${legalName}, ''), companies.legal_name),
+      representative_name = coalesce(nullif(${representativeName}, ''), companies.representative_name),
       invoice_registration_number = ${invoiceRegistrationNumber},
       receipt_purpose_text = ${receiptPurposeText},
       receipt_tax_rate = ${receiptTaxRate},
       address = ${address},
       phone = ${phone},
+      privacy_contact_name = ${privacyContactName},
+      privacy_contact_email = ${privacyContactEmail},
+      privacy_contact_phone = ${privacyContactPhone},
       updated_at = now()
     returning id
   `;
@@ -274,11 +294,15 @@ export async function POST(request: Request) {
   const customerDisplayNames = normalizeCustomerDisplayNames(formData.get("customerDisplayNames"));
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+  const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
   const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
+  const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
+  const privacyContactEmail = String(formData.get("privacyContactEmail") ?? "").trim();
+  const privacyContactPhone = String(formData.get("privacyContactPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
@@ -301,11 +325,15 @@ export async function POST(request: Request) {
   const companyId = await resolveCompanyId({
     name: companyName,
     legalName: companyLegalName,
+    representativeName: companyRepresentativeName,
     invoiceRegistrationNumber,
     receiptPurposeText,
     receiptTaxRate,
     address: companyAddress,
-    phone: companyPhone
+    phone: companyPhone,
+    privacyContactName,
+    privacyContactEmail,
+    privacyContactPhone
   });
 
   if (!name) {
@@ -418,11 +446,15 @@ export async function PUT(request: Request) {
   const customerDisplayNames = normalizeCustomerDisplayNames(formData.get("customerDisplayNames"));
   const companyName = String(formData.get("companyName") ?? "").trim();
   const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+  const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
   const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
+  const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
+  const privacyContactEmail = String(formData.get("privacyContactEmail") ?? "").trim();
+  const privacyContactPhone = String(formData.get("privacyContactPhone") ?? "").trim();
   const businessHours = serializeBusinessHours(String(formData.get("businessHours") ?? ""));
   const reservationNote = String(formData.get("reservationNote") ?? "").trim();
   const payrollCycleType = normalizePayrollCycleType(String(formData.get("payrollCycleType") ?? ""));
@@ -445,11 +477,15 @@ export async function PUT(request: Request) {
   const companyId = await resolveCompanyId({
     name: companyName,
     legalName: companyLegalName,
+    representativeName: companyRepresentativeName,
     invoiceRegistrationNumber,
     receiptPurposeText,
     receiptTaxRate,
     address: companyAddress,
-    phone: companyPhone
+    phone: companyPhone,
+    privacyContactName,
+    privacyContactEmail,
+    privacyContactPhone
   });
 
   if (!currentName || !nextName) {

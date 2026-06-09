@@ -114,11 +114,15 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           stores.name,
           companies.name as "companyName",
           coalesce(companies.legal_name, '') as "companyLegalName",
+          coalesce(companies.representative_name, '') as "companyRepresentativeName",
           coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
           coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
           coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
           coalesce(companies.address, '') as "companyAddress",
           coalesce(companies.phone, '') as "companyPhone",
+          coalesce(companies.privacy_contact_name, '') as "privacyContactName",
+          coalesce(companies.privacy_contact_email, '') as "privacyContactEmail",
+          coalesce(companies.privacy_contact_phone, '') as "privacyContactPhone",
           stores.owner_name as owner,
           coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
           coalesce(stores.default_procurement_staff_id::text, '') as "defaultProcurementStaffId",
@@ -175,7 +179,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         left join brands on brands.id = store_brands.brand_id
         left join companies on companies.id = stores.company_id
         where (${scope.allStores} or stores.id::text = any(${scope.storeIds}))
-        group by stores.id, companies.name, companies.legal_name, companies.invoice_registration_number, companies.receipt_purpose_text, companies.receipt_tax_rate, companies.address, companies.phone
+        group by stores.id, companies.name, companies.legal_name, companies.representative_name, companies.invoice_registration_number, companies.receipt_purpose_text, companies.receipt_tax_rate, companies.address, companies.phone, companies.privacy_contact_name, companies.privacy_contact_email, companies.privacy_contact_phone
         order by stores.name
       `,
       sql`select name, brand_type as type from brands order by name`,

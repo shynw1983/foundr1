@@ -30,11 +30,15 @@ type StoreItem = {
   name: string;
   companyName?: string;
   companyLegalName?: string;
+  companyRepresentativeName?: string;
   invoiceRegistrationNumber?: string;
   receiptPurposeText?: string;
   receiptTaxRate?: number;
   companyAddress?: string;
   companyPhone?: string;
+  privacyContactName?: string;
+  privacyContactEmail?: string;
+  privacyContactPhone?: string;
   customerDisplayNames?: CustomerDisplayNameSettings;
   owner: string;
   defaultProcurementStaffId?: string;
@@ -203,11 +207,15 @@ export default function StoresPage() {
   const [editingStoreName, setEditingStoreName] = useState("");
   const [editingCompanyName, setEditingCompanyName] = useState("");
   const [editingCompanyLegalName, setEditingCompanyLegalName] = useState("");
+  const [editingCompanyRepresentativeName, setEditingCompanyRepresentativeName] = useState("");
   const [editingInvoiceRegistrationNumber, setEditingInvoiceRegistrationNumber] = useState("");
   const [editingReceiptPurposeText, setEditingReceiptPurposeText] = useState("テイクアウト飲食代");
   const [editingReceiptTaxRate, setEditingReceiptTaxRate] = useState("8");
   const [editingCompanyAddress, setEditingCompanyAddress] = useState("");
   const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
+  const [editingPrivacyContactName, setEditingPrivacyContactName] = useState("");
+  const [editingPrivacyContactEmail, setEditingPrivacyContactEmail] = useState("");
+  const [editingPrivacyContactPhone, setEditingPrivacyContactPhone] = useState("");
   const [editingCustomerDisplayNames, setEditingCustomerDisplayNames] = useState<CustomerDisplayNameSettings>(emptyCustomerDisplayNameSettings);
   const [editingOwner, setEditingOwner] = useState("");
   const [editingDefaultProcurementStaffId, setEditingDefaultProcurementStaffId] = useState("");
@@ -595,11 +603,15 @@ export default function StoresPage() {
     const nextName = String(formData.get("name") ?? "").trim();
     const companyName = String(formData.get("companyName") ?? "").trim();
     const companyLegalName = String(formData.get("companyLegalName") ?? "").trim();
+    const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
     const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
     const receiptPurposeText = String(formData.get("receiptPurposeText") ?? "テイクアウト飲食代").trim() || "テイクアウト飲食代";
     const receiptTaxRate = Number(formData.get("receiptTaxRate") ?? 8) || 8;
     const companyAddress = String(formData.get("companyAddress") ?? "").trim();
     const companyPhone = String(formData.get("companyPhone") ?? "").trim();
+    const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
+    const privacyContactEmail = String(formData.get("privacyContactEmail") ?? "").trim();
+    const privacyContactPhone = String(formData.get("privacyContactPhone") ?? "").trim();
     const owner = String(formData.get("owner") ?? "").trim();
     const defaultProcurementStaffId = String(formData.get("defaultProcurementStaffId") ?? "").trim();
     const reservationNote = String(formData.get("reservationNote") ?? "").trim();
@@ -655,11 +667,15 @@ export default function StoresPage() {
         name: nextName,
         companyName,
         companyLegalName,
+        companyRepresentativeName,
         invoiceRegistrationNumber,
         receiptPurposeText,
         receiptTaxRate,
         companyAddress,
         companyPhone,
+        privacyContactName,
+        privacyContactEmail,
+        privacyContactPhone,
         customerDisplayNames: editingCustomerDisplayNames,
         owner,
         defaultProcurementStaffId,
@@ -686,6 +702,10 @@ export default function StoresPage() {
     setEditingStoreBrands([]);
     setEditingSalesSourceKeys([]);
     setEditingCustomerDisplayNames(emptyCustomerDisplayNameSettings);
+    setEditingCompanyRepresentativeName("");
+    setEditingPrivacyContactName("");
+    setEditingPrivacyContactEmail("");
+    setEditingPrivacyContactPhone("");
     setEditingKomojuEnabled(false);
     setEditingKomojuAccountName("");
     setEditingKomojuSecretKeyEnvName("");
@@ -716,11 +736,15 @@ export default function StoresPage() {
     setEditingStoreName(store.name);
     setEditingCompanyName(store.companyName ?? "");
     setEditingCompanyLegalName(store.companyLegalName ?? "");
+    setEditingCompanyRepresentativeName(store.companyRepresentativeName ?? "");
     setEditingInvoiceRegistrationNumber(store.invoiceRegistrationNumber ?? "");
     setEditingReceiptPurposeText(store.receiptPurposeText ?? "テイクアウト飲食代");
     setEditingReceiptTaxRate(String(store.receiptTaxRate ?? 8));
     setEditingCompanyAddress(store.companyAddress ?? "");
     setEditingCompanyPhone(store.companyPhone ?? "");
+    setEditingPrivacyContactName(store.privacyContactName ?? "");
+    setEditingPrivacyContactEmail(store.privacyContactEmail ?? "");
+    setEditingPrivacyContactPhone(store.privacyContactPhone ?? "");
     setEditingCustomerDisplayNames(normalizeCustomerDisplayNameSettings(store.customerDisplayNames));
     setEditingOwner(store.owner);
     setEditingDefaultProcurementStaffId(store.defaultProcurementStaffId ?? "");
@@ -1015,7 +1039,7 @@ export default function StoresPage() {
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
               <button className={editingStoreTab === "customer" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("customer")}>顧客表示</button>
               <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
-              <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>領収書</button>
+              <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>会社・文書</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
             </div>
             <div className="edit-fields">
@@ -1117,11 +1141,15 @@ export default function StoresPage() {
                   <input type="hidden" name="name" value={editingStoreName} />
                   <input type="hidden" name="companyName" value={editingCompanyName} />
                   <input type="hidden" name="companyLegalName" value={editingCompanyLegalName} />
+                  <input type="hidden" name="companyRepresentativeName" value={editingCompanyRepresentativeName} />
                   <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
                   <input type="hidden" name="receiptPurposeText" value={editingReceiptPurposeText} />
                   <input type="hidden" name="receiptTaxRate" value={editingReceiptTaxRate} />
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
+                  <input type="hidden" name="privacyContactName" value={editingPrivacyContactName} />
+                  <input type="hidden" name="privacyContactEmail" value={editingPrivacyContactEmail} />
+                  <input type="hidden" name="privacyContactPhone" value={editingPrivacyContactPhone} />
                   <input type="hidden" name="customerDisplayNames" value={JSON.stringify(editingCustomerDisplayNames)} />
                   <input type="hidden" name="owner" value={editingOwner} />
                   <input type="hidden" name="defaultProcurementStaffId" value={editingDefaultProcurementStaffId} />
@@ -1256,12 +1284,16 @@ export default function StoresPage() {
               {editingStoreTab === "receipt" ? (
                 <div className="store-payroll-settings">
                   <div className="store-payroll-summary">
-                    <strong>領収書発行情報</strong>
-                    <p>前台の取货号画面からダウンロードされる PDF 領収書に表示する会社情報です。この店舗に紐づく会社情報として保存されます。</p>
+                    <strong>会社情報と個人情報文書</strong>
+                    <p>領収書 PDF と従業員向けの個人情報・マイナンバー取扱文書に表示する会社情報です。この店舗に紐づく会社情報として保存されます。</p>
                   </div>
                   <label>
-                    <span>宛名に表示する会社名</span>
+                    <span>正式会社名</span>
                     <input name="companyLegalName" value={editingCompanyLegalName} onChange={(event) => setEditingCompanyLegalName(event.target.value)} placeholder="例: 株式会社丸九" />
+                  </label>
+                  <label>
+                    <span>代表者名</span>
+                    <input name="companyRepresentativeName" value={editingCompanyRepresentativeName} onChange={(event) => setEditingCompanyRepresentativeName(event.target.value)} placeholder="例: 代表取締役 山田太郎" />
                   </label>
                   <label>
                     <span>インボイス登録番号</span>
@@ -1286,15 +1318,35 @@ export default function StoresPage() {
                     <span>会社電話番号</span>
                     <input name="companyPhone" value={editingCompanyPhone} onChange={(event) => setEditingCompanyPhone(event.target.value)} placeholder="例: 092-000-0000" />
                   </label>
+                  <div className="store-payroll-summary">
+                    <strong>個人情報問い合わせ窓口</strong>
+                    <p>従業員が個人情報・個人番号の取扱いについて問い合わせる窓口です。未設定の場合、確認文書には未設定と表示されます。</p>
+                  </div>
+                  <label>
+                    <span>担当部署・担当者</span>
+                    <input name="privacyContactName" value={editingPrivacyContactName} onChange={(event) => setEditingPrivacyContactName(event.target.value)} placeholder="例: 人事労務担当" />
+                  </label>
+                  <label>
+                    <span>問い合わせメール</span>
+                    <input name="privacyContactEmail" type="email" value={editingPrivacyContactEmail} onChange={(event) => setEditingPrivacyContactEmail(event.target.value)} placeholder="例: hr@example.jp" />
+                  </label>
+                  <label>
+                    <span>問い合わせ電話番号</span>
+                    <input name="privacyContactPhone" value={editingPrivacyContactPhone} onChange={(event) => setEditingPrivacyContactPhone(event.target.value)} placeholder="例: 092-000-0000" />
+                  </label>
                 </div>
               ) : (
                 <>
                   <input type="hidden" name="companyLegalName" value={editingCompanyLegalName} />
+                  <input type="hidden" name="companyRepresentativeName" value={editingCompanyRepresentativeName} />
                   <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
                   <input type="hidden" name="receiptPurposeText" value={editingReceiptPurposeText} />
                   <input type="hidden" name="receiptTaxRate" value={editingReceiptTaxRate} />
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
+                  <input type="hidden" name="privacyContactName" value={editingPrivacyContactName} />
+                  <input type="hidden" name="privacyContactEmail" value={editingPrivacyContactEmail} />
+                  <input type="hidden" name="privacyContactPhone" value={editingPrivacyContactPhone} />
                 </>
               )}
               {editingStoreTab === "payroll" ? (

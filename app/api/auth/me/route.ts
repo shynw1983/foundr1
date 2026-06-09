@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { getPendingPrivacyConsents } from "../../../../lib/privacy-consents";
 import { getNavPathsForPermissions, getPermissionsForRole } from "../../../../lib/role-permissions";
 
 export async function GET() {
@@ -22,6 +23,7 @@ export async function GET() {
     from employees
     where id = ${session.id}
   `;
+  const pendingPrivacyConsents = await getPendingPrivacyConsents(session);
 
   return Response.json({
     employee: {
@@ -32,6 +34,7 @@ export async function GET() {
       permissions,
       permittedNavPaths: getNavPathsForPermissions(permissions),
       isTimecardEmployee: rows[0]?.isTimecardEmployee === true,
+      pendingPrivacyConsentCount: pendingPrivacyConsents.length,
       uiPreferences: rows[0]?.uiPreferences ?? {}
     }
   });

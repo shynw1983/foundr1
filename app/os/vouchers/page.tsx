@@ -120,6 +120,8 @@ type VoucherUploadProgress = {
   phase: string;
 };
 
+type VoucherPendingAction = "update" | "confirm" | "delete";
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "証憑管理", href: "/os/vouchers", icon: ReceiptText },
@@ -192,6 +194,7 @@ export default function VouchersPage() {
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
   const [previewVoucher, setPreviewVoucher] = useState<VoucherRecord | null>(null);
+  const [pendingActions, setPendingActions] = useState<Record<string, VoucherPendingAction>>({});
 
   useEffect(() => {
     void loadVouchers();
@@ -298,30 +301,39 @@ export default function VouchersPage() {
   }
 
   async function updateVoucher(voucher: VoucherRecord, next: Partial<VoucherRecord>) {
+    if (pendingActions[voucher.id]) return;
+    setPendingAction(voucher.id, "update");
     const nextVoucher = { ...voucher, ...next };
     setVouchers((current) => current.map((item) => item.id === voucher.id ? nextVoucher : item));
-    if (next.usageType && next.usageType !== voucher.usageType && voucher.sourceType === "voucher" && voucher.status !== "confirmed") {
-      setAccountingDrafts((current) => ({ ...current, [voucher.id]: buildVoucherAccountingDraft(nextVoucher) }));
-    }
-    const response = await fetch("/api/vouchers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: voucher.id,
-        usageType: nextVoucher.usageType,
-        paymentType: nextVoucher.paymentType,
-        reimbursementStatus: nextVoucher.reimbursementStatus
-      })
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setMessage(body.error ?? "証憑を更新できませんでした。");
+    try {
+      if (next.usageType && next.usageType !== voucher.usageType && voucher.sourceType === "voucher" && voucher.status !== "confirmed") {
+        setAccountingDrafts((current) => ({ ...current, [voucher.id]: buildVoucherAccountingDraft(nextVoucher) }));
+      }
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: voucher.id,
+          usageType: nextVoucher.usageType,
+          paymentType: nextVoucher.paymentType,
+          reimbursementStatus: nextVoucher.reimbursementStatus
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "証憑を更新できませんでした。");
+        await loadVouchers();
+        return;
+      }
+      setMessage(next.usageType
+        ? "用途を更新しました。内容を確認してから登録してください。"
+        : "証憑を更新しました。");
+    } catch {
+      setMessage("証憑を更新できませんでした。通信状態を確認してください。");
       await loadVouchers();
-      return;
+    } finally {
+      clearPendingAction(voucher.id);
     }
-    setMessage(next.usageType
-      ? "用途を更新しました。内容を確認してから登録してください。"
-      : "証憑を更新しました。");
   }
 
   function updateAccountingDraft(voucherId: string, next: Partial<VoucherAccountingDraft>) {
@@ -387,56 +399,84 @@ export default function VouchersPage() {
   }
 
   async function confirmVoucherAccounting(voucher: VoucherRecord) {
+    if (pendingActions[voucher.id]) return;
+    setPendingAction(voucher.id, "confirm");
     const draft = accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher);
     const vendorName = draft.brandName
       ? [draft.brandName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ")
       : [draft.companyName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ");
-    const response = await fetch("/api/vouchers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "confirm_accounting",
-        id: voucher.id,
-        usageType: voucher.usageType,
-        paymentType: voucher.paymentType,
-        reimbursementStatus: voucher.reimbursementStatus,
-        lines: draft.lines.map((line) => ({
-          accountTitle: voucher.usageType === "shiire" ? "仕入高" : line.accountTitle,
-          subAccountTitle: line.subAccountTitle,
-          amount: line.amount,
-          taxRate: line.taxRate,
-          taxMode: line.taxMode,
-          taxAmount: line.taxAmount,
-          note: line.note
-        })),
-        vendorName: vendorName || draft.vendorName,
-        companyName: draft.companyName,
-        brandName: draft.brandName,
-        locationName: draft.locationName,
-        transactionDate: draft.transactionDate,
-        transactionTime: draft.transactionTime,
-        note: draft.note
-      })
-    });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setMessage(body.error ?? "証憑を登録できませんでした。");
-      return;
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm_accounting",
+          id: voucher.id,
+          usageType: voucher.usageType,
+          paymentType: voucher.paymentType,
+          reimbursementStatus: voucher.reimbursementStatus,
+          lines: draft.lines.map((line) => ({
+            accountTitle: voucher.usageType === "shiire" ? "仕入高" : line.accountTitle,
+            subAccountTitle: line.subAccountTitle,
+            amount: line.amount,
+            taxRate: line.taxRate,
+            taxMode: line.taxMode,
+            taxAmount: line.taxAmount,
+            note: line.note
+          })),
+          vendorName: vendorName || draft.vendorName,
+          companyName: draft.companyName,
+          brandName: draft.brandName,
+          locationName: draft.locationName,
+          transactionDate: draft.transactionDate,
+          transactionTime: draft.transactionTime,
+          note: draft.note
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "証憑を登録できませんでした。");
+        return;
+      }
+      setMessage(voucher.usageType === "keihi" ? "経費として登録しました。" : "仕入として確認しました。商品候補にも反映されます。");
+      await loadVouchers();
+    } catch {
+      setMessage("証憑を登録できませんでした。通信状態を確認してください。");
+    } finally {
+      clearPendingAction(voucher.id);
     }
-    setMessage(voucher.usageType === "keihi" ? "経費として登録しました。" : "仕入として確認しました。商品候補にも反映されます。");
-    await loadVouchers();
   }
 
   async function deleteVoucher(voucher: VoucherRecord) {
+    if (pendingActions[voucher.id]) return;
     if (!confirm("この証憑を削除しますか？")) return;
-    const response = await fetch(`/api/vouchers?id=${encodeURIComponent(voucher.id)}`, { method: "DELETE" });
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setMessage(body.error ?? "証憑を削除できませんでした。");
-      return;
+    setPendingAction(voucher.id, "delete");
+    try {
+      const response = await fetch(`/api/vouchers?id=${encodeURIComponent(voucher.id)}`, { method: "DELETE" });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "証憑を削除できませんでした。");
+        return;
+      }
+      setVouchers((current) => current.filter((item) => item.id !== voucher.id));
+      setMessage("証憑を削除しました。");
+    } catch {
+      setMessage("証憑を削除できませんでした。通信状態を確認してください。");
+    } finally {
+      clearPendingAction(voucher.id);
     }
-    setVouchers((current) => current.filter((item) => item.id !== voucher.id));
-    setMessage("証憑を削除しました。");
+  }
+
+  function setPendingAction(voucherId: string, action: VoucherPendingAction) {
+    setPendingActions((current) => ({ ...current, [voucherId]: action }));
+  }
+
+  function clearPendingAction(voucherId: string) {
+    setPendingActions((current) => {
+      const next = { ...current };
+      delete next[voucherId];
+      return next;
+    });
   }
 
   return (
@@ -525,6 +565,8 @@ export default function VouchersPage() {
             {sortedVouchers.map((voucher) => {
               const isConfirmed = voucher.status === "confirmed";
               const isExpanded = !isConfirmed || expandedVoucherIds[voucher.id];
+              const pendingAction = pendingActions[voucher.id];
+              const isVoucherBusy = Boolean(pendingAction);
               return (
                 <article className={`voucher-row ${isConfirmed && !isExpanded ? "is-collapsed" : ""}`} key={voucher.id}>
                   <div className="voucher-row-main">
@@ -565,6 +607,7 @@ export default function VouchersPage() {
                           <span>用途</span>
                           <select
                             value={voucher.usageType}
+                            disabled={isVoucherBusy}
                             onChange={(event) => void updateVoucher(voucher, { usageType: event.target.value as VoucherUsageType })}
                           >
                             <option value="unclassified">未分類</option>
@@ -576,6 +619,7 @@ export default function VouchersPage() {
                           <span>支払</span>
                           <select
                             value={voucher.paymentType}
+                            disabled={isVoucherBusy}
                             onChange={(event) => {
                               const nextPaymentType = event.target.value as VoucherPaymentType;
                               void updateVoucher(voucher, {
@@ -593,6 +637,7 @@ export default function VouchersPage() {
                             <span>精算</span>
                             <select
                               value={voucher.reimbursementStatus}
+                              disabled={isVoucherBusy}
                               onChange={(event) => void updateVoucher(voucher, { reimbursementStatus: event.target.value as VoucherReimbursementStatus })}
                             >
                               <option value="pending">精算待ち</option>
@@ -608,7 +653,9 @@ export default function VouchersPage() {
                         <button className="text-button voucher-preview-open" type="button" onClick={() => setPreviewVoucher(voucher)}>証憑を見る</button>
                         <a className="text-button voucher-preview-link" href={voucher.receiptPhotoUrl} target="_blank" rel="noreferrer">証憑を見る</a>
                         {voucher.canDelete ? (
-                          <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)}>削除</button>
+                          <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)} disabled={isVoucherBusy}>
+                            {pendingAction === "delete" ? "削除中..." : "削除"}
+                          </button>
                         ) : null}
                       </div>
                       {voucher.sourceType === "voucher" && voucher.status !== "confirmed" && voucher.status !== "failed" ? (
@@ -616,6 +663,7 @@ export default function VouchersPage() {
                           voucher={voucher}
                           draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
                           validation={validateVoucherAccounting(voucher, accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher))}
+                          isSaving={pendingAction === "confirm"}
                           onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
                           onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
                           onAddLine={() => addAccountingLine(voucher.id)}
@@ -698,6 +746,7 @@ function VoucherAccountingEditor({
   voucher,
   draft,
   validation,
+  isSaving,
   onDraftChange,
   onLineChange,
   onAddLine,
@@ -707,6 +756,7 @@ function VoucherAccountingEditor({
   voucher: VoucherRecord;
   draft: VoucherAccountingDraft;
   validation: VoucherAccountingValidation;
+  isSaving: boolean;
   onDraftChange: (next: Partial<VoucherAccountingDraft>) => void;
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
   onAddLine: () => void;
@@ -718,32 +768,32 @@ function VoucherAccountingEditor({
     <div className="receipt-confirm-form voucher-accounting-form">
       <label>
         <span>会社名</span>
-        <input value={draft.companyName} onChange={(event) => onDraftChange({ companyName: event.target.value })} placeholder="例: 株式会社G-7スーパーマート" />
+        <input value={draft.companyName} onChange={(event) => onDraftChange({ companyName: event.target.value })} placeholder="例: 株式会社G-7スーパーマート" disabled={isSaving} />
       </label>
       <label>
         <span>ブランド名</span>
-        <input value={draft.brandName} onChange={(event) => onDraftChange({ brandName: event.target.value })} placeholder="例: 業務スーパー" />
+        <input value={draft.brandName} onChange={(event) => onDraftChange({ brandName: event.target.value })} placeholder="例: 業務スーパー" disabled={isSaving} />
       </label>
       <label>
         <span>店舗名</span>
-        <input value={draft.locationName} onChange={(event) => onDraftChange({ locationName: event.target.value })} placeholder="例: 春吉店" />
+        <input value={draft.locationName} onChange={(event) => onDraftChange({ locationName: event.target.value })} placeholder="例: 春吉店" disabled={isSaving} />
       </label>
       <label>
         <span>日付</span>
-        <input type="date" value={draft.transactionDate} onChange={(event) => onDraftChange({ transactionDate: event.target.value })} />
+        <input type="date" value={draft.transactionDate} onChange={(event) => onDraftChange({ transactionDate: event.target.value })} disabled={isSaving} />
       </label>
       <label>
         <span>時刻</span>
-        <input type="time" value={draft.transactionTime} onChange={(event) => onDraftChange({ transactionTime: event.target.value })} />
+        <input type="time" value={draft.transactionTime} onChange={(event) => onDraftChange({ transactionTime: event.target.value })} disabled={isSaving} />
       </label>
       <label className="receipt-note-field">
         <span>備考</span>
-        <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" />
+        <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" disabled={isSaving} />
       </label>
       <div className="receipt-line-editor">
         <div className="receipt-line-editor-title">
           <span>{isShiire ? "仕入会計明細" : "Money Forward式 会計明細"}</span>
-          <button className="secondary-button" type="button" onClick={onAddLine}>
+          <button className="secondary-button" type="button" onClick={onAddLine} disabled={isSaving}>
             <Plus size={16} />
             明細を追加
           </button>
@@ -755,45 +805,45 @@ function VoucherAccountingEditor({
               {isShiire ? (
                 <input value="仕入高" readOnly />
               ) : (
-                <select value={line.accountTitle} onChange={(event) => onLineChange(line.id, { accountTitle: event.target.value })}>
+                <select value={line.accountTitle} onChange={(event) => onLineChange(line.id, { accountTitle: event.target.value })} disabled={isSaving}>
                   {expenseAccountTitleOptions.map((option) => <option value={option} key={option}>{option}</option>)}
                 </select>
               )}
             </label>
             <label>
               <span>補助科目</span>
-              <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} />
+              <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} disabled={isSaving} />
             </label>
             <label>
               <span>金額</span>
-              <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} />
+              <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} disabled={isSaving} />
             </label>
             <label>
               <span>税率</span>
-              <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })}>
+              <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })} disabled={isSaving}>
                 {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
               </select>
             </label>
             <label>
               <span>税区分</span>
-              <select value={line.taxMode} onChange={(event) => onLineChange(line.id, { taxMode: event.target.value })}>
+              <select value={line.taxMode} onChange={(event) => onLineChange(line.id, { taxMode: event.target.value })} disabled={isSaving}>
                 {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
               </select>
             </label>
             <label>
               <span>消費税</span>
-              <input type="number" min="0" step="1" value={line.taxAmount} onChange={(event) => onLineChange(line.id, { taxAmount: event.target.value })} />
+              <input type="number" min="0" step="1" value={line.taxAmount} onChange={(event) => onLineChange(line.id, { taxAmount: event.target.value })} disabled={isSaving} />
             </label>
             <label className="receipt-line-note">
               <span>明細メモ</span>
-              <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} />
+              <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} disabled={isSaving} />
             </label>
             <div className="receipt-line-ocr-meta">
               <span>数量 {line.quantity || "-"}</span>
               <span>単位 {line.unit || "-"}</span>
               <span>単価 {line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}</span>
             </div>
-            <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={draft.lines.length <= 1}>
+            <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
               <Trash2 size={16} />
               削除
             </button>
@@ -818,8 +868,8 @@ function VoucherAccountingEditor({
           ) : null}
         </div>
       </div>
-      <button className="primary-button" type="button" onClick={onConfirm} disabled={voucher.usageType === "unclassified"}>
-        {voucher.usageType === "unclassified" ? "用途を選択してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
+      <button className="primary-button" type="button" onClick={onConfirm} disabled={isSaving || voucher.usageType === "unclassified"}>
+        {isSaving ? "登録中..." : voucher.usageType === "unclassified" ? "用途を選択してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
       </button>
     </div>
   );

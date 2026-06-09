@@ -42,18 +42,26 @@ create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   legal_name text,
+  representative_name text,
   invoice_registration_number text,
   receipt_purpose_text text not null default 'テイクアウト飲食代',
   receipt_tax_rate numeric(5, 2) not null default 8,
   address text,
   phone text,
+  privacy_contact_name text,
+  privacy_contact_email text,
+  privacy_contact_phone text,
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table companies add column if not exists representative_name text;
 alter table companies add column if not exists receipt_purpose_text text not null default 'テイクアウト飲食代';
 alter table companies add column if not exists receipt_tax_rate numeric(5, 2) not null default 8;
+alter table companies add column if not exists privacy_contact_name text;
+alter table companies add column if not exists privacy_contact_email text;
+alter table companies add column if not exists privacy_contact_phone text;
 
 alter table stores drop constraint if exists stores_company_id_fkey;
 alter table stores
@@ -406,6 +414,47 @@ create table if not exists payroll_statutory_alert_dismissals (
 
 create index if not exists payroll_statutory_alert_dismissals_lookup_idx
   on payroll_statutory_alert_dismissals(alert_key, target_year, store_id);
+
+create table if not exists privacy_documents (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  version text not null,
+  title text not null default '個人情報および個人番号の取扱いに関する通知書・同意書',
+  body text not null default '',
+  effective_date date not null default current_date,
+  is_active boolean not null default true,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (company_id, version)
+);
+
+create unique index if not exists privacy_documents_one_active_per_company_idx
+  on privacy_documents(company_id)
+  where is_active;
+
+create table if not exists privacy_consents (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  company_id uuid not null references companies(id) on delete cascade,
+  document_id uuid not null references privacy_documents(id) on delete restrict,
+  document_version text not null,
+  employee_name_snapshot text not null default '',
+  agreed_at timestamptz not null default now(),
+  ip_address text,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  unique (employee_id, company_id, document_id)
+);
+
+create index if not exists privacy_consents_employee_company_idx
+  on privacy_consents(employee_id, company_id, agreed_at desc);
+
+insert into privacy_documents (company_id, version, body)
+select companies.id, 'v1.0', ''
+from companies
+where companies.status = 'active'
+on conflict do nothing;
 
 insert into employee_work_stores (employee_id, store_id)
 select distinct employee_id, store_id
