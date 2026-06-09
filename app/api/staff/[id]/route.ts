@@ -21,6 +21,7 @@ type StaffPayload = {
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
+  passwordMustChange?: boolean;
   role?: string;
   staffCategory?: string;
   payrollSubject?: string;
@@ -179,7 +180,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const { id } = await context.params;
   const targetRows = await sql`
-    select role
+    select role, coalesce(password_must_change, false) as "passwordMustChange"
     from employees
     where id = ${id}
       and (
@@ -201,6 +202,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     limit 1
   `;
   const targetRole = String(targetRows[0]?.role ?? "");
+  const currentPasswordMustChange = targetRows[0]?.passwordMustChange === true;
   if (!targetRole || !canManageTargetRole(access, targetRole)) {
     return Response.json({ error: "このスタッフを編集する権限がありません。" }, { status: 403 });
   }
@@ -241,7 +243,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
   const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
-  const passwordMustChange = shouldRequirePasswordChangeForRole(role);
+  const passwordMustChange = shouldRequirePasswordChangeForRole(role) && (
+    typeof body.passwordMustChange === "boolean"
+      ? body.passwordMustChange
+      : password
+        ? true
+        : currentPasswordMustChange
+  );
 
   if (!name || !loginId) {
     return Response.json({ error: "氏名とログインIDを入力してください。" }, { status: 400 });
@@ -281,7 +289,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           status = ${status},
           password_hash = ${hashPassword(password)},
           password_must_change = ${passwordMustChange},
-          password_changed_at = null,
+          password_changed_at = case when ${passwordMustChange} then null else password_changed_at end,
           session_version = session_version + 1,
           updated_at = now()
       where id = ${id}
@@ -303,7 +311,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           staff_category = ${effectiveStaffCategory},
           payroll_subject = ${effectivePayrollSubject},
           status = ${status},
-          password_must_change = case when ${passwordMustChange} then password_must_change else false end,
+          password_must_change = ${passwordMustChange},
+          password_changed_at = case when ${passwordMustChange} then null else password_changed_at end,
           session_version = session_version + 1,
           updated_at = now()
       where id = ${id}

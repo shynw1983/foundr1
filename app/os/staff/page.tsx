@@ -81,6 +81,7 @@ type StaffMember = {
   isForeignNational?: boolean | null;
   larkOpenId?: string | null;
   larkUserId?: string | null;
+  passwordMustChange?: boolean | null;
   role: string;
   staffCategory: string;
   payrollSubject: string;
@@ -131,6 +132,12 @@ const roleOptions = [
   { value: "manager", label: "本部マネージャー" },
   { value: "owner", label: "本部オーナー" }
 ];
+
+const passwordChangeEligibleRoles = new Set(["store_owner", "store_manager", "staff"]);
+
+function canForcePasswordChange(role: string) {
+  return passwordChangeEligibleRoles.has(role);
+}
 
 function getAssignableRoleOptions(currentUserRole: string) {
   if (currentUserRole === "owner") return roleOptions;
@@ -321,6 +328,7 @@ export default function StaffPage() {
       larkOpenId: String(formData.get("larkOpenId") ?? ""),
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
+      passwordMustChange: formData.get("passwordMustChange") === "true",
       role: String(formData.get("role") ?? "staff"),
       staffCategory: String(formData.get("staffCategory") ?? "working"),
       payrollSubject,
@@ -545,6 +553,7 @@ export default function StaffPage() {
                         {member.role === "store_terminal"
                           ? `${member.status === "active" ? "有効" : "停止中"} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
                           : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: ${getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`}
+                        {member.passwordMustChange ? " ・ 初回パスワード変更待ち" : ""}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
                     </div>
@@ -666,6 +675,9 @@ function StaffFormFields({
     : assignableRoleOptions;
   const [selectedRole, setSelectedRole] = useState(member?.role ?? "staff");
   const isStoreTerminal = selectedRole === "store_terminal";
+  const [forcePasswordChange, setForcePasswordChange] = useState(() => (
+    member ? Boolean(member.passwordMustChange) : canForcePasswordChange(selectedRole)
+  ));
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -674,6 +686,7 @@ function StaffFormFields({
   useEffect(() => {
     setSelectedWorkStoreIdList(member ? getWorkStores(member).map((store) => store.id) : []);
     setSelectedRole(member?.role ?? "staff");
+    setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
   }, [member]);
 
   useEffect(() => {
@@ -685,6 +698,11 @@ function StaffFormFields({
       if (checked) return current.includes(storeId) ? current : [...current, storeId];
       return current.filter((id) => id !== storeId);
     });
+  }
+
+  function updateSelectedRole(role: string) {
+    setSelectedRole(role);
+    setForcePasswordChange(canForcePasswordChange(role) ? (member ? forcePasswordChange || !canForcePasswordChange(member.role) : true) : false);
   }
 
   async function lookupLarkUser(event: MouseEvent<HTMLButtonElement>) {
@@ -862,12 +880,26 @@ function StaffFormFields({
         </label>
         <label>
           <span>権限</span>
-          <select name="role" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
+          <select name="role" value={selectedRole} onChange={(event) => updateSelectedRole(event.target.value)}>
             {shownRoleOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </label>
+        {canForcePasswordChange(selectedRole) ? (
+          <label className="staff-checkbox-field">
+            <input
+              name="passwordMustChange"
+              type="checkbox"
+              value="true"
+              checked={forcePasswordChange}
+              onChange={(event) => setForcePasswordChange(event.currentTarget.checked)}
+            />
+            <span>次回ログイン時にパスワード変更を強制</span>
+          </label>
+        ) : (
+          <input name="passwordMustChange" type="hidden" value="false" readOnly />
+        )}
         {!isStoreTerminal ? (
           <label>
             <span>スタッフ区分</span>

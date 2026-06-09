@@ -21,6 +21,7 @@ type StaffPayload = {
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
+  passwordMustChange?: boolean;
   role?: string;
   staffCategory?: string;
   payrollSubject?: string;
@@ -190,6 +191,7 @@ export async function GET() {
       employees.is_foreign_national as "isForeignNational",
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
+      coalesce(employees.password_must_change, false) as "passwordMustChange",
       employees.role,
       employees.staff_category as "staffCategory",
       employees.payroll_subject as "payrollSubject",
@@ -399,7 +401,7 @@ export async function POST(request: Request) {
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
   const effectivePayrollSubject = role === "store_terminal" ? "none" : payrollSubject;
-  const passwordMustChange = shouldRequirePasswordChangeForRole(role);
+  const passwordMustChange = shouldRequirePasswordChangeForRole(role) && (body.passwordMustChange ?? true);
 
   if (!name || !loginId || !password) {
     return Response.json({ error: "氏名、ログインID、初期パスワードを入力してください。" }, { status: 400 });
