@@ -480,7 +480,7 @@ export default function VouchersPage() {
   }
 
   return (
-    <main className="shell">
+    <main className={`shell ${previewVoucher ? "has-voucher-preview" : ""}`}>
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
         <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
           <div className="brand-mark">F1</div>
@@ -718,7 +718,8 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
-  const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf") || voucher.receiptPhotoUrl.toLowerCase().includes(".pdf");
+  const isPdf = voucher.uploadedFileName.toLowerCase().endsWith(".pdf");
+  const previewUrl = normalizeVoucherPreviewUrl(voucher.receiptPhotoUrl);
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
       <div className="voucher-preview-panel-head">
@@ -732,14 +733,27 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
       </div>
       <div className="voucher-preview-panel-body">
         {isPdf ? (
-          <iframe src={voucher.receiptPhotoUrl} title={title} />
+          <iframe src={previewUrl} title={title} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={voucher.receiptPhotoUrl} alt={title} />
+          <img src={previewUrl} alt={title} />
         )}
       </div>
     </aside>
   );
+}
+
+function normalizeVoucherPreviewUrl(value: string) {
+  if (!value) return "";
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.hostname.endsWith("foundr1.jp")) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    return url.href;
+  } catch {
+    return value;
+  }
 }
 
 function VoucherAccountingEditor({
