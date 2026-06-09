@@ -593,6 +593,92 @@ alter table employee_work_store_payroll_history
 create unique index if not exists employee_work_store_payroll_history_effective_idx
   on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from, commute_valid_from);
 
+create table if not exists employee_lifecycle_cases (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  case_type text not null,
+  title text not null,
+  status text not null default 'open',
+  store_id uuid references stores(id) on delete set null,
+  started_at date,
+  completed_at timestamptz,
+  created_by uuid references employees(id) on delete set null,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table employee_lifecycle_cases add column if not exists case_type text not null default 'onboarding';
+alter table employee_lifecycle_cases add column if not exists title text not null default '';
+alter table employee_lifecycle_cases add column if not exists status text not null default 'open';
+alter table employee_lifecycle_cases add column if not exists store_id uuid references stores(id) on delete set null;
+alter table employee_lifecycle_cases add column if not exists started_at date;
+alter table employee_lifecycle_cases add column if not exists completed_at timestamptz;
+alter table employee_lifecycle_cases add column if not exists created_by uuid references employees(id) on delete set null;
+alter table employee_lifecycle_cases add column if not exists updated_by uuid references employees(id) on delete set null;
+
+create unique index if not exists employee_lifecycle_cases_open_type_idx
+  on employee_lifecycle_cases(employee_id, case_type)
+  where status <> 'archived';
+
+create table if not exists employee_lifecycle_tasks (
+  id uuid primary key default gen_random_uuid(),
+  lifecycle_case_id uuid not null references employee_lifecycle_cases(id) on delete cascade,
+  task_key text not null,
+  title text not null,
+  description text not null default '',
+  status text not null default 'todo',
+  assignee_employee_id uuid references employees(id) on delete set null,
+  due_date date,
+  completed_at timestamptz,
+  completed_by uuid references employees(id) on delete set null,
+  note text not null default '',
+  required_document_types jsonb not null default '[]'::jsonb,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(lifecycle_case_id, task_key)
+);
+
+alter table employee_lifecycle_tasks add column if not exists task_key text not null default '';
+alter table employee_lifecycle_tasks add column if not exists description text not null default '';
+alter table employee_lifecycle_tasks add column if not exists status text not null default 'todo';
+alter table employee_lifecycle_tasks add column if not exists assignee_employee_id uuid references employees(id) on delete set null;
+alter table employee_lifecycle_tasks add column if not exists due_date date;
+alter table employee_lifecycle_tasks add column if not exists completed_at timestamptz;
+alter table employee_lifecycle_tasks add column if not exists completed_by uuid references employees(id) on delete set null;
+alter table employee_lifecycle_tasks add column if not exists note text not null default '';
+alter table employee_lifecycle_tasks add column if not exists required_document_types jsonb not null default '[]'::jsonb;
+alter table employee_lifecycle_tasks add column if not exists sort_order integer not null default 0;
+
+create index if not exists employee_lifecycle_tasks_case_order_idx
+  on employee_lifecycle_tasks(lifecycle_case_id, sort_order);
+
+create table if not exists employee_lifecycle_documents (
+  id uuid primary key default gen_random_uuid(),
+  lifecycle_case_id uuid not null references employee_lifecycle_cases(id) on delete cascade,
+  lifecycle_task_id uuid references employee_lifecycle_tasks(id) on delete set null,
+  document_type text not null default 'other',
+  file_name text not null default '',
+  file_url text not null,
+  file_size_bytes integer,
+  content_type text,
+  uploaded_by uuid references employees(id) on delete set null,
+  uploaded_at timestamptz not null default now(),
+  note text not null default ''
+);
+
+alter table employee_lifecycle_documents add column if not exists lifecycle_task_id uuid references employee_lifecycle_tasks(id) on delete set null;
+alter table employee_lifecycle_documents add column if not exists document_type text not null default 'other';
+alter table employee_lifecycle_documents add column if not exists file_name text not null default '';
+alter table employee_lifecycle_documents add column if not exists file_size_bytes integer;
+alter table employee_lifecycle_documents add column if not exists content_type text;
+alter table employee_lifecycle_documents add column if not exists uploaded_by uuid references employees(id) on delete set null;
+alter table employee_lifecycle_documents add column if not exists note text not null default '';
+
+create index if not exists employee_lifecycle_documents_case_idx
+  on employee_lifecycle_documents(lifecycle_case_id, uploaded_at desc);
+
 update employee_work_stores
 set
   payroll_enabled = coalesce(latest_settings.payroll_enabled, employee_work_stores.payroll_enabled),

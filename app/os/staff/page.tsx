@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Store, Truck, UserCog } from "lucide-react";
+import { Boxes, ClipboardList, FileText, FileUp, Lightbulb, LogOut, MessageSquareWarning, PackageCheck, Search, Store, Truck, UserCog } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -100,6 +100,44 @@ type StaffMember = {
   canManage?: boolean;
 };
 
+type LifecycleDocument = {
+  id: string;
+  caseId: string;
+  taskId?: string | null;
+  documentType: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedAt: string;
+  note?: string | null;
+};
+
+type LifecycleTask = {
+  id: string;
+  caseId: string;
+  taskKey: string;
+  title: string;
+  description: string;
+  status: string;
+  assigneeEmployeeId?: string | null;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  note: string;
+  requiredDocumentTypes: string[];
+  sortOrder: number;
+};
+
+type LifecycleCase = {
+  id: string;
+  employeeId: string;
+  caseType: "onboarding" | "offboarding";
+  title: string;
+  status: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  tasks: LifecycleTask[];
+  documents: LifecycleDocument[];
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -157,6 +195,18 @@ const payrollSubjectLabels: Record<string, string> = {
   paid: "給与計算あり",
   unpaid: "給与計算なし",
   none: "給与対象外"
+};
+
+const lifecycleStatusLabels: Record<string, string> = {
+  todo: "未着手",
+  doing: "進行中",
+  done: "完了",
+  not_required: "不要"
+};
+
+const lifecycleCaseTypeLabels: Record<string, string> = {
+  onboarding: "入社",
+  offboarding: "退社"
 };
 
 const genderLabels: Record<string, string> = {
@@ -671,7 +721,9 @@ function StaffFormFields({
   const workStoreById = new Map((member ? getWorkStores(member) : []).map((store) => [store.id, store]));
   const isSelf = Boolean(member && member.id === currentUserId);
   const [larkStatus, setLarkStatus] = useState("");
-  const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "other">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "payroll" | "lifecycle" | "other">("basic");
+  const [lifecycleCases, setLifecycleCases] = useState<LifecycleCase[]>([]);
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const assignableRoleOptions = getAssignableRoleOptions(currentUserRole ?? "");
   const shownRoleOptions = member && !assignableRoleOptions.some((option) => option.value === member.role)
     ? [{ value: member.role, label: roleLabels[member.role] ?? member.role }, ...assignableRoleOptions]
@@ -694,11 +746,18 @@ function StaffFormFields({
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
+    setLifecycleCases([]);
+    setLifecycleLoading(false);
   }, [member]);
 
   useEffect(() => {
     if (isStoreTerminal && activeTab === "payroll") setActiveTab("basic");
   }, [activeTab, isStoreTerminal]);
+
+  useEffect(() => {
+    if (!member || activeTab !== "lifecycle") return;
+    void loadLifecycleCases();
+  }, [activeTab, member?.id]);
 
   function toggleWorkStore(storeId: string, checked: boolean) {
     setSelectedWorkStoreIdList((current) => {
@@ -750,6 +809,99 @@ function StaffFormFields({
     if (openIdInput) openIdInput.value = body.openId;
     if (userIdInput) userIdInput.value = body.userId ?? "";
     setLarkStatus(body.testDelivered ? "Lark 連携を確認しました。" : `open_id を取得しました。${body.testError ? ` テスト送信: ${body.testError}` : ""}`);
+  }
+
+  async function loadLifecycleCases() {
+    if (!member) return;
+    setLifecycleLoading(true);
+    onError?.("");
+    const response = await fetch(`/api/staff/${member.id}/lifecycle`);
+    const body = await response.json().catch(() => ({})) as { cases?: LifecycleCase[]; error?: string };
+    setLifecycleLoading(false);
+    if (!response.ok) {
+      onError?.(body.error ?? "手続き情報を読み込めませんでした。");
+      return;
+    }
+    setLifecycleCases(body.cases ?? []);
+  }
+
+  async function createLifecycleCase(caseType: "onboarding" | "offboarding") {
+    if (!member) return;
+    onError?.("");
+    const response = await fetch(`/api/staff/${member.id}/lifecycle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        caseType,
+        storeId: getWorkStores(member)[0]?.id ?? getVisibleStores(member)[0]?.id ?? "",
+        startedAt: caseType === "onboarding"
+          ? toDateInputValue(getWorkStores(member)[0]?.hireDate)
+          : toDateInputValue(getWorkStores(member)[0]?.resignationDate)
+      })
+    });
+    const body = await response.json().catch(() => ({})) as { cases?: LifecycleCase[]; error?: string };
+    if (!response.ok) {
+      onError?.(body.error ?? "手続きを作成できませんでした。");
+      return;
+    }
+    setLifecycleCases(body.cases ?? []);
+    onNotice?.(`${lifecycleCaseTypeLabels[caseType]}手続きを作成しました。`);
+  }
+
+  async function saveLifecycleTask(event: MouseEvent<HTMLButtonElement>, task: LifecycleTask) {
+    if (!member) return;
+    const row = event.currentTarget.closest<HTMLElement>(".staff-lifecycle-task");
+    if (!row) return;
+
+    const status = row.querySelector<HTMLSelectElement>(`select[name="status:${task.id}"]`)?.value ?? task.status;
+    const dueDate = row.querySelector<HTMLInputElement>(`input[name="dueDate:${task.id}"]`)?.value ?? "";
+    const note = row.querySelector<HTMLTextAreaElement>(`textarea[name="note:${task.id}"]`)?.value ?? "";
+
+    onError?.("");
+    const response = await fetch(`/api/staff/${member.id}/lifecycle`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: task.id, status, dueDate, note })
+    });
+    const body = await response.json().catch(() => ({})) as { cases?: LifecycleCase[]; error?: string };
+    if (!response.ok) {
+      onError?.(body.error ?? "タスクを保存できませんでした。");
+      return;
+    }
+    setLifecycleCases(body.cases ?? []);
+    onNotice?.("タスクを保存しました。");
+  }
+
+  async function uploadLifecycleDocument(event: MouseEvent<HTMLButtonElement>, lifecycleCase: LifecycleCase, task: LifecycleTask) {
+    if (!member) return;
+    const row = event.currentTarget.closest<HTMLElement>(".staff-lifecycle-task");
+    const fileInput = row?.querySelector<HTMLInputElement>(`input[name="file:${task.id}"]`);
+    const typeInput = row?.querySelector<HTMLInputElement>(`input[name="documentType:${task.id}"]`);
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      onError?.("アップロードする書類を選択してください。");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("caseId", lifecycleCase.id);
+    formData.set("taskId", task.id);
+    formData.set("documentType", typeInput?.value || task.requiredDocumentTypes[0] || "other");
+    formData.set("file", file);
+
+    onError?.("");
+    const response = await fetch(`/api/staff/${member.id}/lifecycle/documents`, {
+      method: "POST",
+      body: formData
+    });
+    const body = await response.json().catch(() => ({})) as { cases?: LifecycleCase[]; error?: string };
+    if (!response.ok) {
+      onError?.(body.error ?? "書類をアップロードできませんでした。");
+      return;
+    }
+    if (fileInput) fileInput.value = "";
+    setLifecycleCases(body.cases ?? []);
+    onNotice?.("書類を保存しました。");
   }
 
   function setNamedInputValue(form: HTMLFormElement, name: string, value: number | string | null | undefined) {
@@ -830,6 +982,9 @@ function StaffFormFields({
         <button className={activeTab === "basic" ? "is-active" : ""} type="button" onClick={() => setActiveTab("basic")}>基本情報</button>
         {!isStoreTerminal ? (
           <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>勤務・給与情報</button>
+        ) : null}
+        {member && !isStoreTerminal ? (
+          <button className={activeTab === "lifecycle" ? "is-active" : ""} type="button" onClick={() => setActiveTab("lifecycle")}>手続き</button>
         ) : null}
         <button className={activeTab === "other" ? "is-active" : ""} type="button" onClick={() => setActiveTab("other")}>その他</button>
       </div>
@@ -1207,6 +1362,127 @@ function StaffFormFields({
           }) : <p className="empty-state-text">店舗データがありません。</p>}
         </div>
       </section>
+      ) : null}
+
+      {member && !isStoreTerminal ? (
+        <section className={activeTab === "lifecycle" ? "staff-form-pane is-active" : "staff-form-pane"}>
+          <div className="staff-lifecycle-header">
+            <div>
+              <strong>入退社手続き</strong>
+              <p>このスタッフ本人に紐づくチェックリスト、タスク進捗、提出書類を管理します。</p>
+            </div>
+            <div className="staff-lifecycle-actions">
+              <button className="secondary-button" type="button" onClick={() => void createLifecycleCase("onboarding")}>
+                入社手続きを作成
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void createLifecycleCase("offboarding")}>
+                退社手続きを作成
+              </button>
+            </div>
+          </div>
+
+          {lifecycleLoading ? <p className="empty-state-text">手続きを読み込み中...</p> : null}
+          {!lifecycleLoading && !lifecycleCases.length ? (
+            <p className="empty-state-text">まだ手続きがありません。入社または退社手続きを作成してください。</p>
+          ) : null}
+
+          <div className="staff-lifecycle-case-list">
+            {lifecycleCases.map((lifecycleCase) => {
+              const finishedCount = lifecycleCase.tasks.filter((task) => task.status === "done" || task.status === "not_required").length;
+              const totalCount = lifecycleCase.tasks.length;
+              const documentsByTask = new Map<string, LifecycleDocument[]>();
+              for (const document of lifecycleCase.documents) {
+                const taskId = document.taskId ?? "";
+                documentsByTask.set(taskId, [...(documentsByTask.get(taskId) ?? []), document]);
+              }
+              return (
+                <article className="staff-lifecycle-case" key={lifecycleCase.id}>
+                  <header>
+                    <div>
+                      <span className={`status-pill ${lifecycleCase.status === "completed" ? "is-success" : "is-draft"}`}>
+                        {lifecycleCase.status === "completed" ? "完了" : "進行中"}
+                      </span>
+                      <h4>{lifecycleCase.title}</h4>
+                      <small>{lifecycleCaseTypeLabels[lifecycleCase.caseType]} / {finishedCount}/{totalCount} 完了</small>
+                    </div>
+                    <div className="staff-lifecycle-progress" aria-label={`${finishedCount}/${totalCount} 完了`}>
+                      <span style={{ width: `${totalCount ? Math.round((finishedCount / totalCount) * 100) : 0}%` }} />
+                    </div>
+                  </header>
+                  <div className="staff-lifecycle-tasks">
+                    {lifecycleCase.tasks.map((task) => {
+                      const documents = documentsByTask.get(task.id) ?? [];
+                      return (
+                        <article className="staff-lifecycle-task" key={task.id}>
+                          <div className="staff-lifecycle-task-main">
+                            <div>
+                              <strong>{task.title}</strong>
+                              <p>{task.description}</p>
+                              {task.requiredDocumentTypes.length ? (
+                                <div className="staff-lifecycle-doc-tags">
+                                  {task.requiredDocumentTypes.map((type) => <span key={type}>{type}</span>)}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="staff-lifecycle-task-controls">
+                              <label>
+                                <span>状態</span>
+                                <select name={`status:${task.id}`} defaultValue={task.status}>
+                                  <option value="todo">未着手</option>
+                                  <option value="doing">進行中</option>
+                                  <option value="done">完了</option>
+                                  <option value="not_required">不要</option>
+                                </select>
+                              </label>
+                              <label>
+                                <span>期限</span>
+                                <input name={`dueDate:${task.id}`} type="date" defaultValue={toDateInputValue(task.dueDate)} />
+                              </label>
+                            </div>
+                          </div>
+                          <label className="staff-lifecycle-note">
+                            <span>メモ</span>
+                            <textarea name={`note:${task.id}`} defaultValue={task.note ?? ""} placeholder="確認内容、差戻し理由、届出日など" />
+                          </label>
+                          <div className="staff-lifecycle-task-actions">
+                            <button className="secondary-button" type="button" onClick={(event) => void saveLifecycleTask(event, task)}>
+                              タスクを保存
+                            </button>
+                          </div>
+                          <div className="staff-lifecycle-upload">
+                            <label>
+                              <span>書類種別</span>
+                              <input name={`documentType:${task.id}`} defaultValue={task.requiredDocumentTypes[0] ?? ""} placeholder="例: 雇用契約書" />
+                            </label>
+                            <label>
+                              <span>ファイル</span>
+                              <input name={`file:${task.id}`} type="file" accept="image/*,application/pdf" />
+                            </label>
+                            <button className="secondary-button" type="button" onClick={(event) => void uploadLifecycleDocument(event, lifecycleCase, task)}>
+                              <FileUp size={14} />
+                              書類を保存
+                            </button>
+                          </div>
+                          {documents.length ? (
+                            <div className="staff-lifecycle-documents">
+                              {documents.map((document) => (
+                                <a href={document.fileUrl} target="_blank" rel="noreferrer" key={document.id}>
+                                  <FileText size={14} />
+                                  <span>{document.documentType}</span>
+                                  <small>{document.fileName || "書類"}</small>
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
 
       <section className={activeTab === "other" ? "staff-form-pane is-active" : "staff-form-pane"}>
