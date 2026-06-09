@@ -1360,6 +1360,10 @@ create table if not exists receipt_ocr_results (
   store_id uuid references stores(id) on delete set null,
   supplier_name text not null default '',
   receipt_photo_url text not null default '',
+  uploaded_file_name text not null default '',
+  usage_type text not null default 'unclassified',
+  payment_type text not null default 'company',
+  reimbursement_status text not null default 'none',
   status text not null default 'draft',
   model text not null default '',
   raw_result jsonb not null default '{}'::jsonb,
@@ -1385,6 +1389,10 @@ alter table receipt_ocr_results add column if not exists source_id uuid;
 alter table receipt_ocr_results add column if not exists store_id uuid references stores(id) on delete set null;
 alter table receipt_ocr_results add column if not exists supplier_name text not null default '';
 alter table receipt_ocr_results add column if not exists receipt_photo_url text not null default '';
+alter table receipt_ocr_results add column if not exists uploaded_file_name text not null default '';
+alter table receipt_ocr_results add column if not exists usage_type text not null default 'unclassified';
+alter table receipt_ocr_results add column if not exists payment_type text not null default 'company';
+alter table receipt_ocr_results add column if not exists reimbursement_status text not null default 'none';
 alter table receipt_ocr_results add column if not exists status text not null default 'draft';
 alter table receipt_ocr_results add column if not exists model text not null default '';
 alter table receipt_ocr_results add column if not exists raw_result jsonb not null default '{}'::jsonb;
@@ -1403,6 +1411,7 @@ alter table receipt_ocr_results add column if not exists confirmed_by uuid refer
 alter table receipt_ocr_results add column if not exists created_by uuid references employees(id) on delete set null;
 create index if not exists receipt_ocr_results_source_idx on receipt_ocr_results (source_type, source_id);
 create index if not exists receipt_ocr_results_store_date_idx on receipt_ocr_results (store_id, purchase_date desc);
+create index if not exists receipt_ocr_results_usage_idx on receipt_ocr_results (usage_type, payment_type, status, created_at desc);
 
 create table if not exists receipt_ocr_items (
   id uuid primary key default gen_random_uuid(),

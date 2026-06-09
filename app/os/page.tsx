@@ -7,6 +7,7 @@ import {
   MenuSquare,
   MessageSquareWarning,
   PackageCheck,
+  ReceiptText,
   Settings,
   ShoppingCart,
   Store,
@@ -52,6 +53,14 @@ const osModules: OsModule[] = [
     description: "店舗発注から購入、納品、店舗確認、レシート、発注先まで一連の実行を管理します。",
     href: "/os/orders",
     icon: PackageCheck,
+    status: "active",
+    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
+  },
+  {
+    title: "証憑管理",
+    description: "レシート、領収書、PDF、購入記録をまとめてOCRし、仕入・経費・立替の確認に回します。",
+    href: "/os/vouchers",
+    icon: ReceiptText,
     status: "active",
     roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
   },

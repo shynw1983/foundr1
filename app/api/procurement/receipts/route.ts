@@ -82,6 +82,8 @@ export async function POST(request: Request) {
         storeId: String(order.storeId),
         supplierName,
         receiptPhotoUrl: receiptUrl,
+        usageType: "shiire",
+        paymentType: "company",
         createProductCandidates: true
       }, analyzed.result, analyzed.model, session);
     } catch (error) {
@@ -91,7 +93,9 @@ export async function POST(request: Request) {
         sourceId: fulfillmentId,
         storeId: String(order.storeId),
         supplierName,
-        receiptPhotoUrl: receiptUrl
+        receiptPhotoUrl: receiptUrl,
+        usageType: "shiire",
+        paymentType: "company"
       }, null, process.env.OPENAI_RECEIPT_OCR_MODEL || "", session, ocrError);
     }
 

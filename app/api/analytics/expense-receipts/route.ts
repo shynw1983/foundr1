@@ -155,14 +155,18 @@ export async function POST(request: Request) {
         sourceType: "expense",
         storeId,
         supplierName: vendorName,
-        receiptPhotoUrl: receiptUrl
+        receiptPhotoUrl: receiptUrl,
+        usageType: "keihi",
+        paymentType: "company"
       }, analyzed.result, analyzed.model, session);
     } catch (error) {
       ocrError = error instanceof Error ? error.message : "レシート OCR に失敗しました。";
       ocrResultId = await saveReceiptOcrResult({
         sourceType: "expense",
         storeId,
-        receiptPhotoUrl: receiptUrl
+        receiptPhotoUrl: receiptUrl,
+        usageType: "keihi",
+        paymentType: "company"
       }, null, process.env.OPENAI_RECEIPT_OCR_MODEL || "", session, ocrError);
     }
 

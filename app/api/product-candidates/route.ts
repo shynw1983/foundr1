@@ -29,7 +29,10 @@ export async function GET() {
       left join receipt_ocr_items on receipt_ocr_items.id = product_candidates.receipt_ocr_item_id
       left join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
       where product_candidates.status = 'pending'
-        and receipt_ocr_results.source_type = 'procurement'
+        and (
+          receipt_ocr_results.source_type = 'procurement'
+          or receipt_ocr_results.usage_type = 'shiire'
+        )
       order by product_candidates.created_at desc
       limit 100
     `,
@@ -102,7 +105,10 @@ export async function PATCH(request: Request) {
     left join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
     where product_candidates.id::text = ${id}
       and product_candidates.status = 'pending'
-      and receipt_ocr_results.source_type = 'procurement'
+      and (
+        receipt_ocr_results.source_type = 'procurement'
+        or receipt_ocr_results.usage_type = 'shiire'
+      )
     limit 1
   `;
   const candidate = rows[0];

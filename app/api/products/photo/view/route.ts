@@ -94,5 +94,19 @@ async function canReadBlobPath(session: NonNullable<Awaited<ReturnType<typeof re
     return canAccessStore(session, rows[0]?.storeId);
   }
 
+  if (pathname.startsWith("voucher-documents/")) {
+    const encodedPathname = encodeURIComponent(pathname);
+    const rows = await sql`
+      select
+        store_id::text as "storeId",
+        created_by::text as "createdBy"
+      from receipt_ocr_results
+      where receipt_photo_url like ${`%${encodedPathname}%`}
+      limit 1
+    `;
+    if (String(rows[0]?.createdBy ?? "") === session.id) return true;
+    return canAccessStore(session, rows[0]?.storeId);
+  }
+
   return false;
 }

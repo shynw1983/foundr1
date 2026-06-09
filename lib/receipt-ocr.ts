@@ -28,11 +28,14 @@ export type ReceiptOcrResult = {
 };
 
 export type ReceiptOcrSource = {
-  sourceType: "procurement" | "expense";
+  sourceType: "procurement" | "expense" | "voucher";
   sourceId?: string;
   storeId?: string;
   supplierName?: string;
   receiptPhotoUrl: string;
+  uploadedFileName?: string;
+  usageType?: "unclassified" | "shiire" | "keihi";
+  paymentType?: "company" | "reimbursement";
   createProductCandidates?: boolean;
 };
 
@@ -243,6 +246,10 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       store_id,
       supplier_name,
       receipt_photo_url,
+      uploaded_file_name,
+      usage_type,
+      payment_type,
+      reimbursement_status,
       status,
       model,
       raw_result,
@@ -265,6 +272,10 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       ${source.storeId || null},
       ${source.supplierName || ""},
       ${source.receiptPhotoUrl},
+      ${source.uploadedFileName || ""},
+      ${source.usageType ?? (source.sourceType === "procurement" ? "shiire" : source.sourceType === "expense" ? "keihi" : "unclassified")},
+      ${source.paymentType || "company"},
+      ${source.paymentType === "reimbursement" ? "pending" : "none"},
       ${errorMessage ? "failed" : "draft"},
       ${model},
       ${JSON.stringify(result ?? {})}::jsonb,
@@ -288,6 +299,72 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
     await saveReceiptOcrItems(ocrResultId, result.items, source.supplierName || result.storeName, session, Boolean(source.createProductCandidates));
   }
   return ocrResultId;
+}
+
+export async function createProductCandidatesForOcrResult(ocrResultId: string, session: EmployeeSession) {
+  const resultRows = await sql`
+    select
+      coalesce(supplier_name, '') as "supplierName",
+      coalesce(vendor_name, '') as "vendorName"
+    from receipt_ocr_results
+    where id::text = ${ocrResultId}
+    limit 1
+  `;
+  const result = resultRows[0];
+  if (!result) return;
+
+  const supplierName = String(result.supplierName || result.vendorName || "").trim();
+  const itemRows = await sql`
+    select
+      id::text,
+      raw_name as "rawName",
+      normalized_name as "normalizedName",
+      quantity::float,
+      unit,
+      unit_price::float as "unitPrice",
+      tax_rate as "taxRate",
+      tax_mode as "taxMode",
+      category,
+      account_title as "accountTitle",
+      amount::float,
+      match_status as "matchStatus"
+    from receipt_ocr_items
+    where receipt_ocr_result_id::text = ${ocrResultId}
+      and match_status in ('not_applicable', 'unmatched')
+    order by line_index
+  `;
+
+  for (const row of itemRows) {
+    const rawName = String(row.rawName ?? "").trim();
+    if (!rawName) continue;
+    const normalizedName = String(row.normalizedName || normalizeReceiptProductName(rawName));
+    const match = await findProductMatch(supplierName, normalizedName);
+    if (match.productId) {
+      await sql`
+        update receipt_ocr_items
+        set matched_product_id = ${match.productId}, match_status = 'matched', updated_at = now()
+        where id::text = ${String(row.id)}
+      `;
+      continue;
+    }
+
+    await sql`
+      update receipt_ocr_items
+      set match_status = 'unmatched', updated_at = now()
+      where id::text = ${String(row.id)}
+    `;
+    await createProductCandidate(String(row.id), {
+      name: rawName,
+      quantity: row.quantity === null || row.quantity === undefined ? null : Number(row.quantity),
+      unit: String(row.unit ?? ""),
+      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Number(row.unitPrice),
+      taxRate: String(row.taxRate ?? ""),
+      taxMode: String(row.taxMode ?? ""),
+      category: String(row.category ?? ""),
+      accountTitle: String(row.accountTitle ?? ""),
+      amount: row.amount === null || row.amount === undefined ? null : Number(row.amount)
+    }, normalizedName, supplierName, session);
+  }
 }
 
 async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[], supplierName: string, session: EmployeeSession, createProductCandidates: boolean) {
