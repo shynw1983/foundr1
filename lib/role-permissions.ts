@@ -92,7 +92,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "手順書管理",
     description: "店舗運営の手順書管理を表示します。",
     category: "モジュール",
-    defaultRoles: ["owner", "manager"],
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
     navPaths: ["/os/procedures"]
   },

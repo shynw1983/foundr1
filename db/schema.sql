@@ -2823,6 +2823,234 @@ values
   ('テイクアウト袋', 'テイクアウト', 60)
 on conflict (name) do nothing;
 
+insert into procedure_books (
+  title,
+  category,
+  procedure_type,
+  summary,
+  status,
+  published_at,
+  updated_at
+)
+select
+  '社員入社手続きチェックリスト',
+  '人事手続き',
+  'hr_onboarding',
+  '入社前の条件確認、本人情報・必要書類の回収、社会保険・雇用保険・税務、Foundr1 OS設定、初回勤務準備までを確認します。',
+  'published',
+  now(),
+  now()
+where not exists (
+  select 1
+  from procedure_books
+  where title = '社員入社手続きチェックリスト'
+    and category = '人事手続き'
+);
+
+update procedure_books
+set
+  procedure_type = 'hr_onboarding',
+  summary = '入社前の条件確認、本人情報・必要書類の回収、社会保険・雇用保険・税務、Foundr1 OS設定、初回勤務準備までを確認します。',
+  status = 'published',
+  published_at = coalesce(published_at, now()),
+  updated_at = now()
+where title = '社員入社手続きチェックリスト'
+  and category = '人事手続き';
+
+delete from procedure_steps
+where procedure_book_id in (
+  select id
+  from procedure_books
+  where title = '社員入社手続きチェックリスト'
+    and category = '人事手続き'
+);
+
+insert into procedure_steps (procedure_book_id, sort_order, title, instruction, caution, estimated_minutes, updated_at)
+with book as (
+  select id
+  from procedure_books
+  where title = '社員入社手続きチェックリスト'
+    and category = '人事手続き'
+  order by created_at
+  limit 1
+),
+steps(sort_order, title, instruction, caution, estimated_minutes) as (
+  values
+    (
+      10,
+      '採用条件と勤務区分を確定する',
+      '雇用形態、所属店舗、入社日、勤務時間、時給または月給、交通費、雇用保険・社会保険の加入見込み、給与対象区分を確定する。Foundr1 OSのスタッフ管理で同じ内容を登録できる状態にする。',
+      '労働条件通知書または雇用契約書で、勤務場所・業務内容・契約期間・更新有無・賃金・締日支払日・休日・退職事項を本人に明示する。',
+      20
+    ),
+    (
+      20,
+      '本人情報と必要書類を回収する',
+      '氏名、フリガナ、生年月日、住所、連絡先、緊急連絡先、給与振込口座、マイナンバー取扱対象情報、雇用保険被保険者番号、基礎年金番号またはマイナンバー、扶養情報を回収する。中途入社で同年に前職給与がある場合は前職の給与所得の源泉徴収票も回収する。',
+      '個人番号、在留カード、本人確認書類はアクセス権限と保管場所を限定する。Foundr1 OSには必要最小限の業務情報だけを入力する。',
+      30
+    ),
+    (
+      30,
+      '外国籍スタッフの就労可否を確認する',
+      '外国籍の場合は在留カード、在留資格、在留期間、資格外活動許可、在留カード番号を確認し、仕事内容・勤務時間が在留資格の範囲内か確認する。',
+      '在留資格が外交・公用または特別永住者を除き、外国人雇用状況の届出が必要。雇用保険対象者は雇用保険資格取得届の期限と同じ翌月10日まで、雇用保険対象外は原則翌月末までに対応する。',
+      15
+    ),
+    (
+      40,
+      '税務・給与控除の初期設定をする',
+      '給与所得者の扶養控除等申告書を回収し、所得税区分、扶養人数、住民税の普通徴収・特別徴収切替の要否、交通費、給与締日支払日を確認する。Foundr1 OSのスタッフ管理とタイムカード給与設定に反映する。',
+      '扶養控除等申告書がない場合は源泉徴収税額表の乙欄扱いになるため、初回給与前に未回収を残さない。',
+      20
+    ),
+    (
+      50,
+      '社会保険の資格取得を判定・届出する',
+      '健康保険・厚生年金の加入対象か判定し、対象者は健康保険・厚生年金保険被保険者資格取得届を作成する。扶養家族がいる場合は被扶養者異動届も確認する。',
+      '提出期限は事実発生から5日以内。短時間労働者の加入要件、複数事業所勤務、70歳以上被用者、同月得喪に注意する。',
+      25
+    ),
+    (
+      60,
+      '雇用保険の資格取得を判定・届出する',
+      '雇用保険の加入対象か判定し、対象者は雇用保険被保険者資格取得届をハローワークへ提出する。賃金台帳、労働者名簿、出勤簿、雇用契約書など確認資料をそろえる。',
+      '提出期限は被保険者となった日の属する月の翌月10日まで。外国籍スタッフで雇用保険対象者の場合は外国人雇用状況届出もこの届出に含めて確認する。',
+      25
+    ),
+    (
+      70,
+      'Foundr1 OSアカウントと権限を設定する',
+      'スタッフ管理で従業員を作成し、役割、所属店舗、勤務店舗、社員番号、入社日、給与対象区分、雇用形態、時給または月給、保険・税設定を登録する。初回パスワード変更とプライバシー同意が必要な場合は有効にする。',
+      '加盟店オーナー・店長は担当店舗の通常スタッフと店舗Padだけを作成し、本部権限を付与しない。',
+      20
+    ),
+    (
+      80,
+      '初回勤務前の受け入れ準備を完了する',
+      '制服、名札、衛生ルール、勤怠打刻、POS権限、Lark連絡先、研修手順書、初回シフト、緊急時連絡ルートを確認する。初回勤務後に打刻・給与設定・勤務店舗が正しく反映されているか確認する。',
+      '飲食店では食品衛生、アレルゲン、現金・個人情報・会員情報の取扱いを初回勤務前に説明する。',
+      20
+    )
+)
+select book.id, steps.sort_order, steps.title, steps.instruction, steps.caution, steps.estimated_minutes, now()
+from book
+cross join steps;
+
+insert into procedure_books (
+  title,
+  category,
+  procedure_type,
+  summary,
+  status,
+  published_at,
+  updated_at
+)
+select
+  '社員退社手続きチェックリスト',
+  '人事手続き',
+  'hr_offboarding',
+  '退職日確定、最終勤務・貸与物回収、社会保険・雇用保険・税務、Foundr1 OS停止、最終給与までを確認します。',
+  'published',
+  now(),
+  now()
+where not exists (
+  select 1
+  from procedure_books
+  where title = '社員退社手続きチェックリスト'
+    and category = '人事手続き'
+);
+
+update procedure_books
+set
+  procedure_type = 'hr_offboarding',
+  summary = '退職日確定、最終勤務・貸与物回収、社会保険・雇用保険・税務、Foundr1 OS停止、最終給与までを確認します。',
+  status = 'published',
+  published_at = coalesce(published_at, now()),
+  updated_at = now()
+where title = '社員退社手続きチェックリスト'
+  and category = '人事手続き';
+
+delete from procedure_steps
+where procedure_book_id in (
+  select id
+  from procedure_books
+  where title = '社員退社手続きチェックリスト'
+    and category = '人事手続き'
+);
+
+insert into procedure_steps (procedure_book_id, sort_order, title, instruction, caution, estimated_minutes, updated_at)
+with book as (
+  select id
+  from procedure_books
+  where title = '社員退社手続きチェックリスト'
+    and category = '人事手続き'
+  order by created_at
+  limit 1
+),
+steps(sort_order, title, instruction, caution, estimated_minutes) as (
+  values
+    (
+      10,
+      '退職日と退職理由を確定する',
+      '本人の退職申出、合意退職、契約満了、解雇などの区分を確認し、最終出勤日、退職日、有給残、貸与物、最終給与対象期間を確定する。Foundr1 OSのスタッフ管理に退職予定日と理由を記録する。',
+      '雇用保険の離職理由に影響するため、退職願、契約満了通知、解雇予告通知など根拠資料を保管する。',
+      20
+    ),
+    (
+      20,
+      '最終勤務・勤怠・給与データを締める',
+      '最終出勤日の打刻、シフト、休憩、有給、控除、交通費、立替精算、未返却品を確認する。タイムカードと給与設定の退職日、給与対象区分、勤務店舗を更新する。',
+      '退職日以降のシフト投入、打刻、POS担当者選択、発注・購入操作が残らないよう確認する。',
+      25
+    ),
+    (
+      30,
+      '貸与物とアクセス権限を回収・停止する',
+      '制服、名札、鍵、ICカード、店舗Pad、マニュアル、Larkグループ、メール、POS、決済端末、Foundr1 OSアカウントを確認し、最終勤務後に不要な権限を停止する。',
+      '退職前に必要な引き継ぎと連絡先変更を済ませ、個人情報・会員情報・売上情報へ退職者がアクセスできない状態にする。',
+      20
+    ),
+    (
+      40,
+      '社会保険の資格喪失を届出する',
+      '健康保険・厚生年金の対象者は健康保険・厚生年金保険被保険者資格喪失届を作成し、資格確認書など交付物がある場合は回収する。退職による資格喪失日は退職日の翌日として確認する。',
+      '提出期限は事実発生から5日以内。退職日が3月31日の場合、資格喪失日は4月1日になる。',
+      25
+    ),
+    (
+      50,
+      '雇用保険の資格喪失と離職票要否を処理する',
+      '雇用保険対象者は雇用保険被保険者資格喪失届を提出する。本人が離職票を希望する、または不要申出がない場合は雇用保険被保険者離職証明書も作成し、賃金台帳、労働者名簿、出勤簿、退職理由確認資料をそろえる。',
+      '提出期限は被保険者でなくなった事実があった日の翌日から10日以内。離職票不要としても、後日本人から請求があれば作成・交付が必要。',
+      30
+    ),
+    (
+      60,
+      '外国籍スタッフの離職届出を確認する',
+      '外国籍の場合は在留資格、在留期間、在留カード番号を確認し、外国人雇用状況の離職届出を行う。雇用保険対象者は資格喪失届の届出内容で対応し、対象外の場合は様式第3号または外国人雇用状況届出システムで処理する。',
+      '雇用保険対象者は喪失届と同じ翌日から10日以内、雇用保険対象外は原則翌月末までに対応する。',
+      15
+    ),
+    (
+      70,
+      '税務・住民税・退職書類を交付する',
+      '給与所得の源泉徴収票、退職証明書の要否、住民税の特別徴収継続・普通徴収切替、退職所得がある場合の退職所得申告書と退職所得源泉徴収票を確認する。',
+      '給与所得の源泉徴収票は退職者本人に交付する。転職先の年末調整や本人の確定申告で必要になるため、最終給与後に遅れないようにする。',
+      25
+    ),
+    (
+      80,
+      '最終確認と履歴保存を完了する',
+      'Foundr1 OSのスタッフ状態を退職済みまたは停止にし、退職日、退職理由、保険・雇用保険・税務届出の完了日、貸与物回収、最終給与、書類交付を記録する。',
+      '労働者名簿、賃金台帳、出勤簿、雇用契約書、各種申告書は法定保存期間と社内ルールに従って保管する。',
+      20
+    )
+)
+select book.id, steps.sort_order, steps.title, steps.instruction, steps.caution, steps.estimated_minutes, now()
+from book
+cross join steps;
+
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
 create index if not exists idx_purchase_order_supplier_fulfillments_order on purchase_order_supplier_fulfillments(purchase_order_id);

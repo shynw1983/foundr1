@@ -213,7 +213,9 @@ const procedureTypes = [
   { value: "cleaning", label: "清掃" },
   { value: "opening", label: "開店" },
   { value: "closing", label: "閉店" },
-  { value: "equipment", label: "設備操作" }
+  { value: "equipment", label: "設備操作" },
+  { value: "hr_onboarding", label: "入社手続き" },
+  { value: "hr_offboarding", label: "退社手続き" }
 ];
 
 function getProductUsageTypeLabel(value?: string) {

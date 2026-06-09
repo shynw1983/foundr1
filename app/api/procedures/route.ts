@@ -57,7 +57,7 @@ type ProcedureBookPayload = {
   steps?: ProcedureStepPayload[];
 };
 
-const procedureEditorRoles = new Set(["owner", "manager"]);
+const procedureEditorRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 
 function canEditProcedures(session: EmployeeSession) {
   return procedureEditorRoles.has(session.role);
@@ -512,6 +512,21 @@ export async function DELETE(request: Request) {
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "手順書IDが必要です。" }, { status: 400 });
 
+  const scope = await getSessionStoreScope(session);
+  if (!scope.allStores) {
+    const accessRows = await sql`
+      select exists (
+        select 1
+        from procedure_book_stores
+        where procedure_book_id = ${id}
+          and store_id::text = any(${scope.storeIds})
+      ) as "canDelete"
+    `;
+    if (accessRows[0]?.canDelete !== true) {
+      return Response.json({ error: "この手順書を削除する権限がありません。" }, { status: 403 });
+    }
+  }
+
   await sql`delete from procedure_books where id = ${id}`;
   return Response.json({ ok: true });
 }
@@ -525,9 +540,13 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
   const summary = String(body.summary ?? "").trim();
   const status = cleanStatus(body.status);
   const brandId = String(body.brandId ?? "").trim() || null;
-  const storeIds = Array.isArray(body.storeIds)
+  const requestedStoreIds = Array.isArray(body.storeIds)
     ? Array.from(new Set(body.storeIds.map((item) => String(item).trim()).filter(Boolean)))
     : [];
+  const scope = await getSessionStoreScope(session);
+  const storeIds = scope.allStores
+    ? requestedStoreIds
+    : requestedStoreIds.filter((storeId) => scope.storeIds.includes(storeId));
   const variants = Array.isArray(body.variants) && body.variants.length
     ? body.variants
     : [
@@ -539,6 +558,24 @@ async function saveProcedureBook(body: ProcedureBookPayload, session: EmployeeSe
 
   if (!title) {
     throw new Error("手順書名を入力してください。");
+  }
+
+  if (!scope.allStores && !storeIds.length) {
+    throw new Error("店舗権限の手順書は担当店舗を選択してください。");
+  }
+
+  if (id && !scope.allStores) {
+    const accessRows = await sql`
+      select exists (
+        select 1
+        from procedure_book_stores
+        where procedure_book_id = ${id}
+          and store_id::text = any(${scope.storeIds})
+      ) as "canEdit"
+    `;
+    if (accessRows[0]?.canEdit !== true) {
+      throw new Error("この手順書を編集する権限がありません。");
+    }
   }
 
   const rows = id
