@@ -75,6 +75,7 @@ type VoucherAccountingDraft = {
   locationName: string;
   transactionDate: string;
   transactionTime: string;
+  taxMode: string;
   lines: VoucherAccountingLine[];
 };
 
@@ -340,7 +341,18 @@ export default function VouchersPage() {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
       const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
-      return { ...current, [voucherId]: { ...draft, ...next } };
+      const nextDraft = { ...draft, ...next };
+      if ("taxMode" in next) {
+        nextDraft.lines = draft.lines.map((line) => {
+          const amount = Math.round(Number(line.amount || 0));
+          return {
+            ...line,
+            taxMode: nextDraft.taxMode,
+            taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, nextDraft.taxMode))
+          };
+        });
+      }
+      return { ...current, [voucherId]: nextDraft };
     });
   }
 
@@ -355,9 +367,10 @@ export default function VouchersPage() {
           lines: draft.lines.map((line) => {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
-            if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next || "taxMode" in next)) {
+            updated.taxMode = draft.taxMode;
+            if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next)) {
               const amount = Math.round(Number(updated.amount || 0));
-              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, updated.taxMode));
+              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, draft.taxMode));
             }
             return updated;
           })
@@ -374,7 +387,7 @@ export default function VouchersPage() {
         ...current,
         [voucherId]: {
           ...draft,
-          lines: [...draft.lines, buildNewAccountingLine(draft.lines.length)]
+          lines: [...draft.lines, buildNewAccountingLine(draft.lines.length, draft.taxMode)]
         }
       };
     });
@@ -420,7 +433,7 @@ export default function VouchersPage() {
             subAccountTitle: line.subAccountTitle,
             amount: line.amount,
             taxRate: line.taxRate,
-            taxMode: line.taxMode,
+            taxMode: draft.taxMode,
             taxAmount: line.taxAmount,
             note: line.note
           })),
@@ -800,6 +813,12 @@ function VoucherAccountingEditor({
         <span>時刻</span>
         <input type="time" value={draft.transactionTime} onChange={(event) => onDraftChange({ transactionTime: event.target.value })} disabled={isSaving} />
       </label>
+      <label>
+        <span>レシート税区分</span>
+        <select value={draft.taxMode} onChange={(event) => onDraftChange({ taxMode: event.target.value })} disabled={isSaving}>
+          {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+        </select>
+      </label>
       <label className="receipt-note-field">
         <span>備考</span>
         <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" disabled={isSaving} />
@@ -836,12 +855,6 @@ function VoucherAccountingEditor({
               <span>税率</span>
               <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })} disabled={isSaving}>
                 {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>税区分</span>
-              <select value={line.taxMode} onChange={(event) => onLineChange(line.id, { taxMode: event.target.value })} disabled={isSaving}>
-                {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
               </select>
             </label>
             <label>
@@ -890,6 +903,16 @@ function VoucherAccountingEditor({
 }
 
 function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccountingDraft {
+  const lines = buildVoucherAccountingLines(voucher);
+  const taxMode = inferReceiptTaxMode(lines);
+  const normalizedLines = lines.map((line) => {
+    const amount = Math.round(Number(line.amount || 0));
+    return {
+      ...line,
+      taxMode,
+      taxAmount: taxMode === "不明" ? line.taxAmount : String(calculateDraftTaxAmount(amount, line.taxRate, taxMode))
+    };
+  });
   return {
     note: "",
     vendorName: voucher?.vendorName || "",
@@ -898,7 +921,8 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
     locationName: voucher?.locationName || "",
     transactionDate: voucher?.purchaseDate || getCurrentDate(),
     transactionTime: voucher?.purchaseTime || "",
-    lines: buildVoucherAccountingLines(voucher)
+    taxMode,
+    lines: normalizedLines
   };
 }
 
@@ -944,14 +968,14 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   }];
 }
 
-function buildNewAccountingLine(index: number): VoucherAccountingLine {
+function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccountingLine {
   return {
     id: `manual-${Date.now()}-${index}`,
     accountTitle: "雑費",
     subAccountTitle: "",
     amount: "",
     taxRate: "",
-    taxMode: "不明",
+    taxMode,
     taxAmount: "0",
     quantity: "",
     unit: "",
@@ -963,14 +987,10 @@ function buildNewAccountingLine(index: number): VoucherAccountingLine {
 function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccountingDraft): VoucherAccountingValidation {
   const lineAmountTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.amount || 0)), 0);
   const taxTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
-  const expectedTotal = draft.lines.reduce((sum, line) => {
-    const amount = Math.round(Number(line.amount || 0));
-    const taxAmount = Math.round(Number(line.taxAmount || 0));
-    return sum + (line.taxMode === "外税" ? amount + taxAmount : amount);
-  }, 0);
+  const expectedTotal = draft.taxMode === "外税" ? lineAmountTotal + taxTotal : lineAmountTotal;
   const receiptTotal = Math.round(Number(voucher.total || 0));
   const difference = expectedTotal - receiptTotal;
-  const taxIncomplete = draft.lines.some((line) => !line.taxRate || line.taxMode === "不明");
+  const taxIncomplete = !draft.taxMode || draft.taxMode === "不明" || draft.lines.some((line) => !line.taxRate);
   return {
     ok: Math.abs(difference) <= 1 && !taxIncomplete,
     taxIncomplete,
@@ -980,6 +1000,16 @@ function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccount
     expectedTotal,
     difference
   };
+}
+
+function inferReceiptTaxMode(lines: VoucherAccountingLine[]) {
+  const modes = lines
+    .map((line) => normalizeDraftTaxMode(line.taxMode))
+    .filter((mode) => mode === "内税" || mode === "外税");
+  if (!modes.length) return "不明";
+  const uniqueModes = new Set(modes);
+  if (uniqueModes.size === 1) return modes[0] ?? "不明";
+  return "不明";
 }
 
 function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLine[] }) {

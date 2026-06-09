@@ -3847,7 +3847,7 @@ body :where(
 
 .receipt-expense-line {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
   align-items: end;
   gap: 10px;
   padding: 10px;
