@@ -3,9 +3,10 @@ import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-au
 import { sql } from "../../../../lib/db";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/receipt-ocr";
-import { validateImageUpload } from "../../../../lib/upload-security";
+import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
+const maxReceiptPdfSizeBytes = 20 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();
@@ -163,7 +164,7 @@ async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: stri
     throw new Error("レシート写真を選択してください。");
   }
 
-  const extension = validateImageUpload(file, maxReceiptSizeBytes, "レシート写真");
+  const extension = validateReceiptUpload(file, maxReceiptSizeBytes, maxReceiptPdfSizeBytes, "レシート");
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error("Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。");

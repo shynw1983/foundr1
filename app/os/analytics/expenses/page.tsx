@@ -465,7 +465,7 @@ export default function ExpensesPage() {
     try {
       const uploadData = new FormData();
       uploadData.set("storeId", selectedStoreId);
-      uploadData.set("receipt", await compressReceiptImage(file));
+      uploadData.set("receipt", await prepareReceiptUploadFile(file));
       const response = await fetch("/api/analytics/expense-receipts", {
         method: "POST",
         body: uploadData
@@ -714,8 +714,8 @@ export default function ExpensesPage() {
         </div>
         <form className="expense-form" onSubmit={uploadExpenseReceipt}>
           <label>
-            <span>レシート写真</span>
-            <input name="receipt" type="file" accept="image/*" capture="environment" disabled={!canEditExpenseReceipts || isUploadingReceipt} required />
+            <span>レシート写真 / PDF</span>
+            <input name="receipt" type="file" accept="image/*,application/pdf,.pdf" disabled={!canEditExpenseReceipts || isUploadingReceipt} required />
           </label>
           <button className="primary-button" type="submit" disabled={!canEditExpenseReceipts || isUploadingReceipt}>
             {isUploadingReceipt ? "読み取り中..." : "レシートを読み取る"}
@@ -950,6 +950,15 @@ export default function ExpensesPage() {
       </section>
     </AnalyticsShell>
   );
+}
+
+async function prepareReceiptUploadFile(file: File) {
+  if (isPdfReceiptFile(file)) return file;
+  return compressReceiptImage(file);
+}
+
+function isPdfReceiptFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
 async function compressReceiptImage(file: File) {

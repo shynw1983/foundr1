@@ -96,9 +96,7 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
   if (!apiKey) throw new Error("OPENAI_API_KEY が設定されていません。");
 
   const model = process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
-  const mimeType = file.type || "image/jpeg";
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const imageUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+  const fileInput = await buildReceiptFileInput(file);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -142,8 +140,8 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
         {
           role: "user",
           content: [
-            { type: "input_text", text: "Read this receipt and extract store, date, totals, tax, and line items as JSON." },
-            { type: "input_image", image_url: imageUrl, detail: "high" }
+            { type: "input_text", text: fileInput.kind === "pdf" ? "Read every page of this receipt PDF and extract one combined receipt JSON. If the PDF has multiple pages of the same receipt, merge the visible information without duplicating totals." : "Read this receipt and extract store, date, totals, tax, and line items as JSON." },
+            fileInput.content
           ]
         }
       ],
@@ -190,6 +188,51 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
   });
 
   return { result: normalizeReceiptOcrResult(parsed), model };
+}
+
+async function buildReceiptFileInput(file: File): Promise<{
+  kind: "image" | "pdf";
+  content:
+    | { type: "input_image"; image_url: string; detail: "high" }
+    | { type: "input_file"; filename: string; file_data: string };
+}> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const mimeType = getReceiptMimeType(file);
+  const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+  if (mimeType === "application/pdf") {
+    return {
+      kind: "pdf",
+      content: {
+        type: "input_file",
+        filename: sanitizeReceiptFilename(file.name || "receipt.pdf", "receipt.pdf"),
+        file_data: dataUrl
+      }
+    };
+  }
+  return {
+    kind: "image",
+    content: {
+      type: "input_image",
+      image_url: dataUrl,
+      detail: "high"
+    }
+  };
+}
+
+function getReceiptMimeType(file: File) {
+  const type = file.type.toLowerCase();
+  if (type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "application/pdf";
+  return type || "image/jpeg";
+}
+
+function sanitizeReceiptFilename(value: string, fallback: string) {
+  const cleaned = value
+    .normalize("NFKC")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+  return cleaned || fallback;
 }
 
 export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: ReceiptOcrResult | null, model: string, session: EmployeeSession, errorMessage = "") {

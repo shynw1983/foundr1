@@ -139,6 +139,7 @@ const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
 const purchaseQuantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 const procurementOrderRenderBatchSize = 20;
 const maxReceiptUploadBytes = 4 * 1024 * 1024;
+const maxReceiptPdfUploadBytes = 20 * 1024 * 1024;
 const receiptCompressionTargetBytes = 2 * 1024 * 1024;
 const receiptCompressionEdges = [1800, 1400, 1100];
 const receiptCompressionQualities = [0.82, 0.72, 0.62];
@@ -576,6 +577,19 @@ async function uploadProcurementReceipt(orderId: string, supplier: string, file:
   return body.receiptUrl;
 }
 
+function isPdfReceiptFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function isReceiptUploadFile(file: File) {
+  return file.type.startsWith("image/") || isPdfReceiptFile(file);
+}
+
+async function prepareReceiptUploadFile(file: File) {
+  if (isPdfReceiptFile(file)) return file;
+  return compressReceiptImage(file);
+}
+
 async function compressReceiptImage(file: File) {
   if (file.size <= receiptCompressionTargetBytes && file.type === "image/jpeg") return file;
 
@@ -806,18 +820,22 @@ export default function ProcurementPage() {
   }
 
   function uploadReceiptPhoto(orderId: string, supplier: string, file: File) {
-    if (!file.type.startsWith("image/")) {
-      window.alert("画像ファイルを選択してください。");
+    if (!isReceiptUploadFile(file)) {
+      window.alert("画像またはPDFファイルを選択してください。");
       return;
     }
 
-    void compressReceiptImage(file)
-      .then((compressedFile) => {
-        if (compressedFile.size > maxReceiptUploadBytes) {
+    void prepareReceiptUploadFile(file)
+      .then((uploadFile) => {
+        const maxBytes = isPdfReceiptFile(uploadFile) ? maxReceiptPdfUploadBytes : maxReceiptUploadBytes;
+        if (uploadFile.size > maxBytes) {
+          if (isPdfReceiptFile(uploadFile)) {
+            throw new Error("レシートPDFは20MB以下にしてください。");
+          }
           throw new Error("レシート写真を自動圧縮しても4MBを超えています。少し離れて全体を撮り直してください。");
         }
 
-        return uploadProcurementReceipt(orderId, supplier, compressedFile);
+        return uploadProcurementReceipt(orderId, supplier, uploadFile);
       })
       .then((receiptUrl) => {
         setSupplierFulfillments((fulfillments) => {
@@ -833,7 +851,7 @@ export default function ProcurementPage() {
 
           return fulfillments.map((fulfillment, index) => index === existingIndex ? nextFulfillment : fulfillment);
         });
-        showNotice("レシート写真を保存しました。");
+        showNotice("レシートを保存しました。");
       })
       .catch((error: Error) => {
         window.alert(error.message);
@@ -1325,8 +1343,7 @@ export default function ProcurementPage() {
                                 <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
                                   <input
                                     type="file"
-                                    accept="image/*"
-                                    capture="environment"
+                                    accept="image/*,application/pdf,.pdf"
                                     disabled={!canUploadReceipt}
                                     onChange={(event) => {
                                       const file = event.target.files?.[0];
@@ -1334,7 +1351,7 @@ export default function ProcurementPage() {
                                       event.currentTarget.value = "";
                                     }}
                                   />
-                                  <span>{supplierReceipt ? "レシートを差替" : "レシートを撮影"}</span>
+                                  <span>{supplierReceipt ? "レシートを差替" : "レシートをアップロード"}</span>
                                 </label>
                               </div>
                             </div>

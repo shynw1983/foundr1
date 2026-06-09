@@ -503,6 +503,26 @@ function formatQuantity(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
 }
 
+function isPdfReceiptUrl(receiptPhotoUrl: string) {
+  return getReceiptUrlExtension(receiptPhotoUrl) === "pdf";
+}
+
+function getReceiptDownloadName(row: Pick<ReceiptRow, "orderId" | "supplier" | "receiptPhotoUrl">) {
+  return `receipt-${row.orderId}-${row.supplier}.${getReceiptUrlExtension(row.receiptPhotoUrl)}`.replace(/[^\w.-]+/g, "-");
+}
+
+function getReceiptUrlExtension(receiptPhotoUrl: string) {
+  try {
+    const url = new URL(receiptPhotoUrl, "https://foundr1.local");
+    const pathname = url.searchParams.get("pathname") || url.pathname;
+    const match = pathname.match(/\.([a-z0-9]+)$/i);
+    const extension = match ? match[1].toLowerCase() : "jpg";
+    return ["jpg", "jpeg", "png", "webp", "heic", "pdf"].includes(extension) ? extension : "jpg";
+  } catch {
+    return "jpg";
+  }
+}
+
 function HistoryMonthCalendar({
   monthKey,
   startDate,
@@ -1130,7 +1150,7 @@ export default function ProcurementHistoryPage() {
                   </div>
                   <div className="history-owner-actions history-receipt-actions">
                     {row.receiptPhotoUrl ? (
-                      <a className="text-button" href={row.receiptPhotoUrl} download={`receipt-${row.orderId}-${row.supplier}.jpg`}>
+                      <a className="text-button" href={row.receiptPhotoUrl} download={getReceiptDownloadName(row)}>
                         ダウンロード
                       </a>
                     ) : null}
@@ -1161,10 +1181,14 @@ export default function ProcurementHistoryPage() {
                 </button>
               </div>
               <div className="receipt-preview-frame">
-                <img src={activeReceipt.receiptPhotoUrl} alt={`${activeReceipt.orderId} ${activeReceipt.supplier} のレシート`} />
+                {isPdfReceiptUrl(activeReceipt.receiptPhotoUrl) ? (
+                  <iframe src={activeReceipt.receiptPhotoUrl} title={`${activeReceipt.orderId} ${activeReceipt.supplier} のレシートPDF`} />
+                ) : (
+                  <img src={activeReceipt.receiptPhotoUrl} alt={`${activeReceipt.orderId} ${activeReceipt.supplier} のレシート`} />
+                )}
               </div>
               <div className="modal-actions">
-                <a className="text-button" href={activeReceipt.receiptPhotoUrl} download={`receipt-${activeReceipt.orderId}-${activeReceipt.supplier}.jpg`}>
+                <a className="text-button" href={activeReceipt.receiptPhotoUrl} download={getReceiptDownloadName(activeReceipt)}>
                   ダウンロード
                 </a>
                 {activeReceipt.status !== "確認済み" ? (

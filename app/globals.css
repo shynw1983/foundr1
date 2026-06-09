@@ -17308,6 +17308,14 @@ body :where(
   object-fit: contain;
 }
 
+.receipt-preview-frame iframe {
+  display: block;
+  width: 100%;
+  min-height: min(68vh, 760px);
+  border: 0;
+  background: #ffffff;
+}
+
 .history-row p {
   margin: 4px 0 0;
   color: var(--muted);

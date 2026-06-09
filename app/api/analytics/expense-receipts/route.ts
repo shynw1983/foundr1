@@ -3,9 +3,10 @@ import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritable
 import { sql } from "../../../../lib/db";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/receipt-ocr";
-import { validateImageUpload } from "../../../../lib/upload-security";
+import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
+const maxReceiptPdfSizeBytes = 20 * 1024 * 1024;
 const expenseEditRoles = new Set(["owner", "manager"]);
 
 export async function GET(request: Request) {
@@ -447,7 +448,7 @@ export async function PATCH(request: Request) {
 }
 
 async function uploadExpenseReceipt(file: File, storeId: string) {
-  const extension = validateImageUpload(file, maxReceiptSizeBytes, "レシート写真");
+  const extension = validateReceiptUpload(file, maxReceiptSizeBytes, maxReceiptPdfSizeBytes, "レシート");
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error("Vercel Blob が未設定です。BLOB_READ_WRITE_TOKEN を接続してください。");
@@ -490,7 +491,7 @@ function getReceiptExtension(receiptPhotoUrl: unknown) {
   const pathname = extractPrivateBlobPathname(String(receiptPhotoUrl ?? ""));
   const match = pathname.match(/\.([a-z0-9]+)$/i);
   const extension = match ? match[1].toLowerCase() : "jpg";
-  return ["jpg", "jpeg", "png", "webp", "heic"].includes(extension) ? extension : "jpg";
+  return ["jpg", "jpeg", "png", "webp", "heic", "pdf"].includes(extension) ? extension : "jpg";
 }
 
 function buildVendorName(companyName: string, brandName: string, locationName: string, fallback = "") {
