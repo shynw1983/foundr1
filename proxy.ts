@@ -144,8 +144,8 @@ function getPermittedPagePaths(session: ProxySession) {
 }
 
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
-  if (pathname === "/os/logout" || pathname === "/os/privacy-consent") return true;
-  if (pathname === "/os") return permittedPaths.has("/os");
+  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent") return true;
+  if (pathname === "/os") return true;
   return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
@@ -179,7 +179,7 @@ async function runFoundr1Proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((!isOsPath && !isStorePath) || pathname === "/os/login") {
+  if ((!isOsPath && !isStorePath) || pathname === "/os/login" || pathname === "/store/login") {
     return NextResponse.next();
   }
 
@@ -214,7 +214,7 @@ async function runFoundr1Proxy(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone();
-  url.pathname = "/os/login";
+  url.pathname = isStorePath ? "/store/login" : "/os/login";
   url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
   return NextResponse.redirect(url);
 }
