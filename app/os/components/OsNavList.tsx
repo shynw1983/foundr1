@@ -38,8 +38,6 @@ export type OsNavItem = {
   icon: LucideIcon;
 };
 
-const masterRoles = new Set(["owner", "manager"]);
-const productViewerRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const orderModulePaths = new Set([
   "/os/orders",
   "/os/procurement",
@@ -240,32 +238,20 @@ function canShowInCurrentModule(pathname: string, item: OsNavItem) {
   return getModuleNavPaths(pathname).has(item.href);
 }
 
-function canShowNavItem(role: string, item: OsNavItem) {
+function canShowNavItem(role: string, item: OsNavItem, permittedNavPaths: Set<string>) {
   if (item.href === "/os/logout") return false;
-  if (item.href === "/os/settings") return masterRoles.has(role);
-  if (item.href === "/os/system-usage") return masterRoles.has(role);
-  if (item.href === "/os/feedback") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
-  if (["/os/analytics", "/os/analytics/sales", "/os/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"].includes(item.href)) return masterRoles.has(role);
-  if (item.href === "/os/staff") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
-  if (item.href === "/os/timecard/payroll") return ["owner", "manager", "store_owner", "store_manager"].includes(role);
-  if (item.href === "/os/field-notes") return true;
-  if (item.href === "/os/procedures") return ["owner", "manager"].includes(role);
-  if (item.href === "/os/menus" || item.href === "/os/brand-sites") return ["owner", "manager"].includes(role);
-  if (item.href === "/os/pos" || item.href === "/os/loyalty") return ["owner", "manager"].includes(role);
-  if (item.href === "/os/products") return productViewerRoles.has(role);
-  if (["/os/stores", "/os/suppliers", "/os/product-comparisons"].includes(item.href)) return masterRoles.has(role);
-
-  return true;
+  if (item.href === "/os") return Boolean(role);
+  return permittedNavPaths.has(item.href);
 }
 
-function filterPermittedNavItems(_navItems: OsNavItem[], role: string) {
+function filterPermittedNavItems(_navItems: OsNavItem[], role: string, permittedNavPaths: Set<string>) {
   const availableNavItems = canonicalNavItems;
   if (!role) return [];
-  return availableNavItems.filter((item) => canShowNavItem(role, item));
+  return availableNavItems.filter((item) => canShowNavItem(role, item, permittedNavPaths));
 }
 
-function buildPermittedNavModules(navItems: OsNavItem[], role: string): OsNavModuleWithChildren[] {
-  const permittedNavItems = filterPermittedNavItems(navItems, role);
+function buildPermittedNavModules(navItems: OsNavItem[], role: string, permittedNavPaths: Set<string>): OsNavModuleWithChildren[] {
+  const permittedNavItems = filterPermittedNavItems(navItems, role, permittedNavPaths);
   const navItemByHref = new Map(permittedNavItems.map((item) => [item.href, item]));
 
   return navModules
@@ -286,14 +272,19 @@ function buildPermittedNavModules(navItems: OsNavItem[], role: string): OsNavMod
 
 export function usePermittedNavItems(navItems: OsNavItem[]) {
   const pathname = usePathname();
-  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const cachedEmployee = getCachedCurrentEmployee();
+  const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
+  const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadCurrentRole() {
       const employee = await loadCurrentEmployee();
-      if (isMounted) setRole(employee?.role ?? "");
+      if (isMounted) {
+        setRole(employee?.role ?? "");
+        setPermittedNavPaths(new Set(employee?.permittedNavPaths ?? []));
+      }
     }
 
     void loadCurrentRole();
@@ -304,20 +295,25 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
   }, []);
 
   return useMemo(() => {
-    const permittedItems = filterPermittedNavItems(navItems, role);
+    const permittedItems = filterPermittedNavItems(navItems, role, permittedNavPaths);
     return permittedItems.filter((item) => canShowInCurrentModule(pathname, item));
-  }, [navItems, pathname, role]);
+  }, [navItems, pathname, permittedNavPaths, role]);
 }
 
 export function usePermittedNavModules(navItems: OsNavItem[]) {
-  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const cachedEmployee = getCachedCurrentEmployee();
+  const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
+  const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadCurrentRole() {
       const employee = await loadCurrentEmployee();
-      if (isMounted) setRole(employee?.role ?? "");
+      if (isMounted) {
+        setRole(employee?.role ?? "");
+        setPermittedNavPaths(new Set(employee?.permittedNavPaths ?? []));
+      }
     }
 
     void loadCurrentRole();
@@ -327,12 +323,14 @@ export function usePermittedNavModules(navItems: OsNavItem[]) {
     };
   }, []);
 
-  return useMemo(() => buildPermittedNavModules(navItems, role), [navItems, role]);
+  return useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths), [navItems, permittedNavPaths, role]);
 }
 
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const pathname = usePathname();
-  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const cachedEmployee = getCachedCurrentEmployee();
+  const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
+  const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -340,7 +338,10 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
 
     async function loadCurrentRole() {
       const employee = await loadCurrentEmployee();
-      if (isMounted) setRole(employee?.role ?? "");
+      if (isMounted) {
+        setRole(employee?.role ?? "");
+        setPermittedNavPaths(new Set(employee?.permittedNavPaths ?? []));
+      }
     }
 
     void loadCurrentRole();
@@ -350,7 +351,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     };
   }, []);
 
-  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role), [navItems, role]);
+  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths), [navItems, permittedNavPaths, role]);
   const activeModule = visibleModules.find((module) => module.paths.some((path) => !path.isShortcut && (pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`)))))
     ?? visibleModules.find((module) => module.paths.some((path) => pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`))));
   const openModule = visibleModules.find((module) => module.id === openModuleId);

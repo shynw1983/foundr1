@@ -2,6 +2,7 @@ import { authCookieName, createSessionToken, sessionCookieMaxAge, verifyPassword
 import { touchEmployeeLastSeen } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
+import { getNavPathsForPermissions, getPermissionsForRole } from "../../../../lib/role-permissions";
 
 type EmployeeRow = {
   id: string;
@@ -89,13 +90,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "ログイン情報が正しくありません。" }, { status: 401 });
   }
   loginAttempts.delete(rateLimitKey);
+  const permissionSet = await getPermissionsForRole(employee.role);
+  const permissions = Array.from(permissionSet);
 
   const token = createSessionToken({
     id: employee.id,
     name: employee.name,
     loginId: employee.login_id || employee.email || loginId,
     role: employee.role,
-    sessionVersion: employee.session_version
+    sessionVersion: employee.session_version,
+    permissions,
+    permittedNavPaths: getNavPathsForPermissions(permissions)
   });
   await touchEmployeeLastSeen(employee.id);
   await writeAuditLog({
@@ -111,7 +116,9 @@ export async function POST(request: Request) {
     employee: {
       name: employee.name,
       loginId: employee.login_id || employee.email || loginId,
-      role: employee.role
+      role: employee.role,
+      permissions,
+      permittedNavPaths: getNavPathsForPermissions(permissions)
     }
   });
   response.headers.append(

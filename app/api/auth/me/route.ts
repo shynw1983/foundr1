@@ -1,11 +1,14 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { getNavPathsForPermissions, getPermissionsForRole } from "../../../../lib/role-permissions";
 
 export async function GET() {
   const session = await requireOsSession();
   if (!session) {
     return Response.json({ employee: null }, { status: 401 });
   }
+  const permissionSet = await getPermissionsForRole(session.role);
+  const permissions = Array.from(permissionSet);
 
   const rows = await sql`
     select
@@ -26,6 +29,8 @@ export async function GET() {
       name: session.name,
       loginId: session.loginId,
       role: session.role,
+      permissions,
+      permittedNavPaths: getNavPathsForPermissions(permissions),
       isTimecardEmployee: rows[0]?.isTimecardEmployee === true,
       uiPreferences: rows[0]?.uiPreferences ?? {}
     }

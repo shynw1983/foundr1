@@ -81,6 +81,31 @@ type PayrollStatutoryAlert = {
   dueLabel: string;
 };
 
+type RolePermissionDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  category: string;
+};
+
+type RolePermissionState = {
+  role: string;
+  permissions: Array<{
+    key: string;
+    enabled: boolean;
+    locked: boolean;
+  }>;
+};
+
+const roleLabels: Record<string, string> = {
+  owner: "本部オーナー",
+  manager: "本部マネージャー",
+  store_owner: "加盟店オーナー",
+  store_manager: "店長",
+  staff: "店舗スタッフ",
+  store_terminal: "店舗Pad"
+};
+
 export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
@@ -88,6 +113,9 @@ export default function OsSettingsPage() {
   const [socialInsuranceTables, setSocialInsuranceTables] = useState<SocialInsuranceTable[]>([]);
   const [employmentInsuranceTables, setEmploymentInsuranceTables] = useState<EmploymentInsuranceTable[]>([]);
   const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
+  const [rolePermissionDefinitions, setRolePermissionDefinitions] = useState<RolePermissionDefinition[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionState[]>([]);
+  const [canEditRolePermissions, setCanEditRolePermissions] = useState(false);
   const [taxFile, setTaxFile] = useState<File | null>(null);
   const [socialInsuranceFile, setSocialInsuranceFile] = useState<File | null>(null);
   const [employmentInsuranceFile, setEmploymentInsuranceFile] = useState<File | null>(null);
@@ -102,15 +130,17 @@ export default function OsSettingsPage() {
   const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
   const [uploadingSocialInsurance, setUploadingSocialInsurance] = useState(false);
   const [uploadingEmploymentInsurance, setUploadingEmploymentInsurance] = useState(false);
+  const [savingRolePermissions, setSavingRolePermissions] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
-      const [settingsResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse] = await Promise.all([
+      const [settingsResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse, rolePermissionsResponse] = await Promise.all([
         fetch("/api/settings?module=store", { cache: "no-store" }),
         fetch("/api/settings/withholding-tax", { cache: "no-store" }),
         fetch("/api/settings/social-insurance", { cache: "no-store" }),
         fetch("/api/settings/employment-insurance", { cache: "no-store" }),
-        fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" })
+        fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" }),
+        fetch("/api/settings/role-permissions", { cache: "no-store" })
       ]);
       if (settingsResponse.ok) {
         const body = await settingsResponse.json() as { settings?: StoreModuleSettings };
@@ -132,6 +162,16 @@ export default function OsSettingsPage() {
         const body = await alertResponse.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
         if (body.canView) setPayrollAlerts(body.alerts ?? []);
       }
+      if (rolePermissionsResponse.ok) {
+        const body = await rolePermissionsResponse.json() as {
+          definitions?: RolePermissionDefinition[];
+          rolePermissions?: RolePermissionState[];
+          canEdit?: boolean;
+        };
+        setRolePermissionDefinitions(body.definitions ?? []);
+        setRolePermissions(body.rolePermissions ?? []);
+        setCanEditRolePermissions(body.canEdit === true);
+      }
       setLoading(false);
     }
     void loadSettings();
@@ -152,6 +192,41 @@ export default function OsSettingsPage() {
     const body = await response.json() as { settings?: StoreModuleSettings };
     if (body.settings) setSettings(body.settings);
     showNotice("設定を保存しました。");
+  }
+
+  function toggleRolePermission(role: string, permissionKey: string, checked: boolean) {
+    setRolePermissions((current) => current.map((roleState) => {
+      if (roleState.role !== role) return roleState;
+      return {
+        ...roleState,
+        permissions: roleState.permissions.map((permission) => (
+          permission.key === permissionKey && !permission.locked ? { ...permission, enabled: checked } : permission
+        ))
+      };
+    }));
+  }
+
+  async function saveRolePermissions() {
+    setSavingRolePermissions(true);
+    const response = await fetch("/api/settings/role-permissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        rolePermissions: rolePermissions.map((roleState) => ({
+          role: roleState.role,
+          permissions: roleState.permissions.filter((permission) => permission.enabled).map((permission) => permission.key)
+        }))
+      })
+    });
+    setSavingRolePermissions(false);
+
+    const body = await response.json().catch(() => ({})) as { rolePermissions?: RolePermissionState[]; error?: string };
+    if (!response.ok) {
+      showNotice(body.error ?? "ユーザーグループ権限を保存できませんでした。", "info");
+      return;
+    }
+    setRolePermissions(body.rolePermissions ?? rolePermissions);
+    showNotice("ユーザーグループ権限を保存しました。");
   }
 
   async function fileToBase64(file: File) {
@@ -334,6 +409,61 @@ export default function OsSettingsPage() {
         </header>
 
         <section className="settings-grid">
+          <section className="panel settings-role-permissions-panel">
+            <div className="panel-title">
+              <div>
+                <h3>ユーザーグループ権限</h3>
+                <p>各ユーザーグループが表示できる OS モジュールと、スタッフ管理の操作権限を設定します。</p>
+              </div>
+              {canEditRolePermissions ? (
+                <button className="secondary-button" type="button" disabled={savingRolePermissions} onClick={() => void saveRolePermissions()}>
+                  <Save size={16} />
+                  {savingRolePermissions ? "保存中" : "権限を保存"}
+                </button>
+              ) : null}
+            </div>
+            <div className="role-permission-table-wrap">
+              <table className="role-permission-table">
+                <thead>
+                  <tr>
+                    <th>権限項目</th>
+                    {rolePermissions.map((roleState) => (
+                      <th key={roleState.role}>{roleLabels[roleState.role] ?? roleState.role}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rolePermissionDefinitions.map((definition) => (
+                    <tr key={definition.key}>
+                      <th>
+                        <span>{definition.category}</span>
+                        <strong>{definition.label}</strong>
+                        <small>{definition.description}</small>
+                      </th>
+                      {rolePermissions.map((roleState) => {
+                        const permission = roleState.permissions.find((candidate) => candidate.key === definition.key);
+                        return (
+                          <td key={`${roleState.role}:${definition.key}`}>
+                            <label className="role-permission-check" aria-label={`${roleLabels[roleState.role] ?? roleState.role} ${definition.label}`}>
+                              <input
+                                type="checkbox"
+                                checked={permission?.enabled === true}
+                                disabled={!canEditRolePermissions || permission?.locked === true}
+                                onChange={(event) => toggleRolePermission(roleState.role, definition.key, event.currentTarget.checked)}
+                              />
+                              <span>{permission?.locked ? "固定" : permission?.enabled ? "許可" : "なし"}</span>
+                            </label>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="settings-permission-note">本部オーナーの基本権限は固定です。保存後、対象ユーザーは次回の画面読み込みから新しいナビゲーションになります。</p>
+          </section>
+
           <section className="panel">
             <div className="panel-title">
               <div>

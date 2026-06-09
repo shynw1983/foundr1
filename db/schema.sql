@@ -238,6 +238,17 @@ create table if not exists os_audit_logs (
 create index if not exists os_audit_logs_created_at_idx on os_audit_logs (created_at desc);
 create index if not exists os_audit_logs_actor_idx on os_audit_logs (actor_employee_id, created_at desc);
 
+create table if not exists role_permissions (
+  role text not null,
+  permission_key text not null,
+  is_enabled boolean not null default true,
+  updated_by uuid references employees(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (role, permission_key)
+);
+
+create index if not exists role_permissions_permission_idx on role_permissions (permission_key);
+
 create table if not exists feedback_reports (
   id uuid primary key default gen_random_uuid(),
   source text not null default 'os',

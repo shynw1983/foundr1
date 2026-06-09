@@ -2,8 +2,78 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const authCookieName = "foundr1_os_session";
-const masterPageRoles = new Set(["owner", "manager", "buyer"]);
-const masterPagePaths = ["/os/stores", "/os/suppliers", "/os/products"];
+const defaultRoleNavPaths: Record<string, string[]> = {
+  owner: [
+    "/os",
+    "/store",
+    "/os/orders",
+    "/os/procurement",
+    "/os/history",
+    "/os/vouchers",
+    "/os/field-notes",
+    "/os/reports",
+    "/os/feedback",
+    "/os/analytics",
+    "/os/analytics/sales",
+    "/os/sales",
+    "/os/analytics/labor",
+    "/os/analytics/cost",
+    "/os/analytics/expenses",
+    "/os/analytics/profit",
+    "/os/timecard",
+    "/os/timecard/schedule",
+    "/os/timecard/workload",
+    "/os/timecard/payroll",
+    "/os/staff",
+    "/os/products",
+    "/os/stores",
+    "/os/suppliers",
+    "/os/product-comparisons",
+    "/os/menus",
+    "/os/brand-sites",
+    "/os/loyalty",
+    "/os/procedures",
+    "/os/pos",
+    "/os/settings",
+    "/os/system-usage"
+  ],
+  manager: [
+    "/os",
+    "/store",
+    "/os/orders",
+    "/os/procurement",
+    "/os/history",
+    "/os/vouchers",
+    "/os/field-notes",
+    "/os/reports",
+    "/os/feedback",
+    "/os/analytics",
+    "/os/analytics/sales",
+    "/os/sales",
+    "/os/analytics/labor",
+    "/os/analytics/cost",
+    "/os/analytics/expenses",
+    "/os/analytics/profit",
+    "/os/timecard",
+    "/os/timecard/schedule",
+    "/os/timecard/workload",
+    "/os/timecard/payroll",
+    "/os/staff",
+    "/os/products",
+    "/os/stores",
+    "/os/suppliers",
+    "/os/product-comparisons",
+    "/os/menus",
+    "/os/brand-sites",
+    "/os/loyalty",
+    "/os/procedures",
+    "/os/pos"
+  ],
+  store_owner: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  store_manager: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  staff: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
+  store_terminal: ["/os", "/store"]
+};
 const storeTerminalAllowedPaths = [
   "/store",
   "/store/orders",
@@ -18,6 +88,7 @@ const storeTerminalAllowedPaths = [
 type ProxySession = {
   role?: string;
   expiresAt?: number;
+  permittedNavPaths?: string[];
 };
 
 function base64UrlToBytes(value: string) {
@@ -59,6 +130,19 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
   } catch {
     return null;
   }
+}
+
+function getPermittedPagePaths(session: ProxySession) {
+  if (Array.isArray(session.permittedNavPaths) && session.permittedNavPaths.length > 0) {
+    return new Set(session.permittedNavPaths.map(String));
+  }
+
+  return new Set(defaultRoleNavPaths[session.role ?? ""] ?? ["/os"]);
+}
+
+function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
+  if (pathname === "/os" || pathname === "/os/logout") return true;
+  return Array.from(permittedPaths).some((path) => path !== "/os" && (pathname === path || pathname.startsWith(`${path}/`)));
 }
 
 const clerkKeysConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
@@ -107,16 +191,7 @@ async function runFoundr1Proxy(request: NextRequest) {
       }
     }
 
-    const isStaffPage = pathname === "/os/staff" || pathname.startsWith("/os/staff/");
-    if (isStaffPage && session.role !== "owner") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/os";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
-
-    const isMasterPage = masterPagePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-    if (isMasterPage && !masterPageRoles.has(session.role ?? "")) {
+    if (isOsPath && !isPermittedPagePath(pathname, getPermittedPagePaths(session))) {
       const url = request.nextUrl.clone();
       url.pathname = "/os";
       url.search = "";

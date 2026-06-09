@@ -6,6 +6,8 @@ export type EmployeeSession = {
   loginId: string;
   role: string;
   sessionVersion: number;
+  permissions?: string[];
+  permittedNavPaths?: string[];
 };
 
 export const authCookieName = "foundr1_os_session";

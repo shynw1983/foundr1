@@ -4,6 +4,8 @@ export type CurrentEmployee = {
   name: string;
   loginId: string;
   role: string;
+  permissions?: string[];
+  permittedNavPaths?: string[];
 };
 
 let cachedEmployee: CurrentEmployee | null = null;

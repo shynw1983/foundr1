@@ -1,29 +1,31 @@
 import type { EmployeeSession } from "./auth";
 import { getSessionStoreScope, requireOsSession } from "./api-auth";
+import { getPermissionsForRole } from "./role-permissions";
 
-const globalStaffAdminRoles = new Set(["owner", "manager"]);
-const scopedStaffAdminRoles = new Set(["store_owner", "store_manager"]);
 const scopedAssignableRoles = new Set(["staff", "store_terminal"]);
+const headquarterAssignableRoles = new Set(["owner", "manager"]);
 
 export type StaffAdminAccess = {
   session: EmployeeSession;
   allStores: boolean;
   storeIds: string[];
+  permissions: Set<string>;
 };
 
 export async function requireStaffAdminSession(): Promise<StaffAdminAccess | null> {
   const session = await requireOsSession();
   if (!session) return null;
+  const permissions = await getPermissionsForRole(session.role);
 
-  if (globalStaffAdminRoles.has(session.role)) {
-    return { session, allStores: true, storeIds: [] };
+  if (!permissions.has("staff.manage")) return null;
+
+  if (session.role === "owner" || session.role === "manager") {
+    return { session, allStores: true, storeIds: [], permissions };
   }
-
-  if (!scopedStaffAdminRoles.has(session.role)) return null;
 
   const scope = await getSessionStoreScope(session);
   if (scope.allStores || scope.storeIds.length > 0) {
-    return { session, allStores: scope.allStores, storeIds: scope.storeIds };
+    return { session, allStores: scope.allStores, storeIds: scope.storeIds, permissions };
   }
 
   return null;
@@ -31,13 +33,15 @@ export async function requireStaffAdminSession(): Promise<StaffAdminAccess | nul
 
 export function canAssignStaffRole(access: StaffAdminAccess, role: string) {
   if (access.session.role === "owner") return true;
-  if (access.session.role === "manager") return role !== "owner";
+  if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
+  if (headquarterAssignableRoles.has(role)) return false;
   return scopedAssignableRoles.has(role);
 }
 
 export function canManageTargetRole(access: StaffAdminAccess, role: string) {
   if (access.session.role === "owner") return true;
-  if (access.session.role === "manager") return role !== "owner";
+  if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
+  if (headquarterAssignableRoles.has(role)) return false;
   return scopedAssignableRoles.has(role);
 }
 
