@@ -27502,3 +27502,46 @@ a:focus-visible {
     background: var(--panel);
   }
 }
+
+@media (max-width: 1120px) {
+  .shell .sidebar .mobile-nav-user .account-menu summary.user-badge,
+  .os-home-shell .mobile-nav-user .account-menu summary.user-badge {
+    display: inline-flex;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    min-height: 46px;
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    box-shadow: none;
+  }
+
+  .shell .sidebar .mobile-nav-user .user-avatar,
+  .os-home-shell .mobile-nav-user .user-avatar {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    background: var(--green);
+    color: white;
+  }
+
+  .shell .sidebar .mobile-nav-user .user-badge-name,
+  .os-home-shell .mobile-nav-user .user-badge-name {
+    display: inline-flex;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    color: var(--ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .shell .sidebar .mobile-nav-user .user-badge-role,
+  .os-home-shell .mobile-nav-user .user-badge-role {
+    display: inline-flex;
+    flex: 0 0 auto;
+    background: var(--green-soft);
+    color: var(--green);
+  }
+}
