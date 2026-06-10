@@ -835,8 +835,10 @@ export default function VouchersPage() {
   }
 
   async function bindAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine) {
-    const hasManualProductFilter = Boolean(lineProductCategorySelections[line.id] || lineProductSubcategorySelections[line.id]);
-    const productId = lineProductSelections[line.id] || (!hasManualProductFilter ? line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "" : "");
+    const selectedProductId = lineProductSelections[line.id];
+    const productId = selectedProductId !== undefined
+      ? selectedProductId
+      : line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "";
     if (!productId) {
       window.alert("紐付ける商品を選択してください。");
       return;
@@ -2114,11 +2116,10 @@ function VoucherAccountingEditor({
         </div>
         {draft.lines.map((line) => {
           const suggestedProduct = getSuggestedProduct(line, productOptions);
-          const hasManualProductFilter = Boolean(lineProductCategorySelections[line.id] || lineProductSubcategorySelections[line.id]);
-          const selectedProductId = lineProductSelections[line.id] ?? (!hasManualProductFilter ? line.matchedProductId ?? suggestedProduct?.id ?? "" : "");
+          const selectedProductId = lineProductSelections[line.id] ?? line.matchedProductId ?? suggestedProduct?.id ?? "";
           const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
-          const selectedCategory = lineProductCategorySelections[line.id] ?? (selectedProduct ? getProductCategory(selectedProduct) : suggestedProduct ? getProductCategory(suggestedProduct) : "");
-          const selectedSubcategory = lineProductSubcategorySelections[line.id] ?? (selectedProduct ? getProductSubcategory(selectedProduct) : suggestedProduct ? getProductSubcategory(suggestedProduct) : "");
+          const selectedCategory = selectedProduct ? getProductCategory(selectedProduct) : (lineProductCategorySelections[line.id] ?? (suggestedProduct ? getProductCategory(suggestedProduct) : ""));
+          const selectedSubcategory = selectedProduct ? getProductSubcategory(selectedProduct) : (lineProductSubcategorySelections[line.id] ?? (suggestedProduct ? getProductSubcategory(suggestedProduct) : ""));
           const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
           const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
@@ -2560,11 +2561,10 @@ function ConfirmedVoucherDetailEditor({
         const isProductPending = Boolean(pendingProductLineIds[detailKey]);
         const showProductBinding = voucher.usageType === "shiire" && Boolean(accountingLine.ocrItemId);
         const suggestedProduct = getSuggestedProduct(accountingLine, productOptions);
-        const hasManualProductFilter = Boolean(lineProductCategorySelections[detailKey] || lineProductSubcategorySelections[detailKey]);
-        const selectedProductId = lineProductSelections[detailKey] ?? (!hasManualProductFilter ? suggestedProduct?.id ?? "" : "");
+        const selectedProductId = lineProductSelections[detailKey] ?? suggestedProduct?.id ?? "";
         const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
-        const selectedCategory = lineProductCategorySelections[detailKey] ?? (selectedProduct ? getProductCategory(selectedProduct) : suggestedProduct ? getProductCategory(suggestedProduct) : "");
-        const selectedSubcategory = lineProductSubcategorySelections[detailKey] ?? (selectedProduct ? getProductSubcategory(selectedProduct) : suggestedProduct ? getProductSubcategory(suggestedProduct) : "");
+        const selectedCategory = selectedProduct ? getProductCategory(selectedProduct) : (lineProductCategorySelections[detailKey] ?? (suggestedProduct ? getProductCategory(suggestedProduct) : ""));
+        const selectedSubcategory = selectedProduct ? getProductSubcategory(selectedProduct) : (lineProductSubcategorySelections[detailKey] ?? (suggestedProduct ? getProductSubcategory(suggestedProduct) : ""));
         const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
         const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
         const isBindingExpanded = Boolean(productBindingDetailKeys[detailKey]);
