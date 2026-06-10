@@ -465,7 +465,7 @@ export default function VouchersPage() {
     setConfirmedLineDrafts((current) => {
       const draft = current[key] ?? detail;
       const updated = { ...draft, ...next };
-      if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next || "taxMode" in next)) {
+      if (shouldAutoCalculateTaxAmount(next, updated)) {
         updated.taxAmount = calculateDraftTaxAmount(Number(updated.amount || 0), updated.taxRate, updated.taxMode);
       }
       if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
@@ -737,9 +737,9 @@ export default function VouchersPage() {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
             updated.taxMode = draft.taxMode;
-            if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next)) {
+            if (shouldAutoCalculateTaxAmount(next, updated)) {
               const amount = Math.round(Number(updated.amount || 0));
-              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, draft.taxMode));
+              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, updated.taxMode));
             }
             if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
               updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity);
@@ -2624,6 +2624,17 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
   return 0;
+}
+
+function shouldAutoCalculateTaxAmount(
+  next: Partial<{ amount: string | number; taxRate: string; taxMode: string; taxAmount: string | number; confirmed: boolean }>,
+  line: { amount: string | number; taxRate: string; taxMode: string; taxAmount: string | number }
+) {
+  if ("taxAmount" in next) return false;
+  const changedTaxBasis = "amount" in next || "taxRate" in next || "taxMode" in next;
+  if (changedTaxBasis) return true;
+  if (next.confirmed !== true) return false;
+  return calculateDraftTaxAmount(Number(line.amount || 0), line.taxRate, line.taxMode) !== Number(line.taxAmount || 0);
 }
 
 function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
