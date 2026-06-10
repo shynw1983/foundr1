@@ -2062,21 +2062,59 @@ body :where(
   margin-bottom: 22px;
 }
 
-.os-module-grid {
+.os-home-feature-groups {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
-.os-module-grid.is-compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.os-home-feature-group {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.os-home-feature-group-heading {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.os-home-feature-group-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.os-home-feature-group-heading p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.os-module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.os-module-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .os-module-card {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
-  min-height: 148px;
+  min-height: 136px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2084,6 +2122,14 @@ body :where(
   background: white;
   text-decoration: none;
   box-shadow: var(--shadow);
+}
+
+.os-module-card.is-secondary {
+  grid-template-columns: 36px minmax(0, 1fr);
+  min-height: 96px;
+  padding: 12px;
+  background: var(--color-surface-subtle);
+  box-shadow: none;
 }
 
 .os-module-card:hover,
@@ -2108,6 +2154,11 @@ body :where(
   background: var(--green-soft);
 }
 
+.os-module-card.is-secondary .os-module-icon {
+  width: 36px;
+  height: 36px;
+}
+
 .os-module-heading {
   display: flex;
   align-items: center;
@@ -2120,9 +2171,18 @@ body :where(
   font-size: 18px;
 }
 
+.os-module-card.is-secondary .os-module-heading {
+  margin-bottom: 4px;
+}
+
+.os-module-card.is-secondary .os-module-heading h3 {
+  font-size: 15px;
+}
+
 .os-module-card p {
   margin: 0;
   color: var(--muted);
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -2779,6 +2839,27 @@ body :where(
   flex: 1;
 }
 
+.mobile-nav-list a.is-shortcut .nav-beta-badge,
+.nav-sub-list a.is-shortcut .nav-beta-badge {
+  flex: 0 0 auto;
+}
+
+.nav-beta-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid rgba(31, 111, 91, 0.3);
+  border-radius: 7px;
+  color: var(--green);
+  background: rgba(231, 243, 238, 0.92);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .nav-shortcut-icon {
   flex: 0 0 auto;
   margin-left: auto;
@@ -3048,6 +3129,10 @@ body :where(
     text-align: center;
   }
 
+  .nav-item .nav-beta-badge {
+    display: none;
+  }
+
   .nav-shell.is-expanded .nav-item {
     flex-direction: row;
     justify-content: flex-start;
@@ -3056,6 +3141,11 @@ body :where(
     padding: 0 12px;
     font-size: 15px;
     text-align: left;
+  }
+
+  .nav-shell.is-expanded .nav-item .nav-beta-badge {
+    display: inline-flex;
+    margin-left: auto;
   }
 
   .nav-shell.is-expanded .nav-item span,
@@ -3098,6 +3188,10 @@ body :where(
     text-decoration: none;
     font-size: 13px;
     font-weight: 800;
+  }
+
+  .nav-sub-list .nav-beta-badge {
+    margin-left: auto;
   }
 
   .nav-sub-list a:hover,
@@ -4759,6 +4853,96 @@ body :where(
   grid-column: 1 / -1;
 }
 
+.settings-navigation-beta-panel {
+  grid-column: 1 / -1;
+}
+
+.settings-navigation-beta-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-navigation-beta-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+}
+
+.settings-navigation-beta-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.settings-navigation-beta-heading svg {
+  color: var(--green);
+}
+
+.settings-navigation-beta-heading strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-navigation-beta-list {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-navigation-beta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.settings-navigation-beta-name,
+.settings-navigation-beta-control {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-navigation-beta-name {
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.settings-navigation-beta-name svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.settings-navigation-beta-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-navigation-beta-control {
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-navigation-beta-control input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
 .role-permission-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -4830,7 +5014,7 @@ body :where(
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: var(--primary);
+  accent-color: var(--green);
 }
 
 .role-permission-check input[type="checkbox"]:disabled {
@@ -22266,6 +22450,7 @@ body :where(
 
   .metric-grid,
   .os-module-grid,
+  .os-module-link-grid,
   .content-grid,
   .workspace-grid,
   .management-grid,
@@ -22444,6 +22629,15 @@ body :where(
     font-size: 30px;
   }
 
+  .os-home-feature-group {
+    padding: 12px;
+  }
+
+  .os-home-feature-group-heading {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
   .statutory-alert-heading,
   .statutory-alert-card {
     align-items: stretch;
@@ -22460,6 +22654,10 @@ body :where(
 
   .settings-manual-rate-card {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .settings-navigation-beta-groups {
     grid-template-columns: 1fr;
   }
 
@@ -22484,12 +22682,17 @@ body :where(
   }
 
   .os-module-grid,
-  .os-module-grid.is-compact {
+  .os-module-grid.is-compact,
+  .os-module-link-grid {
     grid-template-columns: 1fr;
   }
 
   .os-module-card {
     min-height: 126px;
+  }
+
+  .os-module-card.is-secondary {
+    min-height: 88px;
   }
 
   .payroll-row-card {

@@ -32,11 +32,13 @@ import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getCachedCurrentEmployee, loadCurrentEmployee } from "./currentEmployeeStore";
+import { getCachedNavigationSettings, loadNavigationSettings } from "./navigationSettingsStore";
 
 export type OsNavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  beta?: boolean;
 };
 
 const orderModulePaths = new Set([
@@ -54,7 +56,7 @@ const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/
 const settingsModulePaths = new Set(["/os/products", "/os/stores", "/os/settings", "/os/system-usage"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
-const canonicalNavItems: OsNavItem[] = [
+export const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "店舗ワークベンチ", href: "/store", icon: Store },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -111,7 +113,7 @@ export type OsNavModuleWithChildren = OsNavModule & {
   children: OsNavChildItem[];
 };
 
-const navModules: OsNavModule[] = [
+export const navModules: OsNavModule[] = [
   {
     id: "store-workbench",
     label: "店舗ワークベンチ",
@@ -249,9 +251,9 @@ function filterPermittedNavItems(_navItems: OsNavItem[], role: string, permitted
   return availableNavItems.filter((item) => canShowNavItem(role, item, permittedNavPaths));
 }
 
-function buildPermittedNavModules(navItems: OsNavItem[], role: string, permittedNavPaths: Set<string>): OsNavModuleWithChildren[] {
+function buildPermittedNavModules(navItems: OsNavItem[], role: string, permittedNavPaths: Set<string>, betaNavPaths: Set<string>): OsNavModuleWithChildren[] {
   const permittedNavItems = filterPermittedNavItems(navItems, role, permittedNavPaths);
-  const navItemByHref = new Map(permittedNavItems.map((item) => [item.href, item]));
+  const navItemByHref = new Map(permittedNavItems.map((item) => [item.href, { ...item, beta: betaNavPaths.has(item.href) }]));
 
   return navModules
     .map((module) => ({
@@ -272,8 +274,10 @@ function buildPermittedNavModules(navItems: OsNavItem[], role: string, permitted
 export function usePermittedNavItems(navItems: OsNavItem[]) {
   const pathname = usePathname();
   const cachedEmployee = getCachedCurrentEmployee();
+  const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
   const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
+  const [betaNavPaths, setBetaNavPaths] = useState(() => new Set(cachedNavigationSettings?.betaNavPaths ?? []));
 
   useEffect(() => {
     let isMounted = true;
@@ -287,6 +291,21 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
     }
 
     void loadCurrentRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBetaNavPaths() {
+      const settings = await loadNavigationSettings();
+      if (isMounted) setBetaNavPaths(new Set(settings.betaNavPaths));
+    }
+
+    void loadBetaNavPaths();
 
     return () => {
       isMounted = false;
@@ -295,14 +314,18 @@ export function usePermittedNavItems(navItems: OsNavItem[]) {
 
   return useMemo(() => {
     const permittedItems = filterPermittedNavItems(navItems, role, permittedNavPaths);
-    return permittedItems.filter((item) => canShowInCurrentModule(pathname, item));
-  }, [navItems, pathname, permittedNavPaths, role]);
+    return permittedItems
+      .filter((item) => canShowInCurrentModule(pathname, item))
+      .map((item) => ({ ...item, beta: betaNavPaths.has(item.href) }));
+  }, [betaNavPaths, navItems, pathname, permittedNavPaths, role]);
 }
 
 export function usePermittedNavModules(navItems: OsNavItem[]) {
   const cachedEmployee = getCachedCurrentEmployee();
+  const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
   const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
+  const [betaNavPaths, setBetaNavPaths] = useState(() => new Set(cachedNavigationSettings?.betaNavPaths ?? []));
 
   useEffect(() => {
     let isMounted = true;
@@ -322,14 +345,31 @@ export function usePermittedNavModules(navItems: OsNavItem[]) {
     };
   }, []);
 
-  return useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths), [navItems, permittedNavPaths, role]);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBetaNavPaths() {
+      const settings = await loadNavigationSettings();
+      if (isMounted) setBetaNavPaths(new Set(settings.betaNavPaths));
+    }
+
+    void loadBetaNavPaths();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, navItems, permittedNavPaths, role]);
 }
 
 export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
   const pathname = usePathname();
   const cachedEmployee = getCachedCurrentEmployee();
+  const cachedNavigationSettings = getCachedNavigationSettings();
   const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
   const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
+  const [betaNavPaths, setBetaNavPaths] = useState(() => new Set(cachedNavigationSettings?.betaNavPaths ?? []));
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -350,7 +390,22 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
     };
   }, []);
 
-  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths), [navItems, permittedNavPaths, role]);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBetaNavPaths() {
+      const settings = await loadNavigationSettings();
+      if (isMounted) setBetaNavPaths(new Set(settings.betaNavPaths));
+    }
+
+    void loadBetaNavPaths();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleModules = useMemo(() => buildPermittedNavModules(navItems, role, permittedNavPaths, betaNavPaths), [betaNavPaths, navItems, permittedNavPaths, role]);
   const activeModule = visibleModules.find((module) => module.paths.some((path) => !path.isShortcut && (pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`)))))
     ?? visibleModules.find((module) => module.paths.some((path) => pathname === path.href || (path.href !== "/os" && pathname.startsWith(`${path.href}/`))));
   const openModule = visibleModules.find((module) => module.id === openModuleId);
@@ -380,6 +435,7 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
             <>
               <Icon size={19} />
               <span>{module.label}</span>
+              {module.href && module.children.some((child) => child.href === module.href && child.beta) ? <span className="nav-beta-badge">Beta</span> : null}
             </>
           );
 
@@ -398,12 +454,13 @@ export function OsNavList({ navItems }: { navItems: OsNavItem[] }) {
               </button>
               {isOpen ? (
                 <nav className="nav-sub-list" aria-label={`${module.label}サブメニュー`}>
-                  {module.children.map(({ label, href, icon: ChildIcon, isShortcut }) => {
+                  {module.children.map(({ label, href, icon: ChildIcon, isShortcut, beta }) => {
                     const isChildActive = pathname === href || pathname.startsWith(`${href}/`);
                     return (
                       <Link href={href} className={`${isChildActive ? "is-active" : ""}${isShortcut ? " is-shortcut" : ""}`.trim()} key={href}>
                         <ChildIcon size={14} />
                         <span>{label}</span>
+                        {beta ? <span className="nav-beta-badge">Beta</span> : null}
                         {isShortcut ? <ExternalLink className="nav-shortcut-icon" size={12} aria-label="快捷リンク" /> : null}
                       </Link>
                     );

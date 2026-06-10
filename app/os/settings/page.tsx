@@ -4,10 +4,15 @@ import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, Packag
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
+import {
+  defaultNavigationMenuSettings,
+  type NavigationMenuSettings
+} from "../../../lib/navigation-setting-defaults";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
-import { OsNavList } from "../components/OsNavList";
+import { canonicalNavItems, navModules, OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
+import { setCachedNavigationSettings } from "../components/navigationSettingsStore";
 
 const employmentInsuranceManualRows = [
   { businessType: "general", label: "一般の事業", employeeRate: "5", employerRate: "8.5", benefitRate: "5", twoProjectsRate: "3.5", totalRate: "13.5" },
@@ -109,6 +114,7 @@ const roleLabels: Record<string, string> = {
 export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
+  const [navigationSettings, setNavigationSettings] = useState<NavigationMenuSettings>(defaultNavigationMenuSettings);
   const [taxTables, setTaxTables] = useState<WithholdingTaxTable[]>([]);
   const [socialInsuranceTables, setSocialInsuranceTables] = useState<SocialInsuranceTable[]>([]);
   const [employmentInsuranceTables, setEmploymentInsuranceTables] = useState<EmploymentInsuranceTable[]>([]);
@@ -127,6 +133,7 @@ export default function OsSettingsPage() {
   const [employmentInsuranceBusinessType, setEmploymentInsuranceBusinessType] = useState("general");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingNavigationSettings, setSavingNavigationSettings] = useState(false);
   const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
   const [uploadingSocialInsurance, setUploadingSocialInsurance] = useState(false);
   const [uploadingEmploymentInsurance, setUploadingEmploymentInsurance] = useState(false);
@@ -134,8 +141,9 @@ export default function OsSettingsPage() {
 
   useEffect(() => {
     async function loadSettings() {
-      const [settingsResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse, rolePermissionsResponse] = await Promise.all([
+      const [settingsResponse, navigationResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse, rolePermissionsResponse] = await Promise.all([
         fetch("/api/settings?module=store", { cache: "no-store" }),
+        fetch("/api/settings?module=navigation", { cache: "no-store" }),
         fetch("/api/settings/withholding-tax", { cache: "no-store" }),
         fetch("/api/settings/social-insurance", { cache: "no-store" }),
         fetch("/api/settings/employment-insurance", { cache: "no-store" }),
@@ -145,6 +153,10 @@ export default function OsSettingsPage() {
       if (settingsResponse.ok) {
         const body = await settingsResponse.json() as { settings?: StoreModuleSettings };
         if (body.settings) setSettings(body.settings);
+      }
+      if (navigationResponse.ok) {
+        const body = await navigationResponse.json() as { settings?: NavigationMenuSettings };
+        if (body.settings) setNavigationSettings(body.settings);
       }
       if (taxResponse.ok) {
         const body = await taxResponse.json() as { tables?: WithholdingTaxTable[] };
@@ -192,6 +204,38 @@ export default function OsSettingsPage() {
     const body = await response.json() as { settings?: StoreModuleSettings };
     if (body.settings) setSettings(body.settings);
     showNotice("設定を保存しました。");
+  }
+
+  function toggleNavigationBeta(path: string, checked: boolean) {
+    setNavigationSettings((current) => {
+      const nextPaths = new Set(current.betaNavPaths);
+      if (checked) {
+        nextPaths.add(path);
+      } else {
+        nextPaths.delete(path);
+      }
+      return { ...current, betaNavPaths: Array.from(nextPaths) };
+    });
+  }
+
+  async function saveNavigationSettings() {
+    setSavingNavigationSettings(true);
+    const response = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ moduleKey: "navigation", settings: navigationSettings })
+    });
+    setSavingNavigationSettings(false);
+    const body = await response.json().catch(() => ({})) as { settings?: NavigationMenuSettings; error?: string };
+    if (!response.ok) {
+      showNotice(body.error ?? "メニュー Beta 表示を保存できませんでした。", "info");
+      return;
+    }
+    if (body.settings) {
+      setNavigationSettings(body.settings);
+      setCachedNavigationSettings(body.settings);
+    }
+    showNotice("メニュー Beta 表示を保存しました。");
   }
 
   function toggleRolePermission(role: string, permissionKey: string, checked: boolean) {
@@ -378,6 +422,9 @@ export default function OsSettingsPage() {
     showNotice(`雇用保険料率を保存しました。${body.rowCount ?? 0}行`);
   }
 
+  const navigationItemByHref = new Map(canonicalNavItems.map((item) => [item.href, item]));
+  const betaNavPathSet = new Set(navigationSettings.betaNavPaths);
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -462,6 +509,59 @@ export default function OsSettingsPage() {
               </table>
             </div>
             <p className="settings-permission-note">本部オーナーの基本権限は固定です。保存後、対象ユーザーは次回の画面読み込みから新しいナビゲーションになります。</p>
+          </section>
+
+          <section className="panel settings-navigation-beta-panel">
+            <div className="panel-title">
+              <div>
+                <h3>メニュー Beta 表示</h3>
+                <p>OS メニューに表示する機能ごとの Beta ラベルを設定します。準備中や試験運用中の機能だけを選択してください。</p>
+              </div>
+              <button className="secondary-button" type="button" disabled={savingNavigationSettings} onClick={() => void saveNavigationSettings()}>
+                <Save size={16} />
+                {savingNavigationSettings ? "保存中" : "Beta 表示を保存"}
+              </button>
+            </div>
+            <div className="settings-navigation-beta-groups">
+              {navModules.map((module) => {
+                const ModuleIcon = module.icon;
+                const items = module.paths.flatMap((path) => {
+                  const item = navigationItemByHref.get(path.href);
+                  return item ? [item] : [];
+                });
+                if (!items.length) return null;
+
+                return (
+                  <section className="settings-navigation-beta-group" key={module.id}>
+                    <div className="settings-navigation-beta-heading">
+                      <ModuleIcon size={16} />
+                      <strong>{module.label}</strong>
+                    </div>
+                    <div className="settings-navigation-beta-list">
+                      {items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <label className="settings-navigation-beta-row" key={item.href}>
+                            <span className="settings-navigation-beta-name">
+                              <Icon size={15} />
+                              <span>{item.label}</span>
+                            </span>
+                            <span className="settings-navigation-beta-control">
+                              <input
+                                type="checkbox"
+                                checked={betaNavPathSet.has(item.href)}
+                                onChange={(event) => toggleNavigationBeta(item.href, event.currentTarget.checked)}
+                              />
+                              <span>Beta</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           </section>
 
           <section className="panel">

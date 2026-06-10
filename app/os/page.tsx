@@ -1,30 +1,45 @@
 "use client";
 
 import {
+  BadgePercent,
+  Boxes,
+  ChartColumn,
   ClipboardCheck,
+  ClipboardList,
   Clock3,
+  FileText,
+  Globe2,
+  Lightbulb,
   LineChart,
   MenuSquare,
   MessageSquareWarning,
   PackageCheck,
   ReceiptText,
+  Search,
   Settings,
   ShoppingCart,
   Store,
+  Truck,
   UserCog
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserBadge } from "./components/UserBadge";
 import { getCachedCurrentEmployee, loadCurrentEmployee } from "./components/currentEmployeeStore";
+import { getCachedNavigationSettings, loadNavigationSettings } from "./components/navigationSettingsStore";
 
-type OsModule = {
+type HomeFeature = {
   title: string;
   description: string;
   href: string;
   icon: LucideIcon;
-  status: "active" | "building";
-  roles: string[];
+  importance: "primary" | "secondary";
+};
+
+type HomeFeatureGroup = {
+  title: string;
+  description: string;
+  features: HomeFeature[];
 };
 
 type PayrollStatutoryAlert = {
@@ -39,144 +54,252 @@ type PayrollStatutoryAlert = {
   dismissActionLabel?: string;
 };
 
-const osModules: OsModule[] = [
+const homeFeatureGroups: HomeFeatureGroup[] = [
   {
-    title: "店舗ワークベンチ",
-    description: "店舗スタッフが注文、キッチン表示、販売状態、手順書、タイムカード、POSをまとめて操作します。",
-    href: "/store",
-    icon: Store,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
-  },
-  {
-    title: "発注・購入管理",
-    description: "店舗発注から購入、納品、店舗確認、レシート、発注先まで一連の実行を管理します。",
-    href: "/os/orders",
-    icon: PackageCheck,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
-  },
-  {
-    title: "証憑管理",
-    description: "レシート、領収書、PDF、購入記録をまとめてOCRし、仕入・経費・立替の確認に回します。",
-    href: "/os/vouchers",
-    icon: ReceiptText,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
+    title: "日常実行",
+    description: "店舗が毎日開く入口。注文、購入、納品、証憑、勤怠をここに集約します。",
+    features: [
+      {
+        title: "店舗ワークベンチ",
+        description: "現場スタッフ用の注文、キッチン、販売状態、手順書、タイムカード、POS入口。",
+        href: "/store",
+        icon: Store,
+        importance: "primary"
+      },
+      {
+        title: "発注依頼",
+        description: "店舗側の発注作成、店舗確認、購入状況の確認。",
+        href: "/os/orders",
+        icon: PackageCheck,
+        importance: "primary"
+      },
+      {
+        title: "購入管理",
+        description: "発注先ごとの購入、納品、到着日、購入不可、レシート管理。",
+        href: "/os/procurement",
+        icon: ClipboardList,
+        importance: "primary"
+      },
+      {
+        title: "証憑管理",
+        description: "レシート、領収書、PDF、OCR結果の整理。",
+        href: "/os/vouchers",
+        icon: ReceiptText,
+        importance: "secondary"
+      },
+      {
+        title: "発注履歴",
+        description: "完了済みの発注、納品、レシート確認。",
+        href: "/os/history",
+        icon: FileText,
+        importance: "secondary"
+      },
+      {
+        title: "タイムカード",
+        description: "出退勤、休憩、勤務実績の確認。",
+        href: "/os/timecard",
+        icon: Clock3,
+        importance: "secondary"
+      }
+    ]
   },
   {
     title: "店舗運営",
-    description: "商品・メニューと連動する手順書を中心に、チェックリスト、清掃・点検、トレーニングを管理します。",
-    href: "/os/procedures",
-    icon: ClipboardCheck,
-    status: "active",
-    roles: ["owner", "manager"]
+    description: "手順書、現場記録、連絡、改善要望など、店舗品質を維持するための入口です。",
+    features: [
+      {
+        title: "手順書管理",
+        description: "商品・メニューと連動する店舗手順、チェックリスト、教育資料。",
+        href: "/os/procedures",
+        icon: ClipboardCheck,
+        importance: "primary"
+      },
+      {
+        title: "現場記録",
+        description: "店舗で起きた改善点、気づき、運用メモ。",
+        href: "/os/field-notes",
+        icon: Lightbulb,
+        importance: "secondary"
+      },
+      {
+        title: "連絡・報告",
+        description: "店舗確認、報告、連絡事項の確認。",
+        href: "/os/reports",
+        icon: MessageSquareWarning,
+        importance: "secondary"
+      },
+      {
+        title: "フィードバック",
+        description: "Store と OS から送られた問題報告や要望。",
+        href: "/os/feedback",
+        icon: MessageSquareWarning,
+        importance: "secondary"
+      }
+    ]
   },
   {
-    title: "タイムカード",
-    description: "出退勤、休憩、希望シフト、勤務実績、給与、負荷分析を店舗別に確認します。",
-    href: "/os/timecard",
-    icon: Clock3,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager", "staff"]
+    title: "売上・顧客",
+    description: "POS、Web予約、メニュー、ブランドサイト、会員を一体で管理します。",
+    features: [
+      {
+        title: "POS",
+        description: "店舗会計、税率・決済設定、取引状況。",
+        href: "/os/pos",
+        icon: ShoppingCart,
+        importance: "primary"
+      },
+      {
+        title: "日次レジ締め",
+        description: "日次締め、差額、決済別の確認。",
+        href: "/os/pos/reconciliation",
+        icon: ReceiptText,
+        importance: "secondary"
+      },
+      {
+        title: "メニュー管理",
+        description: "POS、ブランドサイト、キッチン表示で共有するメニュー master。",
+        href: "/os/menus",
+        icon: MenuSquare,
+        importance: "primary"
+      },
+      {
+        title: "ブランドサイト",
+        description: "公開メニュー、Web予約、販売状態との連携確認。",
+        href: "/os/brand-sites",
+        icon: Globe2,
+        importance: "secondary"
+      },
+      {
+        title: "会員・ポイント",
+        description: "会員カード、ポイント、特典、言語設定。",
+        href: "/os/loyalty",
+        icon: BadgePercent,
+        importance: "secondary"
+      }
+    ]
   },
   {
-    title: "経営分析",
-    description: "POS・Web予約・デリバリー売上、人件費、原価、経費、月次損益を横断して確認します。",
-    href: "/os/analytics",
-    icon: LineChart,
-    status: "active",
-    roles: ["owner", "manager"]
+    title: "分析",
+    description: "売上、人件費、原価、経費、月次損益を分けて見ます。",
+    features: [
+      {
+        title: "経営分析",
+        description: "経営指標の全体確認。",
+        href: "/os/analytics",
+        icon: LineChart,
+        importance: "primary"
+      },
+      {
+        title: "売上分析",
+        description: "POS、Web予約、デリバリー売上の確認。",
+        href: "/os/analytics/sales",
+        icon: ChartColumn,
+        importance: "secondary"
+      },
+      {
+        title: "人件費分析",
+        description: "勤怠データに基づく人件費と労働時間。",
+        href: "/os/analytics/labor",
+        icon: UserCog,
+        importance: "secondary"
+      },
+      {
+        title: "原価・経費分析",
+        description: "原価と月次経費を分けて確認。",
+        href: "/os/analytics/cost",
+        icon: Boxes,
+        importance: "secondary"
+      },
+      {
+        title: "月次損益",
+        description: "月次の利益、固定費、変動費、雑費。",
+        href: "/os/analytics/profit",
+        icon: LineChart,
+        importance: "secondary"
+      }
+    ]
   },
   {
-    title: "POS",
-    description: "店舗 POS の会計状況、税率・決済設定、日次レジ締め、取引履歴を管理します。",
-    href: "/os/pos",
-    icon: ShoppingCart,
-    status: "active",
-    roles: ["owner", "manager"]
+    title: "マスタ・設定",
+    description: "全モジュールの前提になる商品、店舗、スタッフ、発注先、システム設定です。",
+    features: [
+      {
+        title: "商品マスタ",
+        description: "発注、手順、原価計算で使う商品データ。",
+        href: "/os/products",
+        icon: Boxes,
+        importance: "primary"
+      },
+      {
+        title: "店舗・ブランド",
+        description: "店舗、ブランド、営業設定、表示範囲。",
+        href: "/os/stores",
+        icon: Store,
+        importance: "primary"
+      },
+      {
+        title: "スタッフ管理",
+        description: "アカウント、役割、店舗・ブランド・発注先の表示範囲。",
+        href: "/os/staff",
+        icon: UserCog,
+        importance: "primary"
+      },
+      {
+        title: "発注先管理",
+        description: "発注先、購入 URL、納品先、連絡先の管理。",
+        href: "/os/suppliers",
+        icon: Truck,
+        importance: "secondary"
+      },
+      {
+        title: "商品比較",
+        description: "候補商品、輸入品、価格・重量・送料の比較。",
+        href: "/os/product-comparisons",
+        icon: Search,
+        importance: "secondary"
+      },
+      {
+        title: "システム設定",
+        description: "会社情報、通知、勤怠、POS、外部サービス利用量。",
+        href: "/os/settings",
+        icon: Settings,
+        importance: "secondary"
+      }
+    ]
   }
 ];
 
-const systemModules: OsModule[] = [
-  {
-    title: "メニュー管理",
-    description: "ブランドサイト、POS、キッチン表示、手順書で共有するメニュー、選択肢、販売可否を管理します。",
-    href: "/os/menus",
-    icon: MenuSquare,
-    status: "active",
-    roles: ["owner", "manager"]
-  },
-  {
-    title: "店舗・ブランド",
-    description: "店舗、ブランド、表示範囲、営業設定を整え、全モジュールの基礎データとして利用します。",
-    href: "/os/stores",
-    icon: Store,
-    status: "active",
-    roles: ["owner", "manager"]
-  },
-  {
-    title: "スタッフ管理",
-    description: "スタッフアカウント、役割、店舗・ブランド・発注先の表示範囲、ログイン情報を管理します。",
-    href: "/os/staff",
-    icon: UserCog,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager"]
-  },
-  {
-    title: "フィードバック",
-    description: "Store と OS から送られた問題報告、データ修正、機能要望を確認し、対応状態を管理します。",
-    href: "/os/feedback",
-    icon: MessageSquareWarning,
-    status: "active",
-    roles: ["owner", "manager", "store_owner", "store_manager"]
-  },
-  {
-    title: "システム設定",
-    description: "会社情報、Store 表示、販売状態、通知、勤怠、POS などモジュールごとの動作を設定します。",
-    href: "/os/settings",
-    icon: Settings,
-    status: "active",
-    roles: ["owner", "manager"]
-  }
-];
-
-function canAccessModule(role: string, module: OsModule) {
-  return module.roles.includes(role);
+function canAccessFeature(role: string, permittedNavPaths: Set<string>, feature: HomeFeature) {
+  if (!role) return false;
+  if (feature.href === "/os") return true;
+  return permittedNavPaths.has(feature.href);
 }
 
-function ModuleCard({ module }: { module: OsModule }) {
-  const Icon = module.icon;
-  const content = (
-    <>
+function HomeFeatureCard({ feature, isBeta }: { feature: HomeFeature; isBeta: boolean }) {
+  const Icon = feature.icon;
+
+  return (
+    <a className={`os-module-card is-${feature.importance}`} href={feature.href}>
       <div className="os-module-icon">
-        <Icon size={24} />
+        <Icon size={feature.importance === "primary" ? 23 : 18} />
       </div>
       <div>
         <div className="os-module-heading">
-          <h3>{module.title}</h3>
-          <span className={module.status === "active" ? "status-pill is-active" : "status-pill"}>
-            {module.status === "active" ? "利用可能" : "準備中"}
-          </span>
+          <h3>{feature.title}</h3>
+          {isBeta ? <span className="nav-beta-badge">Beta</span> : null}
         </div>
-        <p>{module.description}</p>
+        <p>{feature.description}</p>
       </div>
-    </>
-  );
-
-  return module.status === "active" ? (
-    <a className="os-module-card" href={module.href}>
-      {content}
     </a>
-  ) : (
-    <div className="os-module-card is-disabled" aria-disabled="true">
-      {content}
-    </div>
   );
 }
 
 export default function Foundr1OsHome() {
-  const [role, setRole] = useState(() => getCachedCurrentEmployee()?.role ?? "");
+  const cachedEmployee = getCachedCurrentEmployee();
+  const cachedNavigationSettings = getCachedNavigationSettings();
+  const [role, setRole] = useState(() => cachedEmployee?.role ?? "");
+  const [permittedNavPaths, setPermittedNavPaths] = useState(() => new Set(cachedEmployee?.permittedNavPaths ?? []));
+  const [betaNavPaths, setBetaNavPaths] = useState(() => new Set(cachedNavigationSettings?.betaNavPaths ?? []));
   const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
   const [dismissingAlertKey, setDismissingAlertKey] = useState("");
 
@@ -185,10 +308,28 @@ export default function Foundr1OsHome() {
 
     async function loadRole() {
       const employee = await loadCurrentEmployee();
-      if (isMounted) setRole(employee?.role ?? "");
+      if (isMounted) {
+        setRole(employee?.role ?? "");
+        setPermittedNavPaths(new Set(employee?.permittedNavPaths ?? []));
+      }
     }
 
     void loadRole();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBetaNavPaths() {
+      const settings = await loadNavigationSettings();
+      if (isMounted) setBetaNavPaths(new Set(settings.betaNavPaths));
+    }
+
+    void loadBetaNavPaths();
 
     return () => {
       isMounted = false;
@@ -234,8 +375,14 @@ export default function Foundr1OsHome() {
     setDismissingAlertKey("");
   }
 
-  const permittedModules = useMemo(() => osModules.filter((module) => canAccessModule(role, module)), [role]);
-  const permittedSystemModules = useMemo(() => systemModules.filter((module) => canAccessModule(role, module)), [role]);
+  const permittedHomeFeatureGroups = useMemo(() => {
+    return homeFeatureGroups
+      .map((group) => ({
+        ...group,
+        features: group.features.filter((feature) => canAccessFeature(role, permittedNavPaths, feature))
+      }))
+      .filter((group) => group.features.length > 0);
+  }, [permittedNavPaths, role]);
   const payrollAlertActionHref = ["store_owner", "store_manager"].includes(role) ? "/os/timecard/payroll" : "/os/settings";
   const payrollAlertActionLabel = ["store_owner", "store_manager"].includes(role) ? "給与へ" : "システム設定へ";
 
@@ -257,8 +404,8 @@ export default function Foundr1OsHome() {
       <section className="os-home-hero">
         <div>
           <p className="eyebrow">Restaurant Operating System</p>
-          <h2>店舗運営の機能を選択</h2>
-          <p>商品マスタ、スタッフ、店舗、ブランド、権限を共有しながら、必要な業務アプリへ入ります。</p>
+          <h2>必要な業務へすぐ入る</h2>
+          <p>現在の OS メニューから日常利用する重要な入口だけを整理しています。権限がある機能だけが表示されます。</p>
         </div>
       </section>
 
@@ -295,32 +442,43 @@ export default function Foundr1OsHome() {
         </section>
       ) : null}
 
-      <section className="os-module-section" aria-label="業務アプリ">
+      <section className="os-module-section" aria-label="重要機能">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Modules</p>
-            <h2>業務アプリ</h2>
+            <p className="eyebrow">Core Workspaces</p>
+            <h2>重要な機能ブロック</h2>
           </div>
         </div>
-        <div className="os-module-grid">
-          {permittedModules.map((module) => <ModuleCard module={module} key={module.title} />)}
-          {!permittedModules.length ? <p className="empty-state">利用できる業務アプリがありません。</p> : null}
-        </div>
-      </section>
+        {permittedHomeFeatureGroups.length ? (
+          <div className="os-home-feature-groups">
+            {permittedHomeFeatureGroups.map((group) => {
+              const primaryFeatures = group.features.filter((feature) => feature.importance === "primary");
+              const secondaryFeatures = group.features.filter((feature) => feature.importance === "secondary");
 
-      {permittedSystemModules.length ? (
-        <section className="os-module-section" aria-label="共有データ">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Shared Data</p>
-              <h2>共有データ</h2>
-            </div>
+              return (
+                <section className="os-home-feature-group" key={group.title}>
+                  <div className="os-home-feature-group-heading">
+                    <h3>{group.title}</h3>
+                    <p>{group.description}</p>
+                  </div>
+                  {primaryFeatures.length ? (
+                    <div className="os-module-grid">
+                      {primaryFeatures.map((feature) => <HomeFeatureCard feature={feature} isBeta={betaNavPaths.has(feature.href)} key={feature.href} />)}
+                    </div>
+                  ) : null}
+                  {secondaryFeatures.length ? (
+                    <div className="os-module-link-grid">
+                      {secondaryFeatures.map((feature) => <HomeFeatureCard feature={feature} isBeta={betaNavPaths.has(feature.href)} key={feature.href} />)}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
           </div>
-          <div className="os-module-grid is-compact">
-            {permittedSystemModules.map((module) => <ModuleCard module={module} key={module.title} />)}
-          </div>
-        </section>
-      ) : null}
+        ) : (
+          <p className="empty-state">利用できる機能がありません。</p>
+        )}
+      </section>
     </main>
   );
 }
