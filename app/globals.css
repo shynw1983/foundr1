@@ -18552,6 +18552,12 @@ body :where(
   box-shadow: inset 4px 0 0 rgba(245, 158, 11, 0.72);
 }
 
+.voucher-row.is-duplicate-hit {
+  border-color: rgba(189, 58, 49, 0.46);
+  background: #fffafa;
+  box-shadow: inset 4px 0 0 rgba(189, 58, 49, 0.82);
+}
+
 .voucher-row-main {
   display: grid;
   gap: 6px;
@@ -18606,6 +18612,16 @@ body :where(
   color: #92400e;
   font-size: 0.78rem;
   font-weight: 650;
+}
+
+.voucher-duplicate-alert {
+  border: 1px solid rgba(189, 58, 49, 0.34);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.78rem;
+  font-weight: 750;
 }
 
 .voucher-total {

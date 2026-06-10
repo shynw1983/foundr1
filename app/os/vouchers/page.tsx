@@ -281,6 +281,7 @@ export default function VouchersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [recentDuplicateVoucherIds, setRecentDuplicateVoucherIds] = useState<Record<string, boolean>>({});
   const [accountingDrafts, setAccountingDrafts] = useState<Record<string, VoucherAccountingDraft>>({});
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
@@ -443,10 +444,12 @@ export default function VouchersPage() {
 
       setMessage("証憑を順番に処理しています。");
       setUploadProgress({ total: files.length, completed: 0, failed: 0, currentFile: files[0]?.name || "", phase: "準備中" });
+      setRecentDuplicateVoucherIds({});
 
       let failedCount = 0;
       let savedCount = 0;
       let duplicateCount = 0;
+      const duplicateVoucherIds: Record<string, boolean> = {};
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const fileName = file.name || `file-${index + 1}`;
@@ -472,6 +475,7 @@ export default function VouchersPage() {
           failedCount += 1;
         } else if (result.duplicate) {
           duplicateCount += 1;
+          if (result.existingOcrResultId) duplicateVoucherIds[result.existingOcrResultId] = true;
         } else {
           savedCount += 1;
         }
@@ -484,6 +488,7 @@ export default function VouchersPage() {
         : duplicateCount
           ? `証憑を読み取りました。重複している証憑は登録しませんでした（新規 ${savedCount}件 / 重複 ${duplicateCount}件）。`
           : "証憑を読み取りました。内容を確認してください。";
+      setRecentDuplicateVoucherIds(duplicateVoucherIds);
       setMessage(finalMessage);
       form.reset();
       try {
@@ -1032,13 +1037,15 @@ export default function VouchersPage() {
               const isExpanded = Boolean(expandedVoucherIds[voucher.id]);
               const pendingAction = pendingActions[voucher.id];
               const isVoucherBusy = Boolean(pendingAction);
+              const isRecentDuplicate = Boolean(recentDuplicateVoucherIds[voucher.id]);
               return (
-                <article className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""}`} key={voucher.id}>
+                <article className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""} ${isRecentDuplicate ? "is-duplicate-hit" : ""}`} key={voucher.id}>
                   <div className="voucher-row-main">
                     <div className="voucher-row-heading">
                       <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : isConfirmed ? "is-active" : "is-warning"}`}>
                         {voucher.status === "failed" ? "OCR失敗" : isConfirmed ? "確定済み" : "確認待ち"}
                       </span>
+                      {isRecentDuplicate ? <span className="voucher-duplicate-alert">重複アップロードあり</span> : null}
                       {isPendingReview && !isExpanded ? <span className="voucher-review-alert">未確認明細あり</span> : null}
                       <strong>{buildVoucherTitle(voucher)}</strong>
                     </div>
@@ -2242,11 +2249,16 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
       const response = await fetch("/api/vouchers", { method: "POST", body: formData });
       const body = await response.json().catch(() => ({})) as {
         error?: string;
-        results?: Array<{ ok?: boolean; duplicate?: boolean; ocrError?: string; error?: string }>;
+        results?: Array<{ ok?: boolean; duplicate?: boolean; existingOcrResultId?: string; ocrError?: string; error?: string }>;
       };
       const result = body.results?.[0];
       if (response.ok && result?.ok) {
-        return { ok: true, duplicate: Boolean(result.duplicate), ocrError: result.ocrError || "" };
+        return {
+          ok: true,
+          duplicate: Boolean(result.duplicate),
+          existingOcrResultId: String(result.existingOcrResultId ?? ""),
+          ocrError: result.ocrError || ""
+        };
       }
       lastError = body.error || result?.error || "証憑をアップロードできませんでした。";
     } catch (error) {
@@ -2254,7 +2266,7 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
     }
     await sleep(1200 * (attempt + 1));
   }
-  return { ok: false, duplicate: false, ocrError: lastError || "証憑をアップロードできませんでした。" };
+  return { ok: false, duplicate: false, existingOcrResultId: "", ocrError: lastError || "証憑をアップロードできませんでした。" };
 }
 
 async function splitPdfIntoPageFiles(file: File) {
