@@ -257,7 +257,7 @@ const expenseAccountTitleOptions = [
   "雑費"
 ];
 const taxRateOptions = ["", "8%", "10%", "非課税", "不課税", "対象外"];
-const taxModeOptions = ["内税", "外税", "不明"];
+const taxModeOptions = ["内税", "外税", "対象外", "不明"];
 const voucherWorkspaceStorageKey = "foundr1-os:voucher-workspace:v1";
 const voucherWorkspaceSnapshotMaxAgeMs = 1000 * 60 * 60 * 24 * 7;
 
@@ -2041,7 +2041,7 @@ function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccount
 function inferReceiptTaxMode(lines: VoucherAccountingLine[]) {
   const modes = lines
     .map((line) => normalizeDraftTaxMode(line.taxMode))
-    .filter((mode) => mode === "内税" || mode === "外税");
+    .filter((mode) => mode === "内税" || mode === "外税" || mode === "対象外");
   if (!modes.length) return "不明";
   const uniqueModes = new Set(modes);
   if (uniqueModes.size === 1) return modes[0] ?? "不明";
@@ -2191,7 +2191,7 @@ function normalizeDraftTaxRate(value: string) {
 }
 
 function normalizeDraftTaxMode(value: string) {
-  return value === "内税" || value === "外税" ? value : "不明";
+  return value === "内税" || value === "外税" || value === "対象外" ? value : "不明";
 }
 
 function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: string) {

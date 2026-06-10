@@ -1109,7 +1109,7 @@ function normalizeTaxRate(value: unknown) {
 
 function normalizeTaxMode(value: unknown) {
   const mode = String(value ?? "").trim();
-  return mode === "内税" || mode === "外税" ? mode : "不明";
+  return mode === "内税" || mode === "外税" || mode === "対象外" ? mode : "不明";
 }
 
 function calculateTaxAmount(amount: number, taxRate: string, taxMode: string) {
