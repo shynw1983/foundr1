@@ -18535,6 +18535,14 @@ body :where(
 }
 
 @media (min-width: 761px) and (max-width: 1180px) {
+  .voucher-preview-open {
+    display: inline-flex;
+  }
+
+  .voucher-preview-link {
+    display: none;
+  }
+
   .shell.has-voucher-preview .voucher-workspace {
     min-width: 0;
     overflow: auto;
