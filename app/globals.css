@@ -4005,39 +4005,53 @@ body :where(
 }
 
 .receipt-line-confirm-check {
-  width: 84px;
-  height: 28px;
-  min-height: 28px;
+  width: 104px;
+  min-width: 104px;
+  height: 32px;
+  min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0 11px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  justify-content: flex-start;
+  gap: 7px;
   background: #ffffff;
   color: var(--text);
   font-size: 0.74rem;
   font-weight: 650;
+  font-family: inherit;
+  line-height: 1;
   white-space: nowrap;
   justify-self: end;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
-.receipt-confirm-form .receipt-line-confirm-check input[type="checkbox"] {
-  -webkit-appearance: checkbox;
-  appearance: auto;
-  width: 13px;
-  height: 13px;
-  min-width: 13px;
-  min-height: 13px;
-  padding: 0;
-  margin: 0;
-  accent-color: var(--primary);
+.receipt-line-confirm-check::before {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: inherit;
+  content: "";
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .receipt-line-confirm-check span {
-  min-width: 38px;
+  display: block;
+  min-width: 46px;
   text-align: center;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
 }
 
 .receipt-expense-line.is-confirmed .receipt-line-confirm-check {
@@ -4046,10 +4060,26 @@ body :where(
   color: var(--primary-strong);
 }
 
+.receipt-expense-line.is-confirmed .receipt-line-confirm-check::before {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  content: "✓";
+}
+
 .receipt-expense-line.needs-confirmation .receipt-line-confirm-check {
   border-color: rgba(180, 83, 9, 0.28);
-  background: rgba(180, 83, 9, 0.08);
+  background: #ffffff;
   color: #92400e;
+}
+
+.receipt-line-confirm-check:not(:disabled):hover {
+  box-shadow: 0 0 0 3px rgba(20, 83, 45, 0.08);
+}
+
+.receipt-line-confirm-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .receipt-expense-line-body {

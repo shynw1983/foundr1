@@ -2033,10 +2033,9 @@ function VoucherAccountingEditor({
                   <span>{isProductIgnored ? "商品マスタ対象外" : line.matchedProductName ? `紐付済み: ${line.matchedProductName}` : suggestedProduct ? `提案: ${suggestedProduct.name}` : "商品未確認"}</span>
                 ) : null}
               </button>
-              <label className="receipt-line-confirm-check">
-                <input type="checkbox" checked={line.confirmed} onChange={(event) => onLineChange(line.id, { confirmed: event.target.checked })} disabled={isSaving} />
+              <button className="receipt-line-confirm-check" type="button" onClick={() => onLineChange(line.id, { confirmed: !line.confirmed })} disabled={isSaving} aria-pressed={line.confirmed}>
                 <span>{line.confirmed ? "確認済み" : "未確認"}</span>
-              </label>
+              </button>
             </div>
             <div className="receipt-expense-line-body">
               <label>
