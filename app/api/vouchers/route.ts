@@ -142,6 +142,10 @@ export async function PATCH(request: Request) {
       taxRate?: string;
       taxMode?: string;
       taxAmount?: string | number;
+      quantity?: string | number;
+      unit?: string;
+      unitPrice?: string | number;
+      ocrItemId?: string;
       note?: string;
     }>;
     vendorName?: string;
@@ -303,6 +307,7 @@ export async function PATCH(request: Request) {
     `;
 
     if (nextUsageType === "shiire") {
+      await updateReceiptOcrItemDetails(id, lines);
       await createProductCandidatesForOcrResult(id, session);
     }
 
@@ -532,6 +537,10 @@ function normalizeAccountingLines(lines: Array<{
   taxRate?: string;
   taxMode?: string;
   taxAmount?: string | number;
+  quantity?: string | number;
+  unit?: string;
+  unitPrice?: string | number;
+  ocrItemId?: string;
   note?: string;
 }> | undefined, voucher: { total?: unknown; tax?: unknown }, usageType: VoucherUsageType) {
   const fallbackAccountTitle = usageType === "shiire" ? "仕入高" : "雑費";
@@ -542,6 +551,10 @@ function normalizeAccountingLines(lines: Array<{
     taxRate: "",
     taxMode: "不明",
     taxAmount: voucher.tax,
+    quantity: "",
+    unit: "",
+    unitPrice: "",
+    ocrItemId: "",
     note: ""
   }];
 
@@ -561,9 +574,29 @@ function normalizeAccountingLines(lines: Array<{
       taxRate,
       taxMode,
       taxAmount,
+      quantity: normalizeNullableNumber(line.quantity),
+      unit: String(line.unit ?? "").trim().slice(0, 20),
+      unitPrice: normalizeNullableMoney(line.unitPrice),
+      ocrItemId: String(line.ocrItemId ?? "").trim(),
       note: String(line.note ?? "").trim()
     };
   }).filter((line) => line.amount > 0);
+}
+
+async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnType<typeof normalizeAccountingLines>) {
+  for (const line of lines) {
+    if (!line.ocrItemId) continue;
+    await sql`
+      update receipt_ocr_items
+      set
+        quantity = ${line.quantity},
+        unit = ${line.unit},
+        unit_price = ${line.unitPrice},
+        updated_at = now()
+      where id::text = ${line.ocrItemId}
+        and receipt_ocr_result_id::text = ${ocrResultId}
+    `;
+  }
 }
 
 function normalizeStoredAccountingLines(value: unknown) {
@@ -585,6 +618,10 @@ function normalizeStoredAccountingLines(value: unknown) {
       taxRate: String(row.taxRate ?? ""),
       taxMode: String(row.taxMode ?? ""),
       taxAmount: Number(row.taxAmount ?? 0),
+      quantity: row.quantity === null || row.quantity === undefined ? null : Number(row.quantity),
+      unit: String(row.unit ?? ""),
+      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Number(row.unitPrice),
+      ocrItemId: String(row.ocrItemId ?? ""),
       note: String(row.note ?? "")
     };
   }).filter((line) => line.amount > 0);
@@ -598,6 +635,18 @@ function normalizeAccountTitle(value: unknown, usageType: VoucherUsageType) {
 
 function normalizeSubAccountTitle(value: unknown) {
   return String(value ?? "").trim().slice(0, 80);
+}
+
+function normalizeNullableNumber(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function normalizeNullableMoney(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
 }
 
 function normalizeTaxRate(value: unknown) {

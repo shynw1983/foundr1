@@ -81,6 +81,7 @@ type VoucherAccountingDraft = {
 
 type VoucherAccountingLine = {
   id: string;
+  ocrItemId: string;
   accountTitle: string;
   subAccountTitle: string;
   amount: string;
@@ -435,6 +436,10 @@ export default function VouchersPage() {
             taxRate: line.taxRate,
             taxMode: draft.taxMode,
             taxAmount: line.taxAmount,
+            quantity: line.quantity,
+            unit: line.unit,
+            unitPrice: line.unitPrice,
+            ocrItemId: line.ocrItemId,
             note: line.note
           })),
           vendorName: vendorName || draft.vendorName,
@@ -1053,11 +1058,18 @@ function VoucherAccountingEditor({
               <span>明細メモ</span>
               <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} disabled={isSaving} />
             </label>
-            <div className="receipt-line-ocr-meta">
-              <span>数量 {line.quantity || "-"}</span>
-              <span>単位 {line.unit || "-"}</span>
-              <span>単価 {line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}</span>
-            </div>
+            <label>
+              <span>数量</span>
+              <input type="number" min="0" step="0.001" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
+            </label>
+            <label>
+              <span>単位</span>
+              <input value={line.unit} onChange={(event) => onLineChange(line.id, { unit: event.target.value })} placeholder="例: 個、袋、本" disabled={isSaving} />
+            </label>
+            <label>
+              <span>単価</span>
+              <input type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => onLineChange(line.id, { unitPrice: event.target.value })} disabled={isSaving} />
+            </label>
             <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
               <Trash2 size={16} />
               削除
@@ -1126,6 +1138,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     const taxMode = normalizeDraftTaxMode(item.taxMode);
     return [{
       id: `ocr-${index}-${item.id}`,
+      ocrItemId: item.id,
       accountTitle,
       subAccountTitle,
       amount: String(amount || ""),
@@ -1143,6 +1156,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   const amount = Math.round(voucher?.total ?? 0);
   return [{
     id: "manual-0",
+    ocrItemId: "",
     accountTitle: isShiire ? "仕入高" : "雑費",
     subAccountTitle: "",
     amount: String(amount || ""),
@@ -1159,6 +1173,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
 function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccountingLine {
   return {
     id: `manual-${Date.now()}-${index}`,
+    ocrItemId: "",
     accountTitle: "雑費",
     subAccountTitle: "",
     amount: "",
