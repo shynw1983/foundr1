@@ -185,6 +185,12 @@ type ConfirmedAccountingLineDetail = {
   note: string;
 };
 
+type ConfirmedVoucherBasicDraft = {
+  companyName: string;
+  brandName: string;
+  locationName: string;
+};
+
 type VoucherAccountingValidation = {
   ok: boolean;
   taxIncomplete: boolean;
@@ -460,9 +466,13 @@ export default function VouchersPage() {
     });
   }
 
-  async function saveConfirmedLineDetail(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail) {
+  async function saveConfirmedLineDetail(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail, basicDraft?: ConfirmedVoucherBasicDraft) {
     const key = getConfirmedVoucherDetailKey(voucher.id, detail);
     const draft = confirmedLineDrafts[key] ?? detail;
+    const companyName = basicDraft?.companyName ?? voucher.companyName;
+    const brandName = basicDraft?.brandName ?? voucher.brandName;
+    const locationName = basicDraft?.locationName ?? voucher.locationName;
+    const vendorName = buildVendorNameFromParts(companyName, brandName, locationName, voucher.vendorName);
     setSavingConfirmedLineKeys((current) => ({ ...current, [key]: true }));
     try {
       const response = await fetch("/api/vouchers", {
@@ -474,6 +484,10 @@ export default function VouchersPage() {
           usageType: voucher.usageType,
           paymentType: voucher.paymentType,
           reimbursementStatus: voucher.reimbursementStatus,
+          vendorName,
+          companyName,
+          brandName,
+          locationName,
           lineNo: detail.lineNo,
           lines: [{
             accountTitle: draft.accountTitle,
@@ -1283,7 +1297,7 @@ export default function VouchersPage() {
                           savingLineKeys={savingConfirmedLineKeys}
                           getDraft={(detail) => getConfirmedLineDraft(voucher, detail)}
                           onLineChange={(detail, next) => updateConfirmedLineDraft(voucher, detail, next)}
-                          onSave={(detail) => void saveConfirmedLineDetail(voucher, detail)}
+                          onSave={(detail, basicDraft) => void saveConfirmedLineDetail(voucher, detail, basicDraft)}
                         />
                       ) : null}
                     </>
@@ -1317,9 +1331,14 @@ export default function VouchersPage() {
 }
 
 function buildVoucherTitle(voucher: VoucherRecord) {
-  return [voucher.brandName || voucher.companyName || voucher.vendorName, voucher.locationName]
+  return buildVendorNameFromParts(voucher.companyName, voucher.brandName, voucher.locationName, voucher.vendorName) || voucher.uploadedFileName || "証憑";
+}
+
+function buildVendorNameFromParts(companyName: string, brandName: string, locationName: string, fallback = "") {
+  return [brandName || companyName, locationName]
+    .map((value) => value.trim())
     .filter(Boolean)
-    .join(" ") || voucher.uploadedFileName || "証憑";
+    .join(" ") || fallback.trim();
 }
 
 function formatMoney(value: number) {
@@ -2034,12 +2053,6 @@ function VoucherAccountingEditor({
                   </div>
                 </div>
               ) : null}
-              <div className="receipt-expense-line-actions">
-                <button className="secondary-button" type="button" onClick={() => toggleLineExpanded(line.id)}>
-                  <ChevronDown size={16} />
-                  閉じる
-                </button>
-              </div>
               </div>
           </div>
           );
@@ -2228,9 +2241,21 @@ function ConfirmedVoucherDetailEditor({
   savingLineKeys: Record<string, boolean>;
   getDraft: (detail: ConfirmedAccountingLineDetail) => ConfirmedAccountingLineDetail;
   onLineChange: (detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) => void;
-  onSave: (detail: ConfirmedAccountingLineDetail) => void;
+  onSave: (detail: ConfirmedAccountingLineDetail, basicDraft: ConfirmedVoucherBasicDraft) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
+  const [basicDraft, setBasicDraft] = useState<ConfirmedVoucherBasicDraft>(() => ({
+    companyName: voucher.companyName,
+    brandName: voucher.brandName,
+    locationName: voucher.locationName
+  }));
+  useEffect(() => {
+    setBasicDraft({
+      companyName: voucher.companyName,
+      brandName: voucher.brandName,
+      locationName: voucher.locationName
+    });
+  }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName]);
   function toggleDetailExpanded(detailKey: string) {
     setExpandedDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
   }
@@ -2239,6 +2264,20 @@ function ConfirmedVoucherDetailEditor({
       <div className="voucher-confirmed-detail-title">
         <strong>確定済み原明細</strong>
         <span>保存すると会計集計とCSV出力に反映されます。</span>
+      </div>
+      <div className="voucher-confirmed-basic-grid">
+        <label>
+          <span>会社名</span>
+          <input value={basicDraft.companyName} onChange={(event) => setBasicDraft((current) => ({ ...current, companyName: event.target.value }))} />
+        </label>
+        <label>
+          <span>ブランド名</span>
+          <input value={basicDraft.brandName} onChange={(event) => setBasicDraft((current) => ({ ...current, brandName: event.target.value }))} />
+        </label>
+        <label>
+          <span>店舗名</span>
+          <input value={basicDraft.locationName} onChange={(event) => setBasicDraft((current) => ({ ...current, locationName: event.target.value }))} />
+        </label>
       </div>
       {details.map((detail) => {
         const detailKey = getConfirmedVoucherDetailKey(voucher.id, detail);
@@ -2306,11 +2345,7 @@ function ConfirmedVoucherDetailEditor({
               </label>
             </div>
             <div className="voucher-confirmed-detail-actions">
-              <button className="secondary-button" type="button" onClick={() => toggleDetailExpanded(detailKey)}>
-                <ChevronDown size={16} />
-                閉じる
-              </button>
-              <button className="secondary-button" type="button" disabled={isSaving} onClick={() => onSave(detail)}>
+              <button className="secondary-button" type="button" disabled={isSaving} onClick={() => onSave(detail, basicDraft)}>
                 {isSaving ? "保存中..." : "この明細を保存"}
               </button>
             </div>

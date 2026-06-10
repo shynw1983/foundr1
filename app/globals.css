@@ -4040,16 +4040,6 @@ body :where(
   grid-column: 1 / span 1;
 }
 
-.receipt-expense-line-actions {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.receipt-expense-line-actions button {
-  min-height: 36px;
-}
-
 .voucher-product-binding {
   grid-column: 4 / -1;
   display: grid;
@@ -18391,6 +18381,36 @@ body :where(
   font-size: 0.78rem;
 }
 
+.voucher-confirmed-basic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.voucher-confirmed-basic-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voucher-confirmed-basic-grid span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.voucher-confirmed-basic-grid input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 9px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
 .voucher-confirmed-detail-row {
   display: grid;
   gap: 10px;
@@ -18701,7 +18721,7 @@ body :where(
 
 .voucher-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) auto minmax(260px, 0.9fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 14px;
   align-items: center;
   border: 1px solid var(--border);
@@ -18799,6 +18819,7 @@ body :where(
 }
 
 .voucher-expand-button {
+  justify-self: end;
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -18835,6 +18856,7 @@ body :where(
 }
 
 .voucher-controls {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
@@ -18852,7 +18874,9 @@ body :where(
 }
 
 .voucher-actions {
+  grid-column: 1 / -1;
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
   justify-items: stretch;
 }
@@ -19029,6 +19053,10 @@ body :where(
 
   .voucher-confirmed-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-confirmed-basic-grid {
+    grid-template-columns: 1fr;
   }
 
   .voucher-confirmed-detail-heading {

@@ -348,6 +348,10 @@ export async function PATCH(request: Request) {
     const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
     const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
     const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
+    const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
+    const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
+    const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
+    const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
 
     await sql`
       update receipt_ocr_results
@@ -355,6 +359,10 @@ export async function PATCH(request: Request) {
         usage_type = ${nextUsageType},
         payment_type = ${nextPaymentType},
         reimbursement_status = ${nextReimbursementStatus},
+        vendor_name = ${vendorName},
+        company_name = ${companyName},
+        brand_name = ${brandName},
+        location_name = ${locationName},
         tax = ${tax},
         total = ${receiptTotal},
         raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
