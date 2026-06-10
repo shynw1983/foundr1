@@ -18534,9 +18534,108 @@ body :where(
   }
 }
 
+@media (min-width: 761px) and (max-width: 1180px) {
+  .shell.has-voucher-preview .voucher-workspace {
+    min-width: 0;
+    overflow: auto;
+    padding: 16px;
+  }
+
+  .shell.has-voucher-preview .voucher-upload-panel,
+  .shell.has-voucher-preview .voucher-export-panel,
+  .shell.has-voucher-preview .voucher-list-panel {
+    min-width: 0;
+  }
+
+  .shell.has-voucher-preview .voucher-upload-form,
+  .shell.has-voucher-preview .voucher-export-controls,
+  .shell.has-voucher-preview .voucher-controls,
+  .shell.has-voucher-preview .voucher-actions,
+  .shell.has-voucher-preview .voucher-reference-price-grid,
+  .shell.has-voucher-preview .voucher-product-create-form,
+  .shell.has-voucher-preview .voucher-confirmed-line-row,
+  .shell.has-voucher-preview .voucher-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell.has-voucher-preview .voucher-total,
+  .shell.has-voucher-preview .voucher-expand-button {
+    justify-self: start;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel {
+    display: grid;
+    height: calc(100dvh - 62px);
+    box-shadow: -10px 0 28px rgb(15 23 42 / 0.14);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-open {
+    display: inline-flex;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-link {
+    display: none;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body img,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    min-height: calc(100dvh - 154px);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body iframe,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    height: calc(100dvh - 154px);
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1120px) {
+  .shell.has-voucher-preview {
+    grid-template-columns: minmax(0, min(430px, 50vw)) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 100dvh;
+  }
+
+  .shell.has-voucher-preview .sidebar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .shell.has-voucher-preview .voucher-workspace {
+    grid-column: 1;
+    grid-row: 2;
+    height: calc(100dvh - 62px);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
 @media (min-width: 1121px) and (max-width: 1180px) {
   .shell.has-voucher-preview {
-    grid-template-columns: 78px minmax(0, 1fr);
+    grid-template-columns: 78px minmax(0, min(430px, 46vw)) minmax(0, 1fr);
+    min-height: 100dvh;
+  }
+
+  .shell.has-voucher-preview .voucher-workspace {
+    grid-column: 2;
+    height: 100dvh;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel {
+    grid-column: 3;
+    height: 100dvh;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body img,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    min-height: calc(100dvh - 92px);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body iframe,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    height: calc(100dvh - 92px);
   }
 }
 
