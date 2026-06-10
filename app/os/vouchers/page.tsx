@@ -736,28 +736,52 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
     loading: true,
     error: "",
     contentType: "",
+    kind: "",
     objectUrl: ""
   });
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl = "";
-    setPreviewMeta({ loading: true, error: "", contentType: "", objectUrl: "" });
+    setPreviewMeta({ loading: true, error: "", contentType: "", kind: "", objectUrl: "" });
     fetch(previewUrl)
       .then(async (response) => {
         if (!response.ok) {
           const message = await response.text();
           throw new Error(message || `HTTP ${response.status}`);
         }
-        return response.blob();
+        const buffer = await response.arrayBuffer();
+        return {
+          buffer,
+          contentType: inferVoucherPreviewContentType(
+            new Uint8Array(buffer.slice(0, 16)),
+            response.headers.get("content-type") ?? "",
+            voucher.uploadedFileName
+          )
+        };
       })
-      .then((blob) => {
+      .then(async ({ buffer, contentType }) => {
         if (cancelled) return;
+        if (contentType === "application/pdf") {
+          const pdfImageUrl = await renderVoucherPdfFirstPage(buffer);
+          if (cancelled) return;
+          setPreviewMeta({
+            loading: false,
+            error: "",
+            contentType,
+            kind: "image",
+            objectUrl: pdfImageUrl
+          });
+          return;
+        }
+
+        const blob = new Blob([buffer], { type: contentType || "application/octet-stream" });
         objectUrl = URL.createObjectURL(blob);
         setPreviewMeta({
           loading: false,
           error: "",
-          contentType: blob.type,
+          contentType,
+          kind: contentType.startsWith("image/") ? "image" : "document",
           objectUrl
         });
       })
@@ -767,6 +791,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           loading: false,
           error: error instanceof Error ? error.message : "証憑を読み込めませんでした。",
           contentType: "",
+          kind: "",
           objectUrl: ""
         });
       });
@@ -775,9 +800,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [previewUrl]);
-
-  const shouldRenderImage = isVoucherPreviewImage(previewMeta.contentType, voucher.uploadedFileName);
+  }, [previewUrl, voucher.uploadedFileName]);
 
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
@@ -800,7 +823,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
             <span>{previewMeta.error}</span>
             <a href={previewUrl} target="_blank" rel="noreferrer">新しいタブで開く</a>
           </div>
-        ) : shouldRenderImage ? (
+        ) : previewMeta.kind === "image" ? (
           <img src={previewMeta.objectUrl} alt={title} />
         ) : (
           <iframe src={previewMeta.objectUrl} title={title} />
@@ -814,10 +837,49 @@ function buildVoucherPreviewUrl(voucher: VoucherRecord) {
   return `/api/vouchers/${encodeURIComponent(voucher.id)}/preview`;
 }
 
-function isVoucherPreviewImage(contentType: string, filename: string) {
+function inferVoucherPreviewContentType(bytes: Uint8Array, contentType: string, filename: string) {
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return "application/pdf";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/gif";
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+
   const normalized = contentType.toLowerCase();
-  if (normalized.startsWith("image/")) return true;
-  return /\.(gif|jpe?g|png|webp)$/i.test(filename);
+  if (normalized.startsWith("image/") || normalized === "application/pdf") return normalized;
+  if (/\.(gif)$/i.test(filename)) return "image/gif";
+  if (/\.(jpe?g)$/i.test(filename)) return "image/jpeg";
+  if (/\.(png)$/i.test(filename)) return "image/png";
+  if (/\.(webp)$/i.test(filename)) return "image/webp";
+  if (/\.(pdf)$/i.test(filename)) return "application/pdf";
+  return normalized;
+}
+
+async function renderVoucherPdfFirstPage(buffer: ArrayBuffer) {
+  const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+  const pdf = await loadingTask.promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas is not available.");
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  await page.render({ canvasContext: context, viewport }).promise;
+  pdf.destroy();
+  return canvas.toDataURL("image/png");
 }
 
 function VoucherAccountingEditor({
