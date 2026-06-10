@@ -3847,8 +3847,6 @@ body :where(
 
 .receipt-expense-line {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
-  align-items: end;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -3856,7 +3854,91 @@ body :where(
   background: #ffffff;
 }
 
-.receipt-expense-line > label:nth-of-type(7) {
+.receipt-expense-line.needs-confirmation {
+  border-color: rgba(180, 83, 9, 0.32);
+}
+
+.receipt-expense-line.is-confirmed {
+  border-color: rgba(22, 101, 52, 0.28);
+}
+
+.receipt-expense-line-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.receipt-expense-line-summary {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(150px, 1fr) repeat(4, minmax(80px, auto));
+  gap: 8px;
+  align-items: center;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.receipt-expense-line-summary svg {
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.receipt-expense-line.is-open .receipt-expense-line-summary svg {
+  transform: rotate(180deg);
+}
+
+.receipt-expense-line-summary strong {
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.receipt-expense-line-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.receipt-line-confirm-check {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.receipt-line-confirm-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.receipt-expense-line-body {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.receipt-expense-line-body > label:nth-of-type(7) {
   grid-column: 1 / span 1;
 }
 
@@ -3903,6 +3985,64 @@ body :where(
   min-height: 34px;
   padding: 7px 10px;
   white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .receipt-expense-line-head {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-expense-line-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .receipt-expense-line-summary span {
+    grid-column: 2;
+  }
+
+  .receipt-line-confirm-check {
+    justify-content: center;
+  }
+
+  .receipt-expense-line-body {
+    display: none;
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-expense-line.is-open .receipt-expense-line-body {
+    display: grid;
+  }
+
+  .receipt-expense-line-body > label:nth-of-type(7),
+  .voucher-product-binding {
+    grid-column: auto;
+  }
+}
+
+.shell.has-voucher-preview .receipt-expense-line-head {
+  grid-template-columns: 1fr;
+}
+
+.shell.has-voucher-preview .receipt-expense-line-summary {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.shell.has-voucher-preview .receipt-expense-line-summary span {
+  grid-column: 2;
+}
+
+.shell.has-voucher-preview .receipt-expense-line-body {
+  display: none;
+  grid-template-columns: 1fr;
+}
+
+.shell.has-voucher-preview .receipt-expense-line.is-open .receipt-expense-line-body {
+  display: grid;
+}
+
+.shell.has-voucher-preview .receipt-expense-line-body > label:nth-of-type(7),
+.shell.has-voucher-preview .voucher-product-binding {
+  grid-column: auto;
 }
 
 .receipt-line-delete-button {
@@ -26144,7 +26284,11 @@ body :where(
     grid-template-columns: 1fr;
   }
 
-  .receipt-expense-line > label:nth-of-type(7),
+  .receipt-expense-line-body {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-expense-line-body > label:nth-of-type(7),
   .voucher-product-binding {
     grid-column: auto;
   }

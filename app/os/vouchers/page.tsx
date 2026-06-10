@@ -116,6 +116,7 @@ type VoucherAccountingLine = {
   matchedProductId: string;
   matchedProductName: string;
   matchStatus: string;
+  confirmed: boolean;
   accountTitle: string;
   subAccountTitle: string;
   amount: string;
@@ -524,6 +525,7 @@ export default function VouchersPage() {
           const amount = Math.round(Number(line.amount || 0));
           return {
             ...line,
+            confirmed: false,
             taxMode: nextDraft.taxMode,
             taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, nextDraft.taxMode))
           };
@@ -544,6 +546,8 @@ export default function VouchersPage() {
           lines: draft.lines.map((line) => {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
+            const isOnlyConfirmingLine = Object.keys(next).every((key) => key === "confirmed");
+            if (!isOnlyConfirmingLine) updated.confirmed = false;
             updated.taxMode = draft.taxMode;
             if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next)) {
               const amount = Math.round(Number(updated.amount || 0));
@@ -676,7 +680,8 @@ export default function VouchersPage() {
       linePatch: {
         matchStatus: ignored ? "ignored" : "unmatched",
         matchedProductId: "",
-        matchedProductName: ""
+        matchedProductName: "",
+        confirmed: false
       }
     });
   }
@@ -1704,6 +1709,11 @@ function VoucherAccountingEditor({
 }) {
   const isShiire = voucher.usageType === "shiire";
   const productCategoryOptions = getProductCategoryOptions(productOptions);
+  const [expandedLineIds, setExpandedLineIds] = useState<Record<string, boolean>>({});
+  const allLinesConfirmed = draft.lines.length > 0 && draft.lines.every((line) => line.confirmed);
+  function toggleLineExpanded(lineId: string) {
+    setExpandedLineIds((current) => ({ ...current, [lineId]: !current[lineId] }));
+  }
   return (
     <div className="receipt-confirm-form voucher-accounting-form">
       <label>
@@ -1755,101 +1765,122 @@ function VoucherAccountingEditor({
           const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
           const isProductIgnored = line.matchStatus === "ignored";
+          const isLineExpanded = Boolean(expandedLineIds[line.id]);
+          const lineTitle = line.note || line.subAccountTitle || `明細 ${draft.lines.indexOf(line) + 1}`;
+          const quantityLabel = line.quantity ? `${line.quantity}${line.unit ? ` ${line.unit}` : ""}` : "数量未確認";
           return (
-          <div className="receipt-expense-line" key={line.id}>
-            <label>
-              <span>勘定科目</span>
-              {isShiire ? (
-                <input value="仕入高" readOnly />
-              ) : (
-                <select value={line.accountTitle} onChange={(event) => onLineChange(line.id, { accountTitle: event.target.value })} disabled={isSaving}>
-                  {expenseAccountTitleOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+          <div className={`receipt-expense-line ${line.confirmed ? "is-confirmed" : "needs-confirmation"} ${isLineExpanded ? "is-open" : ""}`} key={line.id}>
+            <div className="receipt-expense-line-head">
+              <button className="receipt-expense-line-summary" type="button" onClick={() => toggleLineExpanded(line.id)} aria-expanded={isLineExpanded}>
+                <ChevronDown size={16} />
+                <strong>{lineTitle}</strong>
+                <span>{formatMoney(Number(line.amount || 0))}</span>
+                <span>{line.taxRate || "税率未確認"} / {line.taxMode}</span>
+                <span>{quantityLabel}</span>
+                {isShiire ? (
+                  <span>{isProductIgnored ? "商品マスタ対象外" : line.matchedProductName ? `紐付済み: ${line.matchedProductName}` : suggestedProduct ? `提案: ${suggestedProduct.name}` : "商品未確認"}</span>
+                ) : null}
+              </button>
+              <label className="receipt-line-confirm-check">
+                <input type="checkbox" checked={line.confirmed} onChange={(event) => onLineChange(line.id, { confirmed: event.target.checked })} disabled={isSaving} />
+                <span>{line.confirmed ? "確認済み" : "未確認"}</span>
+              </label>
+            </div>
+            <div className="receipt-expense-line-body">
+              <label>
+                <span>勘定科目</span>
+                {isShiire ? (
+                  <input value="仕入高" readOnly />
+                ) : (
+                  <select value={line.accountTitle} onChange={(event) => onLineChange(line.id, { accountTitle: event.target.value })} disabled={isSaving}>
+                    {expenseAccountTitleOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+                  </select>
+                )}
+              </label>
+              <label>
+                <span>補助科目</span>
+                <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} disabled={isSaving} />
+              </label>
+              <label>
+                <span>金額</span>
+                <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} disabled={isSaving} />
+              </label>
+              <label>
+                <span>税率</span>
+                <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })} disabled={isSaving}>
+                  {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
                 </select>
-              )}
-            </label>
-            <label>
-              <span>補助科目</span>
-              <input value={line.subAccountTitle} onChange={(event) => onLineChange(line.id, { subAccountTitle: event.target.value })} placeholder={isShiire ? "例: 食材、包材" : "例: ガソリン、駐車場"} disabled={isSaving} />
-            </label>
-            <label>
-              <span>金額</span>
-              <input type="number" min="1" step="1" value={line.amount} onChange={(event) => onLineChange(line.id, { amount: event.target.value })} disabled={isSaving} />
-            </label>
-            <label>
-              <span>税率</span>
-              <select value={line.taxRate} onChange={(event) => onLineChange(line.id, { taxRate: event.target.value })} disabled={isSaving}>
-                {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>消費税</span>
-              <input type="number" min="0" step="1" value={line.taxAmount} onChange={(event) => onLineChange(line.id, { taxAmount: event.target.value })} disabled={isSaving} />
-            </label>
-            <label className="receipt-line-note">
-              <span>明細メモ</span>
-              <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} disabled={isSaving} />
-            </label>
-            <button className="text-button danger-button receipt-line-delete-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
-              <Trash2 size={16} />
-              削除
-            </button>
-            <label>
-              <span>数量</span>
-              <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
-            </label>
-            <label>
-              <span>単位</span>
-              <input value={line.unit} onChange={(event) => onLineChange(line.id, { unit: event.target.value })} placeholder="例: 個、袋、本" disabled={isSaving} />
-            </label>
-            <label>
-              <span>単価</span>
-              <input type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => onLineChange(line.id, { unitPrice: event.target.value })} disabled={isSaving} />
-            </label>
-            {isShiire ? (
-              <div className="voucher-product-binding">
-                <label>
-                  <span>大分類</span>
-                  <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
-                    <option value="">大分類を選択</option>
-                    {productCategoryOptions.map((category) => (
-                      <option value={category} key={category}>{category}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>小分類</span>
-                  <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory}>
-                    <option value="">小分類を選択</option>
-                    {productSubcategoryOptions.map((subcategory) => (
-                      <option value={subcategory} key={subcategory}>{subcategory}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>商品</span>
-                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
-                    <option value="">候補を選択</option>
-                    {filteredProductOptions.map((product) => (
-                      <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="voucher-product-binding-actions">
-                  {isProductIgnored ? <small>商品マスタ対象外</small> : line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
-                  <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.ocrItemId}>
-                    {isProductIgnored ? "対象に戻す" : "商品マスタ対象外"}
-                  </button>
-                  <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedProductId}>
-                    <Link2 size={15} />
-                    紐付け
-                  </button>
-                  <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
-                    <CheckCircle size={15} />
-                    新規追加
-                  </button>
+              </label>
+              <label>
+                <span>消費税</span>
+                <input type="number" min="0" step="1" value={line.taxAmount} onChange={(event) => onLineChange(line.id, { taxAmount: event.target.value })} disabled={isSaving} />
+              </label>
+              <label className="receipt-line-note">
+                <span>明細メモ</span>
+                <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} disabled={isSaving} />
+              </label>
+              <button className="text-button danger-button receipt-line-delete-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
+                <Trash2 size={16} />
+                削除
+              </button>
+              <label>
+                <span>数量</span>
+                <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
+              </label>
+              <label>
+                <span>単位</span>
+                <input value={line.unit} onChange={(event) => onLineChange(line.id, { unit: event.target.value })} placeholder="例: 個、袋、本" disabled={isSaving} />
+              </label>
+              <label>
+                <span>単価</span>
+                <input type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => onLineChange(line.id, { unitPrice: event.target.value })} disabled={isSaving} />
+              </label>
+              {isShiire ? (
+                <div className="voucher-product-binding">
+                  <label>
+                    <span>大分類</span>
+                    <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
+                      <option value="">大分類を選択</option>
+                      {productCategoryOptions.map((category) => (
+                        <option value={category} key={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>小分類</span>
+                    <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory}>
+                      <option value="">小分類を選択</option>
+                      {productSubcategoryOptions.map((subcategory) => (
+                        <option value={subcategory} key={subcategory}>{subcategory}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>商品</span>
+                    <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
+                      <option value="">候補を選択</option>
+                      {filteredProductOptions.map((product) => (
+                        <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="voucher-product-binding-actions">
+                    {isProductIgnored ? <small>商品マスタ対象外</small> : line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
+                    <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                      {isProductIgnored ? "対象に戻す" : "商品マスタ対象外"}
+                    </button>
+                    <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedProductId}>
+                      <Link2 size={15} />
+                      紐付け
+                    </button>
+                    <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
+                      <CheckCircle size={15} />
+                      新規追加
+                    </button>
+                  </div>
                 </div>
+              ) : null}
               </div>
-            ) : null}
           </div>
           );
         })}
@@ -1870,10 +1901,13 @@ function VoucherAccountingEditor({
               差額 {formatMoney(validation.difference)}。税区分・税率・金額が正しいか確認してください。
             </small>
           ) : null}
+          {!allLinesConfirmed ? (
+            <small>未確認の明細が {draft.lines.filter((line) => !line.confirmed).length} 行あります。各明細を展開して確認済みにしてください。</small>
+          ) : null}
         </div>
       </div>
-      <button className="primary-button" type="button" onClick={onConfirm} disabled={isSaving || voucher.usageType === "unclassified"}>
-        {isSaving ? "登録中..." : voucher.usageType === "unclassified" ? "用途を選択してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
+      <button className="primary-button" type="button" onClick={onConfirm} disabled={isSaving || voucher.usageType === "unclassified" || !allLinesConfirmed}>
+        {isSaving ? "登録中..." : voucher.usageType === "unclassified" ? "用途を選択してください" : !allLinesConfirmed ? "明細を確認してください" : voucher.usageType === "keihi" ? "この内容で経費登録" : "この内容で仕入確認"}
       </button>
     </div>
   );
@@ -1919,6 +1953,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       matchedProductId: item.matchedProductId,
       matchedProductName: item.matchedProductName,
       matchStatus: item.matchStatus,
+      confirmed: false,
       accountTitle,
       subAccountTitle,
       amount: String(amount || ""),
@@ -1940,6 +1975,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     matchedProductId: "",
     matchedProductName: "",
     matchStatus: "",
+    confirmed: false,
     accountTitle: isShiire ? "仕入高" : "雑費",
     subAccountTitle: "",
     amount: String(amount || ""),
@@ -1960,6 +1996,7 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
     matchedProductId: "",
     matchedProductName: "",
     matchStatus: "",
+    confirmed: false,
     accountTitle: "雑費",
     subAccountTitle: "",
     amount: "",
