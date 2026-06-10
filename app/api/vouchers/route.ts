@@ -886,9 +886,6 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
     "税率",
     "税区分",
     "消費税",
-    "数量",
-    "単位",
-    "税込単価",
     "集計行数",
     "摘要",
     "証憑ID",
@@ -905,11 +902,6 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       String(row.vendorName ?? "")
     );
     const taxIncludedAmount = row.taxIncludedAmount;
-    const quantityNumber = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
-    const quantity = quantityNumber === null || !Number.isFinite(quantityNumber) ? "" : String(quantityNumber);
-    const unitPrice = quantityNumber && Number.isFinite(quantityNumber) && quantityNumber > 0
-      ? String(Math.round((taxIncludedAmount / quantityNumber) * 100) / 100)
-      : "";
     const summaryKey = buildAccountingSummaryKey(row);
     const summaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey)
       ?? buildAutomaticAccountingSummaryNote(parseAccountingSummaryItems(row.summaryItems))
@@ -928,9 +920,6 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       String(row.taxRate ?? ""),
       String(row.taxMode ?? ""),
       String(Math.round(Number(row.taxAmount ?? 0))),
-      quantity,
-      String(row.unit ?? "個").trim() || "個",
-      unitPrice,
       String(Number(row.lineCount ?? 1)),
       summaryNote,
       String(row.voucherId ?? ""),
