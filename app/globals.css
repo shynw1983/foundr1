@@ -18379,12 +18379,12 @@ body :where(
 
 .voucher-confirmed-line-row {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(180px, 1fr) minmax(130px, auto) auto;
-  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(280px, 320px) 72px;
+  gap: 16px;
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px;
+  padding: 10px 14px;
   background: #ffffff;
 }
 
@@ -18397,6 +18397,11 @@ body :where(
   min-width: 0;
   display: grid;
   gap: 3px;
+}
+
+.voucher-confirmed-line-amount {
+  justify-items: end;
+  text-align: right;
 }
 
 .voucher-confirmed-line-row strong {
@@ -18415,6 +18420,7 @@ body :where(
 
 .voucher-confirmed-line-row .text-button {
   justify-content: center;
+  justify-self: stretch;
   min-height: 34px;
 }
 
@@ -18423,7 +18429,9 @@ body :where(
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
+  justify-self: stretch;
   margin-top: 4px;
+  text-align: left;
 }
 
 .voucher-confirmed-summary-edit input {

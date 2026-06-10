@@ -1267,15 +1267,15 @@ export default function VouchersPage() {
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
                   return (
                   <div className="voucher-confirmed-line-row" key={key}>
-                    <div>
+                    <div className="voucher-confirmed-line-meta">
                       <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
                       <span>{line.storeName} / {line.vendorName}</span>
                     </div>
-                    <div>
+                    <div className="voucher-confirmed-line-account">
                       <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
                       <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
                     </div>
-                    <div>
+                    <div className="voucher-confirmed-line-amount">
                       <strong>{formatMoney(calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
                       <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
                       <div className="voucher-confirmed-summary-edit">
