@@ -1121,7 +1121,7 @@ export default function VouchersPage() {
                       <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
                     </div>
                     <div>
-                      <strong>{formatMoney(line.amount)}</strong>
+                      <strong>{formatMoney(calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
                       <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
                     </div>
                     <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
@@ -2202,7 +2202,7 @@ function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLi
         <div className="voucher-accounting-summary-row" key={`${line.accountTitle}-${line.subAccountTitle}-${line.taxRate}-${line.taxMode}-${index}`}>
           <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
           <small>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</small>
-          <b>{formatMoney(line.amount)}</b>
+          <b>{formatMoney(calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</b>
         </div>
       ))}
     </div>
@@ -2456,6 +2456,13 @@ function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
   const total = line.taxMode === "外税" && Number.isFinite(taxAmount) ? amount + Math.max(0, taxAmount) : amount;
   const unitPrice = total / quantity;
   return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : 0;
+}
+
+function calculateAccountingTaxIncludedAmount(amount: number, taxAmount: number, taxMode: string) {
+  const roundedAmount = Math.round(Number(amount || 0));
+  const roundedTaxAmount = Math.round(Number(taxAmount || 0));
+  if (taxMode === "外税") return roundedAmount + Math.max(0, roundedTaxAmount);
+  return roundedAmount;
 }
 
 function getConfirmedLineKey(line: ConfirmedAccountingLine) {

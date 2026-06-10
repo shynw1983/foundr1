@@ -810,8 +810,12 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       String(row.locationName ?? ""),
       String(row.vendorName ?? "")
     );
-    const quantity = row.quantity === null || row.quantity === undefined ? "" : String(Number(row.quantity));
-    const unitPrice = row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100);
+    const taxIncludedAmount = calculateAccountingTaxIncludedAmount(row.amount, row.taxAmount, row.taxMode);
+    const quantityNumber = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
+    const quantity = quantityNumber === null || !Number.isFinite(quantityNumber) ? "" : String(quantityNumber);
+    const unitPrice = quantityNumber && Number.isFinite(quantityNumber) && quantityNumber > 0
+      ? String(Math.round((taxIncludedAmount / quantityNumber) * 100) / 100)
+      : "";
     return [
       String(row.purchaseDate ?? ""),
       String(row.purchaseTime ?? ""),
@@ -822,7 +826,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       getReimbursementExportLabel(String(row.reimbursementStatus ?? "")),
       String(row.accountTitle ?? ""),
       String(row.subAccountTitle ?? ""),
-      String(Math.round(Number(row.amount ?? 0))),
+      String(taxIncludedAmount),
       String(row.taxRate ?? ""),
       String(row.taxMode ?? ""),
       String(Math.round(Number(row.taxAmount ?? 0))),
@@ -948,6 +952,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     ].join("\u001f");
     const amount = Math.round(Number(row.amount ?? 0));
     const taxAmount = Math.round(Number(row.taxAmount ?? 0));
+    const taxIncludedAmount = calculateAccountingTaxIncludedAmount(amount, taxAmount, row.taxMode);
     const quantity = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
     const unit = String(row.unit ?? "個").trim() || "個";
     const detail = {
@@ -976,8 +981,9 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       if (existing.quantity !== null && Number.isFinite(quantity ?? NaN)) existing.quantity += quantity ?? 0;
       else existing.quantity = null;
       existing.note = `集計 ${existing.lineCount}行`;
+      const existingTaxIncludedAmount = calculateAccountingTaxIncludedAmount(existing.amount, existing.taxAmount, existing.taxMode);
       existing.unitPrice = existing.unit && existing.quantity && existing.quantity > 0
-        ? Math.round((existing.amount / existing.quantity) * 100) / 100
+        ? Math.round((existingTaxIncludedAmount / existing.quantity) * 100) / 100
         : null;
       continue;
     }
@@ -1000,7 +1006,9 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       taxAmount,
       quantity: quantity === null || !Number.isFinite(quantity) ? null : quantity,
       unit,
-      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Math.round(Number(row.unitPrice) * 100) / 100,
+      unitPrice: quantity !== null && Number.isFinite(quantity) && quantity > 0
+        ? Math.round((taxIncludedAmount / quantity) * 100) / 100
+        : null,
       lineCount: 1,
       note: detail.note,
       createdAt: String(row.createdAt ?? ""),
@@ -1356,6 +1364,13 @@ function calculateTaxAmount(amount: number, taxRate: string, taxMode: string) {
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
   return 0;
+}
+
+function calculateAccountingTaxIncludedAmount(amount: unknown, taxAmount: unknown, taxMode: unknown) {
+  const roundedAmount = Math.round(Number(amount ?? 0));
+  const roundedTaxAmount = Math.round(Number(taxAmount ?? 0));
+  if (String(taxMode ?? "").trim() === "外税") return roundedAmount + Math.max(0, roundedTaxAmount);
+  return roundedAmount;
 }
 
 function normalizeDate(value: unknown) {
