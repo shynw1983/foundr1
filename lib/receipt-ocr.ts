@@ -15,6 +15,8 @@ export type ReceiptOcrItem = {
 };
 
 export type ReceiptOcrResult = {
+  documentType: string;
+  financialPurpose: string;
   storeName: string;
   companyName: string;
   brandName: string;
@@ -43,6 +45,8 @@ const receiptOcrSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    documentType: { type: "string", description: "One of レシート, 領収書, 請求書, 納品書, 納付書, 振込明細, カード明細, 銀行明細, 給与社保資料, その他" },
+    financialPurpose: { type: "string", description: "One of 仕入, 経費, 租税公課, 給与関連, 固定資産, 売上関連, 立替返金, 未分類" },
     storeName: { type: "string" },
     companyName: { type: "string", description: "Legal company or operating company name when visible, otherwise empty string" },
     brandName: { type: "string", description: "Retail chain, supermarket, restaurant, gas station, or public-facing brand name when visible, otherwise empty string" },
@@ -72,7 +76,7 @@ const receiptOcrSchema = {
       }
     }
   },
-  required: ["storeName", "companyName", "brandName", "locationName", "purchaseDate", "purchaseTime", "subtotal", "tax", "total", "items"]
+  required: ["documentType", "financialPurpose", "storeName", "companyName", "brandName", "locationName", "purchaseDate", "purchaseTime", "subtotal", "tax", "total", "items"]
 };
 
 function nullableNumberSchema() {
@@ -116,9 +120,16 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
             {
               type: "input_text",
               text: [
-                "You extract Japanese restaurant purchase receipt data.",
+                "You extract Japanese accounting voucher data for a restaurant-focused backoffice system.",
                 "Return JSON only and follow the schema exactly.",
                 "Use visible receipt text only. Do not invent missing values.",
+                "First classify the document from an accounting point of view, then apply restaurant-specific optimization only when it is a food-service purchase.",
+                "For documentType, choose one of: レシート, 領収書, 請求書, 納品書, 納付書, 振込明細, カード明細, 銀行明細, 給与社保資料, その他.",
+                "For financialPurpose, choose one of: 仕入, 経費, 租税公課, 給与関連, 固定資産, 売上関連, 立替返金, 未分類.",
+                "Use documentType 納付書 and financialPurpose 租税公課 for tax payment slips, tax office/local government payment receipts, 納税, 申告所得税, 法人税, 消費税, 源泉所得税, 住民税, 固定資産税, 自動車税, 印紙税, 延滞税, 加算税, or public dues.",
+                "Use financialPurpose 給与関連 for payroll, salary, social insurance, labor insurance, pension, health insurance, unemployment insurance, withholding tax payroll materials, and staff-related statutory payments.",
+                "Use financialPurpose 固定資産 for durable equipment or high-value assets that may require capitalization instead of ordinary expense treatment.",
+                "Use financialPurpose 仕入 only for goods bought for resale/menu production or restaurant operation inventory such as ingredients, packaging, and consumables.",
                 "Separate companyName, brandName, and locationName when receipts show legal/operating company, public chain brand, and branch/store/site name.",
                 "For example, if the receipt shows 相光石油株式会社 and セルフステーション平尾, set companyName to 相光石油株式会社, brandName to empty string, and locationName to セルフステーション平尾.",
                 "For example, if the receipt shows 株式会社G-7スーパーマート, 業務スーパー, and 春吉店, set companyName to 株式会社G-7スーパーマート, brandName to 業務スーパー, and locationName to 春吉店.",
@@ -127,17 +138,25 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
                 "Treat each purchased product, service, fee, or expense row as a separate item. Do not merge different visible rows even when they share the same category, accountTitle, taxRate, or taxMode.",
                 "If one item wraps across multiple printed lines, combine only those wrapped lines into one item. Preserve quantity, unit price, and amount from the same printed item.",
                 "For PDFs that contain multiple independent receipts, still extract item rows separately for each receipt page instead of summarizing by receipt or by category.",
-                "For item category, choose one of: 食材, 包材, 消耗品, 清掃用品, 設備, 雑費, 未分類.",
-                "For accountTitle, choose one Japanese accounting account from: 租税公課, 荷造運賃, 水道光熱費, 旅費交通費, 通信費, 広告宣伝費, 接待交際費, 損害保険料, 修繕費, 消耗品費, 減価償却費, 福利厚生費, 給料賃金, 外注工賃, 利子割引料, 地代家賃, 貸倒金, 支払手数料, 車両費, リース料, 新聞図書費, 研修採用費, 会議費, 諸会費, 衛生管理費, 雑費.",
+                "For item category, choose one of: 食材, 包材, 消耗品, 清掃用品, 設備, 税金, 給与社保, 家賃, 水道光熱, 通信, 広告, 交通, 車両, 保険, 手数料, 研修, 雑費, 未分類.",
+                "For accountTitle, choose one Japanese accounting account from: 仕入高, 租税公課, 荷造運賃, 水道光熱費, 旅費交通費, 通信費, 広告宣伝費, 接待交際費, 損害保険料, 保険料, 修繕費, 消耗品費, 事務用品費, 減価償却費, 福利厚生費, 法定福利費, 給料賃金, 外注工賃, 支払報酬料, 利子割引料, 地代家賃, 貸倒金, 支払手数料, 車両費, リース料, 新聞図書費, 図書研修費, 研修採用費, 会議費, 諸会費, 衛生管理費, 雑費.",
+                "Use 租税公課 for tax payments and public charges. These items are not restaurant product master items.",
+                "Use 法定福利費 for social insurance, labor insurance, pension, health insurance, and employer statutory benefit payments.",
+                "Use 給料賃金 for payroll and wage payments.",
+                "Use 地代家賃 for rent, lease of premises, common area charges, and property management charges.",
+                "Use 水道光熱費 for electricity, gas, water, utility bills, and similar store utilities.",
+                "Use 通信費 for phone, internet, cloud subscriptions, and communication services.",
+                "Use 支払報酬料 for professional fees such as tax accountant, lawyer, consultant, designer, or outsourced expert fees.",
                 "Use 車両費 for gasoline, parking, tolls, vehicle maintenance, car-related purchases, and fuel station receipts when business vehicle use is likely.",
                 "Use 旅費交通費 for trains, buses, taxis, business travel fares, and non-vehicle transportation.",
                 "Use 消耗品費 for store supplies, stationery, packaging materials, small equipment under normal expense treatment, and daily-use consumables.",
                 "Use 衛生管理費 for cleaning supplies, sanitation, pest control, waste disposal, and hygiene-related restaurant expenses.",
                 "Use 支払手数料 for payment, banking, platform, delivery app, or transfer fees.",
                 "Use 雑費 only when no other listed account clearly fits.",
+                "For restaurant purchases, use 食材, 包材, 消耗品, 清掃用品, or 設備 categories to support product master matching. For non-purchase accounting documents such as taxes, payroll, rent, utilities, bank fees, or insurance, use the accounting-oriented category instead of forcing 食材 or 包材.",
                 "Use YYYY-MM-DD for purchaseDate when the date is visible.",
                 "Use HH:mm for purchaseTime when the time is visible.",
-                "For each item taxRate, preserve visible 8% or 10% markers when present.",
+                "For each item taxRate, preserve visible 8% or 10% markers when present. Use 非課税, 不課税, or 対象外 when the document clearly indicates non-taxable, out-of-scope, payroll, tax payment, or public dues.",
                 "Some supermarket receipts mark reduced-tax items with a leading ※. When a visible ※ is attached to an item, treat that item as 8% tax.",
                 "When a receipt prints quantity and unit price under an item, such as (数量 × 単価), (3 × 468), or 3点 × 468, that quantity/unit-price line belongs to the item immediately above it, not to the next item.",
                 "For each item taxMode, use 内税 if tax is included in the displayed amount, 外税 if tax is added separately, otherwise 不明."
@@ -545,6 +564,8 @@ async function createProductCandidate(itemId: string, item: ReceiptOcrItem, norm
 
 function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
   const normalized = {
+    documentType: normalizeDocumentType(value.documentType),
+    financialPurpose: normalizeFinancialPurpose(value.financialPurpose),
     storeName: String(value.storeName ?? "").trim(),
     companyName: String(value.companyName ?? "").trim(),
     brandName: String(value.brandName ?? "").trim(),
@@ -559,14 +580,14 @@ function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
       quantity: coerceNullableNumber(item.quantity),
       unit: String(item.unit ?? "").trim(),
       unitPrice: coerceMoney(item.unitPrice),
-      taxRate: String(item.taxRate ?? "").trim(),
+      taxRate: normalizeTaxRate(item.taxRate),
       taxMode: normalizeTaxMode(item.taxMode),
-      category: String(item.category ?? "").trim() || "未分類",
+      category: normalizeReceiptCategory(item.category),
       accountTitle: normalizeAccountTitle(item.accountTitle),
       amount: coerceMoney(item.amount)
     })).filter((item) => item.name) : []
   };
-  return applyReceiptLineCorrections(normalized);
+  return applyFinancialCorrections(applyReceiptLineCorrections(normalized));
 }
 
 function applyReceiptLineCorrections(result: ReceiptOcrResult): ReceiptOcrResult {
@@ -661,12 +682,142 @@ function normalizeTaxMode(value: unknown) {
   return mode === "内税" || mode === "外税" ? mode : "不明";
 }
 
+function normalizeTaxRate(value: unknown) {
+  const text = String(value ?? "").replace("%", "").trim();
+  if (text === "8" || text === "8.0") return "8%";
+  if (text === "10" || text === "10.0") return "10%";
+  if (text === "非課税" || text === "不課税" || text === "対象外") return text;
+  if (text === "0") return "非課税";
+  return "";
+}
+
+function normalizeDocumentType(value: unknown) {
+  const text = String(value ?? "").trim();
+  return documentTypes.has(text) ? text : "その他";
+}
+
+function normalizeFinancialPurpose(value: unknown) {
+  const text = String(value ?? "").trim();
+  return financialPurposes.has(text) ? text : "未分類";
+}
+
+function normalizeReceiptCategory(value: unknown) {
+  const text = String(value ?? "").trim();
+  return receiptCategories.has(text) ? text : "未分類";
+}
+
 function normalizeAccountTitle(value: unknown) {
   const title = String(value ?? "").trim();
   return accountTitles.has(title) ? title : "雑費";
 }
 
+function applyFinancialCorrections(result: ReceiptOcrResult): ReceiptOcrResult {
+  const haystack = [
+    result.documentType,
+    result.financialPurpose,
+    result.storeName,
+    result.companyName,
+    result.brandName,
+    result.locationName,
+    ...result.items.flatMap((item) => [item.name, item.category, item.accountTitle])
+  ].join(" ").normalize("NFKC");
+
+  const inferredPurpose = inferFinancialPurpose(haystack, result.financialPurpose);
+  const inferredDocumentType = inferDocumentType(haystack, result.documentType);
+  const items = result.items.map((item) => correctFinancialItem(item, inferredPurpose, haystack));
+
+  return {
+    ...result,
+    documentType: inferredDocumentType,
+    financialPurpose: inferredPurpose,
+    items
+  };
+}
+
+function inferDocumentType(text: string, fallback: string) {
+  if (/(納付書|納税|領収済通知書|払込取扱票|納入告知書|公金)/.test(text)) return "納付書";
+  if (/(請求書|請求明細)/.test(text)) return "請求書";
+  if (/(納品書|納品伝票)/.test(text)) return "納品書";
+  if (/(振込|送金|払込|入出金)/.test(text)) return "振込明細";
+  if (/(カード|クレジット|ご利用明細)/.test(text)) return "カード明細";
+  return documentTypes.has(fallback) ? fallback : "その他";
+}
+
+function inferFinancialPurpose(text: string, fallback: string) {
+  if (/(納付書|納税|租税|公課|消費税|法人税|所得税|源泉|住民税|市県民税|事業税|固定資産税|自動車税|印紙税|延滞税|加算税)/.test(text)) return "租税公課";
+  if (/(社会保険|厚生年金|健康保険|雇用保険|労働保険|給与|給料|賃金|賞与)/.test(text)) return "給与関連";
+  if (/(固定資産|減価償却|資産計上)/.test(text)) return "固定資産";
+  return financialPurposes.has(fallback) ? fallback : "未分類";
+}
+
+function correctFinancialItem(item: ReceiptOcrItem, financialPurpose: string, documentText: string): ReceiptOcrItem {
+  const text = [item.name, item.category, item.accountTitle, documentText].join(" ").normalize("NFKC");
+  if (financialPurpose === "租税公課" || /(納税|租税|公課|消費税|法人税|所得税|源泉|住民税|事業税|固定資産税|自動車税|印紙税|延滞税|加算税)/.test(text)) {
+    return { ...item, category: "税金", accountTitle: "租税公課", taxRate: item.taxRate || "非課税", taxMode: item.taxMode === "不明" ? "不明" : item.taxMode };
+  }
+  if (financialPurpose === "給与関連" || /(社会保険|厚生年金|健康保険|雇用保険|労働保険)/.test(text)) {
+    return { ...item, category: "給与社保", accountTitle: "法定福利費", taxRate: item.taxRate || "非課税" };
+  }
+  if (/(給与|給料|賃金|賞与)/.test(text)) {
+    return { ...item, category: "給与社保", accountTitle: "給料賃金", taxRate: item.taxRate || "非課税" };
+  }
+  if (/(家賃|賃料|共益費|管理費)/.test(text)) return { ...item, category: "家賃", accountTitle: "地代家賃" };
+  if (/(電気|ガス|水道|上下水道|光熱)/.test(text)) return { ...item, category: "水道光熱", accountTitle: "水道光熱費" };
+  if (/(電話|通信|インターネット|クラウド|サブスク|サブスクリプション)/.test(text)) return { ...item, category: "通信", accountTitle: "通信費" };
+  if (/(振込手数料|決済手数料|銀行手数料|代引手数料|システム利用料|プラットフォーム手数料)/.test(text)) return { ...item, category: "手数料", accountTitle: "支払手数料" };
+  if (/(税理士|会計士|弁護士|司法書士|行政書士|社労士|コンサル|顧問料|報酬)/.test(text)) return { ...item, category: "手数料", accountTitle: "支払報酬料" };
+  if (/(保険料|損害保険|火災保険|自動車保険)/.test(text)) return { ...item, category: "保険", accountTitle: "保険料" };
+  if (/(広告|宣伝|チラシ|印刷|販促|Google|Meta|Instagram|LINE広告)/i.test(text)) return { ...item, category: "広告", accountTitle: "広告宣伝費" };
+  return item;
+}
+
+const documentTypes = new Set([
+  "レシート",
+  "領収書",
+  "請求書",
+  "納品書",
+  "納付書",
+  "振込明細",
+  "カード明細",
+  "銀行明細",
+  "給与社保資料",
+  "その他"
+]);
+
+const financialPurposes = new Set([
+  "仕入",
+  "経費",
+  "租税公課",
+  "給与関連",
+  "固定資産",
+  "売上関連",
+  "立替返金",
+  "未分類"
+]);
+
+const receiptCategories = new Set([
+  "食材",
+  "包材",
+  "消耗品",
+  "清掃用品",
+  "設備",
+  "税金",
+  "給与社保",
+  "家賃",
+  "水道光熱",
+  "通信",
+  "広告",
+  "交通",
+  "車両",
+  "保険",
+  "手数料",
+  "研修",
+  "雑費",
+  "未分類"
+]);
+
 const accountTitles = new Set([
+  "仕入高",
   "租税公課",
   "荷造運賃",
   "水道光熱費",
@@ -675,12 +826,16 @@ const accountTitles = new Set([
   "広告宣伝費",
   "接待交際費",
   "損害保険料",
+  "保険料",
   "修繕費",
   "消耗品費",
+  "事務用品費",
   "減価償却費",
   "福利厚生費",
+  "法定福利費",
   "給料賃金",
   "外注工賃",
+  "支払報酬料",
   "利子割引料",
   "地代家賃",
   "貸倒金",
@@ -688,6 +843,7 @@ const accountTitles = new Set([
   "車両費",
   "リース料",
   "新聞図書費",
+  "図書研修費",
   "研修採用費",
   "会議費",
   "諸会費",

@@ -21,12 +21,16 @@ const validExpenseAccountTitles = new Set([
   "広告宣伝費",
   "接待交際費",
   "損害保険料",
+  "保険料",
   "修繕費",
   "消耗品費",
+  "事務用品費",
   "減価償却費",
   "福利厚生費",
+  "法定福利費",
   "給料賃金",
   "外注工賃",
+  "支払報酬料",
   "利子割引料",
   "地代家賃",
   "貸倒金",
@@ -34,13 +38,14 @@ const validExpenseAccountTitles = new Set([
   "車両費",
   "リース料",
   "新聞図書費",
+  "図書研修費",
   "研修採用費",
   "会議費",
   "諸会費",
   "衛生管理費",
   "雑費"
 ]);
-const fixedAccountTitles = new Set(["地代家賃", "リース料", "損害保険料", "減価償却費", "利子割引料"]);
+const fixedAccountTitles = new Set(["地代家賃", "リース料", "損害保険料", "保険料", "減価償却費", "利子割引料"]);
 const variableAccountTitles = new Set(["水道光熱費", "通信費", "旅費交通費", "車両費", "荷造運賃", "支払手数料"]);
 
 export async function GET(request: Request) {
@@ -114,7 +119,7 @@ export async function POST(request: Request) {
           supplierName,
           receiptPhotoUrl: receiptUrl,
           uploadedFileName: file.name || "",
-          usageType,
+          usageType: inferVoucherUsageTypeFromOcr(usageType, analyzed.result),
           paymentType,
           createProductCandidates: false
         }, analyzed.result, analyzed.model, session);
@@ -829,6 +834,17 @@ function normalizeUsageType(value: string): VoucherUsageType {
   return "unclassified";
 }
 
+function inferVoucherUsageTypeFromOcr(selectedUsageType: VoucherUsageType, result: ReceiptOcrResult): VoucherUsageType {
+  if (selectedUsageType !== "unclassified") return selectedUsageType;
+  const purpose = String(result.financialPurpose ?? "").trim();
+  if (purpose === "仕入") return "shiire";
+  if (purpose === "経費" || purpose === "租税公課" || purpose === "給与関連" || purpose === "固定資産") return "keihi";
+  const accountTitles = result.items.map((item) => String(item.accountTitle ?? "").trim());
+  if (accountTitles.some((title) => title === "仕入高")) return "shiire";
+  if (accountTitles.some((title) => validExpenseAccountTitles.has(title))) return "keihi";
+  return "unclassified";
+}
+
 function normalizePaymentType(value: string): VoucherPaymentType {
   return value === "reimbursement" ? "reimbursement" : "company";
 }
@@ -1086,7 +1102,8 @@ function normalizeTaxRate(value: unknown) {
   const text = String(value ?? "").replace("%", "").trim();
   if (text === "8" || text === "8.0") return "8%";
   if (text === "10" || text === "10.0") return "10%";
-  if (text === "非課税" || text === "0") return "非課税";
+  if (text === "非課税" || text === "不課税" || text === "対象外") return text;
+  if (text === "0") return "非課税";
   return "";
 }
 

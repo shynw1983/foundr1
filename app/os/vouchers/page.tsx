@@ -232,12 +232,16 @@ const expenseAccountTitleOptions = [
   "広告宣伝費",
   "接待交際費",
   "損害保険料",
+  "保険料",
   "修繕費",
   "消耗品費",
+  "事務用品費",
   "減価償却費",
   "福利厚生費",
+  "法定福利費",
   "給料賃金",
   "外注工賃",
+  "支払報酬料",
   "利子割引料",
   "地代家賃",
   "貸倒金",
@@ -245,13 +249,14 @@ const expenseAccountTitleOptions = [
   "車両費",
   "リース料",
   "新聞図書費",
+  "図書研修費",
   "研修採用費",
   "会議費",
   "諸会費",
   "衛生管理費",
   "雑費"
 ];
-const taxRateOptions = ["", "8%", "10%", "非課税"];
+const taxRateOptions = ["", "8%", "10%", "非課税", "不課税", "対象外"];
 const taxModeOptions = ["内税", "外税", "不明"];
 const voucherWorkspaceStorageKey = "foundr1-os:voucher-workspace:v1";
 const voucherWorkspaceSnapshotMaxAgeMs = 1000 * 60 * 60 * 24 * 7;
@@ -2151,6 +2156,17 @@ function getCurrentMonthStartDate() {
 function getDefaultAccountTitle(category: string) {
   if (category === "清掃用品" || category === "消耗品" || category === "包材") return "消耗品費";
   if (category === "設備") return "修繕費";
+  if (category === "税金") return "租税公課";
+  if (category === "給与社保") return "法定福利費";
+  if (category === "家賃") return "地代家賃";
+  if (category === "水道光熱") return "水道光熱費";
+  if (category === "通信") return "通信費";
+  if (category === "広告") return "広告宣伝費";
+  if (category === "交通") return "旅費交通費";
+  if (category === "車両") return "車両費";
+  if (category === "保険") return "保険料";
+  if (category === "手数料") return "支払手数料";
+  if (category === "研修") return "図書研修費";
   return "雑費";
 }
 
@@ -2169,7 +2185,8 @@ function normalizeDraftTaxRate(value: string) {
   const text = String(value ?? "").replace("%", "").trim();
   if (text === "8" || text === "8.0") return "8%";
   if (text === "10" || text === "10.0") return "10%";
-  if (text === "非課税" || text === "0") return "非課税";
+  if (text === "非課税" || text === "不課税" || text === "対象外") return text;
+  if (text === "0") return "非課税";
   return "";
 }
 
