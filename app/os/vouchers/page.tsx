@@ -634,11 +634,11 @@ export default function VouchersPage() {
       return;
     }
     if (!draft.category.trim()) {
-      window.alert("大分類を入力してください。");
+      window.alert("大分類を選択してください。");
       return;
     }
     if (!draft.subcategory.trim()) {
-      window.alert("小分類を入力してください。");
+      window.alert("小分類を選択してください。");
       return;
     }
     if (!draft.unit.trim()) {
@@ -1220,6 +1220,14 @@ function ProductReferencePriceDialogView({
   );
 }
 
+function normalizeProductCreateDraft(dialog: ProductCreateDialog, productOptions: ProductOption[]): ProductCreateDialog {
+  const categoryOptions = getProductCategoryOptions(productOptions);
+  const category = categoryOptions.includes(dialog.category) ? dialog.category : categoryOptions[0] ?? "";
+  const subcategoryOptions = getProductSubcategoryOptions(productOptions, category);
+  const subcategory = subcategoryOptions.includes(dialog.subcategory) ? dialog.subcategory : subcategoryOptions[0] ?? "";
+  return { ...dialog, category, subcategory };
+}
+
 function ProductCreateDialogView({
   dialog,
   productOptions,
@@ -1233,15 +1241,13 @@ function ProductCreateDialogView({
   onCancel: () => void;
   onConfirm: (next: ProductCreateDialog) => void;
 }) {
-  const [draft, setDraft] = useState<ProductCreateDialog>(dialog);
+  const [draft, setDraft] = useState<ProductCreateDialog>(() => normalizeProductCreateDraft(dialog, productOptions));
   const categoryOptions = getProductCategoryOptions(productOptions);
   const subcategoryOptions = getProductSubcategoryOptions(productOptions, draft.category);
-  const categoryListId = `voucher-product-category-${dialog.line.id}`;
-  const subcategoryListId = `voucher-product-subcategory-${dialog.line.id}`;
 
   useEffect(() => {
-    setDraft(dialog);
-  }, [dialog]);
+    setDraft(normalizeProductCreateDraft(dialog, productOptions));
+  }, [dialog, productOptions]);
 
   return (
     <div className="voucher-reference-price-backdrop" role="presentation">
@@ -1263,17 +1269,33 @@ function ProductCreateDialogView({
           </label>
           <label>
             <span>大分類</span>
-            <input list={categoryListId} value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value, subcategory: "" }))} disabled={isPending} />
-            <datalist id={categoryListId}>
-              {categoryOptions.map((category) => <option value={category} key={category} />)}
-            </datalist>
+            <select
+              value={draft.category}
+              onChange={(event) => {
+                const nextCategory = event.target.value;
+                const nextSubcategories = getProductSubcategoryOptions(productOptions, nextCategory);
+                setDraft((current) => ({
+                  ...current,
+                  category: nextCategory,
+                  subcategory: nextSubcategories[0] ?? ""
+                }));
+              }}
+              disabled={isPending || !categoryOptions.length}
+            >
+              <option value="">大分類を選択</option>
+              {categoryOptions.map((category) => <option value={category} key={category}>{category}</option>)}
+            </select>
           </label>
           <label>
             <span>小分類</span>
-            <input list={subcategoryListId} value={draft.subcategory} onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))} disabled={isPending} />
-            <datalist id={subcategoryListId}>
-              {subcategoryOptions.map((subcategory) => <option value={subcategory} key={subcategory} />)}
-            </datalist>
+            <select
+              value={draft.subcategory}
+              onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))}
+              disabled={isPending || !draft.category || !subcategoryOptions.length}
+            >
+              <option value="">小分類を選択</option>
+              {subcategoryOptions.map((subcategory) => <option value={subcategory} key={subcategory}>{subcategory}</option>)}
+            </select>
           </label>
           <label>
             <span>単位</span>
