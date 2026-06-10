@@ -222,6 +222,8 @@ export default function VouchersPage() {
   const [paymentType, setPaymentType] = useState<VoucherPaymentType>("company");
   const [vouchers, setVouchers] = useState<VoucherRecord[]>([]);
   const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+  const [exportStartDate, setExportStartDate] = useState(getCurrentMonthStartDate());
+  const [exportEndDate, setExportEndDate] = useState(getCurrentDate());
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
   const [lineProductSubcategorySelections, setLineProductSubcategorySelections] = useState<Record<string, string>>({});
@@ -658,6 +660,13 @@ export default function VouchersPage() {
     }
   }
 
+  function downloadTaxAccountantCsv() {
+    const params = new URLSearchParams({ export: "tax_accountant_csv" });
+    if (exportStartDate) params.set("from", exportStartDate);
+    if (exportEndDate) params.set("to", exportEndDate);
+    window.location.href = `/api/vouchers?${params.toString()}`;
+  }
+
   function setPendingAction(voucherId: string, action: VoucherPendingAction) {
     setPendingActions((current) => ({ ...current, [voucherId]: action }));
   }
@@ -740,6 +749,30 @@ export default function VouchersPage() {
           </form>
           {uploadProgress ? <VoucherUploadProgressView progress={uploadProgress} /> : null}
           {message ? <p className="form-status">{message}</p> : null}
+        </section>
+
+        <section className="panel voucher-export-panel">
+          <div className="panel-title">
+            <FileText size={22} />
+            <div>
+              <h3>税理士向けCSV出力</h3>
+              <p>確定済みの証憑会計明細を、確認しやすいCSV形式で出力します。</p>
+            </div>
+          </div>
+          <div className="voucher-export-controls">
+            <label>
+              <span>開始日</span>
+              <input type="date" value={exportStartDate} onChange={(event) => setExportStartDate(event.target.value)} />
+            </label>
+            <label>
+              <span>終了日</span>
+              <input type="date" value={exportEndDate} onChange={(event) => setExportEndDate(event.target.value)} />
+            </label>
+            <button className="secondary-button" type="button" onClick={downloadTaxAccountantCsv}>
+              <FileText size={16} />
+              CSVをダウンロード
+            </button>
+          </div>
         </section>
 
         <section className="panel voucher-list-panel">
@@ -1760,6 +1793,11 @@ function getCurrentDate() {
     month: "2-digit",
     day: "2-digit"
   }).format(new Date());
+}
+
+function getCurrentMonthStartDate() {
+  const currentDate = getCurrentDate();
+  return `${currentDate.slice(0, 7)}-01`;
 }
 
 function getDefaultAccountTitle(category: string) {

@@ -17854,6 +17854,7 @@ body :where(
 }
 
 .voucher-upload-panel,
+.voucher-export-panel,
 .voucher-list-panel {
   display: grid;
   gap: 18px;
@@ -17899,6 +17900,40 @@ body :where(
 
 .voucher-upload-form input[type="file"] {
   padding: 8px;
+}
+
+.voucher-export-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(150px, 180px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.voucher-export-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voucher-export-controls span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.voucher-export-controls input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+}
+
+.voucher-export-controls button {
+  min-height: 40px;
 }
 
 .voucher-list {
@@ -18372,6 +18407,14 @@ body :where(
   }
 
   .voucher-upload-form .primary-button {
+    grid-column: 1 / -1;
+  }
+
+  .voucher-export-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-export-controls button {
     grid-column: 1 / -1;
   }
 

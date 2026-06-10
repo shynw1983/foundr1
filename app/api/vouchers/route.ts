@@ -42,9 +42,14 @@ const validExpenseAccountTitles = new Set([
 const fixedAccountTitles = new Set(["地代家賃", "リース料", "損害保険料", "減価償却費", "利子割引料"]);
 const variableAccountTitles = new Set(["水道光熱費", "通信費", "旅費交通費", "車両費", "荷造運賃", "支払手数料"]);
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("export") === "tax_accountant_csv") {
+    return exportTaxAccountantCsv(session, request);
+  }
 
   const [stores, vouchers, products] = await Promise.all([
     listAccessibleStores(session),
@@ -581,6 +586,114 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
   }));
 }
 
+async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, request: Request) {
+  const scope = await getSessionStoreScope(session);
+  const scopedStoreIds = scope.storeIds.length ? scope.storeIds : ["00000000-0000-0000-0000-000000000000"];
+  const url = new URL(request.url);
+  const fromDate = normalizeDate(url.searchParams.get("from") ?? "");
+  const toDate = normalizeDate(url.searchParams.get("to") ?? "");
+  const origin = url.origin;
+
+  const rows = await sql`
+    select
+      receipt_ocr_results.id::text as "voucherId",
+      stores.name as "storeName",
+      coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+      coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
+      receipt_ocr_results.usage_type as "usageType",
+      receipt_ocr_results.payment_type as "paymentType",
+      receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+      coalesce(receipt_ocr_results.company_name, '') as "companyName",
+      coalesce(receipt_ocr_results.brand_name, '') as "brandName",
+      coalesce(receipt_ocr_results.location_name, '') as "locationName",
+      coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
+      line.ordinality::int as "lineNo",
+      coalesce(line.value->>'accountTitle', '') as "accountTitle",
+      coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
+      coalesce((line.value->>'amount')::float, 0) as amount,
+      coalesce(line.value->>'taxRate', '') as "taxRate",
+      coalesce(line.value->>'taxMode', '') as "taxMode",
+      coalesce((line.value->>'taxAmount')::float, 0) as "taxAmount",
+      coalesce((line.value->>'quantity')::float, null) as quantity,
+      coalesce(line.value->>'unit', '') as unit,
+      coalesce((line.value->>'unitPrice')::float, null) as "unitPrice",
+      coalesce(line.value->>'note', '') as note
+    from receipt_ocr_results
+    join stores on stores.id = receipt_ocr_results.store_id
+    cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
+    where receipt_ocr_results.status = 'confirmed'
+      and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
+      and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
+      and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
+    order by receipt_ocr_results.purchase_date asc nulls last, receipt_ocr_results.purchase_time asc nulls last, receipt_ocr_results.created_at asc, line.ordinality asc
+  `;
+
+  const headers = [
+    "取引日",
+    "時刻",
+    "店舗",
+    "取引先",
+    "用途",
+    "支払区分",
+    "精算状態",
+    "勘定科目",
+    "補助科目",
+    "税込金額",
+    "税率",
+    "税区分",
+    "消費税",
+    "数量",
+    "単位",
+    "税込単価",
+    "摘要",
+    "証憑ID",
+    "行番号",
+    "証憑URL"
+  ];
+
+  const csvRows = rows.map((row) => {
+    const vendorName = buildVendorName(
+      String(row.companyName ?? ""),
+      String(row.brandName ?? ""),
+      String(row.locationName ?? ""),
+      String(row.vendorName ?? "")
+    );
+    const quantity = row.quantity === null || row.quantity === undefined ? "" : String(Number(row.quantity));
+    const unitPrice = row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100);
+    return [
+      String(row.purchaseDate ?? ""),
+      String(row.purchaseTime ?? ""),
+      String(row.storeName ?? ""),
+      vendorName,
+      getUsageTypeExportLabel(String(row.usageType ?? "")),
+      getPaymentTypeExportLabel(String(row.paymentType ?? "")),
+      getReimbursementExportLabel(String(row.reimbursementStatus ?? "")),
+      String(row.accountTitle ?? ""),
+      String(row.subAccountTitle ?? ""),
+      String(Math.round(Number(row.amount ?? 0))),
+      String(row.taxRate ?? ""),
+      String(row.taxMode ?? ""),
+      String(Math.round(Number(row.taxAmount ?? 0))),
+      quantity,
+      String(row.unit ?? ""),
+      unitPrice,
+      String(row.note ?? ""),
+      String(row.voucherId ?? ""),
+      String(row.lineNo ?? ""),
+      `${origin}/api/vouchers/${encodeURIComponent(String(row.voucherId ?? ""))}/preview`
+    ];
+  });
+
+  const csv = "\ufeff" + [headers, ...csvRows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+  const filename = `foundr1-tax-accountant-vouchers-${fromDate || "all"}-${toDate || "all"}.csv`;
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`
+    }
+  });
+}
+
 async function listProductOptions() {
   const rows = await sql`
     select id::text, name, category, subcategory, unit, reference_price::float as "referencePrice"
@@ -946,6 +1059,30 @@ function sanitizeFileStem(value: string) {
 
 function buildVendorName(companyName: string, brandName: string, locationName: string, fallback: string) {
   return [brandName || companyName, locationName].filter(Boolean).join(" ").trim() || fallback || "";
+}
+
+function escapeCsvCell(value: unknown) {
+  const text = String(value ?? "");
+  if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, "\"\"")}"`;
+  return text;
+}
+
+function getUsageTypeExportLabel(value: string) {
+  if (value === "shiire") return "仕入";
+  if (value === "keihi") return "経費";
+  return "未分類";
+}
+
+function getPaymentTypeExportLabel(value: string) {
+  if (value === "reimbursement") return "立替";
+  return "会社支払";
+}
+
+function getReimbursementExportLabel(value: string) {
+  if (value === "pending") return "精算待ち";
+  if (value === "paid") return "精算済み";
+  if (value === "rejected") return "却下";
+  return "-";
 }
 
 function extractBlobPathname(photoUrl: string) {
