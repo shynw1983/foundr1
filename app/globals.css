@@ -4005,24 +4005,38 @@ body :where(
 }
 
 .receipt-line-confirm-check {
-  min-height: 38px;
+  min-height: 28px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
+  border-radius: 999px;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 5px;
   background: #ffffff;
   color: var(--text);
-  font-size: 0.84rem;
+  font-size: 0.74rem;
   font-weight: 650;
   white-space: nowrap;
+  justify-self: end;
 }
 
 .receipt-line-confirm-check input {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   accent-color: var(--primary);
+}
+
+.receipt-expense-line.is-confirmed .receipt-line-confirm-check {
+  border-color: rgba(22, 101, 52, 0.24);
+  background: rgba(20, 83, 45, 0.08);
+  color: var(--primary-strong);
+}
+
+.receipt-expense-line.needs-confirmation .receipt-line-confirm-check {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(180, 83, 9, 0.08);
+  color: #92400e;
 }
 
 .receipt-expense-line-body {
@@ -4087,7 +4101,7 @@ body :where(
 
 @media (max-width: 1100px) {
   .receipt-expense-line-head {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .receipt-expense-line-summary {
@@ -4099,7 +4113,8 @@ body :where(
   }
 
   .receipt-line-confirm-check {
-    justify-content: center;
+    align-self: start;
+    margin-top: 4px;
   }
 
   .receipt-expense-line-body {
@@ -4118,7 +4133,7 @@ body :where(
 }
 
 .shell.has-voucher-preview .receipt-expense-line-head {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .shell.has-voucher-preview .receipt-expense-line-summary {

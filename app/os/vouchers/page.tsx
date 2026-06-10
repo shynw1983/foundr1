@@ -972,8 +972,12 @@ export default function VouchersPage() {
     });
   }
 
-  function toggleVoucherExpanded(voucherId: string) {
-    setExpandedVoucherIds((current) => ({ ...current, [voucherId]: !current[voucherId] }));
+  function toggleVoucherExpanded(voucher: VoucherRecord) {
+    const nextExpanded = !expandedVoucherIds[voucher.id];
+    setExpandedVoucherIds((current) => ({ ...current, [voucher.id]: nextExpanded }));
+    if (nextExpanded && voucher.sourceType === "voucher") {
+      setPreviewVoucher(voucher);
+    }
   }
 
   async function confirmVoucherAccounting(voucher: VoucherRecord) {
@@ -1258,7 +1262,7 @@ export default function VouchersPage() {
                   <button
                     className={`voucher-expand-button ${isExpanded ? "is-open" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""}`}
                     type="button"
-                    onClick={() => toggleVoucherExpanded(voucher.id)}
+                    onClick={() => toggleVoucherExpanded(voucher)}
                     aria-expanded={isExpanded}
                   >
                     <ChevronDown size={16} />
