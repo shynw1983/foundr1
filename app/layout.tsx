@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { FloatingFeedbackButton } from "../components/feedback/FloatingFeedbackButton";
+import { AppZoomGuard } from "./os/components/AppZoomGuard";
 import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
 import { PwaRegister } from "./os/components/PwaRegister";
 import "./globals.css";
@@ -26,6 +27,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   themeColor: "#202a36"
 };
 
@@ -39,6 +42,7 @@ export default function RootLayout({
   const body = (
     <html lang="ja">
       <body>
+        <AppZoomGuard />
         <PwaRegister />
         <OsTranslationProvider>{children}</OsTranslationProvider>
         <FloatingFeedbackButton />
