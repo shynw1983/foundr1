@@ -18488,6 +18488,13 @@ body :where(
   background: #ffffff;
 }
 
+.voucher-confirmed-detail-heading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
 .voucher-confirmed-detail-heading {
   width: 100%;
   min-height: 38px;
@@ -18503,6 +18510,32 @@ body :where(
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.voucher-confirmed-product-mini {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: inline-grid;
+  place-items: center;
+  background: #ffffff;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.voucher-confirmed-product-mini:hover,
+.voucher-confirmed-product-mini.is-active {
+  border-color: rgba(20, 83, 45, 0.24);
+  background: rgba(20, 83, 45, 0.08);
+  color: var(--primary-strong);
+}
+
+.voucher-confirmed-product-mini:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .voucher-confirmed-detail-heading svg {
@@ -18563,6 +18596,23 @@ body :where(
 
 .voucher-confirmed-detail-note {
   grid-column: span 3;
+}
+
+.voucher-confirmed-product-binding {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto;
+  align-items: end;
+  gap: 8px;
+  border: 1px solid rgba(20, 83, 45, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(20, 83, 45, 0.04);
+}
+
+.voucher-confirmed-product-binding button {
+  min-height: 36px;
+  white-space: nowrap;
 }
 
 .voucher-confirmed-detail-actions {
@@ -19123,6 +19173,10 @@ body :where(
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .voucher-confirmed-product-binding {
+    grid-template-columns: 1fr;
+  }
+
   .voucher-confirmed-basic-grid {
     grid-template-columns: 1fr;
   }
@@ -19222,6 +19276,7 @@ body :where(
   .shell.has-voucher-preview .voucher-product-create-form,
   .shell.has-voucher-preview .voucher-confirmed-line-row,
   .shell.has-voucher-preview .voucher-confirmed-detail-grid,
+  .shell.has-voucher-preview .voucher-confirmed-product-binding,
   .shell.has-voucher-preview .voucher-row {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1371,6 +1371,22 @@ export default function VouchersPage() {
                           onLineChange={(detail, next) => updateConfirmedLineDraft(voucher, detail, next)}
                           onSaveBasic={(basicDraft) => void saveConfirmedVoucherBasic(voucher, basicDraft)}
                           onSave={(detail, basicDraft) => void saveConfirmedLineDetail(voucher, detail, basicDraft)}
+                          productOptions={productOptions}
+                          lineProductSelections={lineProductSelections}
+                          lineProductCategorySelections={lineProductCategorySelections}
+                          lineProductSubcategorySelections={lineProductSubcategorySelections}
+                          pendingProductLineIds={pendingProductLineIds}
+                          onProductSelectionChange={(lineId, productId) => setLineProductSelections((current) => ({ ...current, [lineId]: productId }))}
+                          onProductCategoryChange={(lineId, category) => {
+                            setLineProductCategorySelections((current) => ({ ...current, [lineId]: category }));
+                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: "" }));
+                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                          }}
+                          onProductSubcategoryChange={(lineId, subcategory) => {
+                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: subcategory }));
+                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                          }}
+                          onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
                         />
                       ) : null}
                     </>
@@ -2351,7 +2367,16 @@ function ConfirmedVoucherDetailEditor({
   getDraft,
   onLineChange,
   onSaveBasic,
-  onSave
+  onSave,
+  productOptions,
+  lineProductSelections,
+  lineProductCategorySelections,
+  lineProductSubcategorySelections,
+  pendingProductLineIds,
+  onProductSelectionChange,
+  onProductCategoryChange,
+  onProductSubcategoryChange,
+  onBindProduct
 }: {
   voucher: VoucherRecord;
   details: ConfirmedAccountingLineDetail[];
@@ -2361,9 +2386,20 @@ function ConfirmedVoucherDetailEditor({
   onLineChange: (detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) => void;
   onSaveBasic: (basicDraft: ConfirmedVoucherBasicDraft) => void;
   onSave: (detail: ConfirmedAccountingLineDetail, basicDraft: ConfirmedVoucherBasicDraft) => void;
+  productOptions: ProductOption[];
+  lineProductSelections: Record<string, string>;
+  lineProductCategorySelections: Record<string, string>;
+  lineProductSubcategorySelections: Record<string, string>;
+  pendingProductLineIds: Record<string, boolean>;
+  onProductSelectionChange: (lineId: string, productId: string) => void;
+  onProductCategoryChange: (lineId: string, category: string) => void;
+  onProductSubcategoryChange: (lineId: string, subcategory: string) => void;
+  onBindProduct: (line: VoucherAccountingLine) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
+  const [productBindingDetailKeys, setProductBindingDetailKeys] = useState<Record<string, boolean>>({});
   const detailsTaxTotal = calculateVoucherLinesTaxTotal(details);
+  const productCategoryOptions = getProductCategoryOptions(productOptions);
   const [basicDraft, setBasicDraft] = useState<ConfirmedVoucherBasicDraft>(() => ({
     companyName: voucher.companyName,
     brandName: voucher.brandName,
@@ -2380,6 +2416,9 @@ function ConfirmedVoucherDetailEditor({
   }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName, detailsTaxTotal]);
   function toggleDetailExpanded(detailKey: string) {
     setExpandedDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
+  }
+  function toggleProductBinding(detailKey: string) {
+    setProductBindingDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
   }
   return (
     <div className="voucher-confirmed-detail-list is-voucher-editor">
@@ -2415,16 +2454,42 @@ function ConfirmedVoucherDetailEditor({
         const draft = getDraft(detail);
         const isSaving = Boolean(savingLineKeys[detailKey]);
         const isExpanded = Boolean(expandedDetailKeys[detailKey]);
+        const accountingLine = buildVoucherAccountingLineFromConfirmedDetail(draft, detailKey);
+        const isProductPending = Boolean(pendingProductLineIds[detailKey]);
+        const showProductBinding = voucher.usageType === "shiire" && Boolean(accountingLine.ocrItemId);
+        const suggestedProduct = getSuggestedProduct(accountingLine, productOptions);
+        const hasManualProductFilter = Boolean(lineProductCategorySelections[detailKey] || lineProductSubcategorySelections[detailKey]);
+        const selectedProductId = lineProductSelections[detailKey] ?? (!hasManualProductFilter ? suggestedProduct?.id ?? "" : "");
+        const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
+        const selectedCategory = lineProductCategorySelections[detailKey] ?? (selectedProduct ? getProductCategory(selectedProduct) : suggestedProduct ? getProductCategory(suggestedProduct) : "");
+        const selectedSubcategory = lineProductSubcategorySelections[detailKey] ?? (selectedProduct ? getProductSubcategory(selectedProduct) : suggestedProduct ? getProductSubcategory(suggestedProduct) : "");
+        const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
+        const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
+        const isBindingExpanded = Boolean(productBindingDetailKeys[detailKey]);
         const quantityLabel = detail.quantity ? `${detail.quantity} ${detail.unit || "個"}` : "数量未確認";
         return (
           <div className={`voucher-confirmed-detail-row ${isExpanded ? "is-open" : ""}`} key={detailKey}>
-            <button className="voucher-confirmed-detail-heading" type="button" onClick={() => toggleDetailExpanded(detailKey)} aria-expanded={isExpanded}>
-              <ChevronDown size={16} />
-              <strong>原明細 {detail.lineNo}</strong>
-              <span>{detail.note || "摘要なし"}</span>
-              <span>{formatMoney(detail.amount)} / {detail.taxRate || "税率不明"} / {detail.taxMode || "税区分不明"}</span>
-              <span>{quantityLabel}</span>
-            </button>
+            <div className="voucher-confirmed-detail-heading-row">
+              <button className="voucher-confirmed-detail-heading" type="button" onClick={() => toggleDetailExpanded(detailKey)} aria-expanded={isExpanded}>
+                <ChevronDown size={16} />
+                <strong>原明細 {detail.lineNo}</strong>
+                <span>{detail.note || "摘要なし"}</span>
+                <span>{formatMoney(detail.amount)} / {detail.taxRate || "税率不明"} / {detail.taxMode || "税区分不明"}</span>
+                <span>{quantityLabel}</span>
+              </button>
+              {showProductBinding ? (
+                <button
+                  className={`voucher-confirmed-product-mini ${isBindingExpanded ? "is-active" : ""}`}
+                  type="button"
+                  onClick={() => toggleProductBinding(detailKey)}
+                  disabled={isProductPending}
+                  aria-label="商品マスタ紐付けを変更"
+                  title="商品マスタ紐付けを変更"
+                >
+                  <Link2 size={15} />
+                </button>
+              ) : null}
+            </div>
             <div className="voucher-confirmed-detail-grid">
               <label>
                 <span>勘定科目</span>
@@ -2474,6 +2539,40 @@ function ConfirmedVoucherDetailEditor({
                 <span>摘要</span>
                 <input value={draft.note} onChange={(event) => onLineChange(detail, { note: event.target.value })} />
               </label>
+              {showProductBinding && isBindingExpanded ? (
+                <div className="voucher-confirmed-product-binding">
+                  <label>
+                    <span>大分類</span>
+                    <select value={selectedCategory} onChange={(event) => onProductCategoryChange(detailKey, event.target.value)} disabled={isProductPending}>
+                      <option value="">選択</option>
+                      {productCategoryOptions.map((category) => (
+                        <option value={category} key={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>小分類</span>
+                    <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(detailKey, event.target.value)} disabled={isProductPending || !selectedCategory}>
+                      <option value="">選択</option>
+                      {productSubcategoryOptions.map((subcategory) => (
+                        <option value={subcategory} key={subcategory}>{subcategory}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>商品</span>
+                    <select value={selectedProductId} onChange={(event) => onProductSelectionChange(detailKey, event.target.value)} disabled={isProductPending || !selectedCategory || !selectedSubcategory}>
+                      <option value="">商品を選択</option>
+                      {filteredProductOptions.map((product) => (
+                        <option value={product.id} key={product.id}>{product.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="secondary-button" type="button" onClick={() => onBindProduct(accountingLine)} disabled={isProductPending || !selectedProductId}>
+                    {isProductPending ? "更新中..." : "変更"}
+                  </button>
+                </div>
+              ) : null}
             </div>
             <div className="voucher-confirmed-detail-actions">
               <button className="secondary-button" type="button" disabled={isSaving} onClick={() => onSave(detail, basicDraft)}>
@@ -2709,6 +2808,27 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity),
     ocrItemId: line.ocrItemId ?? "",
     note: line.note
+  };
+}
+
+function buildVoucherAccountingLineFromConfirmedDetail(detail: ConfirmedAccountingLineDetail, id: string): VoucherAccountingLine {
+  return {
+    id,
+    ocrItemId: detail.ocrItemId,
+    matchedProductId: "",
+    matchedProductName: "",
+    matchStatus: "",
+    confirmed: true,
+    accountTitle: detail.accountTitle,
+    subAccountTitle: detail.subAccountTitle,
+    amount: String(detail.amount || ""),
+    taxRate: detail.taxRate,
+    taxMode: detail.taxMode,
+    taxAmount: String(detail.taxAmount || 0),
+    quantity: detail.quantity || "1",
+    unit: detail.unit || "個",
+    unitPrice: detail.unitPrice || calculateDraftUnitPrice(String(detail.amount || ""), detail.quantity || "1"),
+    note: detail.note || detail.subAccountTitle || `原明細 ${detail.lineNo}`
   };
 }
 
