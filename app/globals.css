@@ -20089,6 +20089,10 @@ body :where(
   display: none;
 }
 
+.receipt-upload-button span {
+  color: inherit;
+}
+
 .receipt-upload-button.is-disabled {
   border-color: var(--line);
   color: var(--muted);
