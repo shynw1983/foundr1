@@ -4005,6 +4005,8 @@ body :where(
 }
 
 .receipt-line-confirm-check {
+  width: 84px;
+  height: 28px;
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -4021,10 +4023,21 @@ body :where(
   justify-self: end;
 }
 
-.receipt-line-confirm-check input {
+.receipt-confirm-form .receipt-line-confirm-check input[type="checkbox"] {
+  -webkit-appearance: checkbox;
+  appearance: auto;
   width: 13px;
   height: 13px;
+  min-width: 13px;
+  min-height: 13px;
+  padding: 0;
+  margin: 0;
   accent-color: var(--primary);
+}
+
+.receipt-line-confirm-check span {
+  min-width: 38px;
+  text-align: center;
 }
 
 .receipt-expense-line.is-confirmed .receipt-line-confirm-check {
