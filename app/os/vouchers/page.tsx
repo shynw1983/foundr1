@@ -349,7 +349,7 @@ export default function VouchersPage() {
   }, []);
 
   useEffect(() => {
-    void loadConfirmedAccountingLines();
+    void loadConfirmedAccountingLines(exportStartDate, exportEndDate);
   }, [exportStartDate, exportEndDate]);
 
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
@@ -428,12 +428,12 @@ export default function VouchersPage() {
     }
   }
 
-  async function loadConfirmedAccountingLines() {
+  async function loadConfirmedAccountingLines(fromDate = exportStartDate, toDate = exportEndDate) {
     setIsLoadingConfirmedLines(true);
     try {
       const params = new URLSearchParams({ view: "confirmed_accounting_lines" });
-      if (exportStartDate) params.set("from", exportStartDate);
-      if (exportEndDate) params.set("to", exportEndDate);
+      if (fromDate) params.set("from", fromDate);
+      if (toDate) params.set("to", toDate);
       const response = await fetch(`/api/vouchers?${params.toString()}`, { cache: "no-store" });
       const body = await response.json().catch(() => ({})) as { lines?: ConfirmedAccountingLine[]; error?: string };
       if (!response.ok) {
@@ -446,6 +446,13 @@ export default function VouchersPage() {
     } finally {
       setIsLoadingConfirmedLines(false);
     }
+  }
+
+  async function refreshVoucherViews() {
+    await Promise.all([
+      loadVouchers(),
+      loadConfirmedAccountingLines(exportStartDate, exportEndDate)
+    ]);
   }
 
   function getConfirmedLineDraft(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail) {
@@ -519,8 +526,7 @@ export default function VouchersPage() {
         return next;
       });
       setMessage("確定済み明細を更新しました。");
-      await loadConfirmedAccountingLines();
-      await loadVouchers();
+      await refreshVoucherViews();
     } catch {
       setMessage("確定済み明細を保存できませんでした。通信状態を確認してください。");
     } finally {
@@ -561,8 +567,7 @@ export default function VouchersPage() {
         return;
       }
       setMessage("確定済み証憑の基本情報を更新しました。");
-      await loadConfirmedAccountingLines();
-      await loadVouchers();
+      await refreshVoucherViews();
     } catch {
       setMessage("確定済み証憑の基本情報を保存できませんでした。通信状態を確認してください。");
     } finally {
@@ -1017,7 +1022,7 @@ export default function VouchersPage() {
         return;
       }
       setMessage(voucher.usageType === "keihi" ? "経費として登録しました。" : "仕入として確認しました。商品候補にも反映されます。");
-      await loadVouchers();
+      await refreshVoucherViews();
       clearVoucherWorkspaceEntry(voucher.id);
     } catch {
       setMessage("証憑を登録できませんでした。通信状態を確認してください。");
@@ -1038,6 +1043,7 @@ export default function VouchersPage() {
         return;
       }
       setVouchers((current) => current.filter((item) => item.id !== voucher.id));
+      setConfirmedAccountingLines((current) => current.filter((line) => line.voucherId !== voucher.id));
       clearVoucherWorkspaceEntry(voucher.id);
       setMessage("証憑を削除しました。");
     } catch {
