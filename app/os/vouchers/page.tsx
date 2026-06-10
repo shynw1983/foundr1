@@ -734,7 +734,7 @@ export default function VouchersPage() {
       taxMode: line.taxMode,
       taxAmount: line.taxAmount,
       quantity: line.quantity,
-      unit: line.unit
+      unit: line.unit || "個"
     }, updateReferencePrice ? "商品マスタに紐付け、参考価格を更新しました。" : "商品マスタに紐付けました。");
   }
 
@@ -2109,7 +2109,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       taxMode,
       taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
       quantity: item.quantity === null || item.quantity === undefined ? "" : String(item.quantity),
-      unit: item.unit || "",
+      unit: item.unit || "個",
       unitPrice: item.unitPrice === null || item.unitPrice === undefined ? "" : String(item.unitPrice),
       note: item.rawName || ""
     }];
@@ -2131,7 +2131,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     taxMode: "不明",
     taxAmount: String(Math.round(voucher?.tax ?? 0)),
     quantity: "",
-    unit: "",
+    unit: "個",
     unitPrice: "",
     note: ""
   }];
@@ -2152,7 +2152,7 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
     taxMode,
     taxAmount: "0",
     quantity: "",
-    unit: "",
+    unit: "個",
     unitPrice: "",
     note: ""
   };
@@ -2481,7 +2481,7 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     taxMode: line.taxMode,
     taxAmount: line.taxAmount,
     quantity: line.quantity === null || line.quantity === undefined ? "" : String(line.quantity),
-    unit: line.unit ?? "",
+    unit: line.unit || "個",
     unitPrice: line.unitPrice === null || line.unitPrice === undefined ? "" : String(line.unitPrice),
     ocrItemId: line.ocrItemId ?? "",
     note: line.note

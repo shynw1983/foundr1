@@ -281,7 +281,7 @@ export async function PATCH(request: Request) {
     const receiptUnitPrice = normalizeNullableUnitPrice(body.receiptUnitPrice) ?? normalizeNullableUnitPrice(body.unitPrice) ?? normalizeNullableUnitPrice(item.unitPrice);
     const itemForLink = {
       ...item,
-      unit: String(body.unit ?? item.unit ?? "").trim().slice(0, 20),
+      unit: String(body.unit ?? item.unit ?? "個").trim().slice(0, 20) || "個",
       unitPrice: receiptUnitPrice
     };
     await updateReceiptOcrItemForProductLink(id, itemId, body, receiptUnitPrice);
@@ -336,7 +336,7 @@ export async function PATCH(request: Request) {
       taxMode,
       taxAmount: providedTaxAmount ?? calculateTaxAmount(amount, taxRate, taxMode),
       quantity: normalizeNullableNumber(body.lines?.[0]?.quantity ?? currentLine.quantity),
-      unit: String(body.lines?.[0]?.unit ?? currentLine.unit ?? "").trim().slice(0, 20),
+      unit: String(body.lines?.[0]?.unit ?? currentLine.unit ?? "個").trim().slice(0, 20) || "個",
       unitPrice: normalizeNullableUnitPrice(body.lines?.[0]?.unitPrice ?? currentLine.unitPrice),
       ocrItemId: String(body.lines?.[0]?.ocrItemId ?? currentLine.ocrItemId ?? "").trim(),
       note: String(body.lines?.[0]?.note ?? currentLine.note ?? "").trim()
@@ -650,7 +650,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       taxRate: String(item.taxRate ?? ""),
       taxMode: String(item.taxMode ?? ""),
       quantity: item.quantity === null || item.quantity === undefined ? null : Number(item.quantity),
-      unit: String(item.unit ?? ""),
+      unit: String(item.unit ?? "個").trim() || "個",
       unitPrice: item.unitPrice === null || item.unitPrice === undefined ? null : Number(item.unitPrice),
       category: String(item.category ?? ""),
       accountTitle: String(item.accountTitle ?? ""),
@@ -721,7 +721,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
         coalesce(line.value->>'taxMode', '') as "taxMode",
         coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
         (nullif(line.value->>'quantity', ''))::float as quantity,
-        coalesce(line.value->>'unit', '') as unit,
+        coalesce(nullif(line.value->>'unit', ''), '個') as unit,
         coalesce(line.value->>'note', '') as note
       from receipt_ocr_results
       join stores on stores.id = receipt_ocr_results.store_id
@@ -824,7 +824,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       String(row.taxMode ?? ""),
       String(Math.round(Number(row.taxAmount ?? 0))),
       quantity,
-      String(row.unit ?? ""),
+      String(row.unit ?? "個").trim() || "個",
       unitPrice,
       String(Number(row.lineCount ?? 1)),
       String(row.note ?? ""),
@@ -873,7 +873,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       coalesce(line.value->>'taxMode', '') as "taxMode",
       coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
       (nullif(line.value->>'quantity', ''))::float as quantity,
-      coalesce(line.value->>'unit', '') as unit,
+      coalesce(nullif(line.value->>'unit', ''), '個') as unit,
       (nullif(line.value->>'unitPrice', ''))::float as "unitPrice",
       coalesce(line.value->>'ocrItemId', '') as "ocrItemId",
       coalesce(line.value->>'note', '') as note
@@ -946,7 +946,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     const amount = Math.round(Number(row.amount ?? 0));
     const taxAmount = Math.round(Number(row.taxAmount ?? 0));
     const quantity = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
-    const unit = String(row.unit ?? "");
+    const unit = String(row.unit ?? "個").trim() || "個";
     const detail = {
       voucherId: String(row.voucherId ?? ""),
       lineNo: Number(row.lineNo ?? 0),
@@ -1023,7 +1023,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       taxMode: String(row.taxMode ?? ""),
       taxAmount: Math.round(Number(row.taxAmount ?? 0)),
       quantity: row.quantity === null || row.quantity === undefined ? "" : String(Number(row.quantity)),
-      unit: String(row.unit ?? ""),
+      unit: String(row.unit ?? "個").trim() || "個",
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
       lineCount: Number(row.lineCount ?? 1),
       note: String(row.note ?? ""),
@@ -1110,7 +1110,7 @@ function normalizeAccountingLines(lines: Array<{
     taxMode: "不明",
     taxAmount: voucher.tax,
     quantity: "",
-    unit: "",
+    unit: "個",
     unitPrice: "",
     ocrItemId: "",
     note: ""
@@ -1133,7 +1133,7 @@ function normalizeAccountingLines(lines: Array<{
       taxMode,
       taxAmount,
       quantity: normalizeNullableNumber(line.quantity),
-      unit: String(line.unit ?? "").trim().slice(0, 20),
+      unit: String(line.unit ?? "個").trim().slice(0, 20) || "個",
       unitPrice: normalizeNullableMoney(line.unitPrice),
       ocrItemId: String(line.ocrItemId ?? "").trim(),
       note: String(line.note ?? "").trim()
@@ -1254,7 +1254,7 @@ async function linkVoucherItemToProduct(item: Record<string, unknown>, productId
       ${normalizedName},
       ${productId},
       ${String(item.category ?? "")},
-      ${String(item.unit ?? "")},
+      ${String(item.unit ?? "個").trim() || "個"},
       ${employeeId},
       now()
     )
@@ -1273,7 +1273,7 @@ async function linkVoucherItemToProduct(item: Record<string, unknown>, productId
   `;
   await recordReceiptItemPrice(itemId, productId, employeeId, {
     price: receiptUnitPrice ?? undefined,
-    unit: String(item.unit ?? "").trim() || undefined
+    unit: String(item.unit ?? "個").trim() || "個"
   });
 }
 
@@ -1298,7 +1298,7 @@ function normalizeStoredAccountingLines(value: unknown) {
       taxMode: String(row.taxMode ?? ""),
       taxAmount: Number(row.taxAmount ?? 0),
       quantity: row.quantity === null || row.quantity === undefined ? null : Number(row.quantity),
-      unit: String(row.unit ?? ""),
+      unit: String(row.unit ?? "個").trim() || "個",
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Number(row.unitPrice),
       ocrItemId: String(row.ocrItemId ?? ""),
       note: String(row.note ?? "")
