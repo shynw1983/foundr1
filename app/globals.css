@@ -19604,9 +19604,7 @@ body :where(
 
 .additional-purchase-panel {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.4fr) minmax(88px, 0.5fr) minmax(220px, 1fr) auto;
-  align-items: end;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   padding: 10px;
   border: 1px solid rgba(43, 142, 106, 0.16);
@@ -19614,32 +19612,72 @@ body :where(
   background: var(--green-soft);
 }
 
-.additional-purchase-panel > div {
+.additional-purchase-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.additional-purchase-toggle > span {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.additional-purchase-panel strong {
+.additional-purchase-toggle b {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.additional-purchase-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(88px, 0.5fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.additional-purchase-form > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.additional-purchase-panel strong,
+.additional-purchase-form strong {
   font-size: 13px;
 }
 
 .additional-purchase-panel span,
-.additional-purchase-panel small {
+.additional-purchase-panel small,
+.additional-purchase-form small {
   min-width: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }
 
-.additional-purchase-panel label {
+.additional-purchase-form label {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
-.additional-purchase-panel select,
-.additional-purchase-panel input {
+.additional-purchase-form select,
+.additional-purchase-form input {
   width: 100%;
   min-width: 0;
   min-height: 36px;
@@ -19649,13 +19687,36 @@ body :where(
   background: white;
 }
 
-.additional-purchase-panel .secondary-button {
+.additional-purchase-form .secondary-button {
   min-height: 36px;
   white-space: nowrap;
 }
 
-.additional-purchase-panel small {
+.additional-purchase-form small {
   grid-column: 1 / -1;
+}
+
+.additional-purchase-mode {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.additional-purchase-mode button {
+  min-height: 34px;
+  border: 1px solid rgba(31, 126, 93, 0.2);
+  border-radius: 8px;
+  color: var(--green);
+  background: white;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.additional-purchase-mode button.is-active {
+  color: white;
+  background: var(--green);
 }
 
 .procurement-order-summary {
@@ -23188,13 +23249,13 @@ body :where(
     background: white;
   }
 
-  .additional-purchase-panel {
+  .additional-purchase-form {
     grid-template-columns: 1fr;
     align-items: stretch;
     gap: 8px;
   }
 
-  .additional-purchase-panel .secondary-button {
+  .additional-purchase-form .secondary-button {
     justify-content: center;
     width: 100%;
   }
@@ -26717,12 +26778,13 @@ html:lang(ja) :where(
 }
 
 @media (max-width: 900px) {
-  .additional-purchase-panel {
+  .additional-purchase-form {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .additional-purchase-panel .secondary-button,
-  .additional-purchase-panel small {
+  .additional-purchase-form .secondary-button,
+  .additional-purchase-form small,
+  .additional-purchase-mode {
     grid-column: 1 / -1;
     width: 100%;
   }

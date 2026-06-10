@@ -10,16 +10,20 @@ export async function POST(request: Request) {
   const body = await request.json() as {
     orderId?: string;
     productId?: string;
+    temporaryProductName?: string;
+    temporaryProductUnit?: string;
     requestedQuantity?: number;
     note?: string;
   };
   const orderId = String(body.orderId ?? "").trim();
   const productId = String(body.productId ?? "").trim();
+  const temporaryProductName = String(body.temporaryProductName ?? "").trim();
+  const temporaryProductUnit = String(body.temporaryProductUnit ?? "").trim() || "個";
   const requestedQuantity = Number(body.requestedQuantity ?? 0);
   const note = String(body.note ?? "").trim();
 
-  if (!orderId || !productId || !Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
-    return Response.json({ error: "依頼、商品、数量を指定してください。" }, { status: 400 });
+  if (!orderId || (!productId && !temporaryProductName) || !Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+    return Response.json({ error: "依頼、商品名、数量を指定してください。" }, { status: 400 });
   }
 
   const orderRows = await sql`
@@ -41,37 +45,43 @@ export async function POST(request: Request) {
     return Response.json({ error: "この依頼に追加購入を登録する権限がありません。" }, { status: 403 });
   }
 
-  const productRows = await sql`
-    select
-      id,
-      unit,
-      (
-        select product_supplier_options.supplier_id
-        from product_supplier_options
-        where product_supplier_options.product_id = products.id
-          and product_supplier_options.role = 'メイン'
-          and product_supplier_options.is_active = true
+  const productRows = productId
+    ? await sql`
+        select
+          id,
+          unit,
+          (
+            select product_supplier_options.supplier_id
+            from product_supplier_options
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = 'メイン'
+              and product_supplier_options.is_active = true
+            limit 1
+          ) as "mainSupplierId"
+        from products
+        where id = ${productId}
         limit 1
-      ) as "mainSupplierId"
-    from products
-    where id = ${productId}
-    limit 1
-  `;
+      `
+    : [];
   const product = productRows[0];
 
-  if (!product) {
+  if (productId && !product) {
     return Response.json({ error: "商品が見つかりません。" }, { status: 404 });
   }
 
   const procurementNote = note
-    ? `${additionalPurchaseNotePrefix}: ${note}`
-    : additionalPurchaseNotePrefix;
+    ? `${additionalPurchaseNotePrefix}: ${temporaryProductName ? `${temporaryProductName} / ${note}` : note}`
+    : temporaryProductName
+      ? `${additionalPurchaseNotePrefix}: ${temporaryProductName}`
+      : additionalPurchaseNotePrefix;
 
   const insertedRows = await sql`
     insert into purchase_order_items (
       purchase_order_id,
       product_id,
       brand_id,
+      temporary_product_name,
+      temporary_product_unit,
       requested_quantity,
       requested_unit,
       note,
@@ -81,13 +91,15 @@ export async function POST(request: Request) {
     )
     values (
       ${order.id},
-      ${product.id},
+      ${product?.id ?? null},
       ${order.brandId},
+      ${temporaryProductName},
+      ${temporaryProductUnit},
       ${requestedQuantity},
-      ${product.unit},
+      ${product?.unit ?? temporaryProductUnit},
       ${additionalPurchaseNotePrefix},
       ${procurementNote},
-      ${product.mainSupplierId},
+      ${product?.mainSupplierId ?? null},
       'requested'
     )
     returning id::text
@@ -152,8 +164,8 @@ export async function PATCH(request: Request) {
       purchase_orders.order_no as "orderNo",
       purchase_orders.store_id::text as "storeId",
       stores.name as "storeName",
-      products.name as "productName",
-      products.reference_price::float as "referencePrice",
+      coalesce(nullif(purchase_order_items.temporary_product_name, ''), products.name, '臨時購入品') as "productName",
+      coalesce(products.reference_price::float, 0) as "referencePrice",
       purchase_order_items.status as "currentStatus",
       coalesce(purchase_order_items.procurement_note, '') as "currentNote",
       coalesce(purchase_order_items.procurement_note, '') like ${`${additionalPurchaseNotePrefix}%`} as "isAdditionalPurchase",
@@ -172,7 +184,7 @@ export async function PATCH(request: Request) {
     from purchase_order_items
     join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
     join stores on stores.id = purchase_orders.store_id
-    join products on products.id = purchase_order_items.product_id
+    left join products on products.id = purchase_order_items.product_id
     left join lateral (
       select
         purchase_actuals.actual_quantity,
@@ -539,6 +551,7 @@ export async function PATCH(request: Request) {
           ${session.id}
         from purchase_order_items
         where purchase_order_items.id = ${body.itemId}
+          and purchase_order_items.product_id is not null
       `;
     }
   }

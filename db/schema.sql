@@ -1329,15 +1329,20 @@ create table if not exists purchase_orders (
 create table if not exists purchase_order_items (
   id uuid primary key default gen_random_uuid(),
   purchase_order_id uuid not null references purchase_orders(id) on delete cascade,
-  product_id uuid not null references products(id),
+  product_id uuid references products(id),
   brand_id uuid references brands(id),
+  temporary_product_name text not null default '',
+  temporary_product_unit text not null default '個',
   requested_quantity numeric(12, 2) not null,
   requested_unit text not null,
   note text,
   status text not null default 'requested'
 );
 
+alter table purchase_order_items alter column product_id drop not null;
 alter table purchase_order_items add column if not exists brand_id uuid references brands(id);
+alter table purchase_order_items add column if not exists temporary_product_name text not null default '';
+alter table purchase_order_items add column if not exists temporary_product_unit text not null default '個';
 alter table purchase_order_items add column if not exists actual_quantity numeric(12, 2);
 alter table purchase_order_items add column if not exists actual_price numeric(12, 2);
 alter table purchase_order_items add column if not exists procurement_note text;

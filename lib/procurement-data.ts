@@ -460,11 +460,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           purchase_order_items.id::text as id,
           purchase_orders.order_no as "orderId",
           products.id::text as "productId",
-          products.name as "productName",
+          coalesce(nullif(purchase_order_items.temporary_product_name, ''), products.name, '臨時購入品') as "productName",
           coalesce(item_brands.name, order_brands.name, '共通') as "brandName",
-          products.reference_price::float as "referencePrice",
+          coalesce(products.reference_price::float, 0) as "referencePrice",
           purchase_order_items.requested_quantity::float as "requestedQuantity",
-          purchase_order_items.requested_unit as unit,
+          coalesce(nullif(purchase_order_items.requested_unit, ''), nullif(purchase_order_items.temporary_product_unit, ''), products.unit, '個') as unit,
           coalesce(
             purchase_order_items.actual_quantity::float,
             purchase_actuals.actual_quantity::float,
@@ -505,7 +505,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           end as "priceExceptionNote"
         from purchase_order_items
         join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
-        join products on products.id = purchase_order_items.product_id
+        left join products on products.id = purchase_order_items.product_id
         left join brands item_brands on item_brands.id = purchase_order_items.brand_id
         left join brands order_brands on order_brands.id = purchase_orders.brand_id
         left join suppliers selected_suppliers on selected_suppliers.id = purchase_order_items.selected_supplier_id
