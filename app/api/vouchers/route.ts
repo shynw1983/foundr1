@@ -793,6 +793,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
         receipt_ocr_results.usage_type as "usageType",
         receipt_ocr_results.payment_type as "paymentType",
         receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+        coalesce(receipt_ocr_results.total::float, 0) as "receiptTotal",
         coalesce(receipt_ocr_results.raw_result->'accountingSummaryNotes', '{}'::jsonb)::text as "summaryNotes",
         coalesce(receipt_ocr_results.company_name, '') as "companyName",
         coalesce(receipt_ocr_results.brand_name, '') as "brandName",
@@ -824,6 +825,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       "usageType",
       "paymentType",
       "reimbursementStatus",
+      max("receiptTotal") as "receiptTotal",
       max("summaryNotes") as "summaryNotes",
       "companyName",
       "brandName",
@@ -886,14 +888,15 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
     "証憑URL"
   ];
 
-  const csvRows = rows.map((row) => {
+  const adjustedRows = adjustRowsToReceiptTotals(rows);
+  const csvRows = adjustedRows.map((row) => {
     const vendorName = buildVendorName(
       String(row.companyName ?? ""),
       String(row.brandName ?? ""),
       String(row.locationName ?? ""),
       String(row.vendorName ?? "")
     );
-    const taxIncludedAmount = calculateAccountingTaxIncludedAmount(row.amount, row.taxAmount, row.taxMode);
+    const taxIncludedAmount = row.taxIncludedAmount;
     const quantityNumber = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
     const quantity = quantityNumber === null || !Number.isFinite(quantityNumber) ? "" : String(quantityNumber);
     const unitPrice = quantityNumber && Number.isFinite(quantityNumber) && quantityNumber > 0
@@ -953,6 +956,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       receipt_ocr_results.usage_type as "usageType",
       receipt_ocr_results.payment_type as "paymentType",
       receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+      coalesce(receipt_ocr_results.total::float, 0) as "receiptTotal",
       coalesce(receipt_ocr_results.raw_result->'accountingSummaryNotes', '{}'::jsonb)::text as "summaryNotes",
       coalesce(receipt_ocr_results.company_name, '') as "companyName",
       coalesce(receipt_ocr_results.brand_name, '') as "brandName",
@@ -1015,6 +1019,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     taxRate: string;
     taxMode: string;
     taxAmount: number;
+    receiptTotal: number;
     quantity: number | null;
     unit: string;
     unitPrice: number | null;
@@ -1036,6 +1041,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     const manualSummaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey);
     const amount = Math.round(Number(row.amount ?? 0));
     const taxAmount = Math.round(Number(row.taxAmount ?? 0));
+    const receiptTotal = Math.round(Number(row.receiptTotal ?? 0));
     const taxIncludedAmount = calculateAccountingTaxIncludedAmount(amount, taxAmount, row.taxMode);
     const quantity = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
     const unit = String(row.unit ?? "個").trim() || "個";
@@ -1090,6 +1096,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       taxRate: detail.taxRate,
       taxMode: detail.taxMode,
       taxAmount,
+      receiptTotal,
       quantity: quantity === null || !Number.isFinite(quantity) ? null : quantity,
       unit,
       unitPrice: quantity !== null && Number.isFinite(quantity) && quantity > 0
@@ -1103,7 +1110,9 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
   }
 
   return Response.json({
-    lines: [...groups.values()].slice(0, 500).map((row) => ({
+    lines: adjustRowsToReceiptTotals([...groups.values()])
+      .slice(0, 500)
+      .map((row) => ({
       voucherId: String(row.voucherId ?? ""),
       lineNo: Number(row.lineNo ?? 0),
       summaryKey: String(row.summaryKey ?? ""),
@@ -1117,12 +1126,15 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       accountTitle: String(row.accountTitle ?? ""),
       subAccountTitle: String(row.subAccountTitle ?? ""),
       amount: Math.round(Number(row.amount ?? 0)),
+      taxIncludedAmount: row.taxIncludedAmount,
       taxRate: String(row.taxRate ?? ""),
       taxMode: String(row.taxMode ?? ""),
       taxAmount: Math.round(Number(row.taxAmount ?? 0)),
       quantity: row.quantity === null || row.quantity === undefined ? "" : String(Number(row.quantity)),
       unit: String(row.unit ?? "個").trim() || "個",
-      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
+      unitPrice: row.quantity && Number.isFinite(Number(row.quantity)) && Number(row.quantity) > 0
+        ? String(Math.round((row.taxIncludedAmount / Number(row.quantity)) * 100) / 100)
+        : row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
       lineCount: Number(row.lineCount ?? 1),
       note: String(row.note ?? ""),
       details: row.details
@@ -1585,6 +1597,38 @@ function calculateAccountingTaxIncludedAmount(amount: unknown, taxAmount: unknow
   const roundedTaxAmount = Math.round(Number(taxAmount ?? 0));
   if (String(taxMode ?? "").trim() === "外税") return roundedAmount + Math.max(0, roundedTaxAmount);
   return roundedAmount;
+}
+
+function adjustRowsToReceiptTotals<T extends { voucherId?: unknown; receiptTotal?: unknown; amount?: unknown; taxAmount?: unknown; taxMode?: unknown; lineNo?: unknown }>(
+  rows: T[]
+) {
+  const adjustedRows = rows.map((row) => ({
+    ...row,
+    taxIncludedAmount: calculateAccountingTaxIncludedAmount(row.amount, row.taxAmount, row.taxMode)
+  }));
+  const rowsByVoucher = new Map<string, Array<typeof adjustedRows[number]>>();
+
+  for (const row of adjustedRows) {
+    const voucherId = String(row.voucherId ?? "");
+    if (!voucherId) continue;
+    const group = rowsByVoucher.get(voucherId) ?? [];
+    group.push(row);
+    rowsByVoucher.set(voucherId, group);
+  }
+
+  for (const voucherRows of rowsByVoucher.values()) {
+    const receiptTotal = Math.round(Number(voucherRows[0]?.receiptTotal ?? 0));
+    if (!Number.isFinite(receiptTotal) || receiptTotal <= 0) continue;
+
+    const rowTotal = voucherRows.reduce((sum, row) => sum + row.taxIncludedAmount, 0);
+    const difference = receiptTotal - rowTotal;
+    if (!difference) continue;
+
+    const targetRow = [...voucherRows].sort((a, b) => Number(b.lineNo ?? 0) - Number(a.lineNo ?? 0))[0];
+    if (targetRow) targetRow.taxIncludedAmount += difference;
+  }
+
+  return adjustedRows;
 }
 
 function normalizeDate(value: unknown) {

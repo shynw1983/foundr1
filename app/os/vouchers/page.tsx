@@ -135,6 +135,7 @@ type VoucherAccountingSummaryLine = {
   accountTitle: string;
   subAccountTitle: string;
   amount: number;
+  taxIncludedAmount?: number;
   taxRate: string;
   taxMode: string;
   taxAmount: number;
@@ -159,6 +160,7 @@ type ConfirmedAccountingLine = {
   accountTitle: string;
   subAccountTitle: string;
   amount: number;
+  taxIncludedAmount?: number;
   taxRate: string;
   taxMode: string;
   taxAmount: number;
@@ -1276,7 +1278,7 @@ export default function VouchersPage() {
                       <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
                     </div>
                     <div className="voucher-confirmed-line-amount">
-                      <strong>{formatMoney(calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
+                      <strong>{formatMoney(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
                       <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
                       <div className="voucher-confirmed-summary-edit">
                         <input
