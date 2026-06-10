@@ -138,6 +138,8 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
                 "Use YYYY-MM-DD for purchaseDate when the date is visible.",
                 "Use HH:mm for purchaseTime when the time is visible.",
                 "For each item taxRate, preserve visible 8% or 10% markers when present.",
+                "Some supermarket receipts mark reduced-tax items with a leading ※. When a visible ※ is attached to an item, treat that item as 8% tax.",
+                "When a receipt prints quantity and unit price under an item, such as (数量 × 単価), (3 × 468), or 3点 × 468, that quantity/unit-price line belongs to the item immediately above it, not to the next item.",
                 "For each item taxMode, use 内税 if tax is included in the displayed amount, 外税 if tax is added separately, otherwise 不明."
               ].join("\n")
             }
@@ -537,7 +539,7 @@ async function createProductCandidate(itemId: string, item: ReceiptOcrItem, norm
 }
 
 function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
-  return {
+  const normalized = {
     storeName: String(value.storeName ?? "").trim(),
     companyName: String(value.companyName ?? "").trim(),
     brandName: String(value.brandName ?? "").trim(),
@@ -559,6 +561,61 @@ function normalizeReceiptOcrResult(value: ReceiptOcrResult): ReceiptOcrResult {
       amount: coerceMoney(item.amount)
     })).filter((item) => item.name) : []
   };
+  return applyReceiptLineCorrections(normalized);
+}
+
+function applyReceiptLineCorrections(result: ReceiptOcrResult): ReceiptOcrResult {
+  const items = result.items.map((item) => ({ ...item }));
+
+  for (const item of items) {
+    const markedReducedTax = /^[※*＊]/.test(item.name.trim());
+    item.name = item.name.replace(/^[※*＊]\s*/, "").trim();
+    if (markedReducedTax) {
+      item.taxRate = "8%";
+    }
+  }
+
+  for (let index = 0; index < items.length - 1; index += 1) {
+    const current = items[index];
+    const next = items[index + 1];
+    if (!current || !next) continue;
+    if (!isLikelyMisassignedQuantity(current, next)) continue;
+
+    current.quantity = next.quantity;
+    current.unit = next.unit || current.unit || "個";
+    current.unitPrice = next.unitPrice;
+    next.quantity = null;
+    next.unit = "";
+    next.unitPrice = null;
+  }
+
+  return { ...result, items };
+}
+
+function isLikelyMisassignedQuantity(current: ReceiptOcrItem, next: ReceiptOcrItem) {
+  const nextQuantity = Number(next.quantity ?? NaN);
+  const nextUnitPrice = Number(next.unitPrice ?? 0);
+  if (!Number.isFinite(nextQuantity) || nextQuantity <= 1) return false;
+  if (!Number.isFinite(nextUnitPrice) || nextUnitPrice <= 0) return false;
+
+  const quantityTotal = Math.round(nextQuantity * nextUnitPrice);
+  const currentAmount = Number(current.amount ?? 0);
+  const nextAmount = Number(next.amount ?? 0);
+  if (!Number.isFinite(currentAmount) || currentAmount <= 0) return false;
+  const currentQuantity = Number(current.quantity ?? 0);
+  const currentUnitPrice = Number(current.unitPrice ?? 0);
+  if (
+    Number.isFinite(currentQuantity) &&
+    currentQuantity > 1 &&
+    Number.isFinite(currentUnitPrice) &&
+    currentUnitPrice > 0 &&
+    Math.abs(Math.round(currentQuantity * currentUnitPrice) - currentAmount) <= 1
+  ) {
+    return false;
+  }
+  if (Math.abs(quantityTotal - currentAmount) > 1) return false;
+  if (Number.isFinite(nextAmount) && nextAmount > 0 && Math.abs(quantityTotal - nextAmount) <= 1) return false;
+  return true;
 }
 
 function cleanSuggestedProductName(value: string) {
