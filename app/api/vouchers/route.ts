@@ -562,15 +562,16 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
 
 async function listProductOptions() {
   const rows = await sql`
-    select id::text, name, category, unit
+    select id::text, name, category, subcategory, unit
     from products
-    order by name asc
+    order by category asc, subcategory asc, name asc
     limit 800
   `;
   return rows.map((row) => ({
     id: String(row.id ?? ""),
     name: String(row.name ?? ""),
     category: String(row.category ?? ""),
+    subcategory: String(row.subcategory ?? ""),
     unit: String(row.unit ?? "")
   }));
 }

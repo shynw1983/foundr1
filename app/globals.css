@@ -3863,9 +3863,13 @@ body :where(
 .voucher-product-binding {
   grid-column: 4 / -1;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, auto);
+  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(220px, auto);
   align-items: end;
   gap: 10px;
+}
+
+.voucher-product-binding label {
+  min-width: 0;
 }
 
 .voucher-product-binding span {

@@ -76,6 +76,7 @@ type ProductOption = {
   id: string;
   name: string;
   category: string;
+  subcategory: string;
   unit: string;
 };
 
@@ -204,6 +205,8 @@ export default function VouchersPage() {
   const [vouchers, setVouchers] = useState<VoucherRecord[]>([]);
   const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
+  const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
+  const [lineProductSubcategorySelections, setLineProductSubcategorySelections] = useState<Record<string, string>>({});
   const [pendingProductLineIds, setPendingProductLineIds] = useState<Record<string, boolean>>({});
   const [canUpload, setCanUpload] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -417,7 +420,8 @@ export default function VouchersPage() {
   }
 
   async function bindAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine) {
-    const productId = lineProductSelections[line.id] || line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "";
+    const hasManualProductFilter = Boolean(lineProductCategorySelections[line.id] || lineProductSubcategorySelections[line.id]);
+    const productId = lineProductSelections[line.id] || (!hasManualProductFilter ? line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "" : "");
     if (!productId) {
       window.alert("紐付ける商品を選択してください。");
       return;
@@ -774,8 +778,19 @@ export default function VouchersPage() {
                           onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
                           productOptions={productOptions}
                           lineProductSelections={lineProductSelections}
+                          lineProductCategorySelections={lineProductCategorySelections}
+                          lineProductSubcategorySelections={lineProductSubcategorySelections}
                           pendingProductLineIds={pendingProductLineIds}
                           onProductSelectionChange={(lineId, productId) => setLineProductSelections((current) => ({ ...current, [lineId]: productId }))}
+                          onProductCategoryChange={(lineId, category) => {
+                            setLineProductCategorySelections((current) => ({ ...current, [lineId]: category }));
+                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: "" }));
+                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                          }}
+                          onProductSubcategoryChange={(lineId, subcategory) => {
+                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: subcategory }));
+                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                          }}
                           onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
                           onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
                           onConfirm={() => void confirmVoucherAccounting(voucher)}
@@ -1065,8 +1080,12 @@ function VoucherAccountingEditor({
   onRemoveLine,
   productOptions,
   lineProductSelections,
+  lineProductCategorySelections,
+  lineProductSubcategorySelections,
   pendingProductLineIds,
   onProductSelectionChange,
+  onProductCategoryChange,
+  onProductSubcategoryChange,
   onBindProduct,
   onCreateProduct,
   onConfirm
@@ -1081,13 +1100,18 @@ function VoucherAccountingEditor({
   onRemoveLine: (lineId: string) => void;
   productOptions: ProductOption[];
   lineProductSelections: Record<string, string>;
+  lineProductCategorySelections: Record<string, string>;
+  lineProductSubcategorySelections: Record<string, string>;
   pendingProductLineIds: Record<string, boolean>;
   onProductSelectionChange: (lineId: string, productId: string) => void;
+  onProductCategoryChange: (lineId: string, category: string) => void;
+  onProductSubcategoryChange: (lineId: string, subcategory: string) => void;
   onBindProduct: (line: VoucherAccountingLine) => void;
   onCreateProduct: (line: VoucherAccountingLine) => void;
   onConfirm: () => void;
 }) {
   const isShiire = voucher.usageType === "shiire";
+  const productCategoryOptions = getProductCategoryOptions(productOptions);
   return (
     <div className="receipt-confirm-form voucher-accounting-form">
       <label>
@@ -1130,7 +1154,13 @@ function VoucherAccountingEditor({
         </div>
         {draft.lines.map((line) => {
           const suggestedProduct = getSuggestedProduct(line, productOptions);
-          const selectedProductId = lineProductSelections[line.id] ?? line.matchedProductId ?? suggestedProduct?.id ?? "";
+          const hasManualProductFilter = Boolean(lineProductCategorySelections[line.id] || lineProductSubcategorySelections[line.id]);
+          const selectedProductId = lineProductSelections[line.id] ?? (!hasManualProductFilter ? line.matchedProductId ?? suggestedProduct?.id ?? "" : "");
+          const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
+          const selectedCategory = lineProductCategorySelections[line.id] ?? (selectedProduct ? getProductCategory(selectedProduct) : suggestedProduct ? getProductCategory(suggestedProduct) : "");
+          const selectedSubcategory = lineProductSubcategorySelections[line.id] ?? (selectedProduct ? getProductSubcategory(selectedProduct) : suggestedProduct ? getProductSubcategory(suggestedProduct) : "");
+          const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
+          const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
           return (
           <div className="receipt-expense-line" key={line.id}>
@@ -1184,15 +1214,33 @@ function VoucherAccountingEditor({
             </label>
             {isShiire ? (
               <div className="voucher-product-binding">
-                <div>
-                  <span>商品主表</span>
-                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId}>
-                    <option value="">候補を選択</option>
-                    {productOptions.map((product) => (
-                      <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
+                <label>
+                  <span>大分類</span>
+                  <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                    <option value="">大分類を選択</option>
+                    {productCategoryOptions.map((category) => (
+                      <option value={category} key={category}>{category}</option>
                     ))}
                   </select>
-                </div>
+                </label>
+                <label>
+                  <span>小分類</span>
+                  <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedCategory}>
+                    <option value="">小分類を選択</option>
+                    {productSubcategoryOptions.map((subcategory) => (
+                      <option value={subcategory} key={subcategory}>{subcategory}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>商品</span>
+                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
+                    <option value="">候補を選択</option>
+                    {filteredProductOptions.map((product) => (
+                      <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
+                    ))}
+                  </select>
+                </label>
                 <div className="voucher-product-binding-actions">
                   {line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
                   <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedProductId}>
@@ -1389,16 +1437,51 @@ function groupAccountingSummaryLines(lines: VoucherAccountingSummaryLine[]) {
   return Array.from(grouped.values());
 }
 
+function getProductCategory(product: ProductOption) {
+  return product.category || "未分類";
+}
+
+function getProductSubcategory(product: ProductOption) {
+  return product.subcategory || "未分類";
+}
+
+function getProductCategoryOptions(productOptions: ProductOption[]) {
+  return Array.from(new Set(productOptions.map((product) => getProductCategory(product))))
+    .sort((first, second) => first.localeCompare(second, "ja"));
+}
+
+function getProductSubcategoryOptions(productOptions: ProductOption[], category: string) {
+  if (!category) return [];
+  return Array.from(new Set(
+    productOptions
+      .filter((product) => getProductCategory(product) === category)
+      .map((product) => getProductSubcategory(product))
+  )).sort((first, second) => first.localeCompare(second, "ja"));
+}
+
+function getFilteredProductOptions(productOptions: ProductOption[], category: string, subcategory: string) {
+  return productOptions.filter((product) => {
+    return (!category || getProductCategory(product) === category)
+      && (!subcategory || getProductSubcategory(product) === subcategory);
+  });
+}
+
 function getSuggestedProduct(line: VoucherAccountingLine, productOptions: ProductOption[]) {
   if (line.matchedProductId) return productOptions.find((product) => product.id === line.matchedProductId) ?? null;
   const normalizedLineName = normalizeProductSearchText(line.note);
   if (!normalizedLineName) return null;
-  return productOptions.find((product) => {
+  const matchedProducts = productOptions.filter((product) => {
     const normalizedProductName = normalizeProductSearchText(product.name);
     return normalizedProductName === normalizedLineName
       || normalizedLineName.includes(normalizedProductName)
       || normalizedProductName.includes(normalizedLineName);
-  }) ?? null;
+  });
+  if (!matchedProducts.length) return null;
+  const normalizedSubAccount = normalizeProductSearchText(line.subAccountTitle);
+  return matchedProducts.find((product) => (
+    normalizeProductSearchText(getProductCategory(product)) === normalizedSubAccount
+    || normalizeProductSearchText(getProductSubcategory(product)) === normalizedSubAccount
+  )) ?? matchedProducts[0] ?? null;
 }
 
 function normalizeProductSearchText(value: string) {
