@@ -1189,14 +1189,16 @@ function formatMoney(value: number) {
 
 function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgress }) {
   const percentage = progress.total > 0 ? Math.round(progress.completed / progress.total * 100) : 0;
+  const progressScale = Math.max(0, Math.min(100, percentage)) / 100;
+  const isActive = progress.completed < progress.total;
   return (
     <div className="voucher-upload-progress" aria-live="polite">
       <div className="voucher-upload-progress-heading">
         <strong>{percentage}%</strong>
         <span>{progress.completed}/{progress.total}件</span>
       </div>
-      <div className="voucher-upload-progress-bar" aria-hidden="true">
-        <span style={{ width: `${percentage}%` }} />
+      <div className={`voucher-upload-progress-bar ${isActive ? "is-active" : ""}`} aria-hidden="true">
+        <span style={{ transform: `scaleX(${progressScale})` }} />
       </div>
       <p>
         {progress.phase}：{progress.currentFile || "証憑"}

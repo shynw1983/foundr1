@@ -18184,6 +18184,7 @@ body :where(
 }
 
 .voucher-upload-progress-bar {
+  position: relative;
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -18192,10 +18193,29 @@ body :where(
 
 .voucher-upload-progress-bar span {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--primary);
-  transition: width 180ms ease;
+  transform-origin: left center;
+  transition: transform 180ms ease;
+}
+
+.voucher-upload-progress-bar.is-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(31, 111, 85, 0.18), transparent);
+  animation: voucherUploadProgressSweep 1.2s linear infinite;
+}
+
+@keyframes voucherUploadProgressSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .voucher-reference-price-backdrop {
