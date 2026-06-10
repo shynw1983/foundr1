@@ -189,6 +189,7 @@ type ConfirmedVoucherBasicDraft = {
   companyName: string;
   brandName: string;
   locationName: string;
+  receiptTaxTotal: string;
 };
 
 type VoucherAccountingValidation = {
@@ -472,6 +473,7 @@ export default function VouchersPage() {
     const companyName = basicDraft?.companyName ?? voucher.companyName;
     const brandName = basicDraft?.brandName ?? voucher.brandName;
     const locationName = basicDraft?.locationName ?? voucher.locationName;
+    const receiptTaxTotal = basicDraft?.receiptTaxTotal ?? String(calculateVoucherLinesTaxTotal(voucher.accountingLines ?? []));
     const vendorName = buildVendorNameFromParts(companyName, brandName, locationName, voucher.vendorName);
     setSavingConfirmedLineKeys((current) => ({ ...current, [key]: true }));
     try {
@@ -488,6 +490,7 @@ export default function VouchersPage() {
           companyName,
           brandName,
           locationName,
+          receiptTaxTotal,
           lineNo: detail.lineNo,
           lines: [{
             accountTitle: draft.accountTitle,
@@ -695,6 +698,20 @@ export default function VouchersPage() {
             }
             return updated;
           })
+        }
+      };
+    });
+  }
+
+  function updateAccountingDraftTaxTotal(voucherId: string, taxTotalValue: string) {
+    setAccountingDrafts((current) => {
+      const voucher = vouchers.find((item) => item.id === voucherId);
+      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      return {
+        ...current,
+        [voucherId]: {
+          ...draft,
+          lines: adjustVoucherAccountingLinesTaxTotal(draft.lines, taxTotalValue)
         }
       };
     });
@@ -1264,6 +1281,7 @@ export default function VouchersPage() {
                           isSaving={pendingAction === "confirm"}
                           onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
                           onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
+                          onReceiptTaxTotalChange={(taxTotal) => updateAccountingDraftTaxTotal(voucher.id, taxTotal)}
                           onAddLine={() => addAccountingLine(voucher.id)}
                           onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
                           productOptions={productOptions}
@@ -1840,6 +1858,7 @@ function VoucherAccountingEditor({
   isSaving,
   onDraftChange,
   onLineChange,
+  onReceiptTaxTotalChange,
   onAddLine,
   onRemoveLine,
   productOptions,
@@ -1861,6 +1880,7 @@ function VoucherAccountingEditor({
   isSaving: boolean;
   onDraftChange: (next: Partial<VoucherAccountingDraft>) => void;
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
+  onReceiptTaxTotalChange: (taxTotal: string) => void;
   onAddLine: () => void;
   onRemoveLine: (lineId: string) => void;
   productOptions: ProductOption[];
@@ -1914,6 +1934,10 @@ function VoucherAccountingEditor({
       <label>
         <span>レシート総額</span>
         <input type="number" min="0" step="1" value={draft.receiptTotal} onChange={(event) => onDraftChange({ receiptTotal: event.target.value })} disabled={isSaving} />
+      </label>
+      <label>
+        <span>レシート消費税</span>
+        <input type="number" min="0" step="1" value={String(calculateVoucherLinesTaxTotal(draft.lines))} onChange={(event) => onReceiptTaxTotalChange(event.target.value)} disabled={isSaving} />
       </label>
       <label className="receipt-note-field">
         <span>備考</span>
@@ -2186,7 +2210,7 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
 
 function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccountingDraft): VoucherAccountingValidation {
   const lineAmountTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.amount || 0)), 0);
-  const taxTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
+  const taxTotal = calculateVoucherLinesTaxTotal(draft.lines);
   const expectedTotal = draft.taxMode === "外税" ? lineAmountTotal + taxTotal : lineAmountTotal;
   const receiptTotal = Math.round(Number(draft.receiptTotal || voucher.total || 0));
   const difference = expectedTotal - receiptTotal;
@@ -2200,6 +2224,43 @@ function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccount
     expectedTotal,
     difference
   };
+}
+
+function calculateVoucherLinesTaxTotal(lines: Array<{ taxAmount: string | number }>) {
+  return lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
+}
+
+function adjustVoucherAccountingLinesTaxTotal(lines: VoucherAccountingLine[], taxTotalValue: string) {
+  const targetTaxTotal = Math.max(0, Math.round(Number(taxTotalValue || 0)));
+  if (!Number.isFinite(targetTaxTotal)) return lines;
+  let remainingDelta = targetTaxTotal - calculateVoucherLinesTaxTotal(lines);
+  if (!remainingDelta) return lines;
+
+  const nextLines = lines.map((line) => ({ ...line }));
+  const candidates = nextLines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => (
+      normalizeDraftTaxMode(line.taxMode) !== "対象外"
+      && Boolean(normalizeDraftTaxRate(line.taxRate))
+    ));
+  const targetIndexes = candidates.length ? candidates.map((candidate) => candidate.index).reverse() : nextLines.map((_, index) => index).reverse();
+
+  for (const index of targetIndexes) {
+    if (!remainingDelta) break;
+    const line = nextLines[index];
+    if (!line) continue;
+    const currentTaxAmount = Math.max(0, Math.round(Number(line.taxAmount || 0)));
+    if (remainingDelta > 0) {
+      line.taxAmount = String(currentTaxAmount + remainingDelta);
+      remainingDelta = 0;
+      break;
+    }
+    const reduction = Math.min(currentTaxAmount, Math.abs(remainingDelta));
+    line.taxAmount = String(currentTaxAmount - reduction);
+    remainingDelta += reduction;
+  }
+
+  return nextLines;
 }
 
 function inferReceiptTaxMode(lines: VoucherAccountingLine[]) {
@@ -2244,18 +2305,21 @@ function ConfirmedVoucherDetailEditor({
   onSave: (detail: ConfirmedAccountingLineDetail, basicDraft: ConfirmedVoucherBasicDraft) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
+  const detailsTaxTotal = calculateVoucherLinesTaxTotal(details);
   const [basicDraft, setBasicDraft] = useState<ConfirmedVoucherBasicDraft>(() => ({
     companyName: voucher.companyName,
     brandName: voucher.brandName,
-    locationName: voucher.locationName
+    locationName: voucher.locationName,
+    receiptTaxTotal: String(detailsTaxTotal)
   }));
   useEffect(() => {
     setBasicDraft({
       companyName: voucher.companyName,
       brandName: voucher.brandName,
-      locationName: voucher.locationName
+      locationName: voucher.locationName,
+      receiptTaxTotal: String(detailsTaxTotal)
     });
-  }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName]);
+  }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName, detailsTaxTotal]);
   function toggleDetailExpanded(detailKey: string) {
     setExpandedDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
   }
@@ -2277,6 +2341,10 @@ function ConfirmedVoucherDetailEditor({
         <label>
           <span>店舗名</span>
           <input value={basicDraft.locationName} onChange={(event) => setBasicDraft((current) => ({ ...current, locationName: event.target.value }))} />
+        </label>
+        <label>
+          <span>レシート消費税</span>
+          <input type="number" min="0" step="1" value={basicDraft.receiptTaxTotal} onChange={(event) => setBasicDraft((current) => ({ ...current, receiptTaxTotal: event.target.value }))} />
         </label>
       </div>
       {details.map((detail) => {

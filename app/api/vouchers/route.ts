@@ -179,6 +179,7 @@ export async function PATCH(request: Request) {
     transactionDate?: string;
     transactionTime?: string;
     receiptTotal?: string | number;
+    receiptTaxTotal?: string | number;
     note?: string;
     ocrItemId?: string;
     productId?: string;
@@ -343,8 +344,12 @@ export async function PATCH(request: Request) {
       note: String(body.lines?.[0]?.note ?? currentLine.note ?? "").trim()
     };
     accountingLines[index] = nextLine;
+    const receiptTaxTotal = normalizeNullableMoney(body.receiptTaxTotal);
+    const adjustedAccountingLines = receiptTaxTotal === null
+      ? accountingLines
+      : applyAccountingLinesTaxTotal(accountingLines, receiptTaxTotal);
 
-    const normalizedLines = normalizeAccountingLines(accountingLines, voucher, nextUsageType);
+    const normalizedLines = normalizeAccountingLines(adjustedAccountingLines, voucher, nextUsageType);
     const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
     const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
     const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
@@ -1139,9 +1144,10 @@ function normalizeAccountingLines(lines: Array<{
     const amount = Math.round(Number(line.amount ?? 0));
     const taxRate = normalizeTaxRate(line.taxRate);
     const taxMode = normalizeTaxMode(line.taxMode);
+    const taxAmountText = String(line.taxAmount ?? "").trim();
     const rawTaxAmount = Number(line.taxAmount);
-    const shouldCalculateTax = !Number.isFinite(rawTaxAmount) || rawTaxAmount <= 0;
-    const taxAmount = !shouldCalculateTax
+    const hasProvidedTaxAmount = taxAmountText !== "" && Number.isFinite(rawTaxAmount);
+    const taxAmount = hasProvidedTaxAmount
       ? Math.max(0, Math.round(rawTaxAmount))
       : calculateTaxAmount(amount, taxRate, taxMode);
     return {
@@ -1158,6 +1164,43 @@ function normalizeAccountingLines(lines: Array<{
       note: String(line.note ?? "").trim()
     };
   }).filter((line) => line.amount > 0);
+}
+
+function applyAccountingLinesTaxTotal<T>(lines: T[], targetTaxTotal: number): T[] {
+  const mutableLines = lines.map((line) => isPlainObject(line) ? { ...line } : line) as T[];
+  const currentTaxTotal = mutableLines.reduce((sum, line) => {
+    if (!isPlainObject(line)) return sum;
+    return sum + Math.round(Number(line.taxAmount ?? 0));
+  }, 0);
+  let remainingDelta = Math.round(targetTaxTotal) - currentTaxTotal;
+  if (!remainingDelta) return mutableLines;
+
+  const candidates = mutableLines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => (
+      isPlainObject(line)
+      && normalizeTaxMode(line.taxMode) !== "対象外"
+      && Boolean(normalizeTaxRate(line.taxRate))
+    ));
+  const targetIndexes = candidates.length ? candidates.map((candidate) => candidate.index).reverse() : mutableLines.map((_, index) => index).reverse();
+
+  for (const index of targetIndexes) {
+    if (!remainingDelta) break;
+    const line = mutableLines[index];
+    if (!isPlainObject(line)) continue;
+    const lineRecord = line as Record<string, unknown>;
+    const currentTaxAmount = Math.max(0, Math.round(Number(lineRecord.taxAmount ?? 0)));
+    if (remainingDelta > 0) {
+      lineRecord.taxAmount = currentTaxAmount + remainingDelta;
+      remainingDelta = 0;
+      break;
+    }
+    const reduction = Math.min(currentTaxAmount, Math.abs(remainingDelta));
+    lineRecord.taxAmount = currentTaxAmount - reduction;
+    remainingDelta += reduction;
+  }
+
+  return mutableLines;
 }
 
 async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnType<typeof normalizeAccountingLines>) {
