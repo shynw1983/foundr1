@@ -157,6 +157,7 @@ function isActiveInMonth(item: ExpenseItem, month: string) {
 
 const analyticsMonthStorageKey = "foundr1:analytics:selected-month";
 const analyticsStoreStorageKey = "foundr1:analytics:selected-store-id";
+const expenseReceiptDraftStorageKey = "foundr1-os:expense-receipt-drafts:v1";
 const receiptCompressionTargetBytes = 2 * 1024 * 1024;
 const receiptCompressionEdges = [1800, 1400, 1100];
 const receiptCompressionQualities = [0.82, 0.72, 0.62];
@@ -176,6 +177,62 @@ function storeAnalyticsSelection(nextMonth: string, nextStoreId: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(analyticsMonthStorageKey, nextMonth);
   if (nextStoreId) window.localStorage.setItem(analyticsStoreStorageKey, nextStoreId);
+}
+
+function readExpenseReceiptDrafts() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(expenseReceiptDraftStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, Partial<ExpenseReceiptDraft>>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).map(([receiptId, draft]) => [
+      receiptId,
+      normalizeExpenseReceiptDraft(draft)
+    ])) as Record<string, ExpenseReceiptDraft>;
+  } catch {
+    try {
+      window.localStorage.removeItem(expenseReceiptDraftStorageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return {};
+  }
+}
+
+function writeExpenseReceiptDrafts(drafts: Record<string, ExpenseReceiptDraft>) {
+  try {
+    window.localStorage.setItem(expenseReceiptDraftStorageKey, JSON.stringify(drafts));
+  } catch {
+    // Local storage is best-effort; expense receipt editing should keep working without it.
+  }
+}
+
+function normalizeExpenseReceiptDraft(draft: Partial<ExpenseReceiptDraft> | undefined): ExpenseReceiptDraft {
+  return {
+    note: String(draft?.note ?? ""),
+    vendorName: String(draft?.vendorName ?? ""),
+    companyName: String(draft?.companyName ?? ""),
+    brandName: String(draft?.brandName ?? ""),
+    locationName: String(draft?.locationName ?? ""),
+    transactionDate: String(draft?.transactionDate ?? getCurrentDate()),
+    transactionTime: String(draft?.transactionTime ?? ""),
+    lines: Array.isArray(draft?.lines) && draft.lines.length
+      ? draft.lines.map((line, index) => ({
+        id: String(line?.id ?? `restored-${index}`),
+        accountTitle: String(line?.accountTitle ?? "雑費"),
+        amount: String(line?.amount ?? ""),
+        taxRate: taxRateOptions.includes(String(line?.taxRate ?? "")) ? String(line?.taxRate ?? "") : "",
+        taxMode: taxModeOptions.includes(String(line?.taxMode ?? "")) ? String(line?.taxMode ?? "") : "内税",
+        taxAmount: String(line?.taxAmount ?? ""),
+        note: String(line?.note ?? "")
+      }))
+      : [buildNewReceiptLine(0)]
+  };
+}
+
+function filterExpenseReceiptDrafts(drafts: Record<string, ExpenseReceiptDraft>, validReceiptIds: Set<string>) {
+  return Object.fromEntries(Object.entries(drafts).filter(([receiptId]) => validReceiptIds.has(receiptId))) as Record<string, ExpenseReceiptDraft>;
 }
 
 function getCurrentDate() {
@@ -331,7 +388,8 @@ export default function ExpensesPage() {
   const [message, setMessage] = useState("");
   const [receiptMessage, setReceiptMessage] = useState("");
   const [expenseReceipts, setExpenseReceipts] = useState<ExpenseReceipt[]>([]);
-  const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ExpenseReceiptDraft>>({});
+  const [hasLoadedExpenseReceipts, setHasLoadedExpenseReceipts] = useState(false);
+  const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ExpenseReceiptDraft>>(() => readExpenseReceiptDrafts());
   const [editingExpenseId, setEditingExpenseId] = useState("");
   const [expenseEditDraft, setExpenseEditDraft] = useState<ExpenseEditDraft | null>(null);
   const [canEditExpenseReceipts, setCanEditExpenseReceipts] = useState(false);
@@ -359,6 +417,16 @@ export default function ExpensesPage() {
     if (!selectedStoreId) return;
     void loadExpenseReceipts(selectedStoreId);
   }, [selectedStoreId]);
+
+  useEffect(() => {
+    if (!hasLoadedExpenseReceipts) return;
+    const validReceiptIds = new Set(expenseReceipts.map((receipt) => receipt.id));
+    setReceiptDrafts((current) => filterExpenseReceiptDrafts(current, validReceiptIds));
+  }, [expenseReceipts, hasLoadedExpenseReceipts]);
+
+  useEffect(() => {
+    writeExpenseReceiptDrafts(receiptDrafts);
+  }, [receiptDrafts]);
 
   async function createExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -438,10 +506,12 @@ export default function ExpensesPage() {
 
   async function loadExpenseReceipts(storeId = selectedStoreId) {
     if (!storeId) return;
+    setHasLoadedExpenseReceipts(false);
     const response = await fetch(`/api/analytics/expense-receipts?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json() as ExpenseReceiptsPayload;
     setExpenseReceipts(body.receipts);
+    setHasLoadedExpenseReceipts(true);
     setReceiptDrafts((current) => {
       const next = { ...current };
       for (const receipt of body.receipts) {
@@ -487,6 +557,7 @@ export default function ExpensesPage() {
     const response = await fetch(`/api/analytics/expense-receipts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     if (response.ok) {
       setReceiptMessage("経費レシートを削除しました。");
+      clearExpenseReceiptDraft(id);
       await loadExpenseReceipts(selectedStoreId);
     } else {
       const body = await response.json().catch(() => ({})) as { error?: string };
@@ -580,10 +651,19 @@ export default function ExpensesPage() {
     const body = await response.json().catch(() => ({})) as { error?: string };
     if (response.ok) {
       setReceiptMessage("経費に登録しました。");
+      clearExpenseReceiptDraft(receipt.id);
       await Promise.all([loadExpenseReceipts(selectedStoreId), loadExpenses(month, selectedStoreId)]);
     } else {
       setReceiptMessage(body.error ?? "経費に登録できませんでした。");
     }
+  }
+
+  function clearExpenseReceiptDraft(receiptId: string) {
+    setReceiptDrafts((current) => {
+      const next = { ...current };
+      delete next[receiptId];
+      return next;
+    });
   }
 
   const stores = data?.stores ?? [];

@@ -107,6 +107,8 @@ type AdditionalPurchaseDraft = {
   note: string;
 };
 
+const additionalPurchaseDraftStorageKey = "foundr1-os:procurement-additional-purchase-drafts:v1";
+
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
   一部購入済み: "tone-warning",
@@ -691,7 +693,7 @@ export default function ProcurementPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
-  const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>({});
+  const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
     byId: new Map(products.flatMap((product) => product.id ? [[product.id, product] as const] : [])),
@@ -712,6 +714,16 @@ export default function ProcurementPage() {
 
     return supplierMap;
   }, [products, productSupplierOptions]);
+
+  useEffect(() => {
+    if (!purchaseOrders.length) return;
+    const validOrderIds = new Set(purchaseOrders.map((order) => order.id));
+    setAdditionalPurchaseDrafts((drafts) => filterRecordByKeys(drafts, validOrderIds));
+  }, [purchaseOrders]);
+
+  useEffect(() => {
+    writeAdditionalPurchaseDrafts(additionalPurchaseDrafts);
+  }, [additionalPurchaseDrafts]);
   const deliveryBatchesByOrderId = useMemo(() => {
     const batchMap = new Map<string, DeliveryBatch[]>();
     deliveryBatches.forEach((batch) => {
@@ -1937,4 +1949,41 @@ function formatEstimatedAmount(amount: number) {
     currency: "JPY",
     maximumFractionDigits: 0
   }).format(Math.round(amount));
+}
+
+function readAdditionalPurchaseDrafts() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(additionalPurchaseDraftStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, Partial<AdditionalPurchaseDraft>>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).flatMap(([orderId, draft]) => {
+      if (!draft || typeof draft !== "object") return [];
+      return [[orderId, {
+        productId: String(draft.productId ?? ""),
+        quantity: Math.min(99, Math.max(1, Number(draft.quantity) || 1)),
+        note: String(draft.note ?? "")
+      }]];
+    })) as Record<string, AdditionalPurchaseDraft>;
+  } catch {
+    try {
+      window.localStorage.removeItem(additionalPurchaseDraftStorageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return {};
+  }
+}
+
+function writeAdditionalPurchaseDrafts(drafts: Record<string, AdditionalPurchaseDraft>) {
+  try {
+    window.localStorage.setItem(additionalPurchaseDraftStorageKey, JSON.stringify(drafts));
+  } catch {
+    // Local storage is best-effort; procurement should keep working without it.
+  }
+}
+
+function filterRecordByKeys<T>(record: Record<string, T>, validKeys: Set<string>) {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => validKeys.has(key))) as Record<string, T>;
 }

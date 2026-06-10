@@ -106,6 +106,11 @@ type AvailabilityDayDraft = {
   note: string;
 };
 
+type StoreTimecardDraftSnapshot = {
+  availabilityDrafts: AvailabilityDayDraft[];
+  shiftRequestDraft: ShiftRequestDraft;
+};
+
 type MobileLocationState = {
   status: "idle" | "locating" | "ready" | "error";
   message: string;
@@ -122,6 +127,7 @@ const punchActions = [
 ];
 
 const calendarAddedStorageKey = "foundr1:calendar-shifts:v1";
+const storeTimecardDraftStorageKeyPrefix = "foundr1-store:timecard-draft:v1";
 
 function getPunchState(latestPunch: LatestPunch) {
   if (!latestPunch || latestPunch.punchType === "clock_out") return "off";
@@ -141,6 +147,7 @@ export default function StoreTimecardPage() {
   const [data, setData] = useState<TimecardPayload | null>(null);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
   const [myShifts, setMyShifts] = useState<ShiftEntry[]>([]);
+  const [hasLoadedShiftRequests, setHasLoadedShiftRequests] = useState(false);
   const [schedulingPeriod, setSchedulingPeriod] = useState<ShiftRequestPayload["schedulingPeriod"] | null>(null);
   const [submissionPeriod, setSubmissionPeriod] = useState<ShiftRequestPayload["submissionPeriod"] | null>(null);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<AvailabilityDayDraft[]>([]);
@@ -186,6 +193,7 @@ export default function StoreTimecardPage() {
         setSelectedShiftStoreId(body.selectedStoreId);
         setShiftRequests([]);
         setMyShifts([]);
+        setHasLoadedShiftRequests(false);
         setSchedulingPeriod(null);
         setSubmissionPeriod(null);
         setAvailabilityDrafts([]);
@@ -210,6 +218,7 @@ export default function StoreTimecardPage() {
 
   async function loadShiftRequests(nextStoreId = selectedStoreId) {
     if (!nextStoreId) return;
+    setHasLoadedShiftRequests(false);
     try {
       const response = await fetch(`/api/timecard/shift-requests?storeId=${encodeURIComponent(nextStoreId)}&month=${encodeURIComponent(getJstMonthLabel())}`, { cache: "no-store" });
       if (!response.ok) return;
@@ -218,14 +227,17 @@ export default function StoreTimecardPage() {
       setMyShifts(body.myShifts ?? []);
       setSchedulingPeriod(body.schedulingPeriod ?? null);
       setSubmissionPeriod(body.submissionPeriod ?? null);
-      setAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []));
+      const savedDraft = readStoreTimecardDraft(nextStoreId, getJstMonthLabel());
+      setAvailabilityDrafts(mergeAvailabilityDrafts(createAvailabilityDrafts(body.submissionDates ?? [], body.requests ?? []), savedDraft?.availabilityDrafts ?? []));
       setShiftRequestDraft((current) => {
         const firstShift = body.myShifts?.[0];
         return {
           ...current,
-          targetShiftId: current.targetShiftId || firstShift?.id || ""
+          targetShiftId: savedDraft?.shiftRequestDraft.targetShiftId || current.targetShiftId || firstShift?.id || "",
+          note: savedDraft?.shiftRequestDraft.note ?? current.note
         };
       });
+      setHasLoadedShiftRequests(true);
     } catch {
       setShiftRequestMessage("シフト連絡を読み込めませんでした。");
     }
@@ -234,6 +246,14 @@ export default function StoreTimecardPage() {
   useEffect(() => {
     void loadTimecard(getStoredStoreSelection());
   }, []);
+
+  useEffect(() => {
+    if (!selectedShiftStoreId || !hasLoadedShiftRequests) return;
+    writeStoreTimecardDraft(selectedShiftStoreId, getJstMonthLabel(), {
+      availabilityDrafts,
+      shiftRequestDraft
+    });
+  }, [availabilityDrafts, hasLoadedShiftRequests, selectedShiftStoreId, shiftRequestDraft]);
 
   useEffect(() => {
     try {
@@ -826,6 +846,58 @@ function createAvailabilityDrafts(dates: string[], requests: ShiftRequestItem[])
       availableEnd: window?.availableEnd ?? "22:00",
       note: request?.note ?? window?.note ?? ""
     } satisfies AvailabilityDayDraft;
+  });
+}
+
+function readStoreTimecardDraft(storeId: string, month: string): StoreTimecardDraftSnapshot | null {
+  if (typeof window === "undefined" || !storeId || !month) return null;
+  try {
+    const raw = window.localStorage.getItem(getStoreTimecardDraftStorageKey(storeId, month));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoreTimecardDraftSnapshot>;
+    return {
+      availabilityDrafts: Array.isArray(parsed.availabilityDrafts)
+        ? parsed.availabilityDrafts.map((draft) => ({
+          workDate: String(draft?.workDate ?? ""),
+          wantsWork: Boolean(draft?.wantsWork),
+          availableStart: String(draft?.availableStart ?? "17:00"),
+          availableEnd: String(draft?.availableEnd ?? "22:00"),
+          note: String(draft?.note ?? "")
+        })).filter((draft) => /^\d{4}-\d{2}-\d{2}$/.test(draft.workDate))
+        : [],
+      shiftRequestDraft: {
+        targetShiftId: String(parsed.shiftRequestDraft?.targetShiftId ?? ""),
+        note: String(parsed.shiftRequestDraft?.note ?? "")
+      }
+    };
+  } catch {
+    try {
+      window.localStorage.removeItem(getStoreTimecardDraftStorageKey(storeId, month));
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return null;
+  }
+}
+
+function writeStoreTimecardDraft(storeId: string, month: string, snapshot: StoreTimecardDraftSnapshot) {
+  if (typeof window === "undefined" || !storeId || !month) return;
+  try {
+    window.localStorage.setItem(getStoreTimecardDraftStorageKey(storeId, month), JSON.stringify(snapshot));
+  } catch {
+    // Best-effort persistence only.
+  }
+}
+
+function getStoreTimecardDraftStorageKey(storeId: string, month: string) {
+  return `${storeTimecardDraftStorageKeyPrefix}:${storeId}:${month}`;
+}
+
+function mergeAvailabilityDrafts(baseDrafts: AvailabilityDayDraft[], savedDrafts: AvailabilityDayDraft[]) {
+  const savedByDate = new Map(savedDrafts.map((draft) => [draft.workDate, draft]));
+  return baseDrafts.map((draft) => {
+    const saved = savedByDate.get(draft.workDate);
+    return saved ? { ...draft, ...saved } : draft;
   });
 }
 

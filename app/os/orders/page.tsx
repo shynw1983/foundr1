@@ -305,7 +305,7 @@ function readSavedNewOrderDraft(): NewOrderDraftSession | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const rawDraft = window.sessionStorage.getItem(newOrderDraftStorageKey);
+    const rawDraft = window.localStorage.getItem(newOrderDraftStorageKey);
     if (!rawDraft) return null;
     const parsed = JSON.parse(rawDraft) as Partial<NewOrderDraftSession>;
     const items = Array.isArray(parsed.items)
@@ -614,11 +614,11 @@ export default function OrdersPage() {
     const hasDraftContent = draft.items.length > 0 || draft.note.trim().length > 0;
 
     if (!hasDraftContent) {
-      window.sessionStorage.removeItem(newOrderDraftStorageKey);
+      window.localStorage.removeItem(newOrderDraftStorageKey);
       return;
     }
 
-    window.sessionStorage.setItem(newOrderDraftStorageKey, JSON.stringify(draft));
+    window.localStorage.setItem(newOrderDraftStorageKey, JSON.stringify(draft));
   }, [
     selectedDraftStore,
     draftDeadline,
@@ -768,7 +768,7 @@ export default function OrdersPage() {
       setDraftCategoryFilter("");
       setDraftSubcategoryFilter("");
       setOrderItemDrafts([]);
-      window.sessionStorage.removeItem(newOrderDraftStorageKey);
+      window.localStorage.removeItem(newOrderDraftStorageKey);
       await loadDashboardData();
     } finally {
       setIsSubmittingOrder(false);

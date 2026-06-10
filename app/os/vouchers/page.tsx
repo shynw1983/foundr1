@@ -179,6 +179,21 @@ type VoucherUploadProgress = {
 
 type VoucherPendingAction = "update" | "confirm" | "delete";
 
+type VoucherWorkspaceSnapshot = {
+  selectedStoreId: string;
+  usageType: VoucherUsageType;
+  paymentType: VoucherPaymentType;
+  exportStartDate: string;
+  exportEndDate: string;
+  accountingDrafts: Record<string, VoucherAccountingDraft>;
+  expandedVoucherIds: Record<string, boolean>;
+  previewVoucherId: string;
+  lineProductSelections: Record<string, string>;
+  lineProductCategorySelections: Record<string, string>;
+  lineProductSubcategorySelections: Record<string, string>;
+  savedAt: number;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "証憑管理", href: "/os/vouchers", icon: ReceiptText },
@@ -236,6 +251,8 @@ const expenseAccountTitleOptions = [
 ];
 const taxRateOptions = ["", "8%", "10%", "非課税"];
 const taxModeOptions = ["内税", "外税", "不明"];
+const voucherWorkspaceStorageKey = "foundr1-os:voucher-workspace:v1";
+const voucherWorkspaceSnapshotMaxAgeMs = 1000 * 60 * 60 * 24 * 7;
 
 export default function VouchersPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -260,9 +277,29 @@ export default function VouchersPage() {
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
   const [previewVoucher, setPreviewVoucher] = useState<VoucherRecord | null>(null);
+  const [restoredPreviewVoucherId, setRestoredPreviewVoucherId] = useState("");
+  const [hasRestoredWorkspace, setHasRestoredWorkspace] = useState(false);
   const [referencePriceDialog, setReferencePriceDialog] = useState<ProductReferencePriceDialog | null>(null);
   const [createProductDialog, setCreateProductDialog] = useState<ProductCreateDialog | null>(null);
   const [pendingActions, setPendingActions] = useState<Record<string, VoucherPendingAction>>({});
+
+  useEffect(() => {
+    const snapshot = readVoucherWorkspaceSnapshot();
+    if (snapshot) {
+      setSelectedStoreId(snapshot.selectedStoreId);
+      setUsageType(snapshot.usageType);
+      setPaymentType(snapshot.paymentType);
+      setExportStartDate(snapshot.exportStartDate);
+      setExportEndDate(snapshot.exportEndDate);
+      setAccountingDrafts(snapshot.accountingDrafts);
+      setExpandedVoucherIds(snapshot.expandedVoucherIds);
+      setLineProductSelections(snapshot.lineProductSelections);
+      setLineProductCategorySelections(snapshot.lineProductCategorySelections);
+      setLineProductSubcategorySelections(snapshot.lineProductSubcategorySelections);
+      setRestoredPreviewVoucherId(snapshot.previewVoucherId);
+    }
+    setHasRestoredWorkspace(true);
+  }, []);
 
   useEffect(() => {
     void loadVouchers();
@@ -273,6 +310,52 @@ export default function VouchersPage() {
   }, [exportStartDate, exportEndDate]);
 
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
+
+  useEffect(() => {
+    if (!hasRestoredWorkspace || !vouchers.length) return;
+    const validVoucherIds = new Set(vouchers.map((voucher) => voucher.id));
+    setAccountingDrafts((current) => filterVoucherRecord(current, validVoucherIds));
+    setExpandedVoucherIds((current) => filterVoucherRecord(current, validVoucherIds));
+  }, [hasRestoredWorkspace, vouchers]);
+
+  useEffect(() => {
+    if (!restoredPreviewVoucherId || !vouchers.length) return;
+    const restoredVoucher = vouchers.find((voucher) => voucher.id === restoredPreviewVoucherId);
+    if (restoredVoucher) setPreviewVoucher(restoredVoucher);
+    setRestoredPreviewVoucherId("");
+  }, [restoredPreviewVoucherId, vouchers]);
+
+  useEffect(() => {
+    if (!hasRestoredWorkspace) return;
+    const snapshot: VoucherWorkspaceSnapshot = {
+      selectedStoreId,
+      usageType,
+      paymentType,
+      exportStartDate,
+      exportEndDate,
+      accountingDrafts,
+      expandedVoucherIds,
+      previewVoucherId: previewVoucher?.id ?? "",
+      lineProductSelections,
+      lineProductCategorySelections,
+      lineProductSubcategorySelections,
+      savedAt: Date.now()
+    };
+    writeVoucherWorkspaceSnapshot(snapshot);
+  }, [
+    hasRestoredWorkspace,
+    selectedStoreId,
+    usageType,
+    paymentType,
+    exportStartDate,
+    exportEndDate,
+    accountingDrafts,
+    expandedVoucherIds,
+    previewVoucher,
+    lineProductSelections,
+    lineProductCategorySelections,
+    lineProductSubcategorySelections
+  ]);
 
   async function loadVouchers() {
     setIsLoading(true);
@@ -681,6 +764,7 @@ export default function VouchersPage() {
       }
       setMessage(voucher.usageType === "keihi" ? "経費として登録しました。" : "仕入として確認しました。商品候補にも反映されます。");
       await loadVouchers();
+      clearVoucherWorkspaceEntry(voucher.id);
     } catch {
       setMessage("証憑を登録できませんでした。通信状態を確認してください。");
     } finally {
@@ -700,6 +784,7 @@ export default function VouchersPage() {
         return;
       }
       setVouchers((current) => current.filter((item) => item.id !== voucher.id));
+      clearVoucherWorkspaceEntry(voucher.id);
       setMessage("証憑を削除しました。");
     } catch {
       setMessage("証憑を削除できませんでした。通信状態を確認してください。");
@@ -725,6 +810,20 @@ export default function VouchersPage() {
       delete next[voucherId];
       return next;
     });
+  }
+
+  function clearVoucherWorkspaceEntry(voucherId: string) {
+    setAccountingDrafts((current) => {
+      const next = { ...current };
+      delete next[voucherId];
+      return next;
+    });
+    setExpandedVoucherIds((current) => {
+      const next = { ...current };
+      delete next[voucherId];
+      return next;
+    });
+    setPreviewVoucher((current) => current?.id === voucherId ? null : current);
   }
 
   return (
@@ -1393,6 +1492,64 @@ function getTouchDistance(touches: React.TouchList) {
   const second = touches.item(1);
   if (!first || !second) return 0;
   return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+function readVoucherWorkspaceSnapshot(): VoucherWorkspaceSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(voucherWorkspaceStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<VoucherWorkspaceSnapshot>;
+    const savedAt = Number(parsed.savedAt || 0);
+    if (!savedAt || Date.now() - savedAt > voucherWorkspaceSnapshotMaxAgeMs) {
+      window.localStorage.removeItem(voucherWorkspaceStorageKey);
+      return null;
+    }
+    return {
+      selectedStoreId: typeof parsed.selectedStoreId === "string" ? parsed.selectedStoreId : "",
+      usageType: isVoucherUsageType(parsed.usageType) ? parsed.usageType : "unclassified",
+      paymentType: isVoucherPaymentType(parsed.paymentType) ? parsed.paymentType : "company",
+      exportStartDate: typeof parsed.exportStartDate === "string" ? parsed.exportStartDate : getCurrentMonthStartDate(),
+      exportEndDate: typeof parsed.exportEndDate === "string" ? parsed.exportEndDate : getCurrentDate(),
+      accountingDrafts: isPlainRecord(parsed.accountingDrafts) ? parsed.accountingDrafts as Record<string, VoucherAccountingDraft> : {},
+      expandedVoucherIds: isPlainRecord(parsed.expandedVoucherIds) ? parsed.expandedVoucherIds as Record<string, boolean> : {},
+      previewVoucherId: typeof parsed.previewVoucherId === "string" ? parsed.previewVoucherId : "",
+      lineProductSelections: isPlainRecord(parsed.lineProductSelections) ? parsed.lineProductSelections as Record<string, string> : {},
+      lineProductCategorySelections: isPlainRecord(parsed.lineProductCategorySelections) ? parsed.lineProductCategorySelections as Record<string, string> : {},
+      lineProductSubcategorySelections: isPlainRecord(parsed.lineProductSubcategorySelections) ? parsed.lineProductSubcategorySelections as Record<string, string> : {},
+      savedAt
+    };
+  } catch {
+    try {
+      window.localStorage.removeItem(voucherWorkspaceStorageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return null;
+  }
+}
+
+function writeVoucherWorkspaceSnapshot(snapshot: VoucherWorkspaceSnapshot) {
+  try {
+    window.localStorage.setItem(voucherWorkspaceStorageKey, JSON.stringify(snapshot));
+  } catch {
+    // Storage quota or private mode should not break the voucher workflow.
+  }
+}
+
+function filterVoucherRecord<T>(record: Record<string, T>, validVoucherIds: Set<string>) {
+  return Object.fromEntries(Object.entries(record).filter(([voucherId]) => validVoucherIds.has(voucherId))) as Record<string, T>;
+}
+
+function isVoucherUsageType(value: unknown): value is VoucherUsageType {
+  return value === "unclassified" || value === "shiire" || value === "keihi";
+}
+
+function isVoucherPaymentType(value: unknown): value is VoucherPaymentType {
+  return value === "company" || value === "reimbursement";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function inferVoucherPreviewContentType(bytes: Uint8Array, contentType: string, filename: string) {
