@@ -18534,7 +18534,7 @@ body :where(
   }
 }
 
-@media (min-width: 761px) and (max-width: 1180px) {
+@media (min-width: 601px) and (max-width: 1180px) {
   .voucher-preview-open {
     display: inline-flex;
   }
@@ -18596,7 +18596,7 @@ body :where(
   }
 }
 
-@media (min-width: 761px) and (max-width: 1120px) {
+@media (min-width: 601px) and (max-width: 1120px) {
   .shell.has-voucher-preview {
     grid-template-columns: minmax(0, min(430px, 50vw)) minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
