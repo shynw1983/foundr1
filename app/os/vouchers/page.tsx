@@ -13,7 +13,7 @@ import {
   X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -732,6 +732,10 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
   const previewUrl = buildVoucherPreviewUrl(voucher);
+  const previewBodyRef = useRef<HTMLDivElement | null>(null);
+  const gestureStartZoomRef = useRef(1);
+  const touchDistanceRef = useRef(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const [previewMeta, setPreviewMeta] = useState({
     loading: true,
     error: "",
@@ -802,6 +806,59 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
     };
   }, [previewUrl, voucher.uploadedFileName]);
 
+  useEffect(() => {
+    setPreviewZoom(1);
+  }, [previewUrl]);
+
+  useEffect(() => {
+    const node = previewBodyRef.current;
+    if (!node) return;
+
+    const handleGestureStart = (event: Event) => {
+      event.preventDefault();
+      gestureStartZoomRef.current = previewZoom;
+    };
+    const handleGestureChange = (event: Event) => {
+      const gestureEvent = event as Event & { scale?: number };
+      if (!gestureEvent.scale) return;
+      event.preventDefault();
+      setPreviewZoom(clampVoucherPreviewZoom(gestureStartZoomRef.current * gestureEvent.scale));
+    };
+
+    node.addEventListener("gesturestart", handleGestureStart);
+    node.addEventListener("gesturechange", handleGestureChange);
+    return () => {
+      node.removeEventListener("gesturestart", handleGestureStart);
+      node.removeEventListener("gesturechange", handleGestureChange);
+    };
+  }, [previewZoom]);
+
+  const handlePreviewWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setPreviewZoom((current) => clampVoucherPreviewZoom(current + direction * 0.14));
+  };
+
+  const handlePreviewTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    touchDistanceRef.current = getTouchDistance(event.touches);
+    gestureStartZoomRef.current = previewZoom;
+  };
+
+  const handlePreviewTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2 || touchDistanceRef.current <= 0) return;
+    event.preventDefault();
+    const distance = getTouchDistance(event.touches);
+    setPreviewZoom(clampVoucherPreviewZoom(gestureStartZoomRef.current * (distance / touchDistanceRef.current)));
+  };
+
+  const handlePreviewTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length < 2) touchDistanceRef.current = 0;
+  };
+
+  const previewSurfaceStyle = { width: `${previewZoom * 100}%` };
+
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
       <div className="voucher-preview-panel-head">
@@ -814,7 +871,14 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <X size={18} />
         </button>
       </div>
-      <div className="voucher-preview-panel-body">
+      <div
+        ref={previewBodyRef}
+        className="voucher-preview-panel-body"
+        onWheel={handlePreviewWheel}
+        onTouchStart={handlePreviewTouchStart}
+        onTouchMove={handlePreviewTouchMove}
+        onTouchEnd={handlePreviewTouchEnd}
+      >
         {previewMeta.loading ? (
           <div className="voucher-preview-status">読み込み中...</div>
         ) : previewMeta.error ? (
@@ -824,9 +888,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
             <a href={previewUrl} target="_blank" rel="noreferrer">新しいタブで開く</a>
           </div>
         ) : previewMeta.kind === "image" ? (
-          <img src={previewMeta.objectUrl} alt={title} />
+          <img src={previewMeta.objectUrl} alt={title} style={previewSurfaceStyle} />
         ) : (
-          <iframe src={previewMeta.objectUrl} title={title} />
+          <iframe src={previewMeta.objectUrl} title={title} style={previewSurfaceStyle} />
         )}
       </div>
     </aside>
@@ -835,6 +899,17 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
 
 function buildVoucherPreviewUrl(voucher: VoucherRecord) {
   return `/api/vouchers/${encodeURIComponent(voucher.id)}/preview`;
+}
+
+function clampVoucherPreviewZoom(value: number) {
+  return Math.min(4, Math.max(0.6, value));
+}
+
+function getTouchDistance(touches: React.TouchList) {
+  const first = touches.item(0);
+  const second = touches.item(1);
+  if (!first || !second) return 0;
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
 }
 
 function inferVoucherPreviewContentType(bytes: Uint8Array, contentType: string, filename: string) {
