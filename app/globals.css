@@ -18601,7 +18601,7 @@ body :where(
 .voucher-confirmed-product-binding {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto auto;
   align-items: end;
   gap: 8px;
   border: 1px solid rgba(20, 83, 45, 0.12);

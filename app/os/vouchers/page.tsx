@@ -1387,6 +1387,7 @@ export default function VouchersPage() {
                             setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
                           }}
                           onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
+                          onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
                         />
                       ) : null}
                     </>
@@ -2376,7 +2377,8 @@ function ConfirmedVoucherDetailEditor({
   onProductSelectionChange,
   onProductCategoryChange,
   onProductSubcategoryChange,
-  onBindProduct
+  onBindProduct,
+  onCreateProduct
 }: {
   voucher: VoucherRecord;
   details: ConfirmedAccountingLineDetail[];
@@ -2395,6 +2397,7 @@ function ConfirmedVoucherDetailEditor({
   onProductCategoryChange: (lineId: string, category: string) => void;
   onProductSubcategoryChange: (lineId: string, subcategory: string) => void;
   onBindProduct: (line: VoucherAccountingLine) => void;
+  onCreateProduct: (line: VoucherAccountingLine) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
   const [productBindingDetailKeys, setProductBindingDetailKeys] = useState<Record<string, boolean>>({});
@@ -2570,6 +2573,9 @@ function ConfirmedVoucherDetailEditor({
                   </label>
                   <button className="secondary-button" type="button" onClick={() => onBindProduct(accountingLine)} disabled={isProductPending || !selectedProductId}>
                     {isProductPending ? "更新中..." : "変更"}
+                  </button>
+                  <button className="text-button" type="button" onClick={() => onCreateProduct(accountingLine)} disabled={isProductPending}>
+                    新規
                   </button>
                 </div>
               ) : null}
