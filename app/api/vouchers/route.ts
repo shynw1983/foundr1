@@ -1179,7 +1179,7 @@ function normalizeAccountingLines(lines: Array<{
     taxRate: "",
     taxMode: "不明",
     taxAmount: voucher.tax,
-    quantity: "",
+    quantity: 1,
     unit: "個",
     unitPrice: "",
     ocrItemId: "",
@@ -1196,6 +1196,7 @@ function normalizeAccountingLines(lines: Array<{
     const taxAmount = hasProvidedTaxAmount
       ? Math.max(0, Math.round(rawTaxAmount))
       : calculateTaxAmount(amount, taxRate, taxMode);
+    const quantity = normalizeAccountingQuantity(line.quantity);
     return {
       accountTitle: normalizeAccountTitle(line.accountTitle, usageType),
       subAccountTitle: normalizeSubAccountTitle(line.subAccountTitle),
@@ -1203,9 +1204,9 @@ function normalizeAccountingLines(lines: Array<{
       taxRate,
       taxMode,
       taxAmount,
-      quantity: normalizeNullableNumber(line.quantity),
+      quantity,
       unit: String(line.unit ?? "個").trim().slice(0, 20) || "個",
-      unitPrice: normalizeNullableMoney(line.unitPrice),
+      unitPrice: normalizeNullableMoney(line.unitPrice) ?? (quantity > 0 && amount > 0 ? Math.round((amount / quantity) * 100) / 100 : null),
       ocrItemId: String(line.ocrItemId ?? "").trim(),
       note: String(line.note ?? "").trim()
     };
@@ -1429,6 +1430,11 @@ function normalizeNullableNumber(value: unknown) {
   if (!text) return null;
   const number = Number(text);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function normalizeAccountingQuantity(value: unknown) {
+  const quantity = normalizeNullableNumber(value);
+  return quantity && quantity > 0 ? quantity : 1;
 }
 
 function normalizeNullableMoney(value: unknown) {

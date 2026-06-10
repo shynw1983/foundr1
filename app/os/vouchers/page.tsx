@@ -2213,9 +2213,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       taxRate,
       taxMode,
       taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
-      quantity: item.quantity === null || item.quantity === undefined ? "" : String(item.quantity),
+      quantity: getDefaultQuantityText(item.quantity),
       unit: item.unit || "個",
-      unitPrice: item.unitPrice === null || item.unitPrice === undefined ? "" : String(item.unitPrice),
+      unitPrice: getDefaultUnitPriceText(item.unitPrice, amount, item.quantity),
       note: item.rawName || ""
     }];
   });
@@ -2235,9 +2235,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     taxRate: "",
     taxMode: "不明",
     taxAmount: String(Math.round(voucher?.tax ?? 0)),
-    quantity: "",
+    quantity: "1",
     unit: "個",
-    unitPrice: "",
+    unitPrice: amount > 0 ? String(amount) : "",
     note: ""
   }];
 }
@@ -2256,7 +2256,7 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
     taxRate: "",
     taxMode,
     taxAmount: "0",
-    quantity: "",
+    quantity: "1",
     unit: "個",
     unitPrice: "",
     note: ""
@@ -2634,6 +2634,16 @@ function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
 }
 
+function getDefaultQuantityText(value: string | number | null | undefined) {
+  const quantity = Number(value);
+  return Number.isFinite(quantity) && quantity > 0 ? String(quantity) : "1";
+}
+
+function getDefaultUnitPriceText(value: string | number | null | undefined, amount: number, quantity: string | number | null | undefined) {
+  if (value !== null && value !== undefined && String(value).trim()) return String(value);
+  return calculateDraftUnitPrice(String(amount), getDefaultQuantityText(quantity));
+}
+
 function normalizeMoneyInputText(value: string) {
   return value.replace(/[^\d]/g, "");
 }
@@ -2684,9 +2694,9 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     taxRate: line.taxRate,
     taxMode: line.taxMode,
     taxAmount: line.taxAmount,
-    quantity: line.quantity === null || line.quantity === undefined ? "" : String(line.quantity),
+    quantity: getDefaultQuantityText(line.quantity),
     unit: line.unit || "個",
-    unitPrice: line.unitPrice === null || line.unitPrice === undefined ? "" : String(line.unitPrice),
+    unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity),
     ocrItemId: line.ocrItemId ?? "",
     note: line.note
   };
