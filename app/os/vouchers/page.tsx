@@ -115,6 +115,7 @@ type VoucherAccountingLine = {
   ocrItemId: string;
   matchedProductId: string;
   matchedProductName: string;
+  matchStatus: string;
   accountTitle: string;
   subAccountTitle: string;
   amount: string;
@@ -664,6 +665,29 @@ export default function VouchersPage() {
   }
 
   async function updateAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine, payload: Record<string, unknown>, successMessage: string) {
+    await updateAccountingLineProductState(voucher, line, payload, successMessage);
+  }
+
+  async function ignoreAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine, ignored: boolean) {
+    await updateAccountingLineProductState(voucher, line, {
+      action: ignored ? "ignore_product_item" : "unignore_product_item"
+    }, ignored ? "この明細を商品マスタ対象外にしました。" : "この明細を商品マスタ対象に戻しました。", {
+      preserveDraft: true,
+      linePatch: {
+        matchStatus: ignored ? "ignored" : "unmatched",
+        matchedProductId: "",
+        matchedProductName: ""
+      }
+    });
+  }
+
+  async function updateAccountingLineProductState(
+    voucher: VoucherRecord,
+    line: VoucherAccountingLine,
+    payload: Record<string, unknown>,
+    successMessage: string,
+    options: { preserveDraft?: boolean; linePatch?: Partial<VoucherAccountingLine> } = {}
+  ) {
     if (!line.ocrItemId || pendingProductLineIds[line.id]) return;
     setPendingProductLineIds((current) => ({ ...current, [line.id]: true }));
     try {
@@ -684,11 +708,25 @@ export default function VouchersPage() {
       }
       setMessage(successMessage);
       await loadVouchers();
-      setAccountingDrafts((current) => {
-        const next = { ...current };
-        delete next[voucher.id];
-        return next;
-      });
+      if (options.preserveDraft) {
+        setAccountingDrafts((current) => {
+          const draft = current[voucher.id];
+          if (!draft) return current;
+          return {
+            ...current,
+            [voucher.id]: {
+              ...draft,
+              lines: draft.lines.map((draftLine) => draftLine.id === line.id ? { ...draftLine, ...options.linePatch } : draftLine)
+            }
+          };
+        });
+      } else {
+        setAccountingDrafts((current) => {
+          const next = { ...current };
+          delete next[voucher.id];
+          return next;
+        });
+      }
     } catch {
       setMessage("商品マスタ紐付けを更新できませんでした。通信状態を確認してください。");
     } finally {
@@ -1086,6 +1124,7 @@ export default function VouchersPage() {
                           }}
                           onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
                           onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
+                          onIgnoreProduct={(line, ignored) => void ignoreAccountingLineProduct(voucher, line, ignored)}
                           onConfirm={() => void confirmVoucherAccounting(voucher)}
                         />
                       ) : null}
@@ -1638,6 +1677,7 @@ function VoucherAccountingEditor({
   onProductSubcategoryChange,
   onBindProduct,
   onCreateProduct,
+  onIgnoreProduct,
   onConfirm
 }: {
   voucher: VoucherRecord;
@@ -1658,6 +1698,7 @@ function VoucherAccountingEditor({
   onProductSubcategoryChange: (lineId: string, subcategory: string) => void;
   onBindProduct: (line: VoucherAccountingLine) => void;
   onCreateProduct: (line: VoucherAccountingLine) => void;
+  onIgnoreProduct: (line: VoucherAccountingLine, ignored: boolean) => void;
   onConfirm: () => void;
 }) {
   const isShiire = voucher.usageType === "shiire";
@@ -1712,6 +1753,7 @@ function VoucherAccountingEditor({
           const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
           const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
+          const isProductIgnored = line.matchStatus === "ignored";
           return (
           <div className="receipt-expense-line" key={line.id}>
             <label>
@@ -1766,7 +1808,7 @@ function VoucherAccountingEditor({
               <div className="voucher-product-binding">
                 <label>
                   <span>大分類</span>
-                  <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                  <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
                     <option value="">大分類を選択</option>
                     {productCategoryOptions.map((category) => (
                       <option value={category} key={category}>{category}</option>
@@ -1775,7 +1817,7 @@ function VoucherAccountingEditor({
                 </label>
                 <label>
                   <span>小分類</span>
-                  <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedCategory}>
+                  <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory}>
                     <option value="">小分類を選択</option>
                     {productSubcategoryOptions.map((subcategory) => (
                       <option value={subcategory} key={subcategory}>{subcategory}</option>
@@ -1784,7 +1826,7 @@ function VoucherAccountingEditor({
                 </label>
                 <label>
                   <span>商品</span>
-                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
+                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
                     <option value="">候補を選択</option>
                     {filteredProductOptions.map((product) => (
                       <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
@@ -1792,12 +1834,15 @@ function VoucherAccountingEditor({
                   </select>
                 </label>
                 <div className="voucher-product-binding-actions">
-                  {line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
-                  <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedProductId}>
+                  {isProductIgnored ? <small>商品マスタ対象外</small> : line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
+                  <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                    {isProductIgnored ? "対象に戻す" : "商品マスタ対象外"}
+                  </button>
+                  <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedProductId}>
                     <Link2 size={15} />
                     紐付け
                   </button>
-                  <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                  <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
                     <CheckCircle size={15} />
                     新規追加
                   </button>
@@ -1872,6 +1917,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       ocrItemId: item.id,
       matchedProductId: item.matchedProductId,
       matchedProductName: item.matchedProductName,
+      matchStatus: item.matchStatus,
       accountTitle,
       subAccountTitle,
       amount: String(amount || ""),
@@ -1892,6 +1938,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     ocrItemId: "",
     matchedProductId: "",
     matchedProductName: "",
+    matchStatus: "",
     accountTitle: isShiire ? "仕入高" : "雑費",
     subAccountTitle: "",
     amount: String(amount || ""),
@@ -1911,6 +1958,7 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
     ocrItemId: "",
     matchedProductId: "",
     matchedProductName: "",
+    matchStatus: "",
     accountTitle: "雑費",
     subAccountTitle: "",
     amount: "",

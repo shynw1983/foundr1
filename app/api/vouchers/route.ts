@@ -213,6 +213,26 @@ export async function PATCH(request: Request) {
     ? normalizeReimbursementStatus(String(body.reimbursementStatus ?? "pending"))
     : "none";
 
+  if (body.action === "ignore_product_item" || body.action === "unignore_product_item") {
+    if (nextUsageType !== "shiire") {
+      return Response.json({ error: "商品マスタ対象外の設定は仕入の証憑で行ってください。" }, { status: 400 });
+    }
+    const itemId = String(body.ocrItemId ?? "").trim();
+    if (!itemId) return Response.json({ error: "明細IDがありません。" }, { status: 400 });
+
+    const itemRows = await sql`
+      select id::text
+      from receipt_ocr_items
+      where id::text = ${itemId}
+        and receipt_ocr_result_id::text = ${id}
+      limit 1
+    `;
+    if (!itemRows[0]) return Response.json({ error: "明細が見つかりません。" }, { status: 404 });
+
+    await setVoucherItemProductIgnored(id, itemId, body.action === "ignore_product_item");
+    return Response.json({ ok: true });
+  }
+
   if (body.action === "link_product_to_item" || body.action === "create_product_from_item") {
     if (nextUsageType !== "shiire") {
       return Response.json({ error: "商品マスタ紐付けは仕入の証憑で行ってください。" }, { status: 400 });
@@ -897,6 +917,23 @@ async function updateReceiptOcrItemForProductLink(
       updated_at = now()
     where id::text = ${itemId}
       and receipt_ocr_result_id::text = ${ocrResultId}
+  `;
+}
+
+async function setVoucherItemProductIgnored(ocrResultId: string, itemId: string, ignored: boolean) {
+  await sql`
+    update receipt_ocr_items
+    set
+      matched_product_id = null,
+      match_status = ${ignored ? "ignored" : "unmatched"},
+      updated_at = now()
+    where id::text = ${itemId}
+      and receipt_ocr_result_id::text = ${ocrResultId}
+  `;
+
+  await sql`
+    delete from product_candidates
+    where receipt_ocr_item_id::text = ${itemId}
   `;
 }
 
