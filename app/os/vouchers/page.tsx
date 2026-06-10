@@ -1026,7 +1026,7 @@ export default function VouchersPage() {
                 <article className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""}`} key={voucher.id}>
                   <div className="voucher-row-main">
                     <div className="voucher-row-heading">
-                      <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : "is-active"}`}>
+                      <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : isConfirmed ? "is-active" : "is-warning"}`}>
                         {voucher.status === "failed" ? "OCR失敗" : isConfirmed ? "確定済み" : "確認待ち"}
                       </span>
                       {isPendingReview && !isExpanded ? <span className="voucher-review-alert">未確認明細あり</span> : null}
