@@ -306,6 +306,7 @@ export default function VouchersPage() {
   const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
+  const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
   const [lineProductSubcategorySelections, setLineProductSubcategorySelections] = useState<Record<string, string>>({});
@@ -526,6 +527,48 @@ export default function VouchersPage() {
       setSavingConfirmedLineKeys((current) => {
         const next = { ...current };
         delete next[key];
+        return next;
+      });
+    }
+  }
+
+  async function saveConfirmedVoucherBasic(voucher: VoucherRecord, basicDraft: ConfirmedVoucherBasicDraft) {
+    const companyName = basicDraft.companyName;
+    const brandName = basicDraft.brandName;
+    const locationName = basicDraft.locationName;
+    const vendorName = buildVendorNameFromParts(companyName, brandName, locationName, voucher.vendorName);
+    setSavingConfirmedBasicIds((current) => ({ ...current, [voucher.id]: true }));
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_confirmed_voucher_basic",
+          id: voucher.id,
+          usageType: voucher.usageType,
+          paymentType: voucher.paymentType,
+          reimbursementStatus: voucher.reimbursementStatus,
+          vendorName,
+          companyName,
+          brandName,
+          locationName,
+          receiptTaxTotal: basicDraft.receiptTaxTotal
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "確定済み証憑の基本情報を保存できませんでした。");
+        return;
+      }
+      setMessage("確定済み証憑の基本情報を更新しました。");
+      await loadConfirmedAccountingLines();
+      await loadVouchers();
+    } catch {
+      setMessage("確定済み証憑の基本情報を保存できませんでした。通信状態を確認してください。");
+    } finally {
+      setSavingConfirmedBasicIds((current) => {
+        const next = { ...current };
+        delete next[voucher.id];
         return next;
       });
     }
@@ -1313,8 +1356,10 @@ export default function VouchersPage() {
                           voucher={voucher}
                           details={voucher.accountingLines.map((line, index) => buildConfirmedDetailFromAccountingLine(line, index))}
                           savingLineKeys={savingConfirmedLineKeys}
+                          isSavingBasic={Boolean(savingConfirmedBasicIds[voucher.id])}
                           getDraft={(detail) => getConfirmedLineDraft(voucher, detail)}
                           onLineChange={(detail, next) => updateConfirmedLineDraft(voucher, detail, next)}
+                          onSaveBasic={(basicDraft) => void saveConfirmedVoucherBasic(voucher, basicDraft)}
                           onSave={(detail, basicDraft) => void saveConfirmedLineDetail(voucher, detail, basicDraft)}
                         />
                       ) : null}
@@ -2293,15 +2338,19 @@ function ConfirmedVoucherDetailEditor({
   voucher,
   details,
   savingLineKeys,
+  isSavingBasic,
   getDraft,
   onLineChange,
+  onSaveBasic,
   onSave
 }: {
   voucher: VoucherRecord;
   details: ConfirmedAccountingLineDetail[];
   savingLineKeys: Record<string, boolean>;
+  isSavingBasic: boolean;
   getDraft: (detail: ConfirmedAccountingLineDetail) => ConfirmedAccountingLineDetail;
   onLineChange: (detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) => void;
+  onSaveBasic: (basicDraft: ConfirmedVoucherBasicDraft) => void;
   onSave: (detail: ConfirmedAccountingLineDetail, basicDraft: ConfirmedVoucherBasicDraft) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
@@ -2346,6 +2395,11 @@ function ConfirmedVoucherDetailEditor({
           <span>レシート消費税</span>
           <input type="number" min="0" step="1" value={basicDraft.receiptTaxTotal} onChange={(event) => setBasicDraft((current) => ({ ...current, receiptTaxTotal: event.target.value }))} />
         </label>
+        <div className="voucher-confirmed-basic-actions">
+          <button className="secondary-button" type="button" disabled={isSavingBasic} onClick={() => onSaveBasic(basicDraft)}>
+            {isSavingBasic ? "保存中..." : "基本情報を保存"}
+          </button>
+        </div>
       </div>
       {details.map((detail) => {
         const detailKey = getConfirmedVoucherDetailKey(voucher.id, detail);

@@ -302,6 +302,52 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: true, productId });
   }
 
+  if (body.action === "update_confirmed_voucher_basic") {
+    if (String(voucher.status ?? "") !== "confirmed") {
+      return Response.json({ error: "確定済みの証憑だけ編集できます。" }, { status: 400 });
+    }
+
+    const rawRows = await sql`
+      select raw_result as "rawResult"
+      from receipt_ocr_results
+      where id::text = ${id}
+      limit 1
+    `;
+    const rawResult = isPlainObject(rawRows[0]?.rawResult) ? rawRows[0].rawResult : {};
+    const accountingLines = Array.isArray(rawResult.accountingLines) ? [...rawResult.accountingLines] : [];
+    const receiptTaxTotal = normalizeNullableMoney(body.receiptTaxTotal);
+    const adjustedAccountingLines = receiptTaxTotal === null
+      ? accountingLines
+      : applyAccountingLinesTaxTotal(accountingLines, receiptTaxTotal);
+    const normalizedLines = normalizeAccountingLines(adjustedAccountingLines, voucher, nextUsageType);
+    const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
+    const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
+    const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
+    const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
+    const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
+    const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
+
+    await sql`
+      update receipt_ocr_results
+      set
+        usage_type = ${nextUsageType},
+        payment_type = ${nextPaymentType},
+        reimbursement_status = ${nextReimbursementStatus},
+        vendor_name = ${vendorName},
+        company_name = ${companyName},
+        brand_name = ${brandName},
+        location_name = ${locationName},
+        tax = ${tax},
+        total = ${receiptTotal},
+        raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+        updated_at = now()
+      where id::text = ${id}
+    `;
+
+    return Response.json({ ok: true, lineCount: normalizedLines.length, amount: receiptTotal, tax });
+  }
+
   if (body.action === "update_confirmed_accounting_line") {
     if (String(voucher.status ?? "") !== "confirmed") {
       return Response.json({ error: "確定済みの証憑明細だけ編集できます。" }, { status: 400 });

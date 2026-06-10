@@ -18411,6 +18411,16 @@ body :where(
   font-size: 0.82rem;
 }
 
+.voucher-confirmed-basic-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.voucher-confirmed-basic-actions button {
+  min-height: 36px;
+}
+
 .voucher-confirmed-detail-row {
   display: grid;
   gap: 10px;
