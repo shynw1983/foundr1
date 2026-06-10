@@ -1200,14 +1200,15 @@ function formatMoney(value: number) {
 function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgress }) {
   const completedUnits = progress.completed + Math.max(0, Math.min(0.99, progress.currentProgress ?? 0));
   const percentage = progress.total > 0 ? Math.round(Math.min(completedUnits / progress.total, 1) * 100) : 0;
-  const progressBarBackground = `linear-gradient(90deg, var(--primary) 0 ${percentage}%, var(--surface-muted) ${percentage}% 100%)`;
   return (
     <div className="voucher-upload-progress" aria-live="polite">
       <div className="voucher-upload-progress-heading">
         <strong>{percentage}%</strong>
         <span>{progress.completed}/{progress.total}件</span>
       </div>
-      <div className="voucher-upload-progress-bar" aria-hidden="true" style={{ background: progressBarBackground }} />
+      <div className="voucher-upload-progress-bar" aria-hidden="true">
+        <span style={{ width: `${percentage}%` }} />
+      </div>
       <p>
         {progress.phase}：{progress.currentFile || "証憑"}
         {progress.failed ? ` / 要確認 ${progress.failed}件` : ""}
