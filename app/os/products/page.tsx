@@ -15,6 +15,7 @@ import {
   suppliers as initialSuppliers,
   stores as initialStores
 } from "../../../lib/mock-data";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 import { originCountryOptions } from "../../../lib/origin-countries";
 
 type Product = typeof initialProducts[number];
@@ -148,7 +149,7 @@ function getProductPhotoSrc(photoUrl?: string) {
 function parseReferencePrice(value: number | string) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
 
-  const normalizedValue = value.replace(/[^\d.-]/g, "");
+  const normalizedValue = normalizeDecimalInput(value);
   const price = Number(normalizedValue);
 
   return Number.isFinite(price) ? price : 0;
@@ -1818,7 +1819,7 @@ function ProductEditDialog({
                       ...target,
                       value: {
                         ...target.value,
-                        packageQuantity: event.target.value
+                        packageQuantity: normalizeDecimalInput(event.target.value)
                       }
                     })
                   }

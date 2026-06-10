@@ -3,6 +3,7 @@
 import { Banknote, Camera, CreditCard, Gift, Minus, Plus, ReceiptText, ScanLine, Search, ShoppingCart, Trash2, UserRound, X } from "lucide-react";
 import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -925,7 +926,7 @@ export default function StorePosPage() {
     denomination: number,
     value: string
   ) {
-    const normalized = value.replace(/[^\d]/g, "");
+    const normalized = normalizeIntegerInput(value);
     setter((current) => ({ ...current, [String(denomination)]: normalized }));
   }
 
@@ -2016,7 +2017,7 @@ export default function StorePosPage() {
                 <input
                   inputMode="numeric"
                   value={cashTenderedAmount}
-                  onChange={(event) => setCashTenderedAmount(event.target.value.replace(/[^\d]/g, ""))}
+                  onChange={(event) => setCashTenderedAmount(normalizeIntegerInput(event.target.value))}
                   placeholder="0"
                 />
               </label>
@@ -2363,7 +2364,7 @@ export default function StorePosPage() {
                 </label>
                 <label>
                   <span>金額</span>
-                  <input inputMode="numeric" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(event.target.value)} placeholder="0" />
+                  <input inputMode="numeric" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(normalizeIntegerInput(event.target.value))} placeholder="0" />
                 </label>
                 <label>
                   <span>理由</span>
@@ -2452,7 +2453,7 @@ export default function StorePosPage() {
                   <input
                     inputMode="decimal"
                     value={weightDraft}
-                    onChange={(event) => setWeightDraft(event.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
+                    onChange={(event) => setWeightDraft(normalizeDecimalInput(event.target.value))}
                     placeholder="0"
                   />
                   <span>{configuringWeightPricing.unit}</span>

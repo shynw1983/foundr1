@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -619,7 +620,7 @@ export default function LoyaltyPage() {
           <div className="loyalty-settings-grid">
             <label>
               <span>ポイント基準</span>
-              <input value={rewardSettings.basePointRateBasis} onChange={(event) => setRewardSettings((current) => ({ ...current, basePointRateBasis: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.basePointRateBasis} onChange={(event) => setRewardSettings((current) => ({ ...current, basePointRateBasis: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
             <label className="loyalty-toggle-row">
               <input type="checkbox" checked={rewardSettings.birthdayCouponEnabled} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponEnabled: event.target.checked }))} />
@@ -631,11 +632,11 @@ export default function LoyaltyPage() {
             </label>
             <label>
               <span>誕生日割引</span>
-              <input value={rewardSettings.birthdayCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponDiscountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.birthdayCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponDiscountValue: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
             <label>
               <span>誕生日有効日数</span>
-              <input value={rewardSettings.birthdayCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponExpiresInDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.birthdayCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, birthdayCouponExpiresInDays: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
             <label className="loyalty-toggle-row">
               <input type="checkbox" checked={rewardSettings.dormantCouponEnabled} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponEnabled: event.target.checked }))} />
@@ -643,7 +644,7 @@ export default function LoyaltyPage() {
             </label>
             <label>
               <span>未購入日数</span>
-              <input value={rewardSettings.dormantDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.dormantDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantDays: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
             <label>
               <span>再来店クーポン名</span>
@@ -651,11 +652,11 @@ export default function LoyaltyPage() {
             </label>
             <label>
               <span>再来店割引</span>
-              <input value={rewardSettings.dormantCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponDiscountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.dormantCouponDiscountValue} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponDiscountValue: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
             <label>
               <span>再来店有効日数</span>
-              <input value={rewardSettings.dormantCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponExpiresInDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 }))} inputMode="numeric" />
+              <input value={rewardSettings.dormantCouponExpiresInDays} onChange={(event) => setRewardSettings((current) => ({ ...current, dormantCouponExpiresInDays: Number(normalizeIntegerInput(event.target.value)) || 0 }))} inputMode="numeric" />
             </label>
           </div>
           <button className="primary-button" type="button" onClick={() => void saveRewardSettings()} disabled={ruleSaving}>
@@ -683,23 +684,23 @@ export default function LoyaltyPage() {
                 </label>
                 <label>
                   <span>順位</span>
-                  <input value={tier.rank} onChange={(event) => updateTier(index, { rank: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                  <input value={tier.rank} onChange={(event) => updateTier(index, { rank: Number(normalizeIntegerInput(event.target.value)) || 0 })} inputMode="numeric" />
                 </label>
                 <label>
                   <span>判定日数</span>
-                  <input value={tier.evaluationWindowDays} onChange={(event) => updateTier(index, { evaluationWindowDays: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                  <input value={tier.evaluationWindowDays} onChange={(event) => updateTier(index, { evaluationWindowDays: Number(normalizeIntegerInput(event.target.value)) || 0 })} inputMode="numeric" />
                 </label>
                 <label>
                   <span>必要購入額</span>
-                  <input value={tier.requiredSpendAmount} onChange={(event) => updateTier(index, { requiredSpendAmount: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                  <input value={tier.requiredSpendAmount} onChange={(event) => updateTier(index, { requiredSpendAmount: Number(normalizeIntegerInput(event.target.value)) || 0 })} inputMode="numeric" />
                 </label>
                 <label>
                   <span>必要来店数</span>
-                  <input value={tier.requiredVisitCount} onChange={(event) => updateTier(index, { requiredVisitCount: Number(event.target.value.replace(/[^\d]/g, "")) || 0 })} inputMode="numeric" />
+                  <input value={tier.requiredVisitCount} onChange={(event) => updateTier(index, { requiredVisitCount: Number(normalizeIntegerInput(event.target.value)) || 0 })} inputMode="numeric" />
                 </label>
                 <label>
                   <span>ポイント倍率</span>
-                  <input value={tier.pointMultiplier} onChange={(event) => updateTier(index, { pointMultiplier: Number(event.target.value.replace(/[^\d.]/g, "")) || 0 })} inputMode="decimal" />
+                  <input value={tier.pointMultiplier} onChange={(event) => updateTier(index, { pointMultiplier: Number(normalizeDecimalInput(event.target.value)) || 0 })} inputMode="decimal" />
                 </label>
                 <label className="loyalty-toggle-row">
                   <input type="checkbox" checked={tier.isActive} onChange={(event) => updateTier(index, { isActive: event.target.checked })} />
@@ -771,25 +772,25 @@ export default function LoyaltyPage() {
                     {"dayOfMonth" in (template.sendRule ?? {}) ? (
                       <label>
                         <span>送信日</span>
-                        <input value={String(template.sendRule.dayOfMonth ?? 1)} onChange={(event) => updateTemplateRule(index, "dayOfMonth", Number(event.target.value.replace(/[^\d]/g, "")) || 1)} inputMode="numeric" />
+                        <input value={String(template.sendRule.dayOfMonth ?? 1)} onChange={(event) => updateTemplateRule(index, "dayOfMonth", Number(normalizeIntegerInput(event.target.value)) || 1)} inputMode="numeric" />
                       </label>
                     ) : null}
                     {"hour" in (template.sendRule ?? {}) ? (
                       <label>
                         <span>送信時刻</span>
-                        <input value={String(template.sendRule.hour ?? 10)} onChange={(event) => updateTemplateRule(index, "hour", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                        <input value={String(template.sendRule.hour ?? 10)} onChange={(event) => updateTemplateRule(index, "hour", Number(normalizeIntegerInput(event.target.value)) || 0)} inputMode="numeric" />
                       </label>
                     ) : null}
                     {"minutesBefore" in (template.sendRule ?? {}) ? (
                       <label>
                         <span>何分前</span>
-                        <input value={String(template.sendRule.minutesBefore ?? 60)} onChange={(event) => updateTemplateRule(index, "minutesBefore", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                        <input value={String(template.sendRule.minutesBefore ?? 60)} onChange={(event) => updateTemplateRule(index, "minutesBefore", Number(normalizeIntegerInput(event.target.value)) || 0)} inputMode="numeric" />
                       </label>
                     ) : null}
                     {"daysBefore" in (template.sendRule ?? {}) ? (
                       <label>
                         <span>何日前</span>
-                        <input value={String(template.sendRule.daysBefore ?? 3)} onChange={(event) => updateTemplateRule(index, "daysBefore", Number(event.target.value.replace(/[^\d]/g, "")) || 0)} inputMode="numeric" />
+                        <input value={String(template.sendRule.daysBefore ?? 3)} onChange={(event) => updateTemplateRule(index, "daysBefore", Number(normalizeIntegerInput(event.target.value)) || 0)} inputMode="numeric" />
                       </label>
                     ) : null}
                   </div>
@@ -853,7 +854,7 @@ export default function LoyaltyPage() {
             </label>
             <label>
               <span>割引金額</span>
-              <input value={couponForm.discountValue} onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: event.target.value.replace(/[^\d]/g, "") }))} placeholder="500" inputMode="numeric" />
+              <input value={couponForm.discountValue} onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: normalizeIntegerInput(event.target.value) }))} placeholder="500" inputMode="numeric" />
             </label>
             <label>
               <span>有効期限</span>
@@ -903,7 +904,7 @@ export default function LoyaltyPage() {
             </label>
             <label>
               <span>紙レシート分の杯数</span>
-              <input value={stampForm.stamps} onChange={(event) => setStampForm((current) => ({ ...current, stamps: event.target.value.replace(/[^\d]/g, "").slice(0, 3) }))} placeholder="例: 3" inputMode="numeric" />
+              <input value={stampForm.stamps} onChange={(event) => setStampForm((current) => ({ ...current, stamps: normalizeIntegerInput(event.target.value).slice(0, 3) }))} placeholder="例: 3" inputMode="numeric" />
             </label>
             <label>
               <span>メモ</span>

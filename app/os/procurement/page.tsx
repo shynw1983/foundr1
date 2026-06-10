@@ -13,6 +13,7 @@ import {
   products as initialProducts,
   suppliers as initialSuppliers
 } from "../../../lib/mock-data";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 
 type Product = typeof initialProducts[number] & {
   id?: string;
@@ -2014,7 +2015,7 @@ function ExceptionReportDialog({
               inputMode="decimal"
               value={item.actualPrice}
               placeholder="例: 271 / ¥271"
-              onChange={(event) => onChange({ actualPrice: event.target.value })}
+              onChange={(event) => onChange({ actualPrice: normalizeDecimalInput(event.target.value) })}
             />
           </label>
         </div>

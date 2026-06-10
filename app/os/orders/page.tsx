@@ -13,6 +13,7 @@ import {
   products as initialProducts,
   stores
 } from "../../../lib/mock-data";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 
 type Product = typeof initialProducts[number];
 type ProductWithCategory = Product & {
@@ -428,7 +429,7 @@ function createStoreFeedbackItems(
 }
 
 function parsePriceValue(value?: string) {
-  const price = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  const price = Number(normalizeDecimalInput(String(value ?? "")));
   return Number.isFinite(price) ? price : 0;
 }
 

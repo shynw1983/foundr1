@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -1388,7 +1389,7 @@ export default function MenuAdminPage() {
                         </label>
 	                        <label>
 	                          <span>並び順</span>
-	                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+	                          <input value={groupDraft.sortOrder} onChange={(event) => setGroupDraft({ ...groupDraft, sortOrder: Number(normalizeIntegerInput(event.target.value) || 0) })} inputMode="numeric" />
 	                        </label>
 	                      </div>
                       <div className="menu-translation-panel">
@@ -1465,11 +1466,14 @@ export default function MenuAdminPage() {
                         </label>
                         <label>
                           <span>価格差額</span>
-                          <input value={optionDraft.priceDelta ?? ""} onChange={(event) => setOptionDraft({ ...optionDraft, priceDelta: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
+                          <input value={optionDraft.priceDelta ?? ""} onChange={(event) => {
+                            const value = normalizeDecimalInput(event.target.value);
+                            setOptionDraft({ ...optionDraft, priceDelta: value ? Number(value) : null });
+                          }} inputMode="decimal" />
                         </label>
 	                        <label>
 	                          <span>並び順</span>
-	                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+	                          <input value={optionDraft.sortOrder} onChange={(event) => setOptionDraft({ ...optionDraft, sortOrder: Number(normalizeIntegerInput(event.target.value) || 0) })} inputMode="numeric" />
 	                        </label>
 	                      </div>
                       <div className="menu-translation-panel">
@@ -1555,7 +1559,7 @@ export default function MenuAdminPage() {
                   </label>
                   <label>
                     <span>並び順</span>
-                    <input value={categoryDraft.sortOrder} onChange={(event) => setCategoryDraft({ ...categoryDraft, sortOrder: Number(event.target.value || 0) })} inputMode="numeric" />
+                    <input value={categoryDraft.sortOrder} onChange={(event) => setCategoryDraft({ ...categoryDraft, sortOrder: Number(normalizeIntegerInput(event.target.value) || 0) })} inputMode="numeric" />
                   </label>
                   <div className="menu-category-flags">
                     <label className="checkbox-group menu-inline-check">
@@ -1610,7 +1614,10 @@ export default function MenuAdminPage() {
                 </label>
                 <label>
                   <span>基本価格</span>
-                  <input value={itemDraft.basePrice ?? ""} onChange={(event) => setItemDraft({ ...itemDraft, basePrice: event.target.value ? Number(event.target.value) : null })} inputMode="decimal" />
+                  <input value={itemDraft.basePrice ?? ""} onChange={(event) => {
+                    const value = normalizeDecimalInput(event.target.value);
+                    setItemDraft({ ...itemDraft, basePrice: value ? Number(value) : null });
+                  }} inputMode="decimal" />
                 </label>
 	                <label className="checkbox-group menu-inline-check">
 	                  <input type="checkbox" checked={itemDraft.isActive} onChange={(event) => setItemDraft({ ...itemDraft, isActive: event.target.checked })} />
@@ -1717,7 +1724,7 @@ export default function MenuAdminPage() {
                       <span>1単位あたり価格</span>
                       <input
                         value={String((itemDraft.variableSchema.posWeightPricing as Record<string, unknown> | undefined)?.unitPrice ?? "")}
-                        onChange={(event) => updateItemWeightPricing("unitPrice", event.target.value.replace(/[^\d.]/g, ""))}
+                        onChange={(event) => updateItemWeightPricing("unitPrice", normalizeDecimalInput(event.target.value))}
                         inputMode="decimal"
                         placeholder="例: 3.8"
                       />

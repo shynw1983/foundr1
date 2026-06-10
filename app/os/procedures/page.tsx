@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -836,7 +837,7 @@ export default function ProcedureAdminPage() {
                 )}
                 <label>
                   <span>並び順</span>
-                  <input value={settingDraft.sortOrder} onChange={(event) => setSettingDraft({ ...settingDraft, sortOrder: event.target.value })} inputMode="numeric" disabled={!canEdit} />
+                  <input value={settingDraft.sortOrder} onChange={(event) => setSettingDraft({ ...settingDraft, sortOrder: normalizeIntegerInput(event.target.value) })} inputMode="numeric" disabled={!canEdit} />
                 </label>
                 <label className="procedure-setting-toggle">
                   <input type="checkbox" checked={settingDraft.isActive} onChange={(event) => setSettingDraft({ ...settingDraft, isActive: event.target.checked })} disabled={!canEdit} />
@@ -1083,7 +1084,7 @@ export default function ProcedureAdminPage() {
                     <div className="procedure-form-row">
                       <label>
                         <span>目安分数</span>
-                        <input value={step.estimatedMinutes} onChange={(event) => updateStep(stepIndex, { estimatedMinutes: event.target.value })} inputMode="numeric" disabled={!canEdit} />
+                        <input value={step.estimatedMinutes} onChange={(event) => updateStep(stepIndex, { estimatedMinutes: normalizeIntegerInput(event.target.value) })} inputMode="numeric" disabled={!canEdit} />
                       </label>
                       <label>
                         <span>画像 / 動画 URL</span>

@@ -13,6 +13,7 @@ import {
   normalizeCustomerDisplayNameSettings,
   type CustomerDisplayNameSettings
 } from "../../../lib/customer-display-names";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 import { salesSourceDefinitions } from "../../../lib/sales-sources";
 import {
   defaultBusinessHours,
@@ -946,11 +947,11 @@ export default function StoresPage() {
                 {newGeocodeMessage ? <p className="store-geocode-message">{newGeocodeMessage}</p> : null}
                 <label>
                   <span>緯度</span>
-                  <input name="attendanceLatitude" inputMode="decimal" value={newAttendanceLatitude} onChange={(event) => setNewAttendanceLatitude(event.target.value)} placeholder="例: 33.5902" />
+                  <input name="attendanceLatitude" inputMode="decimal" value={newAttendanceLatitude} onChange={(event) => setNewAttendanceLatitude(normalizeDecimalInput(event.target.value))} placeholder="例: 33.5902" />
                 </label>
                 <label>
                   <span>経度</span>
-                  <input name="attendanceLongitude" inputMode="decimal" value={newAttendanceLongitude} onChange={(event) => setNewAttendanceLongitude(event.target.value)} placeholder="例: 130.4017" />
+                  <input name="attendanceLongitude" inputMode="decimal" value={newAttendanceLongitude} onChange={(event) => setNewAttendanceLongitude(normalizeDecimalInput(event.target.value))} placeholder="例: 130.4017" />
                 </label>
                 <label>
                   <span>許可範囲（m）</span>
@@ -1106,11 +1107,11 @@ export default function StoresPage() {
                     {editingGeocodeMessage ? <p className="store-geocode-message">{editingGeocodeMessage}</p> : null}
                     <label>
                       <span>緯度</span>
-                      <input name="attendanceLatitude" inputMode="decimal" value={editingAttendanceLatitude} onChange={(event) => setEditingAttendanceLatitude(event.target.value)} placeholder="例: 33.5902" />
+                      <input name="attendanceLatitude" inputMode="decimal" value={editingAttendanceLatitude} onChange={(event) => setEditingAttendanceLatitude(normalizeDecimalInput(event.target.value))} placeholder="例: 33.5902" />
                     </label>
                     <label>
                       <span>経度</span>
-                      <input name="attendanceLongitude" inputMode="decimal" value={editingAttendanceLongitude} onChange={(event) => setEditingAttendanceLongitude(event.target.value)} placeholder="例: 130.4017" />
+                      <input name="attendanceLongitude" inputMode="decimal" value={editingAttendanceLongitude} onChange={(event) => setEditingAttendanceLongitude(normalizeDecimalInput(event.target.value))} placeholder="例: 130.4017" />
                     </label>
                     <label>
                       <span>許可範囲（m）</span>

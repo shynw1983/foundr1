@@ -4,6 +4,7 @@ import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, Packag
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
+import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import {
   defaultNavigationMenuSettings,
   type NavigationMenuSettings
@@ -588,7 +589,7 @@ export default function OsSettingsPage() {
             <div className="settings-tax-import">
               <label className="settings-field">
                 <span>対象年</span>
-                <input value={taxYear} inputMode="numeric" onChange={(event) => setTaxYear(event.target.value)} placeholder="例: 2026" />
+                <input value={taxYear} inputMode="numeric" onChange={(event) => setTaxYear(normalizeIntegerInput(event.target.value))} placeholder="例: 2026" />
               </label>
               <label className="settings-field">
                 <span>源泉税表ファイル</span>
@@ -607,7 +608,7 @@ export default function OsSettingsPage() {
             <div className="settings-tax-import">
               <label className="settings-field">
                 <span>対象年度</span>
-                <input value={socialInsuranceYear} inputMode="numeric" onChange={(event) => setSocialInsuranceYear(event.target.value)} placeholder="例: 2026" />
+                <input value={socialInsuranceYear} inputMode="numeric" onChange={(event) => setSocialInsuranceYear(normalizeIntegerInput(event.target.value))} placeholder="例: 2026" />
               </label>
               <label className="settings-field">
                 <span>社会保険料表 Excel</span>
@@ -626,7 +627,7 @@ export default function OsSettingsPage() {
             <div className="settings-tax-import">
               <label className="settings-field">
                 <span>対象年度</span>
-                <input value={employmentInsuranceYear} inputMode="numeric" onChange={(event) => updateEmploymentInsuranceYear(event.target.value)} placeholder="例: 2026" />
+                <input value={employmentInsuranceYear} inputMode="numeric" onChange={(event) => updateEmploymentInsuranceYear(normalizeIntegerInput(event.target.value))} placeholder="例: 2026" />
               </label>
               <label className="settings-field">
                 <span>雇用保険料率 PDF</span>
@@ -679,27 +680,27 @@ export default function OsSettingsPage() {
                   </div>
                   <label>
                     <span>労働者負担</span>
-                    <input name={`employmentManualEmployeeRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employeeRate} placeholder="例: 5" aria-label={`${row.label} 労働者負担`} />
+                    <input name={`employmentManualEmployeeRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employeeRate} onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 5" aria-label={`${row.label} 労働者負担`} />
                     <small>/1000</small>
                   </label>
                   <label>
                     <span>事業主負担</span>
-                    <input name={`employmentManualEmployerRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employerRate} placeholder="例: 8.5" aria-label={`${row.label} 事業主負担`} />
+                    <input name={`employmentManualEmployerRate:${row.businessType}`} inputMode="decimal" defaultValue={row.employerRate} onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 8.5" aria-label={`${row.label} 事業主負担`} />
                     <small>/1000</small>
                   </label>
                   <label>
                     <span>給付分</span>
-                    <input name={`employmentManualBenefitRate:${row.businessType}`} inputMode="decimal" defaultValue={row.benefitRate} placeholder="例: 5" aria-label={`${row.label} 給付分`} />
+                    <input name={`employmentManualBenefitRate:${row.businessType}`} inputMode="decimal" defaultValue={row.benefitRate} onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 5" aria-label={`${row.label} 給付分`} />
                     <small>/1000</small>
                   </label>
                   <label>
                     <span>二事業分</span>
-                    <input name={`employmentManualTwoProjectsRate:${row.businessType}`} inputMode="decimal" defaultValue={row.twoProjectsRate} placeholder="例: 3.5" aria-label={`${row.label} 二事業分`} />
+                    <input name={`employmentManualTwoProjectsRate:${row.businessType}`} inputMode="decimal" defaultValue={row.twoProjectsRate} onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 3.5" aria-label={`${row.label} 二事業分`} />
                     <small>/1000</small>
                   </label>
                   <label>
                     <span>合計</span>
-                    <input name={`employmentManualTotalRate:${row.businessType}`} inputMode="decimal" defaultValue={row.totalRate} placeholder="例: 13.5" aria-label={`${row.label} 合計`} />
+                    <input name={`employmentManualTotalRate:${row.businessType}`} inputMode="decimal" defaultValue={row.totalRate} onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 13.5" aria-label={`${row.label} 合計`} />
                     <small>/1000</small>
                   </label>
                 </div>

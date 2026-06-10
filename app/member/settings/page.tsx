@@ -7,6 +7,7 @@ import { MemberAccountMenu } from "../../../components/member/MemberAccountMenu"
 import { MemberAuthPanel } from "../../../components/member/MemberAuthPanel";
 import { MemberLanguageSwitcher, useMemberLanguage } from "../../../components/member/MemberLanguageProvider";
 import { memberText } from "../../../components/member/memberTranslations";
+import { normalizeIntegerInput } from "../../../lib/number-input";
 
 type MemberProfile = {
   memberNumber: string;
@@ -481,10 +482,10 @@ function normalizeSettingsLanguage(value: string): MemberSettingsLanguage {
 }
 
 function splitJapanesePhone(value: string) {
-  const hyphenParts = value.split("-").map((part) => part.replace(/[^\d]/g, "")).filter(Boolean);
+  const hyphenParts = value.split("-").map((part) => normalizeIntegerInput(part)).filter(Boolean);
   if (hyphenParts.length === 3) return hyphenParts as [string, string, string];
 
-  const digits = value.replace(/[^\d]/g, "");
+  const digits = normalizeIntegerInput(value);
   if (/^0[789]0\d{8}$/.test(digits)) return [digits.slice(0, 3), digits.slice(3, 7), digits.slice(7)];
   if (/^(0120\d{6}|0800\d{7})$/.test(digits)) return [digits.slice(0, 4), digits.slice(4, 7), digits.slice(7)];
   if (/^0\d{9}$/.test(digits)) return [digits.slice(0, 2), digits.slice(2, 6), digits.slice(6)];
@@ -493,7 +494,7 @@ function splitJapanesePhone(value: string) {
 }
 
 function composeJapanesePhone(part1: string, part2: string, part3: string) {
-  return [part1, part2, part3].map((part) => part.replace(/[^\d]/g, "")).filter(Boolean).join("-");
+  return [part1, part2, part3].map((part) => normalizeIntegerInput(part)).filter(Boolean).join("-");
 }
 
 function memberAge(birthday: string) {
@@ -803,11 +804,11 @@ export default function MemberSettingsPage() {
                 <label>
                   <span>{text.phone}</span>
                   <div className="member-phone-segments">
-                    <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: event.target.value.replace(/[^\d]/g, "").slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label={text.phonePart1} disabled={loading || saving} required />
+                    <input value={settingsForm.phonePart1} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart1: normalizeIntegerInput(event.target.value).slice(0, 5), phone: composeJapanesePhone(event.target.value, current.phonePart2, current.phonePart3) }))} placeholder="090" inputMode="numeric" autoComplete="tel-area-code" aria-label={text.phonePart1} disabled={loading || saving} required />
                     <span>-</span>
-                    <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label={text.phonePart2} disabled={loading || saving} required />
+                    <input value={settingsForm.phonePart2} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart2: normalizeIntegerInput(event.target.value).slice(0, 4), phone: composeJapanesePhone(current.phonePart1, event.target.value, current.phonePart3) }))} placeholder="1234" inputMode="numeric" autoComplete="tel-local-prefix" aria-label={text.phonePart2} disabled={loading || saving} required />
                     <span>-</span>
-                    <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: event.target.value.replace(/[^\d]/g, "").slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label={text.phonePart3} disabled={loading || saving} required />
+                    <input value={settingsForm.phonePart3} onChange={(event) => setSettingsForm((current) => ({ ...current, phonePart3: normalizeIntegerInput(event.target.value).slice(0, 4), phone: composeJapanesePhone(current.phonePart1, current.phonePart2, event.target.value) }))} placeholder="5678" inputMode="numeric" autoComplete="tel-local-suffix" aria-label={text.phonePart3} disabled={loading || saving} required />
                   </div>
                 </label>
                 <label>

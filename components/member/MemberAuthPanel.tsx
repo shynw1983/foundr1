@@ -3,6 +3,7 @@
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { KeyRound, Loader2, Mail } from "lucide-react";
 import { ClipboardEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
+import { normalizeIntegerInput } from "../../lib/number-input";
 import { useMemberLanguage } from "./MemberLanguageProvider";
 import { memberText } from "./memberTranslations";
 
@@ -129,7 +130,7 @@ export function MemberAuthPanel({
   }
 
   function applyCodeValue(nextCode: string, focusIndex?: number) {
-    const normalizedCode = nextCode.replace(/\D/g, "").slice(0, codeLength);
+    const normalizedCode = normalizeIntegerInput(nextCode).slice(0, codeLength);
     setCode(normalizedCode);
     if (typeof focusIndex === "number") {
       window.requestAnimationFrame(() => focusCodeInput(Math.max(0, Math.min(codeLength - 1, focusIndex))));
@@ -137,7 +138,7 @@ export function MemberAuthPanel({
   }
 
   function handleCodeInput(index: number, value: string) {
-    const digits = value.replace(/\D/g, "");
+    const digits = normalizeIntegerInput(value);
     if (!digits) {
       applyCodeValue(code.slice(0, index) + code.slice(index + 1), index);
       return;
@@ -324,7 +325,6 @@ export function MemberAuthPanel({
                     onKeyDown={(event) => handleCodeKeyDown(index, event)}
                     onPaste={handleCodePaste}
                     inputMode="numeric"
-                    pattern="[0-9]*"
                     autoComplete={index === 0 ? "one-time-code" : "off"}
                     aria-label={text.codeDigit(index + 1)}
                     disabled={emailBusy || !codeReady}

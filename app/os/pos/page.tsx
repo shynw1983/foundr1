@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -434,7 +435,7 @@ export default function PosPage() {
               <input
                 inputMode="decimal"
                 value={taxForm.dineInTaxRate}
-                onChange={(event) => setTaxForm((current) => ({ ...current, dineInTaxRate: event.target.value.replace(/[^\d.]/g, "") }))}
+                onChange={(event) => setTaxForm((current) => ({ ...current, dineInTaxRate: normalizeDecimalInput(event.target.value) }))}
                 disabled={!canManagePosSettings}
               />
             </label>
@@ -443,7 +444,7 @@ export default function PosPage() {
               <input
                 inputMode="decimal"
                 value={taxForm.takeoutTaxRate}
-                onChange={(event) => setTaxForm((current) => ({ ...current, takeoutTaxRate: event.target.value.replace(/[^\d.]/g, "") }))}
+                onChange={(event) => setTaxForm((current) => ({ ...current, takeoutTaxRate: normalizeDecimalInput(event.target.value) }))}
                 disabled={!canManagePosSettings}
               />
             </label>
@@ -517,7 +518,7 @@ export default function PosPage() {
                       value={setting.posWeightUnitPrice == null ? "" : String(setting.posWeightUnitPrice)}
                       onChange={(event) => setTaxForm((current) => ({
                         ...current,
-                        posBrandSettings: current.posBrandSettings.map((item, itemIndex) => itemIndex === index ? { ...item, posWeightUnitPrice: Number(event.target.value.replace(/[^\d.]/g, "")) || null } : item)
+                        posBrandSettings: current.posBrandSettings.map((item, itemIndex) => itemIndex === index ? { ...item, posWeightUnitPrice: Number(normalizeDecimalInput(event.target.value)) || null } : item)
                       }))}
                       placeholder="4"
                       disabled={!canManagePosSettings || setting.posPricingMode !== "weight"}
@@ -572,7 +573,7 @@ export default function PosPage() {
                   value={String(taxForm.customerDisplayMediaSettings.slideDurationSeconds)}
                   onChange={(event) => setTaxForm((current) => ({
                     ...current,
-                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, slideDurationSeconds: Number(event.target.value.replace(/[^\d]/g, "")) || 8 }
+                    customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, slideDurationSeconds: Number(normalizeIntegerInput(event.target.value)) || 8 }
                   }))}
                   disabled={!canManagePosSettings}
                 />
@@ -677,7 +678,7 @@ export default function PosPage() {
                           ...current,
                           customerDisplayMediaSettings: {
                             ...current.customerDisplayMediaSettings,
-                            assets: current.customerDisplayMediaSettings.assets.map((item, itemIndex) => itemIndex === index ? { ...item, durationSeconds: Number(event.target.value.replace(/[^\d]/g, "")) || 8 } : item)
+                            assets: current.customerDisplayMediaSettings.assets.map((item, itemIndex) => itemIndex === index ? { ...item, durationSeconds: Number(normalizeIntegerInput(event.target.value)) || 8 } : item)
                           }
                         }))}
                         disabled={!canManagePosSettings}
@@ -767,7 +768,7 @@ export default function PosPage() {
                       value={String(preset.discountValue)}
                       onChange={(event) => setTaxForm((current) => ({
                         ...current,
-                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, discountValue: Number(event.target.value.replace(/[^\d]/g, "")) || 0 } : item)
+                        discountPresets: current.discountPresets.map((item, itemIndex) => itemIndex === index ? { ...item, discountValue: Number(normalizeIntegerInput(event.target.value)) || 0 } : item)
                       }))}
                       disabled={!canManagePosSettings}
                     />

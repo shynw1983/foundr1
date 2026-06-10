@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { suppliers as initialSuppliers } from "../../../lib/mock-data";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -306,7 +307,7 @@ export default function FieldNotesPage() {
               </label>
               <label>
                 <span>見かけた価格</span>
-                <input name="observedPrice" inputMode="decimal" placeholder="例: 298" />
+                <input name="observedPrice" inputMode="decimal" onInput={(event) => { event.currentTarget.value = normalizeDecimalInput(event.currentTarget.value); }} placeholder="例: 298" />
               </label>
               <div className="modern-file-field">
                 <span>写真</span>

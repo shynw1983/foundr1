@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { products as initialProducts } from "../../../lib/mock-data";
+import { normalizeDecimalInput } from "../../../lib/number-input";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -464,11 +465,11 @@ export default function ProductComparisonsPage() {
               <div className="comparison-inline-fields">
                 <label>
                   <span>現行価格</span>
-                  <input value={basePrice} inputMode="decimal" onChange={(event) => setBasePrice(event.target.value)} placeholder="例: 350" />
+                  <input value={basePrice} inputMode="decimal" onChange={(event) => setBasePrice(normalizeDecimalInput(event.target.value))} placeholder="例: 350" />
                 </label>
                 <label>
                   <span>現行規格数量</span>
-                  <input value={baseQuantity} inputMode="decimal" onChange={(event) => setBaseQuantity(event.target.value)} placeholder="例: 500" />
+                  <input value={baseQuantity} inputMode="decimal" onChange={(event) => setBaseQuantity(normalizeDecimalInput(event.target.value))} placeholder="例: 500" />
                 </label>
                 <label>
                   <span>単位</span>
@@ -493,7 +494,7 @@ export default function ProductComparisonsPage() {
               <div className="comparison-inline-fields">
                 <label>
                   <span>{isImported ? "候補金額" : "候補価格"}</span>
-                  <input value={candidatePrice} inputMode="decimal" onChange={(event) => setCandidatePrice(event.target.value)} placeholder="例: 298" />
+                  <input value={candidatePrice} inputMode="decimal" onChange={(event) => setCandidatePrice(normalizeDecimalInput(event.target.value))} placeholder="例: 298" />
                 </label>
                 {isImported ? (
                   <label>
@@ -509,12 +510,12 @@ export default function ProductComparisonsPage() {
                 {isImported ? (
                   <label>
                     <span>為替レート</span>
-                    <input value={exchangeRate} inputMode="decimal" onChange={(event) => setExchangeRate(event.target.value)} placeholder="例: 21.5" />
+                    <input value={exchangeRate} inputMode="decimal" onChange={(event) => setExchangeRate(normalizeDecimalInput(event.target.value))} placeholder="例: 21.5" />
                   </label>
                 ) : null}
                 <label>
                   <span>候補規格数量</span>
-                  <input value={candidateQuantity} inputMode="decimal" onChange={(event) => setCandidateQuantity(event.target.value)} placeholder="例: 500" />
+                  <input value={candidateQuantity} inputMode="decimal" onChange={(event) => setCandidateQuantity(normalizeDecimalInput(event.target.value))} placeholder="例: 500" />
                 </label>
                 <label>
                   <span>単位</span>
@@ -538,18 +539,18 @@ export default function ProductComparisonsPage() {
                   <input
                     value={candidateWeightKg}
                     inputMode="decimal"
-                    onChange={(event) => setCandidateWeightKg(event.target.value)}
+                    onChange={(event) => setCandidateWeightKg(normalizeDecimalInput(event.target.value))}
                     placeholder={requiresCandidateWeight ? "例: 8" : "g/kgは自動計算"}
                     required={requiresCandidateWeight}
                   />
                 </label>
                 <label>
                   <span>輸入単位数</span>
-                  <input value={importQuantity} inputMode="decimal" onChange={(event) => setImportQuantity(event.target.value)} placeholder="例: 20" />
+                  <input value={importQuantity} inputMode="decimal" onChange={(event) => setImportQuantity(normalizeDecimalInput(event.target.value))} placeholder="例: 20" />
                 </label>
                 <label>
                   <span>{isImported && candidateCurrency !== "JPY" ? "1kg運賃（選択通貨）" : "1kg運賃"}</span>
-                  <input value={freightRatePerKg} inputMode="decimal" onChange={(event) => setFreightRatePerKg(event.target.value)} placeholder="例: 120" />
+                  <input value={freightRatePerKg} inputMode="decimal" onChange={(event) => setFreightRatePerKg(normalizeDecimalInput(event.target.value))} placeholder="例: 120" />
                 </label>
               </div>
               <div className="comparison-inline-fields">
@@ -569,11 +570,11 @@ export default function ProductComparisonsPage() {
                 ) : null}
                 <label>
                   <span>税金（円）</span>
-                  <input value={taxCost} inputMode="decimal" onChange={(event) => setTaxCost(event.target.value)} placeholder="0" />
+                  <input value={taxCost} inputMode="decimal" onChange={(event) => setTaxCost(normalizeDecimalInput(event.target.value))} placeholder="0" />
                 </label>
                 <label>
                   <span>その他費用（円）</span>
-                  <input value={otherCost} inputMode="decimal" onChange={(event) => setOtherCost(event.target.value)} placeholder="0" />
+                  <input value={otherCost} inputMode="decimal" onChange={(event) => setOtherCost(normalizeDecimalInput(event.target.value))} placeholder="0" />
                 </label>
               </div>
               <div className="comparison-preview">
@@ -744,7 +745,7 @@ function ComparisonCard({
 }
 
 function normalizeNumber(value: string) {
-  const numberValue = Number(String(value).replace(/[¥￥,\s]/g, ""));
+  const numberValue = Number(normalizeDecimalInput(String(value)));
   return Number.isFinite(numberValue) ? numberValue : 0;
 }
 
@@ -783,7 +784,7 @@ function formatNumber(value: number) {
 }
 
 function inferSpecQuantity(value: string) {
-  const normalized = value.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  const normalized = value.normalize("NFKC");
   const matches = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g|ml|L|個|袋|本|枚|箱)/gi)]
     .map((match) => ({ quantity: Number(match[1]), unit: match[2] }))
     .filter((match) => Number.isFinite(match.quantity) && match.quantity > 0);
