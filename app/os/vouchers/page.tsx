@@ -88,6 +88,16 @@ type ProductReferencePriceDialog = {
   receiptUnitPrice: number;
 };
 
+type ProductCreateDialog = {
+  voucher: VoucherRecord;
+  line: VoucherAccountingLine;
+  productName: string;
+  category: string;
+  subcategory: string;
+  unit: string;
+  referencePrice: number;
+};
+
 type VoucherAccountingDraft = {
   note: string;
   vendorName: string;
@@ -225,6 +235,7 @@ export default function VouchersPage() {
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
   const [previewVoucher, setPreviewVoucher] = useState<VoucherRecord | null>(null);
   const [referencePriceDialog, setReferencePriceDialog] = useState<ProductReferencePriceDialog | null>(null);
+  const [createProductDialog, setCreateProductDialog] = useState<ProductCreateDialog | null>(null);
   const [pendingActions, setPendingActions] = useState<Record<string, VoucherPendingAction>>({});
 
   useEffect(() => {
@@ -472,14 +483,45 @@ export default function VouchersPage() {
       window.alert("商品名が空の明細は新規追加できません。");
       return;
     }
-    await updateAccountingLineProduct(voucher, line, {
-      action: "create_product_from_item",
-      productName: line.note,
+    const receiptUnitPrice = calculateTaxIncludedUnitPrice(line) || Number(line.unitPrice || 0);
+    setCreateProductDialog({
+      voucher,
+      line,
+      productName: line.note.trim(),
       category: line.subAccountTitle || "食材",
       subcategory: "未分類",
       unit: line.unit || "個",
-      referencePrice: calculateTaxIncludedUnitPrice(line) || line.unitPrice || 0,
-      receiptUnitPrice: calculateTaxIncludedUnitPrice(line) || line.unitPrice || 0,
+      referencePrice: Number.isFinite(receiptUnitPrice) && receiptUnitPrice > 0 ? receiptUnitPrice : 0
+    });
+  }
+
+  async function confirmCreateProductFromAccountingLine(draft: ProductCreateDialog) {
+    if (!draft.productName.trim()) {
+      window.alert("商品名を入力してください。");
+      return;
+    }
+    if (!draft.category.trim()) {
+      window.alert("大分類を入力してください。");
+      return;
+    }
+    if (!draft.subcategory.trim()) {
+      window.alert("小分類を入力してください。");
+      return;
+    }
+    if (!draft.unit.trim()) {
+      window.alert("単位を入力してください。");
+      return;
+    }
+    setCreateProductDialog(null);
+    const { voucher, line } = draft;
+    await updateAccountingLineProduct(voucher, line, {
+      action: "create_product_from_item",
+      productName: draft.productName.trim(),
+      category: draft.category.trim(),
+      subcategory: draft.subcategory.trim(),
+      unit: draft.unit.trim(),
+      referencePrice: draft.referencePrice,
+      receiptUnitPrice: draft.referencePrice,
       amount: line.amount,
       taxRate: line.taxRate,
       taxMode: line.taxMode,
@@ -857,6 +899,15 @@ export default function VouchersPage() {
           onConfirm={(updateReferencePrice) => void confirmAccountingLineProductBinding(updateReferencePrice)}
         />
       ) : null}
+      {createProductDialog ? (
+        <ProductCreateDialogView
+          dialog={createProductDialog}
+          productOptions={productOptions}
+          isPending={Boolean(pendingProductLineIds[createProductDialog.line.id])}
+          onCancel={() => setCreateProductDialog(null)}
+          onConfirm={(next) => void confirmCreateProductFromAccountingLine(next)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -949,6 +1000,97 @@ function ProductReferencePriceDialogView({
           </button>
           <button className="primary-button" type="button" onClick={() => onConfirm(true)} disabled={isPending}>
             紐付けて参考価格を更新
+          </button>
+          <button className="text-button" type="button" onClick={onCancel} disabled={isPending}>
+            キャンセル
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProductCreateDialogView({
+  dialog,
+  productOptions,
+  isPending,
+  onCancel,
+  onConfirm
+}: {
+  dialog: ProductCreateDialog;
+  productOptions: ProductOption[];
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: (next: ProductCreateDialog) => void;
+}) {
+  const [draft, setDraft] = useState<ProductCreateDialog>(dialog);
+  const categoryOptions = getProductCategoryOptions(productOptions);
+  const subcategoryOptions = getProductSubcategoryOptions(productOptions, draft.category);
+  const categoryListId = `voucher-product-category-${dialog.line.id}`;
+  const subcategoryListId = `voucher-product-subcategory-${dialog.line.id}`;
+
+  useEffect(() => {
+    setDraft(dialog);
+  }, [dialog]);
+
+  return (
+    <div className="voucher-reference-price-backdrop" role="presentation">
+      <section className="voucher-reference-price-dialog voucher-product-create-dialog" role="dialog" aria-modal="true" aria-labelledby="voucher-product-create-title">
+        <div className="voucher-reference-price-head">
+          <div>
+            <span>商品マスタ新規追加</span>
+            <h3 id="voucher-product-create-title">商品情報を確認してください</h3>
+          </div>
+          <button type="button" onClick={onCancel} aria-label="閉じる" disabled={isPending}>
+            <X size={18} />
+          </button>
+        </div>
+        <p>レシート明細から商品を作成します。商品主表に残す基本情報を確認してから追加してください。</p>
+        <div className="voucher-product-create-form">
+          <label>
+            <span>商品名</span>
+            <input value={draft.productName} onChange={(event) => setDraft((current) => ({ ...current, productName: event.target.value }))} disabled={isPending} />
+          </label>
+          <label>
+            <span>大分類</span>
+            <input list={categoryListId} value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value, subcategory: "" }))} disabled={isPending} />
+            <datalist id={categoryListId}>
+              {categoryOptions.map((category) => <option value={category} key={category} />)}
+            </datalist>
+          </label>
+          <label>
+            <span>小分類</span>
+            <input list={subcategoryListId} value={draft.subcategory} onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))} disabled={isPending} />
+            <datalist id={subcategoryListId}>
+              {subcategoryOptions.map((subcategory) => <option value={subcategory} key={subcategory} />)}
+            </datalist>
+          </label>
+          <label>
+            <span>単位</span>
+            <input value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} disabled={isPending} />
+          </label>
+          <label>
+            <span>参考価格（税込）</span>
+            <input type="number" min="0" step="0.01" value={draft.referencePrice} onChange={(event) => setDraft((current) => ({ ...current, referencePrice: Number(event.target.value) }))} disabled={isPending} />
+          </label>
+        </div>
+        <div className="voucher-reference-price-grid">
+          <div>
+            <span>レシート金額</span>
+            <strong>{formatMoney(Number(dialog.line.amount || 0))}</strong>
+          </div>
+          <div>
+            <span>数量</span>
+            <strong>{dialog.line.quantity || "-"} {dialog.line.unit}</strong>
+          </div>
+          <div>
+            <span>今回の税込単価</span>
+            <strong>{formatMoney(calculateTaxIncludedUnitPrice(dialog.line))}</strong>
+          </div>
+        </div>
+        <div className="voucher-reference-price-actions">
+          <button className="primary-button" type="button" onClick={() => onConfirm(draft)} disabled={isPending}>
+            商品を追加して紐付け
           </button>
           <button className="text-button" type="button" onClick={onCancel} disabled={isPending}>
             キャンセル
