@@ -571,8 +571,6 @@ export default function VouchersPage() {
           lines: draft.lines.map((line) => {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
-            const isOnlyConfirmingLine = Object.keys(next).every((key) => key === "confirmed");
-            if (!isOnlyConfirmingLine) updated.confirmed = false;
             updated.taxMode = draft.taxMode;
             if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next)) {
               const amount = Math.round(Number(updated.amount || 0));
@@ -738,25 +736,38 @@ export default function VouchersPage() {
       }
       setMessage(successMessage);
       await loadVouchers();
-      if (options.preserveDraft) {
-        setAccountingDrafts((current) => {
-          const draft = current[voucher.id];
-          if (!draft) return current;
-          return {
-            ...current,
-            [voucher.id]: {
-              ...draft,
-              lines: draft.lines.map((draftLine) => draftLine.id === line.id ? { ...draftLine, ...options.linePatch } : draftLine)
-            }
-          };
-        });
-      } else {
-        setAccountingDrafts((current) => {
+      setAccountingDrafts((current) => {
+        const draft = current[voucher.id];
+        if (!draft) {
           const next = { ...current };
           delete next[voucher.id];
           return next;
-        });
-      }
+        }
+        const linkedProduct = typeof payload.productId === "string"
+          ? productOptions.find((product) => product.id === payload.productId)
+          : null;
+        const inferredLinePatch: Partial<VoucherAccountingLine> = options.linePatch ?? (
+          payload.action === "link_product_to_item" && linkedProduct
+            ? {
+              matchedProductId: linkedProduct.id,
+              matchedProductName: linkedProduct.name,
+              matchStatus: "matched"
+            }
+            : payload.action === "create_product_from_item"
+              ? {
+                matchedProductName: String(payload.productName ?? ""),
+                matchStatus: "matched"
+              }
+              : {}
+        );
+        return {
+          ...current,
+          [voucher.id]: {
+            ...draft,
+            lines: draft.lines.map((draftLine) => draftLine.id === line.id ? { ...draftLine, ...inferredLinePatch } : draftLine)
+          }
+        };
+      });
     } catch {
       setMessage("商品マスタ紐付けを更新できませんでした。通信状態を確認してください。");
     } finally {
