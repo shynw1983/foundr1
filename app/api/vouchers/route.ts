@@ -843,6 +843,14 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       case when count(distinct nullif(unit, '')) <= 1 then max(unit) else '' end as unit,
       case when count(distinct nullif(unit, '')) <= 1 and coalesce(sum(quantity), 0) > 0 then sum(amount) / sum(quantity) else null end as "unitPrice",
       case when count(*) = 1 then max(note) else concat('集計 ', count(*)::text, '行') end as note,
+      jsonb_agg(jsonb_build_object(
+        'note', note,
+        'amount', amount,
+        'taxAmount', "taxAmount",
+        'taxMode', "taxMode",
+        'quantity', quantity,
+        'lineNo', "lineNo"
+      ) order by "lineNo" asc) as "summaryItems",
       min("createdAt") as "createdAt"
     from expanded_lines
     group by
@@ -903,7 +911,9 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       ? String(Math.round((taxIncludedAmount / quantityNumber) * 100) / 100)
       : "";
     const summaryKey = buildAccountingSummaryKey(row);
-    const summaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey) ?? String(row.note ?? "");
+    const summaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey)
+      ?? buildAutomaticAccountingSummaryNote(parseAccountingSummaryItems(row.summaryItems))
+      ?? String(row.note ?? "");
     return [
       String(row.purchaseDate ?? ""),
       String(row.purchaseTime ?? ""),
@@ -1107,6 +1117,12 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       createdAt: String(row.createdAt ?? ""),
       details: [detail]
     });
+  }
+
+  for (const group of groups.values()) {
+    if (!group.manualSummaryNote) {
+      group.note = buildAutomaticAccountingSummaryNote(group.details) ?? group.note;
+    }
   }
 
   return Response.json({
@@ -1629,6 +1645,60 @@ function adjustRowsToReceiptTotals<T extends { voucherId?: unknown; receiptTotal
   }
 
   return adjustedRows;
+}
+
+type AccountingSummaryItem = {
+  note?: unknown;
+  amount?: unknown;
+  taxAmount?: unknown;
+  taxMode?: unknown;
+  quantity?: unknown;
+  lineNo?: unknown;
+};
+
+function parseAccountingSummaryItems(value: unknown): AccountingSummaryItem[] {
+  if (Array.isArray(value)) return value as AccountingSummaryItem[];
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as AccountingSummaryItem[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildAutomaticAccountingSummaryNote(items: AccountingSummaryItem[]) {
+  const rankedItems = items
+    .map((item) => ({
+      name: normalizeAccountingSummaryItemName(item.note),
+      taxIncludedAmount: calculateAccountingTaxIncludedAmount(item.amount, item.taxAmount, item.taxMode),
+      quantity: Number(item.quantity ?? 0),
+      lineNo: Number(item.lineNo ?? 0)
+    }))
+    .filter((item) => item.name)
+    .sort((a, b) => {
+      if (b.taxIncludedAmount !== a.taxIncludedAmount) return b.taxIncludedAmount - a.taxIncludedAmount;
+      if (Number.isFinite(b.quantity) && Number.isFinite(a.quantity) && b.quantity !== a.quantity) return b.quantity - a.quantity;
+      return a.lineNo - b.lineNo;
+    });
+
+  const names: string[] = [];
+  for (const item of rankedItems) {
+    if (names.includes(item.name)) continue;
+    names.push(item.name);
+    if (names.length >= 5) break;
+  }
+  if (!names.length) return null;
+  return `${names.join("、")}${names.length > 1 ? "等" : ""}`;
+}
+
+function normalizeAccountingSummaryItemName(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/^\s*(?:提案[:：]\s*)?/, "")
+    .replace(/\s+/g, " ")
+    .replace(/^集計\s*\d+\s*行$/, "")
+    .trim();
 }
 
 function normalizeDate(value: unknown) {
