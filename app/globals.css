@@ -17936,6 +17936,75 @@ body :where(
   min-height: 40px;
 }
 
+.voucher-confirmed-lines {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.voucher-confirmed-lines-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.voucher-confirmed-lines-head strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.voucher-confirmed-lines-head span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.voucher-confirmed-line-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.voucher-confirmed-line-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(180px, 1fr) minmax(130px, auto) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.voucher-confirmed-line-row div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.voucher-confirmed-line-row strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.voucher-confirmed-line-row span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.voucher-confirmed-line-row .text-button {
+  justify-content: center;
+  min-height: 34px;
+}
+
 .voucher-list {
   display: grid;
   gap: 12px;
@@ -18416,6 +18485,10 @@ body :where(
 
   .voucher-export-controls button {
     grid-column: 1 / -1;
+  }
+
+  .voucher-confirmed-line-row {
+    grid-template-columns: 1fr;
   }
 
   .voucher-row {

@@ -137,6 +137,28 @@ type VoucherAccountingSummaryLine = {
   note: string;
 };
 
+type ConfirmedAccountingLine = {
+  voucherId: string;
+  lineNo: number;
+  purchaseDate: string;
+  purchaseTime: string;
+  storeName: string;
+  vendorName: string;
+  usageType: string;
+  paymentType: string;
+  reimbursementStatus: string;
+  accountTitle: string;
+  subAccountTitle: string;
+  amount: number;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: number;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  note: string;
+};
+
 type VoucherAccountingValidation = {
   ok: boolean;
   taxIncomplete: boolean;
@@ -224,6 +246,8 @@ export default function VouchersPage() {
   const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
   const [exportStartDate, setExportStartDate] = useState(getCurrentMonthStartDate());
   const [exportEndDate, setExportEndDate] = useState(getCurrentDate());
+  const [confirmedAccountingLines, setConfirmedAccountingLines] = useState<ConfirmedAccountingLine[]>([]);
+  const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
   const [lineProductSubcategorySelections, setLineProductSubcategorySelections] = useState<Record<string, string>>({});
@@ -243,6 +267,10 @@ export default function VouchersPage() {
   useEffect(() => {
     void loadVouchers();
   }, []);
+
+  useEffect(() => {
+    void loadConfirmedAccountingLines();
+  }, [exportStartDate, exportEndDate]);
 
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
 
@@ -271,6 +299,26 @@ export default function VouchersPage() {
       setMessage("証憑一覧を再読み込みできませんでした。時間をおいて更新してください。");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadConfirmedAccountingLines() {
+    setIsLoadingConfirmedLines(true);
+    try {
+      const params = new URLSearchParams({ view: "confirmed_accounting_lines" });
+      if (exportStartDate) params.set("from", exportStartDate);
+      if (exportEndDate) params.set("to", exportEndDate);
+      const response = await fetch(`/api/vouchers?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as { lines?: ConfirmedAccountingLine[]; error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "確定済み明細を読み込めませんでした。");
+        return;
+      }
+      setConfirmedAccountingLines(body.lines ?? []);
+    } catch {
+      setMessage("確定済み明細を読み込めませんでした。通信状態を確認してください。");
+    } finally {
+      setIsLoadingConfirmedLines(false);
     }
   }
 
@@ -772,6 +820,36 @@ export default function VouchersPage() {
               <FileText size={16} />
               CSVをダウンロード
             </button>
+          </div>
+          <div className="voucher-confirmed-lines">
+            <div className="voucher-confirmed-lines-head">
+              <strong>確定済み明細</strong>
+              <span>{isLoadingConfirmedLines ? "読み込み中..." : `${confirmedAccountingLines.length}行`}</span>
+            </div>
+            {!isLoadingConfirmedLines && !confirmedAccountingLines.length ? (
+              <p className="empty-state">選択期間の確定済み明細はありません。</p>
+            ) : null}
+            {confirmedAccountingLines.length ? (
+              <div className="voucher-confirmed-line-list">
+                {confirmedAccountingLines.map((line) => (
+                  <div className="voucher-confirmed-line-row" key={`${line.voucherId}-${line.lineNo}`}>
+                    <div>
+                      <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
+                      <span>{line.storeName} / {line.vendorName}</span>
+                    </div>
+                    <div>
+                      <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
+                      <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
+                    </div>
+                    <div>
+                      <strong>{formatMoney(line.amount)}</strong>
+                      <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}` : line.note || "-"}</span>
+                    </div>
+                    <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </section>
 
