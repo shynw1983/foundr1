@@ -182,6 +182,14 @@ export async function PATCH(request: Request) {
     receiptTaxTotal?: string | number;
     note?: string;
     ocrItemId?: string;
+    rawName?: string;
+    accountTitle?: string;
+    subAccountTitle?: string;
+    amount?: string | number;
+    taxRate?: string;
+    taxMode?: string;
+    taxAmount?: string | number;
+    quantity?: string | number;
     productId?: string;
     productName?: string;
     category?: string;
@@ -233,8 +241,13 @@ export async function PATCH(request: Request) {
     if (nextUsageType !== "shiire") {
       return Response.json({ error: "商品マスタ対象外の設定は仕入の証憑で行ってください。" }, { status: 400 });
     }
-    const itemId = String(body.ocrItemId ?? "").trim();
-    if (!itemId) return Response.json({ error: "明細IDがありません。" }, { status: 400 });
+    let itemId = String(body.ocrItemId ?? "").trim();
+    let createdItemId = "";
+    if (!itemId) {
+      const item = await createManualVoucherOcrItem(id, body);
+      itemId = String(item.id ?? "");
+      createdItemId = itemId;
+    }
 
     const itemRows = await sql`
       select id::text
@@ -246,7 +259,7 @@ export async function PATCH(request: Request) {
     if (!itemRows[0]) return Response.json({ error: "明細が見つかりません。" }, { status: 404 });
 
     await setVoucherItemProductIgnored(id, itemId, body.action === "ignore_product_item");
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, itemId: createdItemId || itemId });
   }
 
   if (body.action === "link_product_to_item" || body.action === "create_product_from_item") {
@@ -254,25 +267,9 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "商品マスタ紐付けは仕入の証憑で行ってください。" }, { status: 400 });
     }
     const itemId = String(body.ocrItemId ?? "").trim();
-    if (!itemId) return Response.json({ error: "明細IDがありません。" }, { status: 400 });
-
-    const itemRows = await sql`
-      select
-        receipt_ocr_items.id::text,
-        receipt_ocr_items.raw_name as "rawName",
-        receipt_ocr_items.normalized_name as "normalizedName",
-        receipt_ocr_items.category,
-        receipt_ocr_items.unit,
-        receipt_ocr_items.unit_price::float as "unitPrice",
-        receipt_ocr_results.vendor_name as "vendorName",
-        receipt_ocr_results.supplier_name as "supplierName"
-      from receipt_ocr_items
-      join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
-      where receipt_ocr_items.id::text = ${itemId}
-        and receipt_ocr_items.receipt_ocr_result_id::text = ${id}
-      limit 1
-    `;
-    const item = itemRows[0];
+    const item = itemId
+      ? await getVoucherOcrItemForProductLink(id, itemId)
+      : await createManualVoucherOcrItem(id, body);
     if (!item) return Response.json({ error: "明細が見つかりません。" }, { status: 404 });
 
     const productId = body.action === "create_product_from_item"
@@ -299,7 +296,7 @@ export async function PATCH(request: Request) {
         `;
       }
     }
-    return Response.json({ ok: true, productId });
+    return Response.json({ ok: true, productId, itemId: String(item.id ?? "") });
   }
 
   if (body.action === "update_confirmed_voucher_basic") {
@@ -1264,6 +1261,89 @@ async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnTyp
         and receipt_ocr_result_id::text = ${ocrResultId}
     `;
   }
+}
+
+async function getVoucherOcrItemForProductLink(ocrResultId: string, itemId: string) {
+  const itemRows = await sql`
+    select
+      receipt_ocr_items.id::text,
+      receipt_ocr_items.raw_name as "rawName",
+      receipt_ocr_items.normalized_name as "normalizedName",
+      receipt_ocr_items.category,
+      receipt_ocr_items.unit,
+      receipt_ocr_items.unit_price::float as "unitPrice",
+      receipt_ocr_results.vendor_name as "vendorName",
+      receipt_ocr_results.supplier_name as "supplierName"
+    from receipt_ocr_items
+    join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    where receipt_ocr_items.id::text = ${itemId}
+      and receipt_ocr_items.receipt_ocr_result_id::text = ${ocrResultId}
+    limit 1
+  `;
+  return itemRows[0] ?? null;
+}
+
+async function createManualVoucherOcrItem(ocrResultId: string, body: Record<string, unknown>) {
+  const rawName = String(body.rawName ?? body.productName ?? body.name ?? body.note ?? "").trim();
+  const normalizedName = normalizeReceiptProductName(rawName || "手動追加明細");
+  const category = String(body.category ?? body.subAccountTitle ?? "").trim();
+  const itemRows = await sql`
+    with inserted as (
+      insert into receipt_ocr_items (
+        receipt_ocr_result_id,
+        line_index,
+        raw_name,
+        normalized_name,
+        quantity,
+        unit,
+        unit_price,
+        tax_rate,
+        tax_mode,
+        category,
+        account_title,
+        amount,
+        match_status,
+        updated_at
+      )
+      values (
+        ${ocrResultId},
+        (select coalesce(max(line_index), -1) + 1 from receipt_ocr_items where receipt_ocr_result_id::text = ${ocrResultId}),
+        ${rawName || "手動追加明細"},
+        ${normalizedName},
+        ${normalizeNullableNumber(body.quantity)},
+        ${String(body.unit ?? "個").trim().slice(0, 20) || "個"},
+        ${normalizeNullableUnitPrice(body.unitPrice ?? body.receiptUnitPrice)},
+        ${body.taxRate ? normalizeTaxRate(body.taxRate) : ""},
+        ${body.taxMode ? normalizeTaxMode(body.taxMode) : ""},
+        ${category},
+        ${String(body.accountTitle ?? "").trim().slice(0, 80)},
+        ${normalizeNullableMoney(body.amount)},
+        'unmatched',
+        now()
+      )
+      returning
+        id,
+        receipt_ocr_result_id,
+        raw_name,
+        normalized_name,
+        category,
+        unit,
+        unit_price
+    )
+    select
+      inserted.id::text,
+      inserted.raw_name as "rawName",
+      inserted.normalized_name as "normalizedName",
+      inserted.category,
+      inserted.unit,
+      inserted.unit_price::float as "unitPrice",
+      receipt_ocr_results.vendor_name as "vendorName",
+      receipt_ocr_results.supplier_name as "supplierName"
+    from inserted
+    join receipt_ocr_results on receipt_ocr_results.id = inserted.receipt_ocr_result_id
+    limit 1
+  `;
+  return itemRows[0] ?? null;
 }
 
 async function updateReceiptOcrItemForProductLink(

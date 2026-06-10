@@ -903,7 +903,7 @@ export default function VouchersPage() {
     successMessage: string,
     options: { preserveDraft?: boolean; linePatch?: Partial<VoucherAccountingLine> } = {}
   ) {
-    if (!line.ocrItemId || pendingProductLineIds[line.id]) return;
+    if (pendingProductLineIds[line.id]) return;
     setPendingProductLineIds((current) => ({ ...current, [line.id]: true }));
     try {
       const response = await fetch("/api/vouchers", {
@@ -913,10 +913,20 @@ export default function VouchersPage() {
           id: voucher.id,
           usageType: voucher.usageType,
           ocrItemId: line.ocrItemId,
+          rawName: line.note,
+          accountTitle: line.accountTitle,
+          subAccountTitle: line.subAccountTitle,
+          amount: line.amount,
+          taxRate: line.taxRate,
+          taxMode: line.taxMode,
+          taxAmount: line.taxAmount,
+          quantity: line.quantity,
+          unit: line.unit || "個",
+          unitPrice: line.unitPrice,
           ...payload
         })
       });
-      const body = await response.json().catch(() => ({})) as { error?: string };
+      const body = await response.json().catch(() => ({})) as { error?: string; itemId?: string };
       if (!response.ok) {
         setMessage(body.error ?? "商品マスタ紐付けを更新できませんでした。");
         return;
@@ -951,7 +961,11 @@ export default function VouchersPage() {
           ...current,
           [voucher.id]: {
             ...draft,
-            lines: draft.lines.map((draftLine) => draftLine.id === line.id ? { ...draftLine, ...inferredLinePatch } : draftLine)
+            lines: draft.lines.map((draftLine) => draftLine.id === line.id ? {
+              ...draftLine,
+              ocrItemId: body.itemId || draftLine.ocrItemId,
+              ...inferredLinePatch
+            } : draftLine)
           }
         };
       });
@@ -2128,7 +2142,7 @@ function VoucherAccountingEditor({
                 <div className="voucher-product-binding">
                   <label>
                     <span>大分類</span>
-                    <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
+                    <select value={selectedCategory} onChange={(event) => onProductCategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored}>
                       <option value="">大分類を選択</option>
                       {productCategoryOptions.map((category) => (
                         <option value={category} key={category}>{category}</option>
@@ -2137,7 +2151,7 @@ function VoucherAccountingEditor({
                   </label>
                   <label>
                     <span>小分類</span>
-                    <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory}>
+                    <select value={selectedSubcategory} onChange={(event) => onProductSubcategoryChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !selectedCategory}>
                       <option value="">小分類を選択</option>
                       {productSubcategoryOptions.map((subcategory) => (
                         <option value={subcategory} key={subcategory}>{subcategory}</option>
@@ -2146,7 +2160,7 @@ function VoucherAccountingEditor({
                   </label>
                   <label>
                     <span>商品</span>
-                    <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedCategory || !selectedSubcategory}>
+                    <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !selectedCategory || !selectedSubcategory}>
                       <option value="">候補を選択</option>
                       {filteredProductOptions.map((product) => (
                         <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
@@ -2155,14 +2169,14 @@ function VoucherAccountingEditor({
                   </label>
                   <div className="voucher-product-binding-actions">
                     {isProductIgnored ? <small>商品マスタ対象外</small> : line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
-                    <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                    <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.note.trim()}>
                       {isProductIgnored ? "対象に戻す" : "商品マスタ対象外"}
                     </button>
-                    <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId || !selectedProductId}>
+                    <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.note.trim() || !selectedProductId}>
                       <Link2 size={15} />
                       紐付け
                     </button>
-                    <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.ocrItemId}>
+                    <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || isProductIgnored || !line.note.trim()}>
                       <CheckCircle size={15} />
                       新規追加
                     </button>
