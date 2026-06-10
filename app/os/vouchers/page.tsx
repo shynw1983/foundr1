@@ -373,6 +373,9 @@ export default function VouchersPage() {
               const amount = Math.round(Number(updated.amount || 0));
               updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, draft.taxMode));
             }
+            if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
+              updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity);
+            }
             return updated;
           })
         }
@@ -1060,7 +1063,7 @@ function VoucherAccountingEditor({
             </label>
             <label>
               <span>数量</span>
-              <input type="number" min="0" step="0.001" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
+              <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
             </label>
             <label>
               <span>単位</span>
@@ -1274,6 +1277,14 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
   return 0;
+}
+
+function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
+  const amount = Number(amountValue);
+  const quantity = Number(quantityValue);
+  if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return "";
+  const unitPrice = amount / quantity;
+  return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
 }
 
 function isPdfUploadFile(file: File) {
