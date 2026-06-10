@@ -1992,7 +1992,7 @@ function VoucherAccountingEditor({
       </label>
       <label>
         <span>レシート消費税</span>
-        <input type="number" min="0" step="1" value={String(calculateVoucherLinesTaxTotal(draft.lines))} onChange={(event) => onReceiptTaxTotalChange(event.target.value)} disabled={isSaving} />
+        <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(calculateVoucherLinesTaxTotal(draft.lines))} onChange={(event) => onReceiptTaxTotalChange(normalizeMoneyInputText(event.target.value))} disabled={isSaving} />
       </label>
       <label className="receipt-note-field">
         <span>備考</span>
@@ -2403,7 +2403,7 @@ function ConfirmedVoucherDetailEditor({
         </label>
         <label>
           <span>レシート消費税</span>
-          <input type="number" min="0" step="1" value={basicDraft.receiptTaxTotal} onChange={(event) => setBasicDraft((current) => ({ ...current, receiptTaxTotal: event.target.value }))} />
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={basicDraft.receiptTaxTotal} onChange={(event) => setBasicDraft((current) => ({ ...current, receiptTaxTotal: normalizeMoneyInputText(event.target.value) }))} />
         </label>
         <div className="voucher-confirmed-basic-actions">
           <button className="secondary-button" type="button" disabled={isSavingBasic} onClick={() => onSaveBasic(basicDraft)}>
@@ -2632,6 +2632,10 @@ function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return "";
   const unitPrice = amount / quantity;
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
+}
+
+function normalizeMoneyInputText(value: string) {
+  return value.replace(/[^\d]/g, "");
 }
 
 function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
