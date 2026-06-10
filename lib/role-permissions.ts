@@ -49,7 +49,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     category: "モジュール",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll"]
+    navPaths: ["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll"]
   },
   {
     key: "module.staff",
@@ -103,7 +103,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     category: "モジュール",
     defaultRoles: ["owner", "manager"],
     lockedRoles: ["owner"],
-    navPaths: ["/os/pos"]
+    navPaths: ["/os/pos", "/os/pos/reconciliation"]
   },
   {
     key: "module.settings",

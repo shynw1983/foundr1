@@ -16,6 +16,7 @@ import {
   Lightbulb,
   LineChart,
   MenuSquare,
+  MessageSquare,
   MessageSquareWarning,
   PackageCheck,
   ReceiptText,
@@ -44,16 +45,13 @@ const orderModulePaths = new Set([
   "/os/history",
   "/os/vouchers",
   "/os/suppliers",
-  "/os/field-notes",
-  "/os/feedback",
-  "/os/product-comparisons",
-  "/os/reports"
+  "/os/product-comparisons"
 ]);
 const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
-const storeOperationsModulePaths = new Set(["/os/procedures", "/os/menus", "/os/brand-sites", "/os/products"]);
-const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/stores"]);
-const posModulePaths = new Set(["/os/pos", "/os/loyalty", "/os/menus", "/os/products", "/os/stores"]);
-const sharedDataPaths = new Set(["/os/products", "/os/stores", "/os/staff", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
+const storeOperationsModulePaths = new Set(["/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
+const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
+const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff"]);
+const settingsModulePaths = new Set(["/os/products", "/os/stores", "/os/settings", "/os/system-usage"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
 const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
 const canonicalNavItems: OsNavItem[] = [
@@ -75,6 +73,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "発注先管理", href: "/os/suppliers", icon: Truck },
   { label: "タイムカード", href: "/os/timecard", icon: Clock3 },
   { label: "シフト", href: "/os/timecard/schedule", icon: CalendarDays },
+  { label: "シフト連絡", href: "/os/timecard/requests", icon: MessageSquare },
   { label: "負荷分析", href: "/os/timecard/workload", icon: ChartColumn },
   { label: "給与", href: "/os/timecard/payroll", icon: WalletCards },
   { label: "スタッフ管理", href: "/os/staff", icon: UserCog },
@@ -84,6 +83,7 @@ const canonicalNavItems: OsNavItem[] = [
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
+  { label: "日次レジ締め", href: "/os/pos/reconciliation", icon: WalletCards },
   { label: "会員・ポイント", href: "/os/loyalty", icon: BadgePercent },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
   systemUsageNavItem,
@@ -123,18 +123,51 @@ const navModules: OsNavModule[] = [
   },
   {
     id: "orders",
-    label: "発注・購入管理",
+    label: "発注・購入",
     icon: PackageCheck,
     paths: [
       { href: "/os/orders" },
       { href: "/os/procurement" },
       { href: "/os/history" },
       { href: "/os/vouchers" },
+      { href: "/os/suppliers" },
+      { href: "/os/product-comparisons" }
+    ]
+  },
+  {
+    id: "store-operations",
+    label: "店舗運営",
+    icon: ClipboardCheck,
+    paths: [
+      { href: "/os/procedures" },
       { href: "/os/field-notes" },
       { href: "/os/reports" },
-      { href: "/os/feedback" },
-      { href: "/os/suppliers" },
-      { href: "/os/product-comparisons", isShortcut: true }
+      { href: "/os/feedback" }
+    ]
+  },
+  {
+    id: "pos",
+    label: "売上・POS・会員",
+    icon: ShoppingCart,
+    paths: [
+      { href: "/os/pos" },
+      { href: "/os/pos/reconciliation" },
+      { href: "/os/menus" },
+      { href: "/os/brand-sites" },
+      { href: "/os/loyalty" }
+    ]
+  },
+  {
+    id: "timecard",
+    label: "勤怠・スタッフ",
+    icon: Clock3,
+    paths: [
+      { href: "/os/timecard" },
+      { href: "/os/timecard/schedule" },
+      { href: "/os/timecard/requests" },
+      { href: "/os/timecard/workload" },
+      { href: "/os/timecard/payroll" },
+      { href: "/os/staff" }
     ]
   },
   {
@@ -152,52 +185,12 @@ const navModules: OsNavModule[] = [
     ]
   },
   {
-    id: "store-operations",
-    label: "店舗運営",
-    icon: ClipboardCheck,
-    paths: [
-      { href: "/os/procedures" },
-      { href: "/os/menus", isShortcut: true },
-      { href: "/os/brand-sites", isShortcut: true },
-      { href: "/os/products", isShortcut: true }
-    ]
-  },
-  {
-    id: "timecard",
-    label: "タイムカード",
-    icon: Clock3,
-    paths: [
-      { href: "/os/timecard" },
-      { href: "/os/timecard/schedule" },
-      { href: "/os/timecard/workload" },
-      { href: "/os/timecard/payroll" },
-      { href: "/os/staff", isShortcut: true },
-      { href: "/os/stores", isShortcut: true }
-    ]
-  },
-  {
-    id: "pos",
-    label: "POS",
-    icon: ShoppingCart,
-    paths: [
-      { href: "/os/pos" },
-      { href: "/os/loyalty", isShortcut: true },
-      { href: "/os/menus", isShortcut: true },
-      { href: "/os/products", isShortcut: true },
-      { href: "/os/stores", isShortcut: true }
-    ]
-  },
-  {
     id: "shared-data",
-    label: "共有データ",
+    label: "マスタ・設定",
     icon: Boxes,
     paths: [
       { href: "/os/products" },
-      { href: "/os/menus" },
-      { href: "/os/brand-sites" },
-      { href: "/os/loyalty" },
       { href: "/os/stores" },
-      { href: "/os/staff" },
       { href: "/os/system-usage" },
       { href: "/os/settings" }
     ]
@@ -205,28 +198,34 @@ const navModules: OsNavModule[] = [
 ];
 
 function getModuleNavPaths(pathname: string) {
-  if (pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")) {
+  if (
+    pathname === "/os/procedures" || pathname.startsWith("/os/procedures/")
+    || pathname === "/os/field-notes"
+    || pathname === "/os/reports"
+    || pathname === "/os/feedback"
+  ) {
     return storeOperationsModulePaths;
   }
 
-  if (pathname === "/os/menus" || pathname.startsWith("/os/menus/") || pathname === "/os/brand-sites" || pathname.startsWith("/os/brand-sites/")) {
-    return sharedDataPaths;
+  if (
+    pathname === "/os/pos" || pathname.startsWith("/os/pos/")
+    || pathname === "/os/menus" || pathname.startsWith("/os/menus/")
+    || pathname === "/os/brand-sites" || pathname.startsWith("/os/brand-sites/")
+    || pathname === "/os/loyalty"
+  ) {
+    return posModulePaths;
   }
 
   if (pathname === "/os/analytics" || pathname.startsWith("/os/analytics/") || pathname === "/os/sales" || pathname.startsWith("/os/sales/")) {
     return analyticsModulePaths;
   }
 
-  if (pathname === "/os/timecard" || pathname.startsWith("/os/timecard/")) {
+  if (pathname === "/os/timecard" || pathname.startsWith("/os/timecard/") || pathname === "/os/staff") {
     return timecardModulePaths;
   }
 
-  if (pathname === "/os/pos" || pathname.startsWith("/os/pos/") || pathname === "/os/loyalty") {
-    return posModulePaths;
-  }
-
-  if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/staff" || pathname === "/os/system-usage" || pathname === "/os/settings") {
-    return new Set([...sharedDataPaths, "/os/system-usage", "/os/settings"]);
+  if (pathname === "/os/products" || pathname === "/os/stores" || pathname === "/os/system-usage" || pathname === "/os/settings") {
+    return settingsModulePaths;
   }
 
   return orderModulePaths;
