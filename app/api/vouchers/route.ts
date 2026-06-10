@@ -2,7 +2,7 @@ import { del, put } from "@vercel/blob";
 import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
-import { analyzeReceiptImage, createProductCandidatesForOcrResult, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
 
 type VoucherUsageType = "unclassified" | "shiire" | "keihi";
@@ -46,15 +46,17 @@ export async function GET() {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const [stores, vouchers] = await Promise.all([
+  const [stores, vouchers, products] = await Promise.all([
     listAccessibleStores(session),
-    listAccessibleVouchers(session)
+    listAccessibleVouchers(session),
+    listProductOptions()
   ]);
 
   return Response.json({
     canUpload: ["owner", "manager", "store_owner", "store_manager", "staff"].includes(session.role),
     canManageAll: ["owner", "manager"].includes(session.role),
     stores,
+    products,
     vouchers
   });
 }
@@ -155,6 +157,13 @@ export async function PATCH(request: Request) {
     transactionDate?: string;
     transactionTime?: string;
     note?: string;
+    ocrItemId?: string;
+    productId?: string;
+    productName?: string;
+    category?: string;
+    subcategory?: string;
+    unit?: string;
+    referencePrice?: string | number;
   };
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "証憑IDがありません。" }, { status: 400 });
@@ -192,6 +201,41 @@ export async function PATCH(request: Request) {
   const nextReimbursementStatus = nextPaymentType === "reimbursement"
     ? normalizeReimbursementStatus(String(body.reimbursementStatus ?? "pending"))
     : "none";
+
+  if (body.action === "link_product_to_item" || body.action === "create_product_from_item") {
+    if (nextUsageType !== "shiire") {
+      return Response.json({ error: "商品マスタ紐付けは仕入の証憑で行ってください。" }, { status: 400 });
+    }
+    const itemId = String(body.ocrItemId ?? "").trim();
+    if (!itemId) return Response.json({ error: "明細IDがありません。" }, { status: 400 });
+
+    const itemRows = await sql`
+      select
+        receipt_ocr_items.id::text,
+        receipt_ocr_items.raw_name as "rawName",
+        receipt_ocr_items.normalized_name as "normalizedName",
+        receipt_ocr_items.category,
+        receipt_ocr_items.unit,
+        receipt_ocr_items.unit_price::float as "unitPrice",
+        receipt_ocr_results.vendor_name as "vendorName",
+        receipt_ocr_results.supplier_name as "supplierName"
+      from receipt_ocr_items
+      join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+      where receipt_ocr_items.id::text = ${itemId}
+        and receipt_ocr_items.receipt_ocr_result_id::text = ${id}
+      limit 1
+    `;
+    const item = itemRows[0];
+    if (!item) return Response.json({ error: "明細が見つかりません。" }, { status: 404 });
+
+    const productId = body.action === "create_product_from_item"
+      ? await createProductFromVoucherItem(item, body, session.id)
+      : String(body.productId ?? "").trim();
+    if (!productId) return Response.json({ error: "紐付ける商品を選択してください。" }, { status: 400 });
+
+    await linkVoucherItemToProduct(item, productId, session.id);
+    return Response.json({ ok: true, productId });
+  }
 
   if (body.action === "confirm_accounting") {
     if (String(voucher.sourceType ?? "") !== "voucher") {
@@ -443,8 +487,12 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       unit_price::float as "unitPrice",
       coalesce(category, '') as category,
       coalesce(account_title, '') as "accountTitle",
-      amount::float
+      amount::float,
+      coalesce(match_status, '') as "matchStatus",
+      matched_product_id::text as "matchedProductId",
+      coalesce(products.name, '') as "matchedProductName"
     from receipt_ocr_items
+    left join products on products.id = receipt_ocr_items.matched_product_id
     where receipt_ocr_result_id::text = any(${ocrResultIds})
     order by receipt_ocr_result_id, line_index
   ` : [];
@@ -459,6 +507,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     category: string;
     accountTitle: string;
     amount: number;
+    matchStatus: string;
+    matchedProductId: string;
+    matchedProductName: string;
   }>>();
   for (const item of itemRows) {
     const ocrResultId = String(item.ocrResultId ?? "");
@@ -473,7 +524,10 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       unitPrice: item.unitPrice === null || item.unitPrice === undefined ? null : Number(item.unitPrice),
       category: String(item.category ?? ""),
       accountTitle: String(item.accountTitle ?? ""),
-      amount: Number(item.amount ?? 0)
+      amount: Number(item.amount ?? 0),
+      matchStatus: String(item.matchStatus ?? ""),
+      matchedProductId: String(item.matchedProductId ?? ""),
+      matchedProductName: String(item.matchedProductName ?? "")
     });
     itemsByResultId.set(ocrResultId, items);
   }
@@ -503,6 +557,21 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     createdLabel: String(row.createdLabel ?? ""),
     canDelete: String(row.sourceType ?? "") === "voucher",
     items: itemsByResultId.get(String(row.id ?? "")) ?? []
+  }));
+}
+
+async function listProductOptions() {
+  const rows = await sql`
+    select id::text, name, category, unit
+    from products
+    order by name asc
+    limit 800
+  `;
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    category: String(row.category ?? ""),
+    unit: String(row.unit ?? "")
   }));
 }
 
@@ -597,6 +666,85 @@ async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnTyp
         and receipt_ocr_result_id::text = ${ocrResultId}
     `;
   }
+}
+
+async function createProductFromVoucherItem(item: Record<string, unknown>, body: Record<string, unknown>, employeeId: string) {
+  const name = String(body.productName ?? body.name ?? item.rawName ?? "").trim();
+  if (!name) return "";
+  const category = String(body.category ?? item.category ?? "食材").trim() || "食材";
+  const subcategory = String(body.subcategory ?? "未分類").trim() || "未分類";
+  const unit = String(body.unit ?? item.unit ?? "個").trim() || "個";
+  const referencePrice = Number(body.referencePrice ?? item.unitPrice ?? 0);
+
+  const rows = await sql`
+    insert into products (
+      name,
+      category,
+      subcategory,
+      unit,
+      reference_price,
+      brand_scope,
+      usage_type,
+      japanese_note,
+      updated_at
+    )
+    values (
+      ${name},
+      ${category},
+      ${subcategory},
+      ${unit},
+      ${Number.isFinite(referencePrice) ? referencePrice : 0},
+      ${"unset"},
+      ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
+      ${`[情報未補完] レシート OCR から追加: ${String(item.rawName ?? "")}`},
+      now()
+    )
+    returning id::text
+  `;
+  return String(rows[0]?.id ?? "");
+}
+
+async function linkVoucherItemToProduct(item: Record<string, unknown>, productId: string, employeeId: string) {
+  const rawName = String(item.rawName ?? "").trim();
+  const normalizedName = String(item.normalizedName || normalizeReceiptProductName(rawName));
+  const supplierName = String(item.supplierName || item.vendorName || "").trim();
+  const itemId = String(item.id ?? "").trim();
+
+  await sql`
+    insert into product_match_dictionary (
+      supplier_name,
+      raw_name,
+      normalized_name,
+      product_id,
+      category,
+      unit,
+      created_by,
+      updated_at
+    )
+    values (
+      ${supplierName},
+      ${rawName},
+      ${normalizedName},
+      ${productId},
+      ${String(item.category ?? "")},
+      ${String(item.unit ?? "")},
+      ${employeeId},
+      now()
+    )
+    on conflict (supplier_name, normalized_name)
+    do update set
+      product_id = excluded.product_id,
+      category = excluded.category,
+      unit = excluded.unit,
+      updated_at = now()
+  `;
+
+  await sql`
+    update receipt_ocr_items
+    set matched_product_id = ${productId}, match_status = 'matched', updated_at = now()
+    where id::text = ${itemId}
+  `;
+  await recordReceiptItemPrice(itemId, productId, employeeId);
 }
 
 function normalizeStoredAccountingLines(value: unknown) {

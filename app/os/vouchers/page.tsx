@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  CheckCircle,
   ChevronDown,
   ClipboardList,
   FileText,
+  Link2,
   LogOut,
   PackageCheck,
   Plus,
@@ -65,6 +67,16 @@ type VoucherOcrItem = {
   category: string;
   accountTitle: string;
   amount: number;
+  matchStatus: string;
+  matchedProductId: string;
+  matchedProductName: string;
+};
+
+type ProductOption = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
 };
 
 type VoucherAccountingDraft = {
@@ -82,6 +94,8 @@ type VoucherAccountingDraft = {
 type VoucherAccountingLine = {
   id: string;
   ocrItemId: string;
+  matchedProductId: string;
+  matchedProductName: string;
   accountTitle: string;
   subAccountTitle: string;
   amount: string;
@@ -188,6 +202,9 @@ export default function VouchersPage() {
   const [usageType, setUsageType] = useState<VoucherUsageType>("unclassified");
   const [paymentType, setPaymentType] = useState<VoucherPaymentType>("company");
   const [vouchers, setVouchers] = useState<VoucherRecord[]>([]);
+  const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+  const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
+  const [pendingProductLineIds, setPendingProductLineIds] = useState<Record<string, boolean>>({});
   const [canUpload, setCanUpload] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -212,6 +229,7 @@ export default function VouchersPage() {
         error?: string;
         canUpload?: boolean;
         stores?: StoreOption[];
+        products?: ProductOption[];
         vouchers?: VoucherRecord[];
       };
       if (!response.ok) {
@@ -220,6 +238,7 @@ export default function VouchersPage() {
       }
       const nextStores = body.stores ?? [];
       setStores(nextStores);
+      setProductOptions(body.products ?? []);
       setCanUpload(Boolean(body.canUpload));
       setVouchers(body.vouchers ?? []);
       setSelectedStoreId((current) => current || nextStores[0]?.id || "");
@@ -395,6 +414,70 @@ export default function VouchersPage() {
         }
       };
     });
+  }
+
+  async function bindAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine) {
+    const productId = lineProductSelections[line.id] || line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "";
+    if (!productId) {
+      window.alert("紐付ける商品を選択してください。");
+      return;
+    }
+    await updateAccountingLineProduct(voucher, line, {
+      action: "link_product_to_item",
+      productId
+    }, "商品マスタに紐付けました。");
+  }
+
+  async function createProductFromAccountingLine(voucher: VoucherRecord, line: VoucherAccountingLine) {
+    if (!line.note.trim()) {
+      window.alert("商品名が空の明細は新規追加できません。");
+      return;
+    }
+    await updateAccountingLineProduct(voucher, line, {
+      action: "create_product_from_item",
+      productName: line.note,
+      category: line.subAccountTitle || "食材",
+      subcategory: "未分類",
+      unit: line.unit || "個",
+      referencePrice: line.unitPrice || 0
+    }, "商品マスタに追加して紐付けました。");
+  }
+
+  async function updateAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine, payload: Record<string, unknown>, successMessage: string) {
+    if (!line.ocrItemId || pendingProductLineIds[line.id]) return;
+    setPendingProductLineIds((current) => ({ ...current, [line.id]: true }));
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: voucher.id,
+          usageType: voucher.usageType,
+          ocrItemId: line.ocrItemId,
+          ...payload
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "商品マスタ紐付けを更新できませんでした。");
+        return;
+      }
+      setMessage(successMessage);
+      await loadVouchers();
+      setAccountingDrafts((current) => {
+        const next = { ...current };
+        delete next[voucher.id];
+        return next;
+      });
+    } catch {
+      setMessage("商品マスタ紐付けを更新できませんでした。通信状態を確認してください。");
+    } finally {
+      setPendingProductLineIds((current) => {
+        const next = { ...current };
+        delete next[line.id];
+        return next;
+      });
+    }
   }
 
   function removeAccountingLine(voucherId: string, lineId: string) {
@@ -689,6 +772,12 @@ export default function VouchersPage() {
                           onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
                           onAddLine={() => addAccountingLine(voucher.id)}
                           onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
+                          productOptions={productOptions}
+                          lineProductSelections={lineProductSelections}
+                          pendingProductLineIds={pendingProductLineIds}
+                          onProductSelectionChange={(lineId, productId) => setLineProductSelections((current) => ({ ...current, [lineId]: productId }))}
+                          onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
+                          onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
                           onConfirm={() => void confirmVoucherAccounting(voucher)}
                         />
                       ) : null}
@@ -974,6 +1063,12 @@ function VoucherAccountingEditor({
   onLineChange,
   onAddLine,
   onRemoveLine,
+  productOptions,
+  lineProductSelections,
+  pendingProductLineIds,
+  onProductSelectionChange,
+  onBindProduct,
+  onCreateProduct,
   onConfirm
 }: {
   voucher: VoucherRecord;
@@ -984,6 +1079,12 @@ function VoucherAccountingEditor({
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
   onAddLine: () => void;
   onRemoveLine: (lineId: string) => void;
+  productOptions: ProductOption[];
+  lineProductSelections: Record<string, string>;
+  pendingProductLineIds: Record<string, boolean>;
+  onProductSelectionChange: (lineId: string, productId: string) => void;
+  onBindProduct: (line: VoucherAccountingLine) => void;
+  onCreateProduct: (line: VoucherAccountingLine) => void;
   onConfirm: () => void;
 }) {
   const isShiire = voucher.usageType === "shiire";
@@ -1027,7 +1128,11 @@ function VoucherAccountingEditor({
             明細を追加
           </button>
         </div>
-        {draft.lines.map((line) => (
+        {draft.lines.map((line) => {
+          const suggestedProduct = getSuggestedProduct(line, productOptions);
+          const selectedProductId = lineProductSelections[line.id] ?? line.matchedProductId ?? suggestedProduct?.id ?? "";
+          const isProductPending = Boolean(pendingProductLineIds[line.id]);
+          return (
           <div className="receipt-expense-line" key={line.id}>
             <label>
               <span>勘定科目</span>
@@ -1061,6 +1166,10 @@ function VoucherAccountingEditor({
               <span>明細メモ</span>
               <input value={line.note} onChange={(event) => onLineChange(line.id, { note: event.target.value })} disabled={isSaving} />
             </label>
+            <button className="text-button danger-button receipt-line-delete-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
+              <Trash2 size={16} />
+              削除
+            </button>
             <label>
               <span>数量</span>
               <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
@@ -1073,12 +1182,33 @@ function VoucherAccountingEditor({
               <span>単価</span>
               <input type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => onLineChange(line.id, { unitPrice: event.target.value })} disabled={isSaving} />
             </label>
-            <button className="text-button danger-button" type="button" onClick={() => onRemoveLine(line.id)} disabled={isSaving || draft.lines.length <= 1}>
-              <Trash2 size={16} />
-              削除
-            </button>
+            {isShiire ? (
+              <div className="voucher-product-binding">
+                <div>
+                  <span>商品主表</span>
+                  <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                    <option value="">候補を選択</option>
+                    {productOptions.map((product) => (
+                      <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="voucher-product-binding-actions">
+                  {line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
+                  <button className="secondary-button" type="button" onClick={() => onBindProduct(line)} disabled={isSaving || isProductPending || !line.ocrItemId || !selectedProductId}>
+                    <Link2 size={15} />
+                    紐付け
+                  </button>
+                  <button className="primary-button" type="button" onClick={() => onCreateProduct(line)} disabled={isSaving || isProductPending || !line.ocrItemId}>
+                    <CheckCircle size={15} />
+                    新規追加
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ))}
+          );
+        })}
         <div className={`voucher-accounting-check ${validation.ok ? "is-ok" : "is-warning"}`}>
           <strong>{validation.ok ? "金額チェックOK" : "金額を確認してください"}</strong>
           <span>
@@ -1142,6 +1272,8 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     return [{
       id: `ocr-${index}-${item.id}`,
       ocrItemId: item.id,
+      matchedProductId: item.matchedProductId,
+      matchedProductName: item.matchedProductName,
       accountTitle,
       subAccountTitle,
       amount: String(amount || ""),
@@ -1160,6 +1292,8 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   return [{
     id: "manual-0",
     ocrItemId: "",
+    matchedProductId: "",
+    matchedProductName: "",
     accountTitle: isShiire ? "仕入高" : "雑費",
     subAccountTitle: "",
     amount: String(amount || ""),
@@ -1177,6 +1311,8 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
   return {
     id: `manual-${Date.now()}-${index}`,
     ocrItemId: "",
+    matchedProductId: "",
+    matchedProductName: "",
     accountTitle: "雑費",
     subAccountTitle: "",
     amount: "",
@@ -1219,10 +1355,11 @@ function inferReceiptTaxMode(lines: VoucherAccountingLine[]) {
 }
 
 function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLine[] }) {
+  const groupedLines = groupAccountingSummaryLines(lines);
   return (
     <div className="voucher-accounting-summary">
       <span>会計集計</span>
-      {lines.map((line, index) => (
+      {groupedLines.map((line, index) => (
         <div className="voucher-accounting-summary-row" key={`${line.accountTitle}-${line.subAccountTitle}-${line.taxRate}-${line.taxMode}-${index}`}>
           <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
           <small>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</small>
@@ -1231,6 +1368,46 @@ function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLi
       ))}
     </div>
   );
+}
+
+function groupAccountingSummaryLines(lines: VoucherAccountingSummaryLine[]) {
+  const grouped = new Map<string, VoucherAccountingSummaryLine>();
+  for (const line of lines) {
+    const key = [line.accountTitle, line.subAccountTitle, line.taxRate, line.taxMode].join("\u001f");
+    const current = grouped.get(key);
+    if (current) {
+      grouped.set(key, {
+        ...current,
+        amount: current.amount + line.amount,
+        taxAmount: current.taxAmount + line.taxAmount,
+        note: [current.note, line.note].filter(Boolean).join(" / ")
+      });
+    } else {
+      grouped.set(key, { ...line });
+    }
+  }
+  return Array.from(grouped.values());
+}
+
+function getSuggestedProduct(line: VoucherAccountingLine, productOptions: ProductOption[]) {
+  if (line.matchedProductId) return productOptions.find((product) => product.id === line.matchedProductId) ?? null;
+  const normalizedLineName = normalizeProductSearchText(line.note);
+  if (!normalizedLineName) return null;
+  return productOptions.find((product) => {
+    const normalizedProductName = normalizeProductSearchText(product.name);
+    return normalizedProductName === normalizedLineName
+      || normalizedLineName.includes(normalizedProductName)
+      || normalizedProductName.includes(normalizedLineName);
+  }) ?? null;
+}
+
+function normalizeProductSearchText(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[（）()[\]【】「」『』・,，.。]/g, "")
+    .trim();
 }
 
 function getCurrentDate() {

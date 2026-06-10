@@ -3856,6 +3856,55 @@ body :where(
   background: #ffffff;
 }
 
+.receipt-expense-line > label:nth-of-type(7) {
+  grid-column: 1 / span 1;
+}
+
+.voucher-product-binding {
+  grid-column: 4 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, auto);
+  align-items: end;
+  gap: 10px;
+}
+
+.voucher-product-binding span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.voucher-product-binding select {
+  width: 100%;
+  min-height: 42px;
+}
+
+.voucher-product-binding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.voucher-product-binding-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.voucher-product-binding-actions .primary-button,
+.voucher-product-binding-actions .secondary-button {
+  min-height: 34px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.receipt-line-delete-button {
+  align-self: end;
+}
+
 .receipt-line-note {
   min-width: 0;
 }
@@ -25685,6 +25734,18 @@ body :where(
 
   .receipt-expense-line {
     grid-template-columns: 1fr;
+  }
+
+  .receipt-expense-line > label:nth-of-type(7),
+  .voucher-product-binding {
+    grid-column: auto;
+  }
+
+  .voucher-product-binding,
+  .voucher-product-binding-actions {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .expense-edit-actions {
