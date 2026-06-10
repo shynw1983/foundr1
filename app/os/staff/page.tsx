@@ -132,6 +132,7 @@ type LifecycleCase = {
   caseType: "onboarding" | "offboarding";
   title: string;
   status: string;
+  storeName?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
   tasks: LifecycleTask[];
@@ -259,6 +260,11 @@ function formatLastSeen(lastSeenAt?: string | null) {
 
 function toDateInputValue(value?: string | null) {
   return value ? String(value).slice(0, 10) : "";
+}
+
+function formatLifecycleDate(value?: string | null) {
+  const date = toDateInputValue(value);
+  return date || "日付未設定";
 }
 
 function formatPayrollAmount(value?: number | string | null) {
@@ -1369,21 +1375,21 @@ function StaffFormFields({
           <div className="staff-lifecycle-header">
             <div>
               <strong>入退社手続き</strong>
-              <p>このスタッフ本人に紐づくチェックリスト、タスク進捗、提出書類を管理します。</p>
+              <p>勤務店舗ごとの入社日・退職日・税/保険設定から、このスタッフ本人のチェックリストを自動生成します。</p>
             </div>
             <div className="staff-lifecycle-actions">
               <button className="secondary-button" type="button" onClick={() => void createLifecycleCase("onboarding")}>
-                入社手続きを作成
+                入社手続きを同期
               </button>
               <button className="secondary-button" type="button" onClick={() => void createLifecycleCase("offboarding")}>
-                退社手続きを作成
+                退社手続きを同期
               </button>
             </div>
           </div>
 
           {lifecycleLoading ? <p className="empty-state-text">手続きを読み込み中...</p> : null}
           {!lifecycleLoading && !lifecycleCases.length ? (
-            <p className="empty-state-text">まだ手続きがありません。入社または退社手続きを作成してください。</p>
+            <p className="empty-state-text">まだ手続きがありません。勤務・給与情報で店舗ごとの入社日または退職日を入力すると自動生成されます。</p>
           ) : null}
 
           <div className="staff-lifecycle-case-list">
@@ -1403,7 +1409,7 @@ function StaffFormFields({
                         {lifecycleCase.status === "completed" ? "完了" : "進行中"}
                       </span>
                       <h4>{lifecycleCase.title}</h4>
-                      <small>{lifecycleCaseTypeLabels[lifecycleCase.caseType]} / {finishedCount}/{totalCount} 完了</small>
+                      <small>{lifecycleCase.storeName ? `${lifecycleCase.storeName} / ` : ""}{lifecycleCaseTypeLabels[lifecycleCase.caseType]} / {formatLifecycleDate(lifecycleCase.startedAt)} / {finishedCount}/{totalCount} 完了</small>
                     </div>
                     <div className="staff-lifecycle-progress" aria-label={`${finishedCount}/${totalCount} 完了`}>
                       <span style={{ width: `${totalCount ? Math.round((finishedCount / totalCount) * 100) : 0}%` }} />

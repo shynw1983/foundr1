@@ -46,11 +46,13 @@ async function readLifecycleCases(employeeId: string) {
       title,
       status,
       store_id::text as "storeId",
+      coalesce(stores.name, '') as "storeName",
       started_at as "startedAt",
       completed_at as "completedAt",
       created_at as "createdAt",
       updated_at as "updatedAt"
     from employee_lifecycle_cases
+    left join stores on stores.id = employee_lifecycle_cases.store_id
     where employee_id = ${employeeId}
     order by created_at desc
   `;

@@ -617,9 +617,13 @@ alter table employee_lifecycle_cases add column if not exists completed_at times
 alter table employee_lifecycle_cases add column if not exists created_by uuid references employees(id) on delete set null;
 alter table employee_lifecycle_cases add column if not exists updated_by uuid references employees(id) on delete set null;
 
-create unique index if not exists employee_lifecycle_cases_open_type_idx
+drop index if exists employee_lifecycle_cases_open_type_idx;
+create unique index if not exists employee_lifecycle_cases_open_type_store_idx
+  on employee_lifecycle_cases(employee_id, case_type, store_id)
+  where status <> 'archived' and store_id is not null;
+create unique index if not exists employee_lifecycle_cases_open_type_no_store_idx
   on employee_lifecycle_cases(employee_id, case_type)
-  where status <> 'archived';
+  where status <> 'archived' and store_id is null;
 
 create table if not exists employee_lifecycle_tasks (
   id uuid primary key default gen_random_uuid(),

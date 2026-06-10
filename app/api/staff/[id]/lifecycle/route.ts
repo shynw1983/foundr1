@@ -8,6 +8,21 @@ type LifecycleTemplateTask = {
   title: string;
   description: string;
   requiredDocumentTypes: string[];
+  appliesWhen?: (context: LifecycleWorkStoreContext) => boolean;
+  notRequiredNote?: string;
+};
+
+type LifecycleWorkStoreContext = {
+  storeId: string;
+  storeName: string;
+  hireDate: string | null;
+  resignationDate: string | null;
+  isForeignNational: boolean;
+  applySocialInsurance: boolean;
+  applyEmploymentInsurance: boolean;
+  applyLaborInsurance: boolean;
+  applyIncomeTax: boolean;
+  applyResidentTax: boolean;
 };
 
 const allowedCaseTypes = new Set(["onboarding", "offboarding"]);
@@ -33,25 +48,41 @@ const lifecycleTemplates: Record<LifecycleCaseType, { title: string; tasks: Life
         key: "foreign_national",
         title: "外国籍スタッフの就労可否を確認",
         description: "在留カード、在留資格、在留期間、資格外活動許可を確認します。",
-        requiredDocumentTypes: ["在留カード"]
+        requiredDocumentTypes: ["在留カード"],
+        appliesWhen: (context) => context.isForeignNational,
+        notRequiredNote: "外国籍スタッフではないため対象外です。"
       },
       {
         key: "tax_setup",
         title: "税務・給与控除を設定",
         description: "扶養控除等申告書、所得税区分、住民税、交通費、給与締日支払日を確認します。",
-        requiredDocumentTypes: ["扶養控除等申告書"]
+        requiredDocumentTypes: ["扶養控除等申告書"],
+        appliesWhen: (context) => context.applyIncomeTax || context.applyResidentTax,
+        notRequiredNote: "この店舗の給与設定で源泉所得税・住民税が対象外のため不要です。"
       },
       {
         key: "social_insurance",
         title: "社会保険の資格取得",
         description: "健康保険・厚生年金の加入対象を判定し、対象者は資格取得届を処理します。",
-        requiredDocumentTypes: ["社会保険資格取得控え"]
+        requiredDocumentTypes: ["社会保険資格取得控え"],
+        appliesWhen: (context) => context.applySocialInsurance,
+        notRequiredNote: "この店舗の給与設定で社会保険が対象外のため不要です。"
       },
       {
         key: "employment_insurance",
         title: "雇用保険の資格取得",
         description: "雇用保険対象者は資格取得届を処理します。提出期限は翌月10日までです。",
-        requiredDocumentTypes: ["雇用保険資格取得控え"]
+        requiredDocumentTypes: ["雇用保険資格取得控え"],
+        appliesWhen: (context) => context.applyEmploymentInsurance,
+        notRequiredNote: "この店舗の給与設定で雇用保険が対象外のため不要です。"
+      },
+      {
+        key: "labor_insurance",
+        title: "労働保険の給与設定を確認",
+        description: "労働保険の対象設定と給与計算への反映を確認します。",
+        requiredDocumentTypes: [],
+        appliesWhen: (context) => context.applyLaborInsurance,
+        notRequiredNote: "この店舗の給与設定で労働保険が対象外のため不要です。"
       },
       {
         key: "os_access",
@@ -92,25 +123,33 @@ const lifecycleTemplates: Record<LifecycleCaseType, { title: string; tasks: Life
         key: "social_insurance_loss",
         title: "社会保険の資格喪失",
         description: "健康保険・厚生年金の資格喪失届を処理します。提出期限は事実発生から5日以内です。",
-        requiredDocumentTypes: ["社会保険資格喪失控え"]
+        requiredDocumentTypes: ["社会保険資格喪失控え"],
+        appliesWhen: (context) => context.applySocialInsurance,
+        notRequiredNote: "この店舗の給与設定で社会保険が対象外のため不要です。"
       },
       {
         key: "employment_insurance_loss",
         title: "雇用保険資格喪失・離職票",
         description: "資格喪失届、離職証明書、離職票要否を確認します。提出期限は翌日から10日以内です。",
-        requiredDocumentTypes: ["雇用保険資格喪失控え", "離職証明書"]
+        requiredDocumentTypes: ["雇用保険資格喪失控え", "離職証明書"],
+        appliesWhen: (context) => context.applyEmploymentInsurance,
+        notRequiredNote: "この店舗の給与設定で雇用保険が対象外のため不要です。"
       },
       {
         key: "foreign_national_loss",
         title: "外国籍スタッフの離職届出",
         description: "外国人雇用状況の離職届出を確認します。",
-        requiredDocumentTypes: ["外国人雇用状況届出控え"]
+        requiredDocumentTypes: ["外国人雇用状況届出控え"],
+        appliesWhen: (context) => context.isForeignNational,
+        notRequiredNote: "外国籍スタッフではないため対象外です。"
       },
       {
         key: "tax_documents",
         title: "税務・住民税・退職書類を交付",
         description: "源泉徴収票、退職証明書、住民税切替、退職所得書類を確認します。",
-        requiredDocumentTypes: ["源泉徴収票", "退職証明書"]
+        requiredDocumentTypes: ["源泉徴収票", "退職証明書"],
+        appliesWhen: (context) => context.applyIncomeTax || context.applyResidentTax,
+        notRequiredNote: "この店舗の給与設定で源泉所得税・住民税が対象外のため不要です。"
       },
       {
         key: "archive",
@@ -158,6 +197,161 @@ async function canAccessEmployee(access: StaffAdminAccess, employeeId: string) {
   return rows[0]?.canAccess === true;
 }
 
+async function readLifecycleContexts(employeeId: string, access: StaffAdminAccess): Promise<LifecycleWorkStoreContext[]> {
+  const rows = await sql`
+    select
+      stores.id::text as "storeId",
+      stores.name as "storeName",
+      employee_work_stores.hire_date as "hireDate",
+      employee_work_stores.resignation_date as "resignationDate",
+      employees.is_foreign_national as "isForeignNational",
+      employee_work_stores.apply_social_insurance as "applySocialInsurance",
+      employee_work_stores.apply_employment_insurance as "applyEmploymentInsurance",
+      employee_work_stores.apply_labor_insurance as "applyLaborInsurance",
+      employee_work_stores.apply_income_tax as "applyIncomeTax",
+      employee_work_stores.apply_resident_tax as "applyResidentTax"
+    from employee_work_stores
+    join stores on stores.id = employee_work_stores.store_id
+    join employees on employees.id = employee_work_stores.employee_id
+    where employee_work_stores.employee_id = ${employeeId}
+      and (${access.allStores} or employee_work_stores.store_id::text = any(${access.storeIds}))
+    order by stores.name
+  `;
+
+  return rows.map((row) => ({
+    storeId: String(row.storeId),
+    storeName: String(row.storeName ?? ""),
+    hireDate: row.hireDate ? String(row.hireDate).slice(0, 10) : null,
+    resignationDate: row.resignationDate ? String(row.resignationDate).slice(0, 10) : null,
+    isForeignNational: row.isForeignNational === true,
+    applySocialInsurance: row.applySocialInsurance === true,
+    applyEmploymentInsurance: row.applyEmploymentInsurance === true,
+    applyLaborInsurance: row.applyLaborInsurance === true,
+    applyIncomeTax: row.applyIncomeTax === true,
+    applyResidentTax: row.applyResidentTax === true
+  }));
+}
+
+function getTaskStatusForContext(task: LifecycleTemplateTask, context: LifecycleWorkStoreContext) {
+  return task.appliesWhen && !task.appliesWhen(context) ? "not_required" : "todo";
+}
+
+async function upsertLifecycleCase(employeeId: string, caseType: LifecycleCaseType, context: LifecycleWorkStoreContext, sessionId: string) {
+  const template = lifecycleTemplates[caseType];
+  const startedAt = caseType === "onboarding" ? context.hireDate : context.resignationDate;
+  if (!startedAt) return null;
+
+  const title = `${context.storeName} ${template.title}チェックリスト`;
+  const existingRows = await sql`
+    select id::text
+    from employee_lifecycle_cases
+    where employee_id = ${employeeId}
+      and case_type = ${caseType}
+      and store_id is not distinct from ${context.storeId}
+      and status <> 'archived'
+    order by created_at
+    limit 1
+  `;
+  const existingId = String(existingRows[0]?.id ?? "");
+  const caseRows = existingId ? await sql`
+    update employee_lifecycle_cases
+    set
+      title = ${title},
+      started_at = ${startedAt},
+      updated_by = ${sessionId},
+      updated_at = now()
+    where id = ${existingId}
+    returning id::text
+  ` : await sql`
+    insert into employee_lifecycle_cases (
+      employee_id,
+      case_type,
+      title,
+      status,
+      store_id,
+      started_at,
+      created_by,
+      updated_by,
+      updated_at
+    )
+    values (
+      ${employeeId},
+      ${caseType},
+      ${title},
+      'open',
+      ${context.storeId},
+      ${startedAt},
+      ${sessionId},
+      ${sessionId},
+      now()
+    )
+    returning id::text
+  `;
+  const caseId = String(caseRows[0]?.id ?? "");
+
+  for (const [index, task] of template.tasks.entries()) {
+    const targetStatus = getTaskStatusForContext(task, context);
+    const targetNote = targetStatus === "not_required" ? task.notRequiredNote ?? "条件により対象外です。" : "";
+    await sql`
+      insert into employee_lifecycle_tasks (
+        lifecycle_case_id,
+        task_key,
+        title,
+        description,
+        status,
+        note,
+        required_document_types,
+        sort_order,
+        updated_at
+      )
+      values (
+        ${caseId},
+        ${task.key},
+        ${task.title},
+        ${task.description},
+        ${targetStatus},
+        ${targetNote},
+        ${JSON.stringify(task.requiredDocumentTypes)}::jsonb,
+        ${index * 10},
+        now()
+      )
+      on conflict (lifecycle_case_id, task_key)
+      do update set
+        title = excluded.title,
+        description = excluded.description,
+        status = case
+          when employee_lifecycle_tasks.status = 'not_required' and excluded.status = 'todo' then 'todo'
+          when excluded.status = 'not_required' and employee_lifecycle_tasks.status in ('todo', 'doing') then 'not_required'
+          else employee_lifecycle_tasks.status
+        end,
+        note = case
+          when excluded.status = 'not_required' and employee_lifecycle_tasks.status in ('todo', 'doing', 'not_required') then excluded.note
+          when employee_lifecycle_tasks.status = 'not_required' and excluded.status = 'todo' then ''
+          else employee_lifecycle_tasks.note
+        end,
+        required_document_types = excluded.required_document_types,
+        sort_order = excluded.sort_order,
+        updated_at = now()
+    `;
+  }
+
+  await refreshCaseCompletion(caseId, sessionId);
+  return caseId;
+}
+
+async function syncLifecycleCases(employeeId: string, access: StaffAdminAccess, caseType?: LifecycleCaseType, storeId?: string | null) {
+  const contexts = await readLifecycleContexts(employeeId, access);
+  const scopedContexts = contexts.filter((context) => (!storeId || context.storeId === storeId));
+  for (const context of scopedContexts) {
+    if (!caseType || caseType === "onboarding") {
+      await upsertLifecycleCase(employeeId, "onboarding", context, access.session.id);
+    }
+    if (!caseType || caseType === "offboarding") {
+      await upsertLifecycleCase(employeeId, "offboarding", context, access.session.id);
+    }
+  }
+}
+
 async function readLifecycleCases(employeeId: string) {
   const cases = await sql`
     select
@@ -167,13 +361,15 @@ async function readLifecycleCases(employeeId: string) {
       title,
       status,
       store_id::text as "storeId",
+      coalesce(stores.name, '') as "storeName",
       started_at as "startedAt",
       completed_at as "completedAt",
       created_at as "createdAt",
       updated_at as "updatedAt"
     from employee_lifecycle_cases
+    left join stores on stores.id = employee_lifecycle_cases.store_id
     where employee_id = ${employeeId}
-    order by created_at desc
+    order by created_at desc, title
   `;
   const caseIds = cases.map((item) => String(item.id));
   const tasks = caseIds.length ? await sql`
@@ -265,6 +461,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return Response.json({ error: "このスタッフを操作する権限がありません。" }, { status: 403 });
   }
 
+  await syncLifecycleCases(id, access);
   return Response.json({ cases: await readLifecycleCases(id) });
 }
 
@@ -277,78 +474,22 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return Response.json({ error: "このスタッフを操作する権限がありません。" }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({})) as { caseType?: string; storeId?: string; startedAt?: string };
+  const body = await request.json().catch(() => ({})) as { caseType?: string; storeId?: string };
   const caseType = normalizeCaseType(body.caseType);
   if (!caseType) return Response.json({ error: "手続き種別を選択してください。" }, { status: 400 });
 
   const selectedStoreId = String(body.storeId ?? "").trim();
-  const storeId = access.allStores || access.storeIds.includes(selectedStoreId) ? selectedStoreId || null : null;
-  const template = lifecycleTemplates[caseType];
-  const title = `${template.title}チェックリスト`;
-
-  const caseRows = await sql`
-    insert into employee_lifecycle_cases (
-      employee_id,
-      case_type,
-      title,
-      status,
-      store_id,
-      started_at,
-      created_by,
-      updated_by,
-      updated_at
-    )
-    values (
-      ${id},
-      ${caseType},
-      ${title},
-      'open',
-      ${storeId},
-      ${toNullableDate(body.startedAt)},
-      ${access.session.id},
-      ${access.session.id},
-      now()
-    )
-    on conflict (employee_id, case_type) where status <> 'archived'
-    do update set
-      title = excluded.title,
-      status = 'open',
-      store_id = coalesce(excluded.store_id, employee_lifecycle_cases.store_id),
-      started_at = coalesce(excluded.started_at, employee_lifecycle_cases.started_at),
-      updated_by = excluded.updated_by,
-      updated_at = now()
-    returning id::text
-  `;
-  const caseId = String(caseRows[0]?.id ?? "");
-
-  for (const [index, task] of template.tasks.entries()) {
-    await sql`
-      insert into employee_lifecycle_tasks (
-        lifecycle_case_id,
-        task_key,
-        title,
-        description,
-        required_document_types,
-        sort_order,
-        updated_at
-      )
-      values (
-        ${caseId},
-        ${task.key},
-        ${task.title},
-        ${task.description},
-        ${JSON.stringify(task.requiredDocumentTypes)}::jsonb,
-        ${index * 10},
-        now()
-      )
-      on conflict (lifecycle_case_id, task_key)
-      do update set
-        title = excluded.title,
-        description = excluded.description,
-        required_document_types = excluded.required_document_types,
-        sort_order = excluded.sort_order,
-        updated_at = now()
-    `;
+  const storeId = selectedStoreId && (access.allStores || access.storeIds.includes(selectedStoreId)) ? selectedStoreId : null;
+  await syncLifecycleCases(id, access, caseType, storeId);
+  const syncedCases = await readLifecycleCases(id) as Array<{ caseType?: string; storeId?: string | null }>;
+  const hasCase = syncedCases.some((item) => (
+    String(item.caseType) === caseType && (!storeId || String(item.storeId) === storeId)
+  ));
+  if (!hasCase) {
+    const message = caseType === "onboarding"
+      ? "勤務店舗の入社日が未設定のため、入社手続きを自動生成できません。勤務・給与情報で入社日を入力してください。"
+      : "勤務店舗の退職日が未設定のため、退社手続きを自動生成できません。勤務・給与情報で退職日を入力してください。";
+    return Response.json({ error: message }, { status: 400 });
   }
 
   return Response.json({ ok: true, cases: await readLifecycleCases(id) });
