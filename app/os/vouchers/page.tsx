@@ -2034,6 +2034,12 @@ function VoucherAccountingEditor({
                   </div>
                 </div>
               ) : null}
+              <div className="receipt-expense-line-actions">
+                <button className="secondary-button" type="button" onClick={() => toggleLineExpanded(line.id)}>
+                  <ChevronDown size={16} />
+                  閉じる
+                </button>
+              </div>
               </div>
           </div>
           );
@@ -2224,6 +2230,10 @@ function ConfirmedVoucherDetailEditor({
   onLineChange: (detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) => void;
   onSave: (detail: ConfirmedAccountingLineDetail) => void;
 }) {
+  const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
+  function toggleDetailExpanded(detailKey: string) {
+    setExpandedDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
+  }
   return (
     <div className="voucher-confirmed-detail-list is-voucher-editor">
       <div className="voucher-confirmed-detail-title">
@@ -2234,12 +2244,17 @@ function ConfirmedVoucherDetailEditor({
         const detailKey = getConfirmedVoucherDetailKey(voucher.id, detail);
         const draft = getDraft(detail);
         const isSaving = Boolean(savingLineKeys[detailKey]);
+        const isExpanded = Boolean(expandedDetailKeys[detailKey]);
+        const quantityLabel = detail.quantity ? `${detail.quantity} ${detail.unit || "個"}` : "数量未確認";
         return (
-          <div className="voucher-confirmed-detail-row" key={detailKey}>
-            <div className="voucher-confirmed-detail-heading">
+          <div className={`voucher-confirmed-detail-row ${isExpanded ? "is-open" : ""}`} key={detailKey}>
+            <button className="voucher-confirmed-detail-heading" type="button" onClick={() => toggleDetailExpanded(detailKey)} aria-expanded={isExpanded}>
+              <ChevronDown size={16} />
               <strong>原明細 {detail.lineNo}</strong>
               <span>{detail.note || "摘要なし"}</span>
-            </div>
+              <span>{formatMoney(detail.amount)} / {detail.taxRate || "税率不明"} / {detail.taxMode || "税区分不明"}</span>
+              <span>{quantityLabel}</span>
+            </button>
             <div className="voucher-confirmed-detail-grid">
               <label>
                 <span>勘定科目</span>
@@ -2291,6 +2306,10 @@ function ConfirmedVoucherDetailEditor({
               </label>
             </div>
             <div className="voucher-confirmed-detail-actions">
+              <button className="secondary-button" type="button" onClick={() => toggleDetailExpanded(detailKey)}>
+                <ChevronDown size={16} />
+                閉じる
+              </button>
               <button className="secondary-button" type="button" disabled={isSaving} onClick={() => onSave(detail)}>
                 {isSaving ? "保存中..." : "この明細を保存"}
               </button>

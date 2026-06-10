@@ -4026,14 +4026,28 @@ body :where(
 }
 
 .receipt-expense-line-body {
-  display: grid;
+  display: none;
   grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
   align-items: end;
   gap: 10px;
 }
 
+.receipt-expense-line.is-open .receipt-expense-line-body {
+  display: grid;
+}
+
 .receipt-expense-line-body > label:nth-of-type(7) {
   grid-column: 1 / span 1;
+}
+
+.receipt-expense-line-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.receipt-expense-line-actions button {
+  min-height: 36px;
 }
 
 .voucher-product-binding {
@@ -18387,10 +18401,29 @@ body :where(
 }
 
 .voucher-confirmed-detail-heading {
-  display: flex;
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 0.9fr) minmax(160px, 1.2fr) minmax(160px, 1fr) minmax(90px, auto);
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.voucher-confirmed-detail-heading svg {
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.voucher-confirmed-detail-row.is-open .voucher-confirmed-detail-heading svg {
+  transform: rotate(180deg);
 }
 
 .voucher-confirmed-detail-heading strong {
@@ -18406,9 +18439,13 @@ body :where(
 }
 
 .voucher-confirmed-detail-grid {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(6, minmax(80px, 1fr));
   gap: 8px;
+}
+
+.voucher-confirmed-detail-row.is-open .voucher-confirmed-detail-grid {
+  display: grid;
 }
 
 .voucher-confirmed-detail-grid label {
@@ -18441,8 +18478,13 @@ body :where(
 }
 
 .voucher-confirmed-detail-actions {
-  display: flex;
+  display: none;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.voucher-confirmed-detail-row.is-open .voucher-confirmed-detail-actions {
+  display: flex;
 }
 
 .voucher-confirmed-detail-actions button {
@@ -18987,6 +19029,15 @@ body :where(
 
   .voucher-confirmed-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-confirmed-detail-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .voucher-confirmed-detail-heading span {
+    grid-column: 2;
   }
 
   .voucher-confirmed-detail-note {
