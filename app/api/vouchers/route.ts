@@ -163,7 +163,10 @@ export async function PATCH(request: Request) {
     category?: string;
     subcategory?: string;
     unit?: string;
+    unitPrice?: string | number;
     referencePrice?: string | number;
+    receiptUnitPrice?: string | number;
+    updateReferencePrice?: boolean;
   };
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "証憑IDがありません。" }, { status: 400 });
@@ -233,7 +236,25 @@ export async function PATCH(request: Request) {
       : String(body.productId ?? "").trim();
     if (!productId) return Response.json({ error: "紐付ける商品を選択してください。" }, { status: 400 });
 
-    await linkVoucherItemToProduct(item, productId, session.id);
+    const receiptUnitPrice = normalizeNullableUnitPrice(body.receiptUnitPrice) ?? normalizeNullableUnitPrice(body.unitPrice) ?? normalizeNullableUnitPrice(item.unitPrice);
+    const itemForLink = {
+      ...item,
+      unit: String(body.unit ?? item.unit ?? "").trim().slice(0, 20),
+      unitPrice: receiptUnitPrice
+    };
+    await updateReceiptOcrItemForProductLink(id, itemId, body, receiptUnitPrice);
+    await linkVoucherItemToProduct(itemForLink, productId, session.id, receiptUnitPrice);
+
+    if (body.updateReferencePrice) {
+      const nextReferencePrice = normalizeNullableUnitPrice(body.referencePrice) ?? receiptUnitPrice;
+      if (nextReferencePrice && nextReferencePrice > 0) {
+        await sql`
+          update products
+          set reference_price = ${nextReferencePrice}, updated_at = now()
+          where id::text = ${productId}
+        `;
+      }
+    }
     return Response.json({ ok: true, productId });
   }
 
@@ -562,7 +583,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
 
 async function listProductOptions() {
   const rows = await sql`
-    select id::text, name, category, subcategory, unit
+    select id::text, name, category, subcategory, unit, reference_price::float as "referencePrice"
     from products
     order by category asc, subcategory asc, name asc
     limit 800
@@ -572,7 +593,8 @@ async function listProductOptions() {
     name: String(row.name ?? ""),
     category: String(row.category ?? ""),
     subcategory: String(row.subcategory ?? ""),
-    unit: String(row.unit ?? "")
+    unit: String(row.unit ?? ""),
+    referencePrice: Number(row.referencePrice ?? 0)
   }));
 }
 
@@ -669,13 +691,34 @@ async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnTyp
   }
 }
 
+async function updateReceiptOcrItemForProductLink(
+  ocrResultId: string,
+  itemId: string,
+  body: Record<string, unknown>,
+  receiptUnitPrice: number | null
+) {
+  await sql`
+    update receipt_ocr_items
+    set
+      amount = coalesce(${normalizeNullableMoney(body.amount)}, amount),
+      tax_rate = coalesce(${body.taxRate ? normalizeTaxRate(String(body.taxRate)) : null}, tax_rate),
+      tax_mode = coalesce(${body.taxMode ? normalizeTaxMode(String(body.taxMode)) : null}, tax_mode),
+      quantity = coalesce(${normalizeNullableNumber(body.quantity)}, quantity),
+      unit = coalesce(${String(body.unit ?? "").trim().slice(0, 20) || null}, unit),
+      unit_price = coalesce(${receiptUnitPrice}, unit_price),
+      updated_at = now()
+    where id::text = ${itemId}
+      and receipt_ocr_result_id::text = ${ocrResultId}
+  `;
+}
+
 async function createProductFromVoucherItem(item: Record<string, unknown>, body: Record<string, unknown>, employeeId: string) {
   const name = String(body.productName ?? body.name ?? item.rawName ?? "").trim();
   if (!name) return "";
   const category = String(body.category ?? item.category ?? "食材").trim() || "食材";
   const subcategory = String(body.subcategory ?? "未分類").trim() || "未分類";
   const unit = String(body.unit ?? item.unit ?? "個").trim() || "個";
-  const referencePrice = Number(body.referencePrice ?? item.unitPrice ?? 0);
+  const referencePrice = Number(body.referencePrice ?? body.receiptUnitPrice ?? item.unitPrice ?? 0);
 
   const rows = await sql`
     insert into products (
@@ -705,7 +748,7 @@ async function createProductFromVoucherItem(item: Record<string, unknown>, body:
   return String(rows[0]?.id ?? "");
 }
 
-async function linkVoucherItemToProduct(item: Record<string, unknown>, productId: string, employeeId: string) {
+async function linkVoucherItemToProduct(item: Record<string, unknown>, productId: string, employeeId: string, receiptUnitPrice: number | null = null) {
   const rawName = String(item.rawName ?? "").trim();
   const normalizedName = String(item.normalizedName || normalizeReceiptProductName(rawName));
   const supplierName = String(item.supplierName || item.vendorName || "").trim();
@@ -745,7 +788,10 @@ async function linkVoucherItemToProduct(item: Record<string, unknown>, productId
     set matched_product_id = ${productId}, match_status = 'matched', updated_at = now()
     where id::text = ${itemId}
   `;
-  await recordReceiptItemPrice(itemId, productId, employeeId);
+  await recordReceiptItemPrice(itemId, productId, employeeId, {
+    price: receiptUnitPrice ?? undefined,
+    unit: String(item.unit ?? "").trim() || undefined
+  });
 }
 
 function normalizeStoredAccountingLines(value: unknown) {
@@ -796,6 +842,11 @@ function normalizeNullableNumber(value: unknown) {
 function normalizeNullableMoney(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
+}
+
+function normalizeNullableUnitPrice(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number * 100) / 100 : null;
 }
 
 function normalizeTaxRate(value: unknown) {

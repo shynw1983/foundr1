@@ -78,6 +78,14 @@ type ProductOption = {
   category: string;
   subcategory: string;
   unit: string;
+  referencePrice: number;
+};
+
+type ProductReferencePriceDialog = {
+  voucher: VoucherRecord;
+  line: VoucherAccountingLine;
+  product: ProductOption;
+  receiptUnitPrice: number;
 };
 
 type VoucherAccountingDraft = {
@@ -216,6 +224,7 @@ export default function VouchersPage() {
   const [expandedVoucherIds, setExpandedVoucherIds] = useState<Record<string, boolean>>({});
   const [uploadProgress, setUploadProgress] = useState<VoucherUploadProgress | null>(null);
   const [previewVoucher, setPreviewVoucher] = useState<VoucherRecord | null>(null);
+  const [referencePriceDialog, setReferencePriceDialog] = useState<ProductReferencePriceDialog | null>(null);
   const [pendingActions, setPendingActions] = useState<Record<string, VoucherPendingAction>>({});
 
   useEffect(() => {
@@ -426,10 +435,36 @@ export default function VouchersPage() {
       window.alert("紐付ける商品を選択してください。");
       return;
     }
+    const product = productOptions.find((option) => option.id === productId);
+    if (!product) {
+      window.alert("選択した商品を読み込めませんでした。再読み込みしてからもう一度お試しください。");
+      return;
+    }
+    const receiptUnitPrice = calculateTaxIncludedUnitPrice(line);
+    if (!receiptUnitPrice || receiptUnitPrice <= 0) {
+      window.alert("今回の税込単価を計算できません。金額・数量・税区分を確認してください。");
+      return;
+    }
+    setReferencePriceDialog({ voucher, line, product, receiptUnitPrice });
+  }
+
+  async function confirmAccountingLineProductBinding(updateReferencePrice: boolean) {
+    if (!referencePriceDialog) return;
+    const { voucher, line, product, receiptUnitPrice } = referencePriceDialog;
+    setReferencePriceDialog(null);
     await updateAccountingLineProduct(voucher, line, {
       action: "link_product_to_item",
-      productId
-    }, "商品マスタに紐付けました。");
+      productId: product.id,
+      updateReferencePrice,
+      referencePrice: updateReferencePrice ? receiptUnitPrice : undefined,
+      receiptUnitPrice,
+      amount: line.amount,
+      taxRate: line.taxRate,
+      taxMode: line.taxMode,
+      taxAmount: line.taxAmount,
+      quantity: line.quantity,
+      unit: line.unit
+    }, updateReferencePrice ? "商品マスタに紐付け、参考価格を更新しました。" : "商品マスタに紐付けました。");
   }
 
   async function createProductFromAccountingLine(voucher: VoucherRecord, line: VoucherAccountingLine) {
@@ -443,7 +478,13 @@ export default function VouchersPage() {
       category: line.subAccountTitle || "食材",
       subcategory: "未分類",
       unit: line.unit || "個",
-      referencePrice: line.unitPrice || 0
+      referencePrice: calculateTaxIncludedUnitPrice(line) || line.unitPrice || 0,
+      receiptUnitPrice: calculateTaxIncludedUnitPrice(line) || line.unitPrice || 0,
+      amount: line.amount,
+      taxRate: line.taxRate,
+      taxMode: line.taxMode,
+      taxAmount: line.taxAmount,
+      quantity: line.quantity
     }, "商品マスタに追加して紐付けました。");
   }
 
@@ -808,6 +849,14 @@ export default function VouchersPage() {
         </section>
       </section>
       {previewVoucher ? <VoucherPreviewPanel voucher={previewVoucher} onClose={() => setPreviewVoucher(null)} /> : null}
+      {referencePriceDialog ? (
+        <ProductReferencePriceDialogView
+          dialog={referencePriceDialog}
+          isPending={Boolean(pendingProductLineIds[referencePriceDialog.line.id])}
+          onCancel={() => setReferencePriceDialog(null)}
+          onConfirm={(updateReferencePrice) => void confirmAccountingLineProductBinding(updateReferencePrice)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -837,6 +886,75 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
         {progress.phase}：{progress.currentFile || "証憑"}
         {progress.failed ? ` / 要確認 ${progress.failed}件` : ""}
       </p>
+    </div>
+  );
+}
+
+function ProductReferencePriceDialogView({
+  dialog,
+  isPending,
+  onCancel,
+  onConfirm
+}: {
+  dialog: ProductReferencePriceDialog;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: (updateReferencePrice: boolean) => void;
+}) {
+  const currentReferencePrice = Number(dialog.product.referencePrice ?? 0);
+  const hasReferencePrice = Number.isFinite(currentReferencePrice) && currentReferencePrice > 0;
+  const difference = hasReferencePrice ? Math.round(dialog.receiptUnitPrice - currentReferencePrice) : 0;
+  const differenceRate = hasReferencePrice && currentReferencePrice > 0
+    ? Math.round((dialog.receiptUnitPrice - currentReferencePrice) / currentReferencePrice * 1000) / 10
+    : 0;
+
+  return (
+    <div className="voucher-reference-price-backdrop" role="presentation">
+      <section className="voucher-reference-price-dialog" role="dialog" aria-modal="true" aria-labelledby="voucher-reference-price-title">
+        <div className="voucher-reference-price-head">
+          <div>
+            <span>商品マスタ紐付け</span>
+            <h3 id="voucher-reference-price-title">参考価格を更新しますか？</h3>
+          </div>
+          <button type="button" onClick={onCancel} aria-label="閉じる" disabled={isPending}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="voucher-reference-price-product">
+          <strong>{dialog.product.name}</strong>
+          <span>{getProductCategory(dialog.product)} / {getProductSubcategory(dialog.product)} / {dialog.product.unit}</span>
+        </div>
+        <div className="voucher-reference-price-grid">
+          <div>
+            <span>現在の参考価格</span>
+            <strong>{hasReferencePrice ? formatMoney(currentReferencePrice) : "未設定"}</strong>
+          </div>
+          <div>
+            <span>今回の税込単価</span>
+            <strong>{formatMoney(dialog.receiptUnitPrice)}</strong>
+          </div>
+          <div>
+            <span>差額</span>
+            <strong>{hasReferencePrice ? `${formatMoney(difference)} / ${differenceRate > 0 ? "+" : ""}${differenceRate}%` : "-"}</strong>
+          </div>
+        </div>
+        <p>
+          {hasReferencePrice
+            ? "商品主表の参考価格は自動では上書きしません。今回の税込単価を新しい参考価格にする場合だけ更新してください。"
+            : "この商品は参考価格が未設定です。今回の税込単価を参考価格として設定できます。"}
+        </p>
+        <div className="voucher-reference-price-actions">
+          <button className="secondary-button" type="button" onClick={() => onConfirm(false)} disabled={isPending}>
+            紐付けのみ
+          </button>
+          <button className="primary-button" type="button" onClick={() => onConfirm(true)} disabled={isPending}>
+            紐付けて参考価格を更新
+          </button>
+          <button className="text-button" type="button" onClick={onCancel} disabled={isPending}>
+            キャンセル
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1545,6 +1663,16 @@ function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return "";
   const unitPrice = amount / quantity;
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
+}
+
+function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
+  const amount = Number(line.amount);
+  const taxAmount = Number(line.taxAmount);
+  const quantity = Number(line.quantity);
+  if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return 0;
+  const total = line.taxMode === "外税" && Number.isFinite(taxAmount) ? amount + Math.max(0, taxAmount) : amount;
+  const unitPrice = total / quantity;
+  return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : 0;
 }
 
 function isPdfUploadFile(file: File) {

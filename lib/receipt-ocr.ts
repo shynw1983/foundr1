@@ -425,7 +425,12 @@ async function saveReceiptOcrItems(ocrResultId: string, items: ReceiptOcrItem[],
   }
 }
 
-export async function recordReceiptItemPrice(itemId: string, productId: string, employeeId: string) {
+export async function recordReceiptItemPrice(
+  itemId: string,
+  productId: string,
+  employeeId: string,
+  override?: { price?: number; unit?: string }
+) {
   if (!itemId || !productId) return;
 
   const rows = await sql`
@@ -444,9 +449,9 @@ export async function recordReceiptItemPrice(itemId: string, productId: string, 
   const row = rows[0];
   if (!row) return;
 
-  const price = Number(row.unitPrice ?? row.amount ?? 0);
+  const price = Number(override?.price ?? row.unitPrice ?? row.amount ?? 0);
   if (!Number.isFinite(price) || price <= 0) return;
-  const unit = String(row.unit ?? "").trim() || "個";
+  const unit = String(override?.unit ?? row.unit ?? "").trim() || "個";
   const supplierName = String(row.supplierName || row.vendorName || "").trim();
 
   await sql`

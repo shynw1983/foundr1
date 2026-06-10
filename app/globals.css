@@ -17954,6 +17954,120 @@ body :where(
   transition: width 180ms ease;
 }
 
+.voucher-reference-price-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(15 23 42 / 0.42);
+}
+
+.voucher-reference-price-dialog {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 0.22);
+}
+
+.voucher-reference-price-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.voucher-reference-price-head span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.voucher-reference-price-head h3 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 1.06rem;
+  font-weight: 650;
+}
+
+.voucher-reference-price-head button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  background: #ffffff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.voucher-reference-price-product {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8faf9;
+}
+
+.voucher-reference-price-product strong {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.voucher-reference-price-product span,
+.voucher-reference-price-dialog p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.voucher-reference-price-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.voucher-reference-price-grid div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.voucher-reference-price-grid span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.voucher-reference-price-grid strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.voucher-reference-price-dialog p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.voucher-reference-price-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .voucher-row {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) auto minmax(260px, 0.9fr) auto;
@@ -18242,6 +18356,10 @@ body :where(
 
   .voucher-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-reference-price-grid {
+    grid-template-columns: 1fr;
   }
 
   .voucher-preview-open,
