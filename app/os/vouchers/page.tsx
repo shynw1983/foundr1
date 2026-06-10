@@ -130,12 +130,17 @@ type VoucherAccountingLine = {
 };
 
 type VoucherAccountingSummaryLine = {
+  lineNo?: number;
   accountTitle: string;
   subAccountTitle: string;
   amount: number;
   taxRate: string;
   taxMode: string;
   taxAmount: number;
+  quantity?: number | null;
+  unit?: string;
+  unitPrice?: number | null;
+  ocrItemId?: string;
   note: string;
 };
 
@@ -291,7 +296,6 @@ export default function VouchersPage() {
   const [exportEndDate, setExportEndDate] = useState(getCurrentDate());
   const [confirmedAccountingLines, setConfirmedAccountingLines] = useState<ConfirmedAccountingLine[]>([]);
   const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
-  const [expandedConfirmedLineKeys, setExpandedConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
@@ -435,13 +439,13 @@ export default function VouchersPage() {
     }
   }
 
-  function getConfirmedLineDraft(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
-    const key = getConfirmedDetailKey(group, detail);
+  function getConfirmedLineDraft(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail) {
+    const key = getConfirmedVoucherDetailKey(voucher.id, detail);
     return confirmedLineDrafts[key] ?? detail;
   }
 
-  function updateConfirmedLineDraft(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) {
-    const key = getConfirmedDetailKey(group, detail);
+  function updateConfirmedLineDraft(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) {
+    const key = getConfirmedVoucherDetailKey(voucher.id, detail);
     setConfirmedLineDrafts((current) => {
       const draft = current[key] ?? detail;
       const updated = { ...draft, ...next };
@@ -455,8 +459,8 @@ export default function VouchersPage() {
     });
   }
 
-  async function saveConfirmedLineDetail(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
-    const key = getConfirmedDetailKey(group, detail);
+  async function saveConfirmedLineDetail(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail) {
+    const key = getConfirmedVoucherDetailKey(voucher.id, detail);
     const draft = confirmedLineDrafts[key] ?? detail;
     setSavingConfirmedLineKeys((current) => ({ ...current, [key]: true }));
     try {
@@ -465,10 +469,10 @@ export default function VouchersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "update_confirmed_accounting_line",
-          id: group.voucherId,
-          usageType: group.usageType === "仕入" ? "shiire" : group.usageType === "経費" ? "keihi" : "unclassified",
-          paymentType: group.paymentType === "立替" ? "reimbursement" : "company",
-          reimbursementStatus: group.reimbursementStatus === "精算済み" ? "paid" : group.reimbursementStatus === "却下" ? "rejected" : "pending",
+          id: voucher.id,
+          usageType: voucher.usageType,
+          paymentType: voucher.paymentType,
+          reimbursementStatus: voucher.reimbursementStatus,
           lineNo: detail.lineNo,
           lines: [{
             accountTitle: draft.accountTitle,
@@ -1104,110 +1108,23 @@ export default function VouchersPage() {
             ) : null}
             {confirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
-                {confirmedAccountingLines.map((line) => {
-                  const lineKey = getConfirmedLineKey(line);
-                  const isOpen = Boolean(expandedConfirmedLineKeys[lineKey]);
-                  return (
-                    <div className="voucher-confirmed-line-group" key={lineKey}>
-                      <div className={`voucher-confirmed-line-row ${isOpen ? "is-open" : ""}`}>
-                        <div>
-                          <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
-                          <span>{line.storeName} / {line.vendorName}</span>
-                        </div>
-                        <div>
-                          <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
-                          <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
-                        </div>
-                        <div>
-                          <strong>{formatMoney(line.amount)}</strong>
-                          <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
-                        </div>
-                        <div className="voucher-confirmed-line-actions">
-                          <button
-                            className="text-button"
-                            type="button"
-                            onClick={() => setExpandedConfirmedLineKeys((current) => ({ ...current, [lineKey]: !current[lineKey] }))}
-                          >
-                            {isOpen ? "閉じる" : "明細を展開"}
-                          </button>
-                          <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
-                        </div>
-                      </div>
-                      {isOpen ? (
-                        <div className="voucher-confirmed-detail-list">
-                          {(line.details ?? []).map((detail) => {
-                            const detailKey = getConfirmedDetailKey(line, detail);
-                            const draft = getConfirmedLineDraft(line, detail);
-                            const isSaving = Boolean(savingConfirmedLineKeys[detailKey]);
-                            return (
-                              <div className="voucher-confirmed-detail-row" key={detailKey}>
-                                <div className="voucher-confirmed-detail-heading">
-                                  <strong>原明細 {detail.lineNo}</strong>
-                                  <span>{detail.note || "摘要なし"}</span>
-                                </div>
-                                <div className="voucher-confirmed-detail-grid">
-                                  <label>
-                                    <span>勘定科目</span>
-                                    <select value={draft.accountTitle} onChange={(event) => updateConfirmedLineDraft(line, detail, { accountTitle: event.target.value })}>
-                                      {(line.usageType === "仕入" ? ["仕入高"] : expenseAccountTitleOptions).map((option) => (
-                                        <option value={option} key={option}>{option}</option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <label>
-                                    <span>補助科目</span>
-                                    <input value={draft.subAccountTitle} onChange={(event) => updateConfirmedLineDraft(line, detail, { subAccountTitle: event.target.value })} />
-                                  </label>
-                                  <label>
-                                    <span>金額</span>
-                                    <input type="number" inputMode="numeric" value={draft.amount} onChange={(event) => updateConfirmedLineDraft(line, detail, { amount: Number(event.target.value) })} />
-                                  </label>
-                                  <label>
-                                    <span>税率</span>
-                                    <select value={draft.taxRate} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxRate: event.target.value })}>
-                                      {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
-                                    </select>
-                                  </label>
-                                  <label>
-                                    <span>税区分</span>
-                                    <select value={draft.taxMode} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxMode: event.target.value })}>
-                                      {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
-                                    </select>
-                                  </label>
-                                  <label>
-                                    <span>消費税</span>
-                                    <input type="number" inputMode="numeric" value={draft.taxAmount} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxAmount: Number(event.target.value) })} />
-                                  </label>
-                                  <label>
-                                    <span>数量</span>
-                                    <input type="number" inputMode="decimal" step="1" value={draft.quantity} onChange={(event) => updateConfirmedLineDraft(line, detail, { quantity: event.target.value })} />
-                                  </label>
-                                  <label>
-                                    <span>単位</span>
-                                    <input value={draft.unit} onChange={(event) => updateConfirmedLineDraft(line, detail, { unit: event.target.value })} />
-                                  </label>
-                                  <label>
-                                    <span>単価</span>
-                                    <input type="number" inputMode="decimal" value={draft.unitPrice} onChange={(event) => updateConfirmedLineDraft(line, detail, { unitPrice: event.target.value })} />
-                                  </label>
-                                  <label className="voucher-confirmed-detail-note">
-                                    <span>摘要</span>
-                                    <input value={draft.note} onChange={(event) => updateConfirmedLineDraft(line, detail, { note: event.target.value })} />
-                                  </label>
-                                </div>
-                                <div className="voucher-confirmed-detail-actions">
-                                  <button className="secondary-button" type="button" disabled={isSaving} onClick={() => saveConfirmedLineDetail(line, detail)}>
-                                    {isSaving ? "保存中..." : "この明細を保存"}
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
+                {confirmedAccountingLines.map((line) => (
+                  <div className="voucher-confirmed-line-row" key={getConfirmedLineKey(line)}>
+                    <div>
+                      <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
+                      <span>{line.storeName} / {line.vendorName}</span>
                     </div>
-                  );
-                })}
+                    <div>
+                      <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
+                      <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
+                    </div>
+                    <div>
+                      <strong>{formatMoney(line.amount)}</strong>
+                      <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
+                    </div>
+                    <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>
@@ -1356,6 +1273,16 @@ export default function VouchersPage() {
                       ) : null}
                       {voucher.accountingLines?.length ? (
                         <VoucherAccountingSummary lines={voucher.accountingLines} />
+                      ) : null}
+                      {isConfirmed && voucher.sourceType === "voucher" && voucher.accountingLines?.length ? (
+                        <ConfirmedVoucherDetailEditor
+                          voucher={voucher}
+                          details={voucher.accountingLines.map((line, index) => buildConfirmedDetailFromAccountingLine(line, index))}
+                          savingLineKeys={savingConfirmedLineKeys}
+                          getDraft={(detail) => getConfirmedLineDraft(voucher, detail)}
+                          onLineChange={(detail, next) => updateConfirmedLineDraft(voucher, detail, next)}
+                          onSave={(detail) => void saveConfirmedLineDetail(voucher, detail)}
+                        />
                       ) : null}
                     </>
                   ) : null}
@@ -2275,6 +2202,99 @@ function VoucherAccountingSummary({ lines }: { lines: VoucherAccountingSummaryLi
   );
 }
 
+function ConfirmedVoucherDetailEditor({
+  voucher,
+  details,
+  savingLineKeys,
+  getDraft,
+  onLineChange,
+  onSave
+}: {
+  voucher: VoucherRecord;
+  details: ConfirmedAccountingLineDetail[];
+  savingLineKeys: Record<string, boolean>;
+  getDraft: (detail: ConfirmedAccountingLineDetail) => ConfirmedAccountingLineDetail;
+  onLineChange: (detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) => void;
+  onSave: (detail: ConfirmedAccountingLineDetail) => void;
+}) {
+  return (
+    <div className="voucher-confirmed-detail-list is-voucher-editor">
+      <div className="voucher-confirmed-detail-title">
+        <strong>確定済み原明細</strong>
+        <span>保存すると会計集計とCSV出力に反映されます。</span>
+      </div>
+      {details.map((detail) => {
+        const detailKey = getConfirmedVoucherDetailKey(voucher.id, detail);
+        const draft = getDraft(detail);
+        const isSaving = Boolean(savingLineKeys[detailKey]);
+        return (
+          <div className="voucher-confirmed-detail-row" key={detailKey}>
+            <div className="voucher-confirmed-detail-heading">
+              <strong>原明細 {detail.lineNo}</strong>
+              <span>{detail.note || "摘要なし"}</span>
+            </div>
+            <div className="voucher-confirmed-detail-grid">
+              <label>
+                <span>勘定科目</span>
+                <select value={draft.accountTitle} onChange={(event) => onLineChange(detail, { accountTitle: event.target.value })}>
+                  {(voucher.usageType === "shiire" ? ["仕入高"] : expenseAccountTitleOptions).map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>補助科目</span>
+                <input value={draft.subAccountTitle} onChange={(event) => onLineChange(detail, { subAccountTitle: event.target.value })} />
+              </label>
+              <label>
+                <span>金額</span>
+                <input type="number" inputMode="numeric" value={draft.amount} onChange={(event) => onLineChange(detail, { amount: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>税率</span>
+                <select value={draft.taxRate} onChange={(event) => onLineChange(detail, { taxRate: event.target.value })}>
+                  {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>税区分</span>
+                <select value={draft.taxMode} onChange={(event) => onLineChange(detail, { taxMode: event.target.value })}>
+                  {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>消費税</span>
+                <input type="number" inputMode="numeric" value={draft.taxAmount} onChange={(event) => onLineChange(detail, { taxAmount: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>数量</span>
+                <input type="number" inputMode="decimal" step="1" value={draft.quantity} onChange={(event) => onLineChange(detail, { quantity: event.target.value })} />
+              </label>
+              <label>
+                <span>単位</span>
+                <input value={draft.unit} onChange={(event) => onLineChange(detail, { unit: event.target.value })} />
+              </label>
+              <label>
+                <span>単価</span>
+                <input type="number" inputMode="decimal" value={draft.unitPrice} onChange={(event) => onLineChange(detail, { unitPrice: event.target.value })} />
+              </label>
+              <label className="voucher-confirmed-detail-note">
+                <span>摘要</span>
+                <input value={draft.note} onChange={(event) => onLineChange(detail, { note: event.target.value })} />
+              </label>
+            </div>
+            <div className="voucher-confirmed-detail-actions">
+              <button className="secondary-button" type="button" disabled={isSaving} onClick={() => onSave(detail)}>
+                {isSaving ? "保存中..." : "この明細を保存"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function groupAccountingSummaryLines(lines: VoucherAccountingSummaryLine[]) {
   const grouped = new Map<string, VoucherAccountingSummaryLine>();
   for (const line of lines) {
@@ -2444,6 +2464,28 @@ function getConfirmedLineKey(line: ConfirmedAccountingLine) {
 
 function getConfirmedDetailKey(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
   return `${getConfirmedLineKey(group)}:${detail.lineNo}`;
+}
+
+function getConfirmedVoucherDetailKey(voucherId: string, detail: ConfirmedAccountingLineDetail) {
+  return `${voucherId}:${detail.lineNo}`;
+}
+
+function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLine, index: number): ConfirmedAccountingLineDetail {
+  return {
+    voucherId: "",
+    lineNo: Number(line.lineNo ?? index + 1),
+    accountTitle: line.accountTitle,
+    subAccountTitle: line.subAccountTitle,
+    amount: line.amount,
+    taxRate: line.taxRate,
+    taxMode: line.taxMode,
+    taxAmount: line.taxAmount,
+    quantity: line.quantity === null || line.quantity === undefined ? "" : String(line.quantity),
+    unit: line.unit ?? "",
+    unitPrice: line.unitPrice === null || line.unitPrice === undefined ? "" : String(line.unitPrice),
+    ocrItemId: line.ocrItemId ?? "",
+    note: line.note
+  };
 }
 
 function isPdfUploadFile(file: File) {

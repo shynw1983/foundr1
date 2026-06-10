@@ -18354,6 +18354,29 @@ body :where(
   border-left: 2px solid rgba(33, 116, 91, 0.18);
 }
 
+.voucher-confirmed-detail-list.is-voucher-editor {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+}
+
+.voucher-confirmed-detail-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voucher-confirmed-detail-title strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.voucher-confirmed-detail-title span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .voucher-confirmed-detail-row {
   display: grid;
   gap: 10px;

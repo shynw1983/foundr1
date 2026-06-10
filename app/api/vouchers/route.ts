@@ -1287,9 +1287,10 @@ function normalizeStoredAccountingLines(value: unknown) {
     }
   }
   const lines = Array.isArray(parsedValue) ? parsedValue : [];
-  return lines.map((line) => {
+  return lines.map((line, index) => {
     const row = line as Record<string, unknown>;
     return {
+      lineNo: index + 1,
       accountTitle: String(row.accountTitle ?? ""),
       subAccountTitle: String(row.subAccountTitle ?? ""),
       amount: Number(row.amount ?? 0),
