@@ -477,24 +477,24 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
   const ocrResultIds = rows.map((row) => String(row.id ?? "")).filter(Boolean);
   const itemRows = ocrResultIds.length ? await sql`
     select
-      id::text,
-      receipt_ocr_result_id::text as "ocrResultId",
-      raw_name as "rawName",
-      coalesce(tax_rate, '') as "taxRate",
-      coalesce(tax_mode, '') as "taxMode",
-      quantity::float,
-      coalesce(unit, '') as unit,
-      unit_price::float as "unitPrice",
-      coalesce(category, '') as category,
-      coalesce(account_title, '') as "accountTitle",
-      amount::float,
-      coalesce(match_status, '') as "matchStatus",
-      matched_product_id::text as "matchedProductId",
+      receipt_ocr_items.id::text,
+      receipt_ocr_items.receipt_ocr_result_id::text as "ocrResultId",
+      receipt_ocr_items.raw_name as "rawName",
+      coalesce(receipt_ocr_items.tax_rate, '') as "taxRate",
+      coalesce(receipt_ocr_items.tax_mode, '') as "taxMode",
+      receipt_ocr_items.quantity::float,
+      coalesce(receipt_ocr_items.unit, '') as unit,
+      receipt_ocr_items.unit_price::float as "unitPrice",
+      coalesce(receipt_ocr_items.category, '') as category,
+      coalesce(receipt_ocr_items.account_title, '') as "accountTitle",
+      receipt_ocr_items.amount::float,
+      coalesce(receipt_ocr_items.match_status, '') as "matchStatus",
+      receipt_ocr_items.matched_product_id::text as "matchedProductId",
       coalesce(products.name, '') as "matchedProductName"
     from receipt_ocr_items
     left join products on products.id = receipt_ocr_items.matched_product_id
-    where receipt_ocr_result_id::text = any(${ocrResultIds})
-    order by receipt_ocr_result_id, line_index
+    where receipt_ocr_items.receipt_ocr_result_id::text = any(${ocrResultIds})
+    order by receipt_ocr_items.receipt_ocr_result_id, receipt_ocr_items.line_index
   ` : [];
   const itemsByResultId = new Map<string, Array<{
     id: string;
