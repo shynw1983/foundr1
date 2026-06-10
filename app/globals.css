@@ -4170,6 +4170,7 @@ body :where(
   }
 
   .receipt-expense-line-body > label:nth-of-type(7),
+  .receipt-line-insert-actions,
   .voucher-product-binding {
     grid-column: auto;
   }
@@ -4197,12 +4198,28 @@ body :where(
 }
 
 .shell.has-voucher-preview .receipt-expense-line-body > label:nth-of-type(7),
+.shell.has-voucher-preview .receipt-line-insert-actions,
 .shell.has-voucher-preview .voucher-product-binding {
   grid-column: auto;
 }
 
 .receipt-line-delete-button {
   align-self: end;
+}
+
+.receipt-line-insert-actions {
+  grid-column: 1 / span 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.receipt-line-insert-actions .text-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  gap: 4px;
+  font-size: 12px;
 }
 
 .receipt-line-note {

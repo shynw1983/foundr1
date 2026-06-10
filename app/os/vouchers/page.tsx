@@ -765,15 +765,23 @@ export default function VouchersPage() {
     });
   }
 
-  function addAccountingLine(voucherId: string) {
+  function addAccountingLine(voucherId: string, placement?: { lineId: string; position: "before" | "after" }) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
       const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      const targetIndex = placement ? draft.lines.findIndex((line) => line.id === placement.lineId) : -1;
+      const insertIndex = targetIndex >= 0
+        ? targetIndex + (placement?.position === "after" ? 1 : 0)
+        : draft.lines.length;
+      const sourceLine = targetIndex >= 0 ? draft.lines[targetIndex] : undefined;
+      const nextLine = buildNewAccountingLine(draft.lines.length, draft.taxMode, sourceLine);
+      const nextLines = [...draft.lines];
+      nextLines.splice(insertIndex, 0, nextLine);
       return {
         ...current,
         [voucherId]: {
           ...draft,
-          lines: [...draft.lines, buildNewAccountingLine(draft.lines.length, draft.taxMode)]
+          lines: nextLines
         }
       };
     });
@@ -1336,6 +1344,7 @@ export default function VouchersPage() {
                           onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
                           onReceiptTaxTotalChange={(taxTotal) => updateAccountingDraftTaxTotal(voucher.id, taxTotal)}
                           onAddLine={() => addAccountingLine(voucher.id)}
+                          onInsertLine={(lineId, position) => addAccountingLine(voucher.id, { lineId, position })}
                           onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
                           productOptions={productOptions}
                           lineProductSelections={lineProductSelections}
@@ -1932,6 +1941,7 @@ function VoucherAccountingEditor({
   onLineChange,
   onReceiptTaxTotalChange,
   onAddLine,
+  onInsertLine,
   onRemoveLine,
   productOptions,
   lineProductSelections,
@@ -1954,6 +1964,7 @@ function VoucherAccountingEditor({
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
   onReceiptTaxTotalChange: (taxTotal: string) => void;
   onAddLine: () => void;
+  onInsertLine: (lineId: string, position: "before" | "after") => void;
   onRemoveLine: (lineId: string) => void;
   productOptions: ProductOption[];
   lineProductSelections: Record<string, string>;
@@ -2091,6 +2102,16 @@ function VoucherAccountingEditor({
                 <Trash2 size={16} />
                 削除
               </button>
+              <div className="receipt-line-insert-actions">
+                <button className="text-button" type="button" onClick={() => onInsertLine(line.id, "before")} disabled={isSaving}>
+                  <Plus size={14} />
+                  上に追加
+                </button>
+                <button className="text-button" type="button" onClick={() => onInsertLine(line.id, "after")} disabled={isSaving}>
+                  <Plus size={14} />
+                  下に追加
+                </button>
+              </div>
               <label>
                 <span>数量</span>
                 <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => onLineChange(line.id, { quantity: event.target.value })} disabled={isSaving} />
@@ -2258,7 +2279,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   }];
 }
 
-function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccountingLine {
+function buildNewAccountingLine(index: number, taxMode = "不明", sourceLine?: VoucherAccountingLine): VoucherAccountingLine {
   return {
     id: `manual-${Date.now()}-${index}`,
     ocrItemId: "",
@@ -2266,14 +2287,14 @@ function buildNewAccountingLine(index: number, taxMode = "不明"): VoucherAccou
     matchedProductName: "",
     matchStatus: "",
     confirmed: false,
-    accountTitle: "雑費",
-    subAccountTitle: "",
+    accountTitle: sourceLine?.accountTitle || "雑費",
+    subAccountTitle: sourceLine?.subAccountTitle || "",
     amount: "",
-    taxRate: "",
-    taxMode,
+    taxRate: sourceLine?.taxRate || "",
+    taxMode: sourceLine?.taxMode || taxMode,
     taxAmount: "0",
     quantity: "1",
-    unit: "個",
+    unit: sourceLine?.unit || "個",
     unitPrice: "",
     note: ""
   };
