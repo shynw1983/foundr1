@@ -3,6 +3,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritable
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
 import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
 
 type VoucherUsageType = "unclassified" | "shiire" | "keihi";
@@ -100,6 +101,13 @@ export async function POST(request: Request) {
       try {
         const analyzed = await analyzeReceiptWithRetry(file);
         const supplierName = buildVendorName(analyzed.result.companyName, analyzed.result.brandName, analyzed.result.locationName, analyzed.result.storeName);
+        const duplicate = await findDuplicateVoucherResult(storeId, analyzed.result);
+        if (duplicate) {
+          const pathname = extractBlobPathname(receiptUrl);
+          if (pathname) await del(pathname).catch(() => undefined);
+          results.push({ ok: true, duplicate: true, existingOcrResultId: duplicate.id, receiptUrl: duplicate.receiptPhotoUrl });
+          continue;
+        }
         ocrResultId = await saveReceiptOcrResult({
           sourceType: "voucher",
           storeId,
@@ -1153,6 +1161,70 @@ async function uploadVoucherDocument(file: File, storeId: string, index: number)
     metadata: { pathname: blob.pathname }
   });
   return `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
+}
+
+async function findDuplicateVoucherResult(storeId: string, result: ReceiptOcrResult) {
+  const purchaseDate = normalizeDuplicateDate(result.purchaseDate);
+  const purchaseTime = normalizeDuplicateTime(result.purchaseTime);
+  const total = Math.round(Number(result.total ?? 0));
+  const tax = Math.round(Number(result.tax ?? 0));
+  const merchantKey = normalizeDuplicateMerchant(buildVendorName(result.companyName, result.brandName, result.locationName, result.storeName));
+  if (!storeId || !purchaseDate || !merchantKey || !Number.isFinite(total) || total <= 0) return null;
+
+  const rows = await sql`
+    select
+      id::text,
+      receipt_photo_url as "receiptPhotoUrl",
+      coalesce(vendor_name, '') as "vendorName",
+      coalesce(company_name, '') as "companyName",
+      coalesce(brand_name, '') as "brandName",
+      coalesce(location_name, '') as "locationName"
+    from receipt_ocr_results
+    where source_type = 'voucher'
+      and store_id::text = ${storeId}
+      and status <> 'failed'
+      and purchase_date = ${purchaseDate}::date
+      and (${purchaseTime || null}::time is null or purchase_time = ${purchaseTime || null}::time)
+      and abs(coalesce(total, 0) - ${total}) <= 1
+      and abs(coalesce(tax, 0) - ${tax}) <= 1
+      and created_at >= now() - interval '1 year'
+    order by created_at desc
+    limit 8
+  `;
+
+  return rows.find((row) => {
+    const rowMerchantKey = normalizeDuplicateMerchant(buildVendorName(
+      String(row.companyName ?? ""),
+      String(row.brandName ?? ""),
+      String(row.locationName ?? ""),
+      String(row.vendorName ?? "")
+    ));
+    return rowMerchantKey === merchantKey;
+  }) ?? null;
+}
+
+function normalizeDuplicateDate(value: unknown) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function normalizeDuplicateTime(value: unknown) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function normalizeDuplicateMerchant(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[株式会社有限会社㈱()（）・.,，。]/g, "")
+    .trim();
 }
 
 function sleep(ms: number) {

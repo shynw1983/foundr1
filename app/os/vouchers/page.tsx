@@ -440,6 +440,7 @@ export default function VouchersPage() {
 
       let failedCount = 0;
       let savedCount = 0;
+      let duplicateCount = 0;
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const fileName = file.name || `file-${index + 1}`;
@@ -454,6 +455,8 @@ export default function VouchersPage() {
         const result = await uploadVoucherFileWithRetry(formData);
         if (!result.ok || result.ocrError) {
           failedCount += 1;
+        } else if (result.duplicate) {
+          duplicateCount += 1;
         } else {
           savedCount += 1;
         }
@@ -462,8 +465,10 @@ export default function VouchersPage() {
       }
 
       const finalMessage = failedCount
-        ? `保存処理が完了しました。一部OCR結果を確認してください（成功 ${savedCount}件 / 失敗 ${failedCount}件）。`
-        : "証憑を読み取りました。内容を確認してください。";
+        ? `保存処理が完了しました。一部OCR結果を確認してください（成功 ${savedCount}件 / 重複 ${duplicateCount}件 / 失敗 ${failedCount}件）。`
+        : duplicateCount
+          ? `証憑を読み取りました。重複している証憑は登録しませんでした（新規 ${savedCount}件 / 重複 ${duplicateCount}件）。`
+          : "証憑を読み取りました。内容を確認してください。";
       setMessage(finalMessage);
       form.reset();
       try {
@@ -2209,11 +2214,11 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
       const response = await fetch("/api/vouchers", { method: "POST", body: formData });
       const body = await response.json().catch(() => ({})) as {
         error?: string;
-        results?: Array<{ ok?: boolean; ocrError?: string; error?: string }>;
+        results?: Array<{ ok?: boolean; duplicate?: boolean; ocrError?: string; error?: string }>;
       };
       const result = body.results?.[0];
       if (response.ok && result?.ok) {
-        return { ok: true, ocrError: result.ocrError || "" };
+        return { ok: true, duplicate: Boolean(result.duplicate), ocrError: result.ocrError || "" };
       }
       lastError = body.error || result?.error || "証憑をアップロードできませんでした。";
     } catch (error) {
@@ -2221,7 +2226,7 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
     }
     await sleep(1200 * (attempt + 1));
   }
-  return { ok: false, ocrError: lastError || "証憑をアップロードできませんでした。" };
+  return { ok: false, duplicate: false, ocrError: lastError || "証憑をアップロードできませんでした。" };
 }
 
 async function splitPdfIntoPageFiles(file: File) {
