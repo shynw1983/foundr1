@@ -182,6 +182,7 @@ export async function PATCH(request: Request) {
     receiptTaxTotal?: string | number;
     note?: string;
     ocrItemId?: string;
+    summaryKey?: string;
     rawName?: string;
     accountTitle?: string;
     subAccountTitle?: string;
@@ -297,6 +298,30 @@ export async function PATCH(request: Request) {
       }
     }
     return Response.json({ ok: true, productId, itemId: String(item.id ?? "") });
+  }
+
+  if (body.action === "update_confirmed_accounting_summary_note") {
+    if (String(voucher.status ?? "") !== "confirmed") {
+      return Response.json({ error: "確定済みの証憑だけ編集できます。" }, { status: 400 });
+    }
+    const summaryKey = String(body.summaryKey ?? "").trim();
+    if (!summaryKey) return Response.json({ error: "摘要を保存する集計キーがありません。" }, { status: 400 });
+    const note = String(body.note ?? "").trim().slice(0, 240);
+
+    await sql`
+      update receipt_ocr_results
+      set
+        raw_result = jsonb_set(
+          coalesce(raw_result, '{}'::jsonb),
+          '{accountingSummaryNotes}',
+          coalesce(raw_result->'accountingSummaryNotes', '{}'::jsonb) || jsonb_build_object(${summaryKey}, ${note}),
+          true
+        ),
+        updated_at = now()
+      where id::text = ${id}
+    `;
+
+    return Response.json({ ok: true });
   }
 
   if (body.action === "update_confirmed_voucher_basic") {
@@ -768,6 +793,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
         receipt_ocr_results.usage_type as "usageType",
         receipt_ocr_results.payment_type as "paymentType",
         receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+        coalesce(receipt_ocr_results.raw_result->'accountingSummaryNotes', '{}'::jsonb)::text as "summaryNotes",
         coalesce(receipt_ocr_results.company_name, '') as "companyName",
         coalesce(receipt_ocr_results.brand_name, '') as "brandName",
         coalesce(receipt_ocr_results.location_name, '') as "locationName",
@@ -798,6 +824,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       "usageType",
       "paymentType",
       "reimbursementStatus",
+      max("summaryNotes") as "summaryNotes",
       "companyName",
       "brandName",
       "locationName",
@@ -872,6 +899,8 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
     const unitPrice = quantityNumber && Number.isFinite(quantityNumber) && quantityNumber > 0
       ? String(Math.round((taxIncludedAmount / quantityNumber) * 100) / 100)
       : "";
+    const summaryKey = buildAccountingSummaryKey(row);
+    const summaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey) ?? String(row.note ?? "");
     return [
       String(row.purchaseDate ?? ""),
       String(row.purchaseTime ?? ""),
@@ -890,7 +919,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       String(row.unit ?? "個").trim() || "個",
       unitPrice,
       String(Number(row.lineCount ?? 1)),
-      String(row.note ?? ""),
+      summaryNote,
       String(row.voucherId ?? ""),
       String(row.lineNo ?? ""),
       `${origin}/api/vouchers/${encodeURIComponent(String(row.voucherId ?? ""))}/preview`
@@ -924,6 +953,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       receipt_ocr_results.usage_type as "usageType",
       receipt_ocr_results.payment_type as "paymentType",
       receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+      coalesce(receipt_ocr_results.raw_result->'accountingSummaryNotes', '{}'::jsonb)::text as "summaryNotes",
       coalesce(receipt_ocr_results.company_name, '') as "companyName",
       coalesce(receipt_ocr_results.brand_name, '') as "brandName",
       coalesce(receipt_ocr_results.location_name, '') as "locationName",
@@ -977,6 +1007,8 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     usageType: string;
     paymentType: string;
     reimbursementStatus: string;
+    summaryKey: string;
+    manualSummaryNote: boolean;
     accountTitle: string;
     subAccountTitle: string;
     amount: number;
@@ -999,13 +1031,9 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       String(row.locationName ?? ""),
       String(row.vendorName ?? "")
     );
-    const key = [
-      String(row.voucherId ?? ""),
-      String(row.accountTitle ?? ""),
-      String(row.subAccountTitle ?? ""),
-      String(row.taxRate ?? ""),
-      String(row.taxMode ?? "")
-    ].join("\u001f");
+    const summaryKey = buildAccountingSummaryKey(row);
+    const key = [String(row.voucherId ?? ""), summaryKey].join("\u001f");
+    const manualSummaryNote = getAccountingSummaryNote(row.summaryNotes, summaryKey);
     const amount = Math.round(Number(row.amount ?? 0));
     const taxAmount = Math.round(Number(row.taxAmount ?? 0));
     const taxIncludedAmount = calculateAccountingTaxIncludedAmount(amount, taxAmount, row.taxMode);
@@ -1036,7 +1064,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       if (!existing.unit && existing.lineCount === 2 && existing.details[0]?.unit !== unit) existing.quantity = null;
       if (existing.quantity !== null && Number.isFinite(quantity ?? NaN)) existing.quantity += quantity ?? 0;
       else existing.quantity = null;
-      existing.note = `集計 ${existing.lineCount}行`;
+      if (!existing.manualSummaryNote) existing.note = `集計 ${existing.lineCount}行`;
       const existingTaxIncludedAmount = calculateAccountingTaxIncludedAmount(existing.amount, existing.taxAmount, existing.taxMode);
       existing.unitPrice = existing.unit && existing.quantity && existing.quantity > 0
         ? Math.round((existingTaxIncludedAmount / existing.quantity) * 100) / 100
@@ -1054,6 +1082,8 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       usageType: getUsageTypeExportLabel(String(row.usageType ?? "")),
       paymentType: getPaymentTypeExportLabel(String(row.paymentType ?? "")),
       reimbursementStatus: getReimbursementExportLabel(String(row.reimbursementStatus ?? "")),
+      summaryKey,
+      manualSummaryNote: manualSummaryNote !== null,
       accountTitle: detail.accountTitle,
       subAccountTitle: detail.subAccountTitle,
       amount,
@@ -1066,7 +1096,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
         ? Math.round((taxIncludedAmount / quantity) * 100) / 100
         : null,
       lineCount: 1,
-      note: detail.note,
+      note: manualSummaryNote ?? detail.note,
       createdAt: String(row.createdAt ?? ""),
       details: [detail]
     });
@@ -1076,6 +1106,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     lines: [...groups.values()].slice(0, 500).map((row) => ({
       voucherId: String(row.voucherId ?? ""),
       lineNo: Number(row.lineNo ?? 0),
+      summaryKey: String(row.summaryKey ?? ""),
       purchaseDate: String(row.purchaseDate ?? ""),
       purchaseTime: String(row.purchaseTime ?? ""),
       storeName: String(row.storeName ?? ""),
@@ -1696,6 +1727,29 @@ function sanitizeFileStem(value: string) {
 
 function buildVendorName(companyName: string, brandName: string, locationName: string, fallback: string) {
   return [brandName || companyName, locationName].filter(Boolean).join(" ").trim() || fallback || "";
+}
+
+function buildAccountingSummaryKey(value: Record<string, unknown>) {
+  return [
+    String(value.accountTitle ?? ""),
+    String(value.subAccountTitle ?? ""),
+    String(value.taxRate ?? ""),
+    String(value.taxMode ?? "")
+  ].join("\u001f");
+}
+
+function getAccountingSummaryNote(notesValue: unknown, summaryKey: string) {
+  let notes = notesValue;
+  if (typeof notesValue === "string") {
+    try {
+      notes = JSON.parse(notesValue);
+    } catch {
+      notes = {};
+    }
+  }
+  if (!isPlainObject(notes)) return null;
+  const note = String((notes as Record<string, unknown>)[summaryKey] ?? "").trim();
+  return note ? note : null;
 }
 
 function escapeCsvCell(value: unknown) {

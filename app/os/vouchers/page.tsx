@@ -148,6 +148,7 @@ type VoucherAccountingSummaryLine = {
 type ConfirmedAccountingLine = {
   voucherId: string;
   lineNo: number;
+  summaryKey?: string;
   purchaseDate: string;
   purchaseTime: string;
   storeName: string;
@@ -305,7 +306,9 @@ export default function VouchersPage() {
   const [confirmedAccountingLines, setConfirmedAccountingLines] = useState<ConfirmedAccountingLine[]>([]);
   const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
+  const [confirmedSummaryDrafts, setConfirmedSummaryDrafts] = useState<Record<string, string>>({});
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
+  const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
@@ -440,7 +443,16 @@ export default function VouchersPage() {
         setMessage(body.error ?? "確定済み明細を読み込めませんでした。");
         return;
       }
-      setConfirmedAccountingLines(body.lines ?? []);
+      const lines = body.lines ?? [];
+      setConfirmedAccountingLines(lines);
+      setConfirmedSummaryDrafts((current) => {
+        const next = { ...current };
+        for (const line of lines) {
+          const key = getConfirmedLineKey(line);
+          next[key] = line.note ?? "";
+        }
+        return next;
+      });
     } catch {
       setMessage("確定済み明細を読み込めませんでした。通信状態を確認してください。");
     } finally {
@@ -531,6 +543,39 @@ export default function VouchersPage() {
       setMessage("確定済み明細を保存できませんでした。通信状態を確認してください。");
     } finally {
       setSavingConfirmedLineKeys((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  async function saveConfirmedSummaryNote(line: ConfirmedAccountingLine) {
+    const key = getConfirmedLineKey(line);
+    if (savingConfirmedSummaryKeys[key]) return;
+    setSavingConfirmedSummaryKeys((current) => ({ ...current, [key]: true }));
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_confirmed_accounting_summary_note",
+          id: line.voucherId,
+          summaryKey: line.summaryKey || buildConfirmedSummaryKey(line),
+          note: (confirmedSummaryDrafts[key] ?? line.note ?? "").trim()
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "摘要を保存できませんでした。");
+        return;
+      }
+      setMessage("摘要を保存しました。CSV出力にも反映されます。");
+      await loadConfirmedAccountingLines(exportStartDate, exportEndDate);
+    } catch {
+      setMessage("摘要を保存できませんでした。通信状態を確認してください。");
+    } finally {
+      setSavingConfirmedSummaryKeys((current) => {
         const next = { ...current };
         delete next[key];
         return next;
@@ -1216,8 +1261,12 @@ export default function VouchersPage() {
             ) : null}
             {confirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
-                {confirmedAccountingLines.map((line) => (
-                  <div className="voucher-confirmed-line-row" key={getConfirmedLineKey(line)}>
+                {confirmedAccountingLines.map((line) => {
+                  const key = getConfirmedLineKey(line);
+                  const summaryDraft = confirmedSummaryDrafts[key] ?? line.note ?? "";
+                  const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
+                  return (
+                  <div className="voucher-confirmed-line-row" key={key}>
                     <div>
                       <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
                       <span>{line.storeName} / {line.vendorName}</span>
@@ -1229,10 +1278,23 @@ export default function VouchersPage() {
                     <div>
                       <strong>{formatMoney(calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
                       <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
+                      <div className="voucher-confirmed-summary-edit">
+                        <input
+                          value={summaryDraft}
+                          onChange={(event) => setConfirmedSummaryDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                          placeholder="摘要"
+                          aria-label="摘要"
+                          disabled={isSavingSummary}
+                        />
+                        <button className="secondary-button" type="button" onClick={() => saveConfirmedSummaryNote(line)} disabled={isSavingSummary || summaryDraft.trim() === (line.note ?? "").trim()}>
+                          保存
+                        </button>
+                      </div>
                     </div>
                     <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -2819,11 +2881,17 @@ function getConfirmedLineKey(line: ConfirmedAccountingLine) {
   return [
     line.voucherId,
     line.lineNo,
+    line.summaryKey || buildConfirmedSummaryKey(line)
+  ].join("|");
+}
+
+function buildConfirmedSummaryKey(line: Pick<ConfirmedAccountingLine, "accountTitle" | "subAccountTitle" | "taxRate" | "taxMode">) {
+  return [
     line.accountTitle,
     line.subAccountTitle,
     line.taxRate,
     line.taxMode
-  ].join("|");
+  ].join("\u001f");
 }
 
 function getConfirmedDetailKey(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {

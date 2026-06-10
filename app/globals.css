@@ -18418,6 +18418,31 @@ body :where(
   min-height: 34px;
 }
 
+.voucher-confirmed-summary-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.voucher-confirmed-summary-edit input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 0.78rem;
+  background: #ffffff;
+}
+
+.voucher-confirmed-summary-edit button {
+  min-height: 34px;
+  padding-inline: 10px;
+}
+
 .voucher-confirmed-line-actions {
   display: flex;
   gap: 6px;
