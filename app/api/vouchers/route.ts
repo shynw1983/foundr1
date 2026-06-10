@@ -178,6 +178,7 @@ export async function PATCH(request: Request) {
     locationName?: string;
     transactionDate?: string;
     transactionTime?: string;
+    receiptTotal?: string | number;
     note?: string;
     ocrItemId?: string;
     productId?: string;
@@ -344,8 +345,9 @@ export async function PATCH(request: Request) {
     accountingLines[index] = nextLine;
 
     const normalizedLines = normalizeAccountingLines(accountingLines, voucher, nextUsageType);
-    const total = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
+    const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
     const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
 
     await sql`
       update receipt_ocr_results
@@ -354,7 +356,7 @@ export async function PATCH(request: Request) {
         payment_type = ${nextPaymentType},
         reimbursement_status = ${nextReimbursementStatus},
         tax = ${tax},
-        total = ${total},
+        total = ${receiptTotal},
         raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
         updated_at = now()
       where id::text = ${id}
@@ -364,7 +366,7 @@ export async function PATCH(request: Request) {
       await updateReceiptOcrItemDetails(id, normalizedLines);
     }
 
-    return Response.json({ ok: true, lineCount: normalizedLines.length, amount: total, tax });
+    return Response.json({ ok: true, lineCount: normalizedLines.length, amount: receiptTotal, tax });
   }
 
   if (body.action === "confirm_accounting") {
@@ -381,6 +383,7 @@ export async function PATCH(request: Request) {
     const lines = normalizeAccountingLines(body.lines, voucher, nextUsageType);
     const amount = lines.reduce((sum, line) => sum + line.amount, 0);
     const taxAmount = lines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? amount;
     const transactionDate = normalizeDate(body.transactionDate) || normalizeDate(String(voucher.purchaseDate ?? ""));
     const transactionTime = normalizeTime(body.transactionTime) || normalizeTime(String(voucher.purchaseTime ?? ""));
     const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
@@ -472,7 +475,7 @@ export async function PATCH(request: Request) {
         purchase_date = ${transactionDate},
         purchase_time = ${transactionTime || null},
         tax = ${taxAmount},
-        total = ${amount},
+        total = ${receiptTotal},
         raw_result = jsonb_set(raw_result, '{accountingLines}', ${JSON.stringify(lines)}::jsonb, true),
         confirmed_at = now(),
         confirmed_by = ${session.id},

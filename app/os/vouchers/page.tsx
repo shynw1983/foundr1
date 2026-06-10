@@ -106,6 +106,7 @@ type VoucherAccountingDraft = {
   locationName: string;
   transactionDate: string;
   transactionTime: string;
+  receiptTotal: string;
   taxMode: string;
   lines: VoucherAccountingLine[];
 };
@@ -932,6 +933,7 @@ export default function VouchersPage() {
           locationName: draft.locationName,
           transactionDate: draft.transactionDate,
           transactionTime: draft.transactionTime,
+          receiptTotal: draft.receiptTotal,
           note: draft.note
         })
       });
@@ -1890,6 +1892,10 @@ function VoucherAccountingEditor({
           {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
         </select>
       </label>
+      <label>
+        <span>レシート総額</span>
+        <input type="number" min="0" step="1" value={draft.receiptTotal} onChange={(event) => onDraftChange({ receiptTotal: event.target.value })} disabled={isSaving} />
+      </label>
       <label className="receipt-note-field">
         <span>備考</span>
         <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" disabled={isSaving} />
@@ -2046,7 +2052,7 @@ function VoucherAccountingEditor({
           {!validation.ok ? (
             <small>
               {validation.taxIncomplete ? "税率・税区分が未確認の明細があります。 " : ""}
-              差額 {formatMoney(validation.difference)}。税区分・税率・金額が正しいか確認してください。
+              差額 {formatMoney(validation.difference)}。2円以内の丸め差は許容されます。税区分・税率・金額、またはレシート総額を確認してください。
             </small>
           ) : null}
           {!allLinesConfirmed ? (
@@ -2080,6 +2086,7 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
     locationName: voucher?.locationName || "",
     transactionDate: voucher?.purchaseDate || getCurrentDate(),
     transactionTime: voucher?.purchaseTime || "",
+    receiptTotal: String(Math.round(Number(voucher?.total ?? 0)) || ""),
     taxMode,
     lines: normalizedLines
   };
@@ -2162,11 +2169,11 @@ function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccount
   const lineAmountTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.amount || 0)), 0);
   const taxTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
   const expectedTotal = draft.taxMode === "外税" ? lineAmountTotal + taxTotal : lineAmountTotal;
-  const receiptTotal = Math.round(Number(voucher.total || 0));
+  const receiptTotal = Math.round(Number(draft.receiptTotal || voucher.total || 0));
   const difference = expectedTotal - receiptTotal;
   const taxIncomplete = !draft.taxMode || draft.taxMode === "不明" || draft.lines.some((line) => !line.taxRate);
   return {
-    ok: Math.abs(difference) <= 1 && !taxIncomplete,
+    ok: Math.abs(difference) <= 2 && !taxIncomplete,
     taxIncomplete,
     receiptTotal,
     lineAmountTotal,
