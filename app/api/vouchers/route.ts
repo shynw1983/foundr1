@@ -631,37 +631,81 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
   const origin = url.origin;
 
   const rows = await sql`
+    with expanded_lines as (
+      select
+        receipt_ocr_results.id::text as "voucherId",
+        stores.name as "storeName",
+        receipt_ocr_results.created_at as "createdAt",
+        coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+        coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
+        receipt_ocr_results.usage_type as "usageType",
+        receipt_ocr_results.payment_type as "paymentType",
+        receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+        coalesce(receipt_ocr_results.company_name, '') as "companyName",
+        coalesce(receipt_ocr_results.brand_name, '') as "brandName",
+        coalesce(receipt_ocr_results.location_name, '') as "locationName",
+        coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
+        line.ordinality::int as "lineNo",
+        coalesce(line.value->>'accountTitle', '') as "accountTitle",
+        coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
+        coalesce((nullif(line.value->>'amount', ''))::float, 0) as amount,
+        coalesce(line.value->>'taxRate', '') as "taxRate",
+        coalesce(line.value->>'taxMode', '') as "taxMode",
+        coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
+        (nullif(line.value->>'quantity', ''))::float as quantity,
+        coalesce(line.value->>'unit', '') as unit,
+        coalesce(line.value->>'note', '') as note
+      from receipt_ocr_results
+      join stores on stores.id = receipt_ocr_results.store_id
+      cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
+      where receipt_ocr_results.status = 'confirmed'
+        and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
+        and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
+        and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
+    )
     select
-      receipt_ocr_results.id::text as "voucherId",
-      stores.name as "storeName",
-      coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
-      coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
-      receipt_ocr_results.usage_type as "usageType",
-      receipt_ocr_results.payment_type as "paymentType",
-      receipt_ocr_results.reimbursement_status as "reimbursementStatus",
-      coalesce(receipt_ocr_results.company_name, '') as "companyName",
-      coalesce(receipt_ocr_results.brand_name, '') as "brandName",
-      coalesce(receipt_ocr_results.location_name, '') as "locationName",
-      coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
-      line.ordinality::int as "lineNo",
-      coalesce(line.value->>'accountTitle', '') as "accountTitle",
-      coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
-      coalesce((line.value->>'amount')::float, 0) as amount,
-      coalesce(line.value->>'taxRate', '') as "taxRate",
-      coalesce(line.value->>'taxMode', '') as "taxMode",
-      coalesce((line.value->>'taxAmount')::float, 0) as "taxAmount",
-      coalesce((line.value->>'quantity')::float, null) as quantity,
-      coalesce(line.value->>'unit', '') as unit,
-      coalesce((line.value->>'unitPrice')::float, null) as "unitPrice",
-      coalesce(line.value->>'note', '') as note
-    from receipt_ocr_results
-    join stores on stores.id = receipt_ocr_results.store_id
-    cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
-    where receipt_ocr_results.status = 'confirmed'
-      and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
-      and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
-      and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
-    order by receipt_ocr_results.purchase_date asc nulls last, receipt_ocr_results.purchase_time asc nulls last, receipt_ocr_results.created_at asc, line.ordinality asc
+      "voucherId",
+      "storeName",
+      "purchaseDate",
+      "purchaseTime",
+      "usageType",
+      "paymentType",
+      "reimbursementStatus",
+      "companyName",
+      "brandName",
+      "locationName",
+      "vendorName",
+      min("lineNo") as "lineNo",
+      count(*)::int as "lineCount",
+      "accountTitle",
+      "subAccountTitle",
+      sum(amount) as amount,
+      "taxRate",
+      "taxMode",
+      sum("taxAmount") as "taxAmount",
+      case when count(distinct nullif(unit, '')) <= 1 and count(quantity) > 0 then sum(quantity) else null end as quantity,
+      case when count(distinct nullif(unit, '')) <= 1 then max(unit) else '' end as unit,
+      case when count(distinct nullif(unit, '')) <= 1 and coalesce(sum(quantity), 0) > 0 then sum(amount) / sum(quantity) else null end as "unitPrice",
+      case when count(*) = 1 then max(note) else concat('集計 ', count(*)::text, '行') end as note,
+      min("createdAt") as "createdAt"
+    from expanded_lines
+    group by
+      "voucherId",
+      "storeName",
+      "purchaseDate",
+      "purchaseTime",
+      "usageType",
+      "paymentType",
+      "reimbursementStatus",
+      "companyName",
+      "brandName",
+      "locationName",
+      "vendorName",
+      "accountTitle",
+      "subAccountTitle",
+      "taxRate",
+      "taxMode"
+    order by "purchaseDate" asc nulls last, "purchaseTime" asc nulls last, "createdAt" asc, min("lineNo") asc
   `;
 
   const headers = [
@@ -681,6 +725,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
     "数量",
     "単位",
     "税込単価",
+    "集計行数",
     "摘要",
     "証憑ID",
     "行番号",
@@ -713,6 +758,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       quantity,
       String(row.unit ?? ""),
       unitPrice,
+      String(Number(row.lineCount ?? 1)),
       String(row.note ?? ""),
       String(row.voucherId ?? ""),
       String(row.lineNo ?? ""),
@@ -738,37 +784,81 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
   const toDate = normalizeDate(url.searchParams.get("to") ?? "");
 
   const rows = await sql`
+    with expanded_lines as (
+      select
+        receipt_ocr_results.id::text as "voucherId",
+        stores.name as "storeName",
+        receipt_ocr_results.created_at as "createdAt",
+        coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+        coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
+        receipt_ocr_results.usage_type as "usageType",
+        receipt_ocr_results.payment_type as "paymentType",
+        receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+        coalesce(receipt_ocr_results.company_name, '') as "companyName",
+        coalesce(receipt_ocr_results.brand_name, '') as "brandName",
+        coalesce(receipt_ocr_results.location_name, '') as "locationName",
+        coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
+        line.ordinality::int as "lineNo",
+        coalesce(line.value->>'accountTitle', '') as "accountTitle",
+        coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
+        coalesce((nullif(line.value->>'amount', ''))::float, 0) as amount,
+        coalesce(line.value->>'taxRate', '') as "taxRate",
+        coalesce(line.value->>'taxMode', '') as "taxMode",
+        coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
+        (nullif(line.value->>'quantity', ''))::float as quantity,
+        coalesce(line.value->>'unit', '') as unit,
+        coalesce(line.value->>'note', '') as note
+      from receipt_ocr_results
+      join stores on stores.id = receipt_ocr_results.store_id
+      cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
+      where receipt_ocr_results.status = 'confirmed'
+        and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
+        and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
+        and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
+    )
     select
-      receipt_ocr_results.id::text as "voucherId",
-      stores.name as "storeName",
-      coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
-      coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
-      receipt_ocr_results.usage_type as "usageType",
-      receipt_ocr_results.payment_type as "paymentType",
-      receipt_ocr_results.reimbursement_status as "reimbursementStatus",
-      coalesce(receipt_ocr_results.company_name, '') as "companyName",
-      coalesce(receipt_ocr_results.brand_name, '') as "brandName",
-      coalesce(receipt_ocr_results.location_name, '') as "locationName",
-      coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
-      line.ordinality::int as "lineNo",
-      coalesce(line.value->>'accountTitle', '') as "accountTitle",
-      coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
-      coalesce((line.value->>'amount')::float, 0) as amount,
-      coalesce(line.value->>'taxRate', '') as "taxRate",
-      coalesce(line.value->>'taxMode', '') as "taxMode",
-      coalesce((line.value->>'taxAmount')::float, 0) as "taxAmount",
-      coalesce((line.value->>'quantity')::float, null) as quantity,
-      coalesce(line.value->>'unit', '') as unit,
-      coalesce((line.value->>'unitPrice')::float, null) as "unitPrice",
-      coalesce(line.value->>'note', '') as note
-    from receipt_ocr_results
-    join stores on stores.id = receipt_ocr_results.store_id
-    cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
-    where receipt_ocr_results.status = 'confirmed'
-      and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
-      and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
-      and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
-    order by receipt_ocr_results.purchase_date asc nulls last, receipt_ocr_results.purchase_time asc nulls last, receipt_ocr_results.created_at asc, line.ordinality asc
+      "voucherId",
+      "storeName",
+      "purchaseDate",
+      "purchaseTime",
+      "usageType",
+      "paymentType",
+      "reimbursementStatus",
+      "companyName",
+      "brandName",
+      "locationName",
+      "vendorName",
+      min("lineNo") as "lineNo",
+      count(*)::int as "lineCount",
+      "accountTitle",
+      "subAccountTitle",
+      sum(amount) as amount,
+      "taxRate",
+      "taxMode",
+      sum("taxAmount") as "taxAmount",
+      case when count(distinct nullif(unit, '')) <= 1 and count(quantity) > 0 then sum(quantity) else null end as quantity,
+      case when count(distinct nullif(unit, '')) <= 1 then max(unit) else '' end as unit,
+      case when count(distinct nullif(unit, '')) <= 1 and coalesce(sum(quantity), 0) > 0 then sum(amount) / sum(quantity) else null end as "unitPrice",
+      case when count(*) = 1 then max(note) else concat('集計 ', count(*)::text, '行') end as note,
+      min("createdAt") as "createdAt"
+    from expanded_lines
+    group by
+      "voucherId",
+      "storeName",
+      "purchaseDate",
+      "purchaseTime",
+      "usageType",
+      "paymentType",
+      "reimbursementStatus",
+      "companyName",
+      "brandName",
+      "locationName",
+      "vendorName",
+      "accountTitle",
+      "subAccountTitle",
+      "taxRate",
+      "taxMode"
+    order by "purchaseDate" asc nulls last, "purchaseTime" asc nulls last, "createdAt" asc, min("lineNo") asc
     limit 500
   `;
 
@@ -797,6 +887,7 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       quantity: row.quantity === null || row.quantity === undefined ? "" : String(Number(row.quantity)),
       unit: String(row.unit ?? ""),
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
+      lineCount: Number(row.lineCount ?? 1),
       note: String(row.note ?? "")
     }))
   });

@@ -158,6 +158,7 @@ type ConfirmedAccountingLine = {
   quantity: string;
   unit: string;
   unitPrice: string;
+  lineCount?: number;
   note: string;
 };
 
@@ -1010,7 +1011,7 @@ export default function VouchersPage() {
             {confirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
                 {confirmedAccountingLines.map((line) => (
-                  <div className="voucher-confirmed-line-row" key={`${line.voucherId}-${line.lineNo}`}>
+                  <div className="voucher-confirmed-line-row" key={`${line.voucherId}-${line.lineNo}-${line.accountTitle}-${line.subAccountTitle}-${line.taxRate}-${line.taxMode}`}>
                     <div>
                       <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
                       <span>{line.storeName} / {line.vendorName}</span>
@@ -1021,7 +1022,7 @@ export default function VouchersPage() {
                     </div>
                     <div>
                       <strong>{formatMoney(line.amount)}</strong>
-                      <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}` : line.note || "-"}</span>
+                      <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
                     </div>
                     <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
                   </div>
