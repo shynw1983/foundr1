@@ -1003,21 +1003,24 @@ export default function VouchersPage() {
           <div className="voucher-list">
             {sortedVouchers.map((voucher) => {
               const isConfirmed = voucher.status === "confirmed";
-              const isExpanded = !isConfirmed || expandedVoucherIds[voucher.id];
+              const isPendingReview = voucher.status !== "confirmed" && voucher.status !== "failed";
+              const isExpanded = Boolean(expandedVoucherIds[voucher.id]);
               const pendingAction = pendingActions[voucher.id];
               const isVoucherBusy = Boolean(pendingAction);
               return (
-                <article className={`voucher-row ${isConfirmed && !isExpanded ? "is-collapsed" : ""}`} key={voucher.id}>
+                <article className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""}`} key={voucher.id}>
                   <div className="voucher-row-main">
                     <div className="voucher-row-heading">
                       <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : "is-active"}`}>
                         {voucher.status === "failed" ? "OCR失敗" : isConfirmed ? "確定済み" : "確認待ち"}
                       </span>
+                      {isPendingReview && !isExpanded ? <span className="voucher-review-alert">未確認明細あり</span> : null}
                       <strong>{buildVoucherTitle(voucher)}</strong>
                     </div>
                     <p>
                       {voucher.storeName || "店舗未設定"} / {voucher.purchaseDate || "日付未読取"} {voucher.purchaseTime || ""} / {voucher.itemCount}行 / 税 {formatMoney(voucher.tax)}
                     </p>
+                    {isPendingReview && !isExpanded ? <p className="voucher-review-note">展開して用途・税率・金額・商品紐付けを確認してください。</p> : null}
                     <div className="voucher-row-meta">
                       <span>{usageLabels[voucher.usageType]}</span>
                       <span>{paymentLabels[voucher.paymentType]}</span>
@@ -1028,17 +1031,15 @@ export default function VouchersPage() {
                     </div>
                   </div>
                   <strong className="voucher-total">{formatMoney(voucher.total)}</strong>
-                  {isConfirmed ? (
-                    <button
-                      className={`voucher-expand-button ${isExpanded ? "is-open" : ""}`}
-                      type="button"
-                      onClick={() => toggleVoucherExpanded(voucher.id)}
-                      aria-expanded={isExpanded}
-                    >
-                      <ChevronDown size={16} />
-                      {isExpanded ? "閉じる" : "詳細"}
-                    </button>
-                  ) : null}
+                  <button
+                    className={`voucher-expand-button ${isExpanded ? "is-open" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""}`}
+                    type="button"
+                    onClick={() => toggleVoucherExpanded(voucher.id)}
+                    aria-expanded={isExpanded}
+                  >
+                    <ChevronDown size={16} />
+                    {isExpanded ? "閉じる" : isPendingReview ? "明細を確認" : "詳細"}
+                  </button>
                   {isExpanded ? (
                     <>
                       <div className="voucher-controls">

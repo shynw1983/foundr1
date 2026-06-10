@@ -18220,6 +18220,11 @@ body :where(
   background: #ffffff;
 }
 
+.voucher-row.needs-review {
+  border-color: rgba(180, 83, 9, 0.42);
+  box-shadow: inset 4px 0 0 rgba(245, 158, 11, 0.72);
+}
+
 .voucher-row-main {
   display: grid;
   gap: 6px;
@@ -18248,6 +18253,11 @@ body :where(
   line-height: 1.5;
 }
 
+.voucher-row-main .voucher-review-note {
+  color: #92400e;
+  font-weight: 600;
+}
+
 .voucher-row-meta {
   display: flex;
   flex-wrap: wrap;
@@ -18259,6 +18269,16 @@ body :where(
   border-radius: 999px;
   padding: 2px 8px;
   background: #ffffff;
+}
+
+.voucher-review-alert {
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
 .voucher-total {
@@ -18296,6 +18316,12 @@ body :where(
 .voucher-expand-button:hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.voucher-expand-button.needs-review {
+  border-color: rgba(180, 83, 9, 0.38);
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .voucher-controls {
