@@ -174,6 +174,7 @@ type VoucherAccountingValidation = {
 type VoucherUploadProgress = {
   total: number;
   completed: number;
+  currentProgress?: number;
   failed: number;
   currentFile: string;
   phase: string;
@@ -449,7 +450,16 @@ export default function VouchersPage() {
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const fileName = file.name || `file-${index + 1}`;
-        setUploadProgress({ total: files.length, completed: index, failed: failedCount, currentFile: fileName, phase: "アップロード・OCR中" });
+        setUploadProgress({ total: files.length, completed: index, currentProgress: 0.08, failed: failedCount, currentFile: fileName, phase: "アップロード・OCR中" });
+        const progressTimer = window.setInterval(() => {
+          setUploadProgress((current) => {
+            if (!current || current.currentFile !== fileName || current.completed !== index) return current;
+            return {
+              ...current,
+              currentProgress: Math.min(0.9, (current.currentProgress ?? 0) + 0.03)
+            };
+          });
+        }, 900);
 
         const formData = new FormData();
         formData.set("storeId", selectedStoreId);
@@ -457,7 +467,7 @@ export default function VouchersPage() {
         formData.set("paymentType", paymentType);
         formData.append("receipts", file);
 
-        const result = await uploadVoucherFileWithRetry(formData);
+        const result = await uploadVoucherFileWithRetry(formData).finally(() => window.clearInterval(progressTimer));
         if (!result.ok || result.ocrError) {
           failedCount += 1;
         } else if (result.duplicate) {
@@ -465,7 +475,7 @@ export default function VouchersPage() {
         } else {
           savedCount += 1;
         }
-        setUploadProgress({ total: files.length, completed: index + 1, failed: failedCount, currentFile: fileName, phase: "完了" });
+        setUploadProgress({ total: files.length, completed: index + 1, currentProgress: 0, failed: failedCount, currentFile: fileName, phase: "完了" });
         if (index < files.length - 1) await sleep(800);
       }
 
@@ -1188,16 +1198,16 @@ function formatMoney(value: number) {
 }
 
 function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgress }) {
-  const percentage = progress.total > 0 ? Math.round(progress.completed / progress.total * 100) : 0;
+  const completedUnits = progress.completed + Math.max(0, Math.min(0.99, progress.currentProgress ?? 0));
+  const percentage = progress.total > 0 ? Math.round(Math.min(completedUnits / progress.total, 1) * 100) : 0;
   const progressScale = Math.max(0, Math.min(100, percentage)) / 100;
-  const isActive = progress.completed < progress.total;
   return (
     <div className="voucher-upload-progress" aria-live="polite">
       <div className="voucher-upload-progress-heading">
         <strong>{percentage}%</strong>
         <span>{progress.completed}/{progress.total}件</span>
       </div>
-      <div className={`voucher-upload-progress-bar ${isActive ? "is-active" : ""}`} aria-hidden="true">
+      <div className="voucher-upload-progress-bar" aria-hidden="true">
         <span style={{ transform: `scaleX(${progressScale})` }} />
       </div>
       <p>

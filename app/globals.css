@@ -18201,23 +18201,6 @@ body :where(
   transition: transform 180ms ease;
 }
 
-.voucher-upload-progress-bar.is-active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(31, 111, 85, 0.18), transparent);
-  animation: voucherUploadProgressSweep 1.2s linear infinite;
-}
-
-@keyframes voucherUploadProgressSweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
 .voucher-reference-price-backdrop {
   position: fixed;
   inset: 0;
