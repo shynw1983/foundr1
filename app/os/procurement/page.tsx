@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, ChevronDown, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -697,6 +697,7 @@ export default function ProcurementPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
@@ -813,6 +814,18 @@ export default function ProcurementPage() {
   useEffect(() => {
     setVisibleOrderLimit(procurementOrderRenderBatchSize);
   }, [statusFilter, query, focusedOrderId]);
+
+  function toggleOrderExpanded(orderId: string) {
+    setExpandedOrderIds((current) => {
+      const next = new Set(current);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  }
 
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
     let updatedItem: ProcurementTaskItem | null = null;
@@ -1272,9 +1285,10 @@ export default function ProcurementPage() {
               const hasOnlineOrderItems = onlineOrderItems.length > 0;
               const hasStoreDeliveryItems = storeDeliveryItems.length > 0;
               const estimatedAmount = calculateProcurementOrderEstimatedAmount(items, productLookup);
+              const isExpanded = expandedOrderIds.has(order.id);
 
               return (
-                <article className="procurement-order-card" key={order.id}>
+                <article className={isExpanded ? "procurement-order-card is-expanded" : "procurement-order-card is-collapsed"} key={order.id}>
                   <div className="procurement-order-heading">
                     <div>
                       <div className="row-heading">
@@ -1288,179 +1302,202 @@ export default function ProcurementPage() {
                       <span>{handledCount} / {items.length} 処理済み</span>
                       {unavailableCount > 0 ? <span>購入不可 {unavailableCount} 件</span> : null}
                     </div>
+                    <button
+                      type="button"
+                      className="procurement-order-toggle"
+                      aria-expanded={isExpanded}
+                      aria-controls={`procurement-order-body-${order.id}`}
+                      onClick={() => toggleOrderExpanded(order.id)}
+                    >
+                      <ChevronDown size={16} aria-hidden="true" />
+                      <span>{isExpanded ? "閉じる" : "開く"}</span>
+                    </button>
                   </div>
-                  {liveStatus === "確認待ち" ? (
-                    <div className="workflow-hint">
-                      <span>購入側の作業は納品済みです。最終確認は店舗側で行います。</span>
-                      <a href={`/os/orders#order-${order.id}`}>店舗確認へ</a>
+                  <div className="procurement-order-compact-summary">
+                    <span>発注先 {supplierGroups.length}</span>
+                    <span>商品 {items.length}</span>
+                    {inDeliveryCount > 0 ? <span>配送中 {inDeliveryCount}</span> : null}
+                    {deliveredCount > 0 ? <span>納品済み {deliveredCount}</span> : null}
+                    {receivedCount > 0 ? <span>店舗確認済み {receivedCount}</span> : null}
+                    {readyToDeliverCount > 0 ? <span>配送待ち {readyToDeliverCount}</span> : null}
+                    {hasOnlineOrderItems ? <span>オンライン/卸 {onlineOrderItems.length}</span> : null}
+                  </div>
+                  {isExpanded ? (
+                    <div className="procurement-order-body" id={`procurement-order-body-${order.id}`}>
+                      {liveStatus === "確認待ち" ? (
+                        <div className="workflow-hint">
+                          <span>購入側の作業は納品済みです。最終確認は店舗側で行います。</span>
+                          <a href={`/os/orders#order-${order.id}`}>店舗確認へ</a>
+                        </div>
+                      ) : null}
+                      <AdditionalPurchasePanel
+                        orderId={order.id}
+                        products={products}
+                        draft={additionalPurchaseDrafts[order.id] ?? {
+                          productId: getDefaultAdditionalPurchaseProductId(products),
+                          quantity: 1,
+                          note: ""
+                        }}
+                        isSubmitting={submittingAdditionalPurchaseOrderId === order.id}
+                        onChange={(next) => updateAdditionalPurchaseDraft(order.id, next)}
+                        onSubmit={() => void createAdditionalPurchaseItem(order.id)}
+                      />
+                      <OrderFulfillmentPanel
+                        hasOnlineOrderItems={hasOnlineOrderItems}
+                        hasStoreDeliveryItems={hasStoreDeliveryItems}
+                        hasPurchasedItems={hasPurchasedItems}
+                        purchasedCount={completedCount}
+                        unavailableCount={unavailableCount}
+                        onlinePurchasedCount={onlinePurchasedCount}
+                        onlineUnavailableCount={onlineUnavailableCount}
+                        onlineDeliveredCount={onlineDeliveredCount}
+                        onlineReceivedCount={onlineReceivedCount}
+                        onlineTotalCount={onlineOrderItems.length}
+                        onlineSupplierGroups={onlineSupplierGroups}
+                        deliveredCount={deliveredCount}
+                        receivedCount={receivedCount}
+                        inDeliveryCount={inDeliveryCount}
+                        readyToDeliverCount={readyToDeliverCount}
+                        totalCount={items.length}
+                        state={deliveryState}
+                        onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
+                        onConfirmOnlineOrder={(supplier) => confirmOnlineOrder(order.id, supplier)}
+                        onMarkOnlineArrived={(supplier) => markOnlineOrderArrived(order.id, supplier)}
+                        batches={orderDeliveryBatches}
+                        onCreateBatch={() => createDeliveryBatch(order.id)}
+                        onMarkStatus={markDeliveryBatchStatus}
+                      />
+                      <div className="procurement-supplier-list">
+                        {supplierGroups.map((group) => {
+                          const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
+                          const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
+                          const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
+                          const needsReceiptUpload = canUploadReceipt && !supplierReceipt;
+
+                          return (
+                            <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
+                              <div className="supplier-group-heading">
+                                <div>
+                                  <span>発注先</span>
+                                  <strong>{group.supplier}</strong>
+                                </div>
+                                <div className="supplier-group-meta">
+                                  <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
+                                  <div className="receipt-upload-control">
+                                    {supplierReceipt ? (
+                                      <a href={supplierReceipt} target="_blank" rel="noreferrer">
+                                        レシートを見る
+                                      </a>
+                                    ) : needsReceiptUpload ? (
+                                      <span className="receipt-missing-label">レシート未アップロード</span>
+                                    ) : null}
+                                    <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
+                                      <input
+                                        type="file"
+                                        accept="image/*,application/pdf,.pdf"
+                                        disabled={!canUploadReceipt}
+                                        onChange={(event) => {
+                                          const file = event.target.files?.[0];
+                                          if (file) uploadReceiptPhoto(order.id, group.supplier, file);
+                                          event.currentTarget.value = "";
+                                        }}
+                                      />
+                                      <span>{supplierReceipt ? "レシートを差替" : "レシートをアップロード"}</span>
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="procurement-task-list">
+                                {group.items.map((item) => {
+                                  const quantityDiff = item.actualQuantity - item.requestedQuantity;
+                                  const product = findProcurementProductFromLookup(item, productLookup);
+                                  const photoSrc = getProductPhotoSrc(product?.photoUrl);
+                                  const productSpec = product?.packageSpec || product?.specNote;
+                                  const referencePrice = Number(product?.referencePrice ?? 0);
+                                  const temporarySupplierNote = getTemporarySupplierNote(item.note);
+                                  const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
+                                  const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
+                                  const isDeliveryLocked = isDeliveryLockedItem(item);
+
+                                  return (
+                                    <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
+                                      <label className="task-check">
+                                        <input
+                                          type="checkbox"
+                                          checked={item.purchased || item.unavailable}
+                                          disabled={item.unavailable || isDeliveryLocked}
+                                          onChange={(event) =>
+                                            updateProcurementTaskItem(item.id, {
+                                              purchased: event.target.checked,
+                                              unavailable: false,
+                                              deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
+                                              deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
+                                            })
+                                          }
+                                        />
+                                        <span>{item.unavailable ? "購入不可" : item.purchased ? "購入済み" : "未購入"}</span>
+                                      </label>
+                                      <span className="task-product-photo">
+                                        {photoSrc ? (
+                                          <img src={photoSrc} alt={`${item.productName} の写真`} />
+                                        ) : (
+                                          <span>写真</span>
+                                        )}
+                                      </span>
+                                      <div className="task-product">
+                                        <div className="task-product-line">
+                                          <strong>{item.productName}</strong>
+                                          {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
+                                          {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
+                                          {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
+                                          {item.unavailable ? <span>購入不可</span> : null}
+                                          {isAdditionalPurchase ? <span>追加購入</span> : null}
+                                          {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
+                                        </div>
+                                        {productSpec ? <small>{productSpec}</small> : null}
+                                        <small>{isAdditionalPurchase ? "追加" : "依頼"} {item.requestedQuantity} {item.unit}</small>
+                                        <small>
+                                          参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
+                                        </small>
+                                        {purchaseUrl ? (
+                                          <a className="purchase-link-button" href={purchaseUrl} target="_blank" rel="noreferrer">
+                                            購入ページ
+                                          </a>
+                                        ) : null}
+                                      </div>
+                                      <label className="task-actual">
+                                        <span>実数</span>
+                                        <select
+                                          value={item.actualQuantity}
+                                          onChange={(event) =>
+                                            updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
+                                          }
+                                        >
+                                          {actualQuantityOptions.map((quantity) => (
+                                            <option value={quantity} key={quantity}>{quantity}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
+                                        {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className={item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
+                                        onClick={() => setActiveExceptionItemId(item.id)}
+                                      >
+                                        異常報告
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : null}
-                  <AdditionalPurchasePanel
-                    orderId={order.id}
-                    products={products}
-                    draft={additionalPurchaseDrafts[order.id] ?? {
-                      productId: getDefaultAdditionalPurchaseProductId(products),
-                      quantity: 1,
-                      note: ""
-                    }}
-                    isSubmitting={submittingAdditionalPurchaseOrderId === order.id}
-                    onChange={(next) => updateAdditionalPurchaseDraft(order.id, next)}
-                    onSubmit={() => void createAdditionalPurchaseItem(order.id)}
-                  />
-                  <OrderFulfillmentPanel
-                    hasOnlineOrderItems={hasOnlineOrderItems}
-                    hasStoreDeliveryItems={hasStoreDeliveryItems}
-                    hasPurchasedItems={hasPurchasedItems}
-                    purchasedCount={completedCount}
-                    unavailableCount={unavailableCount}
-                    onlinePurchasedCount={onlinePurchasedCount}
-                    onlineUnavailableCount={onlineUnavailableCount}
-                    onlineDeliveredCount={onlineDeliveredCount}
-                    onlineReceivedCount={onlineReceivedCount}
-                    onlineTotalCount={onlineOrderItems.length}
-                    onlineSupplierGroups={onlineSupplierGroups}
-                    deliveredCount={deliveredCount}
-                    receivedCount={receivedCount}
-                    inDeliveryCount={inDeliveryCount}
-                    readyToDeliverCount={readyToDeliverCount}
-                    totalCount={items.length}
-                    state={deliveryState}
-                    onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
-                    onConfirmOnlineOrder={(supplier) => confirmOnlineOrder(order.id, supplier)}
-                    onMarkOnlineArrived={(supplier) => markOnlineOrderArrived(order.id, supplier)}
-                    batches={orderDeliveryBatches}
-                    onCreateBatch={() => createDeliveryBatch(order.id)}
-                    onMarkStatus={markDeliveryBatchStatus}
-                  />
-                  <div className="procurement-supplier-list">
-                    {supplierGroups.map((group) => {
-                      const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
-                      const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
-                      const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
-                      const needsReceiptUpload = canUploadReceipt && !supplierReceipt;
-
-                      return (
-                        <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
-                          <div className="supplier-group-heading">
-                            <div>
-                              <span>発注先</span>
-                              <strong>{group.supplier}</strong>
-                            </div>
-                            <div className="supplier-group-meta">
-                              <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
-                              <div className="receipt-upload-control">
-                                {supplierReceipt ? (
-                                  <a href={supplierReceipt} target="_blank" rel="noreferrer">
-                                    レシートを見る
-                                  </a>
-                                ) : needsReceiptUpload ? (
-                                  <span className="receipt-missing-label">レシート未アップロード</span>
-                                ) : null}
-                                <label className={canUploadReceipt ? "receipt-upload-button" : "receipt-upload-button is-disabled"}>
-                                  <input
-                                    type="file"
-                                    accept="image/*,application/pdf,.pdf"
-                                    disabled={!canUploadReceipt}
-                                    onChange={(event) => {
-                                      const file = event.target.files?.[0];
-                                      if (file) uploadReceiptPhoto(order.id, group.supplier, file);
-                                      event.currentTarget.value = "";
-                                    }}
-                                  />
-                                  <span>{supplierReceipt ? "レシートを差替" : "レシートをアップロード"}</span>
-                                </label>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="procurement-task-list">
-                            {group.items.map((item) => {
-                              const quantityDiff = item.actualQuantity - item.requestedQuantity;
-                              const product = findProcurementProductFromLookup(item, productLookup);
-                              const photoSrc = getProductPhotoSrc(product?.photoUrl);
-                              const productSpec = product?.packageSpec || product?.specNote;
-                              const referencePrice = Number(product?.referencePrice ?? 0);
-                              const temporarySupplierNote = getTemporarySupplierNote(item.note);
-                              const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
-                              const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
-                              const isDeliveryLocked = isDeliveryLockedItem(item);
-
-                              return (
-                                <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
-                                  <label className="task-check">
-                                    <input
-                                      type="checkbox"
-                                      checked={item.purchased || item.unavailable}
-                                      disabled={item.unavailable || isDeliveryLocked}
-                                      onChange={(event) =>
-                                        updateProcurementTaskItem(item.id, {
-                                          purchased: event.target.checked,
-                                          unavailable: false,
-                                          deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
-                                          deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
-                                        })
-                                      }
-                                    />
-                                    <span>{item.unavailable ? "購入不可" : item.purchased ? "購入済み" : "未購入"}</span>
-                                  </label>
-                                  <span className="task-product-photo">
-                                    {photoSrc ? (
-                                      <img src={photoSrc} alt={`${item.productName} の写真`} />
-                                    ) : (
-                                      <span>写真</span>
-                                    )}
-                                  </span>
-                                  <div className="task-product">
-                                    <div className="task-product-line">
-                                      <strong>{item.productName}</strong>
-                                      {item.deliveryStatus === "in_delivery" ? <span>配送中</span> : null}
-                                      {item.deliveryStatus === "delivered" ? <span>納品済み</span> : null}
-                                      {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
-                                      {item.unavailable ? <span>購入不可</span> : null}
-                                      {isAdditionalPurchase ? <span>追加購入</span> : null}
-                                      {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
-                                    </div>
-                                    {productSpec ? <small>{productSpec}</small> : null}
-                                    <small>{isAdditionalPurchase ? "追加" : "依頼"} {item.requestedQuantity} {item.unit}</small>
-                                    <small>
-                                      参考価格 {referencePrice > 0 ? `${formatEstimatedAmount(referencePrice)} / ${item.unit}` : "未設定"}
-                                    </small>
-                                    {purchaseUrl ? (
-                                      <a className="purchase-link-button" href={purchaseUrl} target="_blank" rel="noreferrer">
-                                        購入ページ
-                                      </a>
-                                    ) : null}
-                                  </div>
-                                  <label className="task-actual">
-                                    <span>実数</span>
-                                    <select
-                                      value={item.actualQuantity}
-                                      onChange={(event) =>
-                                        updateProcurementTaskItem(item.id, { actualQuantity: Number(event.target.value) })
-                                      }
-                                    >
-                                      {actualQuantityOptions.map((quantity) => (
-                                        <option value={quantity} key={quantity}>{quantity}</option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
-                                    {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className={item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
-                                    onClick={() => setActiveExceptionItemId(item.id)}
-                                  >
-                                    異常報告
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
                 </article>
               );
             })}
