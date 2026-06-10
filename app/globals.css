@@ -18392,13 +18392,18 @@ body :where(
   display: grid;
   place-items: center;
   padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgb(15 23 42 / 0.42);
 }
 
 .voucher-reference-price-dialog {
   width: min(620px, 100%);
+  max-height: calc(100dvh - 36px);
   display: grid;
   gap: 14px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 18px;
@@ -18878,6 +18883,16 @@ body :where(
 
   .voucher-reference-price-grid {
     grid-template-columns: 1fr;
+  }
+
+  .voucher-reference-price-backdrop {
+    place-items: start center;
+    padding: 12px;
+  }
+
+  .voucher-reference-price-dialog {
+    max-height: calc(100dvh - 24px);
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom));
   }
 
   .voucher-product-create-form {
