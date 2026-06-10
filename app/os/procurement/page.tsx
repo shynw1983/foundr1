@@ -538,6 +538,10 @@ function getDeliveryBatchLabel(batch: DeliveryBatch) {
   return batch.id;
 }
 
+function isDeliveryLockedItem(item: Pick<ProcurementTaskItem, "deliveryStatus">) {
+  return ["in_delivery", "delivered", "received"].includes(item.deliveryStatus);
+}
+
 async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   const response = await fetch("/api/procurement/items", {
     method: "PATCH",
@@ -1378,6 +1382,7 @@ export default function ProcurementPage() {
                               const temporarySupplierNote = getTemporarySupplierNote(item.note);
                               const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
                               const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
+                              const isDeliveryLocked = isDeliveryLockedItem(item);
 
                               return (
                                 <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1385,7 +1390,7 @@ export default function ProcurementPage() {
                                     <input
                                       type="checkbox"
                                       checked={item.purchased || item.unavailable}
-                                      disabled={item.unavailable}
+                                      disabled={item.unavailable || isDeliveryLocked}
                                       onChange={(event) =>
                                         updateProcurementTaskItem(item.id, {
                                           purchased: event.target.checked,
@@ -1813,6 +1818,7 @@ function ExceptionReportDialog({
   const quantityDiff = item.actualQuantity - item.requestedQuantity;
   const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
   const currentSupplier = item.supplier || plannedSupplier;
+  const isDeliveryLocked = isDeliveryLockedItem(item);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="exception-report-title">
@@ -1848,6 +1854,7 @@ function ExceptionReportDialog({
             <input
               type="checkbox"
               checked={item.unavailable}
+              disabled={isDeliveryLocked}
               onChange={(event) =>
                 onChange({
                   unavailable: event.target.checked,

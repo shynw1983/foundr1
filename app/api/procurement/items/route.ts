@@ -187,6 +187,16 @@ export async function PATCH(request: Request) {
   `;
   const itemDetail = detailRows[0];
 
+  const currentStatus = String(itemDetail?.currentStatus ?? "");
+  const isDeliveryLocked = ["in_delivery", "delivered", "received"].includes(currentStatus);
+  const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
+  if (
+    isDeliveryLocked &&
+    (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending")
+  ) {
+    return Response.json({ error: "配送中または納品済みの商品は未配送に戻せません。" }, { status: 409 });
+  }
+
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
   const actualPriceText = String(body.actualPrice ?? "").trim();
