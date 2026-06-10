@@ -160,6 +160,23 @@ type ConfirmedAccountingLine = {
   unitPrice: string;
   lineCount?: number;
   note: string;
+  details?: ConfirmedAccountingLineDetail[];
+};
+
+type ConfirmedAccountingLineDetail = {
+  voucherId: string;
+  lineNo: number;
+  accountTitle: string;
+  subAccountTitle: string;
+  amount: number;
+  taxRate: string;
+  taxMode: string;
+  taxAmount: number;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  ocrItemId: string;
+  note: string;
 };
 
 type VoucherAccountingValidation = {
@@ -274,6 +291,9 @@ export default function VouchersPage() {
   const [exportEndDate, setExportEndDate] = useState(getCurrentDate());
   const [confirmedAccountingLines, setConfirmedAccountingLines] = useState<ConfirmedAccountingLine[]>([]);
   const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
+  const [expandedConfirmedLineKeys, setExpandedConfirmedLineKeys] = useState<Record<string, boolean>>({});
+  const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
+  const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
   const [lineProductSubcategorySelections, setLineProductSubcategorySelections] = useState<Record<string, string>>({});
@@ -412,6 +432,80 @@ export default function VouchersPage() {
       setMessage("確定済み明細を読み込めませんでした。通信状態を確認してください。");
     } finally {
       setIsLoadingConfirmedLines(false);
+    }
+  }
+
+  function getConfirmedLineDraft(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
+    const key = getConfirmedDetailKey(group, detail);
+    return confirmedLineDrafts[key] ?? detail;
+  }
+
+  function updateConfirmedLineDraft(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail, next: Partial<ConfirmedAccountingLineDetail>) {
+    const key = getConfirmedDetailKey(group, detail);
+    setConfirmedLineDrafts((current) => {
+      const draft = current[key] ?? detail;
+      const updated = { ...draft, ...next };
+      if (!("taxAmount" in next) && ("amount" in next || "taxRate" in next || "taxMode" in next)) {
+        updated.taxAmount = calculateDraftTaxAmount(Number(updated.amount || 0), updated.taxRate, updated.taxMode);
+      }
+      if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
+        updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity);
+      }
+      return { ...current, [key]: updated };
+    });
+  }
+
+  async function saveConfirmedLineDetail(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
+    const key = getConfirmedDetailKey(group, detail);
+    const draft = confirmedLineDrafts[key] ?? detail;
+    setSavingConfirmedLineKeys((current) => ({ ...current, [key]: true }));
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_confirmed_accounting_line",
+          id: group.voucherId,
+          usageType: group.usageType === "仕入" ? "shiire" : group.usageType === "経費" ? "keihi" : "unclassified",
+          paymentType: group.paymentType === "立替" ? "reimbursement" : "company",
+          reimbursementStatus: group.reimbursementStatus === "精算済み" ? "paid" : group.reimbursementStatus === "却下" ? "rejected" : "pending",
+          lineNo: detail.lineNo,
+          lines: [{
+            accountTitle: draft.accountTitle,
+            subAccountTitle: draft.subAccountTitle,
+            amount: draft.amount,
+            taxRate: draft.taxRate,
+            taxMode: draft.taxMode,
+            taxAmount: draft.taxAmount,
+            quantity: draft.quantity,
+            unit: draft.unit,
+            unitPrice: draft.unitPrice,
+            ocrItemId: draft.ocrItemId,
+            note: draft.note
+          }]
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "確定済み明細を保存できませんでした。");
+        return;
+      }
+      setConfirmedLineDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setMessage("確定済み明細を更新しました。");
+      await loadConfirmedAccountingLines();
+      await loadVouchers();
+    } catch {
+      setMessage("確定済み明細を保存できませんでした。通信状態を確認してください。");
+    } finally {
+      setSavingConfirmedLineKeys((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
     }
   }
 
@@ -1010,23 +1104,110 @@ export default function VouchersPage() {
             ) : null}
             {confirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
-                {confirmedAccountingLines.map((line) => (
-                  <div className="voucher-confirmed-line-row" key={`${line.voucherId}-${line.lineNo}-${line.accountTitle}-${line.subAccountTitle}-${line.taxRate}-${line.taxMode}`}>
-                    <div>
-                      <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
-                      <span>{line.storeName} / {line.vendorName}</span>
+                {confirmedAccountingLines.map((line) => {
+                  const lineKey = getConfirmedLineKey(line);
+                  const isOpen = Boolean(expandedConfirmedLineKeys[lineKey]);
+                  return (
+                    <div className="voucher-confirmed-line-group" key={lineKey}>
+                      <div className={`voucher-confirmed-line-row ${isOpen ? "is-open" : ""}`}>
+                        <div>
+                          <strong>{line.purchaseDate || "日付未設定"} {line.purchaseTime}</strong>
+                          <span>{line.storeName} / {line.vendorName}</span>
+                        </div>
+                        <div>
+                          <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
+                          <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
+                        </div>
+                        <div>
+                          <strong>{formatMoney(line.amount)}</strong>
+                          <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
+                        </div>
+                        <div className="voucher-confirmed-line-actions">
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() => setExpandedConfirmedLineKeys((current) => ({ ...current, [lineKey]: !current[lineKey] }))}
+                          >
+                            {isOpen ? "閉じる" : "明細を展開"}
+                          </button>
+                          <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
+                        </div>
+                      </div>
+                      {isOpen ? (
+                        <div className="voucher-confirmed-detail-list">
+                          {(line.details ?? []).map((detail) => {
+                            const detailKey = getConfirmedDetailKey(line, detail);
+                            const draft = getConfirmedLineDraft(line, detail);
+                            const isSaving = Boolean(savingConfirmedLineKeys[detailKey]);
+                            return (
+                              <div className="voucher-confirmed-detail-row" key={detailKey}>
+                                <div className="voucher-confirmed-detail-heading">
+                                  <strong>原明細 {detail.lineNo}</strong>
+                                  <span>{detail.note || "摘要なし"}</span>
+                                </div>
+                                <div className="voucher-confirmed-detail-grid">
+                                  <label>
+                                    <span>勘定科目</span>
+                                    <select value={draft.accountTitle} onChange={(event) => updateConfirmedLineDraft(line, detail, { accountTitle: event.target.value })}>
+                                      {(line.usageType === "仕入" ? ["仕入高"] : expenseAccountTitleOptions).map((option) => (
+                                        <option value={option} key={option}>{option}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    <span>補助科目</span>
+                                    <input value={draft.subAccountTitle} onChange={(event) => updateConfirmedLineDraft(line, detail, { subAccountTitle: event.target.value })} />
+                                  </label>
+                                  <label>
+                                    <span>金額</span>
+                                    <input type="number" inputMode="numeric" value={draft.amount} onChange={(event) => updateConfirmedLineDraft(line, detail, { amount: Number(event.target.value) })} />
+                                  </label>
+                                  <label>
+                                    <span>税率</span>
+                                    <select value={draft.taxRate} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxRate: event.target.value })}>
+                                      {taxRateOptions.map((option) => <option value={option} key={option}>{option || "不明"}</option>)}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    <span>税区分</span>
+                                    <select value={draft.taxMode} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxMode: event.target.value })}>
+                                      {taxModeOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    <span>消費税</span>
+                                    <input type="number" inputMode="numeric" value={draft.taxAmount} onChange={(event) => updateConfirmedLineDraft(line, detail, { taxAmount: Number(event.target.value) })} />
+                                  </label>
+                                  <label>
+                                    <span>数量</span>
+                                    <input type="number" inputMode="decimal" step="1" value={draft.quantity} onChange={(event) => updateConfirmedLineDraft(line, detail, { quantity: event.target.value })} />
+                                  </label>
+                                  <label>
+                                    <span>単位</span>
+                                    <input value={draft.unit} onChange={(event) => updateConfirmedLineDraft(line, detail, { unit: event.target.value })} />
+                                  </label>
+                                  <label>
+                                    <span>単価</span>
+                                    <input type="number" inputMode="decimal" value={draft.unitPrice} onChange={(event) => updateConfirmedLineDraft(line, detail, { unitPrice: event.target.value })} />
+                                  </label>
+                                  <label className="voucher-confirmed-detail-note">
+                                    <span>摘要</span>
+                                    <input value={draft.note} onChange={(event) => updateConfirmedLineDraft(line, detail, { note: event.target.value })} />
+                                  </label>
+                                </div>
+                                <div className="voucher-confirmed-detail-actions">
+                                  <button className="secondary-button" type="button" disabled={isSaving} onClick={() => saveConfirmedLineDetail(line, detail)}>
+                                    {isSaving ? "保存中..." : "この明細を保存"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
-                    <div>
-                      <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
-                      <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
-                    </div>
-                    <div>
-                      <strong>{formatMoney(line.amount)}</strong>
-                      <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
-                    </div>
-                    <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -2248,6 +2429,21 @@ function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
   const total = line.taxMode === "外税" && Number.isFinite(taxAmount) ? amount + Math.max(0, taxAmount) : amount;
   const unitPrice = total / quantity;
   return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : 0;
+}
+
+function getConfirmedLineKey(line: ConfirmedAccountingLine) {
+  return [
+    line.voucherId,
+    line.lineNo,
+    line.accountTitle,
+    line.subAccountTitle,
+    line.taxRate,
+    line.taxMode
+  ].join("|");
+}
+
+function getConfirmedDetailKey(group: ConfirmedAccountingLine, detail: ConfirmedAccountingLineDetail) {
+  return `${getConfirmedLineKey(group)}:${detail.lineNo}`;
 }
 
 function isPdfUploadFile(file: File) {

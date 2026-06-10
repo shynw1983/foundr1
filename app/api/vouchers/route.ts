@@ -158,6 +158,7 @@ export async function PATCH(request: Request) {
     usageType?: string;
     paymentType?: string;
     reimbursementStatus?: string;
+    lineNo?: string | number;
     lines?: Array<{
       accountTitle?: string;
       subAccountTitle?: string;
@@ -297,6 +298,73 @@ export async function PATCH(request: Request) {
       }
     }
     return Response.json({ ok: true, productId });
+  }
+
+  if (body.action === "update_confirmed_accounting_line") {
+    if (String(voucher.status ?? "") !== "confirmed") {
+      return Response.json({ error: "確定済みの証憑明細だけ編集できます。" }, { status: 400 });
+    }
+    const lineNo = Number(body.lineNo);
+    if (!Number.isInteger(lineNo) || lineNo <= 0) {
+      return Response.json({ error: "編集する明細番号がありません。" }, { status: 400 });
+    }
+
+    const rawRows = await sql`
+      select raw_result as "rawResult"
+      from receipt_ocr_results
+      where id::text = ${id}
+      limit 1
+    `;
+    const rawResult = isPlainObject(rawRows[0]?.rawResult) ? rawRows[0].rawResult : {};
+    const accountingLines = Array.isArray(rawResult.accountingLines) ? [...rawResult.accountingLines] : [];
+    const index = lineNo - 1;
+    if (!accountingLines[index] || !isPlainObject(accountingLines[index])) {
+      return Response.json({ error: "編集する明細が見つかりません。" }, { status: 404 });
+    }
+
+    const currentLine = accountingLines[index] as Record<string, unknown>;
+    const amount = normalizeNullableMoney(body.lines?.[0]?.amount) ?? normalizeNullableMoney(currentLine.amount) ?? 0;
+    const taxRate = normalizeTaxRate(body.lines?.[0]?.taxRate ?? currentLine.taxRate);
+    const taxMode = normalizeTaxMode(body.lines?.[0]?.taxMode ?? currentLine.taxMode);
+    const providedTaxAmount = normalizeNullableMoney(body.lines?.[0]?.taxAmount);
+    const nextLine = {
+      ...currentLine,
+      accountTitle: normalizeAccountTitle(body.lines?.[0]?.accountTitle ?? currentLine.accountTitle, nextUsageType),
+      subAccountTitle: normalizeSubAccountTitle(body.lines?.[0]?.subAccountTitle ?? currentLine.subAccountTitle),
+      amount,
+      taxRate,
+      taxMode,
+      taxAmount: providedTaxAmount ?? calculateTaxAmount(amount, taxRate, taxMode),
+      quantity: normalizeNullableNumber(body.lines?.[0]?.quantity ?? currentLine.quantity),
+      unit: String(body.lines?.[0]?.unit ?? currentLine.unit ?? "").trim().slice(0, 20),
+      unitPrice: normalizeNullableUnitPrice(body.lines?.[0]?.unitPrice ?? currentLine.unitPrice),
+      ocrItemId: String(body.lines?.[0]?.ocrItemId ?? currentLine.ocrItemId ?? "").trim(),
+      note: String(body.lines?.[0]?.note ?? currentLine.note ?? "").trim()
+    };
+    accountingLines[index] = nextLine;
+
+    const normalizedLines = normalizeAccountingLines(accountingLines, voucher, nextUsageType);
+    const total = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
+    const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
+
+    await sql`
+      update receipt_ocr_results
+      set
+        usage_type = ${nextUsageType},
+        payment_type = ${nextPaymentType},
+        reimbursement_status = ${nextReimbursementStatus},
+        tax = ${tax},
+        total = ${total},
+        raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+        updated_at = now()
+      where id::text = ${id}
+    `;
+
+    if (nextUsageType === "shiire") {
+      await updateReceiptOcrItemDetails(id, normalizedLines);
+    }
+
+    return Response.json({ ok: true, lineCount: normalizedLines.length, amount: total, tax });
   }
 
   if (body.action === "confirm_accounting") {
@@ -784,100 +852,170 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
   const toDate = normalizeDate(url.searchParams.get("to") ?? "");
 
   const rows = await sql`
-    with expanded_lines as (
-      select
-        receipt_ocr_results.id::text as "voucherId",
-        stores.name as "storeName",
-        receipt_ocr_results.created_at as "createdAt",
-        coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
-        coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
-        receipt_ocr_results.usage_type as "usageType",
-        receipt_ocr_results.payment_type as "paymentType",
-        receipt_ocr_results.reimbursement_status as "reimbursementStatus",
-        coalesce(receipt_ocr_results.company_name, '') as "companyName",
-        coalesce(receipt_ocr_results.brand_name, '') as "brandName",
-        coalesce(receipt_ocr_results.location_name, '') as "locationName",
-        coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
-        line.ordinality::int as "lineNo",
-        coalesce(line.value->>'accountTitle', '') as "accountTitle",
-        coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
-        coalesce((nullif(line.value->>'amount', ''))::float, 0) as amount,
-        coalesce(line.value->>'taxRate', '') as "taxRate",
-        coalesce(line.value->>'taxMode', '') as "taxMode",
-        coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
-        (nullif(line.value->>'quantity', ''))::float as quantity,
-        coalesce(line.value->>'unit', '') as unit,
-        coalesce(line.value->>'note', '') as note
-      from receipt_ocr_results
-      join stores on stores.id = receipt_ocr_results.store_id
-      cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
-      where receipt_ocr_results.status = 'confirmed'
-        and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
-        and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
-        and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
-    )
     select
-      "voucherId",
-      "storeName",
-      "purchaseDate",
-      "purchaseTime",
-      "usageType",
-      "paymentType",
-      "reimbursementStatus",
-      "companyName",
-      "brandName",
-      "locationName",
-      "vendorName",
-      min("lineNo") as "lineNo",
-      count(*)::int as "lineCount",
-      "accountTitle",
-      "subAccountTitle",
-      sum(amount) as amount,
-      "taxRate",
-      "taxMode",
-      sum("taxAmount") as "taxAmount",
-      case when count(distinct nullif(unit, '')) <= 1 and count(quantity) > 0 then sum(quantity) else null end as quantity,
-      case when count(distinct nullif(unit, '')) <= 1 then max(unit) else '' end as unit,
-      case when count(distinct nullif(unit, '')) <= 1 and coalesce(sum(quantity), 0) > 0 then sum(amount) / sum(quantity) else null end as "unitPrice",
-      case when count(*) = 1 then max(note) else concat('集計 ', count(*)::text, '行') end as note,
-      min("createdAt") as "createdAt"
-    from expanded_lines
-    group by
-      "voucherId",
-      "storeName",
-      "purchaseDate",
-      "purchaseTime",
-      "usageType",
-      "paymentType",
-      "reimbursementStatus",
-      "companyName",
-      "brandName",
-      "locationName",
-      "vendorName",
-      "accountTitle",
-      "subAccountTitle",
-      "taxRate",
-      "taxMode"
-    order by "purchaseDate" asc nulls last, "purchaseTime" asc nulls last, "createdAt" asc, min("lineNo") asc
-    limit 500
+      receipt_ocr_results.id::text as "voucherId",
+      stores.name as "storeName",
+      receipt_ocr_results.created_at as "createdAt",
+      coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+      coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
+      receipt_ocr_results.usage_type as "usageType",
+      receipt_ocr_results.payment_type as "paymentType",
+      receipt_ocr_results.reimbursement_status as "reimbursementStatus",
+      coalesce(receipt_ocr_results.company_name, '') as "companyName",
+      coalesce(receipt_ocr_results.brand_name, '') as "brandName",
+      coalesce(receipt_ocr_results.location_name, '') as "locationName",
+      coalesce(receipt_ocr_results.vendor_name, '') as "vendorName",
+      line.ordinality::int as "lineNo",
+      coalesce(line.value->>'accountTitle', '') as "accountTitle",
+      coalesce(line.value->>'subAccountTitle', '') as "subAccountTitle",
+      coalesce((nullif(line.value->>'amount', ''))::float, 0) as amount,
+      coalesce(line.value->>'taxRate', '') as "taxRate",
+      coalesce(line.value->>'taxMode', '') as "taxMode",
+      coalesce((nullif(line.value->>'taxAmount', ''))::float, 0) as "taxAmount",
+      (nullif(line.value->>'quantity', ''))::float as quantity,
+      coalesce(line.value->>'unit', '') as unit,
+      (nullif(line.value->>'unitPrice', ''))::float as "unitPrice",
+      coalesce(line.value->>'ocrItemId', '') as "ocrItemId",
+      coalesce(line.value->>'note', '') as note
+    from receipt_ocr_results
+    join stores on stores.id = receipt_ocr_results.store_id
+    cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
+    where receipt_ocr_results.status = 'confirmed'
+      and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
+      and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
+      and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
+    order by receipt_ocr_results.purchase_date asc nulls last, receipt_ocr_results.purchase_time asc nulls last, receipt_ocr_results.created_at asc, line.ordinality asc
+    limit 3000
   `;
 
+  type ConfirmedAccountingDetail = {
+    voucherId: string;
+    lineNo: number;
+    accountTitle: string;
+    subAccountTitle: string;
+    amount: number;
+    taxRate: string;
+    taxMode: string;
+    taxAmount: number;
+    quantity: string;
+    unit: string;
+    unitPrice: string;
+    ocrItemId: string;
+    note: string;
+  };
+
+  const groups = new Map<string, {
+    voucherId: string;
+    lineNo: number;
+    purchaseDate: string;
+    purchaseTime: string;
+    storeName: string;
+    vendorName: string;
+    usageType: string;
+    paymentType: string;
+    reimbursementStatus: string;
+    accountTitle: string;
+    subAccountTitle: string;
+    amount: number;
+    taxRate: string;
+    taxMode: string;
+    taxAmount: number;
+    quantity: number | null;
+    unit: string;
+    unitPrice: number | null;
+    lineCount: number;
+    note: string;
+    createdAt: string;
+    details: ConfirmedAccountingDetail[];
+  }>();
+
+  for (const row of rows) {
+    const vendorName = buildVendorName(
+      String(row.companyName ?? ""),
+      String(row.brandName ?? ""),
+      String(row.locationName ?? ""),
+      String(row.vendorName ?? "")
+    );
+    const key = [
+      String(row.voucherId ?? ""),
+      String(row.accountTitle ?? ""),
+      String(row.subAccountTitle ?? ""),
+      String(row.taxRate ?? ""),
+      String(row.taxMode ?? "")
+    ].join("\u001f");
+    const amount = Math.round(Number(row.amount ?? 0));
+    const taxAmount = Math.round(Number(row.taxAmount ?? 0));
+    const quantity = row.quantity === null || row.quantity === undefined ? null : Number(row.quantity);
+    const unit = String(row.unit ?? "");
+    const detail = {
+      voucherId: String(row.voucherId ?? ""),
+      lineNo: Number(row.lineNo ?? 0),
+      accountTitle: String(row.accountTitle ?? ""),
+      subAccountTitle: String(row.subAccountTitle ?? ""),
+      amount,
+      taxRate: String(row.taxRate ?? ""),
+      taxMode: String(row.taxMode ?? ""),
+      taxAmount,
+      quantity: quantity === null || !Number.isFinite(quantity) ? "" : String(quantity),
+      unit,
+      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
+      ocrItemId: String(row.ocrItemId ?? ""),
+      note: String(row.note ?? "")
+    };
+    const existing = groups.get(key);
+    if (existing) {
+      existing.amount += amount;
+      existing.taxAmount += taxAmount;
+      existing.lineCount += 1;
+      existing.details.push(detail);
+      if (unit && existing.unit && existing.unit !== unit) existing.unit = "";
+      if (!existing.unit && existing.lineCount === 2 && existing.details[0]?.unit !== unit) existing.quantity = null;
+      if (existing.quantity !== null && Number.isFinite(quantity ?? NaN)) existing.quantity += quantity ?? 0;
+      else existing.quantity = null;
+      existing.note = `集計 ${existing.lineCount}行`;
+      existing.unitPrice = existing.unit && existing.quantity && existing.quantity > 0
+        ? Math.round((existing.amount / existing.quantity) * 100) / 100
+        : null;
+      continue;
+    }
+
+    groups.set(key, {
+      voucherId: detail.voucherId,
+      lineNo: detail.lineNo,
+      purchaseDate: String(row.purchaseDate ?? ""),
+      purchaseTime: String(row.purchaseTime ?? ""),
+      storeName: String(row.storeName ?? ""),
+      vendorName,
+      usageType: getUsageTypeExportLabel(String(row.usageType ?? "")),
+      paymentType: getPaymentTypeExportLabel(String(row.paymentType ?? "")),
+      reimbursementStatus: getReimbursementExportLabel(String(row.reimbursementStatus ?? "")),
+      accountTitle: detail.accountTitle,
+      subAccountTitle: detail.subAccountTitle,
+      amount,
+      taxRate: detail.taxRate,
+      taxMode: detail.taxMode,
+      taxAmount,
+      quantity: quantity === null || !Number.isFinite(quantity) ? null : quantity,
+      unit,
+      unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Math.round(Number(row.unitPrice) * 100) / 100,
+      lineCount: 1,
+      note: detail.note,
+      createdAt: String(row.createdAt ?? ""),
+      details: [detail]
+    });
+  }
+
   return Response.json({
-    lines: rows.map((row) => ({
+    lines: [...groups.values()].slice(0, 500).map((row) => ({
       voucherId: String(row.voucherId ?? ""),
       lineNo: Number(row.lineNo ?? 0),
       purchaseDate: String(row.purchaseDate ?? ""),
       purchaseTime: String(row.purchaseTime ?? ""),
       storeName: String(row.storeName ?? ""),
-      vendorName: buildVendorName(
-        String(row.companyName ?? ""),
-        String(row.brandName ?? ""),
-        String(row.locationName ?? ""),
-        String(row.vendorName ?? "")
-      ),
-      usageType: getUsageTypeExportLabel(String(row.usageType ?? "")),
-      paymentType: getPaymentTypeExportLabel(String(row.paymentType ?? "")),
-      reimbursementStatus: getReimbursementExportLabel(String(row.reimbursementStatus ?? "")),
+      vendorName: String(row.vendorName ?? ""),
+      usageType: String(row.usageType ?? ""),
+      paymentType: String(row.paymentType ?? ""),
+      reimbursementStatus: String(row.reimbursementStatus ?? ""),
       accountTitle: String(row.accountTitle ?? ""),
       subAccountTitle: String(row.subAccountTitle ?? ""),
       amount: Math.round(Number(row.amount ?? 0)),
@@ -888,7 +1026,8 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       unit: String(row.unit ?? ""),
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
       lineCount: Number(row.lineCount ?? 1),
-      note: String(row.note ?? "")
+      note: String(row.note ?? ""),
+      details: row.details
     }))
   });
 }
@@ -923,6 +1062,10 @@ function collectVoucherFiles(formData: FormData) {
 function normalizeUsageType(value: string): VoucherUsageType {
   if (value === "shiire" || value === "keihi") return value;
   return "unclassified";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function inferVoucherUsageTypeFromOcr(selectedUsageType: VoucherUsageType, result: ReceiptOcrResult): VoucherUsageType {

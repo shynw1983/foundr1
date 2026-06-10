@@ -18293,6 +18293,11 @@ body :where(
   overflow: auto;
 }
 
+.voucher-confirmed-line-group {
+  display: grid;
+  gap: 8px;
+}
+
 .voucher-confirmed-line-row {
   display: grid;
   grid-template-columns: minmax(150px, 0.9fr) minmax(180px, 1fr) minmax(130px, auto) auto;
@@ -18302,6 +18307,11 @@ body :where(
   border-radius: 8px;
   padding: 10px;
   background: #ffffff;
+}
+
+.voucher-confirmed-line-row.is-open {
+  border-color: rgba(33, 116, 91, 0.28);
+  background: #fbfdfc;
 }
 
 .voucher-confirmed-line-row div {
@@ -18327,6 +18337,93 @@ body :where(
 .voucher-confirmed-line-row .text-button {
   justify-content: center;
   min-height: 34px;
+}
+
+.voucher-confirmed-line-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.voucher-confirmed-detail-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 2px 16px;
+  border-left: 2px solid rgba(33, 116, 91, 0.18);
+}
+
+.voucher-confirmed-detail-row {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.voucher-confirmed-detail-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voucher-confirmed-detail-heading strong {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.voucher-confirmed-detail-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.voucher-confirmed-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.voucher-confirmed-detail-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voucher-confirmed-detail-grid span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.voucher-confirmed-detail-grid input,
+.voucher-confirmed-detail-grid select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 9px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.voucher-confirmed-detail-note {
+  grid-column: span 3;
+}
+
+.voucher-confirmed-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.voucher-confirmed-detail-actions button {
+  min-height: 36px;
 }
 
 .voucher-list {
@@ -18865,6 +18962,14 @@ body :where(
     grid-template-columns: 1fr;
   }
 
+  .voucher-confirmed-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-confirmed-detail-note {
+    grid-column: 1 / -1;
+  }
+
   .voucher-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -18946,6 +19051,7 @@ body :where(
   .shell.has-voucher-preview .voucher-reference-price-grid,
   .shell.has-voucher-preview .voucher-product-create-form,
   .shell.has-voucher-preview .voucher-confirmed-line-row,
+  .shell.has-voucher-preview .voucher-confirmed-detail-grid,
   .shell.has-voucher-preview .voucher-row {
     grid-template-columns: minmax(0, 1fr);
   }
