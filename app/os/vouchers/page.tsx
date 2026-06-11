@@ -776,7 +776,7 @@ export default function VouchersPage() {
   function updateAccountingDraft(voucherId: string, next: Partial<VoucherAccountingDraft>) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
-      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
       const nextDraft = { ...draft, ...next };
       if ("taxMode" in next) {
         nextDraft.lines = draft.lines.map((line) => {
@@ -794,7 +794,7 @@ export default function VouchersPage() {
   function updateAccountingLine(voucherId: string, lineId: string, next: Partial<VoucherAccountingLine>) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
-      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
       return {
         ...current,
         [voucherId]: {
@@ -823,7 +823,7 @@ export default function VouchersPage() {
   function updateAccountingDraftTaxTotal(voucherId: string, taxTotalValue: string) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
-      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
       return {
         ...current,
         [voucherId]: {
@@ -837,7 +837,7 @@ export default function VouchersPage() {
   function addAccountingLine(voucherId: string, placement?: { lineId: string; position: "before" | "after" }) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
-      const draft = current[voucherId] ?? buildVoucherAccountingDraft(voucher);
+      const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
       const targetIndex = placement ? draft.lines.findIndex((line) => line.id === placement.lineId) : -1;
       const insertIndex = targetIndex >= 0
         ? targetIndex + (placement?.position === "after" ? 1 : 0)
@@ -1078,7 +1078,7 @@ export default function VouchersPage() {
   async function confirmVoucherAccounting(voucher: VoucherRecord) {
     if (pendingActions[voucher.id]) return;
     setPendingAction(voucher.id, "confirm");
-    const draft = accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher);
+    const draft = normalizeVoucherAccountingDraft(accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher));
     const vendorName = draft.brandName
       ? [draft.brandName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ")
       : [draft.companyName, draft.locationName].map((value) => value.trim()).filter(Boolean).join(" ");
@@ -1515,37 +1515,42 @@ export default function VouchersPage() {
                         ) : null}
                       </div>
                       {voucher.sourceType === "voucher" && voucher.status !== "confirmed" && voucher.status !== "failed" ? (
-                        <VoucherAccountingEditor
-                          voucher={voucher}
-                          draft={accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher)}
-                          validation={validateVoucherAccounting(voucher, accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher))}
-                          isSaving={pendingAction === "confirm"}
-                          onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
-                          onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
-                          onReceiptTaxTotalChange={(taxTotal) => updateAccountingDraftTaxTotal(voucher.id, taxTotal)}
-                          onAddLine={() => addAccountingLine(voucher.id)}
-                          onInsertLine={(lineId, position) => addAccountingLine(voucher.id, { lineId, position })}
-                          onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
-                          productOptions={productOptions}
-                          lineProductSelections={lineProductSelections}
-                          lineProductCategorySelections={lineProductCategorySelections}
-                          lineProductSubcategorySelections={lineProductSubcategorySelections}
-                          pendingProductLineIds={pendingProductLineIds}
-                          onProductSelectionChange={(lineId, productId) => setLineProductSelections((current) => ({ ...current, [lineId]: productId }))}
-                          onProductCategoryChange={(lineId, category) => {
-                            setLineProductCategorySelections((current) => ({ ...current, [lineId]: category }));
-                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: "" }));
-                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
-                          }}
-                          onProductSubcategoryChange={(lineId, subcategory) => {
-                            setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: subcategory }));
-                            setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
-                          }}
-                          onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
-                          onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
-                          onIgnoreProduct={(line, ignored) => void ignoreAccountingLineProduct(voucher, line, ignored)}
-                          onConfirm={() => void confirmVoucherAccounting(voucher)}
-                        />
+                        (() => {
+                          const normalizedDraft = normalizeVoucherAccountingDraft(accountingDrafts[voucher.id] ?? buildVoucherAccountingDraft(voucher));
+                          return (
+                            <VoucherAccountingEditor
+                              voucher={voucher}
+                              draft={normalizedDraft}
+                              validation={validateVoucherAccounting(voucher, normalizedDraft)}
+                              isSaving={pendingAction === "confirm"}
+                              onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
+                              onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
+                              onReceiptTaxTotalChange={(taxTotal) => updateAccountingDraftTaxTotal(voucher.id, taxTotal)}
+                              onAddLine={() => addAccountingLine(voucher.id)}
+                              onInsertLine={(lineId, position) => addAccountingLine(voucher.id, { lineId, position })}
+                              onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
+                              productOptions={productOptions}
+                              lineProductSelections={lineProductSelections}
+                              lineProductCategorySelections={lineProductCategorySelections}
+                              lineProductSubcategorySelections={lineProductSubcategorySelections}
+                              pendingProductLineIds={pendingProductLineIds}
+                              onProductSelectionChange={(lineId, productId) => setLineProductSelections((current) => ({ ...current, [lineId]: productId }))}
+                              onProductCategoryChange={(lineId, category) => {
+                                setLineProductCategorySelections((current) => ({ ...current, [lineId]: category }));
+                                setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: "" }));
+                                setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                              }}
+                              onProductSubcategoryChange={(lineId, subcategory) => {
+                                setLineProductSubcategorySelections((current) => ({ ...current, [lineId]: subcategory }));
+                                setLineProductSelections((current) => ({ ...current, [lineId]: "" }));
+                              }}
+                              onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
+                              onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
+                              onIgnoreProduct={(line, ignored) => void ignoreAccountingLineProduct(voucher, line, ignored)}
+                              onConfirm={() => void confirmVoucherAccounting(voucher)}
+                            />
+                          );
+                        })()
                       ) : null}
                       {voucher.accountingLines?.length ? (
                         <VoucherAccountingSummary lines={voucher.accountingLines} />
@@ -2403,18 +2408,17 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
 
 function normalizeStoredAccountingDrafts(drafts: Record<string, VoucherAccountingDraft>) {
   return Object.fromEntries(
-    Object.entries(drafts).map(([voucherId, draft]) => {
-      const taxMode = normalizeDraftTaxMode(draft.taxMode);
-      return [
-        voucherId,
-        {
-          ...draft,
-          taxMode,
-          lines: draft.lines.map((line) => normalizeAccountingLineTax(line, taxMode, { forceUnitPrice: true }))
-        }
-      ];
-    })
+    Object.entries(drafts).map(([voucherId, draft]) => [voucherId, normalizeVoucherAccountingDraft(draft)])
   );
+}
+
+function normalizeVoucherAccountingDraft(draft: VoucherAccountingDraft): VoucherAccountingDraft {
+  const taxMode = normalizeDraftTaxMode(draft.taxMode);
+  return {
+    ...draft,
+    taxMode,
+    lines: draft.lines.map((line) => normalizeAccountingLineTax(line, taxMode, { forceUnitPrice: true }))
+  };
 }
 
 function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccountingLine[] {
