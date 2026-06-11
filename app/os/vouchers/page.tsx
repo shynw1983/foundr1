@@ -3059,8 +3059,8 @@ function getSuggestedProduct(line: VoucherAccountingLine, productOptions: Produc
   )) ?? matchedProducts[0] ?? null;
 }
 
-function normalizeProductSearchText(value: string) {
-  return value
+function normalizeProductSearchText(value: unknown) {
+  return String(value ?? "")
     .normalize("NFKC")
     .toLowerCase()
     .replace(/\s+/g, "")
@@ -3239,8 +3239,8 @@ function getDefaultUnitPriceText(
   return normalizeDraftUnitPrice(value, amount, quantity, taxRate, taxMode, { force: normalizeDraftTaxMode(taxMode) === "外税" });
 }
 
-function normalizeMoneyInputText(value: string) {
-  return value
+function normalizeMoneyInputText(value: unknown) {
+  return String(value ?? "")
     .normalize("NFKC")
     .replace(/[^\d]/g, "");
 }
