@@ -50,6 +50,7 @@ type VoucherRecord = {
   total: number;
   tax: number;
   accountingLines: VoucherAccountingSummaryLine[];
+  receiptTaxLines: ReceiptTaxLine[];
   itemCount: number;
   createdByName: string;
   createdLabel: string;
@@ -108,8 +109,16 @@ type VoucherAccountingDraft = {
   transactionDate: string;
   transactionTime: string;
   receiptTotal: string;
+  receiptTaxTotal: string;
+  receiptTaxLines: ReceiptTaxLine[];
   taxMode: string;
   lines: VoucherAccountingLine[];
+};
+
+type ReceiptTaxLine = {
+  id: string;
+  taxRate: string;
+  taxAmount: string;
 };
 
 type VoucherAccountingLine = {
@@ -194,6 +203,7 @@ type ConfirmedVoucherBasicDraft = {
   brandName: string;
   locationName: string;
   receiptTaxTotal: string;
+  receiptTaxLines: ReceiptTaxLine[];
 };
 
 type VoucherAccountingValidation = {
@@ -511,7 +521,7 @@ export default function VouchersPage() {
     const companyName = basicDraft?.companyName ?? voucher.companyName;
     const brandName = basicDraft?.brandName ?? voucher.brandName;
     const locationName = basicDraft?.locationName ?? voucher.locationName;
-    const receiptTaxTotal = basicDraft?.receiptTaxTotal ?? String(calculateVoucherLinesTaxTotal(voucher.accountingLines ?? []));
+    const receiptTaxTotal = basicDraft?.receiptTaxTotal ?? String(Math.round(Number(voucher.tax ?? 0)));
     const vendorName = buildVendorNameFromParts(companyName, brandName, locationName, voucher.vendorName);
     setSavingConfirmedLineKeys((current) => ({ ...current, [key]: true }));
     try {
@@ -529,6 +539,10 @@ export default function VouchersPage() {
           brandName,
           locationName,
           receiptTaxTotal,
+          receiptTaxLines: basicDraft?.receiptTaxLines?.map((line) => ({
+            taxRate: line.taxRate,
+            taxAmount: line.taxAmount
+          })),
           lineNo: detail.lineNo,
           lines: [{
             accountTitle: draft.accountTitle,
@@ -626,7 +640,11 @@ export default function VouchersPage() {
           companyName,
           brandName,
           locationName,
-          receiptTaxTotal: basicDraft.receiptTaxTotal
+          receiptTaxTotal: basicDraft.receiptTaxTotal,
+          receiptTaxLines: basicDraft.receiptTaxLines.map((line) => ({
+            taxRate: line.taxRate,
+            taxAmount: line.taxAmount
+          }))
         })
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
@@ -795,40 +813,44 @@ export default function VouchersPage() {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
       const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
+      const nextLines = draft.lines.map((line) => {
+        if (line.id !== lineId) return line;
+        const updated = { ...line, ...next };
+        updated.taxMode = draft.taxMode;
+        const previousTaxRate = line.taxRate;
+        if ("subAccountTitle" in next && !("taxRate" in next)) {
+          updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
+        }
+        if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
+          return normalizeAccountingLineTax(updated, draft.taxMode, { force: true, forceUnitPrice: true, preserveUnitPrice: "unitPrice" in next });
+        }
+        if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
+          updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
+        }
+        return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode, { preserveUnitPrice: "unitPrice" in next, autoFixStaleTax: false });
+      });
       return {
         ...current,
         [voucherId]: {
           ...draft,
-          lines: draft.lines.map((line) => {
-            if (line.id !== lineId) return line;
-            const updated = { ...line, ...next };
-            updated.taxMode = draft.taxMode;
-            const previousTaxRate = line.taxRate;
-            if ("subAccountTitle" in next && !("taxRate" in next)) {
-              updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
-            }
-            if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
-              return normalizeAccountingLineTax(updated, draft.taxMode, { force: true, forceUnitPrice: true, preserveUnitPrice: "unitPrice" in next });
-            }
-            if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
-              updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
-            }
-            return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode, { preserveUnitPrice: "unitPrice" in next });
-          })
+          lines: nextLines
         }
       };
     });
   }
 
-  function updateAccountingDraftTaxTotal(voucherId: string, taxTotalValue: string) {
+  function updateAccountingDraftTaxLines(voucherId: string, taxLines: ReceiptTaxLine[]) {
     setAccountingDrafts((current) => {
       const voucher = vouchers.find((item) => item.id === voucherId);
       const draft = normalizeVoucherAccountingDraft(current[voucherId] ?? buildVoucherAccountingDraft(voucher));
+      const normalizedTaxLines = normalizeReceiptTaxLines(taxLines, draft.lines, draft.receiptTaxTotal);
       return {
         ...current,
         [voucherId]: {
           ...draft,
-          lines: adjustVoucherAccountingLinesTaxTotal(draft.lines, taxTotalValue)
+          receiptTaxLines: normalizedTaxLines,
+          receiptTaxTotal: String(calculateReceiptTaxLinesTotal(normalizedTaxLines)),
+          lines: draft.lines
         }
       };
     });
@@ -1115,6 +1137,11 @@ export default function VouchersPage() {
           transactionDate: draft.transactionDate,
           transactionTime: draft.transactionTime,
           receiptTotal: draft.receiptTotal,
+          receiptTaxTotal: draft.receiptTaxTotal,
+          receiptTaxLines: draft.receiptTaxLines.map((line) => ({
+            taxRate: line.taxRate,
+            taxAmount: line.taxAmount
+          })),
           note: draft.note
         })
       });
@@ -1525,7 +1552,7 @@ export default function VouchersPage() {
                               isSaving={pendingAction === "confirm"}
                               onDraftChange={(next) => updateAccountingDraft(voucher.id, next)}
                               onLineChange={(lineId, next) => updateAccountingLine(voucher.id, lineId, next)}
-                              onReceiptTaxTotalChange={(taxTotal) => updateAccountingDraftTaxTotal(voucher.id, taxTotal)}
+                              onReceiptTaxLinesChange={(taxLines) => updateAccountingDraftTaxLines(voucher.id, taxLines)}
                               onAddLine={() => addAccountingLine(voucher.id)}
                               onInsertLine={(lineId, position) => addAccountingLine(voucher.id, { lineId, position })}
                               onRemoveLine={(lineId) => removeAccountingLine(voucher.id, lineId)}
@@ -2124,7 +2151,7 @@ function VoucherAccountingEditor({
   isSaving,
   onDraftChange,
   onLineChange,
-  onReceiptTaxTotalChange,
+  onReceiptTaxLinesChange,
   onAddLine,
   onInsertLine,
   onRemoveLine,
@@ -2147,7 +2174,7 @@ function VoucherAccountingEditor({
   isSaving: boolean;
   onDraftChange: (next: Partial<VoucherAccountingDraft>) => void;
   onLineChange: (lineId: string, next: Partial<VoucherAccountingLine>) => void;
-  onReceiptTaxTotalChange: (taxTotal: string) => void;
+  onReceiptTaxLinesChange: (taxLines: ReceiptTaxLine[]) => void;
   onAddLine: () => void;
   onInsertLine: (lineId: string, position: "before" | "after") => void;
   onRemoveLine: (lineId: string) => void;
@@ -2203,10 +2230,7 @@ function VoucherAccountingEditor({
         <span>レシート総額</span>
         <input type="number" min="0" step="1" value={draft.receiptTotal} onChange={(event) => onDraftChange({ receiptTotal: event.target.value })} disabled={isSaving} />
       </label>
-      <label>
-        <span>レシート消費税</span>
-        <input type="text" inputMode="decimal" value={String(calculateVoucherLinesTaxTotal(draft.lines))} onChange={(event) => onReceiptTaxTotalChange(normalizeMoneyInputText(event.target.value))} disabled={isSaving} />
-      </label>
+      <ReceiptTaxLinesEditor taxLines={draft.receiptTaxLines} disabled={isSaving} onChange={onReceiptTaxLinesChange} />
       <label className="receipt-note-field">
         <span>備考</span>
         <input value={draft.note} onChange={(event) => onDraftChange({ note: event.target.value })} placeholder="例: 月次整理、立替精算、店舗用品" disabled={isSaving} />
@@ -2386,12 +2410,61 @@ function VoucherAccountingEditor({
   );
 }
 
+function ReceiptTaxLinesEditor({
+  taxLines,
+  disabled,
+  onChange
+}: {
+  taxLines: ReceiptTaxLine[];
+  disabled: boolean;
+  onChange: (taxLines: ReceiptTaxLine[]) => void;
+}) {
+  const normalizedTaxLines = normalizeReceiptTaxLines(taxLines, [], "0");
+  function updateLine(lineId: string, next: Partial<ReceiptTaxLine>) {
+    onChange(normalizedTaxLines.map((line) => line.id === lineId ? { ...line, ...next } : line));
+  }
+  function addLine() {
+    onChange([
+      ...normalizedTaxLines,
+      { id: `receipt-tax-${Date.now()}`, taxRate: "10%", taxAmount: "0" }
+    ]);
+  }
+  function removeLine(lineId: string) {
+    if (normalizedTaxLines.length <= 1) return;
+    onChange(normalizedTaxLines.filter((line) => line.id !== lineId));
+  }
+  return (
+    <div className="receipt-tax-lines-field">
+      <span>レシート税率・消費税</span>
+      <div className="receipt-tax-lines">
+        {normalizedTaxLines.map((line) => (
+          <div className="receipt-tax-line" key={line.id}>
+            <select aria-label="レシート税率" value={line.taxRate} onChange={(event) => updateLine(line.id, { taxRate: event.target.value })} disabled={disabled}>
+              {taxRateOptions.filter(Boolean).map((option) => <option value={option} key={option}>{option}</option>)}
+            </select>
+            <input aria-label="レシート消費税" type="text" inputMode="decimal" value={line.taxAmount} onChange={(event) => updateLine(line.id, { taxAmount: normalizeMoneyInputText(event.target.value) })} disabled={disabled} />
+            <button className="icon-button" type="button" onClick={() => removeLine(line.id)} disabled={disabled || normalizedTaxLines.length <= 1} aria-label="税率行を削除">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button className="text-button receipt-tax-line-add" type="button" onClick={addLine} disabled={disabled}>
+        <Plus size={14} />
+        税率行を追加
+      </button>
+    </div>
+  );
+}
+
 function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccountingDraft {
   const lines = buildVoucherAccountingLines(voucher);
   const taxMode = inferReceiptTaxMode(lines);
   const normalizedLines = lines.map((line) => {
     return normalizeAccountingLineTax(line, taxMode, { force: taxMode !== "不明" });
   });
+  const receiptTaxTotal = Math.round(Number(voucher?.tax ?? 0)) || calculateVoucherLinesTaxTotal(normalizedLines);
+  const receiptTaxLines = normalizeReceiptTaxLines(voucher?.receiptTaxLines, normalizedLines, receiptTaxTotal);
   return {
     note: "",
     vendorName: voucher?.vendorName || "",
@@ -2401,6 +2474,8 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
     transactionDate: voucher?.purchaseDate || getCurrentDate(),
     transactionTime: voucher?.purchaseTime || "",
     receiptTotal: String(Math.round(Number(voucher?.total ?? 0)) || ""),
+    receiptTaxTotal: String(receiptTaxTotal || 0),
+    receiptTaxLines,
     taxMode,
     lines: normalizedLines
   };
@@ -2414,10 +2489,17 @@ function normalizeStoredAccountingDrafts(drafts: Record<string, VoucherAccountin
 
 function normalizeVoucherAccountingDraft(draft: VoucherAccountingDraft): VoucherAccountingDraft {
   const taxMode = normalizeDraftTaxMode(draft.taxMode);
+  const normalizedLines = draft.lines.map((line) => normalizeAccountingLineTax(line, taxMode, { forceUnitPrice: true, autoFixStaleTax: false }));
+  const receiptTaxTotal = "receiptTaxTotal" in draft
+    ? normalizeMoneyInputText(draft.receiptTaxTotal)
+    : String(calculateVoucherLinesTaxTotal(normalizedLines));
+  const receiptTaxLines = normalizeReceiptTaxLines(draft.receiptTaxLines, normalizedLines, receiptTaxTotal);
   return {
     ...draft,
+    receiptTaxTotal: String(calculateReceiptTaxLinesTotal(receiptTaxLines)),
+    receiptTaxLines,
     taxMode,
-    lines: draft.lines.map((line) => normalizeAccountingLineTax(line, taxMode, { forceUnitPrice: true }))
+    lines: normalizedLines
   };
 }
 
@@ -2506,7 +2588,7 @@ function buildNewAccountingLine(
 
 function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccountingDraft): VoucherAccountingValidation {
   const lineAmountTotal = draft.lines.reduce((sum, line) => sum + Math.round(Number(line.amount || 0)), 0);
-  const taxTotal = calculateVoucherLinesTaxTotal(draft.lines);
+  const taxTotal = Math.round(Number(draft.receiptTaxTotal || voucher.tax || 0));
   const expectedTotal = draft.taxMode === "外税" ? lineAmountTotal + taxTotal : lineAmountTotal;
   const receiptTotal = Math.round(Number(draft.receiptTotal || voucher.total || 0));
   const difference = expectedTotal - receiptTotal;
@@ -2524,6 +2606,33 @@ function validateVoucherAccounting(voucher: VoucherRecord, draft: VoucherAccount
 
 function calculateVoucherLinesTaxTotal(lines: Array<{ taxAmount: string | number }>) {
   return lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
+}
+
+function calculateReceiptTaxLinesTotal(lines: ReceiptTaxLine[]) {
+  return lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount || 0)), 0);
+}
+
+function buildDefaultReceiptTaxLines(taxTotal: number, lines: VoucherAccountingLine[]): ReceiptTaxLine[] {
+  const normalizedTaxTotal = Math.max(0, Math.round(Number(taxTotal || 0)));
+  const taxableRates = Array.from(new Set(lines
+    .map((line) => normalizeDraftTaxRate(line.taxRate))
+    .filter((rate) => rate === "8%" || rate === "10%")));
+  return [{
+    id: `receipt-tax-${Date.now()}-0`,
+    taxRate: normalizedTaxTotal === 0 ? "非課税" : taxableRates.length === 1 ? taxableRates[0] : "8%",
+    taxAmount: String(normalizedTaxTotal)
+  }];
+}
+
+function normalizeReceiptTaxLines(lines: ReceiptTaxLine[] | undefined, accountingLines: VoucherAccountingLine[], fallbackTaxTotal: string | number): ReceiptTaxLine[] {
+  const inputLines = Array.isArray(lines) && lines.length
+    ? lines
+    : buildDefaultReceiptTaxLines(Math.round(Number(fallbackTaxTotal || 0)), accountingLines);
+  return inputLines.map((line, index) => ({
+    id: line.id || `receipt-tax-${Date.now()}-${index}`,
+    taxRate: normalizeDraftTaxRate(line.taxRate) || "8%",
+    taxAmount: normalizeMoneyInputText(line.taxAmount)
+  }));
 }
 
 function adjustVoucherAccountingLinesTaxTotal(lines: VoucherAccountingLine[], taxTotalValue: string) {
@@ -2626,22 +2735,37 @@ function ConfirmedVoucherDetailEditor({
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
   const [productBindingDetailKeys, setProductBindingDetailKeys] = useState<Record<string, boolean>>({});
-  const detailsTaxTotal = calculateVoucherLinesTaxTotal(details);
   const productCategoryOptions = getProductCategoryOptions(productOptions);
+  const initialReceiptTaxTotal = Math.round(Number(voucher.tax ?? 0));
+  const initialAccountingLines = details.map((detail) => buildVoucherAccountingLineFromConfirmedDetail(detail, `${voucher.id}-${detail.lineNo}`));
+  const detailsResetKey = details.map((detail) => [
+    detail.lineNo,
+    detail.accountTitle,
+    detail.subAccountTitle,
+    detail.amount,
+    detail.taxRate,
+    detail.taxMode,
+    detail.taxAmount
+  ].join(":")).join("|");
+  const receiptTaxLinesResetKey = JSON.stringify(voucher.receiptTaxLines ?? []);
   const [basicDraft, setBasicDraft] = useState<ConfirmedVoucherBasicDraft>(() => ({
     companyName: voucher.companyName,
     brandName: voucher.brandName,
     locationName: voucher.locationName,
-    receiptTaxTotal: String(detailsTaxTotal)
+    receiptTaxTotal: String(initialReceiptTaxTotal),
+    receiptTaxLines: normalizeReceiptTaxLines(voucher.receiptTaxLines, initialAccountingLines, initialReceiptTaxTotal)
   }));
   useEffect(() => {
+    const receiptTaxTotal = Math.round(Number(voucher.tax ?? 0));
+    const accountingLines = details.map((detail) => buildVoucherAccountingLineFromConfirmedDetail(detail, `${voucher.id}-${detail.lineNo}`));
     setBasicDraft({
       companyName: voucher.companyName,
       brandName: voucher.brandName,
       locationName: voucher.locationName,
-      receiptTaxTotal: String(detailsTaxTotal)
+      receiptTaxTotal: String(receiptTaxTotal),
+      receiptTaxLines: normalizeReceiptTaxLines(voucher.receiptTaxLines, accountingLines, receiptTaxTotal)
     });
-  }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName, detailsTaxTotal]);
+  }, [voucher.id, voucher.companyName, voucher.brandName, voucher.locationName, voucher.tax, receiptTaxLinesResetKey, detailsResetKey]);
   function toggleDetailExpanded(detailKey: string) {
     setExpandedDetailKeys((current) => ({ ...current, [detailKey]: !current[detailKey] }));
   }
@@ -2667,10 +2791,7 @@ function ConfirmedVoucherDetailEditor({
           <span>店舗名</span>
           <input value={basicDraft.locationName} onChange={(event) => setBasicDraft((current) => ({ ...current, locationName: event.target.value }))} />
         </label>
-        <label>
-          <span>レシート消費税</span>
-          <input type="text" inputMode="decimal" value={basicDraft.receiptTaxTotal} onChange={(event) => setBasicDraft((current) => ({ ...current, receiptTaxTotal: normalizeMoneyInputText(event.target.value) }))} />
-        </label>
+        <ReceiptTaxLinesEditor taxLines={basicDraft.receiptTaxLines} disabled={isSavingBasic} onChange={(taxLines) => setBasicDraft((current) => ({ ...current, receiptTaxLines: taxLines, receiptTaxTotal: String(calculateReceiptTaxLinesTotal(taxLines)) }))} />
         <div className="voucher-confirmed-basic-actions">
           <button className="secondary-button" type="button" disabled={isSavingBasic} onClick={() => onSaveBasic(basicDraft)}>
             {isSavingBasic ? "保存中..." : "基本情報を保存"}
@@ -2963,14 +3084,16 @@ const TAX_AMOUNT_AUTO_FIX_TOLERANCE = 2;
 function normalizeAccountingLineTax(
   line: VoucherAccountingLine,
   taxMode = line.taxMode,
-  options: { force?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean } = {}
+  options: { force?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean; autoFixStaleTax?: boolean } = {}
 ): VoucherAccountingLine {
   const amount = Math.round(Number(line.amount || 0));
   const taxRate = line.taxRate || getDefaultTaxRateForSubAccountTitle(line.subAccountTitle);
   const normalizedTaxMode = normalizeDraftTaxMode(taxMode);
   const expectedTaxAmount = calculateDraftTaxAmount(amount, taxRate, normalizedTaxMode);
   const currentTaxAmount = Math.round(Number(line.taxAmount || 0));
+  const shouldAutoFixStaleTax = options.autoFixStaleTax === true;
   const hasStaleTaxAmount = expectedTaxAmount > 0
+    && shouldAutoFixStaleTax
     && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
   return {
     ...line,
@@ -2986,14 +3109,16 @@ function normalizeAccountingLineTax(
 
 function normalizeConfirmedLineDetail(
   detail: ConfirmedAccountingLineDetail,
-  options: { forceTax?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean } = {}
+  options: { forceTax?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean; autoFixStaleTax?: boolean } = {}
 ): ConfirmedAccountingLineDetail {
   const amount = Math.round(Number(detail.amount || 0));
   const taxRate = detail.taxRate || getDefaultTaxRateForSubAccountTitle(detail.subAccountTitle);
   const normalizedTaxMode = normalizeDraftTaxMode(detail.taxMode);
   const expectedTaxAmount = calculateDraftTaxAmount(amount, taxRate, normalizedTaxMode);
   const currentTaxAmount = Math.round(Number(detail.taxAmount || 0));
+  const shouldAutoFixStaleTax = options.autoFixStaleTax === true;
   const hasStaleTaxAmount = expectedTaxAmount > 0
+    && shouldAutoFixStaleTax
     && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
   return {
     ...detail,

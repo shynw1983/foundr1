@@ -3916,6 +3916,34 @@ body :where(
   min-height: 42px;
 }
 
+.receipt-tax-lines-field {
+  display: grid;
+  gap: 6px;
+}
+
+.receipt-tax-lines {
+  display: grid;
+  gap: 6px;
+}
+
+.receipt-tax-line {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) minmax(100px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.receipt-tax-line .icon-button {
+  width: 38px;
+  height: 38px;
+}
+
+.receipt-tax-line-add {
+  justify-self: start;
+  min-height: 28px;
+  padding: 4px 0;
+}
+
 .receipt-note-field {
   grid-column: span 2;
 }
@@ -18572,7 +18600,8 @@ body :where(
   font-weight: 600;
 }
 
-.voucher-confirmed-basic-grid input {
+.voucher-confirmed-basic-grid input,
+.voucher-confirmed-basic-grid select {
   width: 100%;
   min-height: 36px;
   border: 1px solid var(--border);
@@ -18582,6 +18611,14 @@ body :where(
   color: var(--text);
   font: inherit;
   font-size: 0.82rem;
+}
+
+.voucher-confirmed-basic-grid .receipt-tax-lines-field {
+  min-width: 0;
+}
+
+.voucher-confirmed-basic-grid .receipt-tax-line {
+  grid-template-columns: minmax(76px, 0.8fr) minmax(90px, 1fr) auto;
 }
 
 .voucher-confirmed-basic-actions {
@@ -27207,6 +27244,11 @@ body :where(
   .receipt-confirm-form,
   .expense-edit-form {
     grid-template-columns: 1fr;
+  }
+
+  .receipt-tax-line,
+  .voucher-confirmed-basic-grid .receipt-tax-line {
+    grid-template-columns: minmax(84px, 0.8fr) minmax(90px, 1fr) auto;
   }
 
   .expense-form .primary-button,

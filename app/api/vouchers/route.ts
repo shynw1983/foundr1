@@ -180,6 +180,7 @@ export async function PATCH(request: Request) {
     transactionTime?: string;
     receiptTotal?: string | number;
     receiptTaxTotal?: string | number;
+    receiptTaxLines?: Array<{ taxRate?: string; taxAmount?: string | number }>;
     note?: string;
     ocrItemId?: string;
     summaryKey?: string;
@@ -337,13 +338,11 @@ export async function PATCH(request: Request) {
     `;
     const rawResult = isPlainObject(rawRows[0]?.rawResult) ? rawRows[0].rawResult : {};
     const accountingLines = Array.isArray(rawResult.accountingLines) ? [...rawResult.accountingLines] : [];
-    const receiptTaxTotal = normalizeNullableMoney(body.receiptTaxTotal);
-    const adjustedAccountingLines = receiptTaxTotal === null
-      ? accountingLines
-      : applyAccountingLinesTaxTotal(accountingLines, receiptTaxTotal);
+    const receiptTaxLines = normalizeReceiptTaxLines(body.receiptTaxLines, normalizeNullableMoney(body.receiptTaxTotal) ?? Number(voucher.tax ?? 0));
+    const adjustedAccountingLines = applyAccountingLinesTaxBreakdown(accountingLines, receiptTaxLines);
     const normalizedLines = normalizeAccountingLines(adjustedAccountingLines, voucher, nextUsageType);
     const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
-    const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const tax = calculateReceiptTaxLinesTotal(receiptTaxLines);
     const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
     const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
     const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
@@ -362,7 +361,12 @@ export async function PATCH(request: Request) {
         location_name = ${locationName},
         tax = ${tax},
         total = ${receiptTotal},
-        raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+        raw_result = jsonb_set(
+          jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+          '{receiptTaxLines}',
+          ${JSON.stringify(receiptTaxLines)}::jsonb,
+          true
+        ),
         updated_at = now()
       where id::text = ${id}
     `;
@@ -412,14 +416,11 @@ export async function PATCH(request: Request) {
       note: String(body.lines?.[0]?.note ?? currentLine.note ?? "").trim()
     };
     accountingLines[index] = nextLine;
-    const receiptTaxTotal = normalizeNullableMoney(body.receiptTaxTotal);
-    const adjustedAccountingLines = receiptTaxTotal === null
-      ? accountingLines
-      : applyAccountingLinesTaxTotal(accountingLines, receiptTaxTotal);
-
+    const receiptTaxLines = normalizeReceiptTaxLines(body.receiptTaxLines, normalizeNullableMoney(body.receiptTaxTotal) ?? Number(voucher.tax ?? 0));
+    const adjustedAccountingLines = applyAccountingLinesTaxBreakdown(accountingLines, receiptTaxLines);
     const normalizedLines = normalizeAccountingLines(adjustedAccountingLines, voucher, nextUsageType);
     const lineTotal = normalizedLines.reduce((sum, line) => sum + line.amount, 0);
-    const tax = normalizedLines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const tax = calculateReceiptTaxLinesTotal(receiptTaxLines);
     const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? normalizeNullableMoney(voucher.total) ?? lineTotal;
     const companyName = String(body.companyName ?? voucher.companyName ?? "").trim();
     const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
@@ -438,7 +439,12 @@ export async function PATCH(request: Request) {
         location_name = ${locationName},
         tax = ${tax},
         total = ${receiptTotal},
-        raw_result = jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+        raw_result = jsonb_set(
+          jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(normalizedLines)}::jsonb, true),
+          '{receiptTaxLines}',
+          ${JSON.stringify(receiptTaxLines)}::jsonb,
+          true
+        ),
         updated_at = now()
       where id::text = ${id}
     `;
@@ -461,9 +467,13 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "用途を仕入または経費にしてください。" }, { status: 400 });
     }
 
-    const lines = normalizeAccountingLines(body.lines, voucher, nextUsageType);
+    const receiptTaxLines = normalizeReceiptTaxLines(body.receiptTaxLines, normalizeNullableMoney(body.receiptTaxTotal) ?? Number(voucher.tax ?? 0));
+    const adjustedBodyLines = Array.isArray(body.lines)
+      ? applyAccountingLinesTaxBreakdown(body.lines, receiptTaxLines)
+      : body.lines;
+    const lines = normalizeAccountingLines(adjustedBodyLines, voucher, nextUsageType);
     const amount = lines.reduce((sum, line) => sum + line.amount, 0);
-    const taxAmount = lines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const taxAmount = calculateReceiptTaxLinesTotal(receiptTaxLines);
     const receiptTotal = normalizeNullableMoney(body.receiptTotal) ?? amount;
     const transactionDate = normalizeDate(body.transactionDate) || normalizeDate(String(voucher.purchaseDate ?? ""));
     const transactionTime = normalizeTime(body.transactionTime) || normalizeTime(String(voucher.purchaseTime ?? ""));
@@ -557,7 +567,12 @@ export async function PATCH(request: Request) {
         purchase_time = ${transactionTime || null},
         tax = ${taxAmount},
         total = ${receiptTotal},
-        raw_result = jsonb_set(raw_result, '{accountingLines}', ${JSON.stringify(lines)}::jsonb, true),
+        raw_result = jsonb_set(
+          jsonb_set(coalesce(raw_result, '{}'::jsonb), '{accountingLines}', ${JSON.stringify(lines)}::jsonb, true),
+          '{receiptTaxLines}',
+          ${JSON.stringify(receiptTaxLines)}::jsonb,
+          true
+        ),
         confirmed_at = now(),
         confirmed_by = ${session.id},
         updated_at = now()
@@ -671,6 +686,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       receipt_ocr_results.total::float,
       receipt_ocr_results.tax::float,
       coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb) as "accountingLines",
+      coalesce(receipt_ocr_results.raw_result->'receiptTaxLines', '[]'::jsonb) as "receiptTaxLines",
       coalesce(item_counts.item_count, 0)::int as "itemCount",
       coalesce(employees.name, '') as "createdByName",
       coalesce(to_char(receipt_ocr_results.created_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI'), '') as "createdLabel"
@@ -766,6 +782,7 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     total: Number(row.total ?? 0),
     tax: Number(row.tax ?? 0),
     accountingLines: normalizeStoredAccountingLines(row.accountingLines),
+    receiptTaxLines: normalizeReceiptTaxLines(row.receiptTaxLines, Number(row.tax ?? 0)),
     itemCount: Number(row.itemCount ?? 0),
     createdByName: String(row.createdByName ?? ""),
     createdLabel: String(row.createdLabel ?? ""),
@@ -1256,6 +1273,62 @@ function normalizeAccountingLines(lines: Array<{
       note: String(line.note ?? "").trim()
     };
   }).filter((line) => line.amount > 0);
+}
+
+function normalizeReceiptTaxLines(value: unknown, fallbackTaxTotal: number) {
+  const normalizedFallbackTaxTotal = Math.max(0, Math.round(Number(fallbackTaxTotal || 0)));
+  const inputLines = Array.isArray(value) && value.length
+    ? value
+    : [{ taxRate: normalizedFallbackTaxTotal === 0 ? "非課税" : "8%", taxAmount: normalizedFallbackTaxTotal }];
+  return inputLines.map((line) => {
+    const row = isPlainObject(line) ? line : {};
+    return {
+      taxRate: normalizeTaxRate(row.taxRate) || "8%",
+      taxAmount: Math.max(0, Math.round(Number(row.taxAmount ?? 0)))
+    };
+  });
+}
+
+function calculateReceiptTaxLinesTotal(lines: Array<{ taxAmount?: unknown }>) {
+  return lines.reduce((sum, line) => sum + Math.round(Number(line.taxAmount ?? 0)), 0);
+}
+
+function applyAccountingLinesTaxBreakdown<T>(lines: T[], taxLines: Array<{ taxRate: string; taxAmount: number }>): T[] {
+  const mutableLines = lines.map((line) => isPlainObject(line) ? { ...line } : line) as T[];
+  for (const taxLine of taxLines) {
+    const taxRate = normalizeTaxRate(taxLine.taxRate);
+    if (!taxRate) continue;
+    const targetTaxTotal = Math.max(0, Math.round(Number(taxLine.taxAmount ?? 0)));
+    const targetIndexes = mutableLines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => isPlainObject(line) && normalizeTaxRate(line.taxRate) === taxRate)
+      .map(({ index }) => index)
+      .reverse();
+    if (!targetIndexes.length) continue;
+    const currentTaxTotal = targetIndexes.reduce((sum, index) => {
+      const line = mutableLines[index];
+      if (!isPlainObject(line)) return sum;
+      return sum + Math.round(Number(line.taxAmount ?? 0));
+    }, 0);
+    let remainingDelta = targetTaxTotal - currentTaxTotal;
+    if (!remainingDelta) continue;
+    for (const index of targetIndexes) {
+      if (!remainingDelta) break;
+      const line = mutableLines[index];
+      if (!isPlainObject(line)) continue;
+      const lineRecord = line as Record<string, unknown>;
+      const currentTaxAmount = Math.max(0, Math.round(Number(lineRecord.taxAmount ?? 0)));
+      if (remainingDelta > 0) {
+        lineRecord.taxAmount = currentTaxAmount + remainingDelta;
+        remainingDelta = 0;
+        break;
+      }
+      const reduction = Math.min(currentTaxAmount, Math.abs(remainingDelta));
+      lineRecord.taxAmount = currentTaxAmount - reduction;
+      remainingDelta += reduction;
+    }
+  }
+  return mutableLines;
 }
 
 function applyAccountingLinesTaxTotal<T>(lines: T[], targetTaxTotal: number): T[] {
