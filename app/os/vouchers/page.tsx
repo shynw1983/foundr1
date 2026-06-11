@@ -2029,6 +2029,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
   };
 
   const previewSurfaceStyle = { width: `${previewZoom * 100}%` };
+  const canOpenPreviewObject = !previewMeta.loading && !previewMeta.error && Boolean(previewMeta.objectUrl);
 
   return (
     <aside className="voucher-preview-panel" aria-label="証憑プレビュー">
@@ -2037,7 +2038,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <span>証憑プレビュー</span>
           <strong>{title}</strong>
         </div>
-        <a className="voucher-preview-open-link" href={previewUrl} target="_blank" rel="noreferrer">開く</a>
+        {canOpenPreviewObject ? (
+          <a className="voucher-preview-open-link" href={previewMeta.objectUrl} target="_blank" rel="noreferrer">開く</a>
+        ) : null}
         <button type="button" onClick={onClose} aria-label="プレビューを閉じる">
           <X size={18} />
         </button>
@@ -2056,7 +2059,6 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <div className="voucher-preview-status is-error">
             <strong>証憑を読み込めません</strong>
             <span>{previewMeta.error}</span>
-            <a href={previewUrl} target="_blank" rel="noreferrer">新しいタブで開く</a>
           </div>
         ) : previewMeta.kind === "image" ? (
           <img src={previewMeta.objectUrl} alt={title} style={previewSurfaceStyle} />
