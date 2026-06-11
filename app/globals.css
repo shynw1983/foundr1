@@ -19830,6 +19830,128 @@ body :where(
   font-size: 13px;
 }
 
+.product-price-history-modal {
+  width: min(760px, calc(100vw - 28px));
+}
+
+.product-price-history-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.product-price-history-stats span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.product-price-history-stats small,
+.product-price-history-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.product-price-history-stats strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.product-price-chart {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.product-price-chart svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.product-price-chart line {
+  stroke: var(--line);
+  stroke-width: 2;
+}
+
+.product-price-chart .reference-line {
+  stroke: rgba(196, 125, 0, 0.55);
+  stroke-dasharray: 7 7;
+}
+
+.product-price-chart polyline {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.product-price-chart circle {
+  fill: #ffffff;
+  stroke: var(--green);
+  stroke-width: 3;
+}
+
+.product-price-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.product-price-history-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.product-price-history-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.5fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.product-price-history-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-price-history-row strong {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.product-price-history-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .purchase-link-button {
   display: inline-flex;
   width: fit-content;
@@ -22589,6 +22711,14 @@ body :where(
 }
 
 @media (max-width: 760px) {
+  .product-price-history-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-price-history-row {
+    grid-template-columns: 1fr;
+  }
+
   .privacy-consent-shell {
     padding: 12px;
   }

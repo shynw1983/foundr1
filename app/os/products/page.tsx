@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Boxes, CheckCircle, ClipboardList, FileText, Lightbulb, Link2, MessageSquareWarning, PackageCheck, Plus, RefreshCw, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Ban, Boxes, CheckCircle, ClipboardList, FileText, Lightbulb, Link2, MessageSquareWarning, PackageCheck, Plus, RefreshCw, Search, Store, TrendingUp, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -58,6 +58,23 @@ type ProductOption = {
   name: string;
   category: string;
   unit: string;
+};
+type ProductPriceHistoryRecord = {
+  id: string;
+  price: number;
+  unit: string;
+  source: string;
+  receiptNote: string;
+  recordedAt: string;
+  purchaseDate: string;
+  supplierName: string;
+  vendorName: string;
+};
+type ProductPriceHistoryState = {
+  product: ProductWithCategory;
+  records: ProductPriceHistoryRecord[];
+  isLoading: boolean;
+  error: string;
 };
 type ProductCandidatesPayload = {
   candidates: ProductCandidate[];
@@ -159,6 +176,26 @@ function formatYenAmount(value: number) {
   return value.toLocaleString("ja-JP", {
     maximumFractionDigits: value >= 100 ? 0 : 2
   });
+}
+
+function formatHistoryPrice(value: number) {
+  return `¥${Number(value || 0).toLocaleString("ja-JP", {
+    maximumFractionDigits: value >= 100 ? 0 : 2
+  })}`;
+}
+
+function formatHistoryDate(value: string) {
+  if (!value) return "日付未設定";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10) || "日付未設定";
+  return date.toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function formatPriceRecordSource(source: string) {
+  if (source === "receipt_ocr") return "レシート";
+  if (source === "purchase_actual") return "購入実績";
+  if (source === "manual") return "手入力";
+  return source || "記録";
 }
 
 function formatPackageQuantity(product: ProductWithCategory) {
@@ -391,6 +428,7 @@ export default function ProductsPage() {
   const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
   const [candidateProductIds, setCandidateProductIds] = useState<Record<string, string>>({});
   const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
+  const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryState | null>(null);
   const canManageProducts = productManagerRoles.has(currentRole);
 
   useCloseOnOutside(productSummaryPickerRef, () => setIsProductSummaryPickerOpen(false), isProductSummaryPickerOpen);
@@ -713,6 +751,26 @@ export default function ProductsPage() {
     });
 
     showNotice("商品情報をコピーしました。必要な項目を変更して保存してください。", "info");
+  }
+
+  async function openProductPriceHistory(product: ProductWithCategory) {
+    if (!product.id) {
+      window.alert("保存済みの商品だけ価格履歴を確認できます。");
+      return;
+    }
+
+    setPriceHistory({ product, records: [], isLoading: true, error: "" });
+    try {
+      const response = await fetch(`/api/products/${encodeURIComponent(product.id)}/price-history`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as { records?: ProductPriceHistoryRecord[]; error?: string };
+      if (!response.ok) {
+        setPriceHistory({ product, records: [], isLoading: false, error: body.error ?? "価格履歴を読み込めませんでした。" });
+        return;
+      }
+      setPriceHistory({ product, records: body.records ?? [], isLoading: false, error: "" });
+    } catch {
+      setPriceHistory({ product, records: [], isLoading: false, error: "価格履歴を読み込めませんでした。通信状態を確認してください。" });
+    }
   }
 
   function deleteProduct(product: ProductWithCategory) {
@@ -1201,8 +1259,12 @@ export default function ProductsPage() {
                       </span>
                     ) : null}
                   </div>
-                  {canManageProducts ? (
-                    <div className="mobile-product-actions">
+                  <div className="mobile-product-actions">
+                    <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
+                      価格推移
+                    </button>
+                    {canManageProducts ? (
+                      <>
                       <button
                         className="text-button"
                         onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
@@ -1215,9 +1277,13 @@ export default function ProductsPage() {
                       <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
                         削除
                       </button>
-                    </div>
-                  ) : null}
+                      </>
+                    ) : null}
+                  </div>
                   <div className="row-actions">
+                    <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
+                      価格推移
+                    </button>
                     {canManageProducts ? (
                       <>
                         <button
@@ -1411,6 +1477,12 @@ export default function ProductsPage() {
         ) : null}
       </section>
 
+      {priceHistory ? (
+        <ProductPriceHistoryDialog
+          history={priceHistory}
+          onClose={() => setPriceHistory(null)}
+        />
+      ) : null}
       {canManageProducts && editTarget ? (
         <ProductEditDialog
           target={editTarget}
@@ -1469,6 +1541,128 @@ export default function ProductsPage() {
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
+  );
+}
+
+function ProductPriceHistoryDialog({
+  history,
+  onClose
+}: {
+  history: ProductPriceHistoryState;
+  onClose: () => void;
+}) {
+  const chronologicalRecords = [...history.records].reverse();
+  const prices = history.records.map((record) => Number(record.price)).filter((price) => Number.isFinite(price) && price > 0);
+  const latestRecord = history.records[0];
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+  const averagePrice = prices.length ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length) : 0;
+  const referencePrice = parseReferencePrice(history.product.referencePrice ?? 0);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="product-price-history-title">
+      <section className="edit-modal product-price-history-modal">
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Price Trend</p>
+            <h3 id="product-price-history-title">{history.product.name} の価格推移</h3>
+            <p>レシート紐付けと購入実績から記録された税込単価です。</p>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
+            <span>×</span>
+          </button>
+        </div>
+        {history.isLoading ? (
+          <p className="empty-state">価格履歴を読み込み中...</p>
+        ) : history.error ? (
+          <p className="empty-state">{history.error}</p>
+        ) : history.records.length ? (
+          <>
+            <div className="product-price-history-stats">
+              <span>
+                <small>最新</small>
+                <strong>{formatHistoryPrice(latestRecord?.price ?? 0)}</strong>
+              </span>
+              <span>
+                <small>平均</small>
+                <strong>{formatHistoryPrice(averagePrice)}</strong>
+              </span>
+              <span>
+                <small>最低</small>
+                <strong>{formatHistoryPrice(minPrice)}</strong>
+              </span>
+              <span>
+                <small>最高</small>
+                <strong>{formatHistoryPrice(maxPrice)}</strong>
+              </span>
+              <span>
+                <small>参考価格</small>
+                <strong>{referencePrice > 0 ? formatHistoryPrice(referencePrice) : "未設定"}</strong>
+              </span>
+            </div>
+            <ProductPriceTrendChart records={chronologicalRecords} referencePrice={referencePrice} />
+            <div className="product-price-history-list">
+              {history.records.map((record) => (
+                <div className="product-price-history-row" key={record.id}>
+                  <div>
+                    <strong>{formatHistoryPrice(record.price)}</strong>
+                    <span>{record.unit || history.product.unit || "個"} / {formatPriceRecordSource(record.source)}</span>
+                  </div>
+                  <div>
+                    <span>{record.vendorName || record.supplierName || "取引先未設定"}</span>
+                    <small>{record.purchaseDate || formatHistoryDate(record.recordedAt)}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="empty-state">この商品の購入価格記録はまだありません。レシート明細を商品マスタに紐付けると、税込単価がここに蓄積されます。</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProductPriceTrendChart({ records, referencePrice }: { records: ProductPriceHistoryRecord[]; referencePrice: number }) {
+  const prices = records.map((record) => Number(record.price)).filter((price) => Number.isFinite(price) && price > 0);
+  if (prices.length === 0) return null;
+  const values = referencePrice > 0 ? [...prices, referencePrice] : prices;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const width = 640;
+  const height = 180;
+  const paddingX = 24;
+  const paddingY = 22;
+  const points = prices.map((price, index) => {
+    const x = prices.length === 1
+      ? width / 2
+      : paddingX + (index / (prices.length - 1)) * (width - paddingX * 2);
+    const y = height - paddingY - ((price - min) / range) * (height - paddingY * 2);
+    return `${x},${y}`;
+  }).join(" ");
+  const referenceY = referencePrice > 0
+    ? height - paddingY - ((referencePrice - min) / range) * (height - paddingY * 2)
+    : null;
+
+  return (
+    <div className="product-price-chart" aria-label="価格推移チャート">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} />
+        {referenceY !== null ? <line className="reference-line" x1={paddingX} y1={referenceY} x2={width - paddingX} y2={referenceY} /> : null}
+        <polyline points={points} />
+        {prices.map((price, index) => {
+          const [x, y] = points.split(" ")[index].split(",").map(Number);
+          return <circle cx={x} cy={y} r="4" key={`${price}-${index}`} />;
+        })}
+      </svg>
+      <div className="product-price-chart-labels">
+        <span>{formatHistoryPrice(min)}</span>
+        {referencePrice > 0 ? <span>参考価格 {formatHistoryPrice(referencePrice)}</span> : null}
+        <span>{formatHistoryPrice(max)}</span>
+      </div>
+    </div>
   );
 }
 
