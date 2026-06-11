@@ -309,6 +309,7 @@ export default function VouchersPage() {
   const [isLoadingConfirmedLines, setIsLoadingConfirmedLines] = useState(false);
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
   const [confirmedSummaryDrafts, setConfirmedSummaryDrafts] = useState<Record<string, string>>({});
+  const [editingConfirmedSummaryKeys, setEditingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
@@ -573,6 +574,11 @@ export default function VouchersPage() {
         return;
       }
       setMessage("摘要を保存しました。CSV出力にも反映されます。");
+      setEditingConfirmedSummaryKeys((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
       await loadConfirmedAccountingLines(exportStartDate, exportEndDate);
     } catch {
       setMessage("摘要を保存できませんでした。通信状態を確認してください。");
@@ -1269,6 +1275,7 @@ export default function VouchersPage() {
                   const key = getConfirmedLineKey(line);
                   const summaryDraft = confirmedSummaryDrafts[key] ?? line.note ?? "";
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
+                  const isEditingSummary = Boolean(editingConfirmedSummaryKeys[key]);
                   return (
                   <div className="voucher-confirmed-line-row" key={key}>
                     <div className="voucher-confirmed-line-meta">
@@ -1282,17 +1289,50 @@ export default function VouchersPage() {
                     <div className="voucher-confirmed-line-amount">
                       <strong>{formatMoney(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
                       <span>{line.quantity ? `${line.quantity} ${line.unit} / 単価 ${line.unitPrice ? formatMoney(Number(line.unitPrice)) : "-"}${line.lineCount && line.lineCount > 1 ? ` / 集計 ${line.lineCount}行` : ""}` : line.note || "-"}</span>
-                      <div className="voucher-confirmed-summary-edit">
-                        <input
-                          value={summaryDraft}
-                          onChange={(event) => setConfirmedSummaryDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                          placeholder="摘要"
-                          aria-label="摘要"
-                          disabled={isSavingSummary}
-                        />
-                        <button className="secondary-button" type="button" onClick={() => saveConfirmedSummaryNote(line)} disabled={isSavingSummary || summaryDraft.trim() === (line.note ?? "").trim()}>
-                          保存
-                        </button>
+                      <div className={`voucher-confirmed-summary-edit ${isEditingSummary ? "is-editing" : ""}`}>
+                        {isEditingSummary ? (
+                          <>
+                            <input
+                              value={summaryDraft}
+                              onChange={(event) => setConfirmedSummaryDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                              placeholder="摘要"
+                              aria-label="摘要"
+                              disabled={isSavingSummary}
+                            />
+                            <button className="secondary-button" type="button" onClick={() => saveConfirmedSummaryNote(line)} disabled={isSavingSummary || summaryDraft.trim() === (line.note ?? "").trim()}>
+                              {isSavingSummary ? "保存中" : "保存"}
+                            </button>
+                            <button
+                              className="text-button"
+                              type="button"
+                              onClick={() => {
+                                setConfirmedSummaryDrafts((current) => ({ ...current, [key]: line.note ?? "" }));
+                                setEditingConfirmedSummaryKeys((current) => {
+                                  const next = { ...current };
+                                  delete next[key];
+                                  return next;
+                                });
+                              }}
+                              disabled={isSavingSummary}
+                            >
+                              キャンセル
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="voucher-confirmed-summary-text">{line.note || "摘要なし"}</span>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => {
+                                setConfirmedSummaryDrafts((current) => ({ ...current, [key]: line.note ?? "" }));
+                                setEditingConfirmedSummaryKeys((current) => ({ ...current, [key]: true }));
+                              }}
+                            >
+                              変更
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                     <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>

@@ -18434,6 +18434,21 @@ body :where(
   text-align: left;
 }
 
+.voucher-confirmed-summary-edit.is-editing {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.voucher-confirmed-summary-text {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: var(--text);
+  background: var(--surface-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
 .voucher-confirmed-summary-edit input {
   width: 100%;
   min-width: 0;
@@ -18449,6 +18464,12 @@ body :where(
 .voucher-confirmed-summary-edit button {
   min-height: 34px;
   padding-inline: 10px;
+}
+
+.voucher-confirmed-summary-edit .text-button {
+  justify-self: auto;
+  min-height: 34px;
+  padding-inline: 8px;
 }
 
 .voucher-confirmed-line-actions {
