@@ -18313,7 +18313,20 @@ body :where(
   color: var(--muted);
 }
 
-.voucher-list-search input {
+.voucher-list-search .voucher-filter-control {
+  flex: 0 1 170px;
+  min-width: 150px;
+}
+
+.voucher-filter-control span {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.voucher-list-search input,
+.voucher-list-search select {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -18323,12 +18336,17 @@ body :where(
   font: inherit;
 }
 
+.voucher-list-search select {
+  appearance: none;
+  cursor: pointer;
+}
+
 .voucher-list-search button {
   min-height: 40px;
   padding-inline: 12px;
 }
 
-.voucher-list-search span {
+.voucher-filter-count {
   margin-left: auto;
   color: var(--muted);
   font-size: 0.84rem;
@@ -19323,9 +19341,13 @@ body :where(
 
   .voucher-list-search label,
   .voucher-list-search button,
-  .voucher-list-search span {
+  .voucher-filter-count {
     flex-basis: 100%;
     margin-left: 0;
+  }
+
+  .voucher-list-search .voucher-filter-control {
+    flex-basis: 100%;
   }
 
   .voucher-confirmed-line-row {

@@ -29,6 +29,8 @@ type StoreOption = {
 type VoucherUsageType = "unclassified" | "shiire" | "keihi";
 type VoucherPaymentType = "company" | "reimbursement";
 type VoucherReimbursementStatus = "none" | "pending" | "paid" | "rejected";
+type VoucherReviewStatusFilter = "all" | "confirmed" | "unconfirmed";
+type VoucherDateSort = "desc" | "asc";
 
 type VoucherRecord = {
   id: string;
@@ -324,6 +326,10 @@ export default function VouchersPage() {
   const [editingConfirmedSummaryKeys, setEditingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [voucherSearchInput, setVoucherSearchInput] = useState("");
   const [voucherSearchTerm, setVoucherSearchTerm] = useState("");
+  const [voucherFilterStartDate, setVoucherFilterStartDate] = useState("");
+  const [voucherFilterEndDate, setVoucherFilterEndDate] = useState("");
+  const [voucherReviewStatusFilter, setVoucherReviewStatusFilter] = useState<VoucherReviewStatusFilter>("all");
+  const [voucherDateSort, setVoucherDateSort] = useState<VoucherDateSort>("desc");
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
@@ -375,9 +381,17 @@ export default function VouchersPage() {
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
   const filteredVouchers = useMemo(() => {
     const term = normalizeSearchText(voucherSearchTerm);
-    if (!term) return sortedVouchers;
-    return sortedVouchers.filter((voucher) => voucherMatchesProductSearch(voucher, term));
-  }, [sortedVouchers, voucherSearchTerm]);
+    return sortedVouchers
+      .filter((voucher) => {
+        const voucherDate = voucher.purchaseDate || "";
+        if (voucherFilterStartDate && (!voucherDate || voucherDate < voucherFilterStartDate)) return false;
+        if (voucherFilterEndDate && (!voucherDate || voucherDate > voucherFilterEndDate)) return false;
+        if (voucherReviewStatusFilter === "confirmed" && voucher.status !== "confirmed") return false;
+        if (voucherReviewStatusFilter === "unconfirmed" && voucher.status === "confirmed") return false;
+        return !term || voucherMatchesProductSearch(voucher, term);
+      })
+      .sort((left, right) => compareVoucherPurchaseDate(left, right, voucherDateSort));
+  }, [sortedVouchers, voucherSearchTerm, voucherFilterStartDate, voucherFilterEndDate, voucherReviewStatusFilter, voucherDateSort]);
 
   useEffect(() => {
     if (!hasRestoredWorkspace || !vouchers.length) return;
@@ -1423,23 +1437,71 @@ export default function VouchersPage() {
                 aria-label="証憑の商品検索"
               />
             </label>
+            <label className="voucher-filter-control">
+              <span>開始日</span>
+              <input
+                type="date"
+                value={voucherFilterStartDate}
+                onChange={(event) => setVoucherFilterStartDate(event.target.value)}
+                aria-label="証憑一覧の開始日"
+              />
+            </label>
+            <label className="voucher-filter-control">
+              <span>終了日</span>
+              <input
+                type="date"
+                value={voucherFilterEndDate}
+                onChange={(event) => setVoucherFilterEndDate(event.target.value)}
+                aria-label="証憑一覧の終了日"
+              />
+            </label>
+            <label className="voucher-filter-control">
+              <span>状態</span>
+              <select
+                value={voucherReviewStatusFilter}
+                onChange={(event) => setVoucherReviewStatusFilter(event.target.value as VoucherReviewStatusFilter)}
+                aria-label="証憑一覧の確認状態"
+              >
+                <option value="all">すべて</option>
+                <option value="unconfirmed">未確認</option>
+                <option value="confirmed">確定済み</option>
+              </select>
+            </label>
+            <label className="voucher-filter-control">
+              <span>並び順</span>
+              <select
+                value={voucherDateSort}
+                onChange={(event) => setVoucherDateSort(event.target.value as VoucherDateSort)}
+                aria-label="証憑一覧の日付並び順"
+              >
+                <option value="desc">日付が新しい順</option>
+                <option value="asc">日付が古い順</option>
+              </select>
+            </label>
             <button className="secondary-button" type="submit">検索</button>
-            {voucherSearchTerm ? (
+            {voucherSearchTerm || voucherFilterStartDate || voucherFilterEndDate || voucherReviewStatusFilter !== "all" || voucherDateSort !== "desc" ? (
               <button
                 className="text-button"
                 type="button"
                 onClick={() => {
                   setVoucherSearchInput("");
                   setVoucherSearchTerm("");
+                  setVoucherFilterStartDate("");
+                  setVoucherFilterEndDate("");
+                  setVoucherReviewStatusFilter("all");
+                  setVoucherDateSort("desc");
                 }}
               >
                 クリア
               </button>
             ) : null}
-            <span>
+            <button className="text-button" type="button" onClick={() => setVoucherReviewStatusFilter("unconfirmed")}>
+              未確認のみ
+            </button>
+            <span className="voucher-filter-count">
               {isLoading
                 ? "読み込み中..."
-                : voucherSearchTerm
+                : voucherSearchTerm || voucherFilterStartDate || voucherFilterEndDate || voucherReviewStatusFilter !== "all"
                   ? `検索結果 ${filteredVouchers.length} / ${sortedVouchers.length}件`
                   : `${sortedVouchers.length}件`}
             </span>
@@ -3278,6 +3340,13 @@ function getConfirmedLineKey(line: ConfirmedAccountingLine) {
 
 function normalizeSearchText(value: string) {
   return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function compareVoucherPurchaseDate(left: VoucherRecord, right: VoucherRecord, sort: VoucherDateSort) {
+  const leftKey = `${left.purchaseDate || "0000-00-00"} ${left.purchaseTime || "00:00"}`;
+  const rightKey = `${right.purchaseDate || "0000-00-00"} ${right.purchaseTime || "00:00"}`;
+  const result = leftKey.localeCompare(rightKey);
+  return sort === "asc" ? result : -result;
 }
 
 function voucherMatchesProductSearch(voucher: VoucherRecord, term: string) {
