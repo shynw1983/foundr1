@@ -158,7 +158,7 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
                 "Use YYYY-MM-DD for purchaseDate when the date is visible.",
                 "Use HH:mm for purchaseTime when the time is visible.",
                 "For each item taxRate, preserve visible 8% or 10% markers when present. Use 対象外 for tax payments, public dues, payroll, and other transactions outside Japanese consumption tax. Use 非課税 or 不課税 only when explicitly indicated.",
-                "Some supermarket receipts mark reduced-tax items with a leading ※. When a visible ※ is attached to an item, treat that item as 8% tax.",
+                "On Japanese supermarket receipts, a leading or adjacent ※ next to an item name often marks reduced consumption tax. Treat visible ※ as a strong hint that the item is 8% reduced tax, but not an absolute rule; if visible tax summaries, explicit 10% markers, or other receipt tax labels clearly contradict it, follow the clearer visible tax information.",
                 "When a receipt prints quantity and unit price under an item, such as (数量 × 単価), (3 × 468), or 3点 × 468, that quantity/unit-price line belongs to the item immediately above it, not to the next item.",
                 "For each item taxMode, use 内税 if tax is included in the displayed amount, 外税 if tax is added separately, 対象外 for tax payments/public dues/payroll/out-of-scope transactions, otherwise 不明."
               ].join("\n")
