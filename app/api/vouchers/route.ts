@@ -3,6 +3,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritable
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
 import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import { resolveReceiptSupplierLink } from "../../../lib/supplier-ocr-linking";
 import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
 
@@ -348,6 +349,7 @@ export async function PATCH(request: Request) {
     const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
     const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
     const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
+    const supplierLink = await resolveReceiptSupplierLink({ vendorName, companyName, brandName, locationName });
 
     await sql`
       update receipt_ocr_results
@@ -359,6 +361,9 @@ export async function PATCH(request: Request) {
         company_name = ${companyName},
         brand_name = ${brandName},
         location_name = ${locationName},
+        supplier_id = ${supplierLink.supplierId || null},
+        supplier_location_id = ${supplierLink.supplierLocationId || null},
+        supplier_match_status = ${supplierLink.matchStatus},
         tax = ${tax},
         total = ${receiptTotal},
         raw_result = jsonb_set(
@@ -426,6 +431,7 @@ export async function PATCH(request: Request) {
     const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
     const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
     const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
+    const supplierLink = await resolveReceiptSupplierLink({ vendorName, companyName, brandName, locationName });
 
     await sql`
       update receipt_ocr_results
@@ -437,6 +443,9 @@ export async function PATCH(request: Request) {
         company_name = ${companyName},
         brand_name = ${brandName},
         location_name = ${locationName},
+        supplier_id = ${supplierLink.supplierId || null},
+        supplier_location_id = ${supplierLink.supplierLocationId || null},
+        supplier_match_status = ${supplierLink.matchStatus},
         tax = ${tax},
         total = ${receiptTotal},
         raw_result = jsonb_set(
@@ -481,6 +490,7 @@ export async function PATCH(request: Request) {
     const brandName = String(body.brandName ?? voucher.brandName ?? "").trim();
     const locationName = String(body.locationName ?? voucher.locationName ?? "").trim();
     const vendorName = String(body.vendorName ?? buildVendorName(companyName, brandName, locationName, String(voucher.vendorName ?? ""))).trim();
+    const supplierLink = await resolveReceiptSupplierLink({ vendorName, companyName, brandName, locationName });
     const receiptNote = String(body.note ?? "").trim();
 
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -563,6 +573,9 @@ export async function PATCH(request: Request) {
         company_name = ${companyName},
         brand_name = ${brandName},
         location_name = ${locationName},
+        supplier_id = ${supplierLink.supplierId || null},
+        supplier_location_id = ${supplierLink.supplierLocationId || null},
+        supplier_match_status = ${supplierLink.matchStatus},
         purchase_date = ${transactionDate},
         purchase_time = ${transactionTime || null},
         tax = ${taxAmount},
@@ -681,6 +694,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       receipt_ocr_results.company_name as "companyName",
       receipt_ocr_results.brand_name as "brandName",
       receipt_ocr_results.location_name as "locationName",
+      coalesce(suppliers.name, '') as "linkedSupplierName",
+      coalesce(supplier_locations.name, '') as "linkedSupplierLocationName",
+      coalesce(receipt_ocr_results.supplier_match_status, 'unmatched') as "supplierMatchStatus",
       coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
       coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
       receipt_ocr_results.total::float,
@@ -693,6 +709,8 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     from receipt_ocr_results
     left join stores on stores.id = receipt_ocr_results.store_id
     left join employees on employees.id = receipt_ocr_results.created_by
+    left join suppliers on suppliers.id = receipt_ocr_results.supplier_id
+    left join supplier_locations on supplier_locations.id = receipt_ocr_results.supplier_location_id
     left join lateral (
       select count(*)::int as item_count
       from receipt_ocr_items
@@ -777,6 +795,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     companyName: String(row.companyName ?? ""),
     brandName: String(row.brandName ?? ""),
     locationName: String(row.locationName ?? ""),
+    linkedSupplierName: String(row.linkedSupplierName ?? ""),
+    linkedSupplierLocationName: String(row.linkedSupplierLocationName ?? ""),
+    supplierMatchStatus: String(row.supplierMatchStatus ?? "unmatched"),
     purchaseDate: String(row.purchaseDate ?? ""),
     purchaseTime: String(row.purchaseTime ?? ""),
     total: Number(row.total ?? 0),
@@ -1166,9 +1187,30 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
 
 async function listProductOptions() {
   const rows = await sql`
-    select id::text, name, category, subcategory, unit, reference_price::float as "referencePrice"
+    select
+      id::text,
+      name,
+      category,
+      subcategory,
+      unit,
+      reference_price::float as "referencePrice",
+      coalesce(product_family_name, '') as "productFamilyName",
+      coalesce(variant_name, '') as "variantName",
+      coalesce(package_spec, '') as "packageSpec",
+      package_quantity::float as "packageQuantity",
+      coalesce(package_quantity_unit, '') as "packageQuantityUnit",
+      coalesce((
+        select suppliers.name
+        from product_supplier_options
+        join suppliers on suppliers.id = product_supplier_options.supplier_id
+        where product_supplier_options.product_id = products.id
+          and product_supplier_options.role = 'メイン'
+          and product_supplier_options.is_active = true
+        order by suppliers.name
+        limit 1
+      ), '') as "mainSupplier"
     from products
-    order by category asc, subcategory asc, name asc
+    order by category asc, subcategory asc, coalesce(product_family_name, name) asc, variant_sort_order asc, name asc
     limit 800
   `;
   return rows.map((row) => ({
@@ -1177,7 +1219,13 @@ async function listProductOptions() {
     category: String(row.category ?? ""),
     subcategory: String(row.subcategory ?? ""),
     unit: String(row.unit ?? ""),
-    referencePrice: Number(row.referencePrice ?? 0)
+    referencePrice: Number(row.referencePrice ?? 0),
+    productFamilyName: String(row.productFamilyName ?? ""),
+    variantName: String(row.variantName ?? ""),
+    packageSpec: String(row.packageSpec ?? ""),
+    packageQuantity: row.packageQuantity === null || row.packageQuantity === undefined ? "" : String(Number(row.packageQuantity)),
+    packageQuantityUnit: String(row.packageQuantityUnit ?? ""),
+    mainSupplier: String(row.mainSupplier ?? "")
   }));
 }
 

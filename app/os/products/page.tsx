@@ -61,7 +61,14 @@ type ProductOption = {
   id: string;
   name: string;
   category: string;
+  subcategory?: string;
   unit: string;
+  productFamilyName?: string;
+  variantName?: string;
+  packageSpec?: string;
+  packageQuantity?: string;
+  packageQuantityUnit?: string;
+  mainSupplier?: string;
 };
 type ProductPriceHistoryRecord = {
   id: string;
@@ -79,6 +86,12 @@ type ProductPriceHistoryState = {
   records: ProductPriceHistoryRecord[];
   isLoading: boolean;
   error: string;
+};
+type ProductFamilyGroup = {
+  id: string;
+  familyName: string;
+  products: ProductWithCategory[];
+  representative: ProductWithCategory;
 };
 type ProductCandidatesPayload = {
   candidates: ProductCandidate[];
@@ -329,8 +342,78 @@ function getProductFamilyName(product: ProductWithCategory) {
   return String(product.productFamilyName ?? "").trim() || product.name || "未設定";
 }
 
+function normalizeProductFamilyKey(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getProductVariantName(product: ProductWithCategory) {
   return String(product.variantName ?? "").trim() || getProductDisplaySpec(product) || "単一規格";
+}
+
+function formatReceiptProductOptionLabel(product: ProductOption) {
+  const familyName = String(product.productFamilyName ?? "").trim();
+  const variantName = String(product.variantName ?? "").trim();
+  const packageSpec = String(product.packageSpec ?? "").trim();
+  const packageQuantity = String(product.packageQuantity ?? "").trim();
+  const packageQuantityUnit = String(product.packageQuantityUnit ?? product.unit ?? "").trim();
+  const specLabel = variantName || packageSpec || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
+  const supplierLabel = String(product.mainSupplier ?? "").trim();
+  return [
+    familyName || product.name,
+    specLabel && specLabel !== product.name ? specLabel : "",
+    supplierLabel ? `メイン: ${supplierLabel}` : "",
+    product.subcategory || product.category
+  ].filter(Boolean).join(" / ");
+}
+
+function buildProductNameFromVariant(product: Pick<ProductWithCategory, "productFamilyName" | "variantName">) {
+  const familyName = String(product.productFamilyName ?? "").trim();
+  const variantName = String(product.variantName ?? "").trim();
+  return [familyName, variantName].filter(Boolean).join(" ");
+}
+
+function groupProductsForMaster(productList: ProductWithCategory[]) {
+  const groups = new Map<string, ProductFamilyGroup>();
+
+  for (const product of productList) {
+    const rawFamilyName = String(product.productFamilyName ?? "").trim();
+    const normalizedFamilyName = normalizeProductFamilyKey(rawFamilyName);
+    const groupId = normalizedFamilyName ? `family:${normalizedFamilyName}` : `product:${getProductIdentity(product)}`;
+    const familyName = rawFamilyName || product.name || "未設定の商品";
+    const existing = groups.get(groupId);
+
+    if (existing) {
+      existing.products.push(product);
+    } else {
+      groups.set(groupId, {
+        id: groupId,
+        familyName,
+        products: [product],
+        representative: product
+      });
+    }
+  }
+
+  return Array.from(groups.values()).map((group) => {
+    const products = [...group.products].sort(compareProductVariants);
+    return {
+      ...group,
+      products,
+      representative: products.find((product) => product.isDefaultVariant) ?? products[0] ?? group.representative
+    };
+  });
+}
+
+function compareProductVariants(a: ProductWithCategory, b: ProductWithCategory) {
+  if (a.isDefaultVariant !== b.isDefaultVariant) return a.isDefaultVariant ? -1 : 1;
+  return (
+    Number(a.variantSortOrder ?? 0) - Number(b.variantSortOrder ?? 0) ||
+    compareText(getProductVariantName(a), getProductVariantName(b)) ||
+    compareText(a.name, b.name)
+  );
 }
 
 function compareText(a: string | undefined, b: string | undefined) {
@@ -596,9 +679,10 @@ export default function ProductsPage() {
     );
   });
   const sortedProducts = [...filteredProducts].sort((a, b) => compareProducts(a, b, productSortKey, productSortDirection));
-  const productPageCount = Math.max(1, Math.ceil(sortedProducts.length / productPageSize));
+  const productFamilyGroups = groupProductsForMaster(sortedProducts);
+  const productPageCount = Math.max(1, Math.ceil(productFamilyGroups.length / productPageSize));
   const currentProductPage = Math.min(productPage, productPageCount);
-  const pagedProducts = sortedProducts.slice(
+  const pagedProductGroups = productFamilyGroups.slice(
     (currentProductPage - 1) * productPageSize,
     currentProductPage * productPageSize
   );
@@ -786,6 +870,30 @@ export default function ProductsPage() {
     });
 
     showNotice("商品情報をコピーしました。必要な項目を変更して保存してください。", "info");
+  }
+
+  function addVariantToFamily(product: ProductWithCategory) {
+    const familyName = getProductFamilyName(product);
+    const nextSortOrder = Math.max(0, Number(product.variantSortOrder ?? 0)) + 10;
+
+    setEditTarget({
+      type: "product",
+      value: {
+        ...product,
+        id: undefined,
+        name: familyName,
+        productFamilyName: familyName,
+        variantName: "",
+        isDefaultVariant: false,
+        variantSortOrder: nextSortOrder,
+        packageQuantity: "",
+        packageSpec: "",
+        referencePrice: "",
+        photoUrl: ""
+      }
+    });
+
+    showNotice("同じ品種に新しい規格を追加します。規格名、数量、発注先、価格を確認してください。", "info");
   }
 
   async function openProductPriceHistory(product: ProductWithCategory) {
@@ -1061,7 +1169,7 @@ export default function ProductsPage() {
                       <select value={candidateProductIds[candidate.id] ?? ""} onChange={(event) => setCandidateProductIds((current) => ({ ...current, [candidate.id]: event.target.value }))}>
                         <option value="">既存商品を選択</option>
                         {productOptions.map((product) => (
-                          <option value={product.id} key={product.id}>{product.name} / {product.category}</option>
+                          <option value={product.id} key={product.id}>{formatReceiptProductOptionLabel(product)}</option>
                         ))}
                       </select>
                     </div>
@@ -1109,7 +1217,7 @@ export default function ProductsPage() {
                   ))}
                 </select>
               </label>
-              <span className="source-indicator">{filteredProducts.length} 件</span>
+              <span className="source-indicator">{productFamilyGroups.length} 品種 / {filteredProducts.length} 規格</span>
               <details
                 className="product-summary-picker"
                 open={isProductSummaryPickerOpen}
@@ -1237,194 +1345,195 @@ export default function ProductsPage() {
           </div>
           <div className="product-master-table">
             <div className="product-master-head">
-              <span>商品</span>
-              <span>表示項目</span>
+              <span>品種</span>
+              <span>規格</span>
               <span>{canManageProducts ? "操作" : "権限"}</span>
             </div>
-            {pagedProducts.map((product) => {
-              const displaySpec = getProductDisplaySpec(product);
-              const familyName = String(product.productFamilyName ?? "").trim();
-              const unitPriceLabel = formatProductUnitPrice(product);
-              const summaryItems = productSummaryFields
+            {pagedProductGroups.map((group) => {
+              const representative = group.representative;
+              const groupSummaryItems = productSummaryFields
                 .map((field) => {
                   const option = productSummaryFieldOptions.find((item) => item.value === field);
-                  const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
+                  const value = getProductSummaryFieldValue(representative, field, formatProductUnitPrice(representative));
                   return option && value ? { label: option.label, value } : null;
                 })
                 .filter(Boolean) as Array<{ label: string; value: string }>;
 
               return (
-                <article className="product-master-row" key={getProductIdentity(product)}>
-                  <div className="product-title-block">
-                    <div className="product-title-photo">
-                      {product.photoUrl ? (
-                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                <article className="product-family-card" key={group.id}>
+                  <div className="product-family-card-head">
+                    <div className="product-title-block">
+                      <div className="product-title-photo">
+                        {representative.photoUrl ? (
+                          <img src={getProductPhotoSrc(representative.photoUrl)} alt={`${group.familyName} の写真`} />
+                        ) : (
+                          <span>写真</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="product-name-line">
+                          <strong>{group.familyName}</strong>
+                          <span>{group.products.length} 規格</span>
+                          {representative.isDefaultVariant ? <span className="status-pill">標準規格あり</span> : null}
+                        </div>
+                        <p>{representative.category} / {representative.subcategory ?? "未分類"} / {representative.brand || "共通"}</p>
+                      </div>
+                    </div>
+                    <div className="product-master-info-grid" aria-label="品種情報">
+                      {groupSummaryItems.slice(0, 4).map((item) => (
+                        <span key={`${group.id}-summary-${item.label}`}>
+                          <small>{item.label}</small>
+                          <strong>{item.value}</strong>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="row-actions">
+                      {canManageProducts ? (
+                        <button className="secondary-button" type="button" onClick={() => addVariantToFamily(representative)}>
+                          <Plus size={15} />
+                          規格を追加
+                        </button>
                       ) : (
-                        <span>写真</span>
+                        <span className="product-readonly-badge">閲覧のみ</span>
                       )}
                     </div>
-                    <div>
-                      <div className="product-name-line">
-                        <strong>{product.name || "未設定の商品"}</strong>
-                        {displaySpec ? <span>{displaySpec}</span> : null}
-                        {familyName ? <span className="product-family-chip">{familyName}</span> : null}
-                        {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
-                        {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
-                      </div>
-                      <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
-                    </div>
                   </div>
-                  <div className="mobile-product-head">
-                    <div className="mobile-product-photo">
-                      {product.photoUrl ? (
-                        <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
-                      ) : (
-                        <span>写真</span>
-                      )}
-                    </div>
-                    <div>
-                      <small>基本情報</small>
-                      <div className="product-name-line">
-                        <strong>{product.name || "未設定の商品"}</strong>
-                        {displaySpec ? <span>{displaySpec}</span> : null}
-                        {familyName ? <span className="product-family-chip">{familyName}</span> : null}
-                        {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
-                        {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
-                      </div>
-                      <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
-                    </div>
-                  </div>
-                  <div className="product-master-info-grid" aria-label="商品情報">
-                    {summaryItems.map((item) => (
-                      <span key={`${product.name}-summary-${item.label}`}>
-                        <small>{item.label}</small>
-                        <strong>{item.value}</strong>
-                      </span>
-                    ))}
-                    {summaryItems.length === 0 ? (
-                      <span>
-                        <small>基本情報</small>
-                        <strong>未設定</strong>
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mobile-product-actions">
-                    <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
-                      価格推移
-                    </button>
-                    {canManageProducts ? (
-                      <>
-                      <button
-                        className="text-button"
-                        onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                      >
-                        編集
-                      </button>
-                      <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                        複製
-                      </button>
-                      <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                        削除
-                      </button>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="row-actions">
-                    <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
-                      価格推移
-                    </button>
-                    {canManageProducts ? (
-                      <>
-                        <button
-                          className="text-button"
-                          onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                        >
-                          編集
-                        </button>
-                        <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                          複製
-                        </button>
-                        <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                          削除
-                        </button>
-                      </>
-                    ) : (
-                      <span className="product-readonly-badge">閲覧のみ</span>
-                    )}
-                  </div>
-                  <details className="product-master-detail">
-                    <summary>詳細</summary>
-                    <div className="product-master-detail-body">
-                      <dl>
-                        <div>
-                          <dt>品種</dt>
-                          <dd>{familyName || "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>規格名</dt>
-                          <dd>{product.variantName || "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>標準規格</dt>
-                          <dd>{product.isDefaultVariant ? "はい" : "いいえ"}</dd>
-                        </div>
-                        <div>
-                          <dt>規格表示順</dt>
-                          <dd>{Number(product.variantSortOrder ?? 0)}</dd>
-                        </div>
-                        <div>
-                          <dt>適用ブランド</dt>
-                          <dd>{product.brand || "共通"}</dd>
-                        </div>
-                        <div>
-                          <dt>メーカー</dt>
-                          <dd>{product.manufacturer || "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>日本語メモ</dt>
-                          <dd>{getDisplayJapaneseNote(product) || "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>メイン発注先</dt>
-                          <dd>
-                            {product.mainSupplier || "未設定"}
-                            {product.mainPurchaseUrl ? (
-                              <a className="purchase-link-button" href={product.mainPurchaseUrl} target="_blank" rel="noreferrer">
-                                購入ページ
-                              </a>
+                  <div className="product-variant-list">
+                    {group.products.map((product) => {
+                      const displaySpec = getProductDisplaySpec(product);
+                      const unitPriceLabel = formatProductUnitPrice(product);
+                      const summaryItems = productSummaryFields
+                        .map((field) => {
+                          const option = productSummaryFieldOptions.find((item) => item.value === field);
+                          const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
+                          return option && value ? { label: option.label, value } : null;
+                        })
+                        .filter(Boolean) as Array<{ label: string; value: string }>;
+
+                      return (
+                        <article className="product-variant-row" key={getProductIdentity(product)}>
+                          <div className="product-variant-title">
+                            <strong>{displaySpec || product.name || "単一規格"}</strong>
+                            <span>{product.name || "未設定の商品"}</span>
+                            <div className="product-variant-badges">
+                              {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
+                              {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                            </div>
+                          </div>
+                          <div className="product-master-info-grid" aria-label="規格情報">
+                            {summaryItems.slice(0, 6).map((item) => (
+                              <span key={`${product.name}-summary-${item.label}`}>
+                                <small>{item.label}</small>
+                                <strong>{item.value}</strong>
+                              </span>
+                            ))}
+                            <span>
+                              <small>メイン発注先</small>
+                              <strong>{product.mainSupplier || "未設定"}</strong>
+                            </span>
+                            <span>
+                              <small>規格単価</small>
+                              <strong>{unitPriceLabel}</strong>
+                            </span>
+                          </div>
+                          <div className="row-actions">
+                            <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
+                              価格推移
+                            </button>
+                            {canManageProducts ? (
+                              <>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                                >
+                                  編集
+                                </button>
+                                <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                                  複製
+                                </button>
+                                <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                                  削除
+                                </button>
+                              </>
                             ) : null}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>予備発注先</dt>
-                          <dd>
-                            {product.backupSupplier || "未設定"}
-                            {product.backupPurchaseUrl ? (
-                              <a className="purchase-link-button" href={product.backupPurchaseUrl} target="_blank" rel="noreferrer">
-                                購入ページ
-                              </a>
-                            ) : null}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>原産地</dt>
-                          <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>数量</dt>
-                          <dd>{formatPackageQuantity(product)}</dd>
-                        </div>
-                        <div>
-                          <dt>規格</dt>
-                          <dd>{product.packageSpec || "未設定"}</dd>
-                        </div>
-                        <div>
-                          <dt>メモ</dt>
-                          <dd>{product.specNote || "未設定"}</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </details>
+                          </div>
+                          <details className="product-master-detail">
+                            <summary>詳細</summary>
+                            <div className="product-master-detail-body">
+                              <dl>
+                                <div>
+                                  <dt>品種</dt>
+                                  <dd>{group.familyName}</dd>
+                                </div>
+                                <div>
+                                  <dt>規格名</dt>
+                                  <dd>{product.variantName || "未設定"}</dd>
+                                </div>
+                                <div>
+                                  <dt>標準規格</dt>
+                                  <dd>{product.isDefaultVariant ? "はい" : "いいえ"}</dd>
+                                </div>
+                                <div>
+                                  <dt>規格表示順</dt>
+                                  <dd>{Number(product.variantSortOrder ?? 0)}</dd>
+                                </div>
+                                <div>
+                                  <dt>適用ブランド</dt>
+                                  <dd>{product.brand || "共通"}</dd>
+                                </div>
+                                <div>
+                                  <dt>メーカー</dt>
+                                  <dd>{product.manufacturer || "未設定"}</dd>
+                                </div>
+                                <div>
+                                  <dt>日本語メモ</dt>
+                                  <dd>{getDisplayJapaneseNote(product) || "未設定"}</dd>
+                                </div>
+                                <div>
+                                  <dt>メイン発注先</dt>
+                                  <dd>
+                                    {product.mainSupplier || "未設定"}
+                                    {product.mainPurchaseUrl ? (
+                                      <a className="purchase-link-button" href={product.mainPurchaseUrl} target="_blank" rel="noreferrer">
+                                        購入ページ
+                                      </a>
+                                    ) : null}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>予備発注先</dt>
+                                  <dd>
+                                    {product.backupSupplier || "未設定"}
+                                    {product.backupPurchaseUrl ? (
+                                      <a className="purchase-link-button" href={product.backupPurchaseUrl} target="_blank" rel="noreferrer">
+                                        購入ページ
+                                      </a>
+                                    ) : null}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>原産地</dt>
+                                  <dd>{product.originCountries?.length ? product.originCountries.join(" / ") : "未設定"}</dd>
+                                </div>
+                                <div>
+                                  <dt>数量</dt>
+                                  <dd>{formatPackageQuantity(product)}</dd>
+                                </div>
+                                <div>
+                                  <dt>規格</dt>
+                                  <dd>{product.packageSpec || "未設定"}</dd>
+                                </div>
+                                <div>
+                                  <dt>メモ</dt>
+                                  <dd>{product.specNote || "未設定"}</dd>
+                                </div>
+                              </dl>
+                            </div>
+                          </details>
+                        </article>
+                      );
+                    })}
+                  </div>
                 </article>
               );
             })}
@@ -1432,7 +1541,7 @@ export default function ProductsPage() {
               <div className="empty-state">登録済みの商品はありません</div>
             ) : null}
           </div>
-          {filteredProducts.length > productPageSize ? (
+          {productFamilyGroups.length > productPageSize ? (
             <div className="pagination-bar">
               <button
                 type="button"
@@ -1775,12 +1884,19 @@ function ProductEditDialog({
   }, [currentUnit]);
 
   function setProductValue(key: string, value: string) {
+    const nextValue = {
+      ...target.value,
+      [key]: value
+    };
+
+    if (key === "productFamilyName" || key === "variantName") {
+      const generatedName = buildProductNameFromVariant(nextValue);
+      if (generatedName) nextValue.name = generatedName;
+    }
+
     onChange({
       ...target,
-      value: {
-        ...target.value,
-        [key]: value
-      }
+      value: nextValue
     });
   }
 

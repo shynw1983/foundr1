@@ -37,9 +37,29 @@ export async function GET() {
       limit 100
     `,
     sql`
-      select id::text, name, category, unit
+      select
+        id::text,
+        name,
+        category,
+        unit,
+        coalesce(subcategory, '未分類') as subcategory,
+        coalesce(product_family_name, '') as "productFamilyName",
+        coalesce(variant_name, '') as "variantName",
+        coalesce(package_spec, '') as "packageSpec",
+        package_quantity::float as "packageQuantity",
+        coalesce(package_quantity_unit, '') as "packageQuantityUnit",
+        coalesce((
+          select suppliers.name
+          from product_supplier_options
+          join suppliers on suppliers.id = product_supplier_options.supplier_id
+          where product_supplier_options.product_id = products.id
+            and product_supplier_options.role = 'メイン'
+            and product_supplier_options.is_active = true
+          order by suppliers.name
+          limit 1
+        ), '') as "mainSupplier"
       from products
-      order by name asc
+      order by category asc, coalesce(subcategory, '未分類') asc, coalesce(product_family_name, name) asc, variant_sort_order asc, name asc
       limit 500
     `
   ]);
@@ -65,7 +85,14 @@ export async function GET() {
       id: String(row.id),
       name: String(row.name ?? ""),
       category: String(row.category ?? ""),
-      unit: String(row.unit ?? "")
+      subcategory: String(row.subcategory ?? "未分類"),
+      unit: String(row.unit ?? ""),
+      productFamilyName: String(row.productFamilyName ?? ""),
+      variantName: String(row.variantName ?? ""),
+      packageSpec: String(row.packageSpec ?? ""),
+      packageQuantity: row.packageQuantity === null || row.packageQuantity === undefined ? "" : String(Number(row.packageQuantity)),
+      packageQuantityUnit: String(row.packageQuantityUnit ?? ""),
+      mainSupplier: String(row.mainSupplier ?? "")
     }))
   });
 }

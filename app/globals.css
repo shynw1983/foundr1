@@ -19658,6 +19658,100 @@ body :where(
   background: #fbfcfe;
 }
 
+.product-family-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px var(--product-master-x);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.product-family-card-head,
+.product-variant-row {
+  display: grid;
+  grid-template-columns: var(--product-master-columns);
+  align-items: center;
+  column-gap: var(--product-master-gap);
+}
+
+.product-family-card-head {
+  min-height: 56px;
+}
+
+.product-variant-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.product-variant-row {
+  min-height: 54px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.product-variant-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.product-variant-title strong,
+.product-variant-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-variant-title strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.product-variant-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.product-variant-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.product-variant-row > .row-actions {
+  justify-self: end;
+}
+
+.product-variant-row > .product-master-detail {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1100px) {
+  .product-family-card-head,
+  .product-variant-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+
+  .product-family-card-head > .row-actions,
+  .product-variant-row > .row-actions {
+    justify-self: stretch;
+    justify-content: flex-start;
+  }
+
+  .product-family-card {
+    --product-master-x: 12px;
+  }
+}
+
 .product-master-row p {
   margin: 3px 0 0;
   color: var(--muted);
@@ -22002,6 +22096,45 @@ body :where(
 
 .supplier-detail-list a:hover {
   text-decoration: underline;
+}
+
+.supplier-location-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.supplier-location-tags span,
+.voucher-supplier-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.supplier-location-tags span {
+  color: var(--text);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.voucher-supplier-link {
+  width: fit-content;
+  margin-top: 8px;
+}
+
+.voucher-supplier-link.is-linked {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.voucher-supplier-link.is-unlinked {
+  color: var(--muted);
+  background: var(--surface-muted);
 }
 
 .price-block {

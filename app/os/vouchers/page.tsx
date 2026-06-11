@@ -47,6 +47,9 @@ type VoucherRecord = {
   companyName: string;
   brandName: string;
   locationName: string;
+  linkedSupplierName: string;
+  linkedSupplierLocationName: string;
+  supplierMatchStatus: string;
   purchaseDate: string;
   purchaseTime: string;
   total: number;
@@ -83,6 +86,12 @@ type ProductOption = {
   subcategory: string;
   unit: string;
   referencePrice: number;
+  productFamilyName?: string;
+  variantName?: string;
+  packageSpec?: string;
+  packageQuantity?: string;
+  packageQuantityUnit?: string;
+  mainSupplier?: string;
 };
 
 type ProductReferencePriceDialog = {
@@ -1533,6 +1542,11 @@ export default function VouchersPage() {
                     <p>
                       {voucher.storeName || "店舗未設定"} / {voucher.purchaseDate || "日付未読取"} {voucher.purchaseTime || ""} / {voucher.itemCount}行 / 税 {formatMoney(voucher.tax)}
                     </p>
+                    <p className={`voucher-supplier-link ${voucher.linkedSupplierName ? "is-linked" : "is-unlinked"}`}>
+                      {voucher.linkedSupplierName
+                        ? `発注先: ${voucher.linkedSupplierName}${voucher.linkedSupplierLocationName ? ` / ${voucher.linkedSupplierLocationName}` : ""}`
+                        : "発注先未紐付け"}
+                    </p>
                     {isPendingReview && !isExpanded ? <p className="voucher-review-note">展開して用途・税率・金額・商品紐付けを確認してください。</p> : null}
                     <div className="voucher-row-meta">
                       <span>{usageLabels[voucher.usageType]}</span>
@@ -1713,38 +1727,6 @@ export default function VouchersPage() {
 
 function buildVoucherTitle(voucher: VoucherRecord) {
   return buildVendorNameFromParts(voucher.companyName, voucher.brandName, voucher.locationName, voucher.vendorName) || voucher.uploadedFileName || "証憑";
-}
-
-function buildPreviewVoucherFromConfirmedLine(line: ConfirmedAccountingLine): VoucherRecord {
-  return {
-    id: line.voucherId,
-    sourceType: "voucher",
-    storeId: "",
-    storeName: line.storeName,
-    receiptPhotoUrl: "",
-    uploadedFileName: "",
-    usageType: line.usageType === "keihi" ? "keihi" : line.usageType === "shiire" ? "shiire" : "unclassified",
-    paymentType: line.paymentType === "reimbursement" ? "reimbursement" : "company",
-    reimbursementStatus: line.reimbursementStatus === "pending" || line.reimbursementStatus === "paid" || line.reimbursementStatus === "rejected"
-      ? line.reimbursementStatus
-      : "none",
-    status: "confirmed",
-    vendorName: line.vendorName,
-    companyName: "",
-    brandName: line.vendorName,
-    locationName: "",
-    purchaseDate: line.purchaseDate,
-    purchaseTime: line.purchaseTime,
-    total: Math.round(Number(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode) ?? 0)),
-    tax: Math.round(Number(line.taxAmount ?? 0)),
-    accountingLines: [],
-    receiptTaxLines: [],
-    itemCount: Number(line.lineCount ?? 0),
-    createdByName: "",
-    createdLabel: "",
-    canDelete: false,
-    items: []
-  };
 }
 
 function buildVendorNameFromParts(companyName: string, brandName: string, locationName: string, fallback = "") {
@@ -1960,6 +1942,39 @@ function ProductCreateDialogView({
   );
 }
 
+function buildPreviewVoucherFromConfirmedLine(line: ConfirmedAccountingLine): VoucherRecord {
+  return {
+    id: line.voucherId,
+    sourceType: "voucher",
+    storeId: "",
+    storeName: line.storeName,
+    receiptPhotoUrl: "",
+    uploadedFileName: "",
+    usageType: line.usageType === "keihi" ? "keihi" : line.usageType === "shiire" ? "shiire" : "unclassified",
+    paymentType: line.paymentType === "reimbursement" ? "reimbursement" : "company",
+    reimbursementStatus: line.reimbursementStatus === "pending" || line.reimbursementStatus === "paid" || line.reimbursementStatus === "rejected" ? line.reimbursementStatus : "none",
+    status: "confirmed",
+    vendorName: line.vendorName,
+    companyName: "",
+    brandName: line.vendorName,
+    locationName: "",
+    linkedSupplierName: "",
+    linkedSupplierLocationName: "",
+    supplierMatchStatus: "unmatched",
+    purchaseDate: line.purchaseDate,
+    purchaseTime: line.purchaseTime,
+    total: Math.round(Number(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode) ?? 0)),
+    tax: Math.round(Number(line.taxAmount ?? 0)),
+    accountingLines: [],
+    receiptTaxLines: [],
+    itemCount: Number(line.lineCount ?? 0),
+    createdByName: "",
+    createdLabel: "",
+    canDelete: false,
+    items: []
+  };
+}
+
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
   const title = buildVoucherTitle(voucher);
   const previewUrl = buildVoucherPreviewUrl(voucher);
@@ -1986,6 +2001,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
             throw new Error("証憑ファイルが見つかりません。アップロード元のファイル情報を確認してください。");
           }
           const message = await response.text();
+          if (response.status === 404) {
+            throw new Error("証憑ファイルが見つかりません。アップロード元のファイル情報を確認してください。");
+          }
           throw new Error(message || `HTTP ${response.status}`);
         }
         const buffer = await response.arrayBuffer();
@@ -2475,7 +2493,7 @@ function VoucherAccountingEditor({
                     <select value={selectedProductId} onChange={(event) => onProductSelectionChange(line.id, event.target.value)} disabled={isSaving || isProductPending || isProductIgnored || !selectedCategory || !selectedSubcategory}>
                       <option value="">候補を選択</option>
                       {filteredProductOptions.map((product) => (
-                        <option value={product.id} key={product.id}>{product.name} / {getProductSubcategory(product)}</option>
+                        <option value={product.id} key={product.id}>{formatProductOptionLabel(product)}</option>
                       ))}
                     </select>
                   </label>
@@ -3030,7 +3048,7 @@ function ConfirmedVoucherDetailEditor({
                     <select value={selectedProductId} onChange={(event) => onProductSelectionChange(detailKey, event.target.value)} disabled={isProductPending || !selectedCategory || !selectedSubcategory}>
                       <option value="">商品を選択</option>
                       {filteredProductOptions.map((product) => (
-                        <option value={product.id} key={product.id}>{product.name}</option>
+                        <option value={product.id} key={product.id}>{formatProductOptionLabel(product)}</option>
                       ))}
                     </select>
                   </label>
@@ -3080,6 +3098,22 @@ function getProductCategory(product: ProductOption) {
 
 function getProductSubcategory(product: ProductOption) {
   return product.subcategory || "未分類";
+}
+
+function formatProductOptionLabel(product: ProductOption) {
+  const familyName = String(product.productFamilyName ?? "").trim();
+  const variantName = String(product.variantName ?? "").trim();
+  const packageSpec = String(product.packageSpec ?? "").trim();
+  const packageQuantity = String(product.packageQuantity ?? "").trim();
+  const packageQuantityUnit = String(product.packageQuantityUnit ?? product.unit ?? "").trim();
+  const specLabel = variantName || packageSpec || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
+  const supplierLabel = String(product.mainSupplier ?? "").trim();
+  return [
+    familyName || product.name,
+    specLabel && specLabel !== product.name ? specLabel : "",
+    supplierLabel ? `メイン: ${supplierLabel}` : "",
+    getProductSubcategory(product)
+  ].filter(Boolean).join(" / ");
 }
 
 function getProductCategoryOptions(productOptions: ProductOption[]) {
