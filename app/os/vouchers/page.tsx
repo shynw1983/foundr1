@@ -10,6 +10,7 @@ import {
   PackageCheck,
   Plus,
   ReceiptText,
+  Search,
   Trash2,
   Upload,
   X
@@ -310,6 +311,8 @@ export default function VouchersPage() {
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
   const [confirmedSummaryDrafts, setConfirmedSummaryDrafts] = useState<Record<string, string>>({});
   const [editingConfirmedSummaryKeys, setEditingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
+  const [confirmedSearchInput, setConfirmedSearchInput] = useState("");
+  const [confirmedSearchTerm, setConfirmedSearchTerm] = useState("");
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
@@ -359,6 +362,11 @@ export default function VouchersPage() {
   }, [exportStartDate, exportEndDate]);
 
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
+  const filteredConfirmedAccountingLines = useMemo(() => {
+    const term = normalizeSearchText(confirmedSearchTerm);
+    if (!term) return confirmedAccountingLines;
+    return confirmedAccountingLines.filter((line) => confirmedLineMatchesSearch(line, term));
+  }, [confirmedAccountingLines, confirmedSearchTerm]);
 
   useEffect(() => {
     if (!hasRestoredWorkspace || !vouchers.length) return;
@@ -1276,15 +1284,56 @@ export default function VouchersPage() {
           </div>
           <div className="voucher-confirmed-lines">
             <div className="voucher-confirmed-lines-head">
-              <strong>確定済み明細</strong>
-              <span>{isLoadingConfirmedLines ? "読み込み中..." : `${confirmedAccountingLines.length}行`}</span>
+              <div>
+                <strong>確定済み明細</strong>
+                <span>
+                  {isLoadingConfirmedLines
+                    ? "読み込み中..."
+                    : confirmedSearchTerm
+                      ? `検索結果 ${filteredConfirmedAccountingLines.length} / ${confirmedAccountingLines.length}行`
+                      : `${confirmedAccountingLines.length}行`}
+                </span>
+              </div>
+              <form
+                className="voucher-confirmed-search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setConfirmedSearchTerm(confirmedSearchInput.trim());
+                }}
+              >
+                <label>
+                  <Search size={15} />
+                  <input
+                    value={confirmedSearchInput}
+                    onChange={(event) => setConfirmedSearchInput(event.target.value)}
+                    placeholder="商品名で検索"
+                    aria-label="確定済み明細の商品検索"
+                  />
+                </label>
+                <button className="secondary-button" type="submit">検索</button>
+                {confirmedSearchTerm ? (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => {
+                      setConfirmedSearchInput("");
+                      setConfirmedSearchTerm("");
+                    }}
+                  >
+                    クリア
+                  </button>
+                ) : null}
+              </form>
             </div>
             {!isLoadingConfirmedLines && !confirmedAccountingLines.length ? (
               <p className="empty-state">選択期間の確定済み明細はありません。</p>
             ) : null}
-            {confirmedAccountingLines.length ? (
+            {!isLoadingConfirmedLines && confirmedAccountingLines.length && !filteredConfirmedAccountingLines.length ? (
+              <p className="empty-state">検索条件に一致する確定済み明細はありません。</p>
+            ) : null}
+            {filteredConfirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
-                {confirmedAccountingLines.map((line) => {
+                {filteredConfirmedAccountingLines.map((line) => {
                   const key = getConfirmedLineKey(line);
                   const summaryDraft = confirmedSummaryDrafts[key] ?? line.note ?? "";
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
@@ -2993,6 +3042,26 @@ function getConfirmedLineKey(line: ConfirmedAccountingLine) {
     line.lineNo,
     line.summaryKey || buildConfirmedSummaryKey(line)
   ].join("|");
+}
+
+function normalizeSearchText(value: string) {
+  return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function confirmedLineMatchesSearch(line: ConfirmedAccountingLine, term: string) {
+  const fields = [
+    line.note,
+    line.vendorName,
+    line.storeName,
+    line.accountTitle,
+    line.subAccountTitle,
+    ...(line.details ?? []).flatMap((detail) => [
+      detail.note,
+      detail.accountTitle,
+      detail.subAccountTitle
+    ])
+  ];
+  return fields.some((value) => normalizeSearchText(String(value ?? "")).includes(term));
 }
 
 function buildConfirmedSummaryKey(line: Pick<ConfirmedAccountingLine, "accountTitle" | "subAccountTitle" | "taxRate" | "taxMode">) {
