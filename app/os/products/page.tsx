@@ -26,6 +26,10 @@ type ProductWithCategory = Product & {
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
   packageSpec?: string;
+  productFamilyName?: string;
+  variantName?: string;
+  isDefaultVariant?: boolean;
+  variantSortOrder?: number | string;
   productBrandName?: string;
   manufacturer?: string;
   japaneseNote?: string;
@@ -80,7 +84,7 @@ type ProductCandidatesPayload = {
   candidates: ProductCandidate[];
   products: ProductOption[];
 };
-type ProductSortKey = "name" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice" | "unitPrice";
+type ProductSortKey = "name" | "productFamilyName" | "category" | "subcategory" | "unit" | "storageType" | "referencePrice" | "unitPrice";
 type SortDirection = "asc" | "desc";
 const productUsageTypeOptions = [
   { value: "ingredient", label: "原材料" },
@@ -94,6 +98,7 @@ const productUsageTypeOptions = [
 const productPageSizeOptions = [20, 50, 100];
 const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection; label: string }> = [
   { key: "category", direction: "asc", label: "分類順" },
+  { key: "productFamilyName", direction: "asc", label: "品種順" },
   { key: "name", direction: "asc", label: "商品名 昇順" },
   { key: "name", direction: "desc", label: "商品名 降順" },
   { key: "category", direction: "desc", label: "分類 降順" },
@@ -110,6 +115,7 @@ const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection;
 ];
 const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "name", label: "商品名" },
+  { key: "productFamilyName", label: "品種" },
   { key: "category", label: "分類" },
   { key: "subcategory", label: "小分類" },
   { key: "unit", label: "単位" },
@@ -138,6 +144,8 @@ const productSummaryFieldOptions = [
   { value: "category", label: "大分類" },
   { value: "subcategory", label: "小分類" },
   { value: "unit", label: "単位" },
+  { value: "productFamilyName", label: "品種" },
+  { value: "variantName", label: "規格名" },
   { value: "storageType", label: "保管" },
   { value: "usageType", label: "用途区分" },
   { value: "brand", label: "適用ブランド" },
@@ -273,6 +281,8 @@ function getProductSummaryFieldValue(product: ProductWithCategory, field: string
   if (field === "category") return product.category || "";
   if (field === "subcategory") return product.subcategory || "未分類";
   if (field === "unit") return product.unit || "";
+  if (field === "productFamilyName") return getProductFamilyName(product);
+  if (field === "variantName") return getProductVariantName(product);
   if (field === "storageType") return product.storageType || "未設定";
   if (field === "usageType") return getProductUsageTypeLabel(product.usageType);
   if (field === "brand") return product.brand || "共通";
@@ -305,11 +315,22 @@ function hasAnySupplier(product: ProductWithCategory) {
 }
 
 function getProductDisplaySpec(product: ProductWithCategory) {
+  const variantName = String(product.variantName ?? "").trim();
+  if (variantName) return variantName;
+
   const packageSpec = String(product.packageSpec ?? "").trim();
   if (packageSpec) return packageSpec;
 
   const quantitySpec = formatPackageQuantity(product);
   return quantitySpec === "未設定" ? "" : quantitySpec;
+}
+
+function getProductFamilyName(product: ProductWithCategory) {
+  return String(product.productFamilyName ?? "").trim() || product.name || "未設定";
+}
+
+function getProductVariantName(product: ProductWithCategory) {
+  return String(product.variantName ?? "").trim() || getProductDisplaySpec(product) || "単一規格";
 }
 
 function compareText(a: string | undefined, b: string | undefined) {
@@ -326,6 +347,8 @@ function compareProducts(a: ProductWithCategory, b: ProductWithCategory, key: Pr
     result = (getProductUnitPriceValue(a) ?? Number.POSITIVE_INFINITY) - (getProductUnitPriceValue(b) ?? Number.POSITIVE_INFINITY);
   } else if (key === "subcategory") {
     result = compareText(a.subcategory ?? "未分類", b.subcategory ?? "未分類");
+  } else if (key === "productFamilyName") {
+    result = compareText(getProductFamilyName(a), getProductFamilyName(b)) || Number(a.variantSortOrder ?? 0) - Number(b.variantSortOrder ?? 0);
   } else {
     result = compareText(String(a[key] ?? ""), String(b[key] ?? ""));
   }
@@ -405,6 +428,7 @@ export default function ProductsPage() {
   const [storeFilter, setStoreFilter] = useState("すべて");
   const [brandFilter, setBrandFilter] = useState("すべて");
   const [productBrandFilter, setProductBrandFilter] = useState("すべて");
+  const [productFamilyFilter, setProductFamilyFilter] = useState("すべて");
   const [supplierFilter, setSupplierFilter] = useState("すべて");
   const [missingInfoFilter, setMissingInfoFilter] = useState("すべて");
   const [categoryFilter, setCategoryFilter] = useState("すべて");
@@ -516,6 +540,10 @@ export default function ProductsPage() {
     "未設定",
     ...products.map((product) => product.productBrandName?.trim() || "未設定")
   ]);
+  const productFamilyOptions = uniqueOptions([
+    "未設定",
+    ...products.map((product) => product.productFamilyName?.trim() || "未設定")
+  ]);
   const supplierOptions = uniqueOptions([
     ...suppliers.map((supplier) => supplier.name),
     ...products.flatMap((product) => [product.mainSupplier, product.backupSupplier])
@@ -543,6 +571,8 @@ export default function ProductsPage() {
       product.packageQuantity,
       product.packageQuantityUnit,
       product.packageSpec,
+      product.productFamilyName,
+      product.variantName,
       product.mainSupplier,
       product.backupSupplier,
       product.storageType,
@@ -555,6 +585,7 @@ export default function ProductsPage() {
       productMatchesStore(product, selectedStore) &&
       productMatchesBrand(product, brandFilter) &&
       (productBrandFilter === "すべて" || (product.productBrandName?.trim() || "未設定") === productBrandFilter) &&
+      (productFamilyFilter === "すべて" || (product.productFamilyName?.trim() || "未設定") === productFamilyFilter) &&
       (
         supplierFilter === "すべて" ||
         (supplierFilter === unsetSupplierFilterValue ? !hasAnySupplier(product) : product.mainSupplier === supplierFilter || product.backupSupplier === supplierFilter)
@@ -582,7 +613,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setProductPage(1);
-  }, [query, storeFilter, brandFilter, productBrandFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
+  }, [query, storeFilter, brandFilter, productBrandFilter, productFamilyFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
     const matchingProducts = products.filter((product) =>
@@ -690,6 +721,10 @@ export default function ProductsPage() {
         packageQuantity: "",
         packageQuantityUnit: "個",
         packageSpec: "",
+        productFamilyName: "",
+        variantName: "",
+        isDefaultVariant: false,
+        variantSortOrder: 0,
         mainSupplier: suppliers[0]?.name ?? "",
         backupSupplier: "",
         mainPurchaseUrl: "",
@@ -1145,6 +1180,15 @@ export default function ProductsPage() {
                 </select>
               </label>
               <label>
+                <span>品種</span>
+                <select value={productFamilyFilter} onChange={(event) => setProductFamilyFilter(event.target.value)}>
+                  <option value="すべて">すべて</option>
+                  {productFamilyOptions.map((familyName) => (
+                    <option value={familyName} key={familyName}>{familyName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span>発注先</span>
                 <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
@@ -1199,6 +1243,7 @@ export default function ProductsPage() {
             </div>
             {pagedProducts.map((product) => {
               const displaySpec = getProductDisplaySpec(product);
+              const familyName = String(product.productFamilyName ?? "").trim();
               const unitPriceLabel = formatProductUnitPrice(product);
               const summaryItems = productSummaryFields
                 .map((field) => {
@@ -1222,6 +1267,8 @@ export default function ProductsPage() {
                       <div className="product-name-line">
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
+                        {familyName ? <span className="product-family-chip">{familyName}</span> : null}
+                        {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
                         {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                       </div>
                       <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
@@ -1240,6 +1287,8 @@ export default function ProductsPage() {
                       <div className="product-name-line">
                         <strong>{product.name || "未設定の商品"}</strong>
                         {displaySpec ? <span>{displaySpec}</span> : null}
+                        {familyName ? <span className="product-family-chip">{familyName}</span> : null}
+                        {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
                         {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                       </div>
                       <p>{getDisplayJapaneseNote(product) || product.productBrandName || "商品ブランド未設定"}</p>
@@ -1307,6 +1356,22 @@ export default function ProductsPage() {
                     <summary>詳細</summary>
                     <div className="product-master-detail-body">
                       <dl>
+                        <div>
+                          <dt>品種</dt>
+                          <dd>{familyName || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>規格名</dt>
+                          <dd>{product.variantName || "未設定"}</dd>
+                        </div>
+                        <div>
+                          <dt>標準規格</dt>
+                          <dd>{product.isDefaultVariant ? "はい" : "いいえ"}</dd>
+                        </div>
+                        <div>
+                          <dt>規格表示順</dt>
+                          <dd>{Number(product.variantSortOrder ?? 0)}</dd>
+                        </div>
                         <div>
                           <dt>適用ブランド</dt>
                           <dd>{product.brand || "共通"}</dd>
@@ -2055,6 +2120,22 @@ function ProductEditDialog({
                 }
               />
             </label>
+            <label className="product-default-variant-toggle">
+              <input
+                type="checkbox"
+                checked={target.value.isDefaultVariant === true}
+                onChange={(event) =>
+                  onChange({
+                    ...target,
+                    value: {
+                      ...target.value,
+                      isDefaultVariant: event.target.checked
+                    }
+                  })
+                }
+              />
+              <span>この品種の標準規格にする</span>
+            </label>
             <label className="product-spec-note">
               <span>日本語メモ</span>
               <textarea
@@ -2175,6 +2256,8 @@ function getProductFields(
 
   return [
     { key: "name", label: "商品名" },
+    { key: "productFamilyName", label: "品種名" },
+    { key: "variantName", label: "規格名" },
     { key: "productBrandName", label: "商品ブランド" },
     { key: "manufacturer", label: "メーカー" },
     { key: "category", label: "大分類", options: uniqueOptions([...categoryOptions, product.category]) },
@@ -2186,6 +2269,7 @@ function getProductFields(
     { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位" },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
+    { key: "variantSortOrder", label: "規格表示順", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
     { key: "mainPurchaseUrl", label: "メイン購入リンク" },
     { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },

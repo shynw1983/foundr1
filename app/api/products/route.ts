@@ -15,6 +15,10 @@ type ProductPayload = {
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
   packageSpec?: string;
+  productFamilyName?: string;
+  variantName?: string;
+  isDefaultVariant?: boolean;
+  variantSortOrder?: number | string;
   brand?: string;
   mainSupplier?: string;
   backupSupplier?: string;
@@ -47,6 +51,10 @@ export async function PUT(request: Request) {
     ? body.originCountries.map((item) => String(item).trim()).filter(Boolean)
     : [];
   const packageSpec = String(body.packageSpec ?? "");
+  const productFamilyName = String(body.productFamilyName ?? "").trim();
+  const variantName = String(body.variantName ?? "").trim();
+  const isDefaultVariant = body.isDefaultVariant === true || String(body.isDefaultVariant ?? "") === "true";
+  const variantSortOrder = parseOptionalInteger(body.variantSortOrder);
   const specNote = String(body.specNote ?? "");
   const japaneseNote = String(body.japaneseNote ?? "");
   const photoUrl = String(body.photoUrl ?? "");
@@ -81,6 +89,10 @@ export async function PUT(request: Request) {
           package_quantity = ${packageQuantity},
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
+          product_family_name = ${productFamilyName},
+          variant_name = ${variantName},
+          is_default_variant = ${isDefaultVariant},
+          variant_sort_order = ${variantSortOrder},
           spec_note = ${specNote},
           japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
@@ -106,6 +118,10 @@ export async function PUT(request: Request) {
           package_quantity = ${packageQuantity},
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
           package_spec = ${packageSpec},
+          product_family_name = ${productFamilyName},
+          variant_name = ${variantName},
+          is_default_variant = ${isDefaultVariant},
+          variant_sort_order = ${variantSortOrder},
           spec_note = ${specNote},
           japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
@@ -129,6 +145,10 @@ export async function PUT(request: Request) {
           package_quantity,
           package_quantity_unit,
           package_spec,
+          product_family_name,
+          variant_name,
+          is_default_variant,
+          variant_sort_order,
           spec_note,
           japanese_note,
           photo_url,
@@ -149,6 +169,10 @@ export async function PUT(request: Request) {
           ${packageQuantity},
           ${packageQuantity ? packageQuantityUnit || unit : ""},
           ${packageSpec},
+          ${productFamilyName},
+          ${variantName},
+          ${isDefaultVariant},
+          ${variantSortOrder},
           ${specNote},
           ${japaneseNote},
           ${photoUrl},
@@ -213,6 +237,13 @@ function parseOptionalNumber(value: unknown) {
   if (!normalized) return null;
   const numberValue = Number(normalized);
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function parseOptionalInteger(value: unknown) {
+  const normalized = String(value ?? "").replace(/[,\s]/g, "");
+  if (!normalized) return 0;
+  const numberValue = Number(normalized);
+  return Number.isFinite(numberValue) ? Math.trunc(numberValue) : 0;
 }
 
 export async function DELETE(request: Request) {

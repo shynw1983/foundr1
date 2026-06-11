@@ -19692,6 +19692,22 @@ body :where(
   white-space: nowrap;
 }
 
+.product-name-line .product-family-chip {
+  flex: 0 0 auto;
+  max-width: 140px;
+  min-height: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.product-name-line .status-pill {
+  flex: 0 0 auto;
+}
+
 .product-title-photo {
   display: grid;
   width: 46px;
@@ -22367,6 +22383,32 @@ body :where(
 .product-spec-origin,
 .product-spec-note {
   grid-column: 1 / -1;
+}
+
+.product-default-variant-toggle {
+  align-self: end;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.product-default-variant-toggle input {
+  min-height: auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--green);
+}
+
+.product-default-variant-toggle span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .product-quantity-fields {
