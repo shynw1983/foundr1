@@ -1916,7 +1916,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
     let cancelled = false;
     let objectUrl = "";
     setPreviewMeta({ loading: true, error: "", contentType: "", kind: "", objectUrl: "" });
-    fetch(previewUrl)
+    fetch(previewUrl, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) {
           if (response.status === 404) {
