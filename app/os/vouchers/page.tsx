@@ -480,7 +480,11 @@ export default function VouchersPage() {
     setConfirmedLineDrafts((current) => {
       const draft = current[key] ?? detail;
       const updated = { ...draft, ...next };
-      if (shouldAutoCalculateTaxAmount(next, updated)) {
+      const previousTaxRate = updated.taxRate;
+      if ("subAccountTitle" in next && !("taxRate" in next)) {
+        updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
+      }
+      if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
         updated.taxAmount = calculateDraftTaxAmount(Number(updated.amount || 0), updated.taxRate, updated.taxMode);
       }
       if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
@@ -766,11 +770,13 @@ export default function VouchersPage() {
       if ("taxMode" in next) {
         nextDraft.lines = draft.lines.map((line) => {
           const amount = Math.round(Number(line.amount || 0));
+          const taxRate = line.taxRate || getDefaultTaxRateForSubAccountTitle(line.subAccountTitle);
           return {
             ...line,
             confirmed: false,
+            taxRate,
             taxMode: nextDraft.taxMode,
-            taxAmount: String(calculateDraftTaxAmount(amount, line.taxRate, nextDraft.taxMode))
+            taxAmount: String(calculateDraftTaxAmount(amount, taxRate, nextDraft.taxMode))
           };
         });
       }
@@ -790,7 +796,11 @@ export default function VouchersPage() {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
             updated.taxMode = draft.taxMode;
-            if (shouldAutoCalculateTaxAmount(next, updated)) {
+            const previousTaxRate = updated.taxRate;
+            if ("subAccountTitle" in next && !("taxRate" in next)) {
+              updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
+            }
+            if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
               const amount = Math.round(Number(updated.amount || 0));
               updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, updated.taxMode));
             }
@@ -827,7 +837,7 @@ export default function VouchersPage() {
         ? targetIndex + (placement?.position === "after" ? 1 : 0)
         : draft.lines.length;
       const sourceLine = targetIndex >= 0 ? draft.lines[targetIndex] : undefined;
-      const nextLine = buildNewAccountingLine(draft.lines.length, draft.taxMode, sourceLine);
+      const nextLine = buildNewAccountingLine(draft.lines.length, draft.taxMode, sourceLine, voucher?.usageType);
       const nextLines = [...draft.lines];
       nextLines.splice(insertIndex, 0, nextLine);
       return {
@@ -2353,7 +2363,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     if (!amount) return [];
     const accountTitle = isShiire ? "仕入高" : item.accountTitle || getDefaultAccountTitle(item.category);
     const subAccountTitle = getDefaultSubAccountTitle(voucher?.usageType ?? "unclassified", item.category, item.accountTitle);
-    const taxRate = normalizeDraftTaxRate(item.taxRate);
+    const taxRate = normalizeDraftTaxRate(item.taxRate) || getDefaultTaxRateForSubAccountTitle(subAccountTitle);
     const taxMode = normalizeDraftTaxMode(item.taxMode);
     return [{
       id: `ocr-${index}-${item.id}`,
@@ -2377,6 +2387,8 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   if (lines.length) return lines;
 
   const amount = Math.round(voucher?.total ?? 0);
+  const subAccountTitle = isShiire ? "食材" : "";
+  const taxRate = getDefaultTaxRateForSubAccountTitle(subAccountTitle);
   return [{
     id: "manual-0",
     ocrItemId: "",
@@ -2385,9 +2397,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     matchStatus: "",
     confirmed: false,
     accountTitle: isShiire ? "仕入高" : "雑費",
-    subAccountTitle: "",
+    subAccountTitle,
     amount: String(amount || ""),
-    taxRate: "",
+    taxRate,
     taxMode: "不明",
     taxAmount: String(Math.round(voucher?.tax ?? 0)),
     quantity: "1",
@@ -2397,7 +2409,15 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
   }];
 }
 
-function buildNewAccountingLine(index: number, taxMode = "不明", sourceLine?: VoucherAccountingLine): VoucherAccountingLine {
+function buildNewAccountingLine(
+  index: number,
+  taxMode = "不明",
+  sourceLine?: VoucherAccountingLine,
+  usageType: VoucherUsageType = "unclassified"
+): VoucherAccountingLine {
+  const isShiire = usageType === "shiire";
+  const subAccountTitle = sourceLine?.subAccountTitle || (isShiire ? "食材" : "");
+  const taxRate = sourceLine?.taxRate || getDefaultTaxRateForSubAccountTitle(subAccountTitle);
   return {
     id: `manual-${Date.now()}-${index}`,
     ocrItemId: "",
@@ -2405,10 +2425,10 @@ function buildNewAccountingLine(index: number, taxMode = "不明", sourceLine?: 
     matchedProductName: "",
     matchStatus: "",
     confirmed: false,
-    accountTitle: sourceLine?.accountTitle || "雑費",
-    subAccountTitle: sourceLine?.subAccountTitle || "",
+    accountTitle: sourceLine?.accountTitle || (isShiire ? "仕入高" : "雑費"),
+    subAccountTitle,
     amount: "",
-    taxRate: sourceLine?.taxRate || "",
+    taxRate,
     taxMode: sourceLine?.taxMode || taxMode,
     taxAmount: "0",
     quantity: "1",
@@ -2845,6 +2865,10 @@ function getDefaultSubAccountTitle(usageType: VoucherUsageType, category: string
   if (category && category !== "未分類") return category;
   if (accountTitle === "車両費") return "車両関連";
   return "";
+}
+
+function getDefaultTaxRateForSubAccountTitle(subAccountTitle: string) {
+  return subAccountTitle === "食材" ? "8%" : "";
 }
 
 function normalizeDraftTaxRate(value: string) {
