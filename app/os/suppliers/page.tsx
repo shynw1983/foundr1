@@ -11,6 +11,15 @@ import { useEffect, useState } from "react";
 import { suppliers as initialSuppliers } from "../../../lib/mock-data";
 
 type Supplier = typeof initialSuppliers[number];
+type SupplierLocation = {
+  supplier: string;
+  locationName: string;
+  type: string;
+  area: string;
+  hours: string;
+  purchaseMethod: string;
+  note: string;
+};
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -32,6 +41,7 @@ const channelTypes = ["実店舗", "チェーン店", "ネットショップ", "
 export default function SuppliersPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierLocations, setSupplierLocations] = useState<SupplierLocation[]>([]);
   const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -40,9 +50,10 @@ export default function SuppliersPage() {
     async function loadData() {
       const response = await fetch("/api/dashboard");
       if (!response.ok) return;
-      const data = await response.json() as { suppliers?: Supplier[] };
+      const data = await response.json() as { suppliers?: Supplier[]; supplierLocations?: SupplierLocation[] };
 
       if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
       setDataSource("neon");
     }
 
@@ -65,6 +76,12 @@ export default function SuppliersPage() {
       .toLowerCase()
       .includes(query.toLowerCase())
   );
+  const supplierLocationsByName = supplierLocations.reduce<Record<string, SupplierLocation[]>>((grouped, location) => {
+    const key = location.supplier;
+    grouped[key] = grouped[key] ?? [];
+    grouped[key].push(location);
+    return grouped;
+  }, {});
 
   async function createSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -262,6 +279,13 @@ export default function SuppliersPage() {
                       <a href={supplier.orderUrl} target="_blank" rel="noreferrer">注文URL</a>
                     ) : null}
                   </div>
+                  {supplierLocationsByName[supplier.name]?.length ? (
+                    <div className="supplier-location-tags" aria-label={`${supplier.name} の分店・OCR表示名`}>
+                      {supplierLocationsByName[supplier.name].map((location) => (
+                        <span key={`${supplier.name}-${location.locationName}`}>{location.locationName}</span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <span className="supplier-type">{supplier.channelType}</span>
                 <div className="row-actions">

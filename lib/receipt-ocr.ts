@@ -1,6 +1,7 @@
 import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
 import { recordExternalServiceUsage } from "./external-service-usage";
+import { buildSupplierDisplayName, resolveReceiptSupplierLink } from "./supplier-ocr-linking";
 
 export type ReceiptOcrItem = {
   name: string;
@@ -264,11 +265,26 @@ function sanitizeReceiptFilename(value: string, fallback: string) {
 }
 
 export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: ReceiptOcrResult | null, model: string, session: EmployeeSession, errorMessage = "") {
+  const vendorName = result ? buildSupplierDisplayName({
+    vendorName: result.storeName || source.supplierName || "",
+    companyName: result.companyName || "",
+    brandName: result.brandName || "",
+    locationName: result.locationName || ""
+  }) : source.supplierName || "";
+  const supplierLink = result && !errorMessage ? await resolveReceiptSupplierLink({
+    vendorName,
+    companyName: result.companyName || "",
+    brandName: result.brandName || "",
+    locationName: result.locationName || ""
+  }) : { supplierId: "", supplierLocationId: "", matchStatus: "unmatched" };
   const rows = await sql`
     insert into receipt_ocr_results (
       source_type,
       source_id,
       store_id,
+      supplier_id,
+      supplier_location_id,
+      supplier_match_status,
       supplier_name,
       receipt_photo_url,
       uploaded_file_name,
@@ -295,6 +311,9 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       ${source.sourceType},
       ${source.sourceId || null},
       ${source.storeId || null},
+      ${supplierLink.supplierId || null},
+      ${supplierLink.supplierLocationId || null},
+      ${supplierLink.matchStatus},
       ${source.supplierName || ""},
       ${source.receiptPhotoUrl},
       ${source.uploadedFileName || ""},
@@ -304,7 +323,7 @@ export async function saveReceiptOcrResult(source: ReceiptOcrSource, result: Rec
       ${errorMessage ? "failed" : "draft"},
       ${model},
       ${JSON.stringify(result ?? {})}::jsonb,
-      ${result?.storeName || source.supplierName || ""},
+      ${vendorName},
       ${result?.companyName || ""},
       ${result?.brandName || ""},
       ${result?.locationName || ""},

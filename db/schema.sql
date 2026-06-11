@@ -1584,6 +1584,9 @@ alter table receipt_ocr_results add column if not exists vendor_name text not nu
 alter table receipt_ocr_results add column if not exists company_name text not null default '';
 alter table receipt_ocr_results add column if not exists brand_name text not null default '';
 alter table receipt_ocr_results add column if not exists location_name text not null default '';
+alter table receipt_ocr_results add column if not exists supplier_id uuid references suppliers(id) on delete set null;
+alter table receipt_ocr_results add column if not exists supplier_location_id uuid references supplier_locations(id) on delete set null;
+alter table receipt_ocr_results add column if not exists supplier_match_status text not null default 'unmatched';
 alter table receipt_ocr_results add column if not exists purchase_date date;
 alter table receipt_ocr_results add column if not exists purchase_time time;
 alter table receipt_ocr_results add column if not exists subtotal numeric(12, 2);
@@ -1596,6 +1599,7 @@ alter table receipt_ocr_results add column if not exists created_by uuid referen
 create index if not exists receipt_ocr_results_source_idx on receipt_ocr_results (source_type, source_id);
 create index if not exists receipt_ocr_results_store_date_idx on receipt_ocr_results (store_id, purchase_date desc);
 create index if not exists receipt_ocr_results_usage_idx on receipt_ocr_results (usage_type, payment_type, status, created_at desc);
+create index if not exists receipt_ocr_results_supplier_idx on receipt_ocr_results (supplier_id, supplier_location_id, supplier_match_status);
 
 create table if not exists receipt_ocr_items (
   id uuid primary key default gen_random_uuid(),
