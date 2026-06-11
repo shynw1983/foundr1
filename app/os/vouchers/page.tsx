@@ -769,15 +769,11 @@ export default function VouchersPage() {
       const nextDraft = { ...draft, ...next };
       if ("taxMode" in next) {
         nextDraft.lines = draft.lines.map((line) => {
-          const amount = Math.round(Number(line.amount || 0));
-          const taxRate = line.taxRate || getDefaultTaxRateForSubAccountTitle(line.subAccountTitle);
-          return {
+          return normalizeAccountingLineTax({
             ...line,
             confirmed: false,
-            taxRate,
-            taxMode: nextDraft.taxMode,
-            taxAmount: String(calculateDraftTaxAmount(amount, taxRate, nextDraft.taxMode))
-          };
+            taxMode: nextDraft.taxMode
+          }, nextDraft.taxMode, { force: true });
         });
       }
       return { ...current, [voucherId]: nextDraft };
@@ -796,18 +792,17 @@ export default function VouchersPage() {
             if (line.id !== lineId) return line;
             const updated = { ...line, ...next };
             updated.taxMode = draft.taxMode;
-            const previousTaxRate = updated.taxRate;
+            const previousTaxRate = line.taxRate;
             if ("subAccountTitle" in next && !("taxRate" in next)) {
               updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
             }
             if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
-              const amount = Math.round(Number(updated.amount || 0));
-              updated.taxAmount = String(calculateDraftTaxAmount(amount, updated.taxRate, updated.taxMode));
+              return normalizeAccountingLineTax(updated, draft.taxMode, { force: true });
             }
             if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
               updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity);
             }
-            return updated;
+            return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode);
           })
         }
       };
@@ -876,18 +871,19 @@ export default function VouchersPage() {
     if (!referencePriceDialog) return;
     const { voucher, line, product, receiptUnitPrice } = referencePriceDialog;
     setReferencePriceDialog(null);
+    const normalizedLine = normalizeAccountingLineTax(line, line.taxMode);
     await updateAccountingLineProduct(voucher, line, {
       action: "link_product_to_item",
       productId: product.id,
       updateReferencePrice,
       referencePrice: updateReferencePrice ? receiptUnitPrice : undefined,
       receiptUnitPrice,
-      amount: line.amount,
-      taxRate: line.taxRate,
-      taxMode: line.taxMode,
-      taxAmount: line.taxAmount,
-      quantity: line.quantity,
-      unit: line.unit || "個"
+      amount: normalizedLine.amount,
+      taxRate: normalizedLine.taxRate,
+      taxMode: normalizedLine.taxMode,
+      taxAmount: normalizedLine.taxAmount,
+      quantity: normalizedLine.quantity,
+      unit: normalizedLine.unit || "個"
     }, updateReferencePrice ? "商品マスタに紐付け、参考価格を更新しました。" : "商品マスタに紐付けました。");
   }
 
@@ -927,6 +923,7 @@ export default function VouchersPage() {
     }
     setCreateProductDialog(null);
     const { voucher, line } = draft;
+    const normalizedLine = normalizeAccountingLineTax(line, line.taxMode);
     await updateAccountingLineProduct(voucher, line, {
       action: "create_product_from_item",
       productName: draft.productName.trim(),
@@ -935,11 +932,11 @@ export default function VouchersPage() {
       unit: draft.unit.trim(),
       referencePrice: draft.referencePrice,
       receiptUnitPrice: draft.referencePrice,
-      amount: line.amount,
-      taxRate: line.taxRate,
-      taxMode: line.taxMode,
-      taxAmount: line.taxAmount,
-      quantity: line.quantity
+      amount: normalizedLine.amount,
+      taxRate: normalizedLine.taxRate,
+      taxMode: normalizedLine.taxMode,
+      taxAmount: normalizedLine.taxAmount,
+      quantity: normalizedLine.quantity
     }, "商品マスタに追加して紐付けました。");
   }
 
@@ -1084,19 +1081,22 @@ export default function VouchersPage() {
           usageType: voucher.usageType,
           paymentType: voucher.paymentType,
           reimbursementStatus: voucher.reimbursementStatus,
-          lines: draft.lines.map((line) => ({
-            accountTitle: voucher.usageType === "shiire" ? "仕入高" : line.accountTitle,
-            subAccountTitle: line.subAccountTitle,
-            amount: line.amount,
-            taxRate: line.taxRate,
-            taxMode: draft.taxMode,
-            taxAmount: line.taxAmount,
-            quantity: line.quantity,
-            unit: line.unit,
-            unitPrice: line.unitPrice,
-            ocrItemId: line.ocrItemId,
-            note: line.note
-          })),
+          lines: draft.lines.map((line) => {
+            const normalizedLine = normalizeAccountingLineTax(line, draft.taxMode);
+            return {
+              accountTitle: voucher.usageType === "shiire" ? "仕入高" : normalizedLine.accountTitle,
+              subAccountTitle: normalizedLine.subAccountTitle,
+              amount: normalizedLine.amount,
+              taxRate: normalizedLine.taxRate,
+              taxMode: draft.taxMode,
+              taxAmount: normalizedLine.taxAmount,
+              quantity: normalizedLine.quantity,
+              unit: normalizedLine.unit,
+              unitPrice: normalizedLine.unitPrice,
+              ocrItemId: normalizedLine.ocrItemId,
+              note: normalizedLine.note
+            };
+          }),
           vendorName: vendorName || draft.vendorName,
           companyName: draft.companyName,
           brandName: draft.brandName,
@@ -2334,12 +2334,7 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
   const lines = buildVoucherAccountingLines(voucher);
   const taxMode = inferReceiptTaxMode(lines);
   const normalizedLines = lines.map((line) => {
-    const amount = Math.round(Number(line.amount || 0));
-    return {
-      ...line,
-      taxMode,
-      taxAmount: taxMode === "不明" ? line.taxAmount : String(calculateDraftTaxAmount(amount, line.taxRate, taxMode))
-    };
+    return normalizeAccountingLineTax(line, taxMode, { force: taxMode !== "不明" });
   });
   return {
     note: "",
@@ -2890,6 +2885,25 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
   return 0;
+}
+
+function normalizeAccountingLineTax(
+  line: VoucherAccountingLine,
+  taxMode = line.taxMode,
+  options: { force?: boolean } = {}
+): VoucherAccountingLine {
+  const amount = Math.round(Number(line.amount || 0));
+  const taxRate = line.taxRate || getDefaultTaxRateForSubAccountTitle(line.subAccountTitle);
+  const normalizedTaxMode = normalizeDraftTaxMode(taxMode);
+  const expectedTaxAmount = calculateDraftTaxAmount(amount, taxRate, normalizedTaxMode);
+  const currentTaxAmount = Math.round(Number(line.taxAmount || 0));
+  const hasStaleTaxAmount = expectedTaxAmount > 0 && (!currentTaxAmount || currentTaxAmount > amount);
+  return {
+    ...line,
+    taxRate,
+    taxMode: normalizedTaxMode,
+    taxAmount: options.force || hasStaleTaxAmount ? String(expectedTaxAmount) : String(Math.max(0, currentTaxAmount))
+  };
 }
 
 function shouldAutoCalculateTaxAmount(
