@@ -6,7 +6,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   orders,
   productSupplierOptions as initialProductSupplierOptions,
@@ -112,6 +112,7 @@ type AdditionalPurchaseDraft = {
 };
 
 const additionalPurchaseDraftStorageKey = "foundr1-os:procurement-additional-purchase-drafts:v1";
+const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-task-items:v1";
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -687,6 +688,8 @@ async function saveOrderDeliveryState(orderId: string, supplier: string, state: 
 export default function ProcurementPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [, startStatusTransition] = useTransition();
+  const itemSaveChainsRef = useRef<Record<string, Promise<void>>>({});
+  const procurementTaskItemsRef = useRef<ProcurementTaskItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -794,12 +797,50 @@ export default function ProcurementPage() {
   useEffect(() => {
     setProcurementTaskItems((items) => {
       const existingItems = new Map(items.map((item) => [item.id, item]));
+      const pendingItems = readPendingProcurementTaskItems();
 
-      return createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
-        (item) => existingItems.get(item.id) ?? item
+      const nextItems = createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
+        (item) => pendingItems[item.id]?.item ?? existingItems.get(item.id) ?? item
       );
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
     });
   }, [purchaseOrders, products, purchaseOrderItems]);
+
+  useEffect(() => {
+    procurementTaskItemsRef.current = procurementTaskItems;
+  }, [procurementTaskItems]);
+
+  useEffect(() => {
+    const syncPendingItems = () => {
+      const pendingItems = readPendingProcurementTaskItems();
+      const entries = Object.values(pendingItems);
+      if (entries.length === 0) return;
+
+      setProcurementTaskItems((items) => {
+        const nextItems = items.map((item) => pendingItems[item.id]?.item ?? item);
+        procurementTaskItemsRef.current = nextItems;
+        return nextItems;
+      });
+
+      entries.forEach((entry) => {
+        void queueProcurementTaskItemSave(entry.item, entry.updatedAt, { alreadyPending: true, silentFailure: true });
+      });
+    };
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") syncPendingItems();
+    };
+
+    syncPendingItems();
+    window.addEventListener("online", syncPendingItems);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+
+    return () => {
+      window.removeEventListener("online", syncPendingItems);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     setDeliveryStates((states) => {
@@ -832,24 +873,44 @@ export default function ProcurementPage() {
     });
   }
 
-  function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
-    let updatedItem: ProcurementTaskItem | null = null;
+  function queueProcurementTaskItemSave(
+    item: ProcurementTaskItem,
+    updatedAt = Date.now(),
+    options: { alreadyPending?: boolean; silentFailure?: boolean } = {}
+  ) {
+    if (!options.alreadyPending) writePendingProcurementTaskItem(item, updatedAt);
 
-    setProcurementTaskItems((items) =>
-      items.map((item) => {
-        if (item.id !== id) return item;
-
-        updatedItem = { ...item, ...next };
-        return updatedItem;
+    const previousSave = itemSaveChainsRef.current[item.id] ?? Promise.resolve();
+    const nextSave = previousSave
+      .catch(() => undefined)
+      .then(() => saveProcurementTaskItem(item))
+      .then(() => removePendingProcurementTaskItem(item.id, updatedAt))
+      .catch(() => {
+        if (!options.silentFailure) {
+          window.alert("保存できませんでした。通信が戻ると自動で再保存します。");
+        }
       })
-    );
+      .finally(() => {
+        if (itemSaveChainsRef.current[item.id] === nextSave) {
+          delete itemSaveChainsRef.current[item.id];
+        }
+      });
 
-    queueMicrotask(() => {
-      if (updatedItem) {
-        void saveProcurementTaskItem(updatedItem).catch(() => {
-          window.alert("保存できませんでした。画面を再読み込みして最新状態を確認してください。");
-        });
-      }
+    itemSaveChainsRef.current[item.id] = nextSave;
+    return nextSave;
+  }
+
+  function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
+    const currentItem = procurementTaskItemsRef.current.find((item) => item.id === id);
+    if (!currentItem) return;
+    const updatedItem: ProcurementTaskItem = { ...currentItem, ...next };
+
+    void queueProcurementTaskItemSave(updatedItem);
+
+    setProcurementTaskItems((items) => {
+      const nextItems = items.map((item) => item.id === id ? updatedItem : item);
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
     });
   }
 
@@ -948,17 +1009,19 @@ export default function ProcurementPage() {
 
     if (targetItems.length === 0) return;
 
-    setProcurementTaskItems((items) =>
-      items.map((item) => {
+    setProcurementTaskItems((items) => {
+      const nextItems = items.map((item) => {
         const nextItem = targetItems.find((target) => target.id === item.id);
         return nextItem ?? item;
-      })
-    );
+      });
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
+    });
 
-    void Promise.all(targetItems.map((item) => saveProcurementTaskItem(item)))
+    void Promise.all(targetItems.map((item) => queueProcurementTaskItemSave(item, Date.now(), { silentFailure: true })))
       .then(() => showNotice(`${supplier} を納品済みにしました。`))
       .catch(() => {
-        window.alert("到着状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
+        window.alert("到着状態を保存できませんでした。通信が戻ると自動で再保存します。");
       });
   }
 
@@ -993,13 +1056,15 @@ export default function ProcurementPage() {
         createdLabel
       }
     ]);
-    setProcurementTaskItems((items) =>
-      items.map((item) =>
+    setProcurementTaskItems((items) => {
+      const nextItems = items.map((item) =>
         readyItems.some((readyItem) => readyItem.id === item.id)
-          ? { ...item, deliveryStatus: "in_delivery", deliveryBatchId: batchId }
+          ? { ...item, deliveryStatus: "in_delivery" as const, deliveryBatchId: batchId }
           : item
-      )
-    );
+      );
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
+    });
 
     void fetch("/api/procurement/delivery-batches", {
       method: "POST",
@@ -1023,11 +1088,13 @@ export default function ProcurementPage() {
               : batch
           )
         );
-        setProcurementTaskItems((items) =>
-          items.map((item) =>
+        setProcurementTaskItems((items) => {
+          const nextItems = items.map((item) =>
             item.deliveryBatchId === batchId ? { ...item, deliveryBatchId: savedBatch.id } : item
-          )
-        );
+          );
+          procurementTaskItemsRef.current = nextItems;
+          return nextItems;
+        });
       })
       .catch(() => {
         window.alert("配送状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
@@ -1039,9 +1106,11 @@ export default function ProcurementPage() {
     setDeliveryBatches((batches) =>
       batches.map((batch) => (batch.id === batchId ? { ...batch, status } : batch))
     );
-    setProcurementTaskItems((items) =>
-      items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: status === "received" ? "received" : "delivered" } : item))
-    );
+    setProcurementTaskItems((items) => {
+      const nextItems = items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: status === "received" ? "received" as const : "delivered" as const } : item));
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
+    });
 
     void fetch("/api/procurement/delivery-batches", {
       method: "PATCH",
@@ -2093,6 +2162,85 @@ function writeAdditionalPurchaseDrafts(drafts: Record<string, AdditionalPurchase
   } catch {
     // Local storage is best-effort; procurement should keep working without it.
   }
+}
+
+type PendingProcurementTaskItemEntry = {
+  item: ProcurementTaskItem;
+  updatedAt: number;
+};
+
+function readPendingProcurementTaskItems() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(pendingProcurementTaskItemStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PendingProcurementTaskItemEntry>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+    return Object.fromEntries(Object.entries(parsed).flatMap(([itemId, entry]) => {
+      if (!entry || typeof entry !== "object" || !entry.item || typeof entry.item !== "object") return [];
+      const item = entry.item as Partial<ProcurementTaskItem>;
+      const normalizedItemId = String(item.id ?? itemId);
+      if (!normalizedItemId) return [];
+
+      return [[normalizedItemId, {
+        item: {
+          id: normalizedItemId,
+          orderId: String(item.orderId ?? ""),
+          productId: item.productId ? String(item.productId) : undefined,
+          productName: String(item.productName ?? ""),
+          requestedQuantity: Number(item.requestedQuantity ?? 0),
+          actualQuantity: Number(item.actualQuantity ?? item.requestedQuantity ?? 0),
+          actualPrice: String(item.actualPrice ?? ""),
+          unit: String(item.unit ?? ""),
+          supplier: String(item.supplier ?? ""),
+          purchased: Boolean(item.purchased),
+          unavailable: Boolean(item.unavailable),
+          note: String(item.note ?? ""),
+          priceExceptionNote: String(item.priceExceptionNote ?? ""),
+          deliveryStatus: isProcurementDeliveryStatus(item.deliveryStatus) ? item.deliveryStatus : "pending",
+          deliveryBatchId: item.deliveryBatchId ? String(item.deliveryBatchId) : undefined
+        },
+        updatedAt: Number(entry.updatedAt) || Date.now()
+      }]];
+    })) as Record<string, PendingProcurementTaskItemEntry>;
+  } catch {
+    try {
+      window.localStorage.removeItem(pendingProcurementTaskItemStorageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return {};
+  }
+}
+
+function writePendingProcurementTaskItem(item: ProcurementTaskItem, updatedAt: number) {
+  try {
+    const pendingItems = readPendingProcurementTaskItems();
+    pendingItems[item.id] = { item, updatedAt };
+    window.localStorage.setItem(pendingProcurementTaskItemStorageKey, JSON.stringify(pendingItems));
+  } catch {
+    // Local storage is best-effort; the direct save request still runs.
+  }
+}
+
+function removePendingProcurementTaskItem(itemId: string, updatedAt: number) {
+  try {
+    const pendingItems = readPendingProcurementTaskItems();
+    if (!pendingItems[itemId] || pendingItems[itemId].updatedAt !== updatedAt) return;
+    delete pendingItems[itemId];
+    if (Object.keys(pendingItems).length === 0) {
+      window.localStorage.removeItem(pendingProcurementTaskItemStorageKey);
+      return;
+    }
+    window.localStorage.setItem(pendingProcurementTaskItemStorageKey, JSON.stringify(pendingItems));
+  } catch {
+    // Ignore cleanup failures; a later successful sync can clear the record.
+  }
+}
+
+function isProcurementDeliveryStatus(value: unknown): value is ProcurementTaskItem["deliveryStatus"] {
+  return value === "pending" || value === "in_delivery" || value === "delivered" || value === "received";
 }
 
 function filterRecordByKeys<T>(record: Record<string, T>, validKeys: Set<string>) {

@@ -110,7 +110,21 @@ type NewOrderDraftSession = {
   items: OrderItemDraft[];
 };
 
+type PendingStoreConfirmationAction = {
+  id: string;
+  type: "batch_received" | "items_received" | "feedback_confirmed";
+  updatedAt: number;
+  batchId?: string;
+  itemIds?: string[];
+  feedback?: {
+    itemId: string;
+    kind: StoreFeedback["kind"];
+    requestedQuantity?: number;
+  };
+};
+
 const newOrderDraftStorageKey = "foundr1-os:new-order-draft";
+const pendingStoreConfirmationStorageKey = "foundr1-os:pending-store-confirmations:v1";
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -443,6 +457,7 @@ export default function OrdersPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const hasRestoredNewOrderDraft = useRef(false);
   const shouldSkipInitialDraftSave = useRef(true);
+  const storeConfirmationSaveChainsRef = useRef<Record<string, Promise<void>>>({});
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -484,8 +499,9 @@ export default function OrdersPage() {
       setProducts(data.products);
     }
     if (data.orders) setPurchaseOrders(data.orders);
-    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
-    if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
+    const pendingStoreConfirmations = readPendingStoreConfirmationActions();
+    if (data.purchaseOrderItems) setPurchaseOrderItems(applyPendingStoreConfirmationsToItems(data.purchaseOrderItems, pendingStoreConfirmations));
+    if (data.deliveryBatches) setDeliveryBatches(applyPendingStoreConfirmationsToBatches(data.deliveryBatches, pendingStoreConfirmations));
     if (data.staffOptions) {
       setStaffOptions(data.staffOptions);
     }
@@ -495,6 +511,33 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const syncPendingStoreConfirmations = () => {
+      const pendingActions = readPendingStoreConfirmationActions();
+      if (pendingActions.length === 0) return;
+
+      setPurchaseOrderItems((items) => applyPendingStoreConfirmationsToItems(items, pendingActions));
+      setDeliveryBatches((batches) => applyPendingStoreConfirmationsToBatches(batches, pendingActions));
+
+      pendingActions.forEach((action) => {
+        void queueStoreConfirmationAction(action, { alreadyPending: true, silentFailure: true }).catch(() => undefined);
+      });
+    };
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") syncPendingStoreConfirmations();
+    };
+
+    syncPendingStoreConfirmations();
+    window.addEventListener("online", syncPendingStoreConfirmations);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+
+    return () => {
+      window.removeEventListener("online", syncPendingStoreConfirmations);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -643,6 +686,36 @@ export default function OrdersPage() {
     return purchaseOrders.length;
   }
 
+  function queueStoreConfirmationAction(
+    action: PendingStoreConfirmationAction,
+    options: { alreadyPending?: boolean; silentFailure?: boolean } = {}
+  ) {
+    if (!options.alreadyPending) writePendingStoreConfirmationAction(action);
+
+    const previousSave = storeConfirmationSaveChainsRef.current[action.id] ?? Promise.resolve();
+    const nextSave = previousSave
+      .catch(() => undefined)
+      .then(() => performStoreConfirmationAction(action))
+      .then(() => removePendingStoreConfirmationAction(action.id, action.updatedAt))
+      .then(() => {
+        void loadDashboardData();
+      })
+      .catch((error: Error) => {
+        if (!options.silentFailure) {
+          window.alert(error.message || "確認状態を保存できませんでした。通信が戻ると自動で再保存します。");
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (storeConfirmationSaveChainsRef.current[action.id] === nextSave) {
+          delete storeConfirmationSaveChainsRef.current[action.id];
+        }
+      });
+
+    storeConfirmationSaveChainsRef.current[action.id] = nextSave;
+    return nextSave;
+  }
+
   function addOrderItemDraft() {
     setOrderItemDrafts((items) => [
       ...items,
@@ -778,6 +851,13 @@ export default function OrdersPage() {
 
   async function markDeliveryBatchReceived(batch: DeliveryBatch) {
     const confirmedLabel = getCurrentDateTimeLabel();
+    const action: PendingStoreConfirmationAction = {
+      id: `batch:${batch.id}`,
+      type: "batch_received",
+      batchId: batch.id,
+      itemIds: batch.itemIds,
+      updatedAt: Date.now()
+    };
 
     setDeliveryBatches((batches) =>
       batches.map((item) =>
@@ -790,33 +870,22 @@ export default function OrdersPage() {
       )
     );
 
-    try {
-      const response = await fetch("/api/procurement/delivery-batches", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batchId: batch.id,
-          status: "received"
-        })
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? "店舗確認を保存できませんでした。");
-      }
-
-      showNotice("店舗確認済みにしました。");
-      await loadDashboardData();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "店舗確認を保存できませんでした。");
-      await loadDashboardData();
-    }
+    void queueStoreConfirmationAction(action)
+      .then(() => showNotice("店舗確認済みにしました。"))
+      .catch(() => undefined);
   }
 
   async function markOrderItemsReceived(orderId: string, items: PurchaseOrderItem[]) {
     const targetItems = items.filter((item) => item.id && item.deliveryStatus === "delivered");
 
     if (targetItems.length === 0) return;
+    const itemIds = targetItems.flatMap((item) => item.id ? [item.id] : []);
+    const action: PendingStoreConfirmationAction = {
+      id: `items:${orderId}:${itemIds.sort().join(",")}`,
+      type: "items_received",
+      itemIds,
+      updatedAt: Date.now()
+    };
 
     setPurchaseOrderItems((currentItems) =>
       currentItems.map((item) =>
@@ -826,28 +895,9 @@ export default function OrdersPage() {
       )
     );
 
-    try {
-      await Promise.all(targetItems.map((item) =>
-        fetch("/api/procurement/items", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemId: item.id,
-            deliveryStatus: "received"
-          })
-        }).then(async (response) => {
-          if (response.ok) return;
-          const body = await response.json().catch(() => ({})) as { error?: string };
-          throw new Error(body.error ?? "店舗確認を保存できませんでした。");
-        })
-      ));
-
-      showNotice("店舗確認済みにしました。");
-      await loadDashboardData();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "店舗確認を保存できませんでした。");
-      await loadDashboardData();
-    }
+    void queueStoreConfirmationAction(action)
+      .then(() => showNotice("店舗確認済みにしました。"))
+      .catch(() => undefined);
   }
 
   async function confirmStoreFeedback(item: StoreFeedback) {
@@ -855,42 +905,21 @@ export default function OrdersPage() {
 
     const orderItem = purchaseOrderItems.find((candidate) => candidate.id === item.itemId);
     if (!orderItem && item.kind === "quantity") return;
+    const action: PendingStoreConfirmationAction = {
+      id: `feedback:${item.itemId}:${item.kind}`,
+      type: "feedback_confirmed",
+      feedback: {
+        itemId: item.itemId,
+        kind: item.kind,
+        requestedQuantity: orderItem?.requestedQuantity
+      },
+      updatedAt: Date.now()
+    };
 
-    const payload = item.kind === "quantity"
-      ? { itemId: item.itemId, actualQuantity: orderItem?.requestedQuantity }
-      : item.kind === "price"
-        ? { itemId: item.itemId, clearActualPrice: true }
-        : { itemId: item.itemId, confirmStoreFeedback: true };
-
-    try {
-      const response = await fetch("/api/procurement/items", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? "確認状態を保存できませんでした。");
-      }
-
-      setPurchaseOrderItems((items) =>
-        items.map((candidate) => {
-          if (candidate.id !== item.itemId) return candidate;
-
-          return item.kind === "quantity"
-            ? { ...candidate, actualQuantity: candidate.requestedQuantity }
-            : item.kind === "price"
-              ? { ...candidate, actualPrice: "" }
-              : { ...candidate, storeFeedbackConfirmed: true };
-        })
-      );
-      showNotice("確認済みにしました。");
-      await loadDashboardData();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "確認状態を保存できませんでした。");
-      await loadDashboardData();
-    }
+    setPurchaseOrderItems((items) => applyPendingStoreConfirmationsToItems(items, [action]));
+    void queueStoreConfirmationAction(action)
+      .then(() => showNotice("確認済みにしました。"))
+      .catch(() => undefined);
   }
 
   function createDraftFromOrderItem(item: PurchaseOrderItem, index: number): OrderItemDraft {
@@ -1601,6 +1630,209 @@ export default function OrdersPage() {
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
   );
+}
+
+async function performStoreConfirmationAction(action: PendingStoreConfirmationAction) {
+  if (action.type === "batch_received") {
+    if (!action.batchId) throw new Error("店舗確認対象が見つかりません。");
+    const response = await fetch("/api/procurement/delivery-batches", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batchId: action.batchId,
+        status: "received"
+      })
+    });
+    if (response.ok) return;
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "店舗確認を保存できませんでした。");
+  }
+
+  if (action.type === "items_received") {
+    const itemIds = action.itemIds ?? [];
+    if (itemIds.length === 0) throw new Error("店舗確認対象が見つかりません。");
+    await Promise.all(itemIds.map((itemId) =>
+      fetch("/api/procurement/items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          deliveryStatus: "received"
+        })
+      }).then(async (response) => {
+        if (response.ok) return;
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "店舗確認を保存できませんでした。");
+      })
+    ));
+    return;
+  }
+
+  const feedback = action.feedback;
+  if (!feedback?.itemId || !feedback.kind) throw new Error("確認対象が見つかりません。");
+  const payload = feedback.kind === "quantity"
+    ? { itemId: feedback.itemId, actualQuantity: feedback.requestedQuantity }
+    : feedback.kind === "price"
+      ? { itemId: feedback.itemId, clearActualPrice: true }
+      : { itemId: feedback.itemId, confirmStoreFeedback: true };
+  const response = await fetch("/api/procurement/items", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (response.ok) return;
+  const body = await response.json().catch(() => ({})) as { error?: string };
+  throw new Error(body.error ?? "確認状態を保存できませんでした。");
+}
+
+function readPendingStoreConfirmationActions() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(pendingStoreConfirmationStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((entry) => {
+      const action = normalizePendingStoreConfirmationAction(entry);
+      return action ? [action] : [];
+    });
+  } catch {
+    try {
+      window.localStorage.removeItem(pendingStoreConfirmationStorageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+    return [];
+  }
+}
+
+function writePendingStoreConfirmationAction(action: PendingStoreConfirmationAction) {
+  if (typeof window === "undefined") return;
+  try {
+    const actions = readPendingStoreConfirmationActions();
+    const nextActions = [
+      ...actions.filter((item) => item.id !== action.id),
+      action
+    ];
+    window.localStorage.setItem(pendingStoreConfirmationStorageKey, JSON.stringify(nextActions));
+  } catch {
+    // Best-effort; the live request still runs.
+  }
+}
+
+function removePendingStoreConfirmationAction(actionId: string, updatedAt: number) {
+  if (typeof window === "undefined") return;
+  try {
+    const actions = readPendingStoreConfirmationActions();
+    const nextActions = actions.filter((action) => action.id !== actionId || action.updatedAt !== updatedAt);
+    if (nextActions.length === 0) {
+      window.localStorage.removeItem(pendingStoreConfirmationStorageKey);
+      return;
+    }
+    window.localStorage.setItem(pendingStoreConfirmationStorageKey, JSON.stringify(nextActions));
+  } catch {
+    // Ignore cleanup failures; a later successful sync can clear the action.
+  }
+}
+
+function normalizePendingStoreConfirmationAction(value: unknown): PendingStoreConfirmationAction | null {
+  if (!value || typeof value !== "object") return null;
+  const action = value as Partial<PendingStoreConfirmationAction>;
+  const type = action.type;
+  if (type !== "batch_received" && type !== "items_received" && type !== "feedback_confirmed") return null;
+  const id = String(action.id ?? "").trim();
+  if (!id) return null;
+
+  if (type === "batch_received") {
+    const batchId = String(action.batchId ?? "").trim();
+    if (!batchId) return null;
+    return {
+      id,
+      type,
+      batchId,
+      itemIds: Array.isArray(action.itemIds) ? action.itemIds.map(String).filter(Boolean) : [],
+      updatedAt: Number(action.updatedAt) || Date.now()
+    };
+  }
+
+  if (type === "items_received") {
+    const itemIds = Array.isArray(action.itemIds) ? action.itemIds.map(String).filter(Boolean) : [];
+    if (itemIds.length === 0) return null;
+    return {
+      id,
+      type,
+      itemIds,
+      updatedAt: Number(action.updatedAt) || Date.now()
+    };
+  }
+
+  const feedback = action.feedback;
+  const itemId = String(feedback?.itemId ?? "").trim();
+  const kind = feedback?.kind;
+  if (!itemId || (kind !== "price" && kind !== "quantity" && kind !== "note" && kind !== "unavailable")) return null;
+  return {
+    id,
+    type,
+    feedback: {
+      itemId,
+      kind,
+      requestedQuantity: Number(feedback?.requestedQuantity) || undefined
+    },
+    updatedAt: Number(action.updatedAt) || Date.now()
+  };
+}
+
+function applyPendingStoreConfirmationsToItems(
+  items: PurchaseOrderItem[],
+  actions: PendingStoreConfirmationAction[]
+) {
+  if (actions.length === 0) return items;
+  const receivedItemIds = new Set<string>();
+  const feedbackActions = new Map<string, NonNullable<PendingStoreConfirmationAction["feedback"]>>();
+
+  actions.forEach((action) => {
+    if (action.type === "batch_received" || action.type === "items_received") {
+      action.itemIds?.forEach((itemId) => receivedItemIds.add(itemId));
+    }
+    if (action.type === "feedback_confirmed" && action.feedback) {
+      feedbackActions.set(`${action.feedback.itemId}:${action.feedback.kind}`, action.feedback);
+    }
+  });
+
+  return items.map((item) => {
+    if (!item.id) return item;
+    let nextItem = receivedItemIds.has(item.id) ? { ...item, deliveryStatus: "received" as const } : item;
+
+    for (const feedback of feedbackActions.values()) {
+      if (feedback.itemId !== item.id) continue;
+      nextItem = feedback.kind === "quantity"
+        ? { ...nextItem, actualQuantity: nextItem.requestedQuantity }
+        : feedback.kind === "price"
+          ? { ...nextItem, actualPrice: "" }
+          : { ...nextItem, storeFeedbackConfirmed: true };
+    }
+
+    return nextItem;
+  });
+}
+
+function applyPendingStoreConfirmationsToBatches(
+  batches: DeliveryBatch[],
+  actions: PendingStoreConfirmationAction[]
+) {
+  if (actions.length === 0) return batches;
+  const receivedBatchIds = new Set(actions.flatMap((action) => (
+    action.type === "batch_received" && action.batchId ? [action.batchId] : []
+  )));
+  if (receivedBatchIds.size === 0) return batches;
+  const confirmedLabel = getCurrentDateTimeLabel();
+
+  return batches.map((batch) => (
+    receivedBatchIds.has(batch.id)
+      ? { ...batch, status: "received" as const, storeConfirmedLabel: batch.storeConfirmedLabel ?? confirmedLabel }
+      : batch
+  ));
 }
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
