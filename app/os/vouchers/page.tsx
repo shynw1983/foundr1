@@ -311,8 +311,8 @@ export default function VouchersPage() {
   const [confirmedLineDrafts, setConfirmedLineDrafts] = useState<Record<string, ConfirmedAccountingLineDetail>>({});
   const [confirmedSummaryDrafts, setConfirmedSummaryDrafts] = useState<Record<string, string>>({});
   const [editingConfirmedSummaryKeys, setEditingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
-  const [confirmedSearchInput, setConfirmedSearchInput] = useState("");
-  const [confirmedSearchTerm, setConfirmedSearchTerm] = useState("");
+  const [voucherSearchInput, setVoucherSearchInput] = useState("");
+  const [voucherSearchTerm, setVoucherSearchTerm] = useState("");
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
@@ -362,11 +362,11 @@ export default function VouchersPage() {
   }, [exportStartDate, exportEndDate]);
 
   const sortedVouchers = useMemo(() => vouchers, [vouchers]);
-  const filteredConfirmedAccountingLines = useMemo(() => {
-    const term = normalizeSearchText(confirmedSearchTerm);
-    if (!term) return confirmedAccountingLines;
-    return confirmedAccountingLines.filter((line) => confirmedLineMatchesSearch(line, term));
-  }, [confirmedAccountingLines, confirmedSearchTerm]);
+  const filteredVouchers = useMemo(() => {
+    const term = normalizeSearchText(voucherSearchTerm);
+    if (!term) return sortedVouchers;
+    return sortedVouchers.filter((voucher) => voucherMatchesProductSearch(voucher, term));
+  }, [sortedVouchers, voucherSearchTerm]);
 
   useEffect(() => {
     if (!hasRestoredWorkspace || !vouchers.length) return;
@@ -1284,56 +1284,15 @@ export default function VouchersPage() {
           </div>
           <div className="voucher-confirmed-lines">
             <div className="voucher-confirmed-lines-head">
-              <div>
-                <strong>確定済み明細</strong>
-                <span>
-                  {isLoadingConfirmedLines
-                    ? "読み込み中..."
-                    : confirmedSearchTerm
-                      ? `検索結果 ${filteredConfirmedAccountingLines.length} / ${confirmedAccountingLines.length}行`
-                      : `${confirmedAccountingLines.length}行`}
-                </span>
-              </div>
-              <form
-                className="voucher-confirmed-search"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setConfirmedSearchTerm(confirmedSearchInput.trim());
-                }}
-              >
-                <label>
-                  <Search size={15} />
-                  <input
-                    value={confirmedSearchInput}
-                    onChange={(event) => setConfirmedSearchInput(event.target.value)}
-                    placeholder="商品名で検索"
-                    aria-label="確定済み明細の商品検索"
-                  />
-                </label>
-                <button className="secondary-button" type="submit">検索</button>
-                {confirmedSearchTerm ? (
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() => {
-                      setConfirmedSearchInput("");
-                      setConfirmedSearchTerm("");
-                    }}
-                  >
-                    クリア
-                  </button>
-                ) : null}
-              </form>
+              <strong>確定済み明細</strong>
+              <span>{isLoadingConfirmedLines ? "読み込み中..." : `${confirmedAccountingLines.length}行`}</span>
             </div>
             {!isLoadingConfirmedLines && !confirmedAccountingLines.length ? (
               <p className="empty-state">選択期間の確定済み明細はありません。</p>
             ) : null}
-            {!isLoadingConfirmedLines && confirmedAccountingLines.length && !filteredConfirmedAccountingLines.length ? (
-              <p className="empty-state">検索条件に一致する確定済み明細はありません。</p>
-            ) : null}
-            {filteredConfirmedAccountingLines.length ? (
+            {confirmedAccountingLines.length ? (
               <div className="voucher-confirmed-line-list">
-                {filteredConfirmedAccountingLines.map((line) => {
+                {confirmedAccountingLines.map((line) => {
                   const key = getConfirmedLineKey(line);
                   const summaryDraft = confirmedSummaryDrafts[key] ?? line.note ?? "";
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
@@ -1413,10 +1372,50 @@ export default function VouchersPage() {
               <p>OCR結果の発生日・商取引先・金額を確認し、用途と立替状態を管理します。</p>
             </div>
           </div>
+          <form
+            className="voucher-list-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setVoucherSearchTerm(voucherSearchInput.trim());
+            }}
+          >
+            <label>
+              <Search size={15} />
+              <input
+                value={voucherSearchInput}
+                onChange={(event) => setVoucherSearchInput(event.target.value)}
+                placeholder="商品名・摘要で証憑を検索"
+                aria-label="証憑の商品検索"
+              />
+            </label>
+            <button className="secondary-button" type="submit">検索</button>
+            {voucherSearchTerm ? (
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => {
+                  setVoucherSearchInput("");
+                  setVoucherSearchTerm("");
+                }}
+              >
+                クリア
+              </button>
+            ) : null}
+            <span>
+              {isLoading
+                ? "読み込み中..."
+                : voucherSearchTerm
+                  ? `検索結果 ${filteredVouchers.length} / ${sortedVouchers.length}件`
+                  : `${sortedVouchers.length}件`}
+            </span>
+          </form>
           {isLoading ? <p className="empty-state">読み込み中...</p> : null}
           {!isLoading && !sortedVouchers.length ? <p className="empty-state">登録済みの証憑はありません。</p> : null}
+          {!isLoading && sortedVouchers.length && !filteredVouchers.length ? (
+            <p className="empty-state">検索条件に一致する証憑はありません。</p>
+          ) : null}
           <div className="voucher-list">
-            {sortedVouchers.map((voucher) => {
+            {filteredVouchers.map((voucher) => {
               const isConfirmed = voucher.status === "confirmed";
               const isPendingReview = voucher.status !== "confirmed" && voucher.status !== "failed";
               const isExpanded = Boolean(expandedVoucherIds[voucher.id]);
@@ -3048,17 +3047,30 @@ function normalizeSearchText(value: string) {
   return String(value ?? "").trim().toLocaleLowerCase();
 }
 
-function confirmedLineMatchesSearch(line: ConfirmedAccountingLine, term: string) {
+function voucherMatchesProductSearch(voucher: VoucherRecord, term: string) {
   const fields = [
-    line.note,
-    line.vendorName,
-    line.storeName,
-    line.accountTitle,
-    line.subAccountTitle,
-    ...(line.details ?? []).flatMap((detail) => [
-      detail.note,
-      detail.accountTitle,
-      detail.subAccountTitle
+    buildVoucherTitle(voucher),
+    voucher.vendorName,
+    voucher.companyName,
+    voucher.brandName,
+    voucher.locationName,
+    voucher.storeName,
+    voucher.uploadedFileName,
+    ...(voucher.accountingLines ?? []).flatMap((line) => [
+      line.accountTitle,
+      line.subAccountTitle,
+      line.taxRate,
+      line.taxMode
+    ]),
+    ...(voucher.items ?? []).flatMap((item) => [
+      item.rawName,
+      item.category,
+      item.accountTitle,
+      item.taxRate,
+      item.taxMode,
+      item.unit,
+      item.matchStatus,
+      item.matchedProductName
     ])
   ];
   return fields.some((value) => normalizeSearchText(String(value ?? "")).includes(term));
