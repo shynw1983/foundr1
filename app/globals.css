@@ -4186,7 +4186,7 @@ body :where(
 
 .shell.has-voucher-preview .receipt-expense-line-body {
   display: none;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
 }
 
 .shell.has-voucher-preview .receipt-expense-line.is-open .receipt-expense-line-body {
@@ -4196,7 +4196,7 @@ body :where(
 .shell.has-voucher-preview .receipt-expense-line-body > label:nth-of-type(7),
 .shell.has-voucher-preview .receipt-line-insert-actions,
 .shell.has-voucher-preview .voucher-product-binding {
-  grid-column: auto;
+  grid-column: 1 / -1;
 }
 
 .receipt-line-delete-button {
@@ -27242,8 +27242,14 @@ body :where(
     grid-template-columns: 1fr;
   }
 
+  .shell.has-voucher-preview .receipt-expense-line-body {
+    grid-template-columns: 1fr;
+  }
+
   .receipt-expense-line-body > label:nth-of-type(7),
-  .voucher-product-binding {
+  .shell.has-voucher-preview .receipt-expense-line-body > label:nth-of-type(7),
+  .voucher-product-binding,
+  .shell.has-voucher-preview .voucher-product-binding {
     grid-column: auto;
   }
 
