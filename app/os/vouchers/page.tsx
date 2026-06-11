@@ -480,7 +480,7 @@ export default function VouchersPage() {
     setConfirmedLineDrafts((current) => {
       const draft = current[key] ?? detail;
       const updated = { ...draft, ...next };
-      const previousTaxRate = updated.taxRate;
+      const previousTaxRate = draft.taxRate;
       if ("subAccountTitle" in next && !("taxRate" in next)) {
         updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
       }
@@ -493,7 +493,7 @@ export default function VouchersPage() {
       if (!("unitPrice" in next)) {
         updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity);
       }
-      return { ...current, [key]: updated };
+      return { ...current, [key]: "taxAmount" in next ? updated : normalizeConfirmedLineDetail(updated) };
     });
   }
 
@@ -2890,6 +2890,8 @@ function calculateDraftTaxAmount(amount: number, taxRate: string, taxMode: strin
   return 0;
 }
 
+const TAX_AMOUNT_AUTO_FIX_TOLERANCE = 2;
+
 function normalizeAccountingLineTax(
   line: VoucherAccountingLine,
   taxMode = line.taxMode,
@@ -2900,7 +2902,8 @@ function normalizeAccountingLineTax(
   const normalizedTaxMode = normalizeDraftTaxMode(taxMode);
   const expectedTaxAmount = calculateDraftTaxAmount(amount, taxRate, normalizedTaxMode);
   const currentTaxAmount = Math.round(Number(line.taxAmount || 0));
-  const hasStaleTaxAmount = expectedTaxAmount > 0 && (!currentTaxAmount || currentTaxAmount > amount);
+  const hasStaleTaxAmount = expectedTaxAmount > 0
+    && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
   return {
     ...line,
     taxRate,
@@ -2910,9 +2913,19 @@ function normalizeAccountingLineTax(
   };
 }
 
-function normalizeConfirmedLineDetail(detail: ConfirmedAccountingLineDetail): ConfirmedAccountingLineDetail {
+function normalizeConfirmedLineDetail(detail: ConfirmedAccountingLineDetail, options: { forceTax?: boolean } = {}): ConfirmedAccountingLineDetail {
+  const amount = Math.round(Number(detail.amount || 0));
+  const taxRate = detail.taxRate || getDefaultTaxRateForSubAccountTitle(detail.subAccountTitle);
+  const normalizedTaxMode = normalizeDraftTaxMode(detail.taxMode);
+  const expectedTaxAmount = calculateDraftTaxAmount(amount, taxRate, normalizedTaxMode);
+  const currentTaxAmount = Math.round(Number(detail.taxAmount || 0));
+  const hasStaleTaxAmount = expectedTaxAmount > 0
+    && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
   return {
     ...detail,
+    taxRate,
+    taxMode: normalizedTaxMode,
+    taxAmount: options.forceTax || hasStaleTaxAmount ? expectedTaxAmount : Math.max(0, currentTaxAmount),
     unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity)
   };
 }
