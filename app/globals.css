@@ -19759,19 +19759,55 @@ body :where(
   white-space: nowrap;
 }
 
-.product-variant-list {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
 .product-variant-row {
   min-height: 54px;
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
+}
+
+.product-family-variants {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.product-family-variants summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.product-family-variants summary::-webkit-details-marker {
+  display: none;
+}
+
+.product-family-variants summary::after {
+  content: "を開く";
+}
+
+.product-family-variants[open] summary {
+  margin-bottom: 8px;
+}
+
+.product-family-variants[open] summary::after {
+  content: "を閉じる";
+}
+
+.product-variant-list {
+  display: grid;
+  gap: 8px;
 }
 
 .product-variant-title {

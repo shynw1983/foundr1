@@ -1400,75 +1400,79 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="product-variant-list">
-                    {group.products.map((product) => {
-                      const displaySpec = getProductDisplaySpec(product);
-                      const unitPriceLabel = formatProductUnitPrice(product);
-                      const summaryItems = productSummaryFields
-                        .map((field) => {
-                          const option = productSummaryFieldOptions.find((item) => item.value === field);
-                          const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
-                          return option && value ? { label: option.label, value } : null;
-                        })
-                        .filter(Boolean) as Array<{ label: string; value: string }>;
+                  <details className="product-family-variants">
+                    <summary>
+                      <span>{group.products.length} 規格</span>
+                    </summary>
+                    <div className="product-variant-list">
+                      {group.products.map((product) => {
+                        const displaySpec = getProductDisplaySpec(product);
+                        const unitPriceLabel = formatProductUnitPrice(product);
+                        const summaryItems = productSummaryFields
+                          .map((field) => {
+                            const option = productSummaryFieldOptions.find((item) => item.value === field);
+                            const value = getProductSummaryFieldValue(product, field, unitPriceLabel);
+                            return option && value ? { label: option.label, value } : null;
+                          })
+                          .filter(Boolean) as Array<{ label: string; value: string }>;
 
-                      return (
-                        <article className="product-variant-row" key={getProductIdentity(product)}>
-                          <div className="product-variant-identity">
-                            <div className="product-variant-photo">
-                              {product.photoUrl ? (
-                                <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
-                              ) : (
-                                <span>写真</span>
-                              )}
-                            </div>
-                            <div className="product-variant-title">
-                              <strong>{displaySpec || product.name || "単一規格"}</strong>
-                              <span>{product.name || "未設定の商品"}</span>
-                              <div className="product-variant-badges">
-                                {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
-                                {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                        return (
+                          <article className="product-variant-row" key={getProductIdentity(product)}>
+                            <div className="product-variant-identity">
+                              <div className="product-variant-photo">
+                                {product.photoUrl ? (
+                                  <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                                ) : (
+                                  <span>写真</span>
+                                )}
+                              </div>
+                              <div className="product-variant-title">
+                                <strong>{displaySpec || product.name || "単一規格"}</strong>
+                                <span>{product.name || "未設定の商品"}</span>
+                                <div className="product-variant-badges">
+                                  {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
+                                  {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="product-master-info-grid" aria-label="規格情報">
-                            {summaryItems.slice(0, 6).map((item) => (
-                              <span key={`${product.name}-summary-${item.label}`}>
-                                <small>{item.label}</small>
-                                <strong>{item.value}</strong>
+                            <div className="product-master-info-grid" aria-label="規格情報">
+                              {summaryItems.slice(0, 6).map((item) => (
+                                <span key={`${product.name}-summary-${item.label}`}>
+                                  <small>{item.label}</small>
+                                  <strong>{item.value}</strong>
+                                </span>
+                              ))}
+                              <span>
+                                <small>メイン発注先</small>
+                                <strong>{product.mainSupplier || "未設定"}</strong>
                               </span>
-                            ))}
-                            <span>
-                              <small>メイン発注先</small>
-                              <strong>{product.mainSupplier || "未設定"}</strong>
-                            </span>
-                            <span>
-                              <small>規格単価</small>
-                              <strong>{unitPriceLabel}</strong>
-                            </span>
-                          </div>
-                          <div className="row-actions">
-                            <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
-                              価格推移
-                            </button>
-                            {canManageProducts ? (
-                              <>
-                                <button
-                                  className="text-button"
-                                  onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
-                                >
-                                  編集
-                                </button>
-                                <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
-                                  複製
-                                </button>
-                                <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
-                                  削除
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
-                          <details className="product-master-detail">
+                              <span>
+                                <small>規格単価</small>
+                                <strong>{unitPriceLabel}</strong>
+                              </span>
+                            </div>
+                            <div className="row-actions">
+                              <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
+                                価格推移
+                              </button>
+                              {canManageProducts ? (
+                                <>
+                                  <button
+                                    className="text-button"
+                                    onClick={() => setEditTarget({ type: "product", value: product, originalName: product.name })}
+                                  >
+                                    編集
+                                  </button>
+                                  <button className="text-button" onClick={() => copyProductToNewDraft(product)}>
+                                    複製
+                                  </button>
+                                  <button className="text-button danger-button" onClick={() => deleteProduct(product)}>
+                                    削除
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            <details className="product-master-detail">
                             <summary>詳細</summary>
                             <div className="product-master-detail-body">
                               <dl>
@@ -1540,11 +1544,12 @@ export default function ProductsPage() {
                                 </div>
                               </dl>
                             </div>
-                          </details>
-                        </article>
-                      );
-                    })}
-                  </div>
+                            </details>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </details>
                 </article>
               );
             })}
