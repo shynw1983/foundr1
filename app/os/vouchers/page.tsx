@@ -490,13 +490,16 @@ export default function VouchersPage() {
       if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
         updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity);
       }
+      if (!("unitPrice" in next)) {
+        updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity);
+      }
       return { ...current, [key]: updated };
     });
   }
 
   async function saveConfirmedLineDetail(voucher: VoucherRecord, detail: ConfirmedAccountingLineDetail, basicDraft?: ConfirmedVoucherBasicDraft) {
     const key = getConfirmedVoucherDetailKey(voucher.id, detail);
-    const draft = confirmedLineDrafts[key] ?? detail;
+    const draft = normalizeConfirmedLineDetail(confirmedLineDrafts[key] ?? detail);
     const companyName = basicDraft?.companyName ?? voucher.companyName;
     const brandName = basicDraft?.brandName ?? voucher.brandName;
     const locationName = basicDraft?.locationName ?? voucher.locationName;
@@ -2902,7 +2905,15 @@ function normalizeAccountingLineTax(
     ...line,
     taxRate,
     taxMode: normalizedTaxMode,
-    taxAmount: options.force || hasStaleTaxAmount ? String(expectedTaxAmount) : String(Math.max(0, currentTaxAmount))
+    taxAmount: options.force || hasStaleTaxAmount ? String(expectedTaxAmount) : String(Math.max(0, currentTaxAmount)),
+    unitPrice: normalizeDraftUnitPrice(line.unitPrice, amount, line.quantity)
+  };
+}
+
+function normalizeConfirmedLineDetail(detail: ConfirmedAccountingLineDetail): ConfirmedAccountingLineDetail {
+  return {
+    ...detail,
+    unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity)
   };
 }
 
@@ -2925,14 +2936,19 @@ function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
 }
 
+function normalizeDraftUnitPrice(value: string | number | null | undefined, amount: string | number, quantity: string | number | null | undefined) {
+  const current = Number(value);
+  if (Number.isFinite(current) && current > 0) return String(value);
+  return calculateDraftUnitPrice(String(amount || ""), getDefaultQuantityText(quantity));
+}
+
 function getDefaultQuantityText(value: string | number | null | undefined) {
   const quantity = Number(value);
   return Number.isFinite(quantity) && quantity > 0 ? String(quantity) : "1";
 }
 
 function getDefaultUnitPriceText(value: string | number | null | undefined, amount: number, quantity: string | number | null | undefined) {
-  if (value !== null && value !== undefined && String(value).trim()) return String(value);
-  return calculateDraftUnitPrice(String(amount), getDefaultQuantityText(quantity));
+  return normalizeDraftUnitPrice(value, amount, quantity);
 }
 
 function normalizeMoneyInputText(value: string) {
