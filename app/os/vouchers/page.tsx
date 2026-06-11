@@ -304,8 +304,9 @@ const expenseAccountTitleOptions = [
 ];
 const taxRateOptions = ["", "8%", "10%", "非課税", "不課税", "対象外"];
 const taxModeOptions = ["内税", "外税", "対象外", "不明"];
-const voucherWorkspaceStorageKey = "foundr1-os:voucher-workspace:v1";
-const voucherWorkspaceSnapshotMaxAgeMs = 1000 * 60 * 60 * 24 * 7;
+const legacyVoucherWorkspaceStorageKeys = ["foundr1-os:voucher-workspace:v1"];
+const voucherWorkspaceStorageKey = "foundr1-os:voucher-workspace:v2";
+const voucherWorkspaceSnapshotMaxAgeMs = 1000 * 60 * 60 * 6;
 
 export default function VouchersPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -2087,12 +2088,13 @@ function getTouchDistance(touches: React.TouchList) {
 
 function readVoucherWorkspaceSnapshot(): VoucherWorkspaceSnapshot | null {
   try {
-    const raw = window.localStorage.getItem(voucherWorkspaceStorageKey);
+    cleanupLegacyVoucherWorkspaceSnapshots();
+    const raw = window.sessionStorage.getItem(voucherWorkspaceStorageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<VoucherWorkspaceSnapshot>;
     const savedAt = Number(parsed.savedAt || 0);
     if (!savedAt || Date.now() - savedAt > voucherWorkspaceSnapshotMaxAgeMs) {
-      window.localStorage.removeItem(voucherWorkspaceStorageKey);
+      window.sessionStorage.removeItem(voucherWorkspaceStorageKey);
       return null;
     }
     return {
@@ -2111,7 +2113,7 @@ function readVoucherWorkspaceSnapshot(): VoucherWorkspaceSnapshot | null {
     };
   } catch {
     try {
-      window.localStorage.removeItem(voucherWorkspaceStorageKey);
+      window.sessionStorage.removeItem(voucherWorkspaceStorageKey);
     } catch {
       // Ignore storage cleanup failures.
     }
@@ -2121,9 +2123,19 @@ function readVoucherWorkspaceSnapshot(): VoucherWorkspaceSnapshot | null {
 
 function writeVoucherWorkspaceSnapshot(snapshot: VoucherWorkspaceSnapshot) {
   try {
-    window.localStorage.setItem(voucherWorkspaceStorageKey, JSON.stringify(snapshot));
+    window.sessionStorage.setItem(voucherWorkspaceStorageKey, JSON.stringify(snapshot));
   } catch {
     // Storage quota or private mode should not break the voucher workflow.
+  }
+}
+
+function cleanupLegacyVoucherWorkspaceSnapshots() {
+  try {
+    for (const key of legacyVoucherWorkspaceStorageKeys) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage cleanup failures.
   }
 }
 
