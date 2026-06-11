@@ -2040,7 +2040,7 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <strong>{title}</strong>
         </div>
         {canOpenPreviewObject ? (
-          <a className="voucher-preview-open-link" href={previewMeta.objectUrl} target="_blank" rel="noreferrer">開く</a>
+          <a className="voucher-preview-open-link" href={previewUrl} target="_blank" rel="noreferrer">開く</a>
         ) : null}
         <button type="button" onClick={onClose} aria-label="プレビューを閉じる">
           <X size={18} />
