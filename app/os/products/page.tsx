@@ -1351,6 +1351,7 @@ export default function ProductsPage() {
             </div>
             {pagedProductGroups.map((group) => {
               const representative = group.representative;
+              const photoProduct = group.products.find((product) => product.photoUrl) ?? representative;
               const groupSummaryItems = productSummaryFields
                 .map((field) => {
                   const option = productSummaryFieldOptions.find((item) => item.value === field);
@@ -1362,16 +1363,17 @@ export default function ProductsPage() {
               return (
                 <article className="product-family-card" key={group.id}>
                   <div className="product-family-card-head">
-                    <div className="product-title-block">
-                      <div className="product-title-photo">
-                        {representative.photoUrl ? (
-                          <img src={getProductPhotoSrc(representative.photoUrl)} alt={`${group.familyName} の写真`} />
+                    <div className="product-family-identity">
+                      <div className="product-family-photo">
+                        {photoProduct.photoUrl ? (
+                          <img src={getProductPhotoSrc(photoProduct.photoUrl)} alt={`${group.familyName} の写真`} />
                         ) : (
                           <span>写真</span>
                         )}
                       </div>
                       <div>
-                        <div className="product-name-line">
+                        <small>品種</small>
+                        <div className="product-family-name-line">
                           <strong>{group.familyName}</strong>
                           <span>{group.products.length} 規格</span>
                           {representative.isDefaultVariant ? <span className="status-pill">標準規格あり</span> : null}
@@ -1412,12 +1414,21 @@ export default function ProductsPage() {
 
                       return (
                         <article className="product-variant-row" key={getProductIdentity(product)}>
-                          <div className="product-variant-title">
-                            <strong>{displaySpec || product.name || "単一規格"}</strong>
-                            <span>{product.name || "未設定の商品"}</span>
-                            <div className="product-variant-badges">
-                              {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
-                              {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                          <div className="product-variant-identity">
+                            <div className="product-variant-photo">
+                              {product.photoUrl ? (
+                                <img src={getProductPhotoSrc(product.photoUrl)} alt={`${product.name} の写真`} />
+                              ) : (
+                                <span>写真</span>
+                              )}
+                            </div>
+                            <div className="product-variant-title">
+                              <strong>{displaySpec || product.name || "単一規格"}</strong>
+                              <span>{product.name || "未設定の商品"}</span>
+                              <div className="product-variant-badges">
+                                {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
+                                {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
+                              </div>
                             </div>
                           </div>
                           <div className="product-master-info-grid" aria-label="規格情報">
