@@ -1371,7 +1371,7 @@ export default function ProductsPage() {
                           <span>写真</span>
                         )}
                       </div>
-                      <div>
+                      <div className="product-family-copy">
                         <small>品種</small>
                         <div className="product-family-name-line">
                           <strong>{group.familyName}</strong>

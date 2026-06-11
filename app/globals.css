@@ -19660,8 +19660,8 @@ body :where(
 
 .product-family-card {
   display: grid;
-  gap: 10px;
-  padding: 12px var(--product-master-x);
+  gap: 9px;
+  padding: 11px var(--product-master-x);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
@@ -19676,14 +19676,14 @@ body :where(
 }
 
 .product-family-card-head {
-  min-height: 56px;
+  min-height: 54px;
 }
 
 .product-family-identity {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   min-width: 0;
 }
 
@@ -19702,7 +19702,7 @@ body :where(
 }
 
 .product-family-photo {
-  width: 76px;
+  width: 68px;
 }
 
 .product-variant-photo {
@@ -19720,14 +19720,14 @@ body :where(
   display: block;
   margin-bottom: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .product-family-name-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -19735,17 +19735,26 @@ body :where(
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 24px;
-  font-weight: 650;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.18;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .product-family-name-line > span:not(.status-pill) {
   flex: 0 0 auto;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #ffffff;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 1;
 }
 
 .product-family-identity p {
@@ -19753,7 +19762,7 @@ body :where(
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -19862,7 +19871,7 @@ body :where(
   .product-family-card-head,
   .product-variant-row {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 10px;
+    row-gap: 9px;
   }
 
   .product-family-card-head > .row-actions,
@@ -19872,11 +19881,80 @@ body :where(
   }
 
   .product-family-card {
-    --product-master-x: 12px;
+    --product-master-x: 10px;
+  }
+
+  .product-family-identity {
+    grid-template-columns: 60px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+
+  .product-family-photo {
+    width: 60px;
+  }
+
+  .product-family-copy {
+    min-width: 0;
+    padding-top: 1px;
   }
 
   .product-family-name-line strong {
-    font-size: 22px;
+    display: -webkit-box;
+    font-size: 19px;
+    line-height: 1.22;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .product-family-name-line > span:not(.status-pill) {
+    min-height: 22px;
+    padding: 0 7px;
+    font-size: 11px;
+  }
+
+  .product-family-name-line .status-pill {
+    display: none;
+  }
+
+  .product-family-identity p {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .product-family-card-head .product-master-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .product-family-card-head .product-master-info-grid span {
+    min-height: 42px;
+    padding: 6px 8px;
+  }
+
+  .product-family-card-head .product-master-info-grid small {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .product-family-card-head .product-master-info-grid strong {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .product-family-card-head > .row-actions .secondary-button {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+
+  .product-family-variants {
+    padding-top: 7px;
+  }
+
+  .product-family-variants summary {
+    min-height: 36px;
+    font-size: 13px;
   }
 }
 
