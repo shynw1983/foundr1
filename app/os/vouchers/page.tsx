@@ -1382,7 +1382,14 @@ export default function VouchersPage() {
                         )}
                       </div>
                     </div>
-                    <a className="text-button" href={`/api/vouchers/${encodeURIComponent(line.voucherId)}/preview`} target="_blank" rel="noreferrer">証憑</a>
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() => setPreviewVoucher(buildPreviewVoucherFromConfirmedLine(line))}
+                      disabled={!line.voucherId}
+                    >
+                      証憑
+                    </button>
                   </div>
                   );
                 })}
@@ -1645,6 +1652,38 @@ function buildVoucherTitle(voucher: VoucherRecord) {
   return buildVendorNameFromParts(voucher.companyName, voucher.brandName, voucher.locationName, voucher.vendorName) || voucher.uploadedFileName || "証憑";
 }
 
+function buildPreviewVoucherFromConfirmedLine(line: ConfirmedAccountingLine): VoucherRecord {
+  return {
+    id: line.voucherId,
+    sourceType: "voucher",
+    storeId: "",
+    storeName: line.storeName,
+    receiptPhotoUrl: "",
+    uploadedFileName: "",
+    usageType: line.usageType === "keihi" ? "keihi" : line.usageType === "shiire" ? "shiire" : "unclassified",
+    paymentType: line.paymentType === "reimbursement" ? "reimbursement" : "company",
+    reimbursementStatus: line.reimbursementStatus === "pending" || line.reimbursementStatus === "paid" || line.reimbursementStatus === "rejected"
+      ? line.reimbursementStatus
+      : "none",
+    status: "confirmed",
+    vendorName: line.vendorName,
+    companyName: "",
+    brandName: line.vendorName,
+    locationName: "",
+    purchaseDate: line.purchaseDate,
+    purchaseTime: line.purchaseTime,
+    total: Math.round(Number(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode) ?? 0)),
+    tax: Math.round(Number(line.taxAmount ?? 0)),
+    accountingLines: [],
+    receiptTaxLines: [],
+    itemCount: Number(line.lineCount ?? 0),
+    createdByName: "",
+    createdLabel: "",
+    canDelete: false,
+    items: []
+  };
+}
+
 function buildVendorNameFromParts(companyName: string, brandName: string, locationName: string, fallback = "") {
   return [brandName || companyName, locationName]
     .map((value) => value.trim())
@@ -1880,6 +1919,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
     fetch(previewUrl)
       .then(async (response) => {
         if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("証憑ファイルが見つかりません。アップロード元のファイル情報を確認してください。");
+          }
           const message = await response.text();
           throw new Error(message || `HTTP ${response.status}`);
         }

@@ -19410,6 +19410,42 @@ body :where(
   }
 }
 
+@media (max-width: 600px) {
+  .voucher-preview-open {
+    display: inline-flex;
+  }
+
+  .voucher-preview-link {
+    display: none;
+  }
+
+  .shell.has-voucher-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 260;
+    grid-column: auto;
+    width: 100vw;
+    height: 100dvh;
+    display: grid;
+    border-left: 0;
+    box-shadow: none;
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body img,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    min-height: calc(100dvh - 86px);
+  }
+
+  .shell.has-voucher-preview .voucher-preview-panel-body iframe,
+  .shell.has-voucher-preview .voucher-preview-panel-body object {
+    height: calc(100dvh - 86px);
+  }
+}
+
 @media (min-width: 601px) and (max-width: 1180px) {
   .voucher-preview-open {
     display: inline-flex;
