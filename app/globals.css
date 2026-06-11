@@ -4084,8 +4084,8 @@ body :where(
 
 .receipt-expense-line-body {
   display: none;
-  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) minmax(96px, 0.7fr) minmax(88px, 0.55fr) minmax(88px, 0.55fr) minmax(140px, 1fr) auto;
-  align-items: end;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  align-items: start;
   gap: 10px;
 }
 
@@ -4093,12 +4093,8 @@ body :where(
   display: grid;
 }
 
-.receipt-expense-line-body > label:nth-of-type(7) {
-  grid-column: 1 / span 1;
-}
-
 .voucher-product-binding {
-  grid-column: 4 / -1;
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(220px, auto);
   align-items: end;
@@ -4208,7 +4204,7 @@ body :where(
 }
 
 .receipt-line-insert-actions {
-  grid-column: 1 / span 2;
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -4223,6 +4219,7 @@ body :where(
 }
 
 .receipt-line-note {
+  grid-column: 1 / -1;
   min-width: 0;
 }
 
