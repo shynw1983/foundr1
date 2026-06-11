@@ -1251,7 +1251,7 @@ function normalizeAccountingLines(lines: Array<{
       taxAmount,
       quantity,
       unit: String(line.unit ?? "個").trim().slice(0, 20) || "個",
-      unitPrice: normalizeNullableMoney(line.unitPrice) ?? (quantity > 0 && amount > 0 ? Math.round((amount / quantity) * 100) / 100 : null),
+      unitPrice: normalizeNullableUnitPrice(line.unitPrice) ?? calculateAccountingUnitPrice(amount, taxRate, taxMode, quantity),
       ocrItemId: String(line.ocrItemId ?? "").trim(),
       note: String(line.note ?? "").trim()
     };
@@ -1595,6 +1595,14 @@ function calculateTaxAmount(amount: number, taxRate: string, taxMode: string) {
   if (taxMode === "外税") return Math.round(amount * rate / 100);
   if (taxMode === "内税") return Math.round(amount * rate / (100 + rate));
   return 0;
+}
+
+function calculateAccountingUnitPrice(amount: number, taxRate: string, taxMode: string, quantity: number) {
+  if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return null;
+  const rate = taxRate === "8%" ? 8 : taxRate === "10%" ? 10 : 0;
+  const taxIncludedAmount = taxMode === "外税" && rate > 0 ? amount * (1 + rate / 100) : amount;
+  const unitPrice = taxIncludedAmount / quantity;
+  return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : null;
 }
 
 function calculateAccountingTaxIncludedAmount(amount: unknown, taxAmount: unknown, taxMode: unknown) {

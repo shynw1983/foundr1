@@ -343,7 +343,7 @@ export default function VouchersPage() {
       setPaymentType(snapshot.paymentType);
       setExportStartDate(snapshot.exportStartDate);
       setExportEndDate(snapshot.exportEndDate);
-      setAccountingDrafts(snapshot.accountingDrafts);
+      setAccountingDrafts(normalizeStoredAccountingDrafts(snapshot.accountingDrafts));
       setExpandedVoucherIds(snapshot.expandedVoucherIds);
       setLineProductSelections(snapshot.lineProductSelections);
       setLineProductCategorySelections(snapshot.lineProductCategorySelections);
@@ -496,12 +496,12 @@ export default function VouchersPage() {
         updated.taxAmount = calculateDraftTaxAmount(Number(updated.amount || 0), updated.taxRate, updated.taxMode);
       }
       if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
-        updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity);
+        updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity, updated.taxRate, updated.taxMode);
       }
       if (!("unitPrice" in next)) {
-        updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity);
+        updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
       }
-      return { ...current, [key]: "taxAmount" in next ? updated : normalizeConfirmedLineDetail(updated) };
+      return { ...current, [key]: "taxAmount" in next ? updated : normalizeConfirmedLineDetail(updated, { preserveUnitPrice: "unitPrice" in next }) };
     });
   }
 
@@ -784,7 +784,7 @@ export default function VouchersPage() {
             ...line,
             confirmed: false,
             taxMode: nextDraft.taxMode
-          }, nextDraft.taxMode, { force: true });
+          }, nextDraft.taxMode, { force: true, forceUnitPrice: true });
         });
       }
       return { ...current, [voucherId]: nextDraft };
@@ -808,12 +808,12 @@ export default function VouchersPage() {
               updated.taxRate = updated.taxRate || getDefaultTaxRateForSubAccountTitle(updated.subAccountTitle);
             }
             if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
-              return normalizeAccountingLineTax(updated, draft.taxMode, { force: true });
+              return normalizeAccountingLineTax(updated, draft.taxMode, { force: true, forceUnitPrice: true, preserveUnitPrice: "unitPrice" in next });
             }
             if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
-              updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity);
+              updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
             }
-            return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode);
+            return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode, { preserveUnitPrice: "unitPrice" in next });
           })
         }
       };
@@ -2401,6 +2401,22 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
   };
 }
 
+function normalizeStoredAccountingDrafts(drafts: Record<string, VoucherAccountingDraft>) {
+  return Object.fromEntries(
+    Object.entries(drafts).map(([voucherId, draft]) => {
+      const taxMode = normalizeDraftTaxMode(draft.taxMode);
+      return [
+        voucherId,
+        {
+          ...draft,
+          taxMode,
+          lines: draft.lines.map((line) => normalizeAccountingLineTax(line, taxMode, { forceUnitPrice: true }))
+        }
+      ];
+    })
+  );
+}
+
 function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccountingLine[] {
   const isShiire = voucher?.usageType === "shiire";
 
@@ -2426,7 +2442,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
       quantity: getDefaultQuantityText(item.quantity),
       unit: item.unit || "個",
-      unitPrice: getDefaultUnitPriceText(item.unitPrice, amount, item.quantity),
+      unitPrice: getDefaultUnitPriceText(item.unitPrice, amount, item.quantity, taxRate, taxMode),
       note: item.rawName || ""
     }];
   });
@@ -2943,7 +2959,7 @@ const TAX_AMOUNT_AUTO_FIX_TOLERANCE = 2;
 function normalizeAccountingLineTax(
   line: VoucherAccountingLine,
   taxMode = line.taxMode,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean } = {}
 ): VoucherAccountingLine {
   const amount = Math.round(Number(line.amount || 0));
   const taxRate = line.taxRate || getDefaultTaxRateForSubAccountTitle(line.subAccountTitle);
@@ -2957,11 +2973,17 @@ function normalizeAccountingLineTax(
     taxRate,
     taxMode: normalizedTaxMode,
     taxAmount: options.force || hasStaleTaxAmount ? String(expectedTaxAmount) : String(Math.max(0, currentTaxAmount)),
-    unitPrice: normalizeDraftUnitPrice(line.unitPrice, amount, line.quantity)
+    unitPrice: normalizeDraftUnitPrice(line.unitPrice, amount, line.quantity, taxRate, normalizedTaxMode, {
+      force: options.forceUnitPrice,
+      preserve: options.preserveUnitPrice
+    })
   };
 }
 
-function normalizeConfirmedLineDetail(detail: ConfirmedAccountingLineDetail, options: { forceTax?: boolean } = {}): ConfirmedAccountingLineDetail {
+function normalizeConfirmedLineDetail(
+  detail: ConfirmedAccountingLineDetail,
+  options: { forceTax?: boolean; forceUnitPrice?: boolean; preserveUnitPrice?: boolean } = {}
+): ConfirmedAccountingLineDetail {
   const amount = Math.round(Number(detail.amount || 0));
   const taxRate = detail.taxRate || getDefaultTaxRateForSubAccountTitle(detail.subAccountTitle);
   const normalizedTaxMode = normalizeDraftTaxMode(detail.taxMode);
@@ -2974,7 +2996,10 @@ function normalizeConfirmedLineDetail(detail: ConfirmedAccountingLineDetail, opt
     taxRate,
     taxMode: normalizedTaxMode,
     taxAmount: options.forceTax || hasStaleTaxAmount ? expectedTaxAmount : Math.max(0, currentTaxAmount),
-    unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity)
+    unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity, taxRate, normalizedTaxMode, {
+      force: options.forceUnitPrice,
+      preserve: options.preserveUnitPrice
+    })
   };
 }
 
@@ -2989,18 +3014,29 @@ function shouldAutoCalculateTaxAmount(
   return calculateDraftTaxAmount(Number(line.amount || 0), line.taxRate, line.taxMode) !== Number(line.taxAmount || 0);
 }
 
-function calculateDraftUnitPrice(amountValue: string, quantityValue: string) {
+function calculateDraftUnitPrice(amountValue: string, quantityValue: string, taxRate = "", taxMode = "") {
   const amount = Number(amountValue);
   const quantity = Number(quantityValue);
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return "";
-  const unitPrice = amount / quantity;
+  const rate = getTaxRateNumber(taxRate);
+  const unitPrice = normalizeDraftTaxMode(taxMode) === "外税" && rate > 0
+    ? (amount * (1 + rate / 100)) / quantity
+    : amount / quantity;
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
 }
 
-function normalizeDraftUnitPrice(value: string | number | null | undefined, amount: string | number, quantity: string | number | null | undefined) {
+function normalizeDraftUnitPrice(
+  value: string | number | null | undefined,
+  amount: string | number,
+  quantity: string | number | null | undefined,
+  taxRate = "",
+  taxMode = "",
+  options: { force?: boolean; preserve?: boolean } = {}
+) {
   const current = Number(value);
-  if (Number.isFinite(current) && current > 0) return String(value);
-  return calculateDraftUnitPrice(String(amount || ""), getDefaultQuantityText(quantity));
+  if (options.preserve && Number.isFinite(current) && current > 0) return String(value);
+  if (!options.force && Number.isFinite(current) && current > 0) return String(value);
+  return calculateDraftUnitPrice(String(amount || ""), getDefaultQuantityText(quantity), taxRate, taxMode);
 }
 
 function getDefaultQuantityText(value: string | number | null | undefined) {
@@ -3008,8 +3044,14 @@ function getDefaultQuantityText(value: string | number | null | undefined) {
   return Number.isFinite(quantity) && quantity > 0 ? String(quantity) : "1";
 }
 
-function getDefaultUnitPriceText(value: string | number | null | undefined, amount: number, quantity: string | number | null | undefined) {
-  return normalizeDraftUnitPrice(value, amount, quantity);
+function getDefaultUnitPriceText(
+  value: string | number | null | undefined,
+  amount: number,
+  quantity: string | number | null | undefined,
+  taxRate = "",
+  taxMode = ""
+) {
+  return normalizeDraftUnitPrice(value, amount, quantity, taxRate, taxMode, { force: normalizeDraftTaxMode(taxMode) === "外税" });
 }
 
 function normalizeMoneyInputText(value: string) {
@@ -3020,12 +3062,18 @@ function normalizeMoneyInputText(value: string) {
 
 function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
   const amount = Number(line.amount);
-  const taxAmount = Number(line.taxAmount);
   const quantity = Number(line.quantity);
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return 0;
-  const total = line.taxMode === "外税" && Number.isFinite(taxAmount) ? amount + Math.max(0, taxAmount) : amount;
+  const rate = getTaxRateNumber(line.taxRate);
+  const total = line.taxMode === "外税" && rate > 0 ? amount * (1 + rate / 100) : amount;
   const unitPrice = total / quantity;
   return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : 0;
+}
+
+function getTaxRateNumber(taxRate: string) {
+  if (taxRate === "8%") return 8;
+  if (taxRate === "10%") return 10;
+  return 0;
 }
 
 function calculateAccountingTaxIncludedAmount(amount: number, taxAmount: number, taxMode: string) {
@@ -3105,7 +3153,7 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     taxAmount: line.taxAmount,
     quantity: getDefaultQuantityText(line.quantity),
     unit: line.unit || "個",
-    unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity),
+    unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity, line.taxRate, line.taxMode),
     ocrItemId: line.ocrItemId ?? "",
     note: line.note
   };
@@ -3127,7 +3175,7 @@ function buildVoucherAccountingLineFromConfirmedDetail(detail: ConfirmedAccounti
     taxAmount: String(detail.taxAmount || 0),
     quantity: detail.quantity || "1",
     unit: detail.unit || "個",
-    unitPrice: detail.unitPrice || calculateDraftUnitPrice(String(detail.amount || ""), detail.quantity || "1"),
+    unitPrice: detail.unitPrice || calculateDraftUnitPrice(String(detail.amount || ""), detail.quantity || "1", detail.taxRate, detail.taxMode),
     note: detail.note || detail.subAccountTitle || `原明細 ${detail.lineNo}`
   };
 }
