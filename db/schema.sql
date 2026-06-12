@@ -1630,8 +1630,12 @@ alter table receipt_ocr_items add column if not exists account_title text not nu
 alter table receipt_ocr_items add column if not exists amount numeric(12, 2);
 alter table receipt_ocr_items add column if not exists matched_product_id uuid references products(id) on delete set null;
 alter table receipt_ocr_items add column if not exists match_status text not null default 'unmatched';
+alter table receipt_ocr_items add column if not exists purchase_actual_id uuid references purchase_actuals(id) on delete set null;
+alter table receipt_ocr_items add column if not exists reconciliation_status text not null default 'unmatched';
+alter table receipt_ocr_items add column if not exists reconciliation_note text not null default '';
 create index if not exists receipt_ocr_items_result_idx on receipt_ocr_items (receipt_ocr_result_id);
 create index if not exists receipt_ocr_items_match_idx on receipt_ocr_items (match_status, normalized_name);
+create index if not exists receipt_ocr_items_purchase_actual_idx on receipt_ocr_items (purchase_actual_id, reconciliation_status);
 
 create table if not exists product_match_dictionary (
   id uuid primary key default gen_random_uuid(),

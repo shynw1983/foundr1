@@ -738,6 +738,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       receipt_ocr_items.amount::float,
       coalesce(receipt_ocr_items.match_status, '') as "matchStatus",
       receipt_ocr_items.matched_product_id::text as "matchedProductId",
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus",
+      coalesce(receipt_ocr_items.reconciliation_note, '') as "reconciliationNote",
       coalesce(products.name, '') as "matchedProductName"
     from receipt_ocr_items
     left join products on products.id = receipt_ocr_items.matched_product_id
@@ -758,6 +761,9 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     matchStatus: string;
     matchedProductId: string;
     matchedProductName: string;
+    purchaseActualId: string;
+    reconciliationStatus: string;
+    reconciliationNote: string;
   }>>();
   for (const item of itemRows) {
     const ocrResultId = String(item.ocrResultId ?? "");
@@ -775,7 +781,10 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
       amount: Number(item.amount ?? 0),
       matchStatus: String(item.matchStatus ?? ""),
       matchedProductId: String(item.matchedProductId ?? ""),
-      matchedProductName: String(item.matchedProductName ?? "")
+      matchedProductName: String(item.matchedProductName ?? ""),
+      purchaseActualId: String(item.purchaseActualId ?? ""),
+      reconciliationStatus: String(item.reconciliationStatus ?? "unmatched"),
+      reconciliationNote: String(item.reconciliationNote ?? "")
     });
     itemsByResultId.set(ocrResultId, items);
   }
@@ -1540,6 +1549,9 @@ async function setVoucherItemProductIgnored(ocrResultId: string, itemId: string,
     set
       matched_product_id = null,
       match_status = ${ignored ? "ignored" : "unmatched"},
+      purchase_actual_id = null,
+      reconciliation_status = ${ignored ? "ignored" : "unmatched"},
+      reconciliation_note = '',
       updated_at = now()
     where id::text = ${itemId}
       and receipt_ocr_result_id::text = ${ocrResultId}

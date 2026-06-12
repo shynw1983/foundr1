@@ -521,6 +521,92 @@ export async function recordReceiptItemPrice(
     left join suppliers on suppliers.name = ${supplierName}
     limit 1
   `;
+
+  await reconcileReceiptOcrItemWithPurchaseActual(itemId, productId);
+}
+
+export async function reconcileReceiptOcrItemWithPurchaseActual(itemId: string, productId: string) {
+  if (!itemId || !productId) return;
+
+  const rows = await sql`
+    select
+      receipt_ocr_items.id::text as "itemId",
+      receipt_ocr_items.quantity::float,
+      receipt_ocr_items.unit_price::float as "unitPrice",
+      receipt_ocr_items.amount::float,
+      receipt_ocr_results.store_id::text as "storeId",
+      receipt_ocr_results.supplier_id::text as "supplierId",
+      receipt_ocr_results.purchase_date as "purchaseDate"
+    from receipt_ocr_items
+    join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    where receipt_ocr_items.id::text = ${itemId}
+    limit 1
+  `;
+  const item = rows[0];
+  const storeId = String(item?.storeId ?? "");
+  const purchaseDate = item?.purchaseDate ? new Date(String(item.purchaseDate)) : null;
+  if (!item || !storeId || !purchaseDate || Number.isNaN(purchaseDate.getTime())) {
+    await markReceiptOcrItemReconciliation(itemId, null, "unmatched", "購入日または店舗が未設定です。");
+    return;
+  }
+
+  const purchaseDateKey = purchaseDate.toISOString().slice(0, 10);
+  const candidates = await sql`
+    select
+      purchase_actuals.id::text,
+      abs(coalesce(purchase_actuals.actual_quantity::float, 0) - coalesce(${Number(item.quantity ?? 0)}, 0)) as "quantityDiff",
+      abs((purchase_actuals.recorded_at at time zone 'Asia/Tokyo')::date - ${purchaseDateKey}::date) as "dateDiff",
+      case when purchase_actuals.supplier_id::text = ${String(item.supplierId ?? "")} then 0 else 1 end as "supplierRank"
+    from purchase_actuals
+    join purchase_order_items on purchase_order_items.id = purchase_actuals.purchase_order_item_id
+    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+    where purchase_orders.store_id::text = ${storeId}
+      and purchase_order_items.product_id::text = ${productId}
+      and date_trunc('month', purchase_actuals.recorded_at at time zone 'Asia/Tokyo') = date_trunc('month', ${purchaseDateKey}::date)
+      and not exists (
+        select 1
+        from receipt_ocr_items existing_items
+        where existing_items.purchase_actual_id = purchase_actuals.id
+          and existing_items.id::text <> ${itemId}
+          and existing_items.reconciliation_status in ('auto_matched', 'manual_matched')
+      )
+    order by "supplierRank" asc, "dateDiff" asc, "quantityDiff" asc, purchase_actuals.recorded_at desc
+    limit 1
+  `;
+  const match = candidates[0];
+
+  if (!match?.id) {
+    await markReceiptOcrItemReconciliation(itemId, null, "unmatched", "同じ月の購入実績が見つかりません。");
+    return;
+  }
+
+  const quantity = Number(item.quantity ?? 0);
+  const unitPrice = Number(item.unitPrice ?? item.amount ?? 0);
+  await sql`
+    update purchase_actuals
+    set
+      actual_quantity = coalesce(actual_quantity, ${Number.isFinite(quantity) && quantity > 0 ? quantity : null}),
+      actual_price = coalesce(actual_price, ${Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : null})
+    where id::text = ${String(match.id)}
+  `;
+  await markReceiptOcrItemReconciliation(itemId, String(match.id), "auto_matched", "レシート明細を購入実績に自動照合しました。");
+}
+
+async function markReceiptOcrItemReconciliation(
+  itemId: string,
+  purchaseActualId: string | null,
+  status: "unmatched" | "auto_matched" | "manual_matched" | "ignored",
+  note: string
+) {
+  await sql`
+    update receipt_ocr_items
+    set
+      purchase_actual_id = ${purchaseActualId},
+      reconciliation_status = ${status},
+      reconciliation_note = ${note},
+      updated_at = now()
+    where id::text = ${itemId}
+  `;
 }
 
 async function findProductMatch(supplierName: string, normalizedName: string) {
