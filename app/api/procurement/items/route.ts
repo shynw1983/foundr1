@@ -129,6 +129,7 @@ export async function PATCH(request: Request) {
     productId?: string;
     productName?: string;
     unit?: string;
+    requestedQuantity?: number;
     purchased?: boolean;
     unavailable?: boolean;
     actualQuantity?: number;
@@ -139,6 +140,7 @@ export async function PATCH(request: Request) {
     clearActualPrice?: boolean;
     confirmStoreFeedback?: boolean;
     historyCorrection?: boolean;
+    correctRequestedQuantity?: boolean;
   };
 
   if (!body.itemId) {
@@ -213,6 +215,9 @@ export async function PATCH(request: Request) {
   }
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
+  const requestedQuantity = isHistoryCorrection && body.correctRequestedQuantity === true && Number.isFinite(body.requestedQuantity)
+    ? Math.max(0, Number(body.requestedQuantity))
+    : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
   const actualPriceText = String(body.actualPrice ?? "").trim();
   const normalizedActualPrice = actualPriceText.replace(/[¥￥,\s]/g, "");
@@ -443,6 +448,10 @@ export async function PATCH(request: Request) {
         when status in ('in_delivery', 'delivered', 'received') then status
         when ${body.purchased === true} then 'purchased'
         else status
+      end,
+      requested_quantity = case
+        when ${requestedQuantity}::numeric is not null and ${requestedQuantity}::numeric > 0 then ${requestedQuantity}
+        else requested_quantity
       end,
       actual_quantity = coalesce(${actualQuantity}, actual_quantity),
       actual_price = case

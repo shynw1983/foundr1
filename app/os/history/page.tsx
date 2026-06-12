@@ -71,6 +71,8 @@ type HistoryCorrectionDraft = {
   itemId: string;
   productId: string;
   productName: string;
+  correctRequestedQuantity: boolean;
+  requestedQuantity: string;
   actualQuantity: string;
   actualPrice: string;
   unit: string;
@@ -607,6 +609,8 @@ function HistoryCorrectionDialog({
     itemId: row.id,
     productId: row.productId,
     productName: row.productName,
+    correctRequestedQuantity: false,
+    requestedQuantity: String(row.requestedQuantity),
     actualQuantity: String(row.actualQuantity),
     actualPrice: row.actualPrice,
     unit: row.unit,
@@ -624,7 +628,9 @@ function HistoryCorrectionDialog({
     });
   const selectedProduct = productOptions.find((product) => String(product.id) === draft.productId);
   const actualQuantity = Number(draft.actualQuantity);
-  const canSave = !isSaving && Number.isFinite(actualQuantity) && actualQuantity > 0 && (draft.productId || draft.productName.trim());
+  const requestedQuantity = Number(draft.requestedQuantity);
+  const hasValidRequestedQuantity = !draft.correctRequestedQuantity || (Number.isFinite(requestedQuantity) && requestedQuantity > 0);
+  const canSave = !isSaving && Number.isFinite(actualQuantity) && actualQuantity > 0 && hasValidRequestedQuantity && (draft.productId || draft.productName.trim());
 
   function updateDraft(next: Partial<HistoryCorrectionDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -654,6 +660,7 @@ function HistoryCorrectionDialog({
           <strong>{row.productName}</strong>
           {row.productSpec ? <span>{row.productSpec}</span> : null}
           <span>現在 {formatQuantity(row.actualQuantity)} {row.unit}</span>
+          <span>依頼 {formatQuantity(row.requestedQuantity)} {row.unit}</span>
           <span>{row.status}</span>
         </div>
         <div className="edit-fields">
@@ -697,6 +704,29 @@ function HistoryCorrectionDialog({
               onChange={(event) => updateDraft({ actualQuantity: event.target.value })}
             />
           </label>
+          <label className="exception-toggle">
+            <input
+              type="checkbox"
+              checked={draft.correctRequestedQuantity}
+              onChange={(event) => updateDraft({
+                correctRequestedQuantity: event.target.checked,
+                requestedQuantity: event.target.checked ? draft.actualQuantity : String(row.requestedQuantity)
+              })}
+            />
+            <span>店側の依頼数量も修正</span>
+          </label>
+          {draft.correctRequestedQuantity ? (
+            <label>
+              <span>修正後の依頼数量</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={draft.requestedQuantity}
+                onChange={(event) => updateDraft({ requestedQuantity: event.target.value })}
+              />
+            </label>
+          ) : null}
           <label>
             <span>単位</span>
             <input value={draft.unit} onChange={(event) => updateDraft({ unit: event.target.value })} />
@@ -953,6 +983,8 @@ export default function ProcurementHistoryPage() {
         productId: product?.id ?? "",
         productName: product?.name ?? draft.productName,
         unit: product?.unit ?? draft.unit,
+        correctRequestedQuantity: draft.correctRequestedQuantity,
+        requestedQuantity: draft.correctRequestedQuantity ? Number(draft.requestedQuantity) : undefined,
         actualQuantity: Number(draft.actualQuantity),
         actualPrice: draft.actualPrice,
         supplier: draft.supplier,
