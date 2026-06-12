@@ -861,12 +861,11 @@ export default function ProcurementPage() {
   }, []);
 
   useEffect(() => {
-    setProcurementTaskItems((items) => {
-      const existingItems = new Map(items.map((item) => [item.id, item]));
+    setProcurementTaskItems(() => {
       const pendingItems = readPendingProcurementTaskItems();
 
       const nextItems = createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
-        (item) => pendingItems[item.id]?.item ?? existingItems.get(item.id) ?? item
+        (item) => pendingItems[item.id]?.item ?? item
       );
       procurementTaskItemsRef.current = nextItems;
       return nextItems;
