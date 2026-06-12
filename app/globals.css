@@ -20012,13 +20012,13 @@ body :where(
   }
 
   .product-family-identity {
-    grid-template-columns: 60px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
     align-items: start;
-    gap: 10px;
+    gap: 12px;
   }
 
   .product-family-photo {
-    width: 60px;
+    width: 76px;
   }
 
   .product-family-copy {
