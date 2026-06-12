@@ -1404,10 +1404,12 @@ export default function ProcurementPage() {
                         <strong>{order.id}</strong>
                       <span className={`status-pill ${statusTone[liveStatus]}`}>{liveStatus === "確認待ち" ? "店舗確認待ち" : liveStatus}</span>
                       </div>
-                      <p>{order.store} / {order.brand}{order.buyerName ? ` · 購入担当 ${order.buyerName}` : ""}</p>
+                      <p className="procurement-store-line">
+                        <span>{order.store} / {order.brand}{order.buyerName ? ` · 購入担当 ${order.buyerName}` : ""}</span>
+                        <b>概算 {formatEstimatedAmount(estimatedAmount)}</b>
+                      </p>
                     </div>
                     <div className="procurement-order-summary">
-                      <span>概算 {formatEstimatedAmount(estimatedAmount)}</span>
                       <span>{handledCount} / {items.length} 処理済み</span>
                       {unavailableCount > 0 ? <span>購入不可 {unavailableCount} 件</span> : null}
                     </div>
@@ -2236,10 +2238,21 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
 
 function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
   return items.reduce((total, item) => {
+    if (item.unavailable) return total;
+
     const product = findProcurementProductFromLookup(item, productLookup);
-    const price = Number(product?.referencePrice ?? 0);
-    return total + item.requestedQuantity * (Number.isFinite(price) ? price : 0);
+    const actualPrice = parseProcurementAmount(item.actualPrice);
+    const referencePrice = Number(product?.referencePrice ?? 0);
+    const price = actualPrice > 0 ? actualPrice : referencePrice;
+    const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : item.requestedQuantity;
+
+    return total + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0);
   }, 0);
+}
+
+function parseProcurementAmount(value?: string) {
+  const amount = Number(String(value ?? "").normalize("NFKC").replace(/[￥¥円,\s]/g, ""));
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function formatEstimatedAmount(amount: number) {
