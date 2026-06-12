@@ -1415,19 +1415,21 @@ export default function ProcurementPage() {
               return (
                 <section className={isStoreCollapsed ? "procurement-store-section is-collapsed" : "procurement-store-section"} key={storeGroup.key}>
                   <div className="procurement-store-heading">
-                    <button
-                      type="button"
-                      className="procurement-store-toggle"
-                      aria-expanded={!isStoreCollapsed}
-                      aria-controls={`procurement-store-body-${storeGroup.key}`}
-                      onClick={() => toggleStoreCollapsed(storeGroup.key, isStoreCollapsed)}
-                    >
-                      <ChevronDown size={16} aria-hidden="true" />
-                      <span>{isStoreCollapsed ? "開く" : "閉じる"}</span>
-                    </button>
-                    <div>
-                      <span>店舗</span>
-                      <strong>{storeGroup.store}</strong>
+                    <div className="procurement-store-title-row">
+                      <div>
+                        <span>店舗</span>
+                        <strong>{storeGroup.store}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="procurement-store-toggle"
+                        aria-expanded={!isStoreCollapsed}
+                        aria-controls={`procurement-store-body-${storeGroup.key}`}
+                        onClick={() => toggleStoreCollapsed(storeGroup.key, isStoreCollapsed)}
+                      >
+                        <ChevronDown size={16} aria-hidden="true" />
+                        <span>{isStoreCollapsed ? "開く" : "閉じる"}</span>
+                      </button>
                     </div>
                     <div className="procurement-store-amounts">
                       <span>概算 {formatEstimatedAmount(storeGroup.estimatedAmount)}</span>

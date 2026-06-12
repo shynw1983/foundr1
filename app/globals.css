@@ -20862,7 +20862,7 @@ body :where(
 
 .procurement-store-heading {
   display: grid;
-  grid-template-columns: auto minmax(160px, 1fr) minmax(220px, auto) minmax(190px, auto);
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, auto) minmax(190px, auto);
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -20872,18 +20872,27 @@ body :where(
   min-width: 0;
 }
 
-.procurement-store-heading > div:nth-child(2) {
-  display: grid;
-  gap: 2px;
+.procurement-store-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
 }
 
-.procurement-store-heading > div:nth-child(2) span {
+.procurement-store-title-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.procurement-store-title-row > div span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
 
-.procurement-store-heading > div:nth-child(2) strong {
+.procurement-store-title-row > div strong {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
@@ -24880,32 +24889,32 @@ body :where(
   }
 
   .procurement-store-heading {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 8px;
     padding: 10px;
     background: var(--green-soft);
   }
 
-  .procurement-store-toggle {
-    grid-column: 2;
-    grid-row: 1;
-    min-height: 34px;
-  }
-
-  .procurement-store-heading > div:nth-child(2) {
+  .procurement-store-title-row {
     grid-column: 1;
-    grid-row: 1;
+    align-items: center;
+    gap: 8px;
   }
 
-  .procurement-store-heading > div:nth-child(2) span {
+  .procurement-store-title-row > div span {
     color: var(--green);
     font-size: 10px;
   }
 
-  .procurement-store-heading > div:nth-child(2) strong {
+  .procurement-store-title-row > div strong {
     color: var(--green);
     font-size: 17px;
+  }
+
+  .procurement-store-toggle {
+    flex: 0 0 auto;
+    min-height: 34px;
   }
 
   .procurement-store-amounts,
