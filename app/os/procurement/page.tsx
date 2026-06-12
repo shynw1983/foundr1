@@ -7,7 +7,7 @@ import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { useModalHistory } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   orders,
   productSupplierOptions as initialProductSupplierOptions,
@@ -111,6 +111,7 @@ type ProcurementAmountSummary = {
   amount: number;
   isPending: boolean;
 };
+type DashboardSyncState = "loading" | "synced" | "refreshing" | "error";
 type AdditionalPurchaseDraft = {
   mode: "product" | "temporary";
   productId: string;
@@ -735,12 +736,14 @@ export default function ProcurementPage() {
   const [, startStatusTransition] = useTransition();
   const itemSaveChainsRef = useRef<Record<string, Promise<void>>>({});
   const procurementTaskItemsRef = useRef<ProcurementTaskItem[]>([]);
+  const dashboardLoadRequestRef = useRef(0);
+  const lastDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
-  const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
+  const [dashboardSyncState, setDashboardSyncState] = useState<DashboardSyncState>("loading");
   const [activeExceptionItemId, setActiveExceptionItemId] = useState<string | null>(null);
   const [procurementTaskItems, setProcurementTaskItems] = useState<ProcurementTaskItem[]>([]);
   const [deliveryStates, setDeliveryStates] = useState<Record<string, DeliveryState>>({});
@@ -802,40 +805,55 @@ export default function ProcurementPage() {
     return fulfillmentMap;
   }, [supplierFulfillments]);
 
-  async function loadDashboardData() {
-    const response = await fetch("/api/dashboard", { cache: "no-store" });
-    if (!response.ok) return;
+  const loadDashboardData = useCallback(async (options?: { background?: boolean }) => {
+    const requestId = dashboardLoadRequestRef.current + 1;
+    dashboardLoadRequestRef.current = requestId;
+    setDashboardSyncState(options?.background ? "refreshing" : "loading");
 
-    const data = await response.json() as {
-      products?: Product[];
-      productSupplierOptions?: ProductSupplierGroup[];
-      suppliers?: Supplier[];
-      orders?: PurchaseOrder[];
-      purchaseOrderItems?: DashboardOrderItem[];
-      supplierFulfillments?: SupplierFulfillment[];
-      deliveryBatches?: DeliveryBatch[];
-    };
+    try {
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      if (!response.ok) throw new Error("Dashboard data request failed.");
 
-    if (data.products) setProducts(data.products);
-    if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
-    if (data.suppliers) setSuppliers(data.suppliers);
-    if (data.orders && data.purchaseOrderItems) {
-      const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
-      setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
-    } else if (data.orders) {
-      setPurchaseOrders(data.orders);
+      const data = await response.json() as {
+        products?: Product[];
+        productSupplierOptions?: ProductSupplierGroup[];
+        suppliers?: Supplier[];
+        orders?: PurchaseOrder[];
+        purchaseOrderItems?: DashboardOrderItem[];
+        supplierFulfillments?: SupplierFulfillment[];
+        deliveryBatches?: DeliveryBatch[];
+      };
+
+      if (dashboardLoadRequestRef.current !== requestId) return false;
+
+      if (data.products) setProducts(data.products);
+      if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
+      if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.orders && data.purchaseOrderItems) {
+        const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
+        setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
+      } else if (data.orders) {
+        setPurchaseOrders(data.orders);
+      }
+      if (data.purchaseOrderItems) {
+        setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, readPendingProcurementTaskItems()));
+      }
+      if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
+      if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
+      setDashboardSyncState("synced");
+      lastDashboardLoadedAtRef.current = Date.now();
+      return true;
+    } catch {
+      if (dashboardLoadRequestRef.current === requestId) {
+        setDashboardSyncState("error");
+      }
+      return false;
     }
-    if (data.purchaseOrderItems) {
-      setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, readPendingProcurementTaskItems()));
-    }
-    if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
-    if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
-    setDataSource("neon");
-  }
+  }, []);
 
   useEffect(() => {
     void loadDashboardData();
-  }, []);
+  }, [loadDashboardData]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -877,19 +895,32 @@ export default function ProcurementPage() {
       });
     };
 
+    const refreshDashboardWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastDashboardLoadedAtRef.current < 3000) return;
+      void loadDashboardData({ background: true });
+    };
+
     const syncWhenVisible = () => {
-      if (document.visibilityState === "visible") syncPendingItems();
+      if (document.visibilityState !== "visible") return;
+      syncPendingItems();
+      refreshDashboardWhenVisible();
     };
 
     syncPendingItems();
-    window.addEventListener("online", syncPendingItems);
+    window.addEventListener("online", syncWhenVisible);
+    window.addEventListener("focus", refreshDashboardWhenVisible);
+    window.addEventListener("pageshow", refreshDashboardWhenVisible);
     document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
-      window.removeEventListener("online", syncPendingItems);
+      window.removeEventListener("online", syncWhenVisible);
+      window.removeEventListener("focus", refreshDashboardWhenVisible);
+      window.removeEventListener("pageshow", refreshDashboardWhenVisible);
       document.removeEventListener("visibilitychange", syncWhenVisible);
     };
-  }, []);
+  }, [loadDashboardData]);
 
   useEffect(() => {
     setDeliveryStates((states) => {
@@ -1338,6 +1369,13 @@ export default function ProcurementPage() {
     .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order)), [purchaseOrdersWithStatus, focusedOrderId, statusFilter, normalizedQuery]);
   const visiblePurchaseOrders = displayedPurchaseOrders.slice(0, visibleOrderLimit);
   const hasMorePurchaseOrders = visibleOrderLimit < displayedPurchaseOrders.length;
+  const dashboardSyncLabel = dashboardSyncState === "synced"
+    ? "データ同期済み"
+    : dashboardSyncState === "refreshing"
+      ? "最新状態を確認中"
+      : dashboardSyncState === "error"
+        ? "同期確認が必要"
+        : "読み込み中";
 
   return (
     <main className="shell">
@@ -1361,7 +1399,9 @@ export default function ProcurementPage() {
           <div>
             <p className="eyebrow">現場の発注実行</p>
             <h2>購入管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : "読み込み中"}</span>
+            <span className={dashboardSyncState === "error" ? "source-indicator is-warning" : "source-indicator"}>
+              {dashboardSyncLabel}
+            </span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -1377,6 +1417,17 @@ export default function ProcurementPage() {
             </a>
           </div>
         </header>
+        {dashboardSyncState === "error" ? (
+          <div className="procurement-sync-alert" role="status">
+            <div>
+              <strong>最新状態を確認できませんでした</strong>
+              <span>購入済みや数量が古い状態で表示されている可能性があります。通信状態を確認して更新してください。</span>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => void loadDashboardData({ background: true })}>
+              最新状態に更新
+            </button>
+          </div>
+        ) : null}
 
         <section className="panel procurement-panel">
           <PanelTitle

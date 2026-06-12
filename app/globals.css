@@ -2295,6 +2295,59 @@ body :where(
   font-weight: 800;
 }
 
+.source-indicator.is-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.procurement-sync-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -10px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(169, 101, 20, 0.24);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--color-warning-soft);
+}
+
+.procurement-sync-alert > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.procurement-sync-alert strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.procurement-sync-alert span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.procurement-sync-alert .secondary-button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  background: white;
+}
+
+@media (max-width: 700px) {
+  .procurement-sync-alert {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .procurement-sync-alert .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .action-notice {
   position: fixed;
   right: 18px;
