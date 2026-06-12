@@ -201,7 +201,7 @@ function createProcurementTaskItems(
           productId: item.productId,
           productName: item.productName,
           requestedQuantity: item.requestedQuantity,
-          actualQuantity: item.actualQuantity ?? item.requestedQuantity,
+          actualQuantity: item.unavailable ? 0 : item.actualQuantity ?? item.requestedQuantity,
           actualPrice: item.actualPrice ?? "",
           unit: item.unit,
           supplier: item.supplier || product?.mainSupplier || "",
@@ -949,6 +949,7 @@ export default function ProcurementPage() {
     const currentItem = procurementTaskItemsRef.current.find((item) => item.id === id);
     if (!currentItem) return;
     const updatedItem: ProcurementTaskItem = { ...currentItem, ...next };
+    if (next.unavailable === true) updatedItem.actualQuantity = 0;
 
     void queueProcurementTaskItemSave(updatedItem);
 

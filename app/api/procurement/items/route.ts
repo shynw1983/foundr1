@@ -453,7 +453,10 @@ export async function PATCH(request: Request) {
         when ${requestedQuantity}::numeric is not null and ${requestedQuantity}::numeric > 0 then ${requestedQuantity}
         else requested_quantity
       end,
-      actual_quantity = coalesce(${actualQuantity}, actual_quantity),
+      actual_quantity = case
+        when ${body.unavailable === true} then 0
+        else coalesce(${actualQuantity}, actual_quantity)
+      end,
       actual_price = case
         when ${body.unavailable === true} then null
         when ${hasActualPrice} then ${body.clearActualPrice === true ? null : Number.isFinite(actualPrice) ? actualPrice : null}
