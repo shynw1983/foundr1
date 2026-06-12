@@ -1435,6 +1435,7 @@ export default function ProductsPage() {
                             return option && value ? { label: option.label, value } : null;
                           })
                           .filter(Boolean) as Array<{ label: string; value: string }>;
+                        const shownSummaryLabels = new Set(summaryItems.slice(0, 6).map((item) => item.label));
 
                         return (
                           <article className="product-variant-row" key={getProductIdentity(product)}>
@@ -1462,14 +1463,18 @@ export default function ProductsPage() {
                                   <strong>{item.value}</strong>
                                 </span>
                               ))}
-                              <span>
-                                <small>メイン発注先</small>
-                                <strong>{product.mainSupplier || "未設定"}</strong>
-                              </span>
-                              <span>
-                                <small>規格単価</small>
-                                <strong>{unitPriceLabel}</strong>
-                              </span>
+                              {!shownSummaryLabels.has("メイン発注先") ? (
+                                <span>
+                                  <small>メイン発注先</small>
+                                  <strong>{product.mainSupplier || "未設定"}</strong>
+                                </span>
+                              ) : null}
+                              {!shownSummaryLabels.has("規格単価") ? (
+                                <span>
+                                  <small>規格単価</small>
+                                  <strong>{unitPriceLabel}</strong>
+                                </span>
+                              ) : null}
                             </div>
                             <div className="row-actions">
                               <button className="text-button" type="button" onClick={() => void openProductPriceHistory(product)}>
