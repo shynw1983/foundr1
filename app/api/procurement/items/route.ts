@@ -537,7 +537,7 @@ export async function PATCH(request: Request) {
     `;
   }
 
-  if (body.unavailable === true) {
+  if (body.purchased === false || body.unavailable === true) {
     await sql`
       delete from purchase_actuals
       where purchase_order_item_id = ${body.itemId}
