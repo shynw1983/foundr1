@@ -1826,6 +1826,7 @@ create table if not exists pos_store_settings (
   price_tax_mode text not null default 'tax_included',
   discount_presets jsonb not null default '[]'::jsonb,
   customer_display_media_settings jsonb not null default '{}'::jsonb,
+  printer_settings jsonb not null default '{}'::jsonb,
   updated_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -1835,6 +1836,7 @@ alter table pos_store_settings add column if not exists dine_in_enabled boolean 
 alter table pos_store_settings add column if not exists external_payment_terminal_brand text not null default 'PayCAS';
 alter table pos_store_settings add column if not exists discount_presets jsonb not null default '[]'::jsonb;
 alter table pos_store_settings add column if not exists customer_display_media_settings jsonb not null default '{}'::jsonb;
+alter table pos_store_settings add column if not exists printer_settings jsonb not null default '{}'::jsonb;
 
 create table if not exists pos_customer_display_states (
   store_id uuid primary key references stores(id) on delete cascade,

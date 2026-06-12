@@ -1,5 +1,6 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
+import { normalizePosPrinterSettings } from "../../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -229,6 +230,7 @@ async function getSettings(storeId: string) {
       coalesce(nullif(pos_store_settings.price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(pos_store_settings.discount_presets, '[]'::jsonb) as "discountPresets",
       coalesce(pos_store_settings.customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings",
+      coalesce(pos_store_settings.printer_settings, '{}'::jsonb) as "printerSettings",
       coalesce(pos_store_settings.updated_at::text, '') as "updatedAt"
     from stores
     left join pos_store_settings on pos_store_settings.store_id = stores.id
@@ -255,6 +257,7 @@ async function getSettings(storeId: string) {
     ...settings,
     discountPresets: normalizeDiscountPresets(settings.discountPresets),
     customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings),
+    printerSettings: normalizePosPrinterSettings(settings.printerSettings),
     posBrandSettings: brandRows as PosBrandSetting[]
   };
 }
@@ -287,6 +290,7 @@ export async function POST(request: Request) {
     priceTaxMode?: string;
     discountPresets?: unknown[];
     customerDisplayMediaSettings?: unknown;
+    printerSettings?: unknown;
     posBrandSettings?: unknown[];
   };
   const access = await getStoreOrderAccess(session);
@@ -301,6 +305,7 @@ export async function POST(request: Request) {
   const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
   const discountPresets = normalizeDiscountPresets(body.discountPresets);
   const customerDisplayMediaSettings = normalizeCustomerDisplayMediaSettings(body.customerDisplayMediaSettings);
+  const printerSettings = normalizePosPrinterSettings(body.printerSettings);
   const brandSettings = normalizeBrandSettings(body.posBrandSettings);
   await sql`
     insert into pos_store_settings (
@@ -312,6 +317,7 @@ export async function POST(request: Request) {
       price_tax_mode,
       discount_presets,
       customer_display_media_settings,
+      printer_settings,
       updated_by,
       updated_at
     )
@@ -324,6 +330,7 @@ export async function POST(request: Request) {
       ${priceTaxMode},
       ${JSON.stringify(discountPresets)}::jsonb,
       ${JSON.stringify(customerDisplayMediaSettings)}::jsonb,
+      ${JSON.stringify(printerSettings)}::jsonb,
       ${session.id},
       now()
     )
@@ -336,6 +343,7 @@ export async function POST(request: Request) {
       price_tax_mode = excluded.price_tax_mode,
       discount_presets = excluded.discount_presets,
       customer_display_media_settings = excluded.customer_display_media_settings,
+      printer_settings = excluded.printer_settings,
       updated_by = excluded.updated_by,
       updated_at = now()
   `;

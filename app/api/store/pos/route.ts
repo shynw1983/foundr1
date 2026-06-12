@@ -4,6 +4,7 @@ import { sql } from "../../../../lib/db";
 import { awardLoyaltyForPaidOrder, calculateCouponDiscount, getUsableMemberCoupon, isMemberExchangeCoupon, redeemMemberCouponForOrder, resolveMemberForOrder } from "../../../../lib/loyalty";
 import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
+import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -535,7 +536,7 @@ async function getOpenCashSessionId(selectedStoreId: string) {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings };
+  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null) };
   if (!selectedStoreId) return defaults;
   const rows = await sql`
     select
@@ -545,13 +546,19 @@ async function getPosSettings(selectedStoreId: string) {
       coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
       coalesce(nullif(price_tax_mode, ''), 'tax_included') as "priceTaxMode",
       coalesce(discount_presets, '[]'::jsonb) as "discountPresets",
-      coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings"
+      coalesce(customer_display_media_settings, '{}'::jsonb) as "customerDisplayMediaSettings",
+      coalesce(printer_settings, '{}'::jsonb) as "printerSettings"
     from pos_store_settings
     where store_id::text = ${selectedStoreId}
     limit 1
   `;
   const settings = rows[0] as (typeof defaults & { discountPresets?: unknown }) | undefined;
-  return settings ? { ...settings, discountPresets: normalizeDiscountPresets(settings.discountPresets), customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings) } : defaults;
+  return settings ? {
+    ...settings,
+    discountPresets: normalizeDiscountPresets(settings.discountPresets),
+    customerDisplayMediaSettings: normalizeCustomerDisplayMediaSettings(settings.customerDisplayMediaSettings),
+    printerSettings: normalizePosPrinterSettings(settings.printerSettings)
+  } : defaults;
 }
 
 export async function GET(request: Request) {

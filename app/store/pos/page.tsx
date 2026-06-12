@@ -5,6 +5,7 @@ import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
+import { defaultPosPrinterSettings, printWithAndroidBridge, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -170,6 +171,7 @@ type PosSettings = {
   externalPaymentTerminalBrand: string;
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
+  printerSettings: PosPrinterSettings;
 };
 
 type PosCashSession = {
@@ -575,7 +577,7 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [] });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -682,7 +684,8 @@ export default function StorePosPage() {
       takeoutTaxRate: Number(body.posSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: body.posSettings?.externalPaymentTerminalBrand ?? "PayCAS",
       priceTaxMode: body.posSettings?.priceTaxMode ?? "tax_included",
-      discountPresets: Array.isArray(body.posSettings?.discountPresets) ? body.posSettings.discountPresets : []
+      discountPresets: Array.isArray(body.posSettings?.discountPresets) ? body.posSettings.discountPresets : [],
+      printerSettings: body.posSettings?.printerSettings ?? defaultPosPrinterSettings
     };
     setPosSettings(nextPosSettings);
     setOrderType((current) => nextPosSettings.dineInEnabled ? current : "takeout");
@@ -1121,6 +1124,46 @@ export default function StorePosPage() {
     };
   }
 
+  function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[]): PosPrintPayload {
+    const printer = posSettings.printerSettings;
+    return {
+      version: 1,
+      jobType: "receipt",
+      printer,
+      storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
+      printedAt: new Date().toISOString(),
+      order: {
+        pickupCode: String(body.pickupCode || ""),
+        orderType,
+        paymentMethod,
+        paymentLabel: getPaymentDisplayLabel(paymentMethod),
+        note,
+        subtotalAmount: subtotal,
+        discountAmount: Number(body.discountAmount ?? posDiscountAmount) || 0,
+        couponDiscountAmount: Number(body.couponDiscountAmount ?? couponDiscountAmount) || 0,
+        taxAmount: Number(body.taxAmount ?? taxSummary.taxAmount) || 0,
+        taxRate: Number(body.taxRate ?? taxRate) || 0,
+        totalAmount: Number(body.amount ?? payableAmount) || 0,
+        cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
+        cashChangeAmount: paymentMethod === "cash" ? Number(body.cashChangeAmount ?? cashTenderedValue - payableAmount) : null,
+        items: cartSnapshot.map((item) => ({
+          name: getLocalizedDisplayName(item.name, item.displayNames, "ja"),
+          quantity: item.quantity,
+          unitPrice: getLineUnitPrice(item),
+          amount: getLineUnitPrice(item) * item.quantity,
+          options: getCustomerDisplayOptionLabel(item.selectedOptions, "ja").split(" / ").filter(Boolean)
+        }))
+      }
+    };
+  }
+
+  async function printReceiptAfterCheckout(body: Record<string, unknown>, cartSnapshot: PosCartItem[]) {
+    const printer = posSettings.printerSettings;
+    if (!printer.enabled || !printer.receiptEnabled || !printer.host) return "";
+    const result = await printWithAndroidBridge(createReceiptPrintPayload(body, cartSnapshot));
+    return result.ok ? " / レシート印刷送信済み" : ` / レシート印刷未送信: ${result.error}`;
+  }
+
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
     if (!selectedStoreId) return;
     await fetch("/api/store/pos/customer-display", {
@@ -1363,6 +1406,7 @@ export default function StorePosPage() {
     setSaving(true);
     setMessage("");
     try {
+      const cartSnapshot = cart;
       const response = await fetch("/api/store/pos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1395,6 +1439,7 @@ export default function StorePosPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "checkout failed");
+      const printMessage = await printReceiptAfterCheckout(body, cartSnapshot);
       setCart([]);
       setNote("");
       setCashTenderedAmount("");
@@ -1407,7 +1452,7 @@ export default function StorePosPage() {
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
       const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}`);
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${printMessage}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",

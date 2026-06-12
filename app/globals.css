@@ -12437,7 +12437,20 @@ body :where(
   padding-top: 12px;
 }
 
+.pos-admin-printer-settings {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 .pos-admin-display-media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pos-admin-printer-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -12449,8 +12462,15 @@ body :where(
   min-width: 0;
 }
 
+.pos-admin-printer-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
 .pos-admin-display-media-grid label > span,
-.pos-admin-display-asset-row label > span {
+.pos-admin-display-asset-row label > span,
+.pos-admin-printer-grid label > span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -12459,9 +12479,18 @@ body :where(
 .pos-admin-display-media-grid input,
 .pos-admin-display-media-grid select,
 .pos-admin-display-asset-row input,
-.pos-admin-display-asset-row select {
+.pos-admin-display-asset-row select,
+.pos-admin-printer-grid input,
+.pos-admin-printer-grid select {
   width: 100%;
   min-width: 0;
+}
+
+.pos-admin-printer-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pos-admin-display-upload-row {
@@ -27998,7 +28027,8 @@ body :where(
 
   .pos-admin-tax-grid,
   .pos-admin-tax-footer,
-  .pos-admin-display-media-grid {
+  .pos-admin-display-media-grid,
+  .pos-admin-printer-grid {
     display: grid;
     grid-template-columns: 1fr;
   }

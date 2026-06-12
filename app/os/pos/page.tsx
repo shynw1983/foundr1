@@ -13,6 +13,7 @@ import {
   MonitorSmartphone,
   PackageCheck,
   Plus,
+  Printer,
   Search,
   ShoppingCart,
   WalletCards,
@@ -24,6 +25,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
+import { createTestPrintPayload, defaultPosPrinterSettings, printWithAndroidBridge, type PosPrinterSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -108,6 +110,7 @@ type PosTaxSettings = {
   priceTaxMode: string;
   discountPresets: PosDiscountPreset[];
   customerDisplayMediaSettings: CustomerDisplayMediaSettings;
+  printerSettings: PosPrinterSettings;
   posBrandSettings: PosBrandSetting[];
   updatedAt: string;
 };
@@ -194,7 +197,7 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; posBrandSettings: PosBrandSetting[] }>({
+  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; printerSettings: PosPrinterSettings; posBrandSettings: PosBrandSetting[] }>({
     dineInEnabled: true,
     dineInTaxRate: "10",
     takeoutTaxRate: "8",
@@ -202,11 +205,14 @@ export default function PosPage() {
     priceTaxMode: "tax_included",
     discountPresets: [],
     customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings,
+    printerSettings: defaultPosPrinterSettings,
     posBrandSettings: []
   });
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
   const [mediaUploadStatus, setMediaUploadStatus] = useState("");
+  const [testPrintStatus, setTestPrintStatus] = useState("");
+  const [testPrinting, setTestPrinting] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
     businessDate: "",
@@ -253,6 +259,7 @@ export default function PosPage() {
       priceTaxMode: nextSettings?.priceTaxMode ?? "tax_included",
       discountPresets: Array.isArray(nextSettings?.discountPresets) ? nextSettings.discountPresets : [],
       customerDisplayMediaSettings: nextSettings?.customerDisplayMediaSettings ?? defaultCustomerDisplayMediaSettings,
+      printerSettings: nextSettings?.printerSettings ?? defaultPosPrinterSettings,
       posBrandSettings: Array.isArray(nextSettings?.posBrandSettings) ? nextSettings.posBrandSettings : []
     });
     setReconciliation({
@@ -282,6 +289,7 @@ export default function PosPage() {
           priceTaxMode: taxForm.priceTaxMode,
           discountPresets: taxForm.discountPresets,
           customerDisplayMediaSettings: taxForm.customerDisplayMediaSettings,
+          printerSettings: taxForm.printerSettings,
           posBrandSettings: taxForm.posBrandSettings
         })
       });
@@ -296,6 +304,7 @@ export default function PosPage() {
         priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode,
         discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets,
         customerDisplayMediaSettings: body.settings?.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings,
+        printerSettings: body.settings?.printerSettings ?? taxForm.printerSettings,
         posBrandSettings: Array.isArray(body.settings?.posBrandSettings) ? body.settings.posBrandSettings : taxForm.posBrandSettings
       });
       setMessage("POS 税設定を保存しました。");
@@ -304,6 +313,20 @@ export default function PosPage() {
     } finally {
       setTaxSaving(false);
     }
+  }
+
+  async function testPrint() {
+    if (testPrinting) return;
+    const printer = taxForm.printerSettings;
+    if (!printer.host) {
+      setTestPrintStatus("プリンター IP を入力してください。");
+      return;
+    }
+    setTestPrinting(true);
+    setTestPrintStatus("");
+    const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS"));
+    setTestPrintStatus(result.ok ? "テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
+    setTestPrinting(false);
   }
 
   async function uploadCustomerDisplayMedia(file: File, type: "image" | "video") {
@@ -703,6 +726,133 @@ export default function PosPage() {
                 </div>
               )) : <p className="pos-admin-discount-empty">画像または動画をアップロードすると、客席表示の待機画面に使用できます。</p>}
             </div>
+          </div>
+          <div className="pos-admin-printer-settings">
+            <div className="pos-admin-discount-heading">
+              <div>
+                <h4>レシート / 厨房プリンター</h4>
+                <p>Android 店舗端末から Wi-Fi 熱敏プリンターへ印刷する接続情報を管理します。</p>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || testPrinting}>
+                <Printer size={15} />
+                {testPrinting ? "送信中..." : "テスト印刷"}
+              </button>
+            </div>
+            <div className="pos-admin-printer-grid">
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.enabled}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, enabled: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>POS 印刷を有効にする</span>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.receiptEnabled}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, receiptEnabled: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>会計後にレシート印刷</span>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.kitchenEnabled}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, kitchenEnabled: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>厨房伝票を印刷</span>
+              </label>
+              <label>
+                <span>プリンター IP</span>
+                <input
+                  value={taxForm.printerSettings.host}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, host: event.target.value.trim() }
+                  }))}
+                  placeholder="192.168.1.58"
+                  disabled={!canManagePosSettings}
+                />
+              </label>
+              <label>
+                <span>ポート</span>
+                <input
+                  inputMode="numeric"
+                  value={String(taxForm.printerSettings.port)}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, port: Number(normalizeIntegerInput(event.target.value)) || 9100 }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+              </label>
+              <label>
+                <span>用紙幅</span>
+                <select
+                  value={taxForm.printerSettings.paperWidth}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, paperWidth: event.target.value as PosPrinterSettings["paperWidth"] }
+                  }))}
+                  disabled={!canManagePosSettings}
+                >
+                  <option value="80mm">80mm</option>
+                  <option value="58mm">58mm</option>
+                </select>
+              </label>
+              <label>
+                <span>文字コード</span>
+                <select
+                  value={taxForm.printerSettings.characterEncoding}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, characterEncoding: event.target.value as PosPrinterSettings["characterEncoding"] }
+                  }))}
+                  disabled={!canManagePosSettings}
+                >
+                  <option value="shift_jis">Shift_JIS</option>
+                  <option value="utf8">UTF-8</option>
+                </select>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.cutPaper}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, cutPaper: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>印刷後にカット</span>
+              </label>
+              <label className="pos-admin-discount-check">
+                <input
+                  type="checkbox"
+                  checked={taxForm.printerSettings.openCashDrawer}
+                  onChange={(event) => setTaxForm((current) => ({
+                    ...current,
+                    printerSettings: { ...current.printerSettings, openCashDrawer: event.target.checked }
+                  }))}
+                  disabled={!canManagePosSettings}
+                />
+                <span>現金会計でドロアを開く</span>
+              </label>
+            </div>
+            {testPrintStatus ? <p className="pos-admin-printer-status">{testPrintStatus}</p> : null}
           </div>
           <div className="pos-admin-discount-settings">
             <div className="pos-admin-discount-heading">
