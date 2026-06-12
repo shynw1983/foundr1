@@ -747,7 +747,7 @@ export default function ProcurementPage() {
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
-  const [storeCollapseOverrides, setStoreCollapseOverrides] = useState<Record<string, boolean>>({});
+  const [supplierCollapseOverrides, setSupplierCollapseOverrides] = useState<Record<string, boolean>>({});
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
@@ -918,9 +918,9 @@ export default function ProcurementPage() {
     });
   }
 
-  function toggleStoreCollapsed(storeKey: string, currentCollapsed: boolean) {
-    setStoreCollapseOverrides((current) => {
-      const next = { ...current, [storeKey]: !currentCollapsed };
+  function toggleSupplierCollapsed(supplierKey: string, currentCollapsed: boolean) {
+    setSupplierCollapseOverrides((current) => {
+      const next = { ...current, [supplierKey]: !currentCollapsed };
       return next;
     });
   }
@@ -1334,43 +1334,6 @@ export default function ProcurementPage() {
     .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order)), [purchaseOrdersWithStatus, focusedOrderId, statusFilter, normalizedQuery]);
   const visiblePurchaseOrders = displayedPurchaseOrders.slice(0, visibleOrderLimit);
   const hasMorePurchaseOrders = visibleOrderLimit < displayedPurchaseOrders.length;
-  const visibleStoreGroups = useMemo(() => {
-    const groups = new Map<string, {
-      key: string;
-      store: string;
-      orders: typeof visiblePurchaseOrders;
-      totalCount: number;
-      handledCount: number;
-      unavailableCount: number;
-      estimatedAmount: number;
-      currentAmount: number;
-    }>();
-
-    visiblePurchaseOrders.forEach((entry) => {
-      const store = entry.order.store || "店舗未設定";
-      const key = store;
-      const existingGroup = groups.get(key) ?? {
-        key,
-        store,
-        orders: [],
-        totalCount: 0,
-        handledCount: 0,
-        unavailableCount: 0,
-        estimatedAmount: 0,
-        currentAmount: 0
-      };
-
-      existingGroup.orders.push(entry);
-      existingGroup.totalCount += entry.items.length;
-      existingGroup.handledCount += entry.items.filter((item) => item.purchased || item.unavailable).length;
-      existingGroup.unavailableCount += entry.items.filter((item) => item.unavailable).length;
-      existingGroup.estimatedAmount += calculateProcurementOrderEstimatedAmount(entry.items, productLookup);
-      existingGroup.currentAmount += calculateProcurementOrderCurrentAmount(entry.items, productLookup);
-      groups.set(key, existingGroup);
-    });
-
-    return Array.from(groups.values());
-  }, [visiblePurchaseOrders, productLookup]);
 
   return (
     <main className="shell">
@@ -1441,43 +1404,7 @@ export default function ProcurementPage() {
             </div>
           ) : null}
           <div className="procurement-order-list">
-            {visibleStoreGroups.map((storeGroup) => {
-              const isStoreComplete = storeGroup.totalCount > 0 && storeGroup.handledCount >= storeGroup.totalCount;
-              const defaultStoreCollapsed = isStoreComplete && !focusedOrderId;
-              const isStoreCollapsed = storeCollapseOverrides[storeGroup.key] ?? defaultStoreCollapsed;
-
-              return (
-                <section className={isStoreCollapsed ? "procurement-store-section is-collapsed" : "procurement-store-section"} key={storeGroup.key}>
-                  <div className="procurement-store-heading">
-                    <div className="procurement-store-title-row">
-                      <div>
-                        <span>店舗</span>
-                        <strong>{storeGroup.store}</strong>
-                      </div>
-                      <button
-                        type="button"
-                        className="procurement-store-toggle"
-                        aria-expanded={!isStoreCollapsed}
-                        aria-controls={`procurement-store-body-${storeGroup.key}`}
-                        onClick={() => toggleStoreCollapsed(storeGroup.key, isStoreCollapsed)}
-                      >
-                        <ChevronDown size={16} aria-hidden="true" />
-                        <span>{isStoreCollapsed ? "開く" : "閉じる"}</span>
-                      </button>
-                    </div>
-                    <div className="procurement-store-amounts">
-                      <span>概算 {formatEstimatedAmount(storeGroup.estimatedAmount)}</span>
-                      <span>現在 {formatEstimatedAmount(storeGroup.currentAmount)}</span>
-                    </div>
-                    <div className="procurement-store-summary">
-                      <span>{storeGroup.handledCount} / {storeGroup.totalCount} 処理済み</span>
-                      <span>{storeGroup.orders.length} 依頼</span>
-                      {storeGroup.unavailableCount > 0 ? <span>購入不可 {storeGroup.unavailableCount}</span> : null}
-                    </div>
-                  </div>
-                  {!isStoreCollapsed ? (
-                    <div className="procurement-store-body" id={`procurement-store-body-${storeGroup.key}`}>
-                      {storeGroup.orders.map(({ order, items, deliveryState, liveStatus }) => {
+            {visiblePurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
               const supplierGroups = groupTasksBySupplierFast(items, supplierByProductName).map((group) => ({
                 ...group,
                 items: sortProcurementItemsBySubcategory(group.items, productLookup)
@@ -1602,13 +1529,36 @@ export default function ProcurementPage() {
                           const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
                           const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
                           const needsReceiptUpload = canUploadReceipt && !supplierReceipt;
+                          const supplierKey = `${order.id}:${group.supplier}`;
+                          const supplierPanelId = `procurement-supplier-${supplierKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+                          const supplierEstimatedAmount = calculateProcurementOrderEstimatedAmount(group.items, productLookup);
+                          const supplierCurrentAmount = calculateProcurementOrderCurrentAmount(group.items, productLookup);
+                          const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
+                          const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
+                          const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
 
                           return (
-                            <section className="procurement-supplier-group" key={`${order.id}-${group.supplier}`}>
+                            <section className={isSupplierCollapsed ? "procurement-supplier-group is-collapsed" : "procurement-supplier-group"} key={`${order.id}-${group.supplier}`}>
                               <div className="supplier-group-heading">
-                                <div>
-                                  <span>発注先</span>
-                                  <strong>{group.supplier}</strong>
+                                <div className="supplier-group-title-row">
+                                  <div>
+                                    <span>発注先</span>
+                                    <strong>{group.supplier}</strong>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="supplier-group-toggle"
+                                    aria-expanded={!isSupplierCollapsed}
+                                    aria-controls={supplierPanelId}
+                                    onClick={() => toggleSupplierCollapsed(supplierKey, isSupplierCollapsed)}
+                                  >
+                                    <ChevronDown size={16} aria-hidden="true" />
+                                    <span>{isSupplierCollapsed ? "開く" : "閉じる"}</span>
+                                  </button>
+                                </div>
+                                <div className="supplier-group-amounts">
+                                  <span>概算 {formatEstimatedAmount(supplierEstimatedAmount)}</span>
+                                  <span>購入済み {formatEstimatedAmount(supplierCurrentAmount)}</span>
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
@@ -1636,8 +1586,9 @@ export default function ProcurementPage() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="procurement-task-list">
-                                {group.items.map((item) => {
+                              {!isSupplierCollapsed ? (
+                                <div className="procurement-task-list" id={supplierPanelId}>
+                                  {group.items.map((item) => {
                                   const quantityDiff = item.actualQuantity - item.requestedQuantity;
                                   const product = findProcurementProductFromLookup(item, productLookup);
                                   const photoSrc = getProductPhotoSrc(product?.photoUrl);
@@ -1719,8 +1670,9 @@ export default function ProcurementPage() {
                                       </button>
                                     </div>
                                   );
-                                })}
-                              </div>
+                                  })}
+                                </div>
+                              ) : null}
                             </section>
                           );
                         })}
@@ -1728,11 +1680,6 @@ export default function ProcurementPage() {
                     </div>
                   ) : null}
                 </article>
-              );
-                      })}
-                    </div>
-                  ) : null}
-                </section>
               );
             })}
             {displayedPurchaseOrders.length === 0 ? (
