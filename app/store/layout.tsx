@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { PrivacyConsentGate } from "../os/components/PrivacyConsentGate";
+import { StorePrintStation } from "./components/StorePrintStation";
 import { StoreVersionNotice } from "./components/StoreVersionNotice";
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function StoreLayout({
     <>
       <StoreVersionNotice initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
       <PrivacyConsentGate />
+      <StorePrintStation />
       {children}
     </>
   );
