@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     private static final int LINE_CHARS_58MM = 32;
     private static final int PAPER_DOTS_80MM = 576;
     private static final int PAPER_DOTS_58MM = 384;
+    private static final int LOGO_MAX_HEIGHT_80MM = 150;
+    private static final int LOGO_MAX_HEIGHT_58MM = 120;
 
     private FrameLayout rootView;
     private WebView webView;
@@ -432,7 +434,7 @@ public class MainActivity extends Activity {
         String displayName = templateText(template, "businessName");
 
         if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
-            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), contentWidth);
+            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), contentWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
             if (logo != null) lines.add(RasterLine.image(logo));
         }
         addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
@@ -449,7 +451,7 @@ public class MainActivity extends Activity {
             addText(lines, "No order payload", normal, contentWidth);
         } else {
             addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
-            addText(lines, order.optString("orderType", "") + " / " + order.optString("paymentLabel", ""), normal, contentWidth);
+            addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
             addSeparator(lines, contentWidth, normal);
             JSONArray items = order.optJSONArray("items");
             if (items != null) {
@@ -524,23 +526,57 @@ public class MainActivity extends Activity {
         for (String part : value.split("\\n")) addText(lines, part.trim(), paint, contentWidth);
     }
 
-    private Bitmap loadLogoBitmap(String logoUrl, int maxWidth) {
-        return loadTemplateBitmap(logoUrl, maxWidth);
+    private Bitmap loadLogoBitmap(String logoUrl, int maxWidth, int maxHeight) {
+        return loadTemplateBitmap(logoUrl, maxWidth, maxHeight);
     }
 
     private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth) {
+        return loadTemplateBitmap(logoUrl, maxWidth, 0);
+    }
+
+    private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth, int maxHeight) {
         if (logoUrl == null || logoUrl.trim().isEmpty()) return null;
         try (InputStream stream = new URL(logoUrl.trim()).openStream()) {
             Bitmap source = BitmapFactory.decodeStream(stream);
             if (source == null) return null;
-            int width = Math.min(maxWidth, source.getWidth());
-            int height = Math.max(1, Math.round(source.getHeight() * (width / (float) source.getWidth())));
+            float scale = Math.min(1f, maxWidth / (float) source.getWidth());
+            if (maxHeight > 0) scale = Math.min(scale, maxHeight / (float) source.getHeight());
+            int width = Math.max(1, Math.round(source.getWidth() * scale));
+            int height = Math.max(1, Math.round(source.getHeight() * scale));
             Bitmap scaled = Bitmap.createScaledBitmap(source, width, height, true);
             source.recycle();
             return scaled;
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private String joinReceiptMeta(String left, String right) {
+        String first = left == null ? "" : left.trim();
+        String second = right == null ? "" : right.trim();
+        if (first.isEmpty()) return second;
+        if (second.isEmpty()) return first;
+        return first + " / " + second;
+    }
+
+    private String formatOrderTypeLabel(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if ("eat_in".equals(normalized) || "dine_in".equals(normalized)) return "店内";
+        if ("takeout".equals(normalized) || "take_out".equals(normalized)) return "持ち帰り";
+        if ("delivery".equals(normalized)) return "配達";
+        if ("web".equals(normalized)) return "Web予約";
+        return normalized;
+    }
+
+    private String formatPaymentLabel(JSONObject order) {
+        String label = order == null ? "" : order.optString("paymentLabel", "").trim();
+        if (!label.isEmpty()) return label;
+        String method = order == null ? "" : order.optString("paymentMethod", "").trim();
+        if ("cash".equals(method)) return "現金";
+        if ("external_card".equals(method)) return "外部決済";
+        if ("kitchen".equals(method)) return "厨房";
+        if ("test".equals(method)) return "テスト";
+        return method;
     }
 
     private Paint textPaint(int textSize, boolean bold) {
@@ -628,7 +664,7 @@ public class MainActivity extends Activity {
             return;
         }
         writeLine(out, "No. " + order.optString("pickupCode", ""), charset);
-        writeLine(out, order.optString("orderType", "") + " / " + order.optString("paymentLabel", ""), charset);
+        writeLine(out, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), charset);
         writeLine(out, repeat("-", columns), charset);
 
         JSONArray items = order.optJSONArray("items");
