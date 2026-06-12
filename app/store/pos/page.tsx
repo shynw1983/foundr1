@@ -2610,19 +2610,53 @@ export default function StorePosPage() {
                         const count = selectedIds.filter((id) => id === option.id).length;
                         const selected = count > 0;
                         return (
-                          <div className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"} key={option.id}>
+                          <div
+                            className={selected ? "store-pos-option-choice is-active" : "store-pos-option-choice"}
+                            key={option.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => toggleOption(group, option.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                toggleOption(group, option.id);
+                              }
+                            }}
+                          >
                             <button
                               type="button"
-                              onClick={() => toggleOption(group, option.id)}
+                              tabIndex={-1}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleOption(group, option.id);
+                              }}
                             >
                               <span>{option.name}</span>
                               {getOptionPrice(option) ? <small>{formatYen(getOptionPrice(option))}</small> : <small>+¥0</small>}
                             </button>
                             {selectionType === "quantity" ? (
                               <div className="store-pos-option-stepper">
-                                <button type="button" onClick={() => decrementOption(group, option.id)} aria-label="数量を減らす"><Minus size={14} /></button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    decrementOption(group, option.id);
+                                  }}
+                                  aria-label="数量を減らす"
+                                >
+                                  <Minus size={14} />
+                                </button>
                                 <span>{count}</span>
-                                <button type="button" onClick={() => toggleOption(group, option.id)} aria-label="数量を増やす"><Plus size={14} /></button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleOption(group, option.id);
+                                  }}
+                                  aria-label="数量を増やす"
+                                >
+                                  <Plus size={14} />
+                                </button>
                               </div>
                             ) : null}
                           </div>
