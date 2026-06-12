@@ -18877,7 +18877,7 @@ body :where(
 .voucher-confirmed-product-binding {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto auto;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto auto auto minmax(160px, 1fr);
   align-items: end;
   gap: 8px;
   border: 1px solid rgba(20, 83, 45, 0.12);
@@ -18889,6 +18889,20 @@ body :where(
 .voucher-confirmed-product-binding button {
   min-height: 36px;
   white-space: nowrap;
+}
+
+.voucher-confirmed-reconciliation-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voucher-confirmed-reconciliation-status small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 .voucher-confirmed-detail-actions {
@@ -21751,6 +21765,11 @@ body :where(
 .tone-warning {
   color: var(--red);
   background: var(--red-soft);
+}
+
+.tone-muted {
+  color: var(--muted);
+  background: var(--panel-muted);
 }
 
 .tone-confirm {

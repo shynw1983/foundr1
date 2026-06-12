@@ -801,36 +801,54 @@ async function listAccessibleVouchers(session: NonNullable<Awaited<ReturnType<ty
     itemsByResultId.set(ocrResultId, items);
   }
 
-  return rows.map((row) => ({
-    id: String(row.id),
-    sourceType: String(row.sourceType ?? ""),
-    storeId: String(row.storeId ?? ""),
-    storeName: String(row.storeName ?? ""),
-    receiptPhotoUrl: String(row.receiptPhotoUrl ?? ""),
-    uploadedFileName: String(row.uploadedFileName ?? ""),
-    usageType: String(row.usageType ?? "unclassified"),
-    paymentType: String(row.paymentType ?? "company"),
-    reimbursementStatus: String(row.reimbursementStatus ?? "none"),
-    status: String(row.status ?? "draft"),
-    vendorName: String(row.vendorName ?? ""),
-    companyName: String(row.companyName ?? ""),
-    brandName: String(row.brandName ?? ""),
-    locationName: String(row.locationName ?? ""),
-    linkedSupplierName: String(row.linkedSupplierName ?? ""),
-    linkedSupplierLocationName: String(row.linkedSupplierLocationName ?? ""),
-    supplierMatchStatus: String(row.supplierMatchStatus ?? "unmatched"),
-    purchaseDate: String(row.purchaseDate ?? ""),
-    purchaseTime: String(row.purchaseTime ?? ""),
-    total: Number(row.total ?? 0),
-    tax: Number(row.tax ?? 0),
-    accountingLines: normalizeStoredAccountingLines(row.accountingLines),
-    receiptTaxLines: normalizeReceiptTaxLines(row.receiptTaxLines, Number(row.tax ?? 0)),
-    itemCount: Number(row.itemCount ?? 0),
-    createdByName: String(row.createdByName ?? ""),
-    createdLabel: String(row.createdLabel ?? ""),
-    canDelete: String(row.sourceType ?? "") === "voucher",
-    items: itemsByResultId.get(String(row.id ?? "")) ?? []
-  }));
+  return rows.map((row) => {
+    const resultId = String(row.id ?? "");
+    const items = itemsByResultId.get(resultId) ?? [];
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    const accountingLines = normalizeStoredAccountingLines(row.accountingLines).map((line) => {
+      const item = itemById.get(line.ocrItemId);
+      if (!item) return line;
+      return {
+        ...line,
+        matchedProductId: item.matchedProductId,
+        matchedProductName: item.matchedProductName,
+        matchStatus: item.matchStatus,
+        purchaseActualId: item.purchaseActualId,
+        reconciliationStatus: item.reconciliationStatus,
+        reconciliationNote: item.reconciliationNote
+      };
+    });
+    return {
+      id: resultId,
+      sourceType: String(row.sourceType ?? ""),
+      storeId: String(row.storeId ?? ""),
+      storeName: String(row.storeName ?? ""),
+      receiptPhotoUrl: String(row.receiptPhotoUrl ?? ""),
+      uploadedFileName: String(row.uploadedFileName ?? ""),
+      usageType: String(row.usageType ?? "unclassified"),
+      paymentType: String(row.paymentType ?? "company"),
+      reimbursementStatus: String(row.reimbursementStatus ?? "none"),
+      status: String(row.status ?? "draft"),
+      vendorName: String(row.vendorName ?? ""),
+      companyName: String(row.companyName ?? ""),
+      brandName: String(row.brandName ?? ""),
+      locationName: String(row.locationName ?? ""),
+      linkedSupplierName: String(row.linkedSupplierName ?? ""),
+      linkedSupplierLocationName: String(row.linkedSupplierLocationName ?? ""),
+      supplierMatchStatus: String(row.supplierMatchStatus ?? "unmatched"),
+      purchaseDate: String(row.purchaseDate ?? ""),
+      purchaseTime: String(row.purchaseTime ?? ""),
+      total: Number(row.total ?? 0),
+      tax: Number(row.tax ?? 0),
+      accountingLines,
+      receiptTaxLines: normalizeReceiptTaxLines(row.receiptTaxLines, Number(row.tax ?? 0)),
+      itemCount: Number(row.itemCount ?? 0),
+      createdByName: String(row.createdByName ?? ""),
+      createdLabel: String(row.createdLabel ?? ""),
+      canDelete: String(row.sourceType ?? "") === "voucher",
+      items
+    };
+  });
 }
 
 async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, request: Request) {
@@ -1031,10 +1049,18 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       coalesce(nullif(line.value->>'unit', ''), '個') as unit,
       (nullif(line.value->>'unitPrice', ''))::float as "unitPrice",
       coalesce(line.value->>'ocrItemId', '') as "ocrItemId",
+      receipt_ocr_items.matched_product_id::text as "matchedProductId",
+      coalesce(matched_products.name, '') as "matchedProductName",
+      coalesce(receipt_ocr_items.match_status, '') as "matchStatus",
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus",
+      coalesce(receipt_ocr_items.reconciliation_note, '') as "reconciliationNote",
       coalesce(line.value->>'note', '') as note
     from receipt_ocr_results
     join stores on stores.id = receipt_ocr_results.store_id
     cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
+    left join receipt_ocr_items on receipt_ocr_items.id::text = coalesce(line.value->>'ocrItemId', '')
+    left join products matched_products on matched_products.id = receipt_ocr_items.matched_product_id
     where receipt_ocr_results.status = 'confirmed'
       and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
       and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
@@ -1056,6 +1082,12 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
     unit: string;
     unitPrice: string;
     ocrItemId: string;
+    matchedProductId: string;
+    matchedProductName: string;
+    matchStatus: string;
+    purchaseActualId: string;
+    reconciliationStatus: string;
+    reconciliationNote: string;
     note: string;
   };
 
@@ -1116,6 +1148,12 @@ async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnT
       unit,
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? "" : String(Math.round(Number(row.unitPrice) * 100) / 100),
       ocrItemId: String(row.ocrItemId ?? ""),
+      matchedProductId: String(row.matchedProductId ?? ""),
+      matchedProductName: String(row.matchedProductName ?? ""),
+      matchStatus: String(row.matchStatus ?? ""),
+      purchaseActualId: String(row.purchaseActualId ?? ""),
+      reconciliationStatus: String(row.reconciliationStatus ?? "unmatched"),
+      reconciliationNote: String(row.reconciliationNote ?? ""),
       note: String(row.note ?? "")
     };
     const existing = groups.get(key);
@@ -1862,6 +1900,12 @@ function normalizeStoredAccountingLines(value: unknown) {
       unit: String(row.unit ?? "個").trim() || "個",
       unitPrice: row.unitPrice === null || row.unitPrice === undefined ? null : Number(row.unitPrice),
       ocrItemId: String(row.ocrItemId ?? ""),
+      matchedProductId: String(row.matchedProductId ?? ""),
+      matchedProductName: String(row.matchedProductName ?? ""),
+      matchStatus: String(row.matchStatus ?? ""),
+      purchaseActualId: String(row.purchaseActualId ?? ""),
+      reconciliationStatus: String(row.reconciliationStatus ?? "unmatched"),
+      reconciliationNote: String(row.reconciliationNote ?? ""),
       note: String(row.note ?? "")
     };
   }).filter((line) => line.amount > 0);

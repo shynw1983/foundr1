@@ -169,6 +169,12 @@ type VoucherAccountingSummaryLine = {
   unit?: string;
   unitPrice?: number | null;
   ocrItemId?: string;
+  matchedProductId?: string;
+  matchedProductName?: string;
+  matchStatus?: string;
+  purchaseActualId?: string;
+  reconciliationStatus?: string;
+  reconciliationNote?: string;
   note: string;
 };
 
@@ -211,6 +217,12 @@ type ConfirmedAccountingLineDetail = {
   unit: string;
   unitPrice: string;
   ocrItemId: string;
+  matchedProductId: string;
+  matchedProductName: string;
+  matchStatus: string;
+  purchaseActualId: string;
+  reconciliationStatus: string;
+  reconciliationNote: string;
   note: string;
 };
 
@@ -1366,6 +1378,7 @@ export default function VouchersPage() {
                   const summaryDraft = confirmedSummaryDrafts[key] ?? line.note ?? "";
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
                   const isEditingSummary = Boolean(editingConfirmedSummaryKeys[key]);
+                  const reconciliationStatus = getConfirmedLineReconciliationStatus(line);
                   return (
                   <div className="voucher-confirmed-line-row" key={key}>
                     <div className="voucher-confirmed-line-meta">
@@ -1375,6 +1388,11 @@ export default function VouchersPage() {
                     <div className="voucher-confirmed-line-account">
                       <strong>{line.accountTitle}{line.subAccountTitle ? ` / ${line.subAccountTitle}` : ""}</strong>
                       <span>{line.taxRate || "税率不明"} / {line.taxMode || "税区分不明"} / 消費税 {formatMoney(line.taxAmount)}</span>
+                      {reconciliationStatus ? (
+                        <span className={`status-pill ${getReceiptReconciliationTone(reconciliationStatus)}`}>
+                          {getReceiptReconciliationLabel(reconciliationStatus)}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="voucher-confirmed-line-amount">
                       <strong>{formatMoney(line.taxIncludedAmount ?? calculateAccountingTaxIncludedAmount(line.amount, line.taxAmount, line.taxMode))}</strong>
@@ -1712,6 +1730,7 @@ export default function VouchersPage() {
                           }}
                           onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
                           onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
+                          onCreatePurchaseActual={(line) => void createPurchaseActualFromReceiptLine(voucher, line)}
                         />
                       ) : null}
                     </>
@@ -2887,7 +2906,8 @@ function ConfirmedVoucherDetailEditor({
   onProductCategoryChange,
   onProductSubcategoryChange,
   onBindProduct,
-  onCreateProduct
+  onCreateProduct,
+  onCreatePurchaseActual
 }: {
   voucher: VoucherRecord;
   details: ConfirmedAccountingLineDetail[];
@@ -2907,6 +2927,7 @@ function ConfirmedVoucherDetailEditor({
   onProductSubcategoryChange: (lineId: string, subcategory: string) => void;
   onBindProduct: (line: VoucherAccountingLine) => void;
   onCreateProduct: (line: VoucherAccountingLine) => void;
+  onCreatePurchaseActual: (line: VoucherAccountingLine) => void;
 }) {
   const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
   const [productBindingDetailKeys, setProductBindingDetailKeys] = useState<Record<string, boolean>>({});
@@ -2981,8 +3002,9 @@ function ConfirmedVoucherDetailEditor({
         const accountingLine = buildVoucherAccountingLineFromConfirmedDetail(draft, detailKey);
         const isProductPending = Boolean(pendingProductLineIds[detailKey]);
         const showProductBinding = voucher.usageType === "shiire" && Boolean(accountingLine.ocrItemId);
+        const isReceiptReconciled = accountingLine.reconciliationStatus === "auto_matched" || accountingLine.reconciliationStatus === "manual_matched";
         const suggestedProduct = getSuggestedProduct(accountingLine, productOptions);
-        const selectedProductId = lineProductSelections[detailKey] ?? suggestedProduct?.id ?? "";
+        const selectedProductId = lineProductSelections[detailKey] ?? accountingLine.matchedProductId ?? suggestedProduct?.id ?? "";
         const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
         const selectedCategory = selectedProduct ? getProductCategory(selectedProduct) : (lineProductCategorySelections[detailKey] ?? (suggestedProduct ? getProductCategory(suggestedProduct) : ""));
         const selectedSubcategory = selectedProduct ? getProductSubcategory(selectedProduct) : (lineProductSubcategorySelections[detailKey] ?? (suggestedProduct ? getProductSubcategory(suggestedProduct) : ""));
@@ -2999,6 +3021,11 @@ function ConfirmedVoucherDetailEditor({
                 <span>{detail.note || "摘要なし"}</span>
                 <span>{formatMoney(detail.amount)} / {detail.taxRate || "税率不明"} / {detail.taxMode || "税区分不明"}</span>
                 <span>{quantityLabel}</span>
+                {showProductBinding ? (
+                  <span className={`status-pill ${getReceiptReconciliationTone(accountingLine.reconciliationStatus)}`}>
+                    {getReceiptReconciliationLabel(accountingLine.reconciliationStatus)}
+                  </span>
+                ) : null}
               </button>
               {showProductBinding ? (
                 <button
@@ -3097,6 +3124,17 @@ function ConfirmedVoucherDetailEditor({
                   <button className="text-button" type="button" onClick={() => onCreateProduct(accountingLine)} disabled={isProductPending}>
                     新規
                   </button>
+                  <button className="secondary-button" type="button" onClick={() => onCreatePurchaseActual(accountingLine)} disabled={isSaving || isProductPending || isReceiptReconciled || !accountingLine.ocrItemId || !accountingLine.matchedProductId}>
+                    <PackageCheck size={15} />
+                    購入実績を作成
+                  </button>
+                  <div className="voucher-confirmed-reconciliation-status">
+                    <span className={`status-pill ${getReceiptReconciliationTone(accountingLine.reconciliationStatus)}`}>
+                      {getReceiptReconciliationLabel(accountingLine.reconciliationStatus)}
+                    </span>
+                    {accountingLine.matchedProductName ? <small>紐付済み: {accountingLine.matchedProductName}</small> : null}
+                    {accountingLine.reconciliationNote ? <small>{accountingLine.reconciliationNote}</small> : null}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -3165,6 +3203,15 @@ function getReceiptReconciliationTone(status: string) {
   if (status === "auto_matched" || status === "manual_matched") return "tone-done";
   if (status === "ignored") return "tone-muted";
   return "tone-warning";
+}
+
+function getConfirmedLineReconciliationStatus(line: ConfirmedAccountingLine) {
+  const details = (line.details ?? []).filter((detail) => detail.ocrItemId);
+  if (!details.length) return "";
+  const isMatched = (detail: ConfirmedAccountingLineDetail) => detail.reconciliationStatus === "auto_matched" || detail.reconciliationStatus === "manual_matched";
+  if (details.every(isMatched)) return "auto_matched";
+  if (details.every((detail) => detail.reconciliationStatus === "ignored")) return "ignored";
+  return "unmatched";
 }
 
 function getProductCategoryOptions(productOptions: ProductOption[]) {
@@ -3494,6 +3541,12 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     unit: line.unit || "個",
     unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity, line.taxRate, line.taxMode),
     ocrItemId: line.ocrItemId ?? "",
+    matchedProductId: line.matchedProductId ?? "",
+    matchedProductName: line.matchedProductName ?? "",
+    matchStatus: line.matchStatus ?? "",
+    purchaseActualId: line.purchaseActualId ?? "",
+    reconciliationStatus: line.reconciliationStatus ?? "unmatched",
+    reconciliationNote: line.reconciliationNote ?? "",
     note: line.note
   };
 }
@@ -3502,12 +3555,12 @@ function buildVoucherAccountingLineFromConfirmedDetail(detail: ConfirmedAccounti
   return {
     id,
     ocrItemId: detail.ocrItemId,
-    matchedProductId: "",
-    matchedProductName: "",
-    matchStatus: "",
-    purchaseActualId: "",
-    reconciliationStatus: "unmatched",
-    reconciliationNote: "",
+    matchedProductId: detail.matchedProductId,
+    matchedProductName: detail.matchedProductName,
+    matchStatus: detail.matchStatus,
+    purchaseActualId: detail.purchaseActualId,
+    reconciliationStatus: detail.reconciliationStatus,
+    reconciliationNote: detail.reconciliationNote,
     confirmed: true,
     accountTitle: detail.accountTitle,
     subAccountTitle: detail.subAccountTitle,
