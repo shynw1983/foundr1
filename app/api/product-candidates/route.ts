@@ -248,6 +248,7 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       is_default_variant,
       brand_scope,
       usage_type,
+      spec_note,
       japanese_note,
       updated_at
     )
@@ -262,7 +263,8 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       ${true},
       ${"unset"},
       ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
-      ${`[情報未補完] レシート OCR から追加: ${String(candidate.rawName ?? "")}`},
+      ${`レシート OCR から追加: ${String(candidate.rawName ?? "")}`},
+      ${""},
       now()
     )
     returning id::text
