@@ -747,7 +747,7 @@ export default function ProcurementPage() {
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
-  const [collapsedStoreKeys, setCollapsedStoreKeys] = useState<Set<string>>(() => new Set());
+  const [storeCollapseOverrides, setStoreCollapseOverrides] = useState<Record<string, boolean>>({});
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
@@ -918,14 +918,9 @@ export default function ProcurementPage() {
     });
   }
 
-  function toggleStoreCollapsed(storeKey: string) {
-    setCollapsedStoreKeys((current) => {
-      const next = new Set(current);
-      if (next.has(storeKey)) {
-        next.delete(storeKey);
-      } else {
-        next.add(storeKey);
-      }
+  function toggleStoreCollapsed(storeKey: string, currentCollapsed: boolean) {
+    setStoreCollapseOverrides((current) => {
+      const next = { ...current, [storeKey]: !currentCollapsed };
       return next;
     });
   }
@@ -1413,7 +1408,9 @@ export default function ProcurementPage() {
           ) : null}
           <div className="procurement-order-list">
             {visibleStoreGroups.map((storeGroup) => {
-              const isStoreCollapsed = collapsedStoreKeys.has(storeGroup.key);
+              const isStoreComplete = storeGroup.totalCount > 0 && storeGroup.handledCount >= storeGroup.totalCount;
+              const defaultStoreCollapsed = isStoreComplete && !focusedOrderId;
+              const isStoreCollapsed = storeCollapseOverrides[storeGroup.key] ?? defaultStoreCollapsed;
 
               return (
                 <section className={isStoreCollapsed ? "procurement-store-section is-collapsed" : "procurement-store-section"} key={storeGroup.key}>
@@ -1423,7 +1420,7 @@ export default function ProcurementPage() {
                       className="procurement-store-toggle"
                       aria-expanded={!isStoreCollapsed}
                       aria-controls={`procurement-store-body-${storeGroup.key}`}
-                      onClick={() => toggleStoreCollapsed(storeGroup.key)}
+                      onClick={() => toggleStoreCollapsed(storeGroup.key, isStoreCollapsed)}
                     >
                       <ChevronDown size={16} aria-hidden="true" />
                       <span>{isStoreCollapsed ? "開く" : "閉じる"}</span>
@@ -2334,15 +2331,11 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
 
 function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
   return items.reduce((total, item) => {
-    if (item.unavailable) return total;
-
     const product = findProcurementProductFromLookup(item, productLookup);
-    const actualPrice = parseProcurementAmount(item.actualPrice);
     const referencePrice = Number(product?.referencePrice ?? 0);
-    const price = actualPrice > 0 ? actualPrice : referencePrice;
-    const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : item.requestedQuantity;
+    const quantity = Number.isFinite(item.requestedQuantity) ? item.requestedQuantity : 0;
 
-    return total + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0);
+    return total + Math.max(0, quantity) * (Number.isFinite(referencePrice) ? referencePrice : 0);
   }, 0);
 }
 

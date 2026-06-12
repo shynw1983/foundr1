@@ -24868,15 +24868,23 @@ body :where(
   }
 
   .procurement-store-section {
-    gap: 10px;
-    padding: 10px;
+    gap: 8px;
+    padding: 0;
+    overflow: hidden;
+    border-color: rgba(31, 126, 93, 0.24);
     background: white;
+  }
+
+  .procurement-store-section.is-collapsed {
+    border-color: rgba(31, 126, 93, 0.18);
   }
 
   .procurement-store-heading {
     grid-template-columns: 1fr auto;
     align-items: start;
     gap: 8px;
+    padding: 10px;
+    background: var(--green-soft);
   }
 
   .procurement-store-toggle {
@@ -24890,6 +24898,16 @@ body :where(
     grid-row: 1;
   }
 
+  .procurement-store-heading > div:nth-child(2) span {
+    color: var(--green);
+    font-size: 10px;
+  }
+
+  .procurement-store-heading > div:nth-child(2) strong {
+    color: var(--green);
+    font-size: 17px;
+  }
+
   .procurement-store-amounts,
   .procurement-store-summary {
     grid-column: 1 / -1;
@@ -24900,6 +24918,10 @@ body :where(
   .procurement-store-summary span {
     min-height: 26px;
     font-size: 11px;
+  }
+
+  .procurement-store-body {
+    padding: 10px;
   }
 
   .focused-order-bar {
