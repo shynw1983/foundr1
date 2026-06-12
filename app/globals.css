@@ -12580,6 +12580,31 @@ body :where(
   min-width: 0;
 }
 
+.pos-admin-receipt-template-textareas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pos-admin-receipt-template-textareas label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pos-admin-receipt-template-textareas label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-admin-receipt-template-textareas textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 76px;
+  resize: vertical;
+}
+
 .pos-admin-display-upload-row {
   display: flex;
   align-items: center;
@@ -28116,6 +28141,7 @@ body :where(
   .pos-admin-tax-footer,
   .pos-admin-display-media-grid,
   .pos-admin-printer-grid,
+  .pos-admin-receipt-template-textareas,
   .pos-admin-printer-brand-row {
     display: grid;
     grid-template-columns: 1fr;

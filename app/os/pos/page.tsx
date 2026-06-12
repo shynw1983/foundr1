@@ -25,7 +25,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
-import { createTestPrintPayload, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings } from "../../../lib/pos-printer";
+import { createTestPrintPayload, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -317,6 +317,16 @@ export default function PosPage() {
         }
       };
     });
+  }
+
+  function updateReceiptTemplate(patch: Partial<PosReceiptTemplateSettings>) {
+    setTaxForm((current) => ({
+      ...current,
+      printerSettings: {
+        ...current.printerSettings,
+        receiptTemplate: { ...current.printerSettings.receiptTemplate, ...patch }
+      }
+    }));
   }
 
   function getTestPrinter() {
@@ -961,6 +971,104 @@ export default function PosPage() {
                 </div>
               </div>
             ) : null}
+            <div className="pos-admin-printer-card">
+              <div>
+                <strong>レシートテンプレート</strong>
+                <p>レシートに表示する店舗情報、登録番号、連絡先、販促メッセージを管理します。</p>
+              </div>
+              <div className="pos-admin-printer-grid">
+                <label className="pos-admin-discount-check">
+                  <input
+                    type="checkbox"
+                    checked={taxForm.printerSettings.receiptTemplate.showLogo}
+                    onChange={(event) => updateReceiptTemplate({ showLogo: event.target.checked })}
+                    disabled={!canManagePosSettings}
+                  />
+                  <span>ロゴを表示</span>
+                </label>
+                <label>
+                  <span>ロゴ URL</span>
+                  <input
+                    value={taxForm.printerSettings.receiptTemplate.logoUrl}
+                    onChange={(event) => updateReceiptTemplate({ logoUrl: event.target.value.trim() })}
+                    placeholder="https://..."
+                    disabled={!canManagePosSettings}
+                  />
+                </label>
+                <label>
+                  <span>表示名</span>
+                  <input
+                    value={taxForm.printerSettings.receiptTemplate.businessName}
+                    onChange={(event) => updateReceiptTemplate({ businessName: event.target.value })}
+                    placeholder="店舗名または会社名"
+                    disabled={!canManagePosSettings}
+                  />
+                </label>
+                <label>
+                  <span>登録番号 / 税号</span>
+                  <input
+                    value={taxForm.printerSettings.receiptTemplate.taxRegistrationNumber}
+                    onChange={(event) => updateReceiptTemplate({ taxRegistrationNumber: event.target.value })}
+                    placeholder="T1234567890123"
+                    disabled={!canManagePosSettings}
+                  />
+                </label>
+                <label>
+                  <span>電話番号</span>
+                  <input
+                    value={taxForm.printerSettings.receiptTemplate.phone}
+                    onChange={(event) => updateReceiptTemplate({ phone: event.target.value })}
+                    placeholder="03-0000-0000"
+                    disabled={!canManagePosSettings}
+                  />
+                </label>
+                <label>
+                  <span>Web / SNS</span>
+                  <input
+                    value={taxForm.printerSettings.receiptTemplate.website}
+                    onChange={(event) => updateReceiptTemplate({ website: event.target.value })}
+                    placeholder="https://foundr1.jp"
+                    disabled={!canManagePosSettings}
+                  />
+                </label>
+              </div>
+              <div className="pos-admin-receipt-template-textareas">
+                <label>
+                  <span>会社情報</span>
+                  <textarea value={taxForm.printerSettings.receiptTemplate.companyInfo} onChange={(event) => updateReceiptTemplate({ companyInfo: event.target.value })} disabled={!canManagePosSettings} />
+                </label>
+                <label>
+                  <span>住所</span>
+                  <textarea value={taxForm.printerSettings.receiptTemplate.address} onChange={(event) => updateReceiptTemplate({ address: event.target.value })} disabled={!canManagePosSettings} />
+                </label>
+                <label>
+                  <span>上部メッセージ</span>
+                  <textarea value={taxForm.printerSettings.receiptTemplate.headerMessage} onChange={(event) => updateReceiptTemplate({ headerMessage: event.target.value })} disabled={!canManagePosSettings} />
+                </label>
+                <label>
+                  <span>下部メッセージ</span>
+                  <textarea value={taxForm.printerSettings.receiptTemplate.footerMessage} onChange={(event) => updateReceiptTemplate({ footerMessage: event.target.value })} disabled={!canManagePosSettings} />
+                </label>
+                <label>
+                  <span>販促メッセージ</span>
+                  <textarea value={taxForm.printerSettings.receiptTemplate.promotionMessage} onChange={(event) => updateReceiptTemplate({ promotionMessage: event.target.value })} disabled={!canManagePosSettings} />
+                </label>
+              </div>
+              <div className="pos-admin-printer-toggles">
+                <label className="pos-admin-discount-check">
+                  <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showTaxSummary} onChange={(event) => updateReceiptTemplate({ showTaxSummary: event.target.checked })} disabled={!canManagePosSettings} />
+                  <span>税明細を表示</span>
+                </label>
+                <label className="pos-admin-discount-check">
+                  <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showOrderNote} onChange={(event) => updateReceiptTemplate({ showOrderNote: event.target.checked })} disabled={!canManagePosSettings} />
+                  <span>備考を表示</span>
+                </label>
+                <label className="pos-admin-discount-check">
+                  <input type="checkbox" checked={taxForm.printerSettings.receiptTemplate.showTimestamp} onChange={(event) => updateReceiptTemplate({ showTimestamp: event.target.checked })} disabled={!canManagePosSettings} />
+                  <span>印刷日時を表示</span>
+                </label>
+              </div>
+            </div>
             {testPrintStatus ? <p className="pos-admin-printer-status">{testPrintStatus}</p> : null}
           </div>
           <div className="pos-admin-discount-settings">

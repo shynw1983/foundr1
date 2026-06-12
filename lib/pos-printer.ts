@@ -13,6 +13,23 @@ export type PosBrandKitchenPrinterSetting = {
   printer: PosPrinterConnection;
 };
 
+export type PosReceiptTemplateSettings = {
+  showLogo: boolean;
+  logoUrl: string;
+  businessName: string;
+  companyInfo: string;
+  taxRegistrationNumber: string;
+  phone: string;
+  address: string;
+  website: string;
+  headerMessage: string;
+  footerMessage: string;
+  promotionMessage: string;
+  showTaxSummary: boolean;
+  showOrderNote: boolean;
+  showTimestamp: boolean;
+};
+
 export type PosPrinterSettings = PosPrinterConnection & {
   enabled: boolean;
   receiptEnabled: boolean;
@@ -20,6 +37,7 @@ export type PosPrinterSettings = PosPrinterConnection & {
   receiptPrinter: PosPrinterConnection;
   kitchenPrinter: PosPrinterConnection;
   brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
+  receiptTemplate: PosReceiptTemplateSettings;
 };
 
 export type PosPrintLineItem = {
@@ -36,6 +54,7 @@ export type PosPrintPayload = {
   printer: PosPrinterConnection;
   storeName: string;
   printedAt: string;
+  receiptTemplate?: PosReceiptTemplateSettings;
   order?: {
     pickupCode: string;
     orderType: string;
@@ -78,6 +97,23 @@ export const defaultPosPrinterConnection: PosPrinterConnection = {
   openCashDrawer: false
 };
 
+export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
+  showLogo: false,
+  logoUrl: "",
+  businessName: "",
+  companyInfo: "",
+  taxRegistrationNumber: "",
+  phone: "",
+  address: "",
+  website: "",
+  headerMessage: "",
+  footerMessage: "",
+  promotionMessage: "",
+  showTaxSummary: true,
+  showOrderNote: true,
+  showTimestamp: true
+};
+
 export const defaultPosPrinterSettings: PosPrinterSettings = {
   enabled: false,
   receiptEnabled: true,
@@ -85,7 +121,8 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   ...defaultPosPrinterConnection,
   receiptPrinter: defaultPosPrinterConnection,
   kitchenPrinter: defaultPosPrinterConnection,
-  brandKitchenPrinters: []
+  brandKitchenPrinters: [],
+  receiptTemplate: defaultPosReceiptTemplateSettings
 };
 
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
@@ -98,6 +135,27 @@ export function normalizePosPrinterConnection(value: unknown, fallback: PosPrint
     characterEncoding: source.characterEncoding === "utf8" ? "utf8" : fallback.characterEncoding,
     cutPaper: source.cutPaper ?? fallback.cutPaper,
     openCashDrawer: source.openCashDrawer ?? fallback.openCashDrawer
+  };
+}
+
+export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptTemplateSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosReceiptTemplateSettings> : {};
+  const text = (next: unknown, max = 240) => String(next ?? "").trim().slice(0, max);
+  return {
+    showLogo: source.showLogo === true,
+    logoUrl: text(source.logoUrl, 500),
+    businessName: text(source.businessName, 120),
+    companyInfo: text(source.companyInfo, 500),
+    taxRegistrationNumber: text(source.taxRegistrationNumber, 80),
+    phone: text(source.phone, 80),
+    address: text(source.address, 240),
+    website: text(source.website, 160),
+    headerMessage: text(source.headerMessage, 500),
+    footerMessage: text(source.footerMessage, 500),
+    promotionMessage: text(source.promotionMessage, 500),
+    showTaxSummary: source.showTaxSummary !== false,
+    showOrderNote: source.showOrderNote !== false,
+    showTimestamp: source.showTimestamp !== false
   };
 }
 
@@ -114,6 +172,7 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
     ...receiptPrinter,
     receiptPrinter,
     kitchenPrinter,
+    receiptTemplate: normalizePosReceiptTemplateSettings(source.receiptTemplate),
     brandKitchenPrinters: brandKitchenPrinters.flatMap((item) => {
       const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosBrandKitchenPrinterSetting> : {};
       const brandId = String(record.brandId || "").trim();
@@ -146,6 +205,7 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
     printer,
     storeName,
     printedAt: new Date().toISOString(),
+    receiptTemplate: defaultPosReceiptTemplateSettings,
     order: {
       pickupCode: "TEST",
       orderType: "takeout",

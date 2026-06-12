@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -32,9 +33,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -301,8 +304,23 @@ public class MainActivity extends Activity {
         Paint bold = textPaint(28, true);
         List<RasterLine> lines = new ArrayList<>();
         JSONObject order = payload.optJSONObject("order");
+        JSONObject template = payload.optJSONObject("receiptTemplate");
+        boolean isReceipt = "receipt".equals(payload.optString("jobType", "receipt"));
+        String displayName = templateText(template, "businessName");
 
-        addCenter(lines, payload.optString("storeName", "Foundr1 OS"), bold);
+        if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
+            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), contentWidth);
+            if (logo != null) lines.add(RasterLine.image(logo));
+        }
+        addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
+        if (isReceipt && template != null) {
+            addMultiline(lines, templateText(template, "companyInfo"), small, contentWidth);
+            addMultiline(lines, templateText(template, "address"), small, contentWidth);
+            addTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth);
+            addTextIfPresent(lines, "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth);
+            addTextIfPresent(lines, templateText(template, "website"), templateText(template, "website"), small, contentWidth);
+            addMultiline(lines, templateText(template, "headerMessage"), small, contentWidth);
+        }
         addSeparator(lines, contentWidth, normal);
         if (order == null) {
             addText(lines, "No order payload", normal, contentWidth);
@@ -330,20 +348,28 @@ public class MainActivity extends Activity {
             if (discount > 0) addPair(lines, "割引", "-" + yen(discount), normal, contentWidth);
             int coupon = order.optInt("couponDiscountAmount", 0);
             if (coupon > 0) addPair(lines, "クーポン", "-" + yen(coupon), normal, contentWidth);
-            addPair(lines, "消費税", yen(order.optInt("taxAmount", 0)), normal, contentWidth);
+            if (template == null || template.optBoolean("showTaxSummary", true)) {
+                addPair(lines, "消費税", yen(order.optInt("taxAmount", 0)), normal, contentWidth);
+            }
             addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
             if ("cash".equals(order.optString("paymentMethod", ""))) {
                 addPair(lines, "お預かり", yen(order.optInt("cashTenderedAmount", 0)), normal, contentWidth);
                 addPair(lines, "お釣り", yen(order.optInt("cashChangeAmount", 0)), normal, contentWidth);
             }
             String note = order.optString("note", "").trim();
-            if (!note.isEmpty()) {
+            if (!note.isEmpty() && (template == null || template.optBoolean("showOrderNote", true))) {
                 addSeparator(lines, contentWidth, normal);
                 addText(lines, "備考: " + note, small, contentWidth);
             }
         }
         addSeparator(lines, contentWidth, normal);
-        addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+        if (isReceipt && template != null) {
+            addMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth);
+            addMultiline(lines, templateText(template, "footerMessage"), small, contentWidth);
+        }
+        if (template == null || template.optBoolean("showTimestamp", true)) {
+            addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+        }
 
         int height = padding * 2;
         for (RasterLine line : lines) height += line.height();
@@ -357,6 +383,35 @@ public class MainActivity extends Activity {
         }
         writeRasterBitmap(out, bitmap);
         bitmap.recycle();
+    }
+
+    private String templateText(JSONObject template, String key) {
+        return template == null ? "" : template.optString(key, "").trim();
+    }
+
+    private void addTextIfPresent(List<RasterLine> lines, String text, String value, Paint paint, int contentWidth) {
+        if (!value.trim().isEmpty()) addText(lines, text, paint, contentWidth);
+    }
+
+    private void addMultiline(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
+        String value = text == null ? "" : text.trim();
+        if (value.isEmpty()) return;
+        for (String part : value.split("\\n")) addText(lines, part.trim(), paint, contentWidth);
+    }
+
+    private Bitmap loadLogoBitmap(String logoUrl, int maxWidth) {
+        if (logoUrl == null || logoUrl.trim().isEmpty()) return null;
+        try (InputStream stream = new URL(logoUrl.trim()).openStream()) {
+            Bitmap source = BitmapFactory.decodeStream(stream);
+            if (source == null) return null;
+            int width = Math.min(maxWidth, source.getWidth());
+            int height = Math.max(1, Math.round(source.getHeight() * (width / (float) source.getWidth())));
+            Bitmap scaled = Bitmap.createScaledBitmap(source, width, height, true);
+            source.recycle();
+            return scaled;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private Paint textPaint(int textSize, boolean bold) {
@@ -551,12 +606,22 @@ public class MainActivity extends Activity {
         final String right;
         final Paint paint;
         final int align;
+        final Bitmap image;
 
         private RasterLine(String left, String right, Paint paint, int align) {
             this.left = left;
             this.right = right;
             this.paint = paint;
             this.align = align;
+            this.image = null;
+        }
+
+        private RasterLine(Bitmap image) {
+            this.left = "";
+            this.right = "";
+            this.paint = null;
+            this.align = 4;
+            this.image = image;
         }
 
         static RasterLine left(String text, Paint paint) {
@@ -575,12 +640,22 @@ public class MainActivity extends Activity {
             return new RasterLine(left, right, paint, 3);
         }
 
+        static RasterLine image(Bitmap image) {
+            return new RasterLine(image);
+        }
+
         int height() {
+            if (image != null) return image.getHeight() + 10;
             Paint.FontMetrics metrics = paint.getFontMetrics();
             return Math.round(metrics.descent - metrics.ascent) + 8;
         }
 
         void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {
+            if (image != null) {
+                float x = leftEdge + (rightEdge - leftEdge - image.getWidth()) / 2f;
+                canvas.drawBitmap(image, x, top + 5, null);
+                return;
+            }
             Paint.FontMetrics metrics = paint.getFontMetrics();
             float baseline = top - metrics.ascent + 2;
             if (align == 1) {

@@ -1132,6 +1132,7 @@ export default function StorePosPage() {
       printer,
       storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
       printedAt: new Date().toISOString(),
+      receiptTemplate: posSettings.printerSettings.receiptTemplate,
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
@@ -1165,6 +1166,7 @@ export default function StorePosPage() {
       printer,
       storeName: `${stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS"} / ${brandName}`,
       printedAt: new Date().toISOString(),
+      receiptTemplate: posSettings.printerSettings.receiptTemplate,
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
