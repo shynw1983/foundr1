@@ -19862,6 +19862,13 @@ body :where(
   white-space: nowrap;
 }
 
+.product-family-title-note {
+  margin-left: 4px;
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 500;
+}
+
 .product-family-name-line > span:not(.status-pill) {
   flex: 0 0 auto;
   min-height: 24px;

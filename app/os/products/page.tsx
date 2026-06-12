@@ -322,6 +322,18 @@ function getDisplayJapaneseNote(product: ProductWithCategory) {
   return String(product.japaneseNote ?? "").replace("[情報未補完]", "").trim();
 }
 
+function getProductTitleJapaneseNote(product: ProductWithCategory, title: string) {
+  const japaneseNote = getDisplayJapaneseNote(product);
+  if (!japaneseNote) return "";
+
+  const normalizedNote = normalizeProductFamilyKey(japaneseNote);
+  const normalizedTitle = normalizeProductFamilyKey(title);
+  const normalizedProductName = normalizeProductFamilyKey(product.name);
+  if (normalizedNote === normalizedTitle || normalizedNote === normalizedProductName) return "";
+
+  return japaneseNote;
+}
+
 function hasAnySupplier(product: ProductWithCategory) {
   return !isBlankValue(product.mainSupplier) || !isBlankValue(product.backupSupplier);
 }
@@ -1355,7 +1367,9 @@ export default function ProductsPage() {
             {pagedProductGroups.map((group) => {
               const representative = group.representative;
               const photoProduct = group.products.find((product) => product.photoUrl) ?? representative;
+              const titleJapaneseNote = getProductTitleJapaneseNote(representative, group.familyName);
               const groupSummaryItems = productSummaryFields
+                .filter((field) => !(field === "japaneseNote" && titleJapaneseNote))
                 .map((field) => {
                   const option = productSummaryFieldOptions.find((item) => item.value === field);
                   const value = getProductSummaryFieldValue(representative, field, formatProductUnitPrice(representative));
@@ -1377,7 +1391,10 @@ export default function ProductsPage() {
                       <div className="product-family-copy">
                         <small>商品</small>
                         <div className="product-family-name-line">
-                          <strong>{group.familyName}</strong>
+                          <strong>
+                            {group.familyName}
+                            {titleJapaneseNote ? <em className="product-family-title-note">（{titleJapaneseNote}）</em> : null}
+                          </strong>
                           <span>{group.products.length} バリエーション</span>
                           {representative.isDefaultVariant ? <span className="status-pill">標準バリエーションあり</span> : null}
                         </div>
