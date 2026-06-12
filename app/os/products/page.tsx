@@ -369,7 +369,7 @@ function formatReceiptProductOptionLabel(product: ProductOption) {
   ].filter(Boolean).join(" / ");
 }
 
-function buildProductNameFromVariant(product: Pick<ProductWithCategory, "productFamilyName" | "variantName">) {
+function buildProductNameFromVariant(product: Pick<ProductDraft, "productFamilyName" | "variantName">) {
   const familyName = String(product.productFamilyName ?? "").trim();
   const variantName = String(product.variantName ?? "").trim();
   return [familyName, variantName].filter(Boolean).join(" ");
@@ -700,13 +700,24 @@ export default function ProductsPage() {
   }, [query, storeFilter, brandFilter, productBrandFilter, productFamilyFilter, supplierFilter, missingInfoFilter, categoryFilter, subcategoryFilter, productPageSize, productSortKey, productSortDirection]);
 
   async function saveProduct(target: ProductEditTarget) {
+    const generatedName = buildProductNameFromVariant(target.value) || String(target.value.name ?? "").trim();
+    if (!generatedName) {
+      window.alert("商品名を入力してください。");
+      return;
+    }
+    const normalizedProduct = {
+      ...target.value,
+      name: generatedName,
+      productFamilyName: String(target.value.productFamilyName ?? "").trim() || generatedName,
+      variantName: String(target.value.variantName ?? "").trim()
+    };
     const matchingProducts = products.filter((product) =>
-      getProductIdentity(product) !== getProductIdentity(target.value) &&
-      product.name.trim() === String(target.value.name ?? "").trim()
+      getProductIdentity(product) !== getProductIdentity(normalizedProduct) &&
+      product.name.trim() === normalizedProduct.name
     );
     const sameCategoryMatches = matchingProducts.filter((product) =>
-      product.category === target.value.category &&
-      (product.subcategory ?? "未分類") === (target.value.subcategory ?? "未分類")
+      product.category === normalizedProduct.category &&
+      (product.subcategory ?? "未分類") === (normalizedProduct.subcategory ?? "未分類")
     );
 
     if (sameCategoryMatches.length > 0 || matchingProducts.length > 0) {
@@ -723,8 +734,8 @@ export default function ProductsPage() {
       body: JSON.stringify({
         id: target.value.id ?? "",
         currentName: target.originalName ?? "",
-        ...target.value,
-        referencePrice: parseReferencePrice(target.value.referencePrice)
+        ...normalizedProduct,
+        referencePrice: parseReferencePrice(normalizedProduct.referencePrice)
       })
     });
 
@@ -1892,12 +1903,28 @@ function ProductEditDialog({
   const [isCustomUnitMode, setIsCustomUnitMode] = useState(() =>
     Boolean(currentUnit && !commonUnitOptions.includes(currentUnit))
   );
+  const generatedProductName = buildProductNameFromVariant(target.value) || String(target.value.name ?? "").trim();
 
   useEffect(() => {
     if (currentUnit && !commonUnitOptions.includes(currentUnit)) {
       setIsCustomUnitMode(true);
     }
   }, [currentUnit]);
+
+  useEffect(() => {
+    if (!target.value.name || target.value.productFamilyName || target.value.variantName) return;
+
+    const legacyName = String(target.value.name).trim();
+    if (!legacyName) return;
+
+    onChange({
+      ...target,
+      value: {
+        ...target.value,
+        productFamilyName: legacyName
+      }
+    });
+  }, [target.value.name, target.value.productFamilyName, target.value.variantName]);
 
   function setProductValue(key: string, value: string) {
     const nextValue = {
@@ -1947,7 +1974,8 @@ function ProductEditDialog({
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 30_000);
       const formData = new FormData();
-      formData.set("productName", target.value.name || "new-product");
+      if (target.value.id) formData.set("productId", target.value.id);
+      formData.set("productName", generatedProductName || "new-product");
       formData.set("file", file);
 
       const response = await fetch("/api/products/photo", {
@@ -2103,6 +2131,11 @@ function ProductEditDialog({
           </div>
         </div>
         <div className="edit-fields">
+          <div className="product-generated-name-preview">
+            <span>自動生成名</span>
+            <strong>{generatedProductName || "商品名とバリエーション名から自動生成"}</strong>
+            <small>保存時は「商品名 + バリエーション名」で登録されます。</small>
+          </div>
           {fields.map((field) => (
             <label key={field.key}>
               <span>{field.label}</span>
@@ -2387,7 +2420,6 @@ function getProductFields(
   const brandNames = brandsData.map((brand) => brand.name);
 
   return [
-    { key: "name", label: "商品名" },
     { key: "productFamilyName", label: "商品名" },
     { key: "variantName", label: "バリエーション名" },
     { key: "productBrandName", label: "商品ブランド" },

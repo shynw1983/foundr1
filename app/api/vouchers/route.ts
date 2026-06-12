@@ -1556,6 +1556,8 @@ async function setVoucherItemProductIgnored(ocrResultId: string, itemId: string,
 async function createProductFromVoucherItem(item: Record<string, unknown>, body: Record<string, unknown>, employeeId: string) {
   const name = String(body.productName ?? body.name ?? item.rawName ?? "").trim();
   if (!name) return "";
+  const productFamilyName = name;
+  const variantName = "";
   const category = String(body.category ?? item.category ?? "食材").trim() || "食材";
   const subcategory = String(body.subcategory ?? "未分類").trim() || "未分類";
   const unit = String(body.unit ?? item.unit ?? "個").trim() || "個";
@@ -1568,6 +1570,9 @@ async function createProductFromVoucherItem(item: Record<string, unknown>, body:
       subcategory,
       unit,
       reference_price,
+      product_family_name,
+      variant_name,
+      is_default_variant,
       brand_scope,
       usage_type,
       japanese_note,
@@ -1579,6 +1584,9 @@ async function createProductFromVoucherItem(item: Record<string, unknown>, body:
       ${subcategory},
       ${unit},
       ${Number.isFinite(referencePrice) ? referencePrice : 0},
+      ${productFamilyName},
+      ${variantName},
+      ${true},
       ${"unset"},
       ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
       ${`[情報未補完] レシート OCR から追加: ${String(item.rawName ?? "")}`},

@@ -12,6 +12,7 @@ export async function POST(request: Request) {
 
   try {
     const formData = await request.formData();
+    const productId = String(formData.get("productId") ?? "").trim();
     const productName = String(formData.get("productName") ?? "new-product").trim();
     const file = formData.get("file");
 
@@ -42,7 +43,15 @@ export async function POST(request: Request) {
     });
     const photoUrl = `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
 
-    if (productName && productName !== "new-product") {
+    if (productId) {
+      await sql`
+        update products
+        set
+          photo_url = ${photoUrl},
+          updated_at = now()
+        where id::text = ${productId}
+      `;
+    } else if (productName && productName !== "new-product") {
       await sql`
         update products
         set

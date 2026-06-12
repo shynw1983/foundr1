@@ -22712,6 +22712,37 @@ body :where(
   font-weight: 700;
 }
 
+.product-generated-name-preview {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8faf9;
+}
+
+.product-generated-name-preview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.product-generated-name-preview strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-generated-name-preview small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .edit-fields input,
 .edit-fields select,
 .edit-fields textarea {

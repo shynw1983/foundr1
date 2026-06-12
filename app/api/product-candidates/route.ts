@@ -231,6 +231,8 @@ export async function PATCH(request: Request) {
 async function createProductFromCandidate(candidate: Record<string, unknown>, body: Record<string, unknown>, employeeId: string) {
   const name = String(body.name ?? candidate.suggestedName ?? candidate.rawName ?? "").trim();
   if (!name) throw new Error("商品名を入力してください。");
+  const productFamilyName = name;
+  const variantName = "";
   const category = String(body.category ?? candidate.category ?? "未分類").trim() || "未分類";
   const subcategory = String(body.subcategory ?? candidate.subcategory ?? "未分類").trim() || "未分類";
   const unit = String(body.unit ?? candidate.unit ?? "個").trim() || "個";
@@ -243,6 +245,9 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       subcategory,
       unit,
       reference_price,
+      product_family_name,
+      variant_name,
+      is_default_variant,
       brand_scope,
       usage_type,
       japanese_note,
@@ -254,6 +259,9 @@ async function createProductFromCandidate(candidate: Record<string, unknown>, bo
       ${subcategory},
       ${unit},
       ${Number.isFinite(referencePrice) ? referencePrice : 0},
+      ${productFamilyName},
+      ${variantName},
+      ${true},
       ${"unset"},
       ${category === "包材" ? "packaging" : category === "消耗品" || category === "清掃用品" ? "consumable" : "ingredient"},
       ${`[情報未補完] レシート OCR から追加: ${String(candidate.rawName ?? "")}`},

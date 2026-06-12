@@ -51,7 +51,7 @@ export async function PUT(request: Request) {
     ? body.originCountries.map((item) => String(item).trim()).filter(Boolean)
     : [];
   const packageSpec = String(body.packageSpec ?? "");
-  const productFamilyName = String(body.productFamilyName ?? "").trim();
+  const productFamilyName = String(body.productFamilyName ?? "").trim() || name;
   const variantName = String(body.variantName ?? "").trim();
   const isDefaultVariant = body.isDefaultVariant === true || String(body.isDefaultVariant ?? "") === "true";
   const variantSortOrder = parseOptionalInteger(body.variantSortOrder);

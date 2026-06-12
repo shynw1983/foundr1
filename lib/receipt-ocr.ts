@@ -535,10 +535,29 @@ async function findProductMatch(supplierName: string, normalizedName: string) {
   if (dictionaryRows[0]?.productId) return { productId: String(dictionaryRows[0].productId) };
 
   const productRows = await sql`
-    select id::text as "productId"
-    from products
-    where lower(name) = lower(${normalizedName})
-       or lower(name) = lower(${normalizedName.replace(/\s+/g, "")})
+    with candidates as (
+      select
+        id::text as "productId",
+        case
+          when lower(name) = lower(${normalizedName}) then 0
+          when lower(name) = lower(${normalizedName.replace(/\s+/g, "")}) then 1
+          when lower(coalesce(product_family_name, '')) = lower(${normalizedName}) and is_default_variant = true then 2
+          when lower(replace(coalesce(product_family_name, ''), ' ', '')) = lower(${normalizedName.replace(/\s+/g, "")}) and is_default_variant = true then 3
+          when lower(coalesce(product_family_name, '')) = lower(${normalizedName}) then 4
+          when lower(replace(coalesce(product_family_name, ''), ' ', '')) = lower(${normalizedName.replace(/\s+/g, "")}) then 5
+          else 9
+        end as rank,
+        count(*) over (partition by lower(coalesce(nullif(product_family_name, ''), name))) as family_count
+      from products
+      where lower(name) = lower(${normalizedName})
+         or lower(name) = lower(${normalizedName.replace(/\s+/g, "")})
+         or lower(coalesce(product_family_name, '')) = lower(${normalizedName})
+         or lower(replace(coalesce(product_family_name, ''), ' ', '')) = lower(${normalizedName.replace(/\s+/g, "")})
+    )
+    select "productId"
+    from candidates
+    where rank <= 3 or family_count = 1
+    order by rank asc
     limit 1
   `;
   return { productId: productRows[0]?.productId ? String(productRows[0].productId) : "" };
