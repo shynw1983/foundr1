@@ -126,6 +126,9 @@ export async function PATCH(request: Request) {
 
   const body = await request.json() as {
     itemId?: string;
+    productId?: string;
+    productName?: string;
+    unit?: string;
     purchased?: boolean;
     unavailable?: boolean;
     actualQuantity?: number;
@@ -161,6 +164,8 @@ export async function PATCH(request: Request) {
     select
       purchase_order_items.purchase_order_id::text as "purchaseOrderId",
       purchase_order_items.id::text as "itemId",
+      purchase_order_items.product_id::text as "currentProductId",
+      coalesce(purchase_order_items.temporary_product_name, '') as "currentTemporaryProductName",
       purchase_orders.order_no as "orderNo",
       purchase_orders.store_id::text as "storeId",
       stores.name as "storeName",
@@ -202,13 +207,6 @@ export async function PATCH(request: Request) {
   const currentStatus = String(itemDetail?.currentStatus ?? "");
   const isDeliveryLocked = ["in_delivery", "delivered", "received"].includes(currentStatus);
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
-  if (
-    isDeliveryLocked &&
-    (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending")
-  ) {
-    return Response.json({ error: "配送中または納品済みの商品は未配送に戻せません。" }, { status: 409 });
-  }
-
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
   const actualPriceText = String(body.actualPrice ?? "").trim();
@@ -216,6 +214,21 @@ export async function PATCH(request: Request) {
   const actualPrice = normalizedActualPrice ? Number(normalizedActualPrice) : null;
   const hasNote = body.note !== undefined;
   const note = body.note ?? "";
+  const hasProductChange = body.productId !== undefined || body.productName !== undefined || body.unit !== undefined;
+  const nextProductId = String(body.productId ?? "").trim();
+  const nextProductName = String(body.productName ?? "").trim();
+  const nextUnit = String(body.unit ?? "").trim();
+  const productActuallyChanged = hasProductChange && (
+    String(itemDetail?.currentProductId ?? "") !== nextProductId ||
+    (!nextProductId && nextProductName && String(itemDetail?.currentTemporaryProductName ?? "") !== nextProductName) ||
+    (nextUnit && String(itemDetail?.requestedUnit ?? "") !== nextUnit)
+  );
+  if (
+    isDeliveryLocked &&
+    (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending" || productActuallyChanged)
+  ) {
+    return Response.json({ error: "配送中または納品済みの商品は未配送に戻せません。" }, { status: 409 });
+  }
   const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
   const shouldResetStoreFeedbackConfirmation =
     body.confirmStoreFeedback !== true &&
@@ -236,6 +249,31 @@ export async function PATCH(request: Request) {
 
   if (supplierName && !supplierId) {
     return Response.json({ error: "発注先が見つかりません。" }, { status: 400 });
+  }
+
+  const nextProductRows = nextProductId
+    ? await sql`
+        select
+          products.id,
+          products.name,
+          products.unit,
+          (
+            select product_supplier_options.supplier_id
+            from product_supplier_options
+            where product_supplier_options.product_id = products.id
+              and product_supplier_options.role = 'メイン'
+              and product_supplier_options.is_active = true
+            limit 1
+          ) as "mainSupplierId"
+        from products
+        where products.id::text = ${nextProductId}
+        limit 1
+      `
+    : [];
+  const nextProduct = nextProductRows[0];
+
+  if (nextProductId && !nextProduct) {
+    return Response.json({ error: "購入した商品が見つかりません。" }, { status: 404 });
   }
 
   if (body.purchased === false || body.unavailable === true) {
@@ -413,7 +451,23 @@ export async function PATCH(request: Request) {
         when ${shouldClearPriceException} then ''
         else price_exception_note
       end,
-      selected_supplier_id = coalesce(${supplierId}, selected_supplier_id),
+      product_id = case
+        when ${productActuallyChanged} then ${nextProduct?.id ?? null}
+        else product_id
+      end,
+      temporary_product_name = case
+        when ${productActuallyChanged} then ${nextProduct ? "" : nextProductName}
+        else temporary_product_name
+      end,
+      temporary_product_unit = case
+        when ${productActuallyChanged} then ${nextProduct ? "" : nextUnit}
+        else temporary_product_unit
+      end,
+      requested_unit = case
+        when ${productActuallyChanged} then ${nextProduct ? String(nextProduct.unit ?? "") : nextUnit || itemDetail?.requestedUnit || "個"}
+        else requested_unit
+      end,
+      selected_supplier_id = coalesce(${supplierId}, ${productActuallyChanged ? nextProduct?.mainSupplierId ?? null : null}, selected_supplier_id),
       store_feedback_confirmed_at = case
         when ${body.confirmStoreFeedback === true} then now()
         when ${shouldResetStoreFeedbackConfirmation} then null

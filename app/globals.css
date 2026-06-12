@@ -21540,6 +21540,18 @@ body :where(
   gap: 8px;
 }
 
+.temporary-variant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(96px, 0.45fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.temporary-variant-row .secondary-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
 .supplier-choice {
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
@@ -28119,6 +28131,15 @@ html:lang(ja) :where(
 @media (max-width: 900px) {
   .additional-purchase-form {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .temporary-variant-row {
+    grid-template-columns: 1fr;
+  }
+
+  .temporary-variant-row .secondary-button {
+    justify-content: center;
+    width: 100%;
   }
 
   .additional-purchase-form .secondary-button,

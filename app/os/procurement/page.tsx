@@ -20,6 +20,11 @@ type Product = typeof initialProducts[number] & {
   subcategory?: string;
   packageSpec?: string;
   productBrandName?: string;
+  productFamilyName?: string;
+  variantName?: string;
+  variantSortOrder?: number | string;
+  mainSupplier?: string;
+  backupSupplier?: string;
   usageType?: string;
 };
 type ProductSupplierGroup = Omit<typeof initialProductSupplierOptions[number], "options"> & {
@@ -258,6 +263,38 @@ function findProcurementProduct(item: ProcurementTaskItem, productList: Product[
 function findProcurementProductFromLookup(item: ProcurementTaskItem, productLookup: ProductLookup) {
   return (item.productId ? productLookup.byId.get(item.productId) : undefined)
     ?? productLookup.byName.get(item.productName);
+}
+
+function getProductFamilyLabel(product: Product | undefined, fallbackName: string) {
+  return String(product?.productFamilyName ?? "").trim() || fallbackName;
+}
+
+function getAlternativeVariantOptions(item: ProcurementTaskItem, products: Product[]) {
+  const currentProduct = products.find((product) => product.id === item.productId)
+    ?? products.find((product) => product.name === item.productName);
+  const familyName = getProductFamilyLabel(currentProduct, item.productName);
+  const normalizedFamilyName = familyName.trim().toLowerCase();
+
+  return products
+    .filter((product) => product.id)
+    .filter((product) => getProductFamilyLabel(product, product.name).trim().toLowerCase() === normalizedFamilyName)
+    .sort((left, right) => {
+      const leftOrder = Number(left.variantSortOrder ?? 0);
+      const rightOrder = Number(right.variantSortOrder ?? 0);
+      return leftOrder - rightOrder || left.name.localeCompare(right.name, "ja", { numeric: true, sensitivity: "base" });
+    });
+}
+
+function appendReplacementNote(note: string, fromName: string, toName: string) {
+  const marker = "代替購入:";
+  const cleanNote = note
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith(marker))
+    .join("\n")
+    .trim();
+  const replacementLine = `${marker} ${fromName} → ${toName}`;
+
+  return [cleanNote, replacementLine].filter(Boolean).join("\n");
 }
 
 function compareProcurementItemsBySubcategory(a: ProcurementTaskItem, b: ProcurementTaskItem, productLookup: ProductLookup) {
@@ -560,6 +597,9 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       actualPrice: item.actualPrice,
       note: item.note,
       supplier: item.supplier,
+      productId: item.productId ?? "",
+      productName: item.productName,
+      unit: item.unit,
       deliveryStatus: item.deliveryStatus
     })
   });
@@ -1552,7 +1592,7 @@ export default function ProcurementPage() {
                                         className={item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
                                         onClick={() => setActiveExceptionItemId(item.id)}
                                       >
-                                        異常報告
+                                        購入調整
                                       </button>
                                     </div>
                                   );
@@ -1597,11 +1637,12 @@ export default function ProcurementPage() {
       {activeExceptionItem ? (
         <ExceptionReportDialog
           item={activeExceptionItem}
+          products={products}
           choices={getSupplierChoicesForItem(activeExceptionItem, findProcurementProduct(activeExceptionItem, products), productSupplierOptions)}
           plannedSupplier={getProcurementSupplier(activeExceptionItem.productName, products, productSupplierOptions)}
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
           onClose={() => setActiveExceptionItemId(null)}
-          onSaved={() => showNotice("異常報告を保存しました。")}
+          onSaved={() => showNotice("購入調整を保存しました。")}
         />
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
@@ -1972,6 +2013,7 @@ function OrderFulfillmentPanel({
 
 function ExceptionReportDialog({
   item,
+  products,
   choices,
   plannedSupplier,
   onChange,
@@ -1979,6 +2021,7 @@ function ExceptionReportDialog({
   onSaved
 }: {
   item: ProcurementTaskItem;
+  products: Product[];
   choices: SupplierChoice[];
   plannedSupplier: string;
   onChange: (next: Partial<ProcurementTaskItem>) => void;
@@ -1987,8 +2030,42 @@ function ExceptionReportDialog({
 }) {
   const quantityDiff = item.actualQuantity - item.requestedQuantity;
   const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
+  const currentProduct = products.find((product) => product.id === item.productId)
+    ?? products.find((product) => product.name === item.productName);
+  const familyName = getProductFamilyLabel(currentProduct, item.productName);
+  const variantOptions = getAlternativeVariantOptions(item, products);
+  const selectedVariantId = item.productId ?? "";
+  const [temporaryVariantName, setTemporaryVariantName] = useState("");
+  const [temporaryVariantUnit, setTemporaryVariantUnit] = useState(item.unit || "個");
   const currentSupplier = item.supplier || plannedSupplier;
   const isDeliveryLocked = isDeliveryLockedItem(item);
+  const normalizedTemporaryVariantName = temporaryVariantName.trim();
+
+  function selectPurchasedVariant(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+
+    onChange({
+      productId: product.id,
+      productName: product.name,
+      unit: product.unit,
+      supplier: product.mainSupplier || item.supplier,
+      note: appendReplacementNote(item.note, item.productName, product.name)
+    });
+  }
+
+  function useTemporaryVariant() {
+    if (!normalizedTemporaryVariantName) return;
+    const temporaryProductName = [familyName, normalizedTemporaryVariantName].filter(Boolean).join(" ");
+
+    onChange({
+      productId: undefined,
+      productName: temporaryProductName,
+      unit: temporaryVariantUnit || item.unit || "個",
+      note: appendReplacementNote(item.note, item.productName, temporaryProductName)
+    });
+    setTemporaryVariantName("");
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="exception-report-title">
@@ -2004,7 +2081,7 @@ function ExceptionReportDialog({
         <div className="modal-heading">
           <div>
             <p className="eyebrow">Exception Report</p>
-            <h3 id="exception-report-title">異常報告</h3>
+            <h3 id="exception-report-title">購入調整</h3>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="閉じる">
             ×
@@ -2020,6 +2097,52 @@ function ExceptionReportDialog({
           </span>
         </div>
         <div className="edit-fields">
+          <label>
+            <span>購入したバリエーション</span>
+            <select
+              value={selectedVariantId}
+              disabled={isDeliveryLocked || variantOptions.length === 0}
+              onChange={(event) => selectPurchasedVariant(event.target.value)}
+            >
+              {variantOptions.length === 0 ? <option value="">登録済み候補なし</option> : null}
+              {variantOptions.map((product) => (
+                <option value={product.id ?? ""} key={product.id ?? product.name}>
+                  {product.name}{product.id === item.productId ? "（依頼）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="temporary-variant-row">
+            <label>
+              <span>臨時バリエーション</span>
+              <input
+                value={temporaryVariantName}
+                disabled={isDeliveryLocked}
+                placeholder={`例: ${familyName} の別サイズ`}
+                onChange={(event) => setTemporaryVariantName(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>単位</span>
+              <select
+                value={temporaryVariantUnit}
+                disabled={isDeliveryLocked}
+                onChange={(event) => setTemporaryVariantUnit(event.target.value)}
+              >
+                {temporaryProductUnitOptions.map((unit) => (
+                  <option value={unit} key={`temporary-variant-unit-${unit}`}>{unit}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isDeliveryLocked || !normalizedTemporaryVariantName}
+              onClick={useTemporaryVariant}
+            >
+              臨時で適用
+            </button>
+          </div>
           <label className="exception-toggle">
             <input
               type="checkbox"
