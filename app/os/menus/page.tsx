@@ -1642,14 +1642,19 @@ export default function MenuAdminPage() {
                   ))}
                 </div>
               </div>
-	              <label className="menu-full-field">
-	                <span>説明</span>
-	                <textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} rows={3} />
+              <label className="menu-full-field">
+                <span>日本語（原文）説明</span>
+                <textarea
+                  value={itemDraft.description}
+                  onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })}
+                  rows={3}
+                  placeholder="ブランドサイトや会員画面で日本語表示するときの説明"
+                />
               </label>
               <div className="menu-translation-panel">
                 <div>
                   <strong>客表示・会員・ブランドサイト用説明</strong>
-                  <span>未入力の言語は English、最後に日本語説明へフォールバックします。</span>
+                  <span>日本語（原文）説明から翻訳します。未入力の言語は English、最後に日本語説明へフォールバックします。</span>
                 </div>
                 <div className="menu-translation-grid">
                   {customerMenuLanguageOptions.map((language) => (

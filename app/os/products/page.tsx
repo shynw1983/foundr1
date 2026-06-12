@@ -111,7 +111,7 @@ const productUsageTypeOptions = [
 const productPageSizeOptions = [20, 50, 100];
 const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection; label: string }> = [
   { key: "category", direction: "asc", label: "分類順" },
-  { key: "productFamilyName", direction: "asc", label: "品種順" },
+  { key: "productFamilyName", direction: "asc", label: "商品順" },
   { key: "name", direction: "asc", label: "商品名 昇順" },
   { key: "name", direction: "desc", label: "商品名 降順" },
   { key: "category", direction: "desc", label: "分類 降順" },
@@ -128,7 +128,7 @@ const productSortOptions: Array<{ key: ProductSortKey; direction: SortDirection;
 ];
 const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "name", label: "商品名" },
-  { key: "productFamilyName", label: "品種" },
+  { key: "productFamilyName", label: "商品" },
   { key: "category", label: "分類" },
   { key: "subcategory", label: "小分類" },
   { key: "unit", label: "単位" },
@@ -144,7 +144,7 @@ const productManagerRoles = new Set(["owner", "manager"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
   { value: "receiptIncomplete", label: "情報未補完" },
-  { value: "spec", label: "規格未設定" },
+  { value: "spec", label: "包装規格未設定" },
   { value: "supplier", label: "発注先未設定" },
   { value: "mainSupplier", label: "メイン発注先未設定" },
   { value: "backupSupplier", label: "予備発注先未設定" }
@@ -157,8 +157,8 @@ const productSummaryFieldOptions = [
   { value: "category", label: "大分類" },
   { value: "subcategory", label: "小分類" },
   { value: "unit", label: "単位" },
-  { value: "productFamilyName", label: "品種" },
-  { value: "variantName", label: "規格名" },
+  { value: "productFamilyName", label: "商品" },
+  { value: "variantName", label: "バリエーション名" },
   { value: "storageType", label: "保管" },
   { value: "usageType", label: "用途区分" },
   { value: "brand", label: "適用ブランド" },
@@ -350,7 +350,7 @@ function normalizeProductFamilyKey(value: unknown) {
 }
 
 function getProductVariantName(product: ProductWithCategory) {
-  return String(product.variantName ?? "").trim() || getProductDisplaySpec(product) || "単一規格";
+  return String(product.variantName ?? "").trim() || getProductDisplaySpec(product) || "単一バリエーション";
 }
 
 function formatReceiptProductOptionLabel(product: ProductOption) {
@@ -711,7 +711,7 @@ export default function ProductsPage() {
 
     if (sameCategoryMatches.length > 0 || matchingProducts.length > 0) {
       const message = sameCategoryMatches.length > 0
-        ? "同じ大分類・小分類に同名の商品があります。規格・発注先が違う場合はそのまま保存できます。保存しますか？"
+        ? "同じ大分類・小分類に同名の商品があります。バリエーション・発注先が違う場合はそのまま保存できます。保存しますか？"
         : "同じ商品名が別分類にあります。分類が正しいか確認してください。保存しますか？";
 
       if (!window.confirm(message)) return;
@@ -893,7 +893,7 @@ export default function ProductsPage() {
       }
     });
 
-    showNotice("同じ品種に新しい規格を追加します。規格名、数量、発注先、価格を確認してください。", "info");
+    showNotice("同じ商品に新しいバリエーションを追加します。バリエーション名、数量、発注先、価格を確認してください。", "info");
   }
 
   async function openProductPriceHistory(product: ProductWithCategory) {
@@ -1190,7 +1190,7 @@ export default function ProductsPage() {
           <div className="panel-title product-master-title">
             <div>
               <h3>商品マスタ</h3>
-              <p>大分類、小分類、商品名、単位、発注先、規格、写真、保管属性を管理</p>
+              <p>大分類、小分類、商品、単位、発注先、バリエーション、写真、保管属性を管理</p>
             </div>
             <div className="product-list-controls">
               <label>
@@ -1217,7 +1217,7 @@ export default function ProductsPage() {
                   ))}
                 </select>
               </label>
-              <span className="source-indicator">{productFamilyGroups.length} 品種 / {filteredProducts.length} 規格</span>
+              <span className="source-indicator">{productFamilyGroups.length} 商品 / {filteredProducts.length} バリエーション</span>
               <details
                 className="product-summary-picker"
                 open={isProductSummaryPickerOpen}
@@ -1288,7 +1288,7 @@ export default function ProductsPage() {
                 </select>
               </label>
               <label>
-                <span>品種</span>
+                <span>商品</span>
                 <select value={productFamilyFilter} onChange={(event) => setProductFamilyFilter(event.target.value)}>
                   <option value="すべて">すべて</option>
                   {productFamilyOptions.map((familyName) => (
@@ -1345,8 +1345,8 @@ export default function ProductsPage() {
           </div>
           <div className="product-master-table">
             <div className="product-master-head">
-              <span>品種</span>
-              <span>規格</span>
+              <span>商品</span>
+              <span>バリエーション</span>
               <span>{canManageProducts ? "操作" : "権限"}</span>
             </div>
             {pagedProductGroups.map((group) => {
@@ -1372,16 +1372,16 @@ export default function ProductsPage() {
                         )}
                       </div>
                       <div className="product-family-copy">
-                        <small>品種</small>
+                        <small>商品</small>
                         <div className="product-family-name-line">
                           <strong>{group.familyName}</strong>
-                          <span>{group.products.length} 規格</span>
-                          {representative.isDefaultVariant ? <span className="status-pill">標準規格あり</span> : null}
+                          <span>{group.products.length} バリエーション</span>
+                          {representative.isDefaultVariant ? <span className="status-pill">標準バリエーションあり</span> : null}
                         </div>
                         <p>{representative.category} / {representative.subcategory ?? "未分類"} / {representative.brand || "共通"}</p>
                       </div>
                     </div>
-                    <div className="product-master-info-grid" aria-label="品種情報">
+                    <div className="product-master-info-grid" aria-label="商品情報">
                       {groupSummaryItems.slice(0, 4).map((item) => (
                         <span key={`${group.id}-summary-${item.label}`}>
                           <small>{item.label}</small>
@@ -1393,7 +1393,7 @@ export default function ProductsPage() {
                       {canManageProducts ? (
                         <button className="secondary-button" type="button" onClick={() => addVariantToFamily(representative)}>
                           <Plus size={15} />
-                          規格を追加
+                          バリエーションを追加
                         </button>
                       ) : (
                         <span className="product-readonly-badge">閲覧のみ</span>
@@ -1402,7 +1402,7 @@ export default function ProductsPage() {
                   </div>
                   <details className="product-family-variants">
                     <summary>
-                      <span>{group.products.length} 規格</span>
+                      <span>{group.products.length} バリエーション</span>
                     </summary>
                     <div className="product-variant-list">
                       {group.products.map((product) => {
@@ -1427,15 +1427,15 @@ export default function ProductsPage() {
                                 )}
                               </div>
                               <div className="product-variant-title">
-                                <strong>{displaySpec || product.name || "単一規格"}</strong>
+                                <strong>{displaySpec || product.name || "単一バリエーション"}</strong>
                                 <span>{product.name || "未設定の商品"}</span>
                                 <div className="product-variant-badges">
-                                  {product.isDefaultVariant ? <span className="status-pill">標準規格</span> : null}
+                                  {product.isDefaultVariant ? <span className="status-pill">標準バリエーション</span> : null}
                                   {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                                 </div>
                               </div>
                             </div>
-                            <div className="product-master-info-grid" aria-label="規格情報">
+                            <div className="product-master-info-grid" aria-label="バリエーション情報">
                               {summaryItems.slice(0, 6).map((item) => (
                                 <span key={`${product.name}-summary-${item.label}`}>
                                   <small>{item.label}</small>
@@ -1477,19 +1477,19 @@ export default function ProductsPage() {
                             <div className="product-master-detail-body">
                               <dl>
                                 <div>
-                                  <dt>品種</dt>
+                                  <dt>商品</dt>
                                   <dd>{group.familyName}</dd>
                                 </div>
                                 <div>
-                                  <dt>規格名</dt>
+                                  <dt>バリエーション名</dt>
                                   <dd>{product.variantName || "未設定"}</dd>
                                 </div>
                                 <div>
-                                  <dt>標準規格</dt>
+                                  <dt>標準バリエーション</dt>
                                   <dd>{product.isDefaultVariant ? "はい" : "いいえ"}</dd>
                                 </div>
                                 <div>
-                                  <dt>規格表示順</dt>
+                                  <dt>バリエーション表示順</dt>
                                   <dd>{Number(product.variantSortOrder ?? 0)}</dd>
                                 </div>
                                 <div>
@@ -1535,7 +1535,7 @@ export default function ProductsPage() {
                                   <dd>{formatPackageQuantity(product)}</dd>
                                 </div>
                                 <div>
-                                  <dt>規格</dt>
+                                  <dt>包装規格</dt>
                                   <dd>{product.packageSpec || "未設定"}</dd>
                                 </div>
                                 <div>
@@ -2237,7 +2237,7 @@ function ProductEditDialog({
               </label>
             </div>
             <label className="product-spec-package">
-              <span>規格</span>
+              <span>包装規格</span>
               <input
                 value={target.value.packageSpec ?? ""}
                 placeholder="例: 1500ml、500g、1L"
@@ -2266,7 +2266,7 @@ function ProductEditDialog({
                   })
                 }
               />
-              <span>この品種の標準規格にする</span>
+              <span>この商品の標準バリエーションにする</span>
             </label>
             <label className="product-spec-note">
               <span>日本語メモ</span>
@@ -2388,8 +2388,8 @@ function getProductFields(
 
   return [
     { key: "name", label: "商品名" },
-    { key: "productFamilyName", label: "品種名" },
-    { key: "variantName", label: "規格名" },
+    { key: "productFamilyName", label: "商品名" },
+    { key: "variantName", label: "バリエーション名" },
     { key: "productBrandName", label: "商品ブランド" },
     { key: "manufacturer", label: "メーカー" },
     { key: "category", label: "大分類", options: uniqueOptions([...categoryOptions, product.category]) },
@@ -2401,7 +2401,7 @@ function getProductFields(
     { key: "brand", label: "適用ブランド", options: uniqueOptions(["未設定", "共通", ...brandNames, product.brand]) },
     { key: "unit", label: "単位" },
     { key: "referencePrice", label: "参考価格", type: "text", inputMode: "decimal" },
-    { key: "variantSortOrder", label: "規格表示順", type: "text", inputMode: "decimal" },
+    { key: "variantSortOrder", label: "バリエーション表示順", type: "text", inputMode: "decimal" },
     { key: "mainSupplier", label: "メイン発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.mainSupplier]), emptyLabel: "未設定" },
     { key: "mainPurchaseUrl", label: "メイン購入リンク" },
     { key: "backupSupplier", label: "予備発注先", options: uniqueOptionsWithEmpty(["", ...supplierNames, product.backupSupplier]), emptyLabel: "無" },
