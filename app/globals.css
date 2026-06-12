@@ -3716,6 +3716,112 @@ body :where(
   width: 100%;
 }
 
+.cost-search-field {
+  flex: 1 1 220px;
+}
+
+.cost-analytics-chart-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.cost-breakdown-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.cost-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.cost-breakdown-row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cost-breakdown-row strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.cost-breakdown-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cost-breakdown-row b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cost-breakdown-row i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 9px;
+  border-radius: 999px;
+  background: #21745b;
+}
+
+.cost-breakdown-row i.is-supplier {
+  background: #0f766e;
+}
+
+.cost-purchase-table-panel {
+  padding: 18px;
+}
+
+.cost-purchase-table-wrap {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+
+.cost-purchase-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.cost-purchase-table th,
+.cost-purchase-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cost-purchase-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cost-purchase-table td {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cost-purchase-table td strong,
+.cost-purchase-table td span {
+  display: block;
+}
+
+.cost-purchase-table td strong {
+  font-weight: 650;
+}
+
+.cost-purchase-table td span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .expense-form {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
