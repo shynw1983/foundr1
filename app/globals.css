@@ -12444,6 +12444,14 @@ body :where(
   padding-top: 12px;
 }
 
+.pos-admin-printer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .pos-admin-display-media-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

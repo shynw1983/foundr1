@@ -5,7 +5,9 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.DisplayCutout;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.ViewGroup;
@@ -18,6 +20,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import org.json.JSONArray;
@@ -39,6 +42,7 @@ public class MainActivity extends Activity {
     private static final int LINE_CHARS_80MM = 48;
     private static final int LINE_CHARS_58MM = 32;
 
+    private FrameLayout rootView;
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
     private ValueCallback<Uri[]> filePathCallback;
@@ -47,12 +51,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        rootView = new FrameLayout(this);
         webView = new WebView(this);
-        webView.setLayoutParams(new ViewGroup.LayoutParams(
+        webView.setLayoutParams(new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
-        setContentView(webView);
+        rootView.addView(webView);
+        setContentView(rootView);
         applySystemBarInsets();
 
         WebSettings settings = webView.getSettings();
@@ -128,13 +134,30 @@ public class MainActivity extends Activity {
         Window window = getWindow();
         window.setStatusBarColor(0xFF134E3A);
         window.setNavigationBarColor(0xFF0F172A);
-        webView.setOnApplyWindowInsetsListener((view, insets) -> {
+        rootView.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getSystemWindowInsetTop();
             int bottom = insets.getSystemWindowInsetBottom();
-            view.setPadding(0, top, 0, bottom);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                DisplayCutout cutout = insets.getDisplayCutout();
+                if (cutout != null) {
+                    top = Math.max(top, cutout.getSafeInsetTop());
+                    bottom = Math.max(bottom, cutout.getSafeInsetBottom());
+                }
+            }
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) webView.getLayoutParams();
+            int nextTop = top + dp(8);
+            if (params.topMargin != nextTop || params.bottomMargin != bottom) {
+                params.topMargin = nextTop;
+                params.bottomMargin = bottom;
+                webView.setLayoutParams(params);
+            }
             return insets;
         });
-        webView.requestApplyInsets();
+        rootView.requestApplyInsets();
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     @Override

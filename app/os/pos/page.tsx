@@ -272,10 +272,10 @@ export default function PosPage() {
     setLoading(false);
   }
 
-  async function saveTaxSettings() {
-    if (!selectedStoreId || taxSaving) return;
+  async function savePosSettings(options: { quiet?: boolean } = {}) {
+    if (!selectedStoreId || taxSaving) return false;
     setTaxSaving(true);
-    setMessage("");
+    if (!options.quiet) setMessage("");
     try {
       const response = await fetch("/api/os/pos/settings", {
         method: "POST",
@@ -294,7 +294,7 @@ export default function PosPage() {
         })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "POS 税設定を保存できませんでした。");
+      if (!response.ok) throw new Error(body.error || "POS 設定を保存できませんでした。");
       setTaxSettings(body.settings ?? null);
       setTaxForm({
         dineInEnabled: body.settings?.dineInEnabled !== false,
@@ -307,9 +307,16 @@ export default function PosPage() {
         printerSettings: body.settings?.printerSettings ?? taxForm.printerSettings,
         posBrandSettings: Array.isArray(body.settings?.posBrandSettings) ? body.settings.posBrandSettings : taxForm.posBrandSettings
       });
-      setMessage("POS 税設定を保存しました。");
+      if (!options.quiet) setMessage("POS 設定を保存しました。");
+      return true;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "POS 税設定を保存できませんでした。");
+      const errorMessage = error instanceof Error ? error.message : "POS 設定を保存できませんでした。";
+      if (options.quiet) {
+        setTestPrintStatus(errorMessage);
+      } else {
+        setMessage(errorMessage);
+      }
+      return false;
     } finally {
       setTaxSaving(false);
     }
@@ -324,8 +331,13 @@ export default function PosPage() {
     }
     setTestPrinting(true);
     setTestPrintStatus("");
+    const saved = await savePosSettings({ quiet: true });
+    if (!saved) {
+      setTestPrinting(false);
+      return;
+    }
     const result = await printWithAndroidBridge(createTestPrintPayload(printer, taxSettings?.storeName || "Foundr1 OS"));
-    setTestPrintStatus(result.ok ? "テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
+    setTestPrintStatus(result.ok ? "プリンター設定を保存し、テスト印刷を送信しました。" : result.error || "テスト印刷に失敗しました。");
     setTestPrinting(false);
   }
 
@@ -733,10 +745,15 @@ export default function PosPage() {
                 <h4>レシート / 厨房プリンター</h4>
                 <p>Android 店舗端末から Wi-Fi 熱敏プリンターへ印刷する接続情報を管理します。</p>
               </div>
-              <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || testPrinting}>
-                <Printer size={15} />
-                {testPrinting ? "送信中..." : "テスト印刷"}
-              </button>
+              <div className="pos-admin-printer-actions">
+                <button className="secondary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
+                  {taxSaving ? "保存中..." : "保存"}
+                </button>
+                <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || taxSaving || testPrinting}>
+                  <Printer size={15} />
+                  {testPrinting ? "送信中..." : "テスト印刷"}
+                </button>
+              </div>
             </div>
             <div className="pos-admin-printer-grid">
               <label className="pos-admin-discount-check">
@@ -992,7 +1009,7 @@ export default function PosPage() {
             <span>
               現在: {taxSettings?.dineInEnabled === false ? "持ち帰りのみ" : `店内 ${taxSettings?.dineInTaxRate ?? 10}%`} / 持ち帰り {taxSettings?.takeoutTaxRate ?? 8}% / 外部決済 {taxSettings?.externalPaymentTerminalBrand ?? "PayCAS"} / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
             </span>
-            <button className="primary-button" type="button" onClick={() => void saveTaxSettings()} disabled={!canManagePosSettings || taxSaving}>
+            <button className="primary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
               {taxSaving ? "保存中..." : "保存"}
             </button>
           </div>
