@@ -10,8 +10,10 @@ import { orders, products as initialProducts } from "../../../lib/mock-data";
 
 type Product = typeof initialProducts[number];
 type ProductWithSpec = Product & {
+  id?: string;
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
+  mainSupplier?: string;
   variantName?: string;
 };
 type PurchaseOrder = typeof orders[number] & {
@@ -21,10 +23,12 @@ type PurchaseOrder = typeof orders[number] & {
 type PurchaseOrderItem = {
   id?: string;
   orderId: string;
+  productId?: string;
   productName: string;
   brandName?: string;
   requestedQuantity: number;
   actualQuantity?: number;
+  actualPrice?: string;
   unit: string;
   purchased?: boolean;
   unavailable?: boolean;
@@ -45,6 +49,7 @@ type SupplierFulfillment = {
 type HistoryRow = {
   id: string;
   orderId: string;
+  productId: string;
   store: string;
   brand: string;
   deadline: string;
@@ -56,8 +61,20 @@ type HistoryRow = {
   supplier: string;
   requestedQuantity: number;
   actualQuantity: number;
+  actualPrice: string;
   unit: string;
+  deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
   status: string;
+  note: string;
+};
+type HistoryCorrectionDraft = {
+  itemId: string;
+  productId: string;
+  productName: string;
+  actualQuantity: string;
+  actualPrice: string;
+  unit: string;
+  supplier: string;
   note: string;
 };
 type HistoryReportRow = {
@@ -307,14 +324,16 @@ function createHistoryRows(
 ) {
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
   const productMap = new Map(products.map((product) => [product.name, product]));
+  const productById = new Map(products.flatMap((product) => product.id ? [[String(product.id), product] as const] : []));
 
   return orderItems.map<HistoryRow>((item, index) => {
     const order = orderMap.get(item.orderId);
-    const product = productMap.get(item.productName);
+    const product = item.productId ? productById.get(item.productId) : productMap.get(item.productName);
 
     return {
       id: item.id ?? `${item.orderId}-${index}`,
       orderId: item.orderId,
+      productId: item.productId ?? "",
       store: order?.store ?? "未設定",
       brand: order?.brand ?? "共通",
       deadline: order?.deadline ?? "",
@@ -326,7 +345,9 @@ function createHistoryRows(
       supplier: item.supplier || product?.mainSupplier || "未設定",
       requestedQuantity: item.requestedQuantity,
       actualQuantity: item.actualQuantity ?? item.requestedQuantity,
+      actualPrice: item.actualPrice ?? "",
       unit: item.unit,
+      deliveryStatus: item.deliveryStatus,
       status: getItemStatus(item),
       note: [item.note, item.priceExceptionNote].filter(Boolean).join(" / ")
     };
@@ -571,6 +592,146 @@ function HistoryMonthCalendar({
   );
 }
 
+function HistoryCorrectionDialog({
+  row,
+  products,
+  onClose,
+  onSave
+}: {
+  row: HistoryRow;
+  products: ProductWithSpec[];
+  onClose: () => void;
+  onSave: (draft: HistoryCorrectionDraft) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<HistoryCorrectionDraft>(() => ({
+    itemId: row.id,
+    productId: row.productId,
+    productName: row.productName,
+    actualQuantity: String(row.actualQuantity),
+    actualPrice: row.actualPrice,
+    unit: row.unit,
+    supplier: row.supplier === "未設定" ? "" : row.supplier,
+    note: row.note ? `${row.note} / 履歴修正` : "履歴修正"
+  }));
+  const [isSaving, setIsSaving] = useState(false);
+  const productOptions = products
+    .filter((product) => product.id)
+    .sort((left, right) => {
+      const leftCategory = String(left.category ?? "");
+      const rightCategory = String(right.category ?? "");
+      return leftCategory.localeCompare(rightCategory, "ja")
+        || String(left.name).localeCompare(String(right.name), "ja");
+    });
+  const selectedProduct = productOptions.find((product) => String(product.id) === draft.productId);
+  const actualQuantity = Number(draft.actualQuantity);
+  const canSave = !isSaving && Number.isFinite(actualQuantity) && actualQuantity > 0 && (draft.productId || draft.productName.trim());
+
+  function updateDraft(next: Partial<HistoryCorrectionDraft>) {
+    setDraft((current) => ({ ...current, ...next }));
+  }
+
+  async function submitCorrection() {
+    if (!canSave) return;
+    setIsSaving(true);
+    await onSave(draft);
+    setIsSaving(false);
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="edit-modal history-correction-modal" role="dialog" aria-modal="true" aria-labelledby="history-correction-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">History Correction</p>
+            <h3 id="history-correction-title">購入履歴修正</h3>
+            <p>{row.orderId} · {row.store}</p>
+          </div>
+          <button type="button" className="text-button" onClick={onClose}>
+            閉じる
+          </button>
+        </div>
+        <div className="exception-summary">
+          <strong>{row.productName}</strong>
+          {row.productSpec ? <span>{row.productSpec}</span> : null}
+          <span>現在 {formatQuantity(row.actualQuantity)} {row.unit}</span>
+          <span>{row.status}</span>
+        </div>
+        <div className="edit-fields">
+          <label>
+            <span>購入した商品バリエーション</span>
+            <select
+              value={draft.productId}
+              onChange={(event) => {
+                const product = productOptions.find((item) => String(item.id) === event.target.value);
+                updateDraft({
+                  productId: event.target.value,
+                  productName: product?.name ?? draft.productName,
+                  unit: product?.unit ?? draft.unit,
+                  supplier: product?.mainSupplier || draft.supplier
+                });
+              }}
+            >
+              {!row.productId ? <option value="">現在の臨時商品: {row.productName}</option> : null}
+              {productOptions.map((product) => (
+                <option value={String(product.id)} key={String(product.id)}>
+                  {product.name}{getProductDisplaySpec(product) ? ` / ${getProductDisplaySpec(product)}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>商品名</span>
+            <input
+              value={selectedProduct?.name ?? draft.productName}
+              disabled={Boolean(selectedProduct)}
+              onChange={(event) => updateDraft({ productName: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>実購入数量</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.actualQuantity}
+              onChange={(event) => updateDraft({ actualQuantity: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>単位</span>
+            <input value={draft.unit} onChange={(event) => updateDraft({ unit: event.target.value })} />
+          </label>
+          <label>
+            <span>実単価</span>
+            <input
+              inputMode="decimal"
+              value={draft.actualPrice}
+              placeholder="未設定"
+              onChange={(event) => updateDraft({ actualPrice: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>発注先</span>
+            <input value={draft.supplier} onChange={(event) => updateDraft({ supplier: event.target.value })} />
+          </label>
+          <label className="full-span">
+            <span>修正メモ</span>
+            <textarea value={draft.note} onChange={(event) => updateDraft({ note: event.target.value })} />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="text-button" onClick={onClose}>
+            キャンセル
+          </button>
+          <button type="button" className="primary-button" disabled={!canSave} onClick={() => void submitCorrection()}>
+            {isSaving ? "保存中..." : "修正を保存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProcurementHistoryPage() {
   const [products, setProducts] = useState<ProductWithSpec[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -585,35 +746,36 @@ export default function ProcurementHistoryPage() {
   const [calendarMonth, setCalendarMonth] = useState(getCurrentMonthKey);
   const [historyView, setHistoryView] = useState<HistoryView>("orders");
   const [activeReceipt, setActiveReceipt] = useState<ReceiptRow | null>(null);
+  const [activeCorrectionRow, setActiveCorrectionRow] = useState<HistoryRow | null>(null);
   const [currentRole, setCurrentRole] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
-  useEffect(() => {
-    async function loadHistoryData() {
-      const [response, meResponse] = await Promise.all([
-        fetch("/api/dashboard", { cache: "no-store" }),
-        fetch("/api/auth/me", { cache: "no-store" })
-      ]);
-      if (meResponse.ok) {
-        const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
-        setCurrentRole(body.employee?.role ?? "");
-      }
-      if (!response.ok) return;
-
-      const data = await response.json() as {
-        products?: ProductWithSpec[];
-        orders?: PurchaseOrder[];
-        purchaseOrderItems?: PurchaseOrderItem[];
-        supplierFulfillments?: SupplierFulfillment[];
-      };
-
-      if (data.products) setProducts(data.products);
-      if (data.orders) setPurchaseOrders(data.orders);
-      if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
-      if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
-      setDataSource("neon");
+  async function loadHistoryData() {
+    const [response, meResponse] = await Promise.all([
+      fetch("/api/dashboard", { cache: "no-store" }),
+      fetch("/api/auth/me", { cache: "no-store" })
+    ]);
+    if (meResponse.ok) {
+      const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
+      setCurrentRole(body.employee?.role ?? "");
     }
+    if (!response.ok) return;
 
+    const data = await response.json() as {
+      products?: ProductWithSpec[];
+      orders?: PurchaseOrder[];
+      purchaseOrderItems?: PurchaseOrderItem[];
+      supplierFulfillments?: SupplierFulfillment[];
+    };
+
+    if (data.products) setProducts(data.products);
+    if (data.orders) setPurchaseOrders(data.orders);
+    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
+    setDataSource("neon");
+  }
+
+  useEffect(() => {
     void loadHistoryData();
   }, []);
 
@@ -681,6 +843,7 @@ export default function ProcurementHistoryPage() {
     );
   });
   const canDeleteHistory = currentRole === "owner";
+  const canCorrectHistory = currentRole === "owner" || currentRole === "manager";
   const dateRangeLabel = `${formatDateLabel(dateRange.start)} - ${formatDateLabel(dateRange.end)}`;
 
   function selectDateRangeDay(dateKey: string) {
@@ -775,6 +938,36 @@ export default function ProcurementHistoryPage() {
         status: "確認済み"
       };
     });
+  }
+
+  async function saveHistoryCorrection(draft: HistoryCorrectionDraft) {
+    const product = products.find((item) => item.id === draft.productId);
+    const note = draft.note.trim();
+    const response = await fetch("/api/procurement/items", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemId: draft.itemId,
+        historyCorrection: true,
+        purchased: true,
+        productId: product?.id ?? "",
+        productName: product?.name ?? draft.productName,
+        unit: product?.unit ?? draft.unit,
+        actualQuantity: Number(draft.actualQuantity),
+        actualPrice: draft.actualPrice,
+        supplier: draft.supplier,
+        note
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "履歴修正を保存できませんでした。");
+      return;
+    }
+
+    setActiveCorrectionRow(null);
+    await loadHistoryData();
   }
 
   return (
@@ -964,6 +1157,11 @@ export default function ProcurementHistoryPage() {
                             <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
                             <div className="history-owner-actions">
                               <span className={`status-pill ${statusTone[item.status]}`}>{item.status}</span>
+                              {canCorrectHistory ? (
+                                <button type="button" className="text-button" onClick={() => setActiveCorrectionRow(item)}>
+                                  修正
+                                </button>
+                              ) : null}
                               {canDeleteHistory ? (
                                 <button type="button" className="text-button danger-button" onClick={() => void deleteHistoryItem(item.id)}>
                                   削除
@@ -1085,6 +1283,11 @@ export default function ProcurementHistoryPage() {
                   <strong>{row.actualQuantity} / {row.requestedQuantity} {row.unit}</strong>
                   <div className="history-owner-actions">
                     <span className={`status-pill ${statusTone[row.status]}`}>{row.status}</span>
+                    {canCorrectHistory ? (
+                      <button type="button" className="text-button" onClick={() => setActiveCorrectionRow(row)}>
+                        修正
+                      </button>
+                    ) : null}
                     {canDeleteHistory ? (
                       <button type="button" className="text-button danger-button" onClick={() => void deleteHistoryItem(row.id)}>
                         削除
@@ -1201,6 +1404,14 @@ export default function ProcurementHistoryPage() {
               </div>
             </div>
           </div>
+        ) : null}
+        {activeCorrectionRow ? (
+          <HistoryCorrectionDialog
+            row={activeCorrectionRow}
+            products={products}
+            onClose={() => setActiveCorrectionRow(null)}
+            onSave={saveHistoryCorrection}
+          />
         ) : null}
       </section>
     </main>

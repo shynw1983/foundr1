@@ -138,6 +138,7 @@ export async function PATCH(request: Request) {
     deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
     clearActualPrice?: boolean;
     confirmStoreFeedback?: boolean;
+    historyCorrection?: boolean;
   };
 
   if (!body.itemId) {
@@ -206,6 +207,10 @@ export async function PATCH(request: Request) {
 
   const currentStatus = String(itemDetail?.currentStatus ?? "");
   const isDeliveryLocked = ["in_delivery", "delivered", "received"].includes(currentStatus);
+  const isHistoryCorrection = body.historyCorrection === true;
+  if (isHistoryCorrection && !["owner", "manager"].includes(session.role)) {
+    return Response.json({ error: "履歴修正の権限がありません。" }, { status: 403 });
+  }
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
@@ -225,6 +230,7 @@ export async function PATCH(request: Request) {
   );
   if (
     isDeliveryLocked &&
+    !isHistoryCorrection &&
     (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending" || productActuallyChanged)
   ) {
     return Response.json({ error: "配送中または納品済みの商品は未配送に戻せません。" }, { status: 409 });
@@ -232,6 +238,7 @@ export async function PATCH(request: Request) {
   const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
   const shouldResetStoreFeedbackConfirmation =
     body.confirmStoreFeedback !== true &&
+    !isHistoryCorrection &&
     ((hasNote && note !== itemDetail?.currentNote) || (body.unavailable === true && itemDetail?.currentStatus !== "unavailable"));
   const deliveryStatus = ["in_delivery", "delivered", "received"].includes(body.deliveryStatus ?? "")
     ? body.deliveryStatus
