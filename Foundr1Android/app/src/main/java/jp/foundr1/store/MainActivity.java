@@ -364,6 +364,8 @@ public class MainActivity extends Activity {
         }
         addSeparator(lines, contentWidth, normal);
         if (isReceipt && template != null) {
+            Bitmap promotionImage = loadTemplateBitmap(template.optString("promotionImageUrl", ""), contentWidth);
+            if (promotionImage != null) lines.add(RasterLine.image(promotionImage));
             addMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth);
             addMultiline(lines, templateText(template, "footerMessage"), small, contentWidth);
         }
@@ -400,6 +402,10 @@ public class MainActivity extends Activity {
     }
 
     private Bitmap loadLogoBitmap(String logoUrl, int maxWidth) {
+        return loadTemplateBitmap(logoUrl, maxWidth);
+    }
+
+    private Bitmap loadTemplateBitmap(String logoUrl, int maxWidth) {
         if (logoUrl == null || logoUrl.trim().isEmpty()) return null;
         try (InputStream stream = new URL(logoUrl.trim()).openStream()) {
             Bitmap source = BitmapFactory.decodeStream(stream);

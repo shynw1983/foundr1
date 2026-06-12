@@ -12592,7 +12592,8 @@ body :where(
   min-width: 0;
 }
 
-.pos-admin-receipt-template-textareas label > span {
+.pos-admin-receipt-template-textareas label > span,
+.pos-admin-receipt-image-field > span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -12603,6 +12604,38 @@ body :where(
   min-width: 0;
   min-height: 76px;
   resize: vertical;
+}
+
+.pos-admin-receipt-image-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pos-admin-receipt-image-control {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pos-admin-receipt-image-control > img,
+.pos-admin-receipt-image-control > div:first-child {
+  width: 100%;
+  max-width: 240px;
+  min-height: 72px;
+  max-height: 132px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.pos-admin-receipt-image-control > div:first-child {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pos-admin-display-upload-row {

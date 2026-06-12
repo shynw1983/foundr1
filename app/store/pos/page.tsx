@@ -1124,6 +1124,19 @@ export default function StorePosPage() {
     };
   }
 
+  function absolutizeReceiptTemplateMedia(template: PosPrinterSettings["receiptTemplate"]) {
+    const toAbsolute = (value: string) => {
+      const url = String(value || "").trim();
+      if (!url || /^https?:\/\//i.test(url)) return url;
+      return new URL(url, window.location.origin).toString();
+    };
+    return {
+      ...template,
+      logoUrl: toAbsolute(template.logoUrl),
+      promotionImageUrl: toAbsolute(template.promotionImageUrl)
+    };
+  }
+
   function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[]): PosPrintPayload {
     const printer = getReceiptPrinter(posSettings.printerSettings);
     return {
@@ -1132,7 +1145,7 @@ export default function StorePosPage() {
       printer,
       storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
       printedAt: new Date().toISOString(),
-      receiptTemplate: posSettings.printerSettings.receiptTemplate,
+      receiptTemplate: absolutizeReceiptTemplateMedia(posSettings.printerSettings.receiptTemplate),
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
@@ -1166,7 +1179,7 @@ export default function StorePosPage() {
       printer,
       storeName: `${stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS"} / ${brandName}`,
       printedAt: new Date().toISOString(),
-      receiptTemplate: posSettings.printerSettings.receiptTemplate,
+      receiptTemplate: absolutizeReceiptTemplateMedia(posSettings.printerSettings.receiptTemplate),
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,

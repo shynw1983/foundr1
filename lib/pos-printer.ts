@@ -16,6 +16,7 @@ export type PosBrandKitchenPrinterSetting = {
 export type PosReceiptTemplateSettings = {
   showLogo: boolean;
   logoUrl: string;
+  promotionImageUrl: string;
   businessName: string;
   companyInfo: string;
   taxRegistrationNumber: string;
@@ -100,6 +101,7 @@ export const defaultPosPrinterConnection: PosPrinterConnection = {
 export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   showLogo: false,
   logoUrl: "",
+  promotionImageUrl: "",
   businessName: "",
   companyInfo: "",
   taxRegistrationNumber: "",
@@ -144,6 +146,7 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
   return {
     showLogo: source.showLogo === true,
     logoUrl: text(source.logoUrl, 500),
+    promotionImageUrl: text(source.promotionImageUrl, 500),
     businessName: text(source.businessName, 120),
     companyInfo: text(source.companyInfo, 500),
     taxRegistrationNumber: text(source.taxRegistrationNumber, 80),

@@ -7,6 +7,7 @@ import {
   ClipboardList,
   ExternalLink,
   FileText,
+  ImageUp,
   Lightbulb,
   LogOut,
   MenuSquare,
@@ -211,10 +212,12 @@ export default function PosPage() {
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
   const [mediaUploadStatus, setMediaUploadStatus] = useState("");
+  const [receiptImageUploadStatus, setReceiptImageUploadStatus] = useState("");
   const [testPrintStatus, setTestPrintStatus] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
   const [testPrinterTarget, setTestPrinterTarget] = useState("receipt");
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
+  const [uploadingReceiptImageSlot, setUploadingReceiptImageSlot] = useState<"" | "logo" | "promotion">("");
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
     businessDate: "",
     activeSession: null,
@@ -445,6 +448,33 @@ export default function PosPage() {
       setMediaUploadStatus(error instanceof Error ? error.message : "アップロードできませんでした。");
     } finally {
       setUploadingMediaType("");
+    }
+  }
+
+  async function uploadReceiptTemplateImage(file: File, slot: "logo" | "promotion") {
+    if (!canManagePosSettings || uploadingReceiptImageSlot) return;
+    setUploadingReceiptImageSlot(slot);
+    setReceiptImageUploadStatus("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("slot", slot);
+      formData.append("name", file.name);
+      const response = await fetch("/api/os/pos/receipt-template-image", {
+        method: "POST",
+        body: formData
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "アップロードできませんでした。");
+      updateReceiptTemplate(slot === "logo"
+        ? { logoUrl: body.url, showLogo: true }
+        : { promotionImageUrl: body.url }
+      );
+      setReceiptImageUploadStatus("アップロードしました。保存するとレシート印刷に反映されます。");
+    } catch (error) {
+      setReceiptImageUploadStatus(error instanceof Error ? error.message : "アップロードできませんでした。");
+    } finally {
+      setUploadingReceiptImageSlot("");
     }
   }
 
@@ -986,15 +1016,37 @@ export default function PosPage() {
                   />
                   <span>ロゴを表示</span>
                 </label>
-                <label>
-                  <span>ロゴ URL</span>
-                  <input
-                    value={taxForm.printerSettings.receiptTemplate.logoUrl}
-                    onChange={(event) => updateReceiptTemplate({ logoUrl: event.target.value.trim() })}
-                    placeholder="https://..."
-                    disabled={!canManagePosSettings}
-                  />
-                </label>
+                <div className="pos-admin-receipt-image-field">
+                  <span>ロゴ画像</span>
+                  <div className="pos-admin-receipt-image-control">
+                    {taxForm.printerSettings.receiptTemplate.logoUrl ? (
+                      <img src={taxForm.printerSettings.receiptTemplate.logoUrl} alt="" />
+                    ) : (
+                      <div>Logo</div>
+                    )}
+                    <div className="pos-admin-display-upload-row">
+                      <label className="secondary-button">
+                        <ImageUp size={16} />
+                        {uploadingReceiptImageSlot === "logo" ? "アップロード中" : "画像を選択"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                          disabled={!canManagePosSettings || Boolean(uploadingReceiptImageSlot)}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.currentTarget.value = "";
+                            if (file) void uploadReceiptTemplateImage(file, "logo");
+                          }}
+                        />
+                      </label>
+                      {taxForm.printerSettings.receiptTemplate.logoUrl ? (
+                        <button className="secondary-button" type="button" onClick={() => updateReceiptTemplate({ logoUrl: "", showLogo: false })} disabled={!canManagePosSettings}>
+                          クリア
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
                 <label>
                   <span>表示名</span>
                   <input
@@ -1053,6 +1105,37 @@ export default function PosPage() {
                   <span>販促メッセージ</span>
                   <textarea value={taxForm.printerSettings.receiptTemplate.promotionMessage} onChange={(event) => updateReceiptTemplate({ promotionMessage: event.target.value })} disabled={!canManagePosSettings} />
                 </label>
+                <div className="pos-admin-receipt-image-field">
+                  <span>販促画像</span>
+                  <div className="pos-admin-receipt-image-control">
+                    {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? (
+                      <img src={taxForm.printerSettings.receiptTemplate.promotionImageUrl} alt="" />
+                    ) : (
+                      <div>Promotion</div>
+                    )}
+                    <div className="pos-admin-display-upload-row">
+                      <label className="secondary-button">
+                        <ImageUp size={16} />
+                        {uploadingReceiptImageSlot === "promotion" ? "アップロード中" : "画像を選択"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                          disabled={!canManagePosSettings || Boolean(uploadingReceiptImageSlot)}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.currentTarget.value = "";
+                            if (file) void uploadReceiptTemplateImage(file, "promotion");
+                          }}
+                        />
+                      </label>
+                      {taxForm.printerSettings.receiptTemplate.promotionImageUrl ? (
+                        <button className="secondary-button" type="button" onClick={() => updateReceiptTemplate({ promotionImageUrl: "" })} disabled={!canManagePosSettings}>
+                          クリア
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="pos-admin-printer-toggles">
                 <label className="pos-admin-discount-check">
@@ -1069,6 +1152,7 @@ export default function PosPage() {
                 </label>
               </div>
             </div>
+            {receiptImageUploadStatus ? <p className="pos-admin-printer-status">{receiptImageUploadStatus}</p> : null}
             {testPrintStatus ? <p className="pos-admin-printer-status">{testPrintStatus}</p> : null}
           </div>
           <div className="pos-admin-discount-settings">
