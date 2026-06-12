@@ -587,6 +587,7 @@ function isDeliveryLockedItem(item: Pick<ProcurementTaskItem, "deliveryStatus">)
 async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   const response = await fetch("/api/procurement/items", {
     method: "PATCH",
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       itemId: item.id,
@@ -818,7 +819,9 @@ export default function ProcurementPage() {
     } else if (data.orders) {
       setPurchaseOrders(data.orders);
     }
-    if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.purchaseOrderItems) {
+      setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, readPendingProcurementTaskItems()));
+    }
     if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
     if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
     setDataSource("neon");
@@ -856,6 +859,7 @@ export default function ProcurementPage() {
       const entries = Object.values(pendingItems);
       if (entries.length === 0) return;
 
+      setPurchaseOrderItems((items) => applyPendingProcurementTaskItemsToDashboardItems(items, pendingItems));
       setProcurementTaskItems((items) => {
         const nextItems = items.map((item) => pendingItems[item.id]?.item ?? item);
         procurementTaskItemsRef.current = nextItems;
@@ -2372,6 +2376,32 @@ function removePendingProcurementTaskItem(itemId: string, updatedAt: number) {
   } catch {
     // Ignore cleanup failures; a later successful sync can clear the record.
   }
+}
+
+function applyPendingProcurementTaskItemsToDashboardItems(
+  items: DashboardOrderItem[],
+  pendingItems: Record<string, PendingProcurementTaskItemEntry>
+) {
+  if (Object.keys(pendingItems).length === 0) return items;
+
+  return items.map((item) => {
+    if (!item.id) return item;
+    const pendingItem = pendingItems[item.id]?.item;
+    if (!pendingItem) return item;
+
+    return {
+      ...item,
+      actualQuantity: pendingItem.actualQuantity,
+      actualPrice: pendingItem.actualPrice,
+      purchased: pendingItem.purchased,
+      unavailable: pendingItem.unavailable,
+      supplier: pendingItem.supplier,
+      note: pendingItem.note,
+      priceExceptionNote: pendingItem.priceExceptionNote,
+      deliveryStatus: pendingItem.deliveryStatus,
+      deliveryBatchId: pendingItem.deliveryBatchId
+    };
+  });
 }
 
 function isProcurementDeliveryStatus(value: unknown): value is ProcurementTaskItem["deliveryStatus"] {
