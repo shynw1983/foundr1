@@ -25,7 +25,6 @@ type ProductWithCategory = Product & {
   originCountries?: string[];
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
-  packageSpec?: string;
   productFamilyName?: string;
   variantName?: string;
   isDefaultVariant?: boolean;
@@ -65,7 +64,6 @@ type ProductOption = {
   unit: string;
   productFamilyName?: string;
   variantName?: string;
-  packageSpec?: string;
   packageQuantity?: string;
   packageQuantityUnit?: string;
   mainSupplier?: string;
@@ -144,7 +142,7 @@ const productManagerRoles = new Set(["owner", "manager"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
   { value: "receiptIncomplete", label: "情報未補完" },
-  { value: "spec", label: "包装規格未設定" },
+  { value: "spec", label: "バリエーション未設定" },
   { value: "supplier", label: "発注先未設定" },
   { value: "mainSupplier", label: "メイン発注先未設定" },
   { value: "backupSupplier", label: "予備発注先未設定" }
@@ -240,8 +238,8 @@ function normalizeSpecNumber(value: string) {
     .replace(/，/g, ",");
 }
 
-function parsePackageSpecForUnitPrice(packageSpec?: string) {
-  const normalizedSpec = normalizeSpecNumber(String(packageSpec ?? ""));
+function parseVariantNameForUnitPrice(variantName?: string) {
+  const normalizedSpec = normalizeSpecNumber(String(variantName ?? ""));
   if (!normalizedSpec.trim()) return null;
 
   const matches = Array.from(normalizedSpec.matchAll(/(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(kg|キロ|g|グラム|l|L|リットル|ml|mL|ML|個|枚|本|袋|箱|缶|瓶|束|玉|パック|ケース|セット|ロール|トレー|カートン)/g));
@@ -270,7 +268,7 @@ function getProductUnitPriceValue(product: ProductWithCategory) {
 
   if (!Number.isFinite(price) || price <= 0) return null;
   if (!Number.isFinite(quantity) || quantity <= 0) {
-    const specQuantity = parsePackageSpecForUnitPrice(product.packageSpec);
+    const specQuantity = parseVariantNameForUnitPrice(product.variantName);
     if (!specQuantity) return null;
 
     return price / specQuantity.quantity;
@@ -283,7 +281,7 @@ function formatProductUnitPrice(product: ProductWithCategory) {
   const unitPrice = getProductUnitPriceValue(product);
   if (unitPrice === null) return "未設定";
 
-  const specQuantity = hasPackageQuantity(product) ? null : parsePackageSpecForUnitPrice(product.packageSpec);
+  const specQuantity = hasPackageQuantity(product) ? null : parseVariantNameForUnitPrice(product.variantName);
   return `¥${formatYenAmount(unitPrice)} / ${specQuantity?.unit || product.packageQuantityUnit || product.unit || "単位"}`;
 }
 
@@ -312,7 +310,7 @@ function getProductUsageTypeLabel(value?: string) {
 }
 
 function isProductSpecMissing(product: ProductWithCategory) {
-  return isBlankValue(product.packageSpec) && !hasPackageQuantity(product);
+  return isBlankValue(product.variantName) && !hasPackageQuantity(product);
 }
 
 function isReceiptIncompleteProduct(product: ProductWithCategory) {
@@ -330,9 +328,6 @@ function hasAnySupplier(product: ProductWithCategory) {
 function getProductDisplaySpec(product: ProductWithCategory) {
   const variantName = String(product.variantName ?? "").trim();
   if (variantName) return variantName;
-
-  const packageSpec = String(product.packageSpec ?? "").trim();
-  if (packageSpec) return packageSpec;
 
   const quantitySpec = formatPackageQuantity(product);
   return quantitySpec === "未設定" ? "" : quantitySpec;
@@ -356,10 +351,9 @@ function getProductVariantName(product: ProductWithCategory) {
 function formatReceiptProductOptionLabel(product: ProductOption) {
   const familyName = String(product.productFamilyName ?? "").trim();
   const variantName = String(product.variantName ?? "").trim();
-  const packageSpec = String(product.packageSpec ?? "").trim();
   const packageQuantity = String(product.packageQuantity ?? "").trim();
   const packageQuantityUnit = String(product.packageQuantityUnit ?? product.unit ?? "").trim();
-  const specLabel = variantName || packageSpec || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
+  const specLabel = variantName || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
   const supplierLabel = String(product.mainSupplier ?? "").trim();
   return [
     familyName || product.name,
@@ -653,7 +647,6 @@ export default function ProductsPage() {
       product.unit,
       product.packageQuantity,
       product.packageQuantityUnit,
-      product.packageSpec,
       product.productFamilyName,
       product.variantName,
       product.mainSupplier,
@@ -815,7 +808,6 @@ export default function ProductsPage() {
         originCountries: [],
         packageQuantity: "",
         packageQuantityUnit: "個",
-        packageSpec: "",
         productFamilyName: "",
         variantName: "",
         isDefaultVariant: false,
@@ -898,7 +890,6 @@ export default function ProductsPage() {
         isDefaultVariant: false,
         variantSortOrder: nextSortOrder,
         packageQuantity: "",
-        packageSpec: "",
         referencePrice: "",
         photoUrl: ""
       }
@@ -1544,10 +1535,6 @@ export default function ProductsPage() {
                                 <div>
                                   <dt>数量</dt>
                                   <dd>{formatPackageQuantity(product)}</dd>
-                                </div>
-                                <div>
-                                  <dt>包装規格</dt>
-                                  <dd>{product.packageSpec || "未設定"}</dd>
                                 </div>
                                 <div>
                                   <dt>メモ</dt>
@@ -2269,22 +2256,6 @@ function ProductEditDialog({
                 </select>
               </label>
             </div>
-            <label className="product-spec-package">
-              <span>包装規格</span>
-              <input
-                value={target.value.packageSpec ?? ""}
-                placeholder="例: 1500ml、500g、1L"
-                onChange={(event) =>
-                  onChange({
-                    ...target,
-                    value: {
-                      ...target.value,
-                      packageSpec: event.target.value
-                    }
-                  })
-                }
-              />
-            </label>
             <label className="product-default-variant-toggle">
               <input
                 type="checkbox"

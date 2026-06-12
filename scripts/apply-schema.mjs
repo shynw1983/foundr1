@@ -16,6 +16,37 @@ for (const statement of statements) {
   await sql.query(statement);
 }
 
+const productPackageSpecColumns = await sql`
+  select column_name
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'products'
+    and column_name = 'package_spec'
+`;
+if (productPackageSpecColumns.length > 0) {
+  await sql.query(`
+    update products
+    set
+      product_family_name = coalesce(nullif(product_family_name, ''), name),
+      variant_name = case
+        when coalesce(package_spec, '') = '' then coalesce(variant_name, '')
+        when coalesce(variant_name, '') = '' then package_spec
+        when position(package_spec in variant_name) > 0 then variant_name
+        else concat(variant_name, ' / ', package_spec)
+      end,
+      updated_at = now()
+    where coalesce(package_spec, '') <> ''
+  `);
+  await sql.query(`
+    update products
+    set
+      name = trim(concat(coalesce(nullif(product_family_name, ''), name), ' ', coalesce(nullif(variant_name, ''), ''))),
+      updated_at = now()
+    where coalesce(variant_name, '') <> ''
+  `);
+  await sql.query("alter table products drop column if exists package_spec");
+}
+
 await sql.query("alter table purchase_orders add column if not exists deadline_label text");
 await sql.query("alter table purchase_orders add column if not exists requested_item_count integer not null default 0");
 await sql.query("alter table employees add column if not exists login_id text unique");

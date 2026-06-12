@@ -12,7 +12,7 @@ type Product = typeof initialProducts[number];
 type ProductWithSpec = Product & {
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
-  packageSpec?: string;
+  variantName?: string;
 };
 type PurchaseOrder = typeof orders[number] & {
   deadlineAt?: string | null;
@@ -293,9 +293,9 @@ function getProductDisplaySpec(product?: ProductWithSpec) {
   if (!product) return "";
 
   const packageQuantity = formatPackageQuantity(product);
-  const packageSpec = String(product.packageSpec ?? "").trim();
-  if (packageQuantity && packageSpec) return `${packageSpec} / ${packageQuantity}`;
-  if (packageSpec) return packageSpec;
+  const variantName = String(product.variantName ?? "").trim();
+  if (packageQuantity && variantName) return `${variantName} / ${packageQuantity}`;
+  if (variantName) return variantName;
 
   return packageQuantity;
 }

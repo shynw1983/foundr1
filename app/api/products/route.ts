@@ -14,7 +14,6 @@ type ProductPayload = {
   originCountries?: string[];
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
-  packageSpec?: string;
   productFamilyName?: string;
   variantName?: string;
   isDefaultVariant?: boolean;
@@ -50,7 +49,6 @@ export async function PUT(request: Request) {
   const originCountries = Array.isArray(body.originCountries)
     ? body.originCountries.map((item) => String(item).trim()).filter(Boolean)
     : [];
-  const packageSpec = String(body.packageSpec ?? "");
   const productFamilyName = String(body.productFamilyName ?? "").trim() || name;
   const variantName = String(body.variantName ?? "").trim();
   const isDefaultVariant = body.isDefaultVariant === true || String(body.isDefaultVariant ?? "") === "true";
@@ -88,7 +86,6 @@ export async function PUT(request: Request) {
           origin_countries = ${originCountries},
           package_quantity = ${packageQuantity},
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
-          package_spec = ${packageSpec},
           product_family_name = ${productFamilyName},
           variant_name = ${variantName},
           is_default_variant = ${isDefaultVariant},
@@ -117,7 +114,6 @@ export async function PUT(request: Request) {
           origin_countries = ${originCountries},
           package_quantity = ${packageQuantity},
           package_quantity_unit = ${packageQuantity ? packageQuantityUnit || unit : ""},
-          package_spec = ${packageSpec},
           product_family_name = ${productFamilyName},
           variant_name = ${variantName},
           is_default_variant = ${isDefaultVariant},
@@ -144,7 +140,6 @@ export async function PUT(request: Request) {
           origin_countries,
           package_quantity,
           package_quantity_unit,
-          package_spec,
           product_family_name,
           variant_name,
           is_default_variant,
@@ -168,7 +163,6 @@ export async function PUT(request: Request) {
           ${originCountries},
           ${packageQuantity},
           ${packageQuantity ? packageQuantityUnit || unit : ""},
-          ${packageSpec},
           ${productFamilyName},
           ${variantName},
           ${isDefaultVariant},

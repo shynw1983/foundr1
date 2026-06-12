@@ -18,7 +18,6 @@ import { normalizeDecimalInput } from "../../../lib/number-input";
 type Product = typeof initialProducts[number] & {
   id?: string;
   subcategory?: string;
-  packageSpec?: string;
   productBrandName?: string;
   productFamilyName?: string;
   variantName?: string;
@@ -1518,7 +1517,7 @@ export default function ProcurementPage() {
                                   const quantityDiff = item.actualQuantity - item.requestedQuantity;
                                   const product = findProcurementProductFromLookup(item, productLookup);
                                   const photoSrc = getProductPhotoSrc(product?.photoUrl);
-                                  const productSpec = product?.packageSpec || product?.specNote;
+                                  const productSpec = product?.variantName || product?.specNote;
                                   const referencePrice = Number(product?.referencePrice ?? 0);
                                   const temporarySupplierNote = getTemporarySupplierNote(item.note);
                                   const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);

@@ -15,7 +15,7 @@ type Product = typeof initialProducts[number] & {
   id?: string;
   packageQuantity?: number | string;
   packageQuantityUnit?: string;
-  packageSpec?: string;
+  variantName?: string;
   referencePrice?: number;
   subcategory?: string;
 };
@@ -807,7 +807,7 @@ function getProductSpecQuantity(product: Product) {
     return { quantity: packageQuantity, unit: product.packageQuantityUnit || product.unit || "個" };
   }
 
-  return inferSpecQuantity([product.packageSpec, product.specNote].filter(Boolean).join(" "));
+  return inferSpecQuantity([product.variantName, product.specNote].filter(Boolean).join(" "));
 }
 
 function formatProductSpecSummary(product: Product) {
@@ -815,7 +815,7 @@ function formatProductSpecSummary(product: Product) {
   const quantityLabel = Number.isFinite(packageQuantity) && packageQuantity > 0
     ? `${packageQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${product.packageQuantityUnit || product.unit || "個"}`
     : "";
-  return [quantityLabel, product.packageSpec || "", product.specNote || ""].filter(Boolean).join(" / ") || "未設定";
+  return [quantityLabel, product.variantName || "", product.specNote || ""].filter(Boolean).join(" / ") || "未設定";
 }
 
 function formatCurrency(value: number) {

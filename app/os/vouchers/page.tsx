@@ -88,7 +88,6 @@ type ProductOption = {
   referencePrice: number;
   productFamilyName?: string;
   variantName?: string;
-  packageSpec?: string;
   packageQuantity?: string;
   packageQuantityUnit?: string;
   mainSupplier?: string;
@@ -3103,10 +3102,9 @@ function getProductSubcategory(product: ProductOption) {
 function formatProductOptionLabel(product: ProductOption) {
   const familyName = String(product.productFamilyName ?? "").trim();
   const variantName = String(product.variantName ?? "").trim();
-  const packageSpec = String(product.packageSpec ?? "").trim();
   const packageQuantity = String(product.packageQuantity ?? "").trim();
   const packageQuantityUnit = String(product.packageQuantityUnit ?? product.unit ?? "").trim();
-  const specLabel = variantName || packageSpec || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
+  const specLabel = variantName || (packageQuantity ? `${packageQuantity}${packageQuantityUnit ? ` ${packageQuantityUnit}` : ""}` : "");
   const supplierLabel = String(product.mainSupplier ?? "").trim();
   return [
     familyName || product.name,

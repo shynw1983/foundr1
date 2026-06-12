@@ -1125,7 +1125,6 @@ create table if not exists products (
   origin_countries text[] not null default '{}',
   package_quantity numeric(12, 3),
   package_quantity_unit text,
-  package_spec text,
   product_family_name text,
   variant_name text,
   is_default_variant boolean not null default false,
@@ -1149,7 +1148,6 @@ alter table products add column if not exists subcategory text;
 alter table products add column if not exists origin_countries text[] not null default '{}';
 alter table products add column if not exists package_quantity numeric(12, 3);
 alter table products add column if not exists package_quantity_unit text;
-alter table products add column if not exists package_spec text;
 alter table products add column if not exists product_family_name text;
 alter table products add column if not exists variant_name text;
 alter table products add column if not exists is_default_variant boolean not null default false;

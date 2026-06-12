@@ -1196,7 +1196,6 @@ async function listProductOptions() {
       reference_price::float as "referencePrice",
       coalesce(product_family_name, '') as "productFamilyName",
       coalesce(variant_name, '') as "variantName",
-      coalesce(package_spec, '') as "packageSpec",
       package_quantity::float as "packageQuantity",
       coalesce(package_quantity_unit, '') as "packageQuantityUnit",
       coalesce((
@@ -1222,7 +1221,6 @@ async function listProductOptions() {
     referencePrice: Number(row.referencePrice ?? 0),
     productFamilyName: String(row.productFamilyName ?? ""),
     variantName: String(row.variantName ?? ""),
-    packageSpec: String(row.packageSpec ?? ""),
     packageQuantity: row.packageQuantity === null || row.packageQuantity === undefined ? "" : String(Number(row.packageQuantity)),
     packageQuantityUnit: String(row.packageQuantityUnit ?? ""),
     mainSupplier: String(row.mainSupplier ?? "")

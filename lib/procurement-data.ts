@@ -196,7 +196,6 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(origin_countries, '{}') as "originCountries",
           package_quantity::float as "packageQuantity",
           coalesce(package_quantity_unit, '') as "packageQuantityUnit",
-          coalesce(package_spec, '') as "packageSpec",
           coalesce(product_family_name, '') as "productFamilyName",
           coalesce(variant_name, '') as "variantName",
           coalesce(is_default_variant, false) as "isDefaultVariant",

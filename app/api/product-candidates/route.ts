@@ -45,7 +45,6 @@ export async function GET() {
         coalesce(subcategory, '未分類') as subcategory,
         coalesce(product_family_name, '') as "productFamilyName",
         coalesce(variant_name, '') as "variantName",
-        coalesce(package_spec, '') as "packageSpec",
         package_quantity::float as "packageQuantity",
         coalesce(package_quantity_unit, '') as "packageQuantityUnit",
         coalesce((
@@ -89,7 +88,6 @@ export async function GET() {
       unit: String(row.unit ?? ""),
       productFamilyName: String(row.productFamilyName ?? ""),
       variantName: String(row.variantName ?? ""),
-      packageSpec: String(row.packageSpec ?? ""),
       packageQuantity: row.packageQuantity === null || row.packageQuantity === undefined ? "" : String(Number(row.packageQuantity)),
       packageQuantityUnit: String(row.packageQuantityUnit ?? ""),
       mainSupplier: String(row.mainSupplier ?? "")

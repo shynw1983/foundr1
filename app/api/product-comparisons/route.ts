@@ -19,7 +19,7 @@ export async function GET() {
       product_comparisons.id::text as id,
       product_comparisons.base_product_id::text as "baseProductId",
       coalesce(products.name, '') as "baseProductName",
-      coalesce(products.package_spec, '') as "basePackageSpec",
+      coalesce(products.variant_name, '') as "basePackageSpec",
       product_comparisons.candidate_product_name as "candidateProductName",
       product_comparisons.candidate_supplier_id::text as "candidateSupplierId",
       coalesce(product_comparisons.candidate_supplier_name, suppliers.name, '') as "candidateSupplierName",
