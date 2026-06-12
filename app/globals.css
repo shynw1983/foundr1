@@ -29049,6 +29049,12 @@ a:focus-visible {
   text-indent: -999px;
 }
 
+.os-home-shell .brand-mark,
+.shell .brand-mark {
+  background-color: #000000;
+  background-image: url("/icons/foundr1-os-512.png");
+}
+
 .store-workbench-shell .brand-mark,
 .procedure-reader-shell .brand-mark {
   border-color: var(--line);
