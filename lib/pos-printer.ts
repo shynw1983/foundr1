@@ -1,13 +1,25 @@
-export type PosPrinterSettings = {
-  enabled: boolean;
-  receiptEnabled: boolean;
-  kitchenEnabled: boolean;
+export type PosPrinterConnection = {
   host: string;
   port: number;
   paperWidth: "80mm" | "58mm";
   characterEncoding: "shift_jis" | "utf8";
   cutPaper: boolean;
   openCashDrawer: boolean;
+};
+
+export type PosBrandKitchenPrinterSetting = {
+  brandId: string;
+  brandName: string;
+  printer: PosPrinterConnection;
+};
+
+export type PosPrinterSettings = PosPrinterConnection & {
+  enabled: boolean;
+  receiptEnabled: boolean;
+  kitchenEnabled: boolean;
+  receiptPrinter: PosPrinterConnection;
+  kitchenPrinter: PosPrinterConnection;
+  brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
 };
 
 export type PosPrintLineItem = {
@@ -21,7 +33,7 @@ export type PosPrintLineItem = {
 export type PosPrintPayload = {
   version: 1;
   jobType: "test" | "receipt" | "kitchen";
-  printer: PosPrinterSettings;
+  printer: PosPrinterConnection;
   storeName: string;
   printedAt: string;
   order?: {
@@ -57,10 +69,7 @@ declare global {
   }
 }
 
-export const defaultPosPrinterSettings: PosPrinterSettings = {
-  enabled: false,
-  receiptEnabled: true,
-  kitchenEnabled: false,
+export const defaultPosPrinterConnection: PosPrinterConnection = {
   host: "",
   port: 9100,
   paperWidth: "80mm",
@@ -69,23 +78,68 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   openCashDrawer: false
 };
 
+export const defaultPosPrinterSettings: PosPrinterSettings = {
+  enabled: false,
+  receiptEnabled: true,
+  kitchenEnabled: false,
+  ...defaultPosPrinterConnection,
+  receiptPrinter: defaultPosPrinterConnection,
+  kitchenPrinter: defaultPosPrinterConnection,
+  brandKitchenPrinters: []
+};
+
+export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterConnection> : {};
+  const port = Math.round(Number(source.port || fallback.port));
+  return {
+    host: String(source.host ?? fallback.host ?? "").trim().slice(0, 120),
+    port: Number.isFinite(port) ? Math.max(1, Math.min(65535, port)) : fallback.port,
+    paperWidth: source.paperWidth === "58mm" ? "58mm" : fallback.paperWidth,
+    characterEncoding: source.characterEncoding === "utf8" ? "utf8" : fallback.characterEncoding,
+    cutPaper: source.cutPaper ?? fallback.cutPaper,
+    openCashDrawer: source.openCashDrawer ?? fallback.openCashDrawer
+  };
+}
+
 export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterSettings> : {};
-  const port = Math.round(Number(source.port || defaultPosPrinterSettings.port));
+  const legacyPrinter = normalizePosPrinterConnection(source, defaultPosPrinterConnection);
+  const receiptPrinter = normalizePosPrinterConnection(source.receiptPrinter, legacyPrinter);
+  const kitchenPrinter = normalizePosPrinterConnection(source.kitchenPrinter, legacyPrinter);
+  const brandKitchenPrinters = Array.isArray(source.brandKitchenPrinters) ? source.brandKitchenPrinters : [];
   return {
     enabled: source.enabled === true,
     receiptEnabled: source.receiptEnabled !== false,
     kitchenEnabled: source.kitchenEnabled === true,
-    host: String(source.host || "").trim().slice(0, 120),
-    port: Number.isFinite(port) ? Math.max(1, Math.min(65535, port)) : defaultPosPrinterSettings.port,
-    paperWidth: source.paperWidth === "58mm" ? "58mm" : "80mm",
-    characterEncoding: source.characterEncoding === "utf8" ? "utf8" : "shift_jis",
-    cutPaper: source.cutPaper !== false,
-    openCashDrawer: source.openCashDrawer === true
+    ...receiptPrinter,
+    receiptPrinter,
+    kitchenPrinter,
+    brandKitchenPrinters: brandKitchenPrinters.flatMap((item) => {
+      const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosBrandKitchenPrinterSetting> : {};
+      const brandId = String(record.brandId || "").trim();
+      if (!brandId) return [];
+      return [{
+        brandId: brandId.slice(0, 80),
+        brandName: String(record.brandName || "").trim().slice(0, 120),
+        printer: normalizePosPrinterConnection(record.printer, kitchenPrinter)
+      }];
+    }).slice(0, 30)
   };
 }
 
-export function createTestPrintPayload(printer: PosPrinterSettings, storeName: string): PosPrintPayload {
+export function getReceiptPrinter(settings: PosPrinterSettings) {
+  return settings.receiptPrinter || normalizePosPrinterConnection(settings, defaultPosPrinterConnection);
+}
+
+export function getKitchenPrinterForBrand(settings: PosPrinterSettings, brandId?: string | null) {
+  if (brandId) {
+    const brandPrinter = settings.brandKitchenPrinters.find((item) => item.brandId === brandId)?.printer;
+    if (brandPrinter?.host) return brandPrinter;
+  }
+  return settings.kitchenPrinter || getReceiptPrinter(settings);
+}
+
+export function createTestPrintPayload(printer: PosPrinterConnection, storeName: string): PosPrintPayload {
   return {
     version: 1,
     jobType: "test",

@@ -12452,6 +12452,44 @@ body :where(
   flex-wrap: wrap;
 }
 
+.pos-admin-printer-actions select {
+  min-width: 150px;
+}
+
+.pos-admin-printer-toggles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pos-admin-printer-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.pos-admin-printer-card > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.pos-admin-printer-card strong,
+.pos-admin-printer-brand-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pos-admin-printer-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .pos-admin-display-media-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -12499,6 +12537,36 @@ body :where(
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.pos-admin-printer-brand-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pos-admin-printer-brand-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 10px;
+}
+
+.pos-admin-printer-brand-row label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pos-admin-printer-brand-row label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-admin-printer-brand-row input,
+.pos-admin-printer-brand-row select {
+  width: 100%;
+  min-width: 0;
 }
 
 .pos-admin-display-upload-row {
@@ -28036,7 +28104,8 @@ body :where(
   .pos-admin-tax-grid,
   .pos-admin-tax-footer,
   .pos-admin-display-media-grid,
-  .pos-admin-printer-grid {
+  .pos-admin-printer-grid,
+  .pos-admin-printer-brand-row {
     display: grid;
     grid-template-columns: 1fr;
   }

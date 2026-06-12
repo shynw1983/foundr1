@@ -5,7 +5,7 @@ import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { defaultPosPrinterSettings, printWithAndroidBridge, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -1125,7 +1125,7 @@ export default function StorePosPage() {
   }
 
   function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[]): PosPrintPayload {
-    const printer = posSettings.printerSettings;
+    const printer = getReceiptPrinter(posSettings.printerSettings);
     return {
       version: 1,
       jobType: "receipt",
@@ -1157,11 +1157,68 @@ export default function StorePosPage() {
     };
   }
 
+  function createKitchenPrintPayload(body: Record<string, unknown>, cartItems: PosCartItem[], printer: PosPrinterConnection, brandName: string): PosPrintPayload {
+    const kitchenTotal = cartItems.reduce((sum, item) => sum + getLineUnitPrice(item) * item.quantity, 0);
+    return {
+      version: 1,
+      jobType: "kitchen",
+      printer,
+      storeName: `${stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS"} / ${brandName}`,
+      printedAt: new Date().toISOString(),
+      order: {
+        pickupCode: String(body.pickupCode || ""),
+        orderType,
+        paymentMethod: "kitchen",
+        paymentLabel: "厨房",
+        note,
+        subtotalAmount: kitchenTotal,
+        discountAmount: 0,
+        couponDiscountAmount: 0,
+        taxAmount: 0,
+        taxRate: 0,
+        totalAmount: kitchenTotal,
+        items: cartItems.map((item) => ({
+          name: getLocalizedDisplayName(item.name, item.displayNames, "ja"),
+          quantity: item.quantity,
+          unitPrice: getLineUnitPrice(item),
+          amount: getLineUnitPrice(item) * item.quantity,
+          options: getCustomerDisplayOptionLabel(item.selectedOptions, "ja").split(" / ").filter(Boolean)
+        }))
+      }
+    };
+  }
+
   async function printReceiptAfterCheckout(body: Record<string, unknown>, cartSnapshot: PosCartItem[]) {
-    const printer = posSettings.printerSettings;
-    if (!printer.enabled || !printer.receiptEnabled || !printer.host) return "";
+    const printerSettings = posSettings.printerSettings;
+    const printer = getReceiptPrinter(printerSettings);
+    if (!printerSettings.enabled || !printerSettings.receiptEnabled || !printer.host) return "";
     const result = await printWithAndroidBridge(createReceiptPrintPayload(body, cartSnapshot));
     return result.ok ? " / レシート印刷送信済み" : ` / レシート印刷未送信: ${result.error}`;
+  }
+
+  async function printKitchenAfterCheckout(body: Record<string, unknown>, cartSnapshot: PosCartItem[]) {
+    const printerSettings = posSettings.printerSettings;
+    if (!printerSettings.enabled || !printerSettings.kitchenEnabled) return "";
+    const brandGroups = cartSnapshot.reduce((groups, item) => {
+      const key = item.brandId || "default";
+      groups[key] = groups[key] ?? { brandName: item.brandName || "厨房", items: [] };
+      groups[key].items.push(item);
+      return groups;
+    }, {} as Record<string, { brandName: string; items: PosCartItem[] }>);
+    let sentCount = 0;
+    const errors: string[] = [];
+    for (const [brandId, group] of Object.entries(brandGroups)) {
+      const printer = getKitchenPrinterForBrand(printerSettings, brandId === "default" ? null : brandId);
+      if (!printer.host) continue;
+      const result = await printWithAndroidBridge(createKitchenPrintPayload(body, group.items, printer, group.brandName));
+      if (result.ok) {
+        sentCount += 1;
+      } else {
+        errors.push(`${group.brandName}: ${result.error || "送信失敗"}`);
+      }
+    }
+    if (errors.length) return ` / 厨房印刷未送信: ${errors.join(", ")}`;
+    return sentCount ? ` / 厨房印刷 ${sentCount}件送信済み` : "";
   }
 
   async function publishCustomerDisplayState(state: Record<string, unknown>) {
@@ -1439,7 +1496,8 @@ export default function StorePosPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "checkout failed");
-      const printMessage = await printReceiptAfterCheckout(body, cartSnapshot);
+      const receiptPrintMessage = await printReceiptAfterCheckout(body, cartSnapshot);
+      const kitchenPrintMessage = await printKitchenAfterCheckout(body, cartSnapshot);
       setCart([]);
       setNote("");
       setCashTenderedAmount("");
@@ -1452,7 +1510,7 @@ export default function StorePosPage() {
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
       const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${printMessage}`);
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",

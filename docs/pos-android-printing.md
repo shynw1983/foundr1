@@ -25,16 +25,24 @@ or:
 { "ok": false, "error": "Printer connection timeout" }
 ```
 
-## Printer Connection
+## Printer Connections
 
 The first supported transport is Wi-Fi ESC/POS over TCP.
 
-- Host: saved in POS printer settings, for example `192.168.1.58`
+- Host: saved in POS printer settings, for example `192.168.0.33`
 - Port: default `9100`
 - Paper width: `80mm` or `58mm`
 - Encoding: default `shift_jis`
 
 Android should connect to `host:port`, convert the payload into ESC/POS commands, write bytes, optionally cut paper, and close the socket with a short timeout.
+
+Printer settings are stored per store and support multiple destinations:
+
+- Receipt printer: used for POS receipts after checkout.
+- Default kitchen printer: used for kitchen tickets when a brand does not have its own printer.
+- Brand kitchen printers: optional per-brand overrides for kitchen tickets.
+
+Older single-printer settings are treated as the receipt printer during normalization.
 
 ## Payload
 
@@ -50,5 +58,5 @@ The payload version is `1`. Keep Android parsing tolerant of unknown fields so P
 
 ## Current Web Entry Points
 
-- `/os/pos`: save printer settings and send a test print.
-- `/store/pos`: after checkout, send a receipt print job when printer settings are enabled.
+- `/os/pos`: save receipt, default kitchen, and brand kitchen printer settings; send test prints to the selected destination.
+- `/store/pos`: after checkout, send receipt print jobs and brand-grouped kitchen print jobs when enabled.
