@@ -107,6 +107,10 @@ type ProductLookup = {
   byId: Map<string, Product>;
   byName: Map<string, Product>;
 };
+type ProcurementAmountSummary = {
+  amount: number;
+  isPending: boolean;
+};
 type AdditionalPurchaseDraft = {
   mode: "product" | "temporary";
   productId: string;
@@ -1455,7 +1459,7 @@ export default function ProcurementPage() {
                       </div>
                       <p className="procurement-store-line">
                         <span>{order.store} / {order.brand}{order.buyerName ? ` · 購入担当 ${order.buyerName}` : ""}</span>
-                        <b>概算 {formatEstimatedAmount(estimatedAmount)}</b>
+                        <b>概算 {formatProcurementAmountSummary(estimatedAmount)}</b>
                       </p>
                     </div>
                     <div className="procurement-order-summary">
@@ -1557,8 +1561,8 @@ export default function ProcurementPage() {
                                   </button>
                                 </div>
                                 <div className="supplier-group-amounts">
-                                  <span>概算 {formatEstimatedAmount(supplierEstimatedAmount)}</span>
-                                  <span>購入済み {formatEstimatedAmount(supplierCurrentAmount)}</span>
+                                  <span>概算 {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
+                                  <span>購入済み {formatProcurementAmountSummary(supplierCurrentAmount)}</span>
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
@@ -2368,28 +2372,52 @@ function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
-  return items.reduce((total, item) => {
+function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], productLookup: ProductLookup): ProcurementAmountSummary {
+  const productLookupReady = isProductLookupReady(productLookup);
+  return items.reduce<ProcurementAmountSummary>((summary, item) => {
     const product = findProcurementProductFromLookup(item, productLookup);
+    if (!product && !productLookupReady && hasProductLookupKey(item)) {
+      return { ...summary, isPending: true };
+    }
+
     const referencePrice = Number(product?.referencePrice ?? 0);
     const quantity = Number.isFinite(item.requestedQuantity) ? item.requestedQuantity : 0;
 
-    return total + Math.max(0, quantity) * (Number.isFinite(referencePrice) ? referencePrice : 0);
-  }, 0);
+    return {
+      amount: summary.amount + Math.max(0, quantity) * (Number.isFinite(referencePrice) ? referencePrice : 0),
+      isPending: summary.isPending
+    };
+  }, { amount: 0, isPending: false });
 }
 
-function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
-  return items.reduce((total, item) => {
-    if (!item.purchased || item.unavailable) return total;
+function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], productLookup: ProductLookup): ProcurementAmountSummary {
+  const productLookupReady = isProductLookupReady(productLookup);
+  return items.reduce<ProcurementAmountSummary>((summary, item) => {
+    if (!item.purchased || item.unavailable) return summary;
 
     const product = findProcurementProductFromLookup(item, productLookup);
     const actualPrice = parseProcurementAmount(item.actualPrice);
+    if (actualPrice <= 0 && !product && !productLookupReady && hasProductLookupKey(item)) {
+      return { ...summary, isPending: true };
+    }
+
     const referencePrice = Number(product?.referencePrice ?? 0);
     const price = actualPrice > 0 ? actualPrice : referencePrice;
     const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : 0;
 
-    return total + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0);
-  }, 0);
+    return {
+      amount: summary.amount + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0),
+      isPending: summary.isPending
+    };
+  }, { amount: 0, isPending: false });
+}
+
+function isProductLookupReady(productLookup: ProductLookup) {
+  return productLookup.byId.size > 0 || productLookup.byName.size > 0;
+}
+
+function hasProductLookupKey(item: ProcurementTaskItem) {
+  return Boolean(item.productId || item.productName);
 }
 
 function parseProcurementAmount(value?: string) {
@@ -2403,6 +2431,10 @@ function formatEstimatedAmount(amount: number) {
     currency: "JPY",
     maximumFractionDigits: 0
   }).format(Math.round(amount));
+}
+
+function formatProcurementAmountSummary(summary: ProcurementAmountSummary) {
+  return summary.isPending ? "計算中" : formatEstimatedAmount(summary.amount);
 }
 
 function readAdditionalPurchaseDrafts() {
