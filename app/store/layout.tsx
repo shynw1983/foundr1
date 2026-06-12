@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { PrivacyConsentGate } from "../os/components/PrivacyConsentGate";
+import { StoreNativeOrderNotifier } from "./components/StoreNativeOrderNotifier";
 import { StorePrintStation } from "./components/StorePrintStation";
 import { StoreVersionNotice } from "./components/StoreVersionNotice";
 
@@ -32,6 +33,7 @@ export default function StoreLayout({
     <>
       <StoreVersionNotice initialVersion={version} initialShortVersion={getShortAppVersion(version)} />
       <PrivacyConsentGate />
+      <StoreNativeOrderNotifier />
       <StorePrintStation />
       {children}
     </>
