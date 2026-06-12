@@ -968,6 +968,40 @@ export default function ProcurementPage() {
     });
   }
 
+  async function splitProcurementTaskItem(itemId: string, purchasedQuantity: number, remainingSupplier: string) {
+    const currentItem = procurementTaskItemsRef.current.find((item) => item.id === itemId);
+    if (!currentItem) return;
+
+    const response = await fetch("/api/procurement/items", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemId,
+        splitRemaining: true,
+        purchased: true,
+        unavailable: false,
+        actualQuantity: purchasedQuantity,
+        actualPrice: currentItem.actualPrice,
+        note: currentItem.note,
+        supplier: currentItem.supplier,
+        productId: currentItem.productId ?? "",
+        productName: currentItem.productName,
+        unit: currentItem.unit,
+        remainingSupplier
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      window.alert(body.error ?? "残数を分割できませんでした。");
+      return;
+    }
+
+    setActiveExceptionItemId(null);
+    await loadDashboardData();
+    showNotice("購入済み分と残数を分割しました。");
+  }
+
   function uploadReceiptPhoto(orderId: string, supplier: string, file: File) {
     if (!isReceiptUploadFile(file)) {
       window.alert("画像またはPDFファイルを選択してください。");
@@ -1735,6 +1769,7 @@ export default function ProcurementPage() {
           choices={getSupplierChoicesForItem(activeExceptionItem, findProcurementProduct(activeExceptionItem, products), productSupplierOptions)}
           plannedSupplier={getProcurementSupplier(activeExceptionItem.productName, products, productSupplierOptions)}
           onChange={(next) => updateProcurementTaskItem(activeExceptionItem.id, next)}
+          onSplit={(purchasedQuantity, remainingSupplier) => void splitProcurementTaskItem(activeExceptionItem.id, purchasedQuantity, remainingSupplier)}
           onClose={() => setActiveExceptionItemId(null)}
           onSaved={() => showNotice("購入調整を保存しました。")}
         />
@@ -2111,6 +2146,7 @@ function ExceptionReportDialog({
   choices,
   plannedSupplier,
   onChange,
+  onSplit,
   onClose,
   onSaved
 }: {
@@ -2119,6 +2155,7 @@ function ExceptionReportDialog({
   choices: SupplierChoice[];
   plannedSupplier: string;
   onChange: (next: Partial<ProcurementTaskItem>) => void;
+  onSplit: (purchasedQuantity: number, remainingSupplier: string) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -2136,6 +2173,13 @@ function ExceptionReportDialog({
   const currentSupplier = item.supplier || plannedSupplier;
   const isDeliveryLocked = isDeliveryLockedItem(item);
   const normalizedTemporaryVariantName = temporaryVariantName.trim();
+  const defaultSplitQuantity = item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity
+    ? item.actualQuantity
+    : Math.max(1, item.requestedQuantity - 1);
+  const [splitPurchasedQuantity, setSplitPurchasedQuantity] = useState(defaultSplitQuantity);
+  const [splitRemainingSupplier, setSplitRemainingSupplier] = useState("");
+  const splitRemainingQuantity = Math.max(0, item.requestedQuantity - splitPurchasedQuantity);
+  const canSplitRemaining = !isDeliveryLocked && !item.unavailable && splitPurchasedQuantity > 0 && splitPurchasedQuantity < item.requestedQuantity;
 
   function selectPurchasedVariant(productId: string) {
     const product = products.find((item) => item.id === productId);
@@ -2288,6 +2332,52 @@ function ExceptionReportDialog({
               onChange={(event) => setTemporarySupplier(event.target.value)}
             />
           </label>
+          <div className="remaining-split-panel">
+            <div>
+              <strong>一部購入・残数分割</strong>
+              <small>今回買えた数量だけ購入済みにし、残りを未購入明細として残します。</small>
+            </div>
+            <div className="remaining-split-fields">
+              <label>
+                <span>今回購入数量</span>
+                <select
+                  value={splitPurchasedQuantity}
+                  disabled={isDeliveryLocked || item.requestedQuantity <= 1}
+                  onChange={(event) => setSplitPurchasedQuantity(Number(event.target.value))}
+                >
+                  {item.requestedQuantity <= 1 ? <option value={splitPurchasedQuantity}>分割できる残数なし</option> : null}
+                  {actualQuantityOptions
+                    .filter((quantity) => quantity > 0 && quantity < item.requestedQuantity)
+                    .map((quantity) => (
+                      <option value={quantity} key={`split-${item.id}-${quantity}`}>{quantity} {item.unit}</option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                <span>残数購入先</span>
+                <select
+                  value={splitRemainingSupplier}
+                  disabled={isDeliveryLocked}
+                  onChange={(event) => setSplitRemainingSupplier(event.target.value)}
+                >
+                  <option value="">現在の発注先を引き継ぐ</option>
+                  {choices.map((choice) => (
+                    <option value={choice.supplier} key={`remaining-${choice.role}-${choice.supplier}`}>
+                      {choice.supplier}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!canSplitRemaining}
+              onClick={() => onSplit(splitPurchasedQuantity, splitRemainingSupplier)}
+            >
+              {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} を分ける` : "残数を分ける"}
+            </button>
+          </div>
           <label>
             <span>備考</span>
             <textarea

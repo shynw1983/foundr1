@@ -141,6 +141,8 @@ export async function PATCH(request: Request) {
     confirmStoreFeedback?: boolean;
     historyCorrection?: boolean;
     correctRequestedQuantity?: boolean;
+    splitRemaining?: boolean;
+    remainingSupplier?: string;
   };
 
   if (!body.itemId) {
@@ -168,7 +170,9 @@ export async function PATCH(request: Request) {
       purchase_order_items.purchase_order_id::text as "purchaseOrderId",
       purchase_order_items.id::text as "itemId",
       purchase_order_items.product_id::text as "currentProductId",
+      purchase_order_items.brand_id::text as "brandId",
       coalesce(purchase_order_items.temporary_product_name, '') as "currentTemporaryProductName",
+      coalesce(purchase_order_items.temporary_product_unit, '') as "currentTemporaryProductUnit",
       purchase_orders.order_no as "orderNo",
       purchase_orders.store_id::text as "storeId",
       stores.name as "storeName",
@@ -176,7 +180,9 @@ export async function PATCH(request: Request) {
       coalesce(products.reference_price::float, 0) as "referencePrice",
       purchase_order_items.status as "currentStatus",
       coalesce(purchase_order_items.procurement_note, '') as "currentNote",
+      coalesce(purchase_order_items.note, '') as "requestNote",
       coalesce(purchase_order_items.procurement_note, '') like ${`${additionalPurchaseNotePrefix}%`} as "isAdditionalPurchase",
+      purchase_order_items.selected_supplier_id::text as "currentSupplierId",
       purchase_order_items.store_feedback_confirmed_at is not null as "storeFeedbackConfirmed",
       purchase_order_items.requested_quantity::float as "requestedQuantity",
       purchase_order_items.requested_unit as "requestedUnit",
@@ -215,7 +221,13 @@ export async function PATCH(request: Request) {
   }
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");
   const actualQuantity = Number.isFinite(body.actualQuantity) ? body.actualQuantity : null;
-  const requestedQuantity = isHistoryCorrection && body.correctRequestedQuantity === true && Number.isFinite(body.requestedQuantity)
+  const splitRemaining = body.splitRemaining === true;
+  const splitPurchasedQuantity = splitRemaining && actualQuantity !== null ? Math.max(0, Number(actualQuantity)) : null;
+  const currentRequestedQuantity = Number(itemDetail?.requestedQuantity ?? 0);
+  const splitRemainingQuantity = splitPurchasedQuantity !== null ? Math.max(0, currentRequestedQuantity - splitPurchasedQuantity) : 0;
+  const requestedQuantity = splitRemaining && splitPurchasedQuantity !== null
+    ? splitPurchasedQuantity
+    : isHistoryCorrection && body.correctRequestedQuantity === true && Number.isFinite(body.requestedQuantity)
     ? Math.max(0, Number(body.requestedQuantity))
     : null;
   const hasActualPrice = body.actualPrice !== undefined || body.clearActualPrice === true;
@@ -236,9 +248,16 @@ export async function PATCH(request: Request) {
   if (
     isDeliveryLocked &&
     !isHistoryCorrection &&
-    (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending" || productActuallyChanged)
+    (body.purchased === false || body.unavailable === true || requestedDeliveryStatus === "pending" || productActuallyChanged || splitRemaining)
   ) {
     return Response.json({ error: "配送中または納品済みの商品は未配送に戻せません。" }, { status: 409 });
+  }
+  if (splitRemaining) {
+    if (!itemDetail) return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
+    if (itemDetail.currentStatus === "unavailable") return Response.json({ error: "購入不可の商品は残数分割できません。" }, { status: 400 });
+    if (splitPurchasedQuantity === null || splitPurchasedQuantity <= 0 || splitPurchasedQuantity >= currentRequestedQuantity) {
+      return Response.json({ error: "今回購入数量は依頼数量より少ない正の数にしてください。" }, { status: 400 });
+    }
   }
   const shouldClearPriceException = body.purchased !== undefined || hasActualPrice || hasNote;
   const shouldResetStoreFeedbackConfirmation =
@@ -261,6 +280,20 @@ export async function PATCH(request: Request) {
 
   if (supplierName && !supplierId) {
     return Response.json({ error: "発注先が見つかりません。" }, { status: 400 });
+  }
+  const remainingSupplierName = String(body.remainingSupplier ?? "").trim();
+  const remainingSupplierRows = remainingSupplierName
+    ? await sql`
+        select id
+        from suppliers
+        where name = ${remainingSupplierName}
+        limit 1
+      `
+    : [];
+  const remainingSupplierId = remainingSupplierRows[0]?.id ?? null;
+
+  if (remainingSupplierName && !remainingSupplierId) {
+    return Response.json({ error: "残数の発注先が見つかりません。" }, { status: 400 });
   }
 
   const nextProductRows = nextProductId
@@ -446,6 +479,7 @@ export async function PATCH(request: Request) {
         when ${body.purchased === false} then 'requested'
         when ${deliveryStatus}::text is not null then ${deliveryStatus}
         when status in ('in_delivery', 'delivered', 'received') then status
+        when ${splitRemaining} then 'purchased'
         when ${body.purchased === true} then 'purchased'
         else status
       end,
@@ -499,6 +533,52 @@ export async function PATCH(request: Request) {
       end
     where id = ${body.itemId}
   `;
+
+  if (splitRemaining && itemDetail && splitPurchasedQuantity !== null && splitRemainingQuantity > 0) {
+    await sql`
+      insert into purchase_order_items (
+        purchase_order_id,
+        product_id,
+        brand_id,
+        temporary_product_name,
+        temporary_product_unit,
+        requested_quantity,
+        requested_unit,
+        note,
+        procurement_note,
+        selected_supplier_id,
+        status
+      )
+      values (
+        ${itemDetail.purchaseOrderId},
+        ${itemDetail.currentProductId || null},
+        ${itemDetail.brandId || null},
+        ${String(itemDetail.currentTemporaryProductName ?? "")},
+        ${String(itemDetail.currentTemporaryProductUnit ?? "") || String(itemDetail.requestedUnit ?? "個")},
+        ${splitRemainingQuantity},
+        ${String(itemDetail.requestedUnit ?? "個")},
+        ${String(itemDetail.requestNote ?? "")},
+        ${[
+          String(itemDetail.currentNote ?? "").trim(),
+          `残数分割: 元明細 ${itemDetail.itemId} / 元依頼 ${currentRequestedQuantity} ${itemDetail.requestedUnit} / 今回購入 ${splitPurchasedQuantity} ${itemDetail.requestedUnit}`
+        ].filter(Boolean).join("\n")},
+        ${remainingSupplierId ?? itemDetail.currentSupplierId ?? null},
+        'requested'
+      )
+    `;
+
+    await sql`
+      update purchase_orders
+      set
+        requested_item_count = (
+          select count(*)::int
+          from purchase_order_items
+          where purchase_order_id = ${itemDetail.purchaseOrderId}
+        ),
+        updated_at = now()
+      where id = ${itemDetail.purchaseOrderId}
+    `;
+  }
 
   if (
     deliveryStatus === "delivered" &&

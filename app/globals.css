@@ -21878,6 +21878,44 @@ body :where(
   background: var(--blue-soft);
 }
 
+.remaining-split-panel {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(31, 126, 93, 0.18);
+  border-radius: 8px;
+  background: var(--green-soft);
+}
+
+.remaining-split-panel > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.remaining-split-panel strong {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.remaining-split-panel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.remaining-split-fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.remaining-split-panel .secondary-button {
+  justify-content: center;
+  min-height: 38px;
+  background: white;
+}
+
 .row-heading {
   display: flex;
   flex-wrap: wrap;
@@ -28494,6 +28532,10 @@ html:lang(ja) :where(
   }
 
   .temporary-variant-row {
+    grid-template-columns: 1fr;
+  }
+
+  .remaining-split-fields {
     grid-template-columns: 1fr;
   }
 
