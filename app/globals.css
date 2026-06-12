@@ -20839,10 +20839,129 @@ body :where(
 }
 
 .procurement-order-list,
+.procurement-store-body,
 .procurement-supplier-list,
 .procurement-task-list {
   display: grid;
   gap: 12px;
+}
+
+.procurement-store-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(31, 126, 93, 0.14);
+  border-radius: 8px;
+  background: rgba(31, 126, 93, 0.035);
+}
+
+.procurement-store-section.is-collapsed {
+  gap: 0;
+}
+
+.procurement-store-heading {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) minmax(220px, auto) minmax(190px, auto);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.procurement-store-heading > div {
+  min-width: 0;
+}
+
+.procurement-store-heading > div:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.procurement-store-heading > div:nth-child(2) span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.procurement-store-heading > div:nth-child(2) strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.procurement-store-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid rgba(31, 126, 93, 0.22);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--green);
+  background: white;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.procurement-store-toggle svg {
+  flex: 0 0 auto;
+  transition: transform 0.16s ease;
+}
+
+.procurement-store-section:not(.is-collapsed) .procurement-store-toggle svg {
+  transform: rotate(180deg);
+}
+
+.procurement-store-amounts,
+.procurement-store-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.procurement-store-amounts {
+  justify-content: flex-end;
+}
+
+.procurement-store-summary {
+  justify-content: flex-end;
+}
+
+.procurement-store-amounts span,
+.procurement-store-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.procurement-store-amounts span:first-child {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.procurement-store-amounts span:last-child {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.procurement-store-summary span {
+  color: var(--muted);
+  background: #f1f5f4;
+  font-weight: 700;
 }
 
 .procurement-list-more {
@@ -24746,6 +24865,41 @@ body :where(
 
   .procurement-order-list {
     gap: 14px;
+  }
+
+  .procurement-store-section {
+    gap: 10px;
+    padding: 10px;
+    background: white;
+  }
+
+  .procurement-store-heading {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .procurement-store-toggle {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 34px;
+  }
+
+  .procurement-store-heading > div:nth-child(2) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .procurement-store-amounts,
+  .procurement-store-summary {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .procurement-store-amounts span,
+  .procurement-store-summary span {
+    min-height: 26px;
+    font-size: 11px;
   }
 
   .focused-order-bar {

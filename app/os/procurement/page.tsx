@@ -747,6 +747,7 @@ export default function ProcurementPage() {
   const [statusFilter, setStatusFilter] = useState<ProcurementStatusFilter>("未完了");
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
+  const [collapsedStoreKeys, setCollapsedStoreKeys] = useState<Set<string>>(() => new Set());
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
@@ -912,6 +913,18 @@ export default function ProcurementPage() {
         next.delete(orderId);
       } else {
         next.add(orderId);
+      }
+      return next;
+    });
+  }
+
+  function toggleStoreCollapsed(storeKey: string) {
+    setCollapsedStoreKeys((current) => {
+      const next = new Set(current);
+      if (next.has(storeKey)) {
+        next.delete(storeKey);
+      } else {
+        next.add(storeKey);
       }
       return next;
     });
@@ -1292,6 +1305,43 @@ export default function ProcurementPage() {
     .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order)), [purchaseOrdersWithStatus, focusedOrderId, statusFilter, normalizedQuery]);
   const visiblePurchaseOrders = displayedPurchaseOrders.slice(0, visibleOrderLimit);
   const hasMorePurchaseOrders = visibleOrderLimit < displayedPurchaseOrders.length;
+  const visibleStoreGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      store: string;
+      orders: typeof visiblePurchaseOrders;
+      totalCount: number;
+      handledCount: number;
+      unavailableCount: number;
+      estimatedAmount: number;
+      currentAmount: number;
+    }>();
+
+    visiblePurchaseOrders.forEach((entry) => {
+      const store = entry.order.store || "店舗未設定";
+      const key = store;
+      const existingGroup = groups.get(key) ?? {
+        key,
+        store,
+        orders: [],
+        totalCount: 0,
+        handledCount: 0,
+        unavailableCount: 0,
+        estimatedAmount: 0,
+        currentAmount: 0
+      };
+
+      existingGroup.orders.push(entry);
+      existingGroup.totalCount += entry.items.length;
+      existingGroup.handledCount += entry.items.filter((item) => item.purchased || item.unavailable).length;
+      existingGroup.unavailableCount += entry.items.filter((item) => item.unavailable).length;
+      existingGroup.estimatedAmount += calculateProcurementOrderEstimatedAmount(entry.items, productLookup);
+      existingGroup.currentAmount += calculateProcurementOrderCurrentAmount(entry.items, productLookup);
+      groups.set(key, existingGroup);
+    });
+
+    return Array.from(groups.values());
+  }, [visiblePurchaseOrders, productLookup]);
 
   return (
     <main className="shell">
@@ -1362,7 +1412,39 @@ export default function ProcurementPage() {
             </div>
           ) : null}
           <div className="procurement-order-list">
-            {visiblePurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
+            {visibleStoreGroups.map((storeGroup) => {
+              const isStoreCollapsed = collapsedStoreKeys.has(storeGroup.key);
+
+              return (
+                <section className={isStoreCollapsed ? "procurement-store-section is-collapsed" : "procurement-store-section"} key={storeGroup.key}>
+                  <div className="procurement-store-heading">
+                    <button
+                      type="button"
+                      className="procurement-store-toggle"
+                      aria-expanded={!isStoreCollapsed}
+                      aria-controls={`procurement-store-body-${storeGroup.key}`}
+                      onClick={() => toggleStoreCollapsed(storeGroup.key)}
+                    >
+                      <ChevronDown size={16} aria-hidden="true" />
+                      <span>{isStoreCollapsed ? "開く" : "閉じる"}</span>
+                    </button>
+                    <div>
+                      <span>店舗</span>
+                      <strong>{storeGroup.store}</strong>
+                    </div>
+                    <div className="procurement-store-amounts">
+                      <span>概算 {formatEstimatedAmount(storeGroup.estimatedAmount)}</span>
+                      <span>現在 {formatEstimatedAmount(storeGroup.currentAmount)}</span>
+                    </div>
+                    <div className="procurement-store-summary">
+                      <span>{storeGroup.handledCount} / {storeGroup.totalCount} 処理済み</span>
+                      <span>{storeGroup.orders.length} 依頼</span>
+                      {storeGroup.unavailableCount > 0 ? <span>購入不可 {storeGroup.unavailableCount}</span> : null}
+                    </div>
+                  </div>
+                  {!isStoreCollapsed ? (
+                    <div className="procurement-store-body" id={`procurement-store-body-${storeGroup.key}`}>
+                      {storeGroup.orders.map(({ order, items, deliveryState, liveStatus }) => {
               const supplierGroups = groupTasksBySupplierFast(items, supplierByProductName).map((group) => ({
                 ...group,
                 items: sortProcurementItemsBySubcategory(group.items, productLookup)
@@ -1613,6 +1695,11 @@ export default function ProcurementPage() {
                     </div>
                   ) : null}
                 </article>
+              );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
               );
             })}
             {displayedPurchaseOrders.length === 0 ? (
@@ -2254,6 +2341,20 @@ function calculateProcurementOrderEstimatedAmount(items: ProcurementTaskItem[], 
     const referencePrice = Number(product?.referencePrice ?? 0);
     const price = actualPrice > 0 ? actualPrice : referencePrice;
     const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : item.requestedQuantity;
+
+    return total + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0);
+  }, 0);
+}
+
+function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], productLookup: ProductLookup) {
+  return items.reduce((total, item) => {
+    if (!item.purchased || item.unavailable) return total;
+
+    const product = findProcurementProductFromLookup(item, productLookup);
+    const actualPrice = parseProcurementAmount(item.actualPrice);
+    const referencePrice = Number(product?.referencePrice ?? 0);
+    const price = actualPrice > 0 ? actualPrice : referencePrice;
+    const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : 0;
 
     return total + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0);
   }, 0);
