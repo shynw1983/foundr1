@@ -82,7 +82,7 @@ export default function FieldNotesPage() {
 
   async function loadData() {
     const [dashboardResponse, notesResponse] = await Promise.all([
-      fetch("/api/dashboard"),
+      fetch("/api/dashboard", { cache: "no-store" }),
       fetch("/api/field-notes")
     ]);
 

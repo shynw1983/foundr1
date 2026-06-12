@@ -262,7 +262,7 @@ export default function StoresPage() {
   const [temporaryClosureMessage, setTemporaryClosureMessage] = useState("");
 
   async function loadData() {
-    const response = await fetch("/api/dashboard");
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json() as {
       stores?: StoreItem[];

@@ -797,7 +797,7 @@ export default function ProcurementPage() {
   }, [supplierFulfillments]);
 
   async function loadDashboardData() {
-    const response = await fetch("/api/dashboard");
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = await response.json() as {
@@ -923,10 +923,11 @@ export default function ProcurementPage() {
   ) {
     if (!options.alreadyPending) writePendingProcurementTaskItem(item, updatedAt);
 
-    const previousSave = itemSaveChainsRef.current[item.id] ?? Promise.resolve();
-    const nextSave = previousSave
-      .catch(() => undefined)
-      .then(() => saveProcurementTaskItem(item))
+    const previousSave = itemSaveChainsRef.current[item.id];
+    const saveRequest = previousSave
+      ? previousSave.catch(() => undefined).then(() => saveProcurementTaskItem(item))
+      : saveProcurementTaskItem(item);
+    const nextSave = saveRequest
       .then(() => removePendingProcurementTaskItem(item.id, updatedAt))
       .catch(() => {
         if (!options.silentFailure) {

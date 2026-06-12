@@ -481,7 +481,7 @@ export default function OrdersPage() {
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
 
   async function loadDashboardData() {
-    const response = await fetch("/api/dashboard");
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = await response.json() as {
@@ -692,10 +692,11 @@ export default function OrdersPage() {
   ) {
     if (!options.alreadyPending) writePendingStoreConfirmationAction(action);
 
-    const previousSave = storeConfirmationSaveChainsRef.current[action.id] ?? Promise.resolve();
-    const nextSave = previousSave
-      .catch(() => undefined)
-      .then(() => performStoreConfirmationAction(action))
+    const previousSave = storeConfirmationSaveChainsRef.current[action.id];
+    const saveRequest = previousSave
+      ? previousSave.catch(() => undefined).then(() => performStoreConfirmationAction(action))
+      : performStoreConfirmationAction(action);
+    const nextSave = saveRequest
       .then(() => removePendingStoreConfirmationAction(action.id, action.updatedAt))
       .then(() => {
         void loadDashboardData();

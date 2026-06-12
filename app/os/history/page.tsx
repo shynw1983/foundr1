@@ -591,7 +591,7 @@ export default function ProcurementHistoryPage() {
   useEffect(() => {
     async function loadHistoryData() {
       const [response, meResponse] = await Promise.all([
-        fetch("/api/dashboard"),
+        fetch("/api/dashboard", { cache: "no-store" }),
         fetch("/api/auth/me", { cache: "no-store" })
       ]);
       if (meResponse.ok) {

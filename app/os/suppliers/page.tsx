@@ -48,7 +48,7 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     async function loadData() {
-      const response = await fetch("/api/dashboard");
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
       if (!response.ok) return;
       const data = await response.json() as { suppliers?: Supplier[]; supplierLocations?: SupplierLocation[] };
 

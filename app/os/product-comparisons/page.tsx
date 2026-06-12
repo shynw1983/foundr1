@@ -161,7 +161,7 @@ export default function ProductComparisonsPage() {
 
   async function loadData() {
     const [dashboardResponse, comparisonResponse] = await Promise.all([
-      fetch("/api/dashboard"),
+      fetch("/api/dashboard", { cache: "no-store" }),
       fetch("/api/product-comparisons")
     ]);
 
