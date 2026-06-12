@@ -199,7 +199,7 @@ public class MainActivity extends Activity {
             writeLine(out, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), charset);
         }
 
-        out.write(new byte[] { 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A });
+        feedLines(out, 6);
         if (openCashDrawer) {
             out.write(new byte[] { 0x1B, 0x70, 0x00, 0x19, (byte) 0xFA });
         }
@@ -279,6 +279,13 @@ public class MainActivity extends Activity {
         out.write(text.getBytes(StandardCharsets.US_ASCII));
         out.write(0x0D);
         out.write(0x0A);
+    }
+
+    private void feedLines(ByteArrayOutputStream out, int count) throws Exception {
+        for (int i = 0; i < count; i += 1) {
+            out.write(0x0D);
+            out.write(0x0A);
+        }
     }
 
     private void writeWrapped(ByteArrayOutputStream out, String text, Charset charset, int columns) throws Exception {
