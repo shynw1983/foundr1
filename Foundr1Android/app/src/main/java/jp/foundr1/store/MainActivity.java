@@ -225,7 +225,7 @@ public class MainActivity extends Activity {
         out.write(new byte[] { 0x1B, 0x40 });
         out.write(new byte[] { 0x1B, 0x61, 0x00 });
         out.write(new byte[] { 0x1B, 0x21, 0x00 });
-        out.write(new byte[] { 0x1B, 0x74, 0x00 });
+        applyCharacterEncoding(out, encoding);
 
         String jobType = payload.optString("jobType", "receipt");
         if ("test".equals(jobType)) {
@@ -259,6 +259,20 @@ public class MainActivity extends Activity {
         writeAsciiLine(out, repeat("=", Math.min(columns, 32)));
         writeAsciiLine(out, "If you can read this,");
         writeAsciiLine(out, "Wi-Fi printing works.");
+    }
+
+    private void applyCharacterEncoding(ByteArrayOutputStream out, String encoding) throws Exception {
+        if ("utf8".equals(encoding)) {
+            out.write(new byte[] { 0x1B, 0x74, 0x00 });
+            return;
+        }
+
+        // ESC/POS Japanese mode. Xprinter-compatible firmware often needs both
+        // the international set and Kanji Shift_JIS mode before Japanese text.
+        out.write(new byte[] { 0x1B, 0x52, 0x08 });
+        out.write(new byte[] { 0x1B, 0x74, 0x01 });
+        out.write(new byte[] { 0x1C, 0x43, 0x01 });
+        out.write(new byte[] { 0x1C, 0x26 });
     }
 
     private void writeReceipt(ByteArrayOutputStream out, JSONObject payload, Charset charset, int columns) throws Exception {
@@ -359,7 +373,7 @@ public class MainActivity extends Activity {
     }
 
     private String yen(int value) {
-        return "¥" + String.format(Locale.JAPAN, "%,d", Math.max(0, value));
+        return "JPY " + String.format(Locale.JAPAN, "%,d", Math.max(0, value));
     }
 
     private String jsonEscape(String value) {
