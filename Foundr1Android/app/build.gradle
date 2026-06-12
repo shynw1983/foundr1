@@ -7,10 +7,26 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "jp.foundr1.store"
         minSdk 26
         targetSdk 35
         versionCode 1
         versionName "0.1.0"
+    }
+
+    flavorDimensions "surface"
+
+    productFlavors {
+        store {
+            dimension "surface"
+            applicationId "jp.foundr1.store"
+        }
+        os {
+            dimension "surface"
+            applicationId "jp.foundr1.os"
+        }
+        member {
+            dimension "surface"
+            applicationId "jp.foundr1.member"
+        }
     }
 }

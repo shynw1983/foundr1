@@ -1,10 +1,12 @@
-# Foundr1 Store Android Shell
+# Foundr1 Android Shells
 
-This is the Android WebView shell for Foundr1 OS store operation screens. It loads:
+This Android project builds three WebView shell apps from the same native code:
 
-`https://www.foundr1.jp/store/pos`
+- `store`: `Foundr1 Store`, opens `https://www.foundr1.jp/store`
+- `os`: `Foundr1 OS`, opens `https://www.foundr1.jp/os`
+- `member`: `Foundr1 Member`, opens `https://www.foundr1.jp/member`
 
-and exposes this JavaScript bridge to the web app:
+All variants expose this JavaScript bridge to the web app:
 
 ```js
 window.Foundr1Printer.print(payloadJson)
@@ -22,7 +24,21 @@ The bridge sends ESC/POS bytes to a Wi-Fi thermal printer through TCP, using the
 
 3. Wait for Gradle sync to finish.
 4. Connect the Android tablet by USB, or create an emulator.
-5. Click Run.
+5. Select the build variant:
+
+   - `storeDebug`
+   - `osDebug`
+   - `memberDebug`
+
+6. Click Run.
+
+Command-line builds:
+
+```bash
+./gradlew assembleStoreDebug
+./gradlew assembleOsDebug
+./gradlew assembleMemberDebug
+```
 
 ## Test Printer
 
@@ -48,6 +64,5 @@ printf '\x1b\x40Foundr1 OS Test Print\n80mm Printer OK\nIP 192.168.0.33\n\n\n\x1
 ## Notes
 
 - Ordinary Chrome/Safari will still show `Android 印刷ブリッジが見つかりません。`
-- Printing works only inside this Android app shell.
-- The app currently prints test jobs and POS receipts.
-- Kitchen ticket printing can reuse the same bridge with `jobType: "kitchen"` when the web side starts sending kitchen payloads.
+- Printing works only inside these Android app shells.
+- The web side currently sends test jobs, POS receipts, and brand-grouped kitchen tickets.
