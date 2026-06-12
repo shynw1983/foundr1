@@ -534,6 +534,8 @@ export async function reconcileReceiptOcrItemWithPurchaseActual(itemId: string, 
       receipt_ocr_items.quantity::float,
       receipt_ocr_items.unit_price::float as "unitPrice",
       receipt_ocr_items.amount::float,
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus",
       receipt_ocr_results.store_id::text as "storeId",
       receipt_ocr_results.supplier_id::text as "supplierId",
       receipt_ocr_results.purchase_date as "purchaseDate"
@@ -543,6 +545,7 @@ export async function reconcileReceiptOcrItemWithPurchaseActual(itemId: string, 
     limit 1
   `;
   const item = rows[0];
+  if (String(item?.reconciliationStatus ?? "") === "manual_matched" && item?.purchaseActualId) return;
   const storeId = String(item?.storeId ?? "");
   const purchaseDate = item?.purchaseDate ? new Date(String(item.purchaseDate)) : null;
   if (!item || !storeId || !purchaseDate || Number.isNaN(purchaseDate.getTime())) {

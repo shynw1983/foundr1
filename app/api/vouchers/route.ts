@@ -302,6 +302,18 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: true, productId, itemId: String(item.id ?? "") });
   }
 
+  if (body.action === "create_purchase_actual_from_receipt_item") {
+    if (nextUsageType !== "shiire") {
+      return Response.json({ error: "購入実績への変換は仕入の証憑で行ってください。" }, { status: 400 });
+    }
+    const itemId = String(body.ocrItemId ?? "").trim();
+    if (!itemId) return Response.json({ error: "明細がありません。" }, { status: 400 });
+
+    const result = await createPurchaseActualFromReceiptItem(id, itemId, session.id);
+    if (result.error) return result.error;
+    return Response.json({ ok: true, purchaseActualId: result.purchaseActualId, orderNo: result.orderNo });
+  }
+
   if (body.action === "update_confirmed_accounting_summary_note") {
     if (String(voucher.status ?? "") !== "confirmed") {
       return Response.json({ error: "確定済みの証憑だけ編集できます。" }, { status: 400 });
@@ -1651,6 +1663,179 @@ async function linkVoucherItemToProduct(item: Record<string, unknown>, productId
     price: receiptUnitPrice ?? undefined,
     unit: String(item.unit ?? "個").trim() || "個"
   });
+}
+
+async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: string, employeeId: string) {
+  const rows = await sql`
+    select
+      receipt_ocr_results.store_id::text as "storeId",
+      receipt_ocr_results.supplier_id::text as "supplierId",
+      coalesce(receipt_ocr_results.supplier_name, receipt_ocr_results.vendor_name, '') as "supplierName",
+      coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
+      coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
+      receipt_ocr_items.id::text as "itemId",
+      receipt_ocr_items.raw_name as "rawName",
+      receipt_ocr_items.matched_product_id::text as "productId",
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      receipt_ocr_items.quantity::float,
+      coalesce(receipt_ocr_items.unit, '') as unit,
+      receipt_ocr_items.unit_price::float as "unitPrice",
+      receipt_ocr_items.amount::float
+    from receipt_ocr_items
+    join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    where receipt_ocr_results.id::text = ${ocrResultId}
+      and receipt_ocr_items.id::text = ${itemId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return { error: Response.json({ error: "明細が見つかりません。" }, { status: 404 }) };
+  if (row.purchaseActualId) {
+    return { purchaseActualId: String(row.purchaseActualId), orderNo: "" };
+  }
+
+  const storeId = String(row.storeId ?? "");
+  const productId = String(row.productId ?? "");
+  if (!storeId) return { error: Response.json({ error: "店舗が未設定のため購入実績に変換できません。" }, { status: 400 }) };
+  if (!productId) return { error: Response.json({ error: "商品マスタに紐付けてから購入実績に変換してください。" }, { status: 400 }) };
+
+  const productRows = await sql`
+    select
+      name,
+      unit,
+      (
+        select product_supplier_options.supplier_id
+        from product_supplier_options
+        where product_supplier_options.product_id = products.id
+          and product_supplier_options.role = 'メイン'
+          and product_supplier_options.is_active = true
+        limit 1
+      ) as "mainSupplierId"
+    from products
+    where id::text = ${productId}
+    limit 1
+  `;
+  const product = productRows[0];
+  if (!product) return { error: Response.json({ error: "商品マスタが見つかりません。" }, { status: 404 }) };
+
+  const quantity = normalizeNullableNumber(row.quantity) ?? 1;
+  const unit = String(row.unit || product.unit || "個").trim() || "個";
+  const amount = normalizeNullableMoney(row.amount);
+  const unitPrice = normalizeNullableUnitPrice(row.unitPrice) ?? (amount && quantity > 0 ? Math.round((amount / quantity) * 100) / 100 : null);
+  const purchaseDate = String(row.purchaseDate ?? "");
+  const purchaseTime = String(row.purchaseTime ?? "00:00") || "00:00";
+  const recordedAt = purchaseDate ? new Date(`${purchaseDate}T${purchaseTime}:00+09:00`) : new Date();
+  const compactDate = purchaseDate ? purchaseDate.replaceAll("-", "") : new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const shortItemId = itemId.replaceAll("-", "").slice(0, 8).toUpperCase();
+  const orderNo = `RCPT-${compactDate}-${shortItemId}`;
+  const supplierId = row.supplierId ?? product.mainSupplierId ?? null;
+
+  const orderRows = await sql`
+    insert into purchase_orders (
+      order_no,
+      store_id,
+      deadline_label,
+      deadline_at,
+      requested_item_count,
+      priority,
+      status,
+      note,
+      requested_by,
+      assigned_to,
+      updated_at
+    )
+    values (
+      ${orderNo},
+      ${storeId},
+      ${purchaseDate || "レシート補録"},
+      ${recordedAt},
+      1,
+      '中',
+      '購入済み',
+      ${`レシートから購入実績を補録: ${String(row.supplierName ?? "")}`},
+      ${employeeId},
+      ${employeeId},
+      now()
+    )
+    on conflict (order_no)
+    do update set updated_at = now()
+    returning id
+  `;
+  const purchaseOrderId = orderRows[0]?.id;
+  if (!purchaseOrderId) return { error: Response.json({ error: "購入実績の発注を作成できませんでした。" }, { status: 500 }) };
+
+  const orderItemRows = await sql`
+    insert into purchase_order_items (
+      purchase_order_id,
+      product_id,
+      requested_quantity,
+      requested_unit,
+      actual_quantity,
+      actual_price,
+      selected_supplier_id,
+      status,
+      note,
+      procurement_note
+    )
+    values (
+      ${purchaseOrderId},
+      ${productId},
+      ${quantity},
+      ${unit},
+      ${quantity},
+      ${unitPrice},
+      ${supplierId},
+      'purchased',
+      'レシート補録',
+      ${`レシート補録: ${String(row.rawName ?? "")}`}
+    )
+    returning id
+  `;
+  const purchaseOrderItemId = orderItemRows[0]?.id;
+  if (!purchaseOrderItemId) return { error: Response.json({ error: "購入実績明細を作成できませんでした。" }, { status: 500 }) };
+
+  const actualRows = await sql`
+    insert into purchase_actuals (
+      purchase_order_item_id,
+      supplier_id,
+      actual_quantity,
+      actual_unit,
+      actual_price,
+      price_is_exception,
+      note,
+      recorded_by,
+      recorded_at
+    )
+    values (
+      ${purchaseOrderItemId},
+      ${supplierId},
+      ${quantity},
+      ${unit},
+      ${unitPrice},
+      false,
+      ${`レシート補録: ${String(row.rawName ?? "")}`},
+      ${employeeId},
+      ${recordedAt}
+    )
+    returning id::text
+  `;
+  const purchaseActualId = String(actualRows[0]?.id ?? "");
+  if (!purchaseActualId) return { error: Response.json({ error: "購入実績を作成できませんでした。" }, { status: 500 }) };
+
+  await sql`
+    update receipt_ocr_items
+    set
+      purchase_actual_id = ${purchaseActualId},
+      reconciliation_status = 'manual_matched',
+      reconciliation_note = 'レシート明細から購入実績を作成しました。',
+      updated_at = now()
+    where id::text = ${itemId}
+  `;
+
+  if (unitPrice && unitPrice > 0) {
+    await recordReceiptItemPrice(itemId, productId, employeeId, { price: unitPrice, unit });
+  }
+
+  return { purchaseActualId, orderNo };
 }
 
 function normalizeStoredAccountingLines(value: unknown) {

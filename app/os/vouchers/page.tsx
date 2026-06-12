@@ -77,6 +77,9 @@ type VoucherOcrItem = {
   matchStatus: string;
   matchedProductId: string;
   matchedProductName: string;
+  purchaseActualId: string;
+  reconciliationStatus: string;
+  reconciliationNote: string;
 };
 
 type ProductOption = {
@@ -137,6 +140,9 @@ type VoucherAccountingLine = {
   matchedProductId: string;
   matchedProductName: string;
   matchStatus: string;
+  purchaseActualId: string;
+  reconciliationStatus: string;
+  reconciliationNote: string;
   confirmed: boolean;
   accountTitle: string;
   subAccountTitle: string;
@@ -1014,6 +1020,19 @@ export default function VouchersPage() {
     });
   }
 
+  async function createPurchaseActualFromReceiptLine(voucher: VoucherRecord, line: VoucherAccountingLine) {
+    if (!line.ocrItemId || !line.matchedProductId || line.purchaseActualId || line.reconciliationStatus === "manual_matched" || line.reconciliationStatus === "auto_matched") return;
+    await updateAccountingLineProductState(voucher, line, {
+      action: "create_purchase_actual_from_receipt_item"
+    }, "レシート明細から購入実績を作成しました。", {
+      preserveDraft: true,
+      linePatch: {
+        reconciliationStatus: "manual_matched",
+        reconciliationNote: "レシート明細から購入実績を作成しました。"
+      }
+    });
+  }
+
   async function updateAccountingLineProductState(
     voucher: VoucherRecord,
     line: VoucherAccountingLine,
@@ -1657,6 +1676,7 @@ export default function VouchersPage() {
                               onBindProduct={(line) => void bindAccountingLineProduct(voucher, line)}
                               onCreateProduct={(line) => void createProductFromAccountingLine(voucher, line)}
                               onIgnoreProduct={(line, ignored) => void ignoreAccountingLineProduct(voucher, line, ignored)}
+                              onCreatePurchaseActual={(line) => void createPurchaseActualFromReceiptLine(voucher, line)}
                               onConfirm={() => void confirmVoucherAccounting(voucher)}
                             />
                           );
@@ -2301,6 +2321,7 @@ function VoucherAccountingEditor({
   onBindProduct,
   onCreateProduct,
   onIgnoreProduct,
+  onCreatePurchaseActual,
   onConfirm
 }: {
   voucher: VoucherRecord;
@@ -2324,6 +2345,7 @@ function VoucherAccountingEditor({
   onBindProduct: (line: VoucherAccountingLine) => void;
   onCreateProduct: (line: VoucherAccountingLine) => void;
   onIgnoreProduct: (line: VoucherAccountingLine, ignored: boolean) => void;
+  onCreatePurchaseActual: (line: VoucherAccountingLine) => void;
   onConfirm: () => void;
 }) {
   const isShiire = voucher.usageType === "shiire";
@@ -2388,6 +2410,7 @@ function VoucherAccountingEditor({
           const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
           const isProductIgnored = line.matchStatus === "ignored";
+          const isReceiptReconciled = line.reconciliationStatus === "auto_matched" || line.reconciliationStatus === "manual_matched";
           const isLineExpanded = Boolean(expandedLineIds[line.id]);
           const lineTitle = line.note || line.subAccountTitle || `明細 ${draft.lines.indexOf(line) + 1}`;
           const quantityLabel = line.quantity ? `${line.quantity}${line.unit ? ` ${line.unit}` : ""}` : "数量未確認";
@@ -2498,6 +2521,9 @@ function VoucherAccountingEditor({
                   </label>
                   <div className="voucher-product-binding-actions">
                     {isProductIgnored ? <small>商品マスタ対象外</small> : line.matchedProductName ? <small>紐付済み: {line.matchedProductName}</small> : suggestedProduct ? <small>提案: {suggestedProduct.name}</small> : <small>一致候補なし</small>}
+                    <span className={`status-pill ${getReceiptReconciliationTone(line.reconciliationStatus)}`}>
+                      {getReceiptReconciliationLabel(line.reconciliationStatus)}
+                    </span>
                     <button className="text-button" type="button" onClick={() => onIgnoreProduct(line, !isProductIgnored)} disabled={isSaving || isProductPending || !line.note.trim()}>
                       {isProductIgnored ? "対象に戻す" : "商品マスタ対象外"}
                     </button>
@@ -2509,6 +2535,11 @@ function VoucherAccountingEditor({
                       <CheckCircle size={15} />
                       新規追加
                     </button>
+                    <button className="secondary-button" type="button" onClick={() => onCreatePurchaseActual(line)} disabled={isSaving || isProductPending || isProductIgnored || isReceiptReconciled || !line.ocrItemId || !line.matchedProductId}>
+                      <PackageCheck size={15} />
+                      購入実績を作成
+                    </button>
+                    {line.reconciliationNote ? <small>{line.reconciliationNote}</small> : null}
                   </div>
                 </div>
               ) : null}
@@ -2654,6 +2685,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       matchedProductId: item.matchedProductId,
       matchedProductName: item.matchedProductName,
       matchStatus: item.matchStatus,
+      purchaseActualId: item.purchaseActualId,
+      reconciliationStatus: item.reconciliationStatus,
+      reconciliationNote: item.reconciliationNote,
       confirmed: false,
       accountTitle,
       subAccountTitle,
@@ -2678,6 +2712,9 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
     matchedProductId: "",
     matchedProductName: "",
     matchStatus: "",
+    purchaseActualId: "",
+    reconciliationStatus: "unmatched",
+    reconciliationNote: "",
     confirmed: false,
     accountTitle: isShiire ? "仕入高" : "雑費",
     subAccountTitle,
@@ -2707,6 +2744,9 @@ function buildNewAccountingLine(
     matchedProductId: "",
     matchedProductName: "",
     matchStatus: "",
+    purchaseActualId: sourceLine?.purchaseActualId ?? "",
+    reconciliationStatus: sourceLine?.reconciliationStatus ?? "unmatched",
+    reconciliationNote: sourceLine?.reconciliationNote ?? "",
     confirmed: false,
     accountTitle: sourceLine?.accountTitle || (isShiire ? "仕入高" : "雑費"),
     subAccountTitle,
@@ -3114,6 +3154,19 @@ function formatProductOptionLabel(product: ProductOption) {
   ].filter(Boolean).join(" / ");
 }
 
+function getReceiptReconciliationLabel(status: string) {
+  if (status === "auto_matched") return "購入実績照合済み";
+  if (status === "manual_matched") return "購入実績作成済み";
+  if (status === "ignored") return "照合対象外";
+  return "購入実績未照合";
+}
+
+function getReceiptReconciliationTone(status: string) {
+  if (status === "auto_matched" || status === "manual_matched") return "tone-done";
+  if (status === "ignored") return "tone-muted";
+  return "tone-warning";
+}
+
 function getProductCategoryOptions(productOptions: ProductOption[]) {
   return Array.from(new Set(productOptions.map((product) => getProductCategory(product))))
     .sort((first, second) => first.localeCompare(second, "ja"));
@@ -3452,6 +3505,9 @@ function buildVoucherAccountingLineFromConfirmedDetail(detail: ConfirmedAccounti
     matchedProductId: "",
     matchedProductName: "",
     matchStatus: "",
+    purchaseActualId: "",
+    reconciliationStatus: "unmatched",
+    reconciliationNote: "",
     confirmed: true,
     accountTitle: detail.accountTitle,
     subAccountTitle: detail.subAccountTitle,
