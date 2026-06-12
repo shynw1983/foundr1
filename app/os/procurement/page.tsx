@@ -811,7 +811,13 @@ export default function ProcurementPage() {
     setDashboardSyncState(options?.background ? "refreshing" : "loading");
 
     try {
-      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const response = await fetch(`/api/dashboard?ts=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache"
+        }
+      });
       if (!response.ok) throw new Error("Dashboard data request failed.");
 
       const data = await response.json() as {
@@ -908,15 +914,19 @@ export default function ProcurementPage() {
     };
 
     syncPendingItems();
+    const visibleRefreshTimer = window.setInterval(refreshDashboardWhenVisible, 15000);
     window.addEventListener("online", syncWhenVisible);
     window.addEventListener("focus", refreshDashboardWhenVisible);
     window.addEventListener("pageshow", refreshDashboardWhenVisible);
+    window.addEventListener("pointerdown", refreshDashboardWhenVisible);
     document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
+      window.clearInterval(visibleRefreshTimer);
       window.removeEventListener("online", syncWhenVisible);
       window.removeEventListener("focus", refreshDashboardWhenVisible);
       window.removeEventListener("pageshow", refreshDashboardWhenVisible);
+      window.removeEventListener("pointerdown", refreshDashboardWhenVisible);
       document.removeEventListener("visibilitychange", syncWhenVisible);
     };
   }, [loadDashboardData]);

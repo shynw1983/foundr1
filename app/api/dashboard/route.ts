@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireOsSession } from "../../../lib/api-auth";
 import { getProcurementDashboardData } from "../../../lib/procurement-data";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
@@ -11,5 +13,9 @@ export async function GET() {
   return NextResponse.json({
     ...data,
     exceptions: []
+  }, {
+    headers: {
+      "Cache-Control": "no-store, max-age=0"
+    }
   });
 }
