@@ -4,6 +4,11 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -33,7 +38,9 @@ import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -41,6 +48,8 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1002;
     private static final int LINE_CHARS_80MM = 48;
     private static final int LINE_CHARS_58MM = 32;
+    private static final int PAPER_DOTS_80MM = 576;
+    private static final int PAPER_DOTS_58MM = 384;
 
     private FrameLayout rootView;
     private WebView webView;
@@ -218,7 +227,7 @@ public class MainActivity extends Activity {
         String paperWidth = printer != null ? printer.optString("paperWidth", "80mm") : "80mm";
         boolean cutPaper = printer == null || printer.optBoolean("cutPaper", true);
         boolean openCashDrawer = printer != null && printer.optBoolean("openCashDrawer", false);
-        Charset charset = "utf8".equals(encoding) ? StandardCharsets.UTF_8 : Charset.forName("Shift_JIS");
+        Charset charset = "utf8".equals(encoding) ? StandardCharsets.UTF_8 : Charset.forName("MS932");
         int columns = "58mm".equals(paperWidth) ? LINE_CHARS_58MM : LINE_CHARS_80MM;
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -231,11 +240,7 @@ public class MainActivity extends Activity {
         if ("test".equals(jobType)) {
             writeRawAsciiTest(out, printer, columns);
         } else {
-            writeLine(out, center(payload.optString("storeName", "Foundr1 OS"), columns), charset);
-            writeLine(out, repeat("-", columns), charset);
-            writeReceipt(out, payload, charset, columns);
-            writeLine(out, repeat("-", columns), charset);
-            writeLine(out, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), charset);
+            writeRasterReceipt(out, payload, paperWidth);
         }
 
         feedLines(out, 6);
@@ -259,20 +264,177 @@ public class MainActivity extends Activity {
         writeAsciiLine(out, repeat("=", Math.min(columns, 32)));
         writeAsciiLine(out, "If you can read this,");
         writeAsciiLine(out, "Wi-Fi printing works.");
+        writeEncodingProbe(out, "A UTF-8 / ESC t 255", StandardCharsets.UTF_8, new byte[] { 0x1B, 0x74, (byte) 0xFF });
+        writeEncodingProbe(out, "B MS932 / ESC R Japan + t1", Charset.forName("MS932"), new byte[] { 0x1B, 0x52, 0x08, 0x1B, 0x74, 0x01 });
+        writeEncodingProbe(out, "C MS932 / Kanji Shift_JIS", Charset.forName("MS932"), new byte[] { 0x1B, 0x52, 0x08, 0x1C, 0x26, 0x1C, 0x43, 0x01 });
     }
 
     private void applyCharacterEncoding(ByteArrayOutputStream out, String encoding) throws Exception {
         if ("utf8".equals(encoding)) {
-            out.write(new byte[] { 0x1B, 0x74, 0x00 });
+            out.write(new byte[] { 0x1B, 0x74, (byte) 0xFF });
             return;
         }
 
-        // ESC/POS Japanese mode. Xprinter-compatible firmware often needs both
-        // the international set and Kanji Shift_JIS mode before Japanese text.
+        // Keep the normal receipt path in character mode. The test print below
+        // prints multiple Japanese probes so the store can choose the working
+        // XP-80T code page from the POS settings.
         out.write(new byte[] { 0x1B, 0x52, 0x08 });
         out.write(new byte[] { 0x1B, 0x74, 0x01 });
-        out.write(new byte[] { 0x1C, 0x43, 0x01 });
-        out.write(new byte[] { 0x1C, 0x26 });
+    }
+
+    private void writeEncodingProbe(ByteArrayOutputStream out, String title, Charset charset, byte[] commands) throws Exception {
+        out.write(new byte[] { 0x1B, 0x40 });
+        out.write(commands);
+        writeLine(out, title, charset);
+        writeLine(out, "日本語テスト / 小計 / 合計 / お預かり", charset);
+        writeLine(out, "カタカナ: アイス ミルク テイクアウト", charset);
+        writeLine(out, "漢字: 店内 会計 厨房 領収書", charset);
+        writeLine(out, repeat("-", 32), charset);
+    }
+
+    private void writeRasterReceipt(ByteArrayOutputStream out, JSONObject payload, String paperWidth) throws Exception {
+        int paperDots = "58mm".equals(paperWidth) ? PAPER_DOTS_58MM : PAPER_DOTS_80MM;
+        int padding = 18;
+        int contentWidth = paperDots - padding * 2;
+        Paint normal = textPaint(24, false);
+        Paint small = textPaint(21, false);
+        Paint bold = textPaint(28, true);
+        List<RasterLine> lines = new ArrayList<>();
+        JSONObject order = payload.optJSONObject("order");
+
+        addCenter(lines, payload.optString("storeName", "Foundr1 OS"), bold);
+        addSeparator(lines, contentWidth, normal);
+        if (order == null) {
+            addText(lines, "No order payload", normal, contentWidth);
+        } else {
+            addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
+            addText(lines, order.optString("orderType", "") + " / " + order.optString("paymentLabel", ""), normal, contentWidth);
+            addSeparator(lines, contentWidth, normal);
+            JSONArray items = order.optJSONArray("items");
+            if (items != null) {
+                for (int i = 0; i < items.length(); i += 1) {
+                    JSONObject item = items.optJSONObject(i);
+                    if (item == null) continue;
+                    addPair(lines, item.optString("name", "Item") + " x" + item.optInt("quantity", 1), yen(item.optInt("amount", 0)), normal, contentWidth);
+                    JSONArray options = item.optJSONArray("options");
+                    if (options != null) {
+                        for (int optionIndex = 0; optionIndex < options.length(); optionIndex += 1) {
+                            addText(lines, "  " + options.optString(optionIndex), small, contentWidth);
+                        }
+                    }
+                }
+            }
+            addSeparator(lines, contentWidth, normal);
+            addPair(lines, "小計", yen(order.optInt("subtotalAmount", 0)), normal, contentWidth);
+            int discount = order.optInt("discountAmount", 0);
+            if (discount > 0) addPair(lines, "割引", "-" + yen(discount), normal, contentWidth);
+            int coupon = order.optInt("couponDiscountAmount", 0);
+            if (coupon > 0) addPair(lines, "クーポン", "-" + yen(coupon), normal, contentWidth);
+            addPair(lines, "消費税", yen(order.optInt("taxAmount", 0)), normal, contentWidth);
+            addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
+            if ("cash".equals(order.optString("paymentMethod", ""))) {
+                addPair(lines, "お預かり", yen(order.optInt("cashTenderedAmount", 0)), normal, contentWidth);
+                addPair(lines, "お釣り", yen(order.optInt("cashChangeAmount", 0)), normal, contentWidth);
+            }
+            String note = order.optString("note", "").trim();
+            if (!note.isEmpty()) {
+                addSeparator(lines, contentWidth, normal);
+                addText(lines, "備考: " + note, small, contentWidth);
+            }
+        }
+        addSeparator(lines, contentWidth, normal);
+        addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+
+        int height = padding * 2;
+        for (RasterLine line : lines) height += line.height();
+        Bitmap bitmap = Bitmap.createBitmap(paperDots, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+        int y = padding;
+        for (RasterLine line : lines) {
+            line.draw(canvas, padding, paperDots - padding, y);
+            y += line.height();
+        }
+        writeRasterBitmap(out, bitmap);
+        bitmap.recycle();
+    }
+
+    private Paint textPaint(int textSize, boolean bold) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(textSize);
+        paint.setTypeface(Typeface.create(Typeface.SANS_SERIF, bold ? Typeface.BOLD : Typeface.NORMAL));
+        return paint;
+    }
+
+    private void addCenter(List<RasterLine> lines, String text, Paint paint) {
+        lines.add(RasterLine.center(text, paint));
+    }
+
+    private void addSeparator(List<RasterLine> lines, int contentWidth, Paint paint) {
+        StringBuilder separator = new StringBuilder();
+        while (paint.measureText(separator.toString()) < contentWidth) separator.append("-");
+        lines.add(RasterLine.left(separator.toString(), paint));
+    }
+
+    private void addPair(List<RasterLine> lines, String left, String right, Paint paint, int contentWidth) {
+        float rightWidth = paint.measureText(right);
+        int leftWidth = Math.max(80, Math.round(contentWidth - rightWidth - 14));
+        List<String> wrapped = wrapText(left, paint, leftWidth);
+        if (wrapped.size() <= 1) {
+            lines.add(RasterLine.pair(wrapped.isEmpty() ? "" : wrapped.get(0), right, paint));
+            return;
+        }
+        for (String line : wrapped) lines.add(RasterLine.left(line, paint));
+        lines.add(RasterLine.right(right, paint));
+    }
+
+    private void addText(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
+        for (String line : wrapText(text, paint, contentWidth)) lines.add(RasterLine.left(line, paint));
+    }
+
+    private List<String> wrapText(String text, Paint paint, int maxWidth) {
+        List<String> lines = new ArrayList<>();
+        String value = text == null ? "" : text;
+        StringBuilder current = new StringBuilder();
+        for (int offset = 0; offset < value.length(); ) {
+            int codePoint = value.codePointAt(offset);
+            String next = new String(Character.toChars(codePoint));
+            if (current.length() > 0 && paint.measureText(current + next) > maxWidth) {
+                lines.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(next);
+            offset += Character.charCount(codePoint);
+        }
+        lines.add(current.toString());
+        return lines;
+    }
+
+    private void writeRasterBitmap(ByteArrayOutputStream out, Bitmap bitmap) throws Exception {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int widthBytes = (width + 7) / 8;
+        out.write(new byte[] {
+            0x1D, 0x76, 0x30, 0x00,
+            (byte) (widthBytes & 0xFF),
+            (byte) ((widthBytes >> 8) & 0xFF),
+            (byte) (height & 0xFF),
+            (byte) ((height >> 8) & 0xFF)
+        });
+        for (int y = 0; y < height; y += 1) {
+            for (int xByte = 0; xByte < widthBytes; xByte += 1) {
+                int value = 0;
+                for (int bit = 0; bit < 8; bit += 1) {
+                    int x = xByte * 8 + bit;
+                    if (x >= width) continue;
+                    int pixel = bitmap.getPixel(x, y);
+                    int luminance = (Color.red(pixel) * 299 + Color.green(pixel) * 587 + Color.blue(pixel) * 114) / 1000;
+                    if (Color.alpha(pixel) > 128 && luminance < 180) value |= 0x80 >> bit;
+                }
+                out.write(value);
+            }
+        }
     }
 
     private void writeReceipt(ByteArrayOutputStream out, JSONObject payload, Charset charset, int columns) throws Exception {
@@ -382,6 +544,57 @@ public class MainActivity extends Activity {
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r");
+    }
+
+    private static class RasterLine {
+        final String left;
+        final String right;
+        final Paint paint;
+        final int align;
+
+        private RasterLine(String left, String right, Paint paint, int align) {
+            this.left = left;
+            this.right = right;
+            this.paint = paint;
+            this.align = align;
+        }
+
+        static RasterLine left(String text, Paint paint) {
+            return new RasterLine(text, "", paint, 0);
+        }
+
+        static RasterLine center(String text, Paint paint) {
+            return new RasterLine(text, "", paint, 1);
+        }
+
+        static RasterLine right(String text, Paint paint) {
+            return new RasterLine(text, "", paint, 2);
+        }
+
+        static RasterLine pair(String left, String right, Paint paint) {
+            return new RasterLine(left, right, paint, 3);
+        }
+
+        int height() {
+            Paint.FontMetrics metrics = paint.getFontMetrics();
+            return Math.round(metrics.descent - metrics.ascent) + 8;
+        }
+
+        void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {
+            Paint.FontMetrics metrics = paint.getFontMetrics();
+            float baseline = top - metrics.ascent + 2;
+            if (align == 1) {
+                float x = leftEdge + (rightEdge - leftEdge - paint.measureText(left)) / 2;
+                canvas.drawText(left, x, baseline, paint);
+            } else if (align == 2) {
+                canvas.drawText(left, rightEdge - paint.measureText(left), baseline, paint);
+            } else if (align == 3) {
+                canvas.drawText(left, leftEdge, baseline, paint);
+                canvas.drawText(right, rightEdge - paint.measureText(right), baseline, paint);
+            } else {
+                canvas.drawText(left, leftEdge, baseline, paint);
+            }
+        }
     }
 
     private static class PrintResult {
