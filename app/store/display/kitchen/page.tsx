@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
+import { useVisibleRefresh } from "../../components/useVisibleRefresh";
 
 type KitchenTask = {
   id: string;
@@ -72,6 +73,7 @@ export default function StoreKitchenPage() {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
     if (area) params.set("area", area);
+    params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/display/kitchen?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
       setLoading(false);
@@ -95,6 +97,10 @@ export default function StoreKitchenPage() {
     setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
     setLoading(false);
   }
+
+  useVisibleRefresh(() => {
+    void load();
+  });
 
   function toggleLineCheck(key: string) {
     setCheckedLineKeys((current) => {

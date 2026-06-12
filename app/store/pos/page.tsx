@@ -8,6 +8,7 @@ import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
+import { useVisibleRefresh } from "../components/useVisibleRefresh";
 
 type StoreOption = {
   id: string;
@@ -566,6 +567,7 @@ export default function StorePosPage() {
   const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const memberScannerStreamRef = useRef<MediaStream | null>(null);
   const memberScannerActiveRef = useRef(false);
+  const selectedStoreIdRef = useRef("");
   const [access, setAccess] = useState<PosAccess | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -621,9 +623,14 @@ export default function StorePosPage() {
   const [completedDisplayState, setCompletedDisplayState] = useState<Record<string, unknown> | null>(null);
   const [customerDisplayMode, setCustomerDisplayMode] = useState<"business" | "advertising">("business");
 
+  useEffect(() => {
+    selectedStoreIdRef.current = selectedStoreId;
+  }, [selectedStoreId]);
+
   async function loadReconciliation(storeId = selectedStoreId) {
     if (!storeId) return;
     const params = new URLSearchParams({ storeId });
+    params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/pos/reconciliation?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json();
@@ -646,6 +653,7 @@ export default function StorePosPage() {
     setLoading(true);
     const params = new URLSearchParams();
     if (nextStoreId) params.set("storeId", nextStoreId);
+    params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/pos${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
       setMessage("POS データを読み込めませんでした。");
@@ -687,6 +695,10 @@ export default function StorePosPage() {
     setMessage("");
     setLoading(false);
   }
+
+  useVisibleRefresh(() => {
+    void loadReconciliation(selectedStoreIdRef.current);
+  }, { minIntervalMs: 10000 });
 
   useEffect(() => {
     void load(getStoredStoreSelection());

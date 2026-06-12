@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
+import { useVisibleRefresh } from "../../components/useVisibleRefresh";
 
 type PickupOrder = {
   pickupCode: string;
@@ -51,6 +52,7 @@ export default function StorePickupDisplayPage() {
   async function load(storeId = selectedStoreIdRef.current) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
+    params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/display/pickup?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json();
@@ -76,6 +78,10 @@ export default function StorePickupDisplayPage() {
     setReady(nextReady);
     setLastUpdatedAt(new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
   }
+
+  useVisibleRefresh(() => {
+    void load();
+  });
 
   function enableVoice() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {

@@ -4,6 +4,7 @@ import { BriefcaseBusiness, CalendarDays, Clock3, Coffee, LogIn, LogOut, Refresh
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
+import { useVisibleRefresh } from "../components/useVisibleRefresh";
 import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 
 type StoreOption = {
@@ -178,6 +179,7 @@ export default function StoreTimecardPage() {
     setMessage("");
     const params = new URLSearchParams({ month: getJstMonthLabel() });
     if (nextStoreId) params.set("storeId", nextStoreId);
+    params.set("ts", String(Date.now()));
     try {
       const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) {
@@ -220,7 +222,12 @@ export default function StoreTimecardPage() {
     if (!nextStoreId) return;
     setHasLoadedShiftRequests(false);
     try {
-      const response = await fetch(`/api/timecard/shift-requests?storeId=${encodeURIComponent(nextStoreId)}&month=${encodeURIComponent(getJstMonthLabel())}`, { cache: "no-store" });
+      const params = new URLSearchParams({
+        storeId: nextStoreId,
+        month: getJstMonthLabel(),
+        ts: String(Date.now())
+      });
+      const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) return;
       const body = await response.json() as ShiftRequestPayload;
       setShiftRequests(body.requests ?? []);
@@ -246,6 +253,10 @@ export default function StoreTimecardPage() {
   useEffect(() => {
     void loadTimecard(getStoredStoreSelection());
   }, []);
+
+  useVisibleRefresh(() => {
+    void loadTimecard(selectedStoreId);
+  }, { minIntervalMs: 30000 });
 
   useEffect(() => {
     if (!selectedShiftStoreId || !hasLoadedShiftRequests) return;

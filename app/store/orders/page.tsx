@@ -229,6 +229,7 @@ export default function StoreOrdersPage() {
   const [cancelNotice, setCancelNotice] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const selectedStoreIdRef = useRef("");
+  const lastResumeRefreshAtRef = useRef(0);
 
   useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
@@ -356,6 +357,7 @@ export default function StoreOrdersPage() {
     const params = new URLSearchParams();
     const requestedStoreId = selectedStoreIdRef.current;
     if (requestedStoreId) params.set("storeId", requestedStoreId);
+    params.set("ts", String(Date.now()));
     const response = await fetch(`/api/store/orders${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!response.ok) {
       if (response.status === 403 && requestedStoreId) {
@@ -392,6 +394,7 @@ export default function StoreOrdersPage() {
       const statsParams = new URLSearchParams({ days: String(statsDays) });
       const statsStoreId = selectedStoreIdRef.current || responseStoreId;
       if (statsStoreId) statsParams.set("storeId", statsStoreId);
+      statsParams.set("ts", String(Date.now()));
       const statsResponse = await fetch(`/api/store/order-stats?${statsParams.toString()}`, { cache: "no-store" });
       if (statsResponse.ok) setStats(await statsResponse.json());
     } else {
@@ -427,15 +430,26 @@ export default function StoreOrdersPage() {
   };
 
   useEffect(() => {
+    lastResumeRefreshAtRef.current = Date.now();
     refresh();
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") refresh();
+    const refreshFromResume = () => {
+      const now = Date.now();
+      if (now - lastResumeRefreshAtRef.current < 5000) return;
+      lastResumeRefreshAtRef.current = now;
+      void refresh();
     };
-    window.addEventListener("focus", refresh);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshFromResume();
+    };
+    window.addEventListener("focus", refreshFromResume);
+    window.addEventListener("pageshow", refreshFromResume);
+    window.addEventListener("pointerdown", refreshFromResume);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     const timer = window.setInterval(refresh, realtimeStatus === "connected" ? 60000 : 8000);
     return () => {
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", refreshFromResume);
+      window.removeEventListener("pageshow", refreshFromResume);
+      window.removeEventListener("pointerdown", refreshFromResume);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.clearInterval(timer);
     };
