@@ -19,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
+import { useModalHistory } from "../components/useModalHistory";
 import { UserBadge } from "../components/UserBadge";
 
 type StoreOption = {
@@ -1809,6 +1810,8 @@ function ProductReferencePriceDialogView({
   onCancel: () => void;
   onConfirm: (updateReferencePrice: boolean) => void;
 }) {
+  useModalHistory(true, onCancel, "vouchers-reference-price");
+
   const currentReferencePrice = Number(dialog.product.referencePrice ?? 0);
   const hasReferencePrice = Number.isFinite(currentReferencePrice) && currentReferencePrice > 0;
   const difference = hasReferencePrice ? Math.round(dialog.receiptUnitPrice - currentReferencePrice) : 0;
@@ -1888,6 +1891,8 @@ function ProductCreateDialogView({
   onCancel: () => void;
   onConfirm: (next: ProductCreateDialog) => void;
 }) {
+  useModalHistory(true, onCancel, "vouchers-product-create");
+
   const [draft, setDraft] = useState<ProductCreateDialog>(() => normalizeProductCreateDraft(dialog, productOptions));
   const categoryOptions = getProductCategoryOptions(productOptions);
   const subcategoryOptions = getProductSubcategoryOptions(productOptions, draft.category);
@@ -2014,6 +2019,8 @@ function buildPreviewVoucherFromConfirmedLine(line: ConfirmedAccountingLine): Vo
 }
 
 function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
+  useModalHistory(true, onClose, "vouchers-preview");
+
   const title = buildVoucherTitle(voucher);
   const previewUrl = buildVoucherPreviewUrl(voucher);
   const previewBodyRef = useRef<HTMLDivElement | null>(null);

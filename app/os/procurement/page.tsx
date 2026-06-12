@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { useModalHistory } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -2034,6 +2035,8 @@ function ExceptionReportDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  useModalHistory(true, onClose, "procurement-exception-report");
+
   const quantityDiff = item.actualQuantity - item.requestedQuantity;
   const [temporarySupplier, setTemporarySupplier] = useState(getTemporarySupplierNote(item.note));
   const currentProduct = products.find((product) => product.id === item.productId)

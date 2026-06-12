@@ -5,6 +5,7 @@ import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
+import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -2069,8 +2070,9 @@ export default function StorePosPage() {
       </section>
 
       {memberScannerOpen ? (
-        <div className="store-pos-scanner-overlay" role="dialog" aria-modal="true" aria-label="会員 QR 読取">
-          <div className="store-pos-scanner-dialog">
+        <ModalHistoryScope historyKey="store-pos-member-scanner" onClose={() => setMemberScannerOpen(false)}>
+          <div className="store-pos-scanner-overlay" role="dialog" aria-modal="true" aria-label="会員 QR 読取">
+            <div className="store-pos-scanner-dialog">
             <div className="store-pos-scanner-head">
               <div>
                 <p className="eyebrow">Member QR</p>
@@ -2089,13 +2091,15 @@ export default function StorePosPage() {
               <ScanLine size={16} />
               <span>読み取れない場合は、会員番号または電話番号を入力してください。</span>
             </div>
+            </div>
           </div>
-        </div>
+        </ModalHistoryScope>
       ) : null}
 
       {transactionDialogOpen ? (
-        <div className="store-pos-transaction-overlay" role="dialog" aria-modal="true" aria-label="取引履歴">
-          <div className="store-pos-transaction-dialog">
+        <ModalHistoryScope historyKey="store-pos-transactions" onClose={() => setTransactionDialogOpen(false)}>
+          <div className="store-pos-transaction-overlay" role="dialog" aria-modal="true" aria-label="取引履歴">
+            <div className="store-pos-transaction-dialog">
             <div className="store-pos-transaction-head">
               <div>
                 <p className="eyebrow">Transactions</p>
@@ -2288,13 +2292,15 @@ export default function StorePosPage() {
                 )}
               </section>
             </div>
+            </div>
           </div>
-        </div>
+        </ModalHistoryScope>
       ) : null}
 
       {cashDialog ? (
-        <div className="store-pos-cash-overlay" role="dialog" aria-modal="true" aria-label="レジ操作">
-          <div className="store-pos-cash-dialog">
+        <ModalHistoryScope historyKey="store-pos-cash" onClose={() => setCashDialog(null)}>
+          <div className="store-pos-cash-overlay" role="dialog" aria-modal="true" aria-label="レジ操作">
+            <div className="store-pos-cash-dialog">
             <div className="store-pos-cash-dialog-head">
               <div>
                 <p className="eyebrow">Daily Cash</p>
@@ -2427,13 +2433,15 @@ export default function StorePosPage() {
                 </button>
               </div>
             ) : null}
+            </div>
           </div>
-        </div>
+        </ModalHistoryScope>
       ) : null}
 
       {configuringItem ? (
-        <div className="store-pos-option-overlay" role="dialog" aria-modal="true" aria-label="商品オプション">
-          <div className="store-pos-option-panel">
+        <ModalHistoryScope historyKey="store-pos-item-options" onClose={() => setConfiguringItem(null)}>
+          <div className="store-pos-option-overlay" role="dialog" aria-modal="true" aria-label="商品オプション">
+            <div className="store-pos-option-panel">
             <div className="store-pos-option-head">
               <div>
                 <p className="eyebrow">Options</p>
@@ -2514,8 +2522,9 @@ export default function StorePosPage() {
             <button className="primary-button store-pos-option-add" type="button" onClick={addConfiguredItem} disabled={!canAddConfiguredItem}>
               この内容で追加
             </button>
+            </div>
           </div>
-        </div>
+        </ModalHistoryScope>
       ) : null}
     </main>
   );

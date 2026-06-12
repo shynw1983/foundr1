@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { ModalHistoryScope } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -1022,8 +1023,9 @@ export default function StoresPage() {
       </section>
 
       {editingStore ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="store-edit-title">
-          <form className="edit-modal" onSubmit={saveStoreEdit}>
+        <ModalHistoryScope historyKey="stores-edit" onClose={() => setEditingStore(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="store-edit-title">
+            <form className="edit-modal" onSubmit={saveStoreEdit}>
             <div className="modal-heading">
               <div>
                 <h3 id="store-edit-title">店舗を編集</h3>
@@ -1453,13 +1455,15 @@ export default function StoresPage() {
                 店舗を削除
               </button>
             </details>
-          </form>
-        </div>
+            </form>
+          </div>
+        </ModalHistoryScope>
       ) : null}
 
       {editingBrand ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="brand-edit-title">
-          <form className="edit-modal" onSubmit={saveBrandEdit}>
+        <ModalHistoryScope historyKey="brands-edit" onClose={() => setEditingBrand(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="brand-edit-title">
+            <form className="edit-modal" onSubmit={saveBrandEdit}>
             <div className="modal-heading">
               <div>
                 <h3 id="brand-edit-title">ブランドを編集</h3>
@@ -1494,8 +1498,9 @@ export default function StoresPage() {
                 ブランドを削除
               </button>
             </details>
-          </form>
-        </div>
+            </form>
+          </div>
+        </ModalHistoryScope>
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>

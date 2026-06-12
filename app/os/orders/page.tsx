@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { ModalHistoryScope } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -1451,8 +1452,9 @@ export default function OrdersPage() {
       </section>
 
       {editingOrder ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="order-edit-title">
-          <section className="edit-modal order-edit-modal">
+        <ModalHistoryScope historyKey="orders-edit" onClose={() => setEditingOrder(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="order-edit-title">
+            <section className="edit-modal order-edit-modal">
             <div className="modal-heading">
               <div>
                 <h3 id="order-edit-title">発注依頼を編集</h3>
@@ -1625,8 +1627,9 @@ export default function OrdersPage() {
                 保存
               </button>
             </div>
-          </section>
-        </div>
+            </section>
+          </div>
+        </ModalHistoryScope>
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>

@@ -8,6 +8,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { ModalHistoryScope } from "../components/useModalHistory";
 
 type StoreOption = {
   id: string;
@@ -645,8 +646,9 @@ export default function StaffPage() {
       </section>
 
       {editingStaff ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="staff-edit-title">
-          <section className="edit-modal staff-edit-modal">
+        <ModalHistoryScope historyKey="staff-edit" onClose={() => setEditingStaff(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="staff-edit-title">
+            <section className="edit-modal staff-edit-modal">
             <div className="modal-heading">
               <div>
                 <p className="eyebrow">Staff</p>
@@ -674,8 +676,9 @@ export default function StaffPage() {
                 スタッフを削除
               </button>
             </details>
-          </section>
-        </div>
+            </section>
+          </div>
+        </ModalHistoryScope>
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>

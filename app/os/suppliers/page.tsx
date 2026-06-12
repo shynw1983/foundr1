@@ -5,6 +5,7 @@ import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
+import { ModalHistoryScope } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -303,8 +304,9 @@ export default function SuppliersPage() {
       </section>
 
       {editingSupplier ? (
-        <div className="modal-backdrop">
-          <form className="edit-modal" onSubmit={saveSupplierEdit}>
+        <ModalHistoryScope historyKey="suppliers-edit" onClose={() => setEditingSupplier(null)}>
+          <div className="modal-backdrop">
+            <form className="edit-modal" onSubmit={saveSupplierEdit}>
             <div className="modal-heading">
               <div>
                 <h3>発注先を編集</h3>
@@ -362,8 +364,9 @@ export default function SuppliersPage() {
               </button>
               <button className="primary-button" type="submit">保存</button>
             </div>
-          </form>
-        </div>
+            </form>
+          </div>
+        </ModalHistoryScope>
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>

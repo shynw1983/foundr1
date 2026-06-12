@@ -6,6 +6,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { ActionNotice, useActionNotice } from "../components/ActionNotice";
 import { useCloseOnOutside } from "../components/useCloseOnOutside";
+import { ModalHistoryScope, useModalHistory } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -1689,43 +1690,45 @@ export default function ProductsPage() {
         />
       ) : null}
       {canManageProducts && editingCategory ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-edit-title">
-          <section className="edit-modal">
-            <div className="modal-heading">
-              <div>
-                <h3 id="category-edit-title">{editingCategory.type === "category" ? "大分類を編集" : "小分類を編集"}</h3>
-                <p>{editingCategory.type === "category" ? editingCategory.currentName : `${editingCategory.currentCategory} / ${editingCategory.currentName}`}</p>
+        <ModalHistoryScope historyKey="products-category-edit" onClose={() => setEditingCategory(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-edit-title">
+            <section className="edit-modal">
+              <div className="modal-heading">
+                <div>
+                  <h3 id="category-edit-title">{editingCategory.type === "category" ? "大分類を編集" : "小分類を編集"}</h3>
+                  <p>{editingCategory.type === "category" ? editingCategory.currentName : `${editingCategory.currentCategory} / ${editingCategory.currentName}`}</p>
+                </div>
+                <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>閉じる</button>
               </div>
-              <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>閉じる</button>
-            </div>
-            <div className="edit-fields">
-              {editingCategory.type === "subcategory" ? (
+              <div className="edit-fields">
+                {editingCategory.type === "subcategory" ? (
+                  <label>
+                    <span>大分類</span>
+                    <select
+                      value={editingCategory.category}
+                      onChange={(event) => setEditingCategory({ ...editingCategory, category: event.target.value })}
+                    >
+                      {productCategories.map((category) => (
+                        <option value={category} key={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label>
-                  <span>大分類</span>
-                  <select
-                    value={editingCategory.category}
-                    onChange={(event) => setEditingCategory({ ...editingCategory, category: event.target.value })}
-                  >
-                    {productCategories.map((category) => (
-                      <option value={category} key={category}>{category}</option>
-                    ))}
-                  </select>
+                  <span>{editingCategory.type === "category" ? "大分類名" : "小分類名"}</span>
+                  <input
+                    value={editingCategory.name}
+                    onChange={(event) => setEditingCategory({ ...editingCategory, name: event.target.value })}
+                  />
                 </label>
-              ) : null}
-              <label>
-                <span>{editingCategory.type === "category" ? "大分類名" : "小分類名"}</span>
-                <input
-                  value={editingCategory.name}
-                  onChange={(event) => setEditingCategory({ ...editingCategory, name: event.target.value })}
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>キャンセル</button>
-              <button type="button" className="primary-button" onClick={() => void saveCategoryEdit()}>保存</button>
-            </div>
-          </section>
-        </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="text-button" onClick={() => setEditingCategory(null)}>キャンセル</button>
+                <button type="button" className="primary-button" onClick={() => void saveCategoryEdit()}>保存</button>
+              </div>
+            </section>
+          </div>
+        </ModalHistoryScope>
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
@@ -1739,6 +1742,8 @@ function ProductPriceHistoryDialog({
   history: ProductPriceHistoryState;
   onClose: () => void;
 }) {
+  useModalHistory(true, onClose, "products-price-history");
+
   const chronologicalRecords = [...history.records].reverse();
   const prices = history.records.map((record) => Number(record.price)).filter((price) => Number.isFinite(price) && price > 0);
   const latestRecord = history.records[0];
@@ -1875,6 +1880,8 @@ function ProductEditDialog({
   onSave: (target: ProductEditTarget) => void;
   onSupplierCreated: (supplier: Supplier) => void;
 }) {
+  useModalHistory(true, onClose, "products-edit");
+
   const fields = getProductFields(target.value, suppliers, brands, categoryOptions, subcategoryOptions);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -1891,6 +1898,7 @@ function ProductEditDialog({
     Boolean(currentUnit && !commonUnitOptions.includes(currentUnit))
   );
   const generatedProductName = buildProductNameFromVariant(target.value) || String(target.value.name ?? "").trim();
+  useModalHistory(Boolean(supplierCreateTarget), () => setSupplierCreateTarget(null), "products-supplier-quick-create");
 
   useEffect(() => {
     if (currentUnit && !commonUnitOptions.includes(currentUnit)) {

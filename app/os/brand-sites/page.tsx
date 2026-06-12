@@ -26,6 +26,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ModalHistoryScope } from "../components/useModalHistory";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
@@ -847,8 +848,9 @@ export default function BrandSitesPage() {
         </section>
 
         {translationPreview ? (
-          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="ブランドサイトAI翻訳プレビュー">
-            <section className="edit-modal menu-translation-preview-modal">
+          <ModalHistoryScope historyKey="brand-sites-translation-preview" onClose={() => setTranslationPreview(null)}>
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="ブランドサイトAI翻訳プレビュー">
+              <section className="edit-modal menu-translation-preview-modal">
               <div className="modal-header">
                 <div>
                   <p className="eyebrow">AI translation preview</p>
@@ -900,8 +902,9 @@ export default function BrandSitesPage() {
                   <CheckCircle2 size={16} /> {translationBusy === "apply" ? "書き込み中" : "確認して書き込む"}
                 </button>
               </div>
-            </section>
-          </div>
+              </section>
+            </div>
+          </ModalHistoryScope>
         ) : null}
       </section>
     </main>

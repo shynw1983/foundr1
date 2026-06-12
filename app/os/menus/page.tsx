@@ -25,6 +25,7 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { MobileNavMenu } from "../components/MobileNavMenu";
+import { ModalHistoryScope } from "../components/useModalHistory";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 
@@ -1814,8 +1815,9 @@ export default function MenuAdminPage() {
         </div>
       </section>
       {translationPreview ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="AI翻訳プレビュー">
-          <section className="edit-modal menu-translation-preview-modal">
+        <ModalHistoryScope historyKey="menus-translation-preview" onClose={() => setTranslationPreview(null)}>
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="AI翻訳プレビュー">
+            <section className="edit-modal menu-translation-preview-modal">
             <div className="modal-heading">
               <div>
                 <p className="eyebrow">AI Translation Preview</p>
@@ -1875,8 +1877,9 @@ export default function MenuAdminPage() {
                 {translationBusy === "apply" ? "書き込み中" : "確認して書き込む"}
               </button>
             </div>
-          </section>
-        </div>
+            </section>
+          </div>
+        </ModalHistoryScope>
       ) : null}
     </main>
   );

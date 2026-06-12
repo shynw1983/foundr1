@@ -4,6 +4,7 @@ import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, Packag
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
+import { ModalHistoryScope, useModalHistory } from "../components/useModalHistory";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { orders, products as initialProducts } from "../../../lib/mock-data";
@@ -605,6 +606,8 @@ function HistoryCorrectionDialog({
   onClose: () => void;
   onSave: (draft: HistoryCorrectionDraft) => Promise<void>;
 }) {
+  useModalHistory(true, onClose, "history-correction");
+
   const [draft, setDraft] = useState<HistoryCorrectionDraft>(() => ({
     itemId: row.id,
     productId: row.productId,
@@ -1404,8 +1407,9 @@ export default function ProcurementHistoryPage() {
           </section>
         ) : null}
         {activeReceipt ? (
-          <div className="modal-backdrop" role="presentation" onMouseDown={() => setActiveReceipt(null)}>
-            <div className="edit-modal receipt-preview-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <ModalHistoryScope historyKey="history-receipt-preview" onClose={() => setActiveReceipt(null)}>
+            <div className="modal-backdrop" role="presentation" onMouseDown={() => setActiveReceipt(null)}>
+              <div className="edit-modal receipt-preview-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-preview-title" onMouseDown={(event) => event.stopPropagation()}>
               <div className="modal-heading">
                 <div>
                   <h3 id="receipt-preview-title">レシート確認</h3>
@@ -1434,8 +1438,9 @@ export default function ProcurementHistoryPage() {
                   <span className="status-pill tone-done">確認済み</span>
                 )}
               </div>
+              </div>
             </div>
-          </div>
+          </ModalHistoryScope>
         ) : null}
         {activeCorrectionRow ? (
           <HistoryCorrectionDialog

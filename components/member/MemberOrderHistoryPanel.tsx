@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { localizedMemberStoreName } from "./memberDisplayLocalization";
 import { useMemberLanguage } from "./MemberLanguageProvider";
 import { memberText } from "./memberTranslations";
+import { ModalHistoryScope } from "../useModalHistory";
 
 export type MemberOrderHistoryItem = {
   name: string;
@@ -266,14 +267,15 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
         )) : <p>{emptyMessage}</p>}
       </div>
       {selectedOrder ? (
-        <div className="member-order-modal-backdrop" role="presentation" onClick={() => setSelectedOrder(null)}>
-          <section
-            className="member-order-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="member-order-modal-title"
-            onClick={(event) => event.stopPropagation()}
-          >
+        <ModalHistoryScope historyKey="member-order-detail" onClose={() => setSelectedOrder(null)}>
+          <div className="member-order-modal-backdrop" role="presentation" onClick={() => setSelectedOrder(null)}>
+            <section
+              className="member-order-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="member-order-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
             <header className="member-order-modal-header">
               <div>
                 <span>{orderSourceLabel(selectedOrder.orderSource, text)} / {selectedOrder.pickupCode}</span>
@@ -367,8 +369,9 @@ export function MemberOrderHistoryPanel({ orders, compact = false, onRefresh }: 
                 {text.tasteFeedback}
               </button>
             </div>
-          </section>
-        </div>
+            </section>
+          </div>
+        </ModalHistoryScope>
       ) : null}
     </article>
   );
