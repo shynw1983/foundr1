@@ -184,33 +184,22 @@ public class MainActivity extends Activity {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[] { 0x1B, 0x40 });
-        writeLine(out, center(payload.optString("storeName", "Foundr1 OS"), columns), charset);
-        writeLine(out, repeat("-", columns), charset);
+        out.write(new byte[] { 0x1B, 0x61, 0x00 });
+        out.write(new byte[] { 0x1B, 0x21, 0x00 });
+        out.write(new byte[] { 0x1B, 0x74, 0x00 });
 
         String jobType = payload.optString("jobType", "receipt");
         if ("test".equals(jobType)) {
-            writeLine(out, center("Foundr1 OS Test Print", columns), charset);
-            writeLine(out, "Printer OK", charset);
-            JSONObject order = payload.optJSONObject("order");
-            if (order != null) {
-                JSONArray items = order.optJSONArray("items");
-                if (items != null && items.length() > 0) {
-                    JSONObject item = items.optJSONObject(0);
-                    JSONArray options = item != null ? item.optJSONArray("options") : null;
-                    if (options != null) {
-                        for (int i = 0; i < options.length(); i += 1) {
-                            writeLine(out, options.optString(i), charset);
-                        }
-                    }
-                }
-            }
+            writeRawAsciiTest(out, printer, columns);
         } else {
+            writeLine(out, center(payload.optString("storeName", "Foundr1 OS"), columns), charset);
+            writeLine(out, repeat("-", columns), charset);
             writeReceipt(out, payload, charset, columns);
+            writeLine(out, repeat("-", columns), charset);
+            writeLine(out, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), charset);
         }
 
-        writeLine(out, repeat("-", columns), charset);
-        writeLine(out, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), charset);
-        out.write(new byte[] { 0x0A, 0x0A, 0x0A });
+        out.write(new byte[] { 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A });
         if (openCashDrawer) {
             out.write(new byte[] { 0x1B, 0x70, 0x00, 0x19, (byte) 0xFA });
         }
@@ -218,6 +207,19 @@ public class MainActivity extends Activity {
             out.write(new byte[] { 0x1D, 0x56, 0x00 });
         }
         return out.toByteArray();
+    }
+
+    private void writeRawAsciiTest(ByteArrayOutputStream out, JSONObject printer, int columns) throws Exception {
+        writeAsciiLine(out, "FOUND R1 OS PRINT TEST");
+        writeAsciiLine(out, repeat("=", Math.min(columns, 32)));
+        writeAsciiLine(out, "Printer bridge: OK");
+        writeAsciiLine(out, "Host: " + (printer == null ? "" : printer.optString("host", "")));
+        writeAsciiLine(out, "Port: " + (printer == null ? "9100" : printer.optInt("port", 9100)));
+        writeAsciiLine(out, "Paper: " + (printer == null ? "80mm" : printer.optString("paperWidth", "80mm")));
+        writeAsciiLine(out, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()));
+        writeAsciiLine(out, repeat("=", Math.min(columns, 32)));
+        writeAsciiLine(out, "If you can read this,");
+        writeAsciiLine(out, "Wi-Fi printing works.");
     }
 
     private void writeReceipt(ByteArrayOutputStream out, JSONObject payload, Charset charset, int columns) throws Exception {
@@ -269,6 +271,13 @@ public class MainActivity extends Activity {
 
     private void writeLine(ByteArrayOutputStream out, String text, Charset charset) throws Exception {
         out.write(text.getBytes(charset));
+        out.write(0x0D);
+        out.write(0x0A);
+    }
+
+    private void writeAsciiLine(ByteArrayOutputStream out, String text) throws Exception {
+        out.write(text.getBytes(StandardCharsets.US_ASCII));
+        out.write(0x0D);
         out.write(0x0A);
     }
 
