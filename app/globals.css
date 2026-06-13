@@ -13137,10 +13137,6 @@ body :where(
   gap: 10px;
 }
 
-.loyalty-app-announcement-panel .loyalty-app-announcement-form-row {
-  grid-template-columns: 1fr;
-}
-
 .loyalty-app-announcement-item {
   display: grid;
   gap: 6px;

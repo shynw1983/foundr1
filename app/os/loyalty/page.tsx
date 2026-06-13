@@ -612,6 +612,77 @@ export default function LoyaltyPage() {
     void load();
   }, []);
 
+  const appAnnouncementPanel = (
+    <section className="panel loyalty-app-announcement-panel">
+      <div className="panel-title">
+        <div>
+          <p className="eyebrow">Member APP</p>
+          <h3>会員APP通知</h3>
+        </div>
+      </div>
+      <div className="loyalty-app-announcement-grid">
+        <div className="loyalty-app-announcement-form">
+          <label>
+            <span>表示形式</span>
+            <select value={announcementForm.kind} onChange={(event) => setAnnouncementForm((current) => ({ ...current, kind: event.target.value }))}>
+              <option value="campaign">定期優待</option>
+              <option value="coupon">クーポン</option>
+              <option value="new_product">新商品</option>
+              <option value="news">お知らせ</option>
+            </select>
+          </label>
+          <label>
+            <span>タイトル</span>
+            <input value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="例: 新商品が登場しました" />
+          </label>
+          <label>
+            <span>本文</span>
+            <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))} placeholder="Member APPを開いたお客様に表示する内容" />
+          </label>
+          <div className="loyalty-app-announcement-form-row">
+            <label>
+              <span>ボタン文言</span>
+              <input value={announcementForm.ctaLabel} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaLabel: event.target.value }))} placeholder="任意" />
+            </label>
+            <label>
+              <span>リンクURL</span>
+              <input value={announcementForm.ctaUrl} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaUrl: event.target.value }))} placeholder="https://..." inputMode="url" />
+            </label>
+          </div>
+          <div className="loyalty-app-announcement-form-row">
+            <label>
+              <span>開始日時</span>
+              <input type="datetime-local" value={announcementForm.startsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, startsAt: event.target.value }))} />
+            </label>
+            <label>
+              <span>終了日時</span>
+              <input type="datetime-local" value={announcementForm.endsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, endsAt: event.target.value }))} />
+            </label>
+          </div>
+          <button className="primary-button" type="button" onClick={() => void createAppAnnouncement()} disabled={announcementSaving}>
+            {announcementSaving ? "作成中..." : "APP通知を作成"}
+          </button>
+        </div>
+        <div className="loyalty-app-announcement-list">
+          {dashboard.appAnnouncements.length ? dashboard.appAnnouncements.map((announcement) => (
+            <article key={announcement.id} className="loyalty-app-announcement-item">
+              <span><Megaphone size={16} /> {getAnnouncementKindLabel(announcement.kind)}</span>
+              <strong>{announcement.title}</strong>
+              <p>{announcement.body}</p>
+              <small>
+                {announcement.startsAt ? `開始 ${formatDateTime(announcement.startsAt)} / ` : ""}
+                {announcement.endsAt ? `終了 ${formatDateTime(announcement.endsAt)} / ` : ""}
+                {announcement.status === "active" ? "有効" : announcement.status}
+              </small>
+            </article>
+          )) : (
+            <div className="loyalty-template-empty">会員APP通知はまだありません。</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+
   return (
     <main className="shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
@@ -667,6 +738,8 @@ export default function LoyaltyPage() {
             <p>使用済み {formatNumber(dashboard.summary.usedCoupons)}</p>
           </article>
         </section>
+
+        {appAnnouncementPanel}
 
         <section className="panel loyalty-rule-panel">
           <div>
@@ -929,73 +1002,6 @@ export default function LoyaltyPage() {
             <button className="primary-button" type="button" onClick={() => void issueCoupon()} disabled={couponSaving}>
               {couponSaving ? "発行中..." : "クーポンを発行"}
             </button>
-          </article>
-
-          <article className="panel loyalty-member-form loyalty-app-announcement-panel">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">Member APP</p>
-                <h3>APPポップアップ通知</h3>
-              </div>
-            </div>
-            <div className="loyalty-app-announcement-form">
-              <label>
-                <span>種類</span>
-                <select value={announcementForm.kind} onChange={(event) => setAnnouncementForm((current) => ({ ...current, kind: event.target.value }))}>
-                  <option value="campaign">定期優待</option>
-                  <option value="coupon">クーポン</option>
-                  <option value="new_product">新商品</option>
-                  <option value="news">お知らせ</option>
-                </select>
-              </label>
-              <label>
-                <span>タイトル</span>
-                <input value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="例: 新商品が登場しました" />
-              </label>
-              <label>
-                <span>本文</span>
-                <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))} placeholder="Member APPを開いたお客様に表示する内容" />
-              </label>
-              <div className="loyalty-app-announcement-form-row">
-                <label>
-                  <span>ボタン文言</span>
-                  <input value={announcementForm.ctaLabel} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaLabel: event.target.value }))} placeholder="任意" />
-                </label>
-                <label>
-                  <span>リンクURL</span>
-                  <input value={announcementForm.ctaUrl} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaUrl: event.target.value }))} placeholder="https://..." inputMode="url" />
-                </label>
-              </div>
-              <div className="loyalty-app-announcement-form-row">
-                <label>
-                  <span>開始日時</span>
-                  <input type="datetime-local" value={announcementForm.startsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, startsAt: event.target.value }))} />
-                </label>
-                <label>
-                  <span>終了日時</span>
-                  <input type="datetime-local" value={announcementForm.endsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, endsAt: event.target.value }))} />
-                </label>
-              </div>
-              <button className="primary-button" type="button" onClick={() => void createAppAnnouncement()} disabled={announcementSaving}>
-                {announcementSaving ? "作成中..." : "APPポップアップを作成"}
-              </button>
-            </div>
-            <div className="loyalty-app-announcement-list">
-              {dashboard.appAnnouncements.length ? dashboard.appAnnouncements.map((announcement) => (
-                <article key={announcement.id} className="loyalty-app-announcement-item">
-                  <span><Megaphone size={16} /> {getAnnouncementKindLabel(announcement.kind)}</span>
-                  <strong>{announcement.title}</strong>
-                  <p>{announcement.body}</p>
-                  <small>
-                    {announcement.startsAt ? `開始 ${formatDateTime(announcement.startsAt)} / ` : ""}
-                    {announcement.endsAt ? `終了 ${formatDateTime(announcement.endsAt)} / ` : ""}
-                    {announcement.status === "active" ? "有効" : announcement.status}
-                  </small>
-                </article>
-              )) : (
-                <div className="loyalty-template-empty">APPポップアップ通知はまだありません。</div>
-              )}
-            </div>
           </article>
 
           <article className="panel loyalty-member-form">
