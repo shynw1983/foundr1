@@ -28003,39 +28003,56 @@ body :where(
     display: none;
   }
 
-  .store-workbench-topbar,
+  .store-workbench-topbar {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    align-items: center;
+    column-gap: 10px;
+    padding-top: 0;
+  }
+
   .procedure-reader-topbar {
     position: relative;
     grid-template-columns: 1fr;
     padding-top: 0;
   }
 
-  .store-workbench-topbar .brand-block,
+  .store-workbench-topbar .brand-block {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    min-height: 48px;
+    padding-right: 0;
+  }
+
   .procedure-reader-topbar .brand-block {
     padding-right: 58px;
   }
 
   .store-nav-menu {
-    position: absolute;
-    top: 0;
-    right: 0;
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
     width: 48px;
   }
 
   .store-nav-menu summary {
     width: 48px;
+    height: 48px;
     min-height: 48px;
   }
 
   .store-live-clock {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
     justify-self: start;
     max-width: calc(100% - 192px);
   }
 
   .store-user-tools {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
     justify-self: end;
   }
