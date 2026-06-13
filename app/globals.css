@@ -2272,6 +2272,7 @@ body :where(
 
 .brand-block h1 {
   font-size: 22px;
+  line-height: 1.08;
 }
 
 .eyebrow {
@@ -24030,7 +24031,7 @@ body :where(
   .mobile-nav-menu {
     order: 3;
     position: relative;
-    flex: 0 0 132px;
+    flex: 0 0 48px;
     display: block;
   }
 
@@ -24047,11 +24048,12 @@ body :where(
   .mobile-visible-notification {
     display: none;
     position: relative;
-    flex: 0 0 46px;
+    flex: 0 0 48px;
   }
 
   .mobile-visible-notification summary {
-    min-height: 42px;
+    min-height: 48px;
+    width: 48px;
     border-color: rgba(255, 255, 255, 0.14);
     background: rgba(255, 255, 255, 0.07);
     color: #f7fafc;
@@ -24062,9 +24064,9 @@ body :where(
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 42px;
-    width: 100%;
-    padding: 0 10px;
+    min-height: 48px;
+    width: 48px;
+    padding: 0;
     border: 1px solid rgba(31, 111, 91, 0.28);
     border-radius: 8px;
     background: var(--green);
@@ -24076,10 +24078,14 @@ body :where(
     cursor: pointer;
   }
 
+  .shell .sidebar .mobile-nav-menu-label {
+    display: none;
+  }
+
   .hamburger-button {
     display: inline-grid;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     place-items: center;
     border-radius: 7px;
     background: rgba(255, 255, 255, 0.16);
@@ -24399,14 +24405,14 @@ body :where(
     position: sticky;
     top: 0;
     z-index: 30;
-    height: 58px;
-    max-height: 58px;
+    height: 64px;
+    max-height: 64px;
     display: flex;
     overflow: visible;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    min-height: 58px;
+    gap: 12px;
+    min-height: 64px;
     min-width: 0;
     padding: 8px 10px;
   }
@@ -24414,18 +24420,25 @@ body :where(
   .brand-block {
     display: flex;
     flex: 1 1 0;
+    align-items: center;
+    gap: 11px;
     min-width: 0;
     margin-bottom: 0;
     padding: 0;
   }
 
   .brand-block > div:last-child {
+    display: grid;
+    align-content: center;
+    gap: 2px;
     min-width: 0;
   }
 
   .brand-mark {
-    width: 40px;
-    height: 40px;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    background-size: 138%;
   }
 
   .brand-block h1,
@@ -24512,13 +24525,14 @@ body :where(
   }
 
   .brand-block h1 {
-    font-size: 18px;
-    line-height: 1.1;
+    font-size: 20px;
+    line-height: 1.02;
   }
 
   .brand-block .eyebrow {
-    margin-bottom: 2px;
-    font-size: 10px;
+    margin-bottom: 0;
+    font-size: 10.5px;
+    line-height: 1;
   }
 
   .workspace {
@@ -25715,20 +25729,21 @@ body :where(
   }
 
   .brand-block {
-    gap: 8px;
+    gap: 9px;
   }
 
   .brand-mark {
-    width: 36px;
-    height: 36px;
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
   }
 
   .brand-block h1 {
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .brand-block .eyebrow {
-    font-size: 9px;
+    font-size: 9.5px;
   }
 
   .mobile-nav-actions {
@@ -25736,11 +25751,11 @@ body :where(
   }
 
   .mobile-visible-notification {
-    flex-basis: 42px;
+    flex-basis: 48px;
   }
 
   .mobile-nav-menu {
-    flex-basis: 108px;
+    flex-basis: 48px;
   }
 
   .mobile-nav-menu summary {
@@ -29041,7 +29056,7 @@ a:focus-visible {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
-  background: #000000 url("/icons/foundr1-os-512.png") center / cover no-repeat;
+  background: #000000 url("/icons/foundr1-os-512.png") center / 138% no-repeat;
   box-shadow: none;
   color: transparent;
   font-size: 0;
@@ -29053,6 +29068,7 @@ a:focus-visible {
 .shell .brand-mark {
   background-color: #000000;
   background-image: url("/icons/foundr1-os-512.png");
+  background-size: 138%;
 }
 
 .store-workbench-shell .brand-mark,
@@ -29060,6 +29076,7 @@ a:focus-visible {
   border-color: var(--line);
   background-color: #ffffff;
   background-image: url("/icons/foundr1-store-512.png");
+  background-size: 138%;
 }
 
 .brand-block .eyebrow {
@@ -29076,9 +29093,9 @@ a:focus-visible {
   .brand-mark,
   .store-workbench-topbar .brand-mark,
   .procedure-reader-topbar .brand-mark {
-    flex-basis: 40px;
-    width: 40px;
-    height: 40px;
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
   }
 }
 
@@ -29086,9 +29103,9 @@ a:focus-visible {
   .brand-mark,
   .store-workbench-topbar .brand-mark,
   .procedure-reader-topbar .brand-mark {
-    flex-basis: 34px;
-    width: 34px;
-    height: 34px;
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
   }
 }
 
