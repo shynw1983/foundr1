@@ -26111,13 +26111,15 @@ body :where(
   .store-workbench-topbar .brand-block,
   .procedure-reader-topbar .brand-block {
     overflow: hidden;
-    gap: 8px;
+    align-items: center;
+    gap: 11px;
   }
 
   .store-workbench-topbar .brand-mark {
     flex: 0 0 48px;
     width: 48px;
     height: 48px;
+    background-size: 190%;
   }
 
   .procedure-reader-topbar .brand-mark {
@@ -26131,6 +26133,25 @@ body :where(
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .store-workbench-topbar .brand-block > div:last-child,
+  .procedure-reader-topbar .brand-block > div:last-child {
+    display: grid;
+    align-content: center;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .store-workbench-topbar .brand-block h1 {
+    font-size: 24px;
+    line-height: 1.02;
+  }
+
+  .store-workbench-topbar .brand-block .eyebrow {
+    margin-bottom: 0;
+    font-size: 10.5px;
+    line-height: 1;
   }
 
   .store-nav-cluster {
@@ -26262,14 +26283,15 @@ body :where(
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
-    width: 184px;
+    width: 48px;
     display: block;
   }
 
   .store-nav-menu summary {
-    width: 100%;
+    width: 48px;
+    min-height: 48px;
     margin-left: auto;
-    padding-inline: 10px;
+    padding: 0;
   }
 
   .store-version-notice {
