@@ -2,14 +2,16 @@
   "app": "store",
   "title": "Foundr1 STORE",
   "packageName": "jp.foundr1.store",
-  "versionName": "0.1.0",
-  "versionCode": 1,
+  "versionName": "0.1.2",
+  "versionCode": 2,
+  "releaseLabel": "2026.06.13.2",
   "buildType": "debug",
   "fileName": "latest.apk",
   "downloadPath": "/downloads/store/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-store-latest.apk",
   "sizeBytes": 20261619,
-  "sha256": "2f557d68c2d6f66b512692e93f112c2612faaf883e79fabb7edb590cdc5ca5a9",
-  "builtAt": "2026-06-13T13:08:11.878Z",
-  "gitCommit": "6e6e3d85"
+  "sha256": "2db901eb77bc7a74d85a7ed669a23783f4c04ed3a742f49aa41b22e40945413a",
+  "builtAt": "2026-06-13T13:19:20.505Z",
+  "gitCommit": "b295c8af",
+  "gitSubject": "Add APK release version metadata"
 }

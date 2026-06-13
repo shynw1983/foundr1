@@ -2,14 +2,16 @@
   "app": "os",
   "title": "Foundr1 OS",
   "packageName": "jp.foundr1.os",
-  "versionName": "0.1.0",
-  "versionCode": 1,
+  "versionName": "0.1.2",
+  "versionCode": 2,
+  "releaseLabel": "2026.06.13.2",
   "buildType": "debug",
   "fileName": "latest.apk",
   "downloadPath": "/downloads/os/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-os-latest.apk",
   "sizeBytes": 838576,
-  "sha256": "3c559dee4089a013d33f2c65fc98023336069de17c4f1f6c056e7483c46792f5",
-  "builtAt": "2026-06-13T11:45:09.826Z",
-  "gitCommit": "415275e7"
+  "sha256": "cc137f4cbfb3d1cdb6a3b84c9bce058cd86dd47039a7aa46c9a076f190afb531",
+  "builtAt": "2026-06-13T13:18:39.372Z",
+  "gitCommit": "b295c8af",
+  "gitSubject": "Add APK release version metadata"
 }

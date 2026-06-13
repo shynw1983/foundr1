@@ -2,14 +2,16 @@
   "app": "staff",
   "title": "Foundr1 STAFF",
   "packageName": "jp.foundr1.staff",
-  "versionName": "0.1.0",
-  "versionCode": 1,
+  "versionName": "0.1.2",
+  "versionCode": 2,
+  "releaseLabel": "2026.06.13.2",
   "buildType": "debug",
   "fileName": "latest.apk",
   "downloadPath": "/downloads/staff/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-staff-latest.apk",
-  "sizeBytes": 838992,
-  "sha256": "10e878938057702bbb8754035c95b033afe3b420a7a49dbee17dbc6d4ff0e601",
-  "builtAt": "2026-06-13T11:45:39.374Z",
-  "gitCommit": "415275e7"
+  "sizeBytes": 838996,
+  "sha256": "77d304c9313b0cfe5f2bc8d5de23d7735e1ad1feced78d5c5e3e49536022fb02",
+  "builtAt": "2026-06-13T13:19:09.418Z",
+  "gitCommit": "b295c8af",
+  "gitSubject": "Add APK release version metadata"
 }

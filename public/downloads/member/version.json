@@ -2,14 +2,16 @@
   "app": "member",
   "title": "Foundr1 MEMBER",
   "packageName": "jp.foundr1.member",
-  "versionName": "0.1.0",
-  "versionCode": 1,
+  "versionName": "0.1.2",
+  "versionCode": 2,
+  "releaseLabel": "2026.06.13.2",
   "buildType": "debug",
   "fileName": "latest.apk",
   "downloadPath": "/downloads/member/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-member-latest.apk",
-  "sizeBytes": 839112,
-  "sha256": "7e097f45d3354b11d8ce5e95214a049da29925ccfdf4bb1e1829e7efe2df23b5",
-  "builtAt": "2026-06-13T11:45:26.008Z",
-  "gitCommit": "415275e7"
+  "sizeBytes": 839116,
+  "sha256": "ddf804cad81d1d2bf695c8fec41809ec04d165a9ee596ba40fdd0a180ef9c8c1",
+  "builtAt": "2026-06-13T13:18:56.573Z",
+  "gitCommit": "b295c8af",
+  "gitSubject": "Add APK release version metadata"
 }
