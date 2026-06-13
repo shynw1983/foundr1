@@ -1,5 +1,5 @@
 export type PosPrinterConnection = {
-  deviceType: "escpos_network" | "star_printer";
+  deviceType: "escpos_network" | "escpos_bluetooth" | "escpos_usb" | "star_printer";
   connectionType: "lan" | "bluetooth" | "bluetooth_le" | "usb";
   identifier: string;
   host: string;
@@ -136,7 +136,9 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterConnection> : {};
   const port = Math.round(Number(source.port || fallback.port));
-  const deviceType = source.deviceType === "star_printer" ? "star_printer" : fallback.deviceType;
+  const deviceType = ["escpos_bluetooth", "escpos_usb", "star_printer"].includes(String(source.deviceType))
+    ? source.deviceType as PosPrinterConnection["deviceType"]
+    : fallback.deviceType;
   const connectionType = ["bluetooth", "bluetooth_le", "usb"].includes(String(source.connectionType))
     ? source.connectionType as PosPrinterConnection["connectionType"]
     : deviceType === "star_printer"
@@ -242,13 +244,19 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
         quantity: 1,
         amount: 0,
         options: [
-          printer.deviceType === "star_printer" ? `Star printer / ${printer.connectionType}` : `${printer.host}:${printer.port}`,
+          printer.deviceType === "star_printer" ? `Star printer / ${printer.connectionType}` : getEscPosDeviceLabel(printer),
           printer.identifier ? `ID: ${printer.identifier}` : printer.paperWidth,
           printer.paperWidth
         ]
       }]
     }
   };
+}
+
+function getEscPosDeviceLabel(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_bluetooth") return `ESC/POS Bluetooth / ${printer.identifier}`;
+  if (printer.deviceType === "escpos_usb") return `ESC/POS USB${printer.identifier ? ` / ${printer.identifier}` : ""}`;
+  return `${printer.host}:${printer.port}`;
 }
 
 export async function printWithAndroidBridge(payload: PosPrintPayload) {

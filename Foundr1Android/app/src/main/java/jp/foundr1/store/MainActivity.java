@@ -6,6 +6,9 @@ import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -15,6 +18,12 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.hardware.usb.UsbConstants;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbEndpoint;
+import android.hardware.usb.UsbInterface;
+import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,8 +58,11 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final int CAMERA_PERMISSION_REQUEST = 1001;
@@ -65,6 +77,7 @@ public class MainActivity extends Activity {
     private static final int PAPER_DOTS_58MM = 384;
     private static final int LOGO_MAX_HEIGHT_80MM = 150;
     private static final int LOGO_MAX_HEIGHT_58MM = 120;
+    private static final UUID BLUETOOTH_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
     private FrameLayout rootView;
     private WebView webView;
@@ -386,6 +399,12 @@ public class MainActivity extends Activity {
         if ("star_printer".equals(deviceType)) {
             return sendStarPrintJob(payload, printer);
         }
+        if ("escpos_bluetooth".equals(deviceType)) {
+            return sendEscPosBluetoothPrintJob(payload, printer);
+        }
+        if ("escpos_usb".equals(deviceType)) {
+            return sendEscPosUsbPrintJob(payload, printer);
+        }
         String host = printer.optString("host", "").trim();
         int port = printer.optInt("port", 9100);
         if (host.isEmpty()) throw new IllegalArgumentException("Printer IP is empty.");
@@ -399,6 +418,134 @@ public class MainActivity extends Activity {
             output.flush();
         }
         return new PrintResult("印刷を送信しました");
+    }
+
+    private PrintResult sendEscPosBluetoothPrintJob(JSONObject payload, JSONObject printer) throws Exception {
+        String identifier = printer.optString("identifier", "").trim();
+        if (identifier.isEmpty()) throw new IllegalArgumentException("Bluetooth printer identifier is empty.");
+        byte[] bytes = buildEscPos(payload);
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        if (adapter == null) throw new IllegalArgumentException("Bluetooth is not available on this device.");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            throw new IllegalArgumentException("Bluetooth permission is not granted.");
+        }
+        BluetoothDevice device = findBondedBluetoothDevice(adapter, identifier);
+        if (device == null) throw new IllegalArgumentException("Paired Bluetooth printer was not found: " + identifier);
+        try (BluetoothSocket socket = device.createRfcommSocketToServiceRecord(BLUETOOTH_SPP_UUID)) {
+            adapter.cancelDiscovery();
+            socket.connect();
+            OutputStream output = socket.getOutputStream();
+            output.write(bytes);
+            output.flush();
+        }
+        return new PrintResult("Bluetooth プリンターに印刷を送信しました");
+    }
+
+    private BluetoothDevice findBondedBluetoothDevice(BluetoothAdapter adapter, String identifier) {
+        String normalized = identifier.trim().toLowerCase(Locale.ROOT);
+        Set<BluetoothDevice> devices = adapter.getBondedDevices();
+        for (BluetoothDevice device : devices) {
+            String name = device.getName() == null ? "" : device.getName();
+            String address = device.getAddress() == null ? "" : device.getAddress();
+            if (name.equalsIgnoreCase(identifier) || address.equalsIgnoreCase(identifier)) return device;
+            if (name.toLowerCase(Locale.ROOT).contains(normalized)) return device;
+        }
+        return null;
+    }
+
+    private PrintResult sendEscPosUsbPrintJob(JSONObject payload, JSONObject printer) throws Exception {
+        String identifier = printer.optString("identifier", "").trim();
+        byte[] bytes = buildEscPos(payload);
+        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        if (manager == null) throw new IllegalArgumentException("USB manager is not available.");
+        UsbDevice device = findUsbPrinter(manager, identifier);
+        if (device == null) throw new IllegalArgumentException("USB printer was not found.");
+        if (!manager.hasPermission(device)) {
+            PendingIntent permissionIntent = PendingIntent.getBroadcast(
+                this,
+                0,
+                new Intent("jp.foundr1.store.USB_PERMISSION"),
+                PendingIntent.FLAG_IMMUTABLE
+            );
+            manager.requestPermission(device, permissionIntent);
+            throw new IllegalArgumentException("USB printer permission was requested. Please allow it, then retry.");
+        }
+        UsbInterface usbInterface = findUsbPrinterInterface(device);
+        UsbEndpoint endpoint = findUsbOutEndpoint(usbInterface);
+        if (usbInterface == null || endpoint == null) throw new IllegalArgumentException("USB printer output endpoint was not found.");
+        UsbDeviceConnection connection = manager.openDevice(device);
+        if (connection == null) throw new IllegalArgumentException("USB printer could not be opened.");
+        try {
+            if (!connection.claimInterface(usbInterface, true)) throw new IllegalArgumentException("USB printer interface could not be claimed.");
+            int offset = 0;
+            while (offset < bytes.length) {
+                int length = Math.min(4096, bytes.length - offset);
+                int written = connection.bulkTransfer(endpoint, bytes, offset, length, 5000);
+                if (written <= 0) throw new IllegalArgumentException("USB printer write failed.");
+                offset += written;
+            }
+        } finally {
+            connection.releaseInterface(usbInterface);
+            connection.close();
+        }
+        return new PrintResult("USB プリンターに印刷を送信しました");
+    }
+
+    private UsbDevice findUsbPrinter(UsbManager manager, String identifier) {
+        HashMap<String, UsbDevice> devices = manager.getDeviceList();
+        UsbDevice fallback = null;
+        for (UsbDevice device : devices.values()) {
+            if (!hasUsbOutEndpoint(device)) continue;
+            if (identifier == null || identifier.trim().isEmpty()) {
+                if (fallback == null) fallback = device;
+                continue;
+            }
+            if (matchesUsbIdentifier(device, identifier)) return device;
+        }
+        return fallback;
+    }
+
+    private boolean matchesUsbIdentifier(UsbDevice device, String identifier) {
+        String normalized = identifier.trim().toLowerCase(Locale.ROOT);
+        String vendorProduct = device.getVendorId() + ":" + device.getProductId();
+        String vendorProductHex = Integer.toHexString(device.getVendorId()) + ":" + Integer.toHexString(device.getProductId());
+        if (vendorProduct.equalsIgnoreCase(normalized) || vendorProductHex.equalsIgnoreCase(normalized)) return true;
+        if (device.getDeviceName() != null && device.getDeviceName().toLowerCase(Locale.ROOT).contains(normalized)) return true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            String product = device.getProductName() == null ? "" : device.getProductName();
+            String manufacturer = device.getManufacturerName() == null ? "" : device.getManufacturerName();
+            return product.toLowerCase(Locale.ROOT).contains(normalized) || manufacturer.toLowerCase(Locale.ROOT).contains(normalized);
+        }
+        return false;
+    }
+
+    private boolean hasUsbOutEndpoint(UsbDevice device) {
+        UsbInterface usbInterface = findUsbPrinterInterface(device);
+        return usbInterface != null && findUsbOutEndpoint(usbInterface) != null;
+    }
+
+    private UsbInterface findUsbPrinterInterface(UsbDevice device) {
+        UsbInterface fallback = null;
+        for (int index = 0; index < device.getInterfaceCount(); index += 1) {
+            UsbInterface usbInterface = device.getInterface(index);
+            if (findUsbOutEndpoint(usbInterface) == null) continue;
+            if (usbInterface.getInterfaceClass() == UsbConstants.USB_CLASS_PRINTER) return usbInterface;
+            if (fallback == null) fallback = usbInterface;
+        }
+        return fallback;
+    }
+
+    private UsbEndpoint findUsbOutEndpoint(UsbInterface usbInterface) {
+        if (usbInterface == null) return null;
+        for (int index = 0; index < usbInterface.getEndpointCount(); index += 1) {
+            UsbEndpoint endpoint = usbInterface.getEndpoint(index);
+            if (endpoint.getDirection() == UsbConstants.USB_DIR_OUT
+                && endpoint.getType() == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                return endpoint;
+            }
+        }
+        return null;
     }
 
     private PrintResult sendStarPrintJob(JSONObject payload, JSONObject printer) throws Exception {

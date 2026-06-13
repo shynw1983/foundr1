@@ -167,6 +167,31 @@ type PosDiscountPreset = {
   allowCouponCombination: boolean;
 };
 
+function isNetworkPrinter(printer: PosPrinterConnection) {
+  return printer.deviceType === "escpos_network";
+}
+
+function usesPrinterIdentifier(printer: PosPrinterConnection) {
+  return printer.deviceType === "escpos_bluetooth" || printer.deviceType === "escpos_usb" || printer.deviceType === "star_printer";
+}
+
+function requiresPrinterIdentifier(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_bluetooth") return true;
+  if (printer.deviceType === "star_printer") return printer.connectionType !== "usb";
+  return false;
+}
+
+function getPrinterIdentifierHelp(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_bluetooth") return "ペアリング名または MAC";
+  if (printer.deviceType === "escpos_usb") return "任意: USB名 / vendor:product";
+  return "Star printer / MAC / IP";
+}
+
+function getPrinterIdentifierError(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_bluetooth") return "ESC/POS Bluetooth プリンターの識別子を入力してください。ペアリング名または MAC を指定します。";
+  return "Star プリンターの識別子を入力してください。Bluetooth はペアリング名または MAC、LAN は IP / MAC を指定します。";
+}
+
 function createDiscountPreset(): PosDiscountPreset {
   return {
     key: `discount_${Date.now()}`,
@@ -393,11 +418,11 @@ export default function PosPage() {
   async function testPrint() {
     if (testPrinting) return;
     const printer = getTestPrinter();
-    if (printer.deviceType === "star_printer" && printer.connectionType !== "usb" && !printer.identifier) {
-      setTestPrintStatus("Star プリンターの識別子を入力してください。Bluetooth はペアリング名または MAC、LAN は IP / MAC を指定します。");
+    if (requiresPrinterIdentifier(printer) && !printer.identifier) {
+      setTestPrintStatus(getPrinterIdentifierError(printer));
       return;
     }
-    if (printer.deviceType !== "star_printer" && !printer.host) {
+    if (isNetworkPrinter(printer) && !printer.host) {
       setTestPrintStatus("プリンター IP を入力してください。");
       return;
     }
@@ -908,7 +933,9 @@ export default function PosPage() {
                 <label>
                   <span>機器タイプ</span>
                   <select value={getReceiptPrinter(taxForm.printerSettings).deviceType} onChange={(event) => updateReceiptPrinter({ deviceType: event.target.value as PosPrinterConnection["deviceType"] })} disabled={!canManagePosSettings}>
-                    <option value="escpos_network">ESC/POS Wi-Fi</option>
+                    <option value="escpos_network">ESC/POS Wi-Fi / LAN</option>
+                    <option value="escpos_bluetooth">ESC/POS Bluetooth</option>
+                    <option value="escpos_usb">ESC/POS USB</option>
                     <option value="star_printer">Star プリンター</option>
                   </select>
                 </label>
@@ -929,13 +956,19 @@ export default function PosPage() {
                     </label>
                   </>
                 ) : null}
+                {usesPrinterIdentifier(getReceiptPrinter(taxForm.printerSettings)) && getReceiptPrinter(taxForm.printerSettings).deviceType !== "star_printer" ? (
+                  <label>
+                    <span>識別子</span>
+                    <input value={getReceiptPrinter(taxForm.printerSettings).identifier} onChange={(event) => updateReceiptPrinter({ identifier: event.target.value.trim() })} placeholder={getPrinterIdentifierHelp(getReceiptPrinter(taxForm.printerSettings))} disabled={!canManagePosSettings} />
+                  </label>
+                ) : null}
                 <label>
                   <span>プリンター IP</span>
-                  <input value={getReceiptPrinter(taxForm.printerSettings).host} onChange={(event) => updateReceiptPrinter({ host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder="192.168.0.33" disabled={!canManagePosSettings || getReceiptPrinter(taxForm.printerSettings).deviceType === "star_printer"} />
+                  <input value={getReceiptPrinter(taxForm.printerSettings).host} onChange={(event) => updateReceiptPrinter({ host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder="192.168.0.33" disabled={!canManagePosSettings || !isNetworkPrinter(getReceiptPrinter(taxForm.printerSettings))} />
                 </label>
                 <label>
                   <span>ポート</span>
-                  <input inputMode="numeric" value={String(getReceiptPrinter(taxForm.printerSettings).port)} onChange={(event) => updateReceiptPrinter({ port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || getReceiptPrinter(taxForm.printerSettings).deviceType === "star_printer"} />
+                  <input inputMode="numeric" value={String(getReceiptPrinter(taxForm.printerSettings).port)} onChange={(event) => updateReceiptPrinter({ port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || !isNetworkPrinter(getReceiptPrinter(taxForm.printerSettings))} />
                 </label>
                 <label>
                   <span>用紙幅</span>
@@ -970,7 +1003,9 @@ export default function PosPage() {
                 <label>
                   <span>機器タイプ</span>
                   <select value={taxForm.printerSettings.kitchenPrinter.deviceType} onChange={(event) => updateKitchenPrinter({ deviceType: event.target.value as PosPrinterConnection["deviceType"] })} disabled={!canManagePosSettings}>
-                    <option value="escpos_network">ESC/POS Wi-Fi</option>
+                    <option value="escpos_network">ESC/POS Wi-Fi / LAN</option>
+                    <option value="escpos_bluetooth">ESC/POS Bluetooth</option>
+                    <option value="escpos_usb">ESC/POS USB</option>
                     <option value="star_printer">Star プリンター</option>
                   </select>
                 </label>
@@ -991,13 +1026,19 @@ export default function PosPage() {
                     </label>
                   </>
                 ) : null}
+                {usesPrinterIdentifier(taxForm.printerSettings.kitchenPrinter) && taxForm.printerSettings.kitchenPrinter.deviceType !== "star_printer" ? (
+                  <label>
+                    <span>識別子</span>
+                    <input value={taxForm.printerSettings.kitchenPrinter.identifier} onChange={(event) => updateKitchenPrinter({ identifier: event.target.value.trim() })} placeholder={getPrinterIdentifierHelp(taxForm.printerSettings.kitchenPrinter)} disabled={!canManagePosSettings} />
+                  </label>
+                ) : null}
                 <label>
                   <span>プリンター IP</span>
-                  <input value={taxForm.printerSettings.kitchenPrinter.host} onChange={(event) => updateKitchenPrinter({ host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder="192.168.0.34" disabled={!canManagePosSettings || taxForm.printerSettings.kitchenPrinter.deviceType === "star_printer"} />
+                  <input value={taxForm.printerSettings.kitchenPrinter.host} onChange={(event) => updateKitchenPrinter({ host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder="192.168.0.34" disabled={!canManagePosSettings || !isNetworkPrinter(taxForm.printerSettings.kitchenPrinter)} />
                 </label>
                 <label>
                   <span>ポート</span>
-                  <input inputMode="numeric" value={String(taxForm.printerSettings.kitchenPrinter.port)} onChange={(event) => updateKitchenPrinter({ port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || taxForm.printerSettings.kitchenPrinter.deviceType === "star_printer"} />
+                  <input inputMode="numeric" value={String(taxForm.printerSettings.kitchenPrinter.port)} onChange={(event) => updateKitchenPrinter({ port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || !isNetworkPrinter(taxForm.printerSettings.kitchenPrinter)} />
                 </label>
                 <label>
                   <span>用紙幅</span>
@@ -1035,7 +1076,9 @@ export default function PosPage() {
                         <label>
                           <span>機器</span>
                           <select value={printer.deviceType} onChange={(event) => updateBrandKitchenPrinter(brand, { deviceType: event.target.value as PosPrinterConnection["deviceType"] })} disabled={!canManagePosSettings}>
-                            <option value="escpos_network">ESC/POS Wi-Fi</option>
+                            <option value="escpos_network">ESC/POS Wi-Fi / LAN</option>
+                            <option value="escpos_bluetooth">ESC/POS Bluetooth</option>
+                            <option value="escpos_usb">ESC/POS USB</option>
                             <option value="star_printer">Star プリンター</option>
                           </select>
                         </label>
@@ -1056,13 +1099,19 @@ export default function PosPage() {
                             </label>
                           </>
                         ) : null}
+                        {usesPrinterIdentifier(printer) && printer.deviceType !== "star_printer" ? (
+                          <label>
+                            <span>識別子</span>
+                            <input value={printer.identifier} onChange={(event) => updateBrandKitchenPrinter(brand, { identifier: event.target.value.trim() })} placeholder={getPrinterIdentifierHelp(printer)} disabled={!canManagePosSettings} />
+                          </label>
+                        ) : null}
                         <label>
                           <span>厨房 IP</span>
-                          <input value={printer.host} onChange={(event) => updateBrandKitchenPrinter(brand, { host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder={taxForm.printerSettings.kitchenPrinter.host || "192.168.0.35"} disabled={!canManagePosSettings || printer.deviceType === "star_printer"} />
+                          <input value={printer.host} onChange={(event) => updateBrandKitchenPrinter(brand, { host: event.target.value.trim(), identifier: event.target.value.trim() })} placeholder={taxForm.printerSettings.kitchenPrinter.host || "192.168.0.35"} disabled={!canManagePosSettings || !isNetworkPrinter(printer)} />
                         </label>
                         <label>
                           <span>ポート</span>
-                          <input inputMode="numeric" value={String(printer.port)} onChange={(event) => updateBrandKitchenPrinter(brand, { port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || printer.deviceType === "star_printer"} />
+                          <input inputMode="numeric" value={String(printer.port)} onChange={(event) => updateBrandKitchenPrinter(brand, { port: Number(normalizeIntegerInput(event.target.value)) || 9100 })} disabled={!canManagePosSettings || !isNetworkPrinter(printer)} />
                         </label>
                         <label>
                           <span>用紙幅</span>

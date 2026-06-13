@@ -14,8 +14,14 @@ window.Foundr1Printer.print(payloadJson)
 window.Foundr1Printer.isAvailable()
 ```
 
-The bridge sends ESC/POS bytes to a Wi-Fi thermal printer through TCP, using the printer settings saved in Foundr1 OS.
-It also supports Star printers through StarXpand SDK when the POS printer device type is set to `Star プリンター`.
+The bridge sends print jobs from Foundr1 OS to store printers using the printer settings saved in POS settings.
+
+Supported device types:
+
+- `ESC/POS Wi-Fi / LAN`: raw ESC/POS over TCP, usually port `9100`.
+- `ESC/POS Bluetooth`: raw ESC/POS over paired Bluetooth SPP devices.
+- `ESC/POS USB`: raw ESC/POS over Android USB bulk output. The first print may ask for USB permission.
+- `Star プリンター`: Star printers through the official StarXpand SDK.
 
 ## Build With Android Studio
 
@@ -52,12 +58,22 @@ Command-line builds:
 4. Go to `/os/pos`.
 5. In `レシート / 厨房プリンター`, choose the device type.
 
-   For xprinter / ESC-POS Wi-Fi:
+   For ESC/POS Wi-Fi / LAN printers such as many xprinter or Epson TM-compatible devices:
 
    - Printer IP: `192.168.0.33`
    - Port: `9100`
    - Paper width: `80mm`
    - Character encoding: `Shift_JIS`
+
+   For ESC/POS Bluetooth printers:
+
+   - Device type: `ESC/POS Bluetooth`
+   - Identifier: paired Bluetooth device name or MAC address.
+
+   For ESC/POS USB printers:
+
+   - Device type: `ESC/POS USB`
+   - Identifier: optional USB device name or `vendor:product`. Leave empty to use the first compatible USB printer.
 
    For Star printers:
 
