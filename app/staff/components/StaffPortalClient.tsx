@@ -489,7 +489,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
     <main className="staff-shell">
       <header className="staff-topbar">
         <a className="staff-brand" href="/staff" aria-label="Foundr1 STAFF">
-          <span className="staff-app-icon" aria-hidden="true" />
+          <span className="brand-mark staff-app-icon" aria-hidden="true" />
           <span>
             <small>Foundr1 STAFF</small>
             <strong>{currentEmployee?.name ?? "スタッフ"}</strong>

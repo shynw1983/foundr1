@@ -29166,11 +29166,10 @@ a:focus-visible {
 }
 
 .staff-app-icon {
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: #ffffff url("/icons/foundr1-staff-512.png") center / 138% no-repeat;
+  border-color: var(--line);
+  background-color: #ffffff;
+  background-image: url("/icons/foundr1-staff-512.png");
+  background-size: 190%;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
