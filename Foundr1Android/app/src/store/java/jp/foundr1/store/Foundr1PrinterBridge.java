@@ -391,7 +391,7 @@ public class Foundr1PrinterBridge {
             addMultiline(lines, templateText(template, "address"), small, contentWidth);
             addTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth);
             addTextIfPresent(lines, "TEL: " + templateText(template, "phone"), templateText(template, "phone"), small, contentWidth);
-            addTextIfPresent(lines, templateText(template, "website"), templateText(template, "website"), small, contentWidth);
+            addCenteredTextIfPresent(lines, templateText(template, "website"), small, contentWidth);
             addMultiline(lines, templateText(template, "headerMessage"), small, contentWidth);
         }
         addSeparator(lines, contentWidth, normal);
@@ -567,6 +567,12 @@ public class Foundr1PrinterBridge {
         for (String line : wrapText(text, paint, contentWidth)) lines.add(RasterLine.left(line, paint));
     }
 
+    private void addCenteredTextIfPresent(List<RasterLine> lines, String text, Paint paint, int contentWidth) {
+        String value = text == null ? "" : text.trim();
+        if (value.isEmpty()) return;
+        for (String line : wrapText(value, paint, contentWidth)) lines.add(RasterLine.center(line, paint));
+    }
+
     private List<String> wrapText(String text, Paint paint, int maxWidth) {
         List<String> lines = new ArrayList<>();
         String value = text == null ? "" : text;
@@ -709,7 +715,7 @@ public class Foundr1PrinterBridge {
     }
 
     private String yen(int value) {
-        return "JPY " + String.format(Locale.JAPAN, "%,d", Math.max(0, value));
+        return "¥" + String.format(Locale.JAPAN, "%,d", Math.max(0, value));
     }
 
     private String jsonEscape(String value) {
