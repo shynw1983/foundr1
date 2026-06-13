@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import { Download, ShieldCheck, Smartphone } from "lucide-react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const apk = {
-  href: "/downloads/foundr1-staff-latest.apk",
-  fileName: "foundr1-staff-latest.apk",
-  versionName: "0.1.0",
-  versionCode: 1,
-  packageName: "jp.foundr1.staff",
-  updatedAt: "2026-06-13",
-  sizeLabel: "46 KB"
+type ApkVersion = {
+  title: string;
+  packageName: string;
+  versionName: string;
+  versionCode: number;
+  buildType: string;
+  fileName: string;
+  downloadPath: string;
+  sizeBytes: number;
+  sha256: string;
+  builtAt: string;
+  gitCommit: string;
 };
 
 export const metadata: Metadata = {
@@ -16,7 +22,33 @@ export const metadata: Metadata = {
   description: "Foundr1 STAFF Android APK download"
 };
 
+function getApkVersion() {
+  const json = readFileSync(join(process.cwd(), "public", "downloads", "staff", "version.json"), "utf8");
+  return JSON.parse(json) as ApkVersion;
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "--";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatBuildTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 export default function StaffDownloadPage() {
+  const apk = getApkVersion();
+
   return (
     <main className="staff-download-shell">
       <section className="staff-download-panel">
@@ -27,7 +59,7 @@ export default function StaffDownloadPage() {
           <p>最新版のスタッフ用アプリをダウンロードできます。</p>
         </div>
 
-        <a className="primary-button staff-download-button" href={apk.href} download={apk.fileName}>
+        <a className="primary-button staff-download-button" href={apk.downloadPath} download={apk.fileName}>
           <Download size={18} />
           APKをダウンロード
         </a>
@@ -38,16 +70,28 @@ export default function StaffDownloadPage() {
             <dd>{apk.versionName} ({apk.versionCode})</dd>
           </div>
           <div>
-            <dt>更新日</dt>
-            <dd>{apk.updatedAt}</dd>
+            <dt>APKビルド</dt>
+            <dd>{formatBuildTime(apk.builtAt)}</dd>
           </div>
           <div>
             <dt>サイズ</dt>
-            <dd>{apk.sizeLabel}</dd>
+            <dd>{formatBytes(apk.sizeBytes)}</dd>
           </div>
           <div>
             <dt>パッケージ</dt>
             <dd>{apk.packageName}</dd>
+          </div>
+          <div>
+            <dt>ビルド種別</dt>
+            <dd>{apk.buildType}</dd>
+          </div>
+          <div>
+            <dt>Commit</dt>
+            <dd>{apk.gitCommit}</dd>
+          </div>
+          <div>
+            <dt>SHA-256</dt>
+            <dd>{apk.sha256.slice(0, 12)}...</dd>
           </div>
         </dl>
 

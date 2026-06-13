@@ -1,0 +1,15 @@
+{
+  "app": "member",
+  "title": "Foundr1 MEMBER",
+  "packageName": "jp.foundr1.member",
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "buildType": "debug",
+  "fileName": "latest.apk",
+  "downloadPath": "/downloads/member/latest.apk",
+  "legacyDownloadPath": "/downloads/foundr1-member-latest.apk",
+  "sizeBytes": 210514,
+  "sha256": "48d976e7fd4ba58a4b8ca01ed3d55450f172afd84ae071223baef776188cf17a",
+  "builtAt": "2026-06-13T08:02:33.329Z",
+  "gitCommit": "0045d265"
+}

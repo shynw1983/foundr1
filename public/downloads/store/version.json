@@ -1,0 +1,15 @@
+{
+  "app": "store",
+  "title": "Foundr1 STORE",
+  "packageName": "jp.foundr1.store",
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "buildType": "debug",
+  "fileName": "latest.apk",
+  "downloadPath": "/downloads/store/latest.apk",
+  "legacyDownloadPath": "/downloads/foundr1-store-latest.apk",
+  "sizeBytes": 210518,
+  "sha256": "0dad9f34bce4f618bbd0a7200eaeb19e02194aa43e6414c42e7dde3b7fc52688",
+  "builtAt": "2026-06-13T08:02:34.735Z",
+  "gitCommit": "0045d265"
+}

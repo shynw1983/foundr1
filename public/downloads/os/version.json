@@ -1,0 +1,15 @@
+{
+  "app": "os",
+  "title": "Foundr1 OS",
+  "packageName": "jp.foundr1.os",
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "buildType": "debug",
+  "fileName": "latest.apk",
+  "downloadPath": "/downloads/os/latest.apk",
+  "legacyDownloadPath": "/downloads/foundr1-os-latest.apk",
+  "sizeBytes": 92792,
+  "sha256": "7de3ecb0eb6361eb64b37e7f23e0cf19b14036f5fd71692e33634192d7bd46e5",
+  "builtAt": "2026-06-13T08:02:31.094Z",
+  "gitCommit": "0045d265"
+}
