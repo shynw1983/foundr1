@@ -1,5 +1,5 @@
 export type PosPrinterConnection = {
-  deviceType: "escpos_network" | "star_mpop";
+  deviceType: "escpos_network" | "star_printer";
   connectionType: "lan" | "bluetooth" | "bluetooth_le" | "usb";
   identifier: string;
   host: string;
@@ -136,10 +136,10 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterConnection> : {};
   const port = Math.round(Number(source.port || fallback.port));
-  const deviceType = source.deviceType === "star_mpop" ? "star_mpop" : fallback.deviceType;
+  const deviceType = source.deviceType === "star_printer" ? "star_printer" : fallback.deviceType;
   const connectionType = ["bluetooth", "bluetooth_le", "usb"].includes(String(source.connectionType))
     ? source.connectionType as PosPrinterConnection["connectionType"]
-    : deviceType === "star_mpop"
+    : deviceType === "star_printer"
       ? fallback.connectionType
       : "lan";
   const host = String(source.host ?? fallback.host ?? "").trim().slice(0, 120);
@@ -242,7 +242,7 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
         quantity: 1,
         amount: 0,
         options: [
-          printer.deviceType === "star_mpop" ? `Star mPOP / ${printer.connectionType}` : `${printer.host}:${printer.port}`,
+          printer.deviceType === "star_printer" ? `Star printer / ${printer.connectionType}` : `${printer.host}:${printer.port}`,
           printer.identifier ? `ID: ${printer.identifier}` : printer.paperWidth,
           printer.paperWidth
         ]

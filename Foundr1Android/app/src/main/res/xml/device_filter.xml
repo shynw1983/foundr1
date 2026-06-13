@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <usb-device class="255" subclass="66" protocol="1" />
+    <usb-device vendor-id="1305" product-id="0001" />
+    <usb-device vendor-id="1305" product-id="0003" />
     <usb-device vendor-id="1305" product-id="0023" />
+    <usb-device vendor-id="1305" product-id="0025" />
+    <usb-device vendor-id="1305" product-id="0027" />
+    <usb-device vendor-id="1305" product-id="0029" />
+    <usb-device vendor-id="1305" product-id="0071" />
+    <usb-device vendor-id="1305" product-id="0073" />
+    <usb-device vendor-id="1305" product-id="0075" />
+    <usb-device vendor-id="1305" product-id="0077" />
+    <usb-device vendor-id="1305" product-id="0079" />
+    <usb-device vendor-id="1305" product-id="0081" />
+    <usb-device vendor-id="1305" product-id="4104" />
+    <usb-device vendor-id="1305" product-id="4113" />
 </resources>

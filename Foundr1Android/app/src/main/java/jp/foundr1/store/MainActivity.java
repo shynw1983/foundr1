@@ -383,7 +383,7 @@ public class MainActivity extends Activity {
         JSONObject printer = payload.optJSONObject("printer");
         if (printer == null) throw new IllegalArgumentException("Printer settings are missing.");
         String deviceType = printer.optString("deviceType", "escpos_network");
-        if ("star_mpop".equals(deviceType)) {
+        if ("star_printer".equals(deviceType)) {
             return sendStarPrintJob(payload, printer);
         }
         String host = printer.optString("host", "").trim();
@@ -406,7 +406,7 @@ public class MainActivity extends Activity {
         String connectionType = printer.optString("connectionType", "bluetooth");
         String identifier = printer.optString("identifier", "").trim();
         if (!"usb".equals(connectionType) && identifier.isEmpty()) {
-            throw new IllegalArgumentException("Star mPOP identifier is empty.");
+            throw new IllegalArgumentException("Star printer identifier is empty.");
         }
         boolean cutPaper = printer.optBoolean("cutPaper", true);
         boolean openCashDrawer = printer.optBoolean("openCashDrawer", false);
@@ -416,7 +416,7 @@ public class MainActivity extends Activity {
         } finally {
             bitmap.recycle();
         }
-        return new PrintResult("Star mPOP に印刷を送信しました");
+        return new PrintResult("Star プリンターに印刷を送信しました");
     }
 
     private byte[] buildEscPos(JSONObject payload) throws Exception {
