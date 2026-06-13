@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, FileText, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, Clock3, ClipboardList, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -52,13 +52,6 @@ const storeModules = [
     description: "店頭会計、注文入力、決済、レジ開店・締め、取引履歴、返金を処理します。",
     href: "/store/pos",
     icon: ShoppingCart,
-    status: "利用可能"
-  },
-  {
-    title: "個人情報文書",
-    description: "同意済みの個人情報・マイナンバー取扱文書を確認し、必要に応じてダウンロードします。",
-    href: "/store/privacy-documents",
-    icon: FileText,
     status: "利用可能"
   },
   {
