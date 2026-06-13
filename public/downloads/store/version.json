@@ -8,8 +8,8 @@
   "fileName": "latest.apk",
   "downloadPath": "/downloads/store/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-store-latest.apk",
-  "sizeBytes": 20245235,
-  "sha256": "5df33d820199cbb222c99d3136ba01864a29eb22766c27eaf7d5e3c282f71ab9",
-  "builtAt": "2026-06-13T11:45:55.059Z",
-  "gitCommit": "415275e7"
+  "sizeBytes": 20261619,
+  "sha256": "2f557d68c2d6f66b512692e93f112c2612faaf883e79fabb7edb590cdc5ca5a9",
+  "builtAt": "2026-06-13T13:08:11.878Z",
+  "gitCommit": "6e6e3d85"
 }
