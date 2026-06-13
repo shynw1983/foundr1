@@ -8,8 +8,8 @@
   "fileName": "latest.apk",
   "downloadPath": "/downloads/staff/latest.apk",
   "legacyDownloadPath": "/downloads/foundr1-staff-latest.apk",
-  "sizeBytes": 20245959,
-  "sha256": "3be303e4b580d670a1de3a2ed860ae8dbb44868b918aa88c4b5833261ea8917c",
-  "builtAt": "2026-06-13T11:22:58.779Z",
-  "gitCommit": "8fbc933c"
+  "sizeBytes": 838992,
+  "sha256": "10e878938057702bbb8754035c95b033afe3b420a7a49dbee17dbc6d4ff0e601",
+  "builtAt": "2026-06-13T11:45:39.374Z",
+  "gitCommit": "415275e7"
 }
