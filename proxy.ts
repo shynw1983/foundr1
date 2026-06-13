@@ -6,6 +6,7 @@ const defaultRoleNavPaths: Record<string, string[]> = {
   owner: [
     "/os",
     "/store",
+    "/staff",
     "/os/orders",
     "/os/procurement",
     "/os/history",
@@ -40,6 +41,7 @@ const defaultRoleNavPaths: Record<string, string[]> = {
   manager: [
     "/os",
     "/store",
+    "/staff",
     "/os/orders",
     "/os/procurement",
     "/os/history",
@@ -69,9 +71,9 @@ const defaultRoleNavPaths: Record<string, string[]> = {
     "/os/procedures",
     "/os/pos"
   ],
-  store_owner: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  store_manager: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  staff: ["/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
+  store_owner: ["/os", "/store", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  store_manager: ["/os", "/store", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  staff: ["/staff", "/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
   store_terminal: ["/os", "/store"]
 };
 const storeTerminalAllowedPaths = [
@@ -144,12 +146,13 @@ function getPermittedPagePaths(session: ProxySession) {
 }
 
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
-  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent") return true;
+  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent" || pathname === "/staff/privacy-consent") return true;
   if (pathname === "/os") return true;
   return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 function getFallbackPagePath(permittedPaths: Set<string>) {
+  if (permittedPaths.has("/staff")) return "/staff";
   if (permittedPaths.has("/store")) return "/store";
   if (permittedPaths.has("/os")) return "/os";
   return Array.from(permittedPaths).find((path) => path.startsWith("/os/")) ?? "/store";
@@ -161,6 +164,7 @@ async function runFoundr1Proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isOsPath = pathname.startsWith("/os");
   const isStorePath = pathname.startsWith("/store");
+  const isStaffPath = pathname.startsWith("/staff");
 
   if (pathname.startsWith("/api")) {
     const isMutatingRequest = !["GET", "HEAD", "OPTIONS"].includes(request.method);
@@ -179,14 +183,14 @@ async function runFoundr1Proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((!isOsPath && !isStorePath) || pathname === "/os/login" || pathname === "/store/login") {
+  if ((!isOsPath && !isStorePath && !isStaffPath) || pathname === "/os/login" || pathname === "/store/login" || pathname === "/staff/login") {
     return NextResponse.next();
   }
 
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
     if (session.role === "store_terminal") {
-      if (isOsPath && pathname !== "/os/logout") {
+      if ((isOsPath || isStaffPath) && pathname !== "/os/logout" && pathname !== "/staff/logout") {
         const url = request.nextUrl.clone();
         url.pathname = "/store";
         url.search = "";
@@ -203,7 +207,7 @@ async function runFoundr1Proxy(request: NextRequest) {
 
     const permittedPaths = getPermittedPagePaths(session);
 
-    if (isOsPath && !isPermittedPagePath(pathname, permittedPaths)) {
+    if ((isOsPath || isStaffPath) && !isPermittedPagePath(pathname, permittedPaths)) {
       const url = request.nextUrl.clone();
       url.pathname = getFallbackPagePath(permittedPaths);
       url.search = "";
@@ -214,7 +218,7 @@ async function runFoundr1Proxy(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone();
-  url.pathname = isStorePath ? "/store/login" : "/os/login";
+  url.pathname = isStaffPath ? "/staff/login" : isStorePath ? "/store/login" : "/os/login";
   url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
   return NextResponse.redirect(url);
 }
@@ -226,5 +230,5 @@ const foundr1Proxy = clerkKeysConfigured
 export default foundr1Proxy;
 
 export const config = {
-  matcher: ["/os/:path*", "/store/:path*", "/member/:path*", "/api/:path*", "/__clerk/:path*"]
+  matcher: ["/os/:path*", "/store/:path*", "/staff/:path*", "/member/:path*", "/api/:path*", "/__clerk/:path*"]
 };

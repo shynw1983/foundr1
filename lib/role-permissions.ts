@@ -25,6 +25,15 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     navPaths: ["/store"]
   },
   {
+    key: "module.staffPortal",
+    label: "スタッフ個人アプリ",
+    description: "スタッフ本人の打刻、シフト、給与確認画面を開けます。",
+    category: "モジュール",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff"],
+    lockedRoles: ["owner"],
+    navPaths: ["/staff"]
+  },
+  {
     key: "module.orders",
     label: "発注・購入管理",
     description: "発注依頼、購入管理、履歴、証憑、現場記録を表示します。",

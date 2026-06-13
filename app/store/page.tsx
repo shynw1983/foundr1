@@ -85,7 +85,7 @@ export default function StoreHomePage() {
     employeeRole === "store_terminal"
       ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
       : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/privacy-documents" || module.href === "/store/feedback" || module.href === "/os")
+        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/feedback")
         : storeModules
   ), [employeeRole, isMobileViewport, isTimecardEmployee]);
 

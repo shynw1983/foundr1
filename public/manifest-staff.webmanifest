@@ -1,0 +1,26 @@
+{
+  "id": "/staff",
+  "name": "Foundr1 STAFF",
+  "short_name": "Foundr1 STAFF",
+  "description": "スタッフ向け個人ワークアプリ",
+  "start_url": "/staff",
+  "scope": "/staff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icons/foundr1-staff-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/foundr1-staff-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 # Foundr1 Android Shells
 
-This Android project builds three WebView shell apps from the same native code:
+This Android project builds four WebView shell apps from the same native code:
 
 - `store`: `Foundr1 Store`, opens `https://www.foundr1.jp/store`
 - `os`: `Foundr1 OS`, opens `https://www.foundr1.jp/os`
 - `member`: `Foundr1 Member`, opens `https://www.foundr1.jp/member`
+- `staff`: `Foundr1 Staff`, opens `https://www.foundr1.jp/staff`
 
 All variants expose this JavaScript bridge to the web app:
 
@@ -29,6 +30,7 @@ The bridge sends ESC/POS bytes to a Wi-Fi thermal printer through TCP, using the
    - `storeDebug`
    - `osDebug`
    - `memberDebug`
+   - `staffDebug`
 
 6. Click Run.
 
@@ -38,6 +40,7 @@ Command-line builds:
 ./gradlew assembleStoreDebug
 ./gradlew assembleOsDebug
 ./gradlew assembleMemberDebug
+./gradlew assembleStaffDebug
 ```
 
 ## Test Printer

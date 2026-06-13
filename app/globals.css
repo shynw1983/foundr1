@@ -29136,6 +29136,381 @@ a:focus-visible {
   height: 52px;
 }
 
+.staff-shell {
+  min-height: 100vh;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  background: #f6f8f6;
+  color: var(--ink);
+}
+
+.staff-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.staff-brand,
+.staff-account-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.staff-brand {
+  gap: 10px;
+}
+
+.staff-brand .brand-mark {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+}
+
+.staff-brand span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.staff-brand small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.staff-brand strong {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-account-link {
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.staff-nav a {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-height: 44px;
+  border-radius: 7px;
+  padding: 5px 2px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.staff-nav a.is-active {
+  background: var(--green);
+  color: white;
+}
+
+.staff-status-card,
+.staff-panel,
+.staff-action-card,
+.staff-store-select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.staff-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+}
+
+.staff-status-card span,
+.staff-store-select span,
+.staff-panel-title p,
+.staff-action-card small,
+.staff-mini-row span,
+.staff-shift-row span,
+.staff-request-row span,
+.staff-request-row small {
+  color: var(--muted);
+}
+
+.staff-status-card h1 {
+  margin: 4px 0;
+  color: var(--green);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.staff-status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.staff-status-card.is-working {
+  border-color: rgba(31, 111, 85, 0.28);
+  background: #f2fbf6;
+}
+
+.staff-status-card.is-break {
+  border-color: rgba(181, 125, 30, 0.28);
+  background: #fff9ed;
+}
+
+.staff-store-select {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.staff-store-select span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-store-select select,
+.staff-form-row select,
+.staff-form-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.staff-home-grid,
+.staff-page-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.staff-action-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  padding: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.staff-action-card > svg:first-child {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.staff-action-card span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.staff-action-card strong,
+.staff-panel-title h2,
+.staff-shift-row strong,
+.staff-request-row strong,
+.staff-mini-row strong {
+  font-weight: 700;
+}
+
+.staff-action-card small,
+.staff-request-row span,
+.staff-request-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-action-card.is-secondary {
+  min-height: 64px;
+}
+
+.staff-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.staff-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.staff-panel-title > svg {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.staff-panel-title h2,
+.staff-panel-title p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.staff-panel-title h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.staff-panel-title p {
+  font-size: 13px;
+}
+
+.staff-mini-list,
+.staff-shift-list,
+.staff-request-list {
+  display: grid;
+  gap: 8px;
+}
+
+.staff-mini-row,
+.staff-shift-row,
+.staff-request-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 11px;
+  background: #fbfcfb;
+}
+
+.staff-shift-row div,
+.staff-request-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.staff-form-row {
+  display: grid;
+  gap: 8px;
+}
+
+.staff-full-button {
+  width: 100%;
+}
+
+.staff-payroll-card {
+  gap: 12px;
+}
+
+.staff-payroll-total {
+  color: var(--green);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.staff-payroll-breakdown {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.staff-payroll-breakdown div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.staff-payroll-breakdown dt,
+.staff-payroll-breakdown dd {
+  margin: 0;
+}
+
+.staff-payroll-breakdown dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.staff-payroll-breakdown dd {
+  font-weight: 700;
+}
+
+.staff-payroll-alert {
+  margin: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff7e6;
+  color: #8a5b12;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+@media (min-width: 860px) {
+  .staff-shell {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 22px;
+  }
+
+  .staff-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-home-summary {
+    grid-column: span 2;
+  }
+}
+
 @media (max-width: 760px) {
   .brand-mark,
   .store-workbench-topbar .brand-mark,

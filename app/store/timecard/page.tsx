@@ -254,6 +254,12 @@ export default function StoreTimecardPage() {
     void loadTimecard(getStoredStoreSelection());
   }, []);
 
+  useEffect(() => {
+    if (data?.currentEmployeeRole === "staff") {
+      window.location.href = "/staff/timecard";
+    }
+  }, [data?.currentEmployeeRole]);
+
   useVisibleRefresh(() => {
     void loadTimecard(selectedStoreId);
   }, { minIntervalMs: 30000 });

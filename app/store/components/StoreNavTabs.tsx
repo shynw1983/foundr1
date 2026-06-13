@@ -89,7 +89,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const visibleTabs = employeeRole === "store_terminal"
     ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
     : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/store/privacy-documents" || tab.href === "/store/feedback" || tab.href === "/os")
+      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/store/feedback")
       : tabs;
 
   const clearOrderAlert = () => {

@@ -28,5 +28,9 @@ android {
             dimension "surface"
             applicationId "jp.foundr1.member"
         }
+        staff {
+            dimension "surface"
+            applicationId "jp.foundr1.staff"
+        }
     }
 }

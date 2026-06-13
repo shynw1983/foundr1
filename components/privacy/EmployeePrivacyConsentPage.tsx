@@ -28,10 +28,11 @@ function getNextPath() {
     && !next.startsWith("//")
     && !next.startsWith("/os/privacy-consent")
     && !next.startsWith("/store/privacy-consent")
+    && !next.startsWith("/staff/privacy-consent")
   ) {
     return next;
   }
-  return "/store";
+  return window.location.pathname.startsWith("/staff") ? "/staff" : "/store";
 }
 
 export function EmployeePrivacyConsentPage() {

@@ -3,14 +3,16 @@
 import { FormEvent, useState } from "react";
 import { OsLanguagePicker } from "../../app/os/components/OsTranslationProvider";
 
-type LoginSurface = "os" | "store";
+type LoginSurface = "os" | "store" | "staff";
 
 function getSurfaceDefaultPath(surface: LoginSurface) {
+  if (surface === "staff") return "/staff";
   return surface === "store" ? "/store" : "/os";
 }
 
 function isSameSurfacePath(pathname: string, surface: LoginSurface) {
-  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent") return true;
+  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent" || pathname === "/staff/privacy-consent") return true;
+  if (surface === "staff") return pathname === "/staff" || pathname.startsWith("/staff/");
   return surface === "store" ? pathname === "/store" || pathname.startsWith("/store/") : pathname === "/os" || pathname.startsWith("/os/");
 }
 
@@ -25,7 +27,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const productName = surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
+  const productName = surface === "staff" ? "Foundr1 STAFF" : surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
 
   function redirectAfterLogin() {
     const params = new URLSearchParams(window.location.search);
@@ -141,7 +143,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     <main className="login-shell">
       <section className="login-card">
         <OsLanguagePicker />
-        {surface === "store" ? (
+        {surface === "store" || surface === "staff" ? (
           <img className="login-app-icon" src="/icons/foundr1-store-192.png" alt="Foundr1 STORE" />
         ) : (
           <div className="brand-mark">F1</div>
