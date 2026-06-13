@@ -24741,15 +24741,17 @@ body :where(
   }
 
   .mobile-nav-menu {
-    flex: 0 0 auto;
+    flex: 0 0 48px;
     display: block;
     gap: 5px;
+    width: 48px;
   }
 
   .mobile-nav-menu summary {
     justify-content: center;
-    width: 100%;
-    min-height: 42px;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
   }
 
   .mobile-nav-user {
