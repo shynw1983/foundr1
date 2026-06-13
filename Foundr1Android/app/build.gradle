@@ -3,6 +3,9 @@ plugins {
     id "org.jetbrains.kotlin.android"
 }
 
+def foundr1VersionCode = (System.getenv("FOUNDR1_ANDROID_VERSION_CODE") ?: "1").toInteger()
+def foundr1VersionName = System.getenv("FOUNDR1_ANDROID_VERSION_NAME") ?: "0.1.0"
+
 android {
     namespace "jp.foundr1.store"
     compileSdk 35
@@ -10,8 +13,8 @@ android {
     defaultConfig {
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "0.1.0"
+        versionCode foundr1VersionCode
+        versionName foundr1VersionName
     }
 
     flavorDimensions "surface"

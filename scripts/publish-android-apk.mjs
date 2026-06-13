@@ -28,6 +28,8 @@ const appConfigs = {
 
 const flavor = process.argv[2];
 const skipBuild = process.argv.includes("--skip-build");
+const versionCodeArg = process.argv.find((arg) => arg.startsWith("--version-code="));
+const versionNameArg = process.argv.find((arg) => arg.startsWith("--version-name="));
 
 if (!flavor || !appConfigs[flavor]) {
   console.error(`Usage: node scripts/publish-android-apk.mjs <${Object.keys(appConfigs).join("|")}> [--skip-build]`);
@@ -41,11 +43,48 @@ const outputDir = join(androidRoot, "app", "build", "outputs", "apk", flavor, "d
 const metadataPath = join(outputDir, "output-metadata.json");
 const downloadsDir = join(repoRoot, "public", "downloads");
 const appDownloadDir = join(downloadsDir, flavor);
+const appVersionPath = join(appDownloadDir, "version.json");
+
+function readPreviousVersion() {
+  try {
+    return JSON.parse(readFileSync(appVersionPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function formatTokyoDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return { year, month, day };
+}
+
+function parseArgValue(arg) {
+  return arg ? arg.slice(arg.indexOf("=") + 1).trim() : "";
+}
+
+const previousVersion = readPreviousVersion();
+const previousVersionCode = Number(previousVersion?.versionCode ?? 0);
+const nextVersionCode = Number(parseArgValue(versionCodeArg)) || Math.max(1, previousVersionCode + 1);
+const dateKey = formatTokyoDateKey();
+const nextVersionName = parseArgValue(versionNameArg) || `0.1.${nextVersionCode}`;
 
 if (!skipBuild) {
   execFileSync("./gradlew", [gradleTask], {
     cwd: androidRoot,
-    stdio: "inherit"
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      FOUNDR1_ANDROID_VERSION_CODE: String(nextVersionCode),
+      FOUNDR1_ANDROID_VERSION_NAME: nextVersionName
+    }
   });
 }
 
@@ -70,13 +109,18 @@ const gitCommit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
   cwd: repoRoot,
   encoding: "utf8"
 }).trim();
+const gitSubject = execFileSync("git", ["log", "-1", "--pretty=%s"], {
+  cwd: repoRoot,
+  encoding: "utf8"
+}).trim();
 
 const version = {
   app: flavor,
   title: appConfigs[flavor].title,
   packageName: appConfigs[flavor].packageName,
-  versionName: String(element.versionName ?? "0.0.0"),
-  versionCode: Number(element.versionCode ?? 0),
+  versionName: String(element.versionName ?? nextVersionName),
+  versionCode: Number(element.versionCode ?? nextVersionCode),
+  releaseLabel: `${dateKey.year}.${dateKey.month}.${dateKey.day}.${nextVersionCode}`,
   buildType: "debug",
   fileName: targetFileName,
   downloadPath: `/downloads/${flavor}/${targetFileName}`,
@@ -84,7 +128,8 @@ const version = {
   sizeBytes: apkStat.size,
   sha256: createHash("sha256").update(apkBytes).digest("hex"),
   builtAt: new Date().toISOString(),
-  gitCommit
+  gitCommit,
+  gitSubject
 };
 
 writeFileSync(join(appDownloadDir, "version.json"), `${JSON.stringify(version, null, 2)}\n`);

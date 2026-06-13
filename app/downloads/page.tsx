@@ -9,12 +9,14 @@ type ApkVersion = {
   packageName: string;
   versionName: string;
   versionCode: number;
+  releaseLabel?: string;
   buildType: string;
   fileName: string;
   downloadPath: string;
   sizeBytes: number;
   builtAt: string;
   gitCommit: string;
+  gitSubject?: string;
 };
 
 const appOrder = ["store", "os", "member", "staff"];
@@ -68,8 +70,12 @@ export default function DownloadsPage() {
             </div>
             <dl>
               <div>
-                <dt>バージョン</dt>
+                <dt>アプリ版</dt>
                 <dd>{apk.versionName} ({apk.versionCode})</dd>
+              </div>
+              <div>
+                <dt>リリース</dt>
+                <dd>{apk.releaseLabel || "latest"}</dd>
               </div>
               <div>
                 <dt>APKビルド</dt>
@@ -83,6 +89,12 @@ export default function DownloadsPage() {
                 <dt>Commit</dt>
                 <dd>{apk.gitCommit}</dd>
               </div>
+              {apk.gitSubject ? (
+                <div>
+                  <dt>更新内容</dt>
+                  <dd>{apk.gitSubject}</dd>
+                </div>
+              ) : null}
             </dl>
             <a className="primary-button apk-download-card-button" href={apk.downloadPath} download={apk.fileName}>
               <Download size={18} />
