@@ -241,6 +241,7 @@ export default function PosPage() {
   const [testPrintStatus, setTestPrintStatus] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
   const [testPrinterTarget, setTestPrinterTarget] = useState("receipt");
+  const [hasNativePrintBridge, setHasNativePrintBridge] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
   const [uploadingReceiptImageSlot, setUploadingReceiptImageSlot] = useState<"" | "logo" | "promotion">("");
   const [reconciliation, setReconciliation] = useState<PosReconciliation>({
@@ -417,6 +418,10 @@ export default function PosPage() {
 
   async function testPrint() {
     if (testPrinting) return;
+    if (!hasNativePrintBridge) {
+      setTestPrintStatus("テスト印刷は iOS / Android アプリで実行してください。ブラウザでは設定の保存のみできます。");
+      return;
+    }
     const printer = getTestPrinter();
     if (requiresPrinterIdentifier(printer) && !printer.identifier) {
       setTestPrintStatus(getPrinterIdentifierError(printer));
@@ -510,6 +515,19 @@ export default function PosPage() {
   useEffect(() => {
     void load("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const detectNativePrintBridge = () => {
+      setHasNativePrintBridge(Boolean(window.Foundr1Printer?.print));
+    };
+    detectNativePrintBridge();
+    window.addEventListener("focus", detectNativePrintBridge);
+    window.addEventListener("pageshow", detectNativePrintBridge);
+    return () => {
+      window.removeEventListener("focus", detectNativePrintBridge);
+      window.removeEventListener("pageshow", detectNativePrintBridge);
+    };
   }, []);
 
   return (
@@ -867,7 +885,7 @@ export default function PosPage() {
             <div className="pos-admin-discount-heading">
               <div>
                 <h4>レシート / 厨房プリンター</h4>
-                <p>Android 店舗端末から Wi-Fi 熱敏プリンターへ印刷する接続情報を管理します。</p>
+                <p>店舗アプリから Wi-Fi 熱敏プリンターへ印刷する接続情報を管理します。ブラウザでは設定保存のみできます。</p>
               </div>
               <div className="pos-admin-printer-actions">
                 <select value={testPrinterTarget} onChange={(event) => setTestPrinterTarget(event.target.value)} disabled={!canManagePosSettings || taxSaving || testPrinting}>
@@ -880,12 +898,15 @@ export default function PosPage() {
                 <button className="secondary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
                   {taxSaving ? "保存中..." : "保存"}
                 </button>
-                <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || taxSaving || testPrinting}>
+                <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || taxSaving || testPrinting || !hasNativePrintBridge}>
                   <Printer size={15} />
-                  {testPrinting ? "送信中..." : "テスト印刷"}
+                  {testPrinting ? "送信中..." : hasNativePrintBridge ? "テスト印刷" : "アプリでテスト"}
                 </button>
               </div>
             </div>
+            {!hasNativePrintBridge ? (
+              <p className="pos-admin-printer-status">ブラウザではプリンター設定の保存のみできます。テスト印刷は iOS / Android アプリで実行してください。</p>
+            ) : null}
             <div className="pos-admin-printer-toggles">
               <label className="pos-admin-discount-check">
                 <input
