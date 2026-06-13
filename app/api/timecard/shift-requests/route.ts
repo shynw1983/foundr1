@@ -168,8 +168,8 @@ function getCurrentSchedulingPeriod() {
 
 function enumerateDates(startDate: string, endDate: string) {
   const dates: string[] = [];
-  const current = new Date(`${startDate}T00:00:00+09:00`);
-  const end = new Date(`${endDate}T00:00:00+09:00`);
+  const current = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
   while (current.getTime() <= end.getTime()) {
     dates.push(formatDateKey(current));
     current.setUTCDate(current.getUTCDate() + 1);
