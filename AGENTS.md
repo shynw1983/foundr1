@@ -14,6 +14,16 @@ This file is the working guide for coding agents and future maintainers of Found
 - Backoffice app path: `/os`.
 - Product direction: Foundr1 OS is a full backoffice platform for restaurant operators. Procurement, electronic procedures, Timecard, POS, checklists, training, inventory, audits, and analytics are parallel modules that share product master, employees, stores, brands, and permissions.
 
+## Native Shell Requirements
+
+Foundr1 Store and Foundr1 OS are maintained as WebView-based native shells for Android and iOS. Keep business logic in the Next.js web app and shared APIs whenever possible; native shells should provide device capabilities through stable JavaScript bridges.
+
+- Store order, kitchen, and pickup operation screens must support foreground alert sounds in native shells without requiring the staff member to manually press a web "sound on" button on every launch.
+- Ordinary browsers should still keep an explicit sound enable control, because browser autoplay policies may block audio without user activation.
+- Android WebView shells should keep media playback enabled without user gesture for trusted Foundr1 pages and expose native bridges such as `window.Foundr1Printer` and `window.Foundr1NativeNotifications`.
+- Future iOS WKWebView shells must account for the same requirement: configure WebView media playback appropriately and/or expose a native sound bridge so foreground order alerts can play reliably.
+- Background, lock-screen, or app-not-running alerts should use native notification mechanisms with sound rather than relying on webpage audio.
+
 ## Associated Brand Websites
 
 Foundr1 OS is connected to two separate brand website projects on this machine. When working on public customer flows, menu sync, pickup reservations, checkout, kitchen display data, or member/loyalty integration for these brands, check these projects directly instead of rediscovering their paths:

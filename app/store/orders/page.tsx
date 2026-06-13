@@ -39,6 +39,15 @@ type StoreOrder = {
   squareReceiptUrl: string;
 };
 
+function isFoundr1NativeShell() {
+  if (typeof window === "undefined") return false;
+  const nativeWindow = window as typeof window & {
+    Foundr1NativeNotifications?: unknown;
+    Foundr1Printer?: unknown;
+  };
+  return Boolean(nativeWindow.Foundr1NativeNotifications || nativeWindow.Foundr1Printer);
+}
+
 type StoreOrderAccess = {
   role: string;
   allStores: boolean;
@@ -327,6 +336,16 @@ export default function StoreOrdersPage() {
 
     setSoundReady(true);
   };
+
+  useEffect(() => {
+    if (!isFoundr1NativeShell()) return;
+    setSoundEnabled(true);
+    void ensureAudioReady().catch(() => {
+      setSoundReady(false);
+    });
+    // Native shells are configured to allow foreground order sounds without a manual browser gesture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const playNewOrderSound = () => {
     if (!soundEnabled || !audioContextRef.current || audioContextRef.current.state !== "running") return;
