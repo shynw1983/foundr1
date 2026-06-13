@@ -28006,11 +28006,17 @@ body :where(
   }
 
   .store-workbench-topbar {
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 70;
     grid-template-columns: minmax(0, 1fr) 48px;
     align-items: center;
     column-gap: 10px;
-    padding-top: 0;
+    margin: -12px -12px 14px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
   }
 
   .procedure-reader-topbar {
