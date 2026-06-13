@@ -613,7 +613,7 @@ export default function PosPage() {
             <div className="pos-admin-discount-heading">
               <div>
                 <h4>ブランド別 POS 販売方式</h4>
-                <p>称重販売を行うブランドだけ、重量単価を設定します。通常商品は固定価格のままです。</p>
+                <p>計量販売を行うブランドだけ、重量単価を設定します。通常商品は固定価格のままです。</p>
               </div>
             </div>
             <div className="pos-admin-brand-pricing-list">
@@ -631,7 +631,7 @@ export default function PosPage() {
                       disabled={!canManagePosSettings}
                     >
                       <option value="fixed">固定価格</option>
-                      <option value="weight">称重販売</option>
+                      <option value="weight">計量販売</option>
                     </select>
                   </label>
                   <label>
