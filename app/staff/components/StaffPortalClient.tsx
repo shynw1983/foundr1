@@ -294,7 +294,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
   async function loadTimecard(nextStoreId = selectedStoreId || readStoredStoreId()) {
     setLoading(true);
     setMessage("");
-    const params = new URLSearchParams({ month: getJstMonthLabel(), ts: String(Date.now()) });
+    const params = new URLSearchParams({ month: getJstMonthLabel(), selfOnly: "1", ts: String(Date.now()) });
     if (nextStoreId) params.set("storeId", nextStoreId);
     const response = await fetch(`/api/timecard?${params.toString()}`, { cache: "no-store" });
     const body = await response.json().catch(() => ({})) as TimecardPayload & { error?: string };
@@ -313,7 +313,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
 
   async function loadShiftRequests(nextStoreId = selectedStoreId) {
     if (!nextStoreId) return;
-    const params = new URLSearchParams({ storeId: nextStoreId, month: getJstMonthLabel(), ts: String(Date.now()) });
+    const params = new URLSearchParams({ storeId: nextStoreId, month: getJstMonthLabel(), selfOnly: "1", ts: String(Date.now()) });
     const response = await fetch(`/api/timecard/shift-requests?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json().catch(() => ({})) as ShiftRequestPayload;

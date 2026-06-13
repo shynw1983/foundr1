@@ -216,6 +216,18 @@ async function getVisibleStores(session: EmployeeSession) {
   `;
 }
 
+async function getEmployeeVisibleStores(employeeId: string) {
+  const storeIds = await getEmployeeWorkStoreIds(employeeId);
+  if (!storeIds.length) return [];
+  return sql`
+    select id::text, name, business_hours as "businessHours"
+    from stores
+    where status = 'active'
+      and id::text = any(${storeIds})
+    order by name
+  `;
+}
+
 async function canUseStore(session: EmployeeSession, storeId: string) {
   if (session.role === "staff") {
     const storeIds = await getEmployeeWorkStoreIds(session.id);
@@ -279,7 +291,9 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const { month, startDate, endDate } = getMonthRange(url.searchParams.get("month") || getJstMonthLabel());
-  const stores = await getVisibleStores(session);
+  const selfOnly = url.searchParams.get("selfOnly") === "1";
+  const canManageRequestScope = managerRoles.has(session.role) && !selfOnly;
+  const stores = selfOnly ? await getEmployeeVisibleStores(session.id) : await getVisibleStores(session);
   const visibleStoreIds = stores.map((store) => String(store.id));
   const requestedStoreId = url.searchParams.get("storeId");
   const selectedStoreId = requestedStoreId && visibleStoreIds.includes(requestedStoreId)
@@ -384,10 +398,15 @@ export async function GET(request: Request) {
         )
       )
       and (
-        ${managerRoles.has(session.role)}
+        ${canManageRequestScope}
         or timecard_shift_requests.employee_id::text = ${session.id}
-        or timecard_shift_request_candidates.employee_id::text = ${session.id}
-        or (timecard_shift_requests.request_type = 'swap' and timecard_shift_requests.status = 'open')
+        or (
+          ${!selfOnly}
+          and (
+            timecard_shift_request_candidates.employee_id::text = ${session.id}
+            or (timecard_shift_requests.request_type = 'swap' and timecard_shift_requests.status = 'open')
+          )
+        )
       )
     group by timecard_shift_requests.id, employees.id, reviewer.name
     order by timecard_shift_requests.created_at desc
@@ -405,7 +424,7 @@ export async function GET(request: Request) {
     where timecard_shifts.store_id::text = ${selectedStoreId}
       and timecard_shifts.work_date >= ${queryStartDate}::date
       and timecard_shifts.work_date < ${queryEndDate}::date
-      and (${managerRoles.has(session.role)} or timecard_shifts.employee_id::text = ${session.id})
+      and (${canManageRequestScope} or timecard_shifts.employee_id::text = ${session.id})
     order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc
   ` : [];
 
@@ -429,8 +448,8 @@ export async function GET(request: Request) {
     selectedStoreId,
     currentEmployeeId: session.id,
     currentEmployeeRole: session.role,
-    canManageRequests: managerRoles.has(session.role),
-    employees,
+    canManageRequests: canManageRequestScope,
+    employees: selfOnly ? employees.filter((employee) => String(employee.id) === session.id) : employees,
     submissionPeriod,
     submissionDates,
     schedulingPeriod,

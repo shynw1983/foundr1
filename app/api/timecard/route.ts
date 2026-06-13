@@ -797,7 +797,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const monthParam = url.searchParams.get("month") || getJstMonthLabel();
   const month = /^(\d{4})-(\d{2})$/.test(monthParam) ? monthParam : getJstMonthLabel();
-  const scope = await getTimecardStoreScope(session);
+  const selfOnly = url.searchParams.get("selfOnly") === "1";
+  const scope = selfOnly
+    ? { allStores: false, storeIds: await getEmployeeWorkStoreIds(session.id) }
+    : await getTimecardStoreScope(session);
   const stores = await getVisibleStores(scope.allStores, scope.storeIds);
   const visibleStoreIds = stores.map((store) => String(store.id));
   const requestedStoreId = url.searchParams.get("storeId");
@@ -808,8 +811,11 @@ export async function GET(request: Request) {
   const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, selectedStore);
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
-  const canViewPayroll = timecardPayrollViewRoles.has(session.role);
-  const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+  const canViewPayroll = timecardPayrollViewRoles.has(session.role) && !selfOnly;
+  const allVisibleEmployees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+  const employees = selfOnly
+    ? allVisibleEmployees.filter((employee) => String(employee.id) === session.id)
+    : allVisibleEmployees;
   const withholdingTaxRows = canViewPayroll ? await getWithholdingTaxRowsForMonth(month) : [];
   const socialInsuranceRows = canViewPayroll ? await getSocialInsuranceRowsForMonth(month) : [];
   const employmentInsuranceRateRows = canViewPayroll ? await getEmploymentInsuranceRateRowsForMonth(month) : [];
@@ -831,6 +837,7 @@ export async function GET(request: Request) {
     where timecard_punches.store_id::text = ${selectedStoreId}
       and timecard_punches.punched_at >= ${punchWindowStartUtc.toISOString()}
       and timecard_punches.punched_at < ${punchWindowEndUtc.toISOString()}
+      and (${!selfOnly} or timecard_punches.employee_id::text = ${session.id})
     order by timecard_punches.punched_at desc
   ` : [];
 
@@ -891,6 +898,7 @@ export async function GET(request: Request) {
     where timecard_shifts.store_id::text = ${selectedStoreId}
       and timecard_shifts.work_date >= ${startDate}::date
       and timecard_shifts.work_date < ${endDate}::date
+      and (${!selfOnly} or timecard_shifts.employee_id::text = ${session.id})
     order by timecard_shifts.work_date asc, employees.name asc
   ` : [];
 
@@ -913,11 +921,13 @@ export async function GET(request: Request) {
         max(punched_at) as latest_punched_at
       from timecard_punches
       where store_id::text = ${selectedStoreId}
+        and (${!selfOnly} or employee_id::text = ${session.id})
       group by employee_id
     ) latest
       on latest.employee_id = timecard_punches.employee_id
       and latest.latest_punched_at = timecard_punches.punched_at
     where timecard_punches.store_id::text = ${selectedStoreId}
+      and (${!selfOnly} or timecard_punches.employee_id::text = ${session.id})
     order by timecard_punches.punched_at desc
   ` : [];
   const latestPunches = latestPunchRows.map((row) => ({
@@ -943,7 +953,7 @@ export async function GET(request: Request) {
     month,
     currentEmployeeId: session.id,
     currentEmployeeRole: session.role,
-    canEditActualTime: timecardActualEditRoles.has(session.role),
+    canEditActualTime: timecardActualEditRoles.has(session.role) && !selfOnly,
     canViewPayroll,
     stores,
     selectedStoreId,
