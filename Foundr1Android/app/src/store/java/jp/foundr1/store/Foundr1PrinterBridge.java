@@ -69,8 +69,10 @@ public class Foundr1PrinterBridge {
     private static final int LINE_CHARS_58MM = 32;
     private static final int PAPER_DOTS_80MM = 576;
     private static final int PAPER_DOTS_58MM = 384;
-    private static final int LOGO_MAX_HEIGHT_80MM = 150;
-    private static final int LOGO_MAX_HEIGHT_58MM = 120;
+    private static final int LOGO_MAX_WIDTH_PERCENT = 58;
+    private static final int LOGO_MAX_HEIGHT_80MM = 92;
+    private static final int LOGO_MAX_HEIGHT_58MM = 76;
+    private static final int LOGO_BOTTOM_GAP = 18;
     private static final UUID BLUETOOTH_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
 
     private final MainActivity activity;
@@ -376,8 +378,12 @@ public class Foundr1PrinterBridge {
         String displayName = templateText(template, "businessName");
 
         if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
-            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), contentWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
-            if (logo != null) lines.add(RasterLine.image(logo));
+            int logoMaxWidth = Math.max(1, Math.round(contentWidth * LOGO_MAX_WIDTH_PERCENT / 100f));
+            Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), logoMaxWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
+            if (logo != null) {
+                lines.add(RasterLine.image(logo));
+                lines.add(RasterLine.spacer(LOGO_BOTTOM_GAP));
+            }
         }
         addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
         if (isReceipt && template != null) {
@@ -416,7 +422,7 @@ public class Foundr1PrinterBridge {
             int coupon = order.optInt("couponDiscountAmount", 0);
             if (coupon > 0) addPair(lines, "クーポン", "-" + yen(coupon), normal, contentWidth);
             if (template == null || template.optBoolean("showTaxSummary", true)) {
-                addPair(lines, "消費税", yen(order.optInt("taxAmount", 0)), normal, contentWidth);
+                addPair(lines, formatTaxLabel(order), yen(order.optInt("taxAmount", 0)), normal, contentWidth);
             }
             addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
             if ("cash".equals(order.optString("paymentMethod", ""))) {
@@ -501,12 +507,19 @@ public class Foundr1PrinterBridge {
     }
 
     private String formatOrderTypeLabel(String value) {
-        String normalized = value == null ? "" : value.trim();
-        if ("eat_in".equals(normalized) || "dine_in".equals(normalized)) return "店内";
-        if ("takeout".equals(normalized) || "take_out".equals(normalized)) return "持ち帰り";
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
+        if ("eat_in".equals(normalized) || "dine_in".equals(normalized) || "eatin".equals(normalized) || "dinein".equals(normalized)) return "店内";
+        if ("takeout".equals(normalized) || "take_out".equals(normalized) || "to_go".equals(normalized)) return "持ち帰り";
         if ("delivery".equals(normalized)) return "配達";
         if ("web".equals(normalized)) return "Web予約";
-        return normalized;
+        return value == null ? "" : value.trim();
+    }
+
+    private String formatTaxLabel(JSONObject order) {
+        double rate = order == null ? 0 : order.optDouble("taxRate", 0);
+        if (!Double.isFinite(rate) || rate <= 0) return "消費税";
+        if (Math.abs(rate - Math.round(rate)) < 0.001) return "消費税 " + Math.round(rate) + "%";
+        return "消費税 " + String.format(Locale.JAPAN, "%.1f", rate) + "%";
     }
 
     private String formatPaymentLabel(JSONObject order) {
@@ -632,7 +645,7 @@ public class Foundr1PrinterBridge {
         if (discount > 0) writeLine(out, fitLeftRight("割引", "-" + yen(discount), columns), charset);
         int coupon = order.optInt("couponDiscountAmount", 0);
         if (coupon > 0) writeLine(out, fitLeftRight("クーポン", "-" + yen(coupon), columns), charset);
-        writeLine(out, fitLeftRight("消費税", yen(order.optInt("taxAmount", 0)), columns), charset);
+        writeLine(out, fitLeftRight(formatTaxLabel(order), yen(order.optInt("taxAmount", 0)), columns), charset);
         writeLine(out, fitLeftRight("合計", yen(order.optInt("totalAmount", 0)), columns), charset);
         if ("cash".equals(order.optString("paymentMethod", ""))) {
             writeLine(out, fitLeftRight("お預かり", yen(order.optInt("cashTenderedAmount", 0)), columns), charset);
@@ -713,6 +726,7 @@ public class Foundr1PrinterBridge {
         final Paint paint;
         final int align;
         final Bitmap image;
+        final int spacerHeight;
 
         private RasterLine(String left, String right, Paint paint, int align) {
             this.left = left;
@@ -720,6 +734,7 @@ public class Foundr1PrinterBridge {
             this.paint = paint;
             this.align = align;
             this.image = null;
+            this.spacerHeight = 0;
         }
 
         private RasterLine(Bitmap image) {
@@ -728,6 +743,16 @@ public class Foundr1PrinterBridge {
             this.paint = null;
             this.align = 4;
             this.image = image;
+            this.spacerHeight = 0;
+        }
+
+        private RasterLine(int spacerHeight) {
+            this.left = "";
+            this.right = "";
+            this.paint = null;
+            this.align = 5;
+            this.image = null;
+            this.spacerHeight = spacerHeight;
         }
 
         static RasterLine left(String text, Paint paint) {
@@ -750,13 +775,19 @@ public class Foundr1PrinterBridge {
             return new RasterLine(image);
         }
 
+        static RasterLine spacer(int height) {
+            return new RasterLine(Math.max(0, height));
+        }
+
         int height() {
+            if (spacerHeight > 0) return spacerHeight;
             if (image != null) return image.getHeight() + 10;
             Paint.FontMetrics metrics = paint.getFontMetrics();
             return Math.round(metrics.descent - metrics.ascent) + 8;
         }
 
         void draw(Canvas canvas, int leftEdge, int rightEdge, int top) {
+            if (spacerHeight > 0) return;
             if (image != null) {
                 float x = leftEdge + (rightEdge - leftEdge - image.getWidth()) / 2f;
                 canvas.drawBitmap(image, x, top + 5, null);
