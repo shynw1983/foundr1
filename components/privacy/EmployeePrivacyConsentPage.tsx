@@ -27,7 +27,6 @@ function getNextPath() {
     next?.startsWith("/")
     && !next.startsWith("//")
     && !next.startsWith("/os/privacy-consent")
-    && !next.startsWith("/store/privacy-consent")
     && !next.startsWith("/staff/privacy-consent")
   ) {
     return next;

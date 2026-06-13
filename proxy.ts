@@ -146,7 +146,7 @@ function getPermittedPagePaths(session: ProxySession) {
 }
 
 function isPermittedPagePath(pathname: string, permittedPaths: Set<string>) {
-  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent" || pathname === "/staff/privacy-consent") return true;
+  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/staff/privacy-consent") return true;
   if (pathname === "/os") return true;
   return Array.from(permittedPaths).some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }

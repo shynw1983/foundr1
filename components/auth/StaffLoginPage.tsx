@@ -11,7 +11,7 @@ function getSurfaceDefaultPath(surface: LoginSurface) {
 }
 
 function isSameSurfacePath(pathname: string, surface: LoginSurface) {
-  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/store/privacy-consent" || pathname === "/staff/privacy-consent") return true;
+  if (pathname === "/os/logout" || pathname === "/store/logout" || pathname === "/staff/logout" || pathname === "/os/privacy-consent" || pathname === "/staff/privacy-consent") return true;
   if (surface === "staff") return pathname === "/staff" || pathname.startsWith("/staff/");
   return surface === "store" ? pathname === "/store" || pathname.startsWith("/store/") : pathname === "/os" || pathname.startsWith("/os/");
 }
