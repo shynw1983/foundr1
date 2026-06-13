@@ -71,9 +71,9 @@ const defaultRoleNavPaths: Record<string, string[]> = {
     "/os/procedures",
     "/os/pos"
   ],
-  store_owner: ["/os", "/store", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  store_manager: ["/os", "/store", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
-  staff: ["/staff", "/os", "/store", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
+  store_owner: ["/os", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  store_manager: ["/os", "/staff", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback", "/os/timecard", "/os/timecard/schedule", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff", "/os/products"],
+  staff: ["/staff", "/os", "/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"],
   store_terminal: ["/os", "/store"]
 };
 const storeTerminalAllowedPaths = [
@@ -189,6 +189,16 @@ async function runFoundr1Proxy(request: NextRequest) {
 
   const session = await readValidSession(request.cookies.get(authCookieName)?.value);
   if (session) {
+    const storeAppRoles = new Set(["owner", "manager", "store_terminal"]);
+    if (!storeAppRoles.has(session.role ?? "") && isStorePath && pathname !== "/store/logout") {
+      const url = request.nextUrl.clone();
+      url.pathname = session.role === "staff"
+        ? pathname === "/store/timecard" ? "/staff/timecard" : "/staff"
+        : "/os";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
     if (session.role === "store_terminal") {
       if ((isOsPath || isStaffPath) && pathname !== "/os/logout" && pathname !== "/staff/logout") {
         const url = request.nextUrl.clone();

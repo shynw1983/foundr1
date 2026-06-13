@@ -129,6 +129,7 @@ const punchActions = [
 
 const calendarAddedStorageKey = "foundr1:calendar-shifts:v1";
 const storeTimecardDraftStorageKeyPrefix = "foundr1-store:timecard-draft:v1";
+const storeTimecardRoles = new Set(["owner", "manager", "store_terminal"]);
 
 function getPunchState(latestPunch: LatestPunch) {
   if (!latestPunch || latestPunch.punchType === "clock_out") return "off";
@@ -159,7 +160,6 @@ export default function StoreTimecardPage() {
     targetShiftId: "",
     note: ""
   });
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileLocation, setMobileLocation] = useState<MobileLocationState>({
     status: "idle",
     message: "位置情報を取得してから打刻します。",
@@ -255,8 +255,11 @@ export default function StoreTimecardPage() {
   }, []);
 
   useEffect(() => {
-    if (data?.currentEmployeeRole === "staff") {
-      window.location.href = "/staff/timecard";
+    if (!data?.currentEmployeeRole || storeTimecardRoles.has(data.currentEmployeeRole)) return;
+    if (data.currentEmployeeRole === "staff") {
+      window.location.replace("/staff/timecard");
+    } else {
+      window.location.replace("/os/timecard");
     }
   }, [data?.currentEmployeeRole]);
 
@@ -283,17 +286,10 @@ export default function StoreTimecardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 760px)");
-    const updateViewport = () => setIsMobileViewport(query.matches);
-    updateViewport();
-    query.addEventListener("change", updateViewport);
-    return () => query.removeEventListener("change", updateViewport);
-  }, []);
-
   const employeesForStore = useMemo(() => getEmployeesForStore(data?.employees ?? [], selectedStoreId), [data, selectedStoreId]);
   const isStoreTerminal = data?.currentEmployeeRole === "store_terminal";
-  const isMobileStaffPunch = isMobileViewport && data?.currentEmployeeRole === "staff";
+  const isStoreTimecardRole = data?.currentEmployeeRole ? storeTimecardRoles.has(data.currentEmployeeRole) : false;
+  const isMobileStaffPunch = false;
   const selectedEmployee = isMobileStaffPunch
     ? employeesForStore.find((employee) => employee.id === data?.currentEmployeeId) ?? null
     : employeesForStore.find((employee) => employee.id === selectedEmployeeId) ?? employeesForStore[0] ?? null;
@@ -541,7 +537,7 @@ export default function StoreTimecardPage() {
           <div className="panel-title">
             <Clock3 />
             <div>
-              <h2>タイムカード</h2>
+              <h2>店舗端末打刻</h2>
               <p>{selectedStoreName}・{isLoading ? "読み込み中" : selectedEmployee ? `${selectedEmployee.name} / ${statusLabel}` : "従業員を選択"}</p>
             </div>
           </div>
@@ -616,7 +612,7 @@ export default function StoreTimecardPage() {
 
           <div className={`timecard-status is-${state}`}>
             <span>{selectedEmployee?.name ?? "従業員未選択"} / {statusLabel}</span>
-            <strong>{isStoreTerminal ? "打刻操作を選択してください" : selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
+            <strong>{isStoreTimecardRole ? "店舗端末で打刻操作を選択してください" : selectedLatestPunch ? `${formatJstDateTime(selectedLatestPunch.punchedAt)} に最終打刻` : "本日の打刻を開始できます"}</strong>
           </div>
 
           {message ? <div className="timecard-message">{message}</div> : null}

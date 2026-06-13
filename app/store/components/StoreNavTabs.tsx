@@ -78,8 +78,6 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState("");
-  const [isTimecardEmployee, setIsTimecardEmployee] = useState(false);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
   const hasInitializedOrderWatchRef = useRef(false);
@@ -88,9 +86,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
     ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
-    : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-      ? tabs.filter((tab) => tab.href === "/store/procedures" || tab.href === "/store/timecard" || tab.href === "/store/feedback")
-      : tabs;
+    : tabs;
 
   const clearOrderAlert = () => {
     setHasPendingOrderAlert(false);
@@ -114,14 +110,6 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   }, []);
 
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 760px)");
-    const updateViewport = () => setIsMobileViewport(query.matches);
-    updateViewport();
-    query.addEventListener("change", updateViewport);
-    return () => query.removeEventListener("change", updateViewport);
-  }, []);
-
-  useEffect(() => {
     let isMounted = true;
     async function loadCurrentEmployee() {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
@@ -129,7 +117,6 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
       const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
       if (isMounted) {
         setEmployeeRole(String(body.employee?.role ?? ""));
-        setIsTimecardEmployee(body.employee?.isTimecardEmployee === true);
       }
     }
     void loadCurrentEmployee();

@@ -29,6 +29,10 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const productName = surface === "staff" ? "Foundr1 STAFF" : surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
   const appIconSrc = surface === "staff" ? "/icons/foundr1-staff-192.png" : "/icons/foundr1-store-192.png";
+  const loginTitle = surface === "store" ? "店舗ワークベンチログイン" : "スタッフログイン";
+  const loginDescription = surface === "store"
+    ? "店舗端末または管理者アカウントでログイン"
+    : `${productName} にログイン`;
 
   function redirectAfterLogin() {
     const params = new URLSearchParams(window.location.search);
@@ -49,7 +53,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loginId, password })
+      body: JSON.stringify({ loginId, password, surface })
     });
 
     if (!response.ok) {
@@ -151,13 +155,13 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
         )}
         <div>
           <p className="eyebrow">{productName}</p>
-          <h1>{mode === "forgot" ? "パスワード再設定" : mode === "initialChange" ? "新しいパスワード設定" : "スタッフログイン"}</h1>
+          <h1>{mode === "forgot" ? "パスワード再設定" : mode === "initialChange" ? "新しいパスワード設定" : loginTitle}</h1>
           <p>
             {mode === "forgot"
               ? "登録メールアドレスを確認して新しいパスワードを設定します。"
               : mode === "initialChange"
                 ? "初期パスワードから変更してください。"
-                : `${productName} にログイン`}
+                : loginDescription}
           </p>
         </div>
         {mode === "login" ? (

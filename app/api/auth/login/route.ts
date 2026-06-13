@@ -51,9 +51,10 @@ function checkLoginRateLimit(key: string) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { loginId?: string; password?: string };
+  const body = await request.json().catch(() => ({})) as { loginId?: string; password?: string; surface?: string };
   const loginId = String(body.loginId ?? "").trim();
   const password = String(body.password ?? "");
+  const surface = String(body.surface ?? "os");
 
   if (!loginId || !password) {
     return Response.json({ error: "ログインIDとパスワードを入力してください。" }, { status: 400 });
@@ -93,6 +94,30 @@ export async function POST(request: Request) {
   loginAttempts.delete(rateLimitKey);
 
   const loginIdForSession = employee.login_id || employee.email || loginId;
+
+  if (surface === "store" && !["owner", "manager", "store_terminal"].includes(employee.role)) {
+    await writeAuditLog({
+      actorEmployeeId: employee.id,
+      action: "auth.login_rejected_for_surface",
+      targetType: "employee",
+      targetId: employee.id,
+      metadata: { surface, role: employee.role },
+      request
+    });
+    return Response.json({ error: "店舗ワークベンチは店舗端末アカウント、または owner / manager アカウントでログインしてください。スタッフ個人機能は Foundr1 STAFF を利用してください。" }, { status: 403 });
+  }
+
+  if (surface === "staff" && employee.role === "store_terminal") {
+    await writeAuditLog({
+      actorEmployeeId: employee.id,
+      action: "auth.login_rejected_for_surface",
+      targetType: "employee",
+      targetId: employee.id,
+      metadata: { surface, role: employee.role },
+      request
+    });
+    return Response.json({ error: "店舗端末アカウントは Foundr1 STAFF にログインできません。店舗ワークベンチを利用してください。" }, { status: 403 });
+  }
 
   if (employee.password_must_change && shouldRequirePasswordChangeForRole(employee.role)) {
     await writeAuditLog({

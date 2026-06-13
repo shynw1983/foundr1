@@ -42,7 +42,7 @@ const storeModules = [
   },
   {
     title: "タイムカード",
-    description: "出退勤、休憩、確定シフト、希望シフト、交代募集をスタッフが確認・申請します。",
+    description: "店舗端末でスタッフの出退勤、休憩、退勤を記録します。個人のシフト・給与確認は Staff App で行います。",
     href: "/store/timecard",
     icon: Clock3,
     status: "利用可能"
@@ -79,23 +79,11 @@ const storeModules = [
 
 export default function StoreHomePage() {
   const [employeeRole, setEmployeeRole] = useState("");
-  const [isTimecardEmployee, setIsTimecardEmployee] = useState(false);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const visibleModules = useMemo(() => (
     employeeRole === "store_terminal"
       ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
-      : isMobileViewport && employeeRole === "staff" && isTimecardEmployee
-        ? storeModules.filter((module) => module.href === "/store/procedures" || module.href === "/store/timecard" || module.href === "/store/feedback")
-        : storeModules
-  ), [employeeRole, isMobileViewport, isTimecardEmployee]);
-
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 760px)");
-    const updateViewport = () => setIsMobileViewport(query.matches);
-    updateViewport();
-    query.addEventListener("change", updateViewport);
-    return () => query.removeEventListener("change", updateViewport);
-  }, []);
+      : storeModules
+  ), [employeeRole]);
 
   useEffect(() => {
     let isMounted = true;
@@ -105,7 +93,6 @@ export default function StoreHomePage() {
       const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
       if (isMounted) {
         setEmployeeRole(String(body.employee?.role ?? ""));
-        setIsTimecardEmployee(body.employee?.isTimecardEmployee === true);
       }
     }
     void loadCurrentEmployee();

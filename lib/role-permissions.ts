@@ -20,7 +20,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "店舗ワークベンチ",
     description: "店舗現場画面を開けます。",
     category: "モジュール",
-    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff", "store_terminal"],
+    defaultRoles: ["owner", "manager", "store_terminal"],
     lockedRoles: ["owner"],
     navPaths: ["/store"]
   },
