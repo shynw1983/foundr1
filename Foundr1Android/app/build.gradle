@@ -36,6 +36,10 @@ android {
             dimension "surface"
             applicationId "jp.foundr1.staff"
         }
+        bridge {
+            dimension "surface"
+            applicationId "jp.foundr1.bridge"
+        }
     }
 
     kotlinOptions {

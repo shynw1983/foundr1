@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Foundr1 Bridge</string>
+    <string name="default_app_url">https://www.foundr1.jp/os</string>
+    <string name="bridge_default_endpoint">https://www.foundr1.jp/api/local-bridge/uber-eats/events</string>
+</resources>

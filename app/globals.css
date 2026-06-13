@@ -12625,6 +12625,148 @@ body :where(
   resize: vertical;
 }
 
+.pos-admin-receipt-template-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  align-items: start;
+  gap: 14px;
+}
+
+.pos-admin-receipt-template-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pos-admin-receipt-preview-panel {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f4f4ef;
+}
+
+.pos-admin-receipt-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-admin-receipt-preview-heading strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pos-admin-receipt-preview-heading span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-admin-receipt-paper {
+  display: grid;
+  gap: 4px;
+  width: min(100%, 292px);
+  justify-self: center;
+  border: 1px solid #e7e1d7;
+  border-radius: 2px;
+  padding: 14px 12px 18px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.025)),
+    #fffef8;
+  box-shadow: 0 14px 28px rgba(33, 40, 34, 0.12);
+  color: #1f2521;
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.pos-admin-receipt-paper h5 {
+  margin: 0;
+  text-align: center;
+  color: #111611;
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pos-admin-receipt-paper p {
+  margin: 0;
+  color: #202720;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pos-admin-receipt-paper p.is-sub {
+  color: #5e655f;
+  font-size: 10px;
+}
+
+.pos-admin-receipt-paper-logo,
+.pos-admin-receipt-paper-promo {
+  justify-self: center;
+  max-width: 72%;
+  max-height: 64px;
+  object-fit: contain;
+}
+
+.pos-admin-receipt-paper-promo {
+  max-width: 100%;
+  max-height: 92px;
+}
+
+.pos-admin-receipt-paper-logo-placeholder {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 42px;
+  border: 1px dashed #b9b4aa;
+  color: #8b857b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pos-admin-receipt-paper-rule {
+  height: 1px;
+  margin: 3px 0;
+  background: repeating-linear-gradient(90deg, #222 0 6px, transparent 6px 10px);
+}
+
+.pos-admin-receipt-paper-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.pos-admin-receipt-paper-line span {
+  overflow-wrap: anywhere;
+}
+
+.pos-admin-receipt-paper-line span:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pos-admin-receipt-paper-line.is-strong,
+.pos-admin-receipt-paper-line.is-total {
+  color: #101510;
+  font-weight: 700;
+}
+
+.pos-admin-receipt-paper-line.is-total {
+  padding-top: 2px;
+  font-size: 13px;
+}
+
 .pos-admin-receipt-image-field {
   display: grid;
   gap: 5px;
@@ -12937,10 +13079,105 @@ body :where(
 }
 
 .loyalty-rule-panel h3,
+.loyalty-app-announcement-panel h3,
 .loyalty-member-form h3,
 .loyalty-member-list h3,
 .loyalty-ledger-panel h3 {
   margin: 0;
+}
+
+.loyalty-app-announcement-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.loyalty-app-announcement-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.92fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.loyalty-app-announcement-form,
+.loyalty-app-announcement-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.loyalty-app-announcement-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.loyalty-app-announcement-form label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.loyalty-app-announcement-form input,
+.loyalty-app-announcement-form select,
+.loyalty-app-announcement-form textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.loyalty-app-announcement-form textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.loyalty-app-announcement-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.loyalty-app-announcement-panel .loyalty-app-announcement-form-row {
+  grid-template-columns: 1fr;
+}
+
+.loyalty-app-announcement-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.loyalty-app-announcement-item span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.loyalty-app-announcement-item strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.loyalty-app-announcement-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-app-announcement-item small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .loyalty-rule-grid {
@@ -13631,6 +13868,141 @@ body :where(
 
 .member-account-menu-item.is-muted {
   color: var(--member-muted);
+}
+
+.member-app-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.42);
+  padding: 20px;
+}
+
+.member-app-popup {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(17, 17, 17, 0.24);
+  padding: 22px;
+}
+
+.member-app-popup-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--member-line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--member-ink);
+  cursor: pointer;
+}
+
+.member-app-popup-close:focus-visible {
+  outline: 2px solid var(--member-logo-accent);
+  outline-offset: 3px;
+}
+
+.member-app-popup-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 42px;
+}
+
+.member-app-popup-heading > span,
+.member-app-popup-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: #f3faf7;
+  color: var(--member-logo-accent);
+}
+
+.member-app-popup-heading h2 {
+  margin: 2px 0 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.member-app-popup-list {
+  display: grid;
+  gap: 10px;
+}
+
+.member-app-popup-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--member-soft-line);
+  border-radius: 8px;
+  background: var(--member-soft);
+  padding: 14px;
+}
+
+.member-app-popup-item h3,
+.member-app-popup-item p {
+  margin: 0;
+}
+
+.member-app-popup-item h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.member-app-popup-item p {
+  margin-top: 5px;
+  color: var(--member-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.member-app-popup-item small {
+  display: block;
+  margin-top: 8px;
+  color: var(--member-muted);
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.member-app-popup-item button,
+.member-app-popup-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 34px;
+  margin-top: 12px;
+  border: 1px solid var(--member-ink);
+  border-radius: 999px;
+  background: var(--member-ink);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 0 14px;
 }
 
 .member-portal-hero {
@@ -15197,6 +15569,7 @@ body :where(
 
 @media (max-width: 1180px) {
   .loyalty-metric-grid,
+  .loyalty-app-announcement-grid,
   .loyalty-rule-grid,
   .loyalty-settings-grid,
   .loyalty-tier-grid,
@@ -15211,6 +15584,8 @@ body :where(
 
 @media (max-width: 640px) {
   .loyalty-metric-grid,
+  .loyalty-app-announcement-grid,
+  .loyalty-app-announcement-form-row,
   .loyalty-rule-grid,
   .loyalty-settings-grid,
   .loyalty-tier-grid,
@@ -15223,6 +15598,7 @@ body :where(
   .loyalty-member-form,
   .loyalty-member-list,
   .loyalty-ledger-panel,
+  .loyalty-app-announcement-panel,
   .loyalty-rule-panel,
   .loyalty-tier-panel,
   .loyalty-email-template-panel {
@@ -15261,6 +15637,29 @@ body :where(
 @media (max-width: 640px) {
   .member-portal-page {
     padding: 14px;
+  }
+
+  .member-app-popup-backdrop {
+    align-items: center;
+    padding: 14px;
+  }
+
+  .member-app-popup {
+    width: calc(100vw - 28px);
+    max-height: calc(100vh - 28px);
+    padding: 18px;
+  }
+
+  .member-app-popup-heading {
+    align-items: flex-start;
+  }
+
+  .member-app-popup-heading h2 {
+    font-size: 20px;
+  }
+
+  .member-app-popup-item {
+    grid-template-columns: 1fr;
   }
 
   .member-portal-topbar {
@@ -21925,6 +22324,16 @@ body :where(
   white-space: nowrap;
 }
 
+.task-product-line span.is-follow {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.task-product-line span.is-warning {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
 .quantity-diff {
   display: inline-flex;
   align-items: center;
@@ -28261,9 +28670,18 @@ body :where(
   .pos-admin-display-media-grid,
   .pos-admin-printer-grid,
   .pos-admin-receipt-template-textareas,
+  .pos-admin-receipt-template-workspace,
   .pos-admin-printer-brand-row {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .pos-admin-receipt-preview-panel {
+    position: static;
+  }
+
+  .pos-admin-receipt-paper {
+    width: min(100%, 320px);
   }
 
   .pos-admin-discount-row {

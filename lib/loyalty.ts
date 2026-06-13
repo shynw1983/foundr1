@@ -121,6 +121,21 @@ export type EmailNotificationTemplate = {
   variables: string[];
 };
 
+export type MemberAppAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  displayTitles: Record<string, string>;
+  displayBodies: Record<string, string>;
+  kind: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  createdAt: string;
+};
+
 export type LoyaltyTierSetting = {
   id: string;
   tierKey: string;
@@ -222,6 +237,39 @@ function mergeMemberDisplayNames(name: string, value: unknown) {
     ...defaultMemberBenefitDisplayNames(name),
     ...normalizeDisplayNames(value)
   };
+}
+
+function normalizeAnnouncementKind(value: unknown) {
+  const kind = normalizeText(value);
+  return ["coupon", "campaign", "new_product", "news"].includes(kind) ? kind : "campaign";
+}
+
+function normalizeAbsoluteUrl(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAnnouncementRows(rows: Array<Record<string, unknown>>) {
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    title: String(row.title ?? ""),
+    body: String(row.body ?? ""),
+    displayTitles: normalizeDisplayNames(row.displayTitles),
+    displayBodies: normalizeDisplayNames(row.displayBodies),
+    kind: String(row.kind ?? "campaign"),
+    ctaLabel: String(row.ctaLabel ?? ""),
+    ctaUrl: String(row.ctaUrl ?? ""),
+    startsAt: String(row.startsAt ?? ""),
+    endsAt: String(row.endsAt ?? ""),
+    status: String(row.status ?? "active"),
+    createdAt: String(row.createdAt ?? "")
+  }));
 }
 
 function currentTokyoYearMonth() {
@@ -923,6 +971,31 @@ export async function getMemberAvailableCoupons(memberId: string, input: { brand
   }));
 }
 
+export async function getActiveMemberAppAnnouncements() {
+  const rows = await sql`
+    select
+      id::text,
+      title,
+      body,
+      coalesce(display_titles, '{}'::jsonb) as "displayTitles",
+      coalesce(display_bodies, '{}'::jsonb) as "displayBodies",
+      kind,
+      cta_label as "ctaLabel",
+      cta_url as "ctaUrl",
+      coalesce(starts_at::text, '') as "startsAt",
+      coalesce(ends_at::text, '') as "endsAt",
+      status,
+      created_at::text as "createdAt"
+    from member_app_announcements
+    where status = 'active'
+      and (starts_at is null or starts_at <= now())
+      and (ends_at is null or ends_at > now())
+    order by created_at desc
+    limit 5
+  `;
+  return normalizeAnnouncementRows(rows);
+}
+
 export async function getMemberStampCards(memberId: string) {
   const rows = await sql`
     with stamp_totals as (
@@ -1105,6 +1178,52 @@ export async function issueMemberCoupon(input: {
       nullif(${expiresAt}, '')::timestamptz,
       ${source},
       ${JSON.stringify({ note: normalizeText(input.note), issuedBy: normalizeText(input.issuedBy) })}::jsonb
+    )
+    returning id::text
+  `;
+  return rows[0] ?? null;
+}
+
+export async function createMemberAppAnnouncement(input: {
+  title: string;
+  body: string;
+  kind?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  createdBy?: string | null;
+}) {
+  const title = normalizeText(input.title).slice(0, 120);
+  const body = normalizeText(input.body).slice(0, 600);
+  const kind = normalizeAnnouncementKind(input.kind);
+  const ctaLabel = normalizeText(input.ctaLabel).slice(0, 32);
+  const ctaUrl = normalizeAbsoluteUrl(input.ctaUrl);
+  const startsAt = normalizeText(input.startsAt);
+  const endsAt = normalizeText(input.endsAt);
+  if (!title) throw new Error("ポップアップタイトルを入力してください。");
+  if (!body) throw new Error("ポップアップ本文を入力してください。");
+
+  const rows = await sql`
+    insert into member_app_announcements (
+      title,
+      body,
+      kind,
+      cta_label,
+      cta_url,
+      starts_at,
+      ends_at,
+      created_by
+    )
+    values (
+      ${title},
+      ${body},
+      ${kind},
+      ${ctaLabel},
+      ${ctaUrl},
+      nullif(${startsAt}, '')::timestamptz,
+      nullif(${endsAt}, '')::timestamptz,
+      nullif(${normalizeText(input.createdBy)}, '')::uuid
     )
     returning id::text
   `;
@@ -2487,7 +2606,7 @@ export async function refreshMemberTier(memberId: string) {
 }
 
 export async function getLoyaltyDashboard() {
-  const [summaryRows, recentMembers, recentLedger, coupons, recentCoupons, stampCampaigns] = await Promise.all([
+  const [summaryRows, recentMembers, recentLedger, coupons, recentCoupons, stampCampaigns, appAnnouncements] = await Promise.all([
     sql`
       select
         count(*)::int as "memberCount",
@@ -2582,6 +2701,24 @@ export async function getLoyaltyDashboard() {
         and (loyalty_stamp_campaigns.valid_from is null or loyalty_stamp_campaigns.valid_from <= current_date)
         and (loyalty_stamp_campaigns.valid_until is null or loyalty_stamp_campaigns.valid_until >= current_date)
       order by brands.name nulls last, loyalty_stamp_campaigns.created_at desc
+    `,
+    sql`
+      select
+        id::text,
+        title,
+        body,
+        coalesce(display_titles, '{}'::jsonb) as "displayTitles",
+        coalesce(display_bodies, '{}'::jsonb) as "displayBodies",
+        kind,
+        cta_label as "ctaLabel",
+        cta_url as "ctaUrl",
+        coalesce(starts_at::text, '') as "startsAt",
+        coalesce(ends_at::text, '') as "endsAt",
+        status,
+        created_at::text as "createdAt"
+      from member_app_announcements
+      order by created_at desc
+      limit 20
     `
   ]);
 
@@ -2593,6 +2730,7 @@ export async function getLoyaltyDashboard() {
     recentMembers,
     recentLedger,
     recentCoupons,
-    stampCampaigns
+    stampCampaigns,
+    appAnnouncements: normalizeAnnouncementRows(appAnnouncements)
   };
 }

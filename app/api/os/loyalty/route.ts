@@ -1,5 +1,5 @@
 import { requireOsSession } from "../../../../lib/api-auth";
-import { adjustMemberStamps, getEmailNotificationTemplates, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, resendMemberCouponEmail, updateEmailNotificationTemplates, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
+import { adjustMemberStamps, createMemberAppAnnouncement, getEmailNotificationTemplates, getLoyaltyDashboard, getLoyaltyRewardSettings, getLoyaltyTierSettings, issueMemberCoupon, resendMemberCouponEmail, updateEmailNotificationTemplates, updateLoyaltyRewardSettings, updateLoyaltyTierSettings, upsertMember } from "../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +84,25 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, coupon, ...dashboard });
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "クーポンを発行できませんでした。" }, { status: 400 });
+    }
+  }
+
+  if (normalizeText(body.action) === "create_app_announcement") {
+    try {
+      const announcement = await createMemberAppAnnouncement({
+        title: normalizeText(body.title),
+        body: normalizeText(body.body),
+        kind: normalizeText(body.kind),
+        ctaLabel: normalizeText(body.ctaLabel),
+        ctaUrl: normalizeText(body.ctaUrl),
+        startsAt: normalizeText(body.startsAt),
+        endsAt: normalizeText(body.endsAt),
+        createdBy: session.id
+      });
+      const dashboard = await getLoyaltyDashboard();
+      return Response.json({ ok: true, announcement, ...dashboard });
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "APPポップアップを作成できませんでした。" }, { status: 400 });
     }
   }
 

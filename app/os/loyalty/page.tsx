@@ -10,6 +10,7 @@ import {
   Lightbulb,
   LogOut,
   Mail,
+  Megaphone,
   MenuSquare,
   PackageCheck,
   RefreshCw,
@@ -156,6 +157,19 @@ type EmailNotificationTemplate = {
   variables: string[];
 };
 
+type MemberAppAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  kind: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  createdAt: string;
+};
+
 type LoyaltyDashboard = {
   summary: LoyaltySummary;
   recentMembers: LoyaltyMember[];
@@ -165,6 +179,7 @@ type LoyaltyDashboard = {
   rewardSettings: LoyaltyRewardSettings;
   tierSettings: LoyaltyTierSetting[];
   emailTemplates: EmailNotificationTemplate[];
+  appAnnouncements: MemberAppAnnouncement[];
 };
 
 const emptySummary: LoyaltySummary = {
@@ -264,6 +279,13 @@ function getCouponEmailNote(coupon: LoyaltyCoupon) {
   return "再送できます";
 }
 
+function getAnnouncementKindLabel(kind: string) {
+  if (kind === "coupon") return "クーポン";
+  if (kind === "new_product") return "新商品";
+  if (kind === "news") return "お知らせ";
+  return "定期優待";
+}
+
 export default function LoyaltyPage() {
   const [dashboard, setDashboard] = useState<LoyaltyDashboard>({
     summary: emptySummary,
@@ -273,7 +295,8 @@ export default function LoyaltyPage() {
     stampCampaigns: [],
     rewardSettings: defaultRewardSettings,
     tierSettings: defaultTierSettings,
-    emailTemplates: []
+    emailTemplates: [],
+    appAnnouncements: []
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -301,6 +324,16 @@ export default function LoyaltyPage() {
   const [tierSettings, setTierSettings] = useState<LoyaltyTierSetting[]>(defaultTierSettings);
   const [emailTemplates, setEmailTemplates] = useState<EmailNotificationTemplate[]>([]);
   const [templateSaving, setTemplateSaving] = useState(false);
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({
+    kind: "campaign",
+    title: "",
+    body: "",
+    ctaLabel: "",
+    ctaUrl: "",
+    startsAt: "",
+    endsAt: ""
+  });
 
   const averageSpend = useMemo(() => {
     const visits = dashboard.summary.lifetimeVisits || 0;
@@ -335,7 +368,8 @@ export default function LoyaltyPage() {
       stampCampaigns: body.stampCampaigns ?? [],
       rewardSettings: nextRewardSettings,
       tierSettings: nextTierSettings,
-      emailTemplates: nextEmailTemplates
+      emailTemplates: nextEmailTemplates,
+      appAnnouncements: body.appAnnouncements ?? []
     });
     setRewardSettings(nextRewardSettings);
     setTierSettings(nextTierSettings);
@@ -398,6 +432,34 @@ export default function LoyaltyPage() {
       setMessage(error instanceof Error ? error.message : "クーポンを発行できませんでした。");
     } finally {
       setCouponSaving(false);
+    }
+  }
+
+  async function createAppAnnouncement() {
+    if (announcementSaving || !announcementForm.title.trim() || !announcementForm.body.trim()) {
+      setMessage("ポップアップタイトルと本文を入力してください。");
+      return;
+    }
+    setAnnouncementSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/os/loyalty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_app_announcement",
+          ...announcementForm
+        })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "APPポップアップを作成できませんでした。");
+      syncDashboard(body);
+      setAnnouncementForm({ kind: "campaign", title: "", body: "", ctaLabel: "", ctaUrl: "", startsAt: "", endsAt: "" });
+      setMessage("APPポップアップを作成しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "APPポップアップを作成できませんでした。");
+    } finally {
+      setAnnouncementSaving(false);
     }
   }
 
@@ -869,6 +931,73 @@ export default function LoyaltyPage() {
             </button>
           </article>
 
+          <article className="panel loyalty-member-form loyalty-app-announcement-panel">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Member APP</p>
+                <h3>APPポップアップ通知</h3>
+              </div>
+            </div>
+            <div className="loyalty-app-announcement-form">
+              <label>
+                <span>種類</span>
+                <select value={announcementForm.kind} onChange={(event) => setAnnouncementForm((current) => ({ ...current, kind: event.target.value }))}>
+                  <option value="campaign">定期優待</option>
+                  <option value="coupon">クーポン</option>
+                  <option value="new_product">新商品</option>
+                  <option value="news">お知らせ</option>
+                </select>
+              </label>
+              <label>
+                <span>タイトル</span>
+                <input value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="例: 新商品が登場しました" />
+              </label>
+              <label>
+                <span>本文</span>
+                <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))} placeholder="Member APPを開いたお客様に表示する内容" />
+              </label>
+              <div className="loyalty-app-announcement-form-row">
+                <label>
+                  <span>ボタン文言</span>
+                  <input value={announcementForm.ctaLabel} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaLabel: event.target.value }))} placeholder="任意" />
+                </label>
+                <label>
+                  <span>リンクURL</span>
+                  <input value={announcementForm.ctaUrl} onChange={(event) => setAnnouncementForm((current) => ({ ...current, ctaUrl: event.target.value }))} placeholder="https://..." inputMode="url" />
+                </label>
+              </div>
+              <div className="loyalty-app-announcement-form-row">
+                <label>
+                  <span>開始日時</span>
+                  <input type="datetime-local" value={announcementForm.startsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, startsAt: event.target.value }))} />
+                </label>
+                <label>
+                  <span>終了日時</span>
+                  <input type="datetime-local" value={announcementForm.endsAt} onChange={(event) => setAnnouncementForm((current) => ({ ...current, endsAt: event.target.value }))} />
+                </label>
+              </div>
+              <button className="primary-button" type="button" onClick={() => void createAppAnnouncement()} disabled={announcementSaving}>
+                {announcementSaving ? "作成中..." : "APPポップアップを作成"}
+              </button>
+            </div>
+            <div className="loyalty-app-announcement-list">
+              {dashboard.appAnnouncements.length ? dashboard.appAnnouncements.map((announcement) => (
+                <article key={announcement.id} className="loyalty-app-announcement-item">
+                  <span><Megaphone size={16} /> {getAnnouncementKindLabel(announcement.kind)}</span>
+                  <strong>{announcement.title}</strong>
+                  <p>{announcement.body}</p>
+                  <small>
+                    {announcement.startsAt ? `開始 ${formatDateTime(announcement.startsAt)} / ` : ""}
+                    {announcement.endsAt ? `終了 ${formatDateTime(announcement.endsAt)} / ` : ""}
+                    {announcement.status === "active" ? "有効" : announcement.status}
+                  </small>
+                </article>
+              )) : (
+                <div className="loyalty-template-empty">APPポップアップ通知はまだありません。</div>
+              )}
+            </div>
+          </article>
+
           <article className="panel loyalty-member-form">
             <div className="panel-title">
               <div>
@@ -1021,7 +1150,7 @@ export default function LoyaltyPage() {
           <div className="panel-title">
             <div>
               <p className="eyebrow">Ledger</p>
-              <h3>ポイント流水</h3>
+              <h3>ポイント履歴</h3>
             </div>
           </div>
           <div className="loyalty-table-wrap">
@@ -1054,7 +1183,7 @@ export default function LoyaltyPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={6}>ポイント流水はまだありません。</td>
+                    <td colSpan={6}>ポイント履歴はまだありません。</td>
                   </tr>
                 )}
               </tbody>

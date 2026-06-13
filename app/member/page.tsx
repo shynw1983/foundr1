@@ -1,7 +1,7 @@
 "use client";
 
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { BadgePercent, ExternalLink, Gift, Loader2, LogIn, LogOut, QrCode, RefreshCw, Settings, ShoppingBag, Stamp, Ticket, UserPlus, UserRound } from "lucide-react";
+import { BadgePercent, ExternalLink, Gift, Loader2, LogIn, LogOut, Megaphone, QrCode, RefreshCw, Settings, ShoppingBag, Sparkles, Stamp, Ticket, UserPlus, UserRound, X } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MemberAccountMenu } from "../../components/member/MemberAccountMenu";
@@ -63,6 +63,21 @@ type MemberStampCard = {
   validUntil: string;
 };
 
+type MemberAppAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  displayTitles?: Record<string, string>;
+  displayBodies?: Record<string, string>;
+  kind: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  createdAt: string;
+};
+
 type MemberResponse = {
   configured?: boolean;
   authenticated?: boolean;
@@ -70,11 +85,72 @@ type MemberResponse = {
   coupons?: MemberCoupon[];
   orders?: MemberOrderHistory[];
   stampCards?: MemberStampCard[];
+  appAnnouncements?: MemberAppAnnouncement[];
   error?: string;
 };
 
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 const memberReturnStorageKey = "foundr1-member-return-to";
+const memberPopupDismissedStorageKey = "foundr1-member-popup-dismissed";
+
+const memberPopupText = {
+  ja: {
+    eyebrow: "お知らせ",
+    title: "新しいお知らせがあります",
+    couponTitle: "利用できるクーポンがあります",
+    couponBody: "店頭で会員証を提示すると、対象クーポンを利用できます。",
+    couponAction: "クーポンを見る",
+    close: "閉じる"
+  },
+  zh: {
+    eyebrow: "通知",
+    title: "你有新的通知",
+    couponTitle: "有可用优惠券",
+    couponBody: "到店出示会员证即可使用适用优惠券。",
+    couponAction: "查看优惠券",
+    close: "关闭"
+  },
+  "zh-Hant": {
+    eyebrow: "通知",
+    title: "你有新的通知",
+    couponTitle: "有可用優惠券",
+    couponBody: "到店出示會員證即可使用適用優惠券。",
+    couponAction: "查看優惠券",
+    close: "關閉"
+  },
+  en: {
+    eyebrow: "Notice",
+    title: "You have a new update",
+    couponTitle: "You have available coupons",
+    couponBody: "Show your member card in store to use eligible coupons.",
+    couponAction: "View coupons",
+    close: "Close"
+  },
+  ko: {
+    eyebrow: "알림",
+    title: "새로운 알림이 있습니다",
+    couponTitle: "사용 가능한 쿠폰이 있습니다",
+    couponBody: "매장에서 회원증을 제시하면 대상 쿠폰을 사용할 수 있습니다.",
+    couponAction: "쿠폰 보기",
+    close: "닫기"
+  },
+  vi: {
+    eyebrow: "Thông báo",
+    title: "Bạn có thông báo mới",
+    couponTitle: "Bạn có phiếu giảm giá có thể dùng",
+    couponBody: "Xuất trình thẻ thành viên tại cửa hàng để dùng phiếu phù hợp.",
+    couponAction: "Xem phiếu",
+    close: "Đóng"
+  },
+  ne: {
+    eyebrow: "सूचना",
+    title: "नयाँ सूचना छ",
+    couponTitle: "प्रयोग गर्न मिल्ने कुपन छ",
+    couponBody: "पसलमा सदस्य कार्ड देखाएर योग्य कुपन प्रयोग गर्न सक्नुहुन्छ।",
+    couponAction: "कुपन हेर्नुहोस्",
+    close: "बन्द गर्नुहोस्"
+  }
+};
 
 const memberBrandLinks = [
   {
@@ -128,6 +204,55 @@ function localizedMemberBenefitName(name: string, displayNames: Record<string, s
   return displayNames?.[language] || name;
 }
 
+function localizedAnnouncementText(source: string, displayValues: Record<string, string> | undefined, language: string) {
+  if (language === "ja") return source;
+  return displayValues?.[language] || source;
+}
+
+type MemberPopupItem = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  detail: string;
+  ctaLabel: string;
+  ctaUrl?: string;
+  couponId?: string;
+};
+
+function getMemberPopupSignature(memberId: string, items: MemberPopupItem[]) {
+  if (!memberId || !items.length) return "";
+  return `${memberId}:${items.map((item) => item.id).join("|")}`;
+}
+
+function getMemberPopupItems(input: {
+  announcements?: MemberAppAnnouncement[];
+  coupons?: MemberCoupon[];
+  language: string;
+  labels: typeof memberPopupText[keyof typeof memberPopupText];
+  text: typeof memberText[keyof typeof memberText];
+}) {
+  const announcementItems = (input.announcements ?? []).map((announcement) => ({
+    id: `announcement:${announcement.id}`,
+    kind: announcement.kind || "campaign",
+    title: localizedAnnouncementText(announcement.title, announcement.displayTitles, input.language),
+    body: localizedAnnouncementText(announcement.body, announcement.displayBodies, input.language),
+    detail: announcement.endsAt ? `${input.text.dateTime}: ${formatDate(announcement.endsAt, input.text.dateNoExpiry)}` : "",
+    ctaLabel: announcement.ctaLabel || "",
+    ctaUrl: announcement.ctaUrl || ""
+  }));
+  const couponItems = (input.coupons ?? []).slice(0, 3).map((coupon) => ({
+    id: `coupon:${coupon.id}`,
+    kind: "coupon",
+    title: localizedMemberBenefitName(coupon.name, coupon.displayNames, input.language) || input.labels.couponTitle,
+    body: input.labels.couponBody,
+    detail: `${couponScopeLabel(coupon, input.text)} / ${couponValueLabel(coupon, input.text)} / ${formatDate(coupon.expiresAt, input.text.dateNoExpiry)}`,
+    ctaLabel: input.labels.couponAction,
+    couponId: coupon.id
+  }));
+  return [...announcementItems, ...couponItems].filter((item) => item.title.trim() && item.body.trim()).slice(0, 5);
+}
+
 function safeReturnTo(value: string) {
   try {
     const url = new URL(value);
@@ -172,6 +297,58 @@ function getMemberCardDisplayName(member?: MemberProfile | null, fallback = "会
 
 function getAccountDisplayName(member?: MemberProfile | null, user?: { username?: string | null; primaryEmailAddress?: { emailAddress?: string | null } | null }, fallback = "会員") {
   return member?.displayName?.trim() || user?.username || user?.primaryEmailAddress?.emailAddress || fallback;
+}
+
+function MemberAppPopup({
+  labels,
+  items,
+  onClose,
+  onCouponSelect
+}: {
+  labels: typeof memberPopupText[keyof typeof memberPopupText];
+  items: MemberPopupItem[];
+  onClose: () => void;
+  onCouponSelect: (couponId: string) => void;
+}) {
+  return (
+    <div className="member-app-popup-backdrop" role="presentation">
+      <section className="member-app-popup" role="dialog" aria-modal="true" aria-labelledby="member-app-popup-title">
+        <button className="member-app-popup-close" type="button" onClick={onClose} aria-label={labels.close}>
+          <X size={20} />
+        </button>
+        <div className="member-app-popup-heading">
+          <span><Megaphone size={18} /></span>
+          <div>
+            <p className="eyebrow">{labels.eyebrow}</p>
+            <h2 id="member-app-popup-title">{labels.title}</h2>
+          </div>
+        </div>
+        <div className="member-app-popup-list">
+          {items.map((item) => (
+            <article key={item.id} className="member-app-popup-item">
+              <span className="member-app-popup-item-icon">
+                {item.kind === "coupon" ? <Gift size={18} /> : <Sparkles size={18} />}
+              </span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+                {item.detail ? <small>{item.detail}</small> : null}
+                {item.couponId ? (
+                  <button type="button" onClick={() => onCouponSelect(item.couponId)}>
+                    {item.ctaLabel}
+                  </button>
+                ) : item.ctaUrl && item.ctaLabel ? (
+                  <a href={item.ctaUrl} target="_blank" rel="noreferrer">
+                    {item.ctaLabel}
+                  </a>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export default function MemberPage() {
@@ -222,6 +399,8 @@ function ConfiguredMemberPortal() {
   const [handoffStarted, setHandoffStarted] = useState(false);
   const [handoffFailed, setHandoffFailed] = useState(false);
   const [selectedCouponId, setSelectedCouponId] = useState("");
+  const [dismissedPopupSignature, setDismissedPopupSignature] = useState("");
+  const [memberPopupOpen, setMemberPopupOpen] = useState(false);
 
   const qrValue = useMemo(() => {
     if (!data.member?.publicToken) return "";
@@ -253,6 +432,18 @@ function ConfiguredMemberPortal() {
     : data.coupons?.length
       ? text.availableCoupons(data.coupons.length)
       : "";
+  const popupLabels = memberPopupText[language];
+  const memberPopupItems = useMemo(() => getMemberPopupItems({
+    announcements: data.appAnnouncements,
+    coupons: data.coupons,
+    language,
+    labels: popupLabels,
+    text
+  }), [data.appAnnouncements, data.coupons, language, popupLabels, text]);
+  const memberPopupSignature = useMemo(
+    () => getMemberPopupSignature(data.member?.id ?? "", memberPopupItems),
+    [data.member?.id, memberPopupItems]
+  );
 
   const scrollToCoupons = () => {
     window.requestAnimationFrame(() => {
@@ -261,6 +452,19 @@ function ConfiguredMemberPortal() {
         : null;
       (target ?? couponPanelRef.current)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
+  };
+
+  const dismissMemberPopup = () => {
+    setMemberPopupOpen(false);
+    if (!memberPopupSignature) return;
+    window.localStorage.setItem(memberPopupDismissedStorageKey, memberPopupSignature);
+    setDismissedPopupSignature(memberPopupSignature);
+  };
+
+  const selectPopupCoupon = (couponId: string) => {
+    setSelectedCouponId(couponId);
+    dismissMemberPopup();
+    window.requestAnimationFrame(scrollToCoupons);
   };
 
   useEffect(() => {
@@ -286,6 +490,7 @@ function ConfiguredMemberPortal() {
     }
 
     window.localStorage.removeItem(memberReturnStorageKey);
+    setDismissedPopupSignature(window.localStorage.getItem(memberPopupDismissedStorageKey) || "");
   }, []);
 
   async function loadMember() {
@@ -345,6 +550,14 @@ function ConfiguredMemberPortal() {
   }, [data.member, handoffEnabled, handoffStarted, isLoaded, isSignedIn, returnTo]);
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn || returningToSite || missingRequiredProfile || !memberPopupSignature) {
+      setMemberPopupOpen(false);
+      return;
+    }
+    setMemberPopupOpen(memberPopupSignature !== dismissedPopupSignature);
+  }, [dismissedPopupSignature, isLoaded, isSignedIn, memberPopupSignature, missingRequiredProfile, returningToSite]);
+
+  useEffect(() => {
     let active = true;
     if (!qrValue) {
       setQrDataUrl("");
@@ -369,6 +582,14 @@ function ConfiguredMemberPortal() {
 
   return (
     <main className="member-portal-page">
+      {memberPopupOpen && memberPopupItems.length ? (
+        <MemberAppPopup
+          labels={popupLabels}
+          items={memberPopupItems}
+          onClose={dismissMemberPopup}
+          onCouponSelect={selectPopupCoupon}
+        />
+      ) : null}
       <header className="member-portal-topbar">
         <div className="member-portal-brand" aria-label="Foundr1 Members">
           <span><img src="/icons/foundr1-member-512.png" alt="Foundr1" /></span>

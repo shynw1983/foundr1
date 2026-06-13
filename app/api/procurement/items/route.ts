@@ -254,7 +254,7 @@ export async function PATCH(request: Request) {
   }
   if (splitRemaining) {
     if (!itemDetail) return Response.json({ error: "発注明細が見つかりません。" }, { status: 404 });
-    if (itemDetail.currentStatus === "unavailable") return Response.json({ error: "購入不可の商品は残数分割できません。" }, { status: 400 });
+    if (itemDetail.currentStatus === "unavailable") return Response.json({ error: "購入不可の商品は残数フォローに回せません。" }, { status: 400 });
     if (splitPurchasedQuantity === null || splitPurchasedQuantity <= 0 || splitPurchasedQuantity >= currentRequestedQuantity) {
       return Response.json({ error: "今回購入数量は依頼数量より少ない正の数にしてください。" }, { status: 400 });
     }
@@ -560,7 +560,7 @@ export async function PATCH(request: Request) {
         ${String(itemDetail.requestNote ?? "")},
         ${[
           String(itemDetail.currentNote ?? "").trim(),
-          `残数分割: 元明細 ${itemDetail.itemId} / 元依頼 ${currentRequestedQuantity} ${itemDetail.requestedUnit} / 今回購入 ${splitPurchasedQuantity} ${itemDetail.requestedUnit}`
+          `残数フォロー: 元明細 ${itemDetail.itemId} / 元依頼 ${currentRequestedQuantity} ${itemDetail.requestedUnit} / 今回購入 ${splitPurchasedQuantity} ${itemDetail.requestedUnit} / 残数 ${splitRemainingQuantity} ${itemDetail.requestedUnit}`
         ].filter(Boolean).join("\n")},
         ${remainingSupplierId ?? itemDetail.currentSupplierId ?? null},
         'requested'

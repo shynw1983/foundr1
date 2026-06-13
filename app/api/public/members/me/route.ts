@@ -1,7 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
 import { sql } from "../../../../../lib/db";
-import { getMemberAvailableCoupons, getMemberOnlineOrderHistory, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
+import { getActiveMemberAppAnnouncements, getMemberAvailableCoupons, getMemberOnlineOrderHistory, getMemberPointHistory, getMemberStampCards, issueAutomaticLoyaltyRewardsForMember, updateMemberSettings, upsertMember } from "../../../../../lib/loyalty";
 
 export const dynamic = "force-dynamic";
 
@@ -142,12 +142,13 @@ export async function GET(request: Request) {
   if (!member) return Response.json({ error: "会員を保存できませんでした。" }, { status: 500 });
   await issueAutomaticLoyaltyRewardsForMember(member.id);
 
-  const [coupons, pointHistory, stampCards, orders, preferredStoreOptions] = await Promise.all([
+  const [coupons, pointHistory, stampCards, orders, preferredStoreOptions, appAnnouncements] = await Promise.all([
     getMemberAvailableCoupons(member.id),
     getMemberPointHistory(member.id, pointHistoryOptions(request)),
     getMemberStampCards(member.id),
     getMemberOnlineOrderHistory(member.id, orderHistoryOptions(request)),
-    getPreferredStoreOptions()
+    getPreferredStoreOptions(),
+    getActiveMemberAppAnnouncements()
   ]);
 
   return Response.json({
@@ -158,7 +159,8 @@ export async function GET(request: Request) {
     pointHistory,
     stampCards,
     orders,
-    preferredStoreOptions
+    preferredStoreOptions,
+    appAnnouncements
   }, { headers: { "Cache-Control": "no-store" } });
 }
 

@@ -370,6 +370,10 @@ function isAdditionalPurchaseNote(note: string) {
   return note.startsWith("追加購入");
 }
 
+function isRemainingFollowNote(note: string) {
+  return note.split(/\r?\n/).some((line) => line.startsWith("残数フォロー:") || line.startsWith("残数分割:"));
+}
+
 function setTemporarySupplierNote(note: string, temporarySupplier: string) {
   const nextNote = note
     .split(/\r?\n/)
@@ -1043,7 +1047,7 @@ export default function ProcurementPage() {
 
     setActiveExceptionItemId(null);
     await loadDashboardData();
-    showNotice("購入済み分と残数を分割しました。");
+    showNotice("残数をフォロー待ちとして分割しました。");
   }
 
   function uploadReceiptPhoto(orderId: string, supplier: string, file: File) {
@@ -1661,7 +1665,10 @@ export default function ProcurementPage() {
                                   const temporarySupplierNote = getTemporarySupplierNote(item.note);
                                   const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
                                   const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
+                                  const isRemainingFollow = isRemainingFollowNote(item.note);
                                   const isDeliveryLocked = isDeliveryLockedItem(item);
+                                  const remainingQuantity = Math.max(0, item.requestedQuantity - item.actualQuantity);
+                                  const needsRemainingFollow = !item.unavailable && !isDeliveryLocked && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity;
 
                                   return (
                                     <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1696,6 +1703,8 @@ export default function ProcurementPage() {
                                           {item.deliveryStatus === "received" ? <span>店舗確認済み</span> : null}
                                           {item.unavailable ? <span>購入不可</span> : null}
                                           {isAdditionalPurchase ? <span>追加購入</span> : null}
+                                          {isRemainingFollow ? <span className="is-follow">残数フォロー</span> : null}
+                                          {needsRemainingFollow ? <span className="is-warning">残数 {remainingQuantity} {item.unit}</span> : null}
                                           {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
                                         </div>
                                         {productSpec ? <small>{productSpec}</small> : null}
@@ -1727,10 +1736,10 @@ export default function ProcurementPage() {
                                       </div>
                                       <button
                                         type="button"
-                                        className={item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
+                                        className={needsRemainingFollow || item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
                                         onClick={() => setActiveExceptionItemId(item.id)}
                                       >
-                                        購入調整
+                                        {needsRemainingFollow ? "残数フォロー" : "購入調整"}
                                       </button>
                                     </div>
                                   );
@@ -2345,8 +2354,8 @@ function ExceptionReportDialog({
           </label>
           <div className="remaining-split-panel">
             <div>
-              <strong>一部購入・残数分割</strong>
-              <small>今回買えた数量だけ購入済みにし、残りを未購入明細として残します。</small>
+              <strong>残数フォロー</strong>
+              <small>今回買えた数量だけ購入済みにし、残りをフォロー待ちの未購入明細として残します。</small>
             </div>
             <div className="remaining-split-fields">
               <label>
@@ -2386,7 +2395,7 @@ function ExceptionReportDialog({
               disabled={!canSplitRemaining}
               onClick={() => onSplit(splitPurchasedQuantity, splitRemainingSupplier)}
             >
-              {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} を分ける` : "残数を分ける"}
+              {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} をフォローへ回す` : "残数をフォローへ回す"}
             </button>
           </div>
           <label>

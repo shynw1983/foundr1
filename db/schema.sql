@@ -2410,6 +2410,26 @@ alter table member_coupons add column if not exists display_names jsonb not null
 create index if not exists idx_member_coupons_member_status
   on member_coupons(member_id, status, expires_at);
 
+create table if not exists member_app_announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null default '',
+  display_titles jsonb not null default '{}'::jsonb,
+  display_bodies jsonb not null default '{}'::jsonb,
+  kind text not null default 'campaign',
+  cta_label text not null default '',
+  cta_url text not null default '',
+  starts_at timestamptz,
+  ends_at timestamptz,
+  status text not null default 'active',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_member_app_announcements_active
+  on member_app_announcements(status, starts_at, ends_at, created_at desc);
+
 insert into loyalty_stamp_campaigns (
   brand_id,
   campaign_key,
@@ -3249,6 +3269,25 @@ create index if not exists idx_sales_import_batches_store_month
   on sales_import_batches(store_id, source_platform, import_month, created_at desc);
 create index if not exists idx_sales_import_batches_source_month
   on sales_import_batches(store_id, sales_source_id, import_month, created_at desc);
+
+create table if not exists local_bridge_events (
+  id uuid primary key default gen_random_uuid(),
+  platform text not null default 'uber_eats',
+  kind text not null,
+  package_name text not null default '',
+  device_name text not null default '',
+  store_external_id text not null default '',
+  payload jsonb not null default '{}'::jsonb,
+  parse_status text not null default 'raw',
+  parse_error text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_local_bridge_events_platform_created
+  on local_bridge_events(platform, created_at desc);
+
+create index if not exists idx_local_bridge_events_store_created
+  on local_bridge_events(store_external_id, created_at desc);
 create index if not exists idx_sales_import_rows_batch
   on sales_import_rows(batch_id, row_index);
 create index if not exists idx_procedure_books_menu_catalog_item on procedure_books(menu_catalog_item_id);
