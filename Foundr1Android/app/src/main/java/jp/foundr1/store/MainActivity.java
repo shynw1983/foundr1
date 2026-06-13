@@ -239,6 +239,10 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN);
+        }
         if (!permissions.isEmpty()) {
             requestPermissions(permissions.toArray(new String[0]), STARTUP_PERMISSION_REQUEST);
         }
@@ -378,6 +382,10 @@ public class MainActivity extends Activity {
         JSONObject payload = new JSONObject(payloadJson);
         JSONObject printer = payload.optJSONObject("printer");
         if (printer == null) throw new IllegalArgumentException("Printer settings are missing.");
+        String deviceType = printer.optString("deviceType", "escpos_network");
+        if ("star_mpop".equals(deviceType)) {
+            return sendStarPrintJob(payload, printer);
+        }
         String host = printer.optString("host", "").trim();
         int port = printer.optInt("port", 9100);
         if (host.isEmpty()) throw new IllegalArgumentException("Printer IP is empty.");
@@ -391,6 +399,24 @@ public class MainActivity extends Activity {
             output.flush();
         }
         return new PrintResult("印刷を送信しました");
+    }
+
+    private PrintResult sendStarPrintJob(JSONObject payload, JSONObject printer) throws Exception {
+        String paperWidth = printer.optString("paperWidth", "58mm");
+        String connectionType = printer.optString("connectionType", "bluetooth");
+        String identifier = printer.optString("identifier", "").trim();
+        if (!"usb".equals(connectionType) && identifier.isEmpty()) {
+            throw new IllegalArgumentException("Star mPOP identifier is empty.");
+        }
+        boolean cutPaper = printer.optBoolean("cutPaper", true);
+        boolean openCashDrawer = printer.optBoolean("openCashDrawer", false);
+        Bitmap bitmap = createReceiptBitmap(payload, paperWidth);
+        try {
+            Foundr1StarPrinter.print(this, connectionType, identifier, bitmap, cutPaper, openCashDrawer);
+        } finally {
+            bitmap.recycle();
+        }
+        return new PrintResult("Star mPOP に印刷を送信しました");
     }
 
     private byte[] buildEscPos(JSONObject payload) throws Exception {
@@ -465,6 +491,15 @@ public class MainActivity extends Activity {
     }
 
     private void writeRasterReceipt(ByteArrayOutputStream out, JSONObject payload, String paperWidth) throws Exception {
+        Bitmap bitmap = createReceiptBitmap(payload, paperWidth);
+        try {
+            writeRasterBitmap(out, bitmap);
+        } finally {
+            bitmap.recycle();
+        }
+    }
+
+    private Bitmap createReceiptBitmap(JSONObject payload, String paperWidth) {
         int paperDots = "58mm".equals(paperWidth) ? PAPER_DOTS_58MM : PAPER_DOTS_80MM;
         int padding = 18;
         int contentWidth = paperDots - padding * 2;
@@ -552,8 +587,7 @@ public class MainActivity extends Activity {
             line.draw(canvas, padding, paperDots - padding, y);
             y += line.height();
         }
-        writeRasterBitmap(out, bitmap);
-        bitmap.recycle();
+        return bitmap;
     }
 
     private String templateText(JSONObject template, String key) {

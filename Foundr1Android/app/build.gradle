@@ -1,5 +1,6 @@
 plugins {
     id "com.android.application"
+    id "org.jetbrains.kotlin.android"
 }
 
 android {
@@ -33,4 +34,14 @@ android {
             applicationId "jp.foundr1.staff"
         }
     }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+dependencies {
+    implementation "com.starmicronics:stario10:1.12.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.1"
 }

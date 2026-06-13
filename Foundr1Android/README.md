@@ -15,6 +15,7 @@ window.Foundr1Printer.isAvailable()
 ```
 
 The bridge sends ESC/POS bytes to a Wi-Fi thermal printer through TCP, using the printer settings saved in Foundr1 OS.
+It also supports Star mPOP through StarXpand SDK when the POS printer device type is set to `Star mPOP`.
 
 ## Build With Android Studio
 
@@ -45,16 +46,25 @@ Command-line builds:
 
 ## Test Printer
 
-1. On the Android tablet, connect to the same Wi-Fi as the printer.
+1. On the Android tablet, connect to the same Wi-Fi as the printer for ESC/POS Wi-Fi printers, or pair the Star mPOP in Android Bluetooth settings.
 2. Open the installed `Foundr1 Store` app.
 3. Log in to Foundr1 OS.
 4. Go to `/os/pos`.
-5. In `レシート / 厨房プリンター`, use:
+5. In `レシート / 厨房プリンター`, choose the device type.
+
+   For xprinter / ESC-POS Wi-Fi:
 
    - Printer IP: `192.168.0.33`
    - Port: `9100`
    - Paper width: `80mm`
    - Character encoding: `Shift_JIS`
+
+   For Star mPOP:
+
+   - Device type: `Star mPOP`
+   - Connection: `Bluetooth` is recommended for store tablets; `USB` is also supported for fixed counters.
+   - Identifier: paired Bluetooth name, Bluetooth MAC address, or LAN identifier depending on the connection mode. USB can leave the identifier empty.
+   - Cash drawer: enable `現金会計でドロアを開く` for the receipt printer when the drawer should open after cash payment.
 
 6. Tap `テスト印刷`.
 
@@ -69,3 +79,4 @@ printf '\x1b\x40Foundr1 OS Test Print\n80mm Printer OK\nIP 192.168.0.33\n\n\n\x1
 - Ordinary Chrome/Safari will still show `Android 印刷ブリッジが見つかりません。`
 - Printing works only inside these Android app shells.
 - The web side currently sends test jobs, POS receipts, and brand-grouped kitchen tickets.
+- Star mPOP support uses the official `com.starmicronics:stario10` StarXpand SDK. Keep Bluetooth/USB permissions and USB filters in sync when updating the SDK.

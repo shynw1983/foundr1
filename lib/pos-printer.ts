@@ -1,4 +1,7 @@
 export type PosPrinterConnection = {
+  deviceType: "escpos_network" | "star_mpop";
+  connectionType: "lan" | "bluetooth" | "bluetooth_le" | "usb";
+  identifier: string;
   host: string;
   port: number;
   paperWidth: "80mm" | "58mm";
@@ -90,6 +93,9 @@ declare global {
 }
 
 export const defaultPosPrinterConnection: PosPrinterConnection = {
+  deviceType: "escpos_network",
+  connectionType: "lan",
+  identifier: "",
   host: "",
   port: 9100,
   paperWidth: "80mm",
@@ -130,8 +136,19 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterConnection> : {};
   const port = Math.round(Number(source.port || fallback.port));
+  const deviceType = source.deviceType === "star_mpop" ? "star_mpop" : fallback.deviceType;
+  const connectionType = ["bluetooth", "bluetooth_le", "usb"].includes(String(source.connectionType))
+    ? source.connectionType as PosPrinterConnection["connectionType"]
+    : deviceType === "star_mpop"
+      ? fallback.connectionType
+      : "lan";
+  const host = String(source.host ?? fallback.host ?? "").trim().slice(0, 120);
+  const identifier = String(source.identifier ?? "").trim().slice(0, 160) || host;
   return {
-    host: String(source.host ?? fallback.host ?? "").trim().slice(0, 120),
+    deviceType,
+    connectionType,
+    identifier,
+    host,
     port: Number.isFinite(port) ? Math.max(1, Math.min(65535, port)) : fallback.port,
     paperWidth: source.paperWidth === "58mm" ? "58mm" : fallback.paperWidth,
     characterEncoding: source.characterEncoding === "utf8" ? "utf8" : fallback.characterEncoding,
@@ -224,7 +241,11 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
         name: "Foundr1 OS Test Print",
         quantity: 1,
         amount: 0,
-        options: [`${printer.host}:${printer.port}`, printer.paperWidth]
+        options: [
+          printer.deviceType === "star_mpop" ? `Star mPOP / ${printer.connectionType}` : `${printer.host}:${printer.port}`,
+          printer.identifier ? `ID: ${printer.identifier}` : printer.paperWidth,
+          printer.paperWidth
+        ]
       }]
     }
   };
