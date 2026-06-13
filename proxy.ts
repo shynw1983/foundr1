@@ -183,7 +183,7 @@ async function runFoundr1Proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((!isOsPath && !isStorePath && !isStaffPath) || pathname === "/os/login" || pathname === "/store/login" || pathname === "/staff/login") {
+  if ((!isOsPath && !isStorePath && !isStaffPath) || pathname === "/os/login" || pathname === "/store/login" || pathname === "/staff/login" || pathname === "/staff/download") {
     return NextResponse.next();
   }
 

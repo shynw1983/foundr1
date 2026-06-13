@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock3,
   Coffee,
+  Download,
   FileText,
   Home,
   LogIn,
@@ -624,6 +625,14 @@ function HomeView({ latestPayroll, nextShift, myDays, requests }: { latestPayrol
         <span>
           <strong>給与</strong>
           <small>{latestPayroll ? `${latestPayroll.payrollMonth} ${formatMoney(latestPayroll.row.totalPay)}` : "確認済み給与なし"}</small>
+        </span>
+        <ChevronRight size={18} />
+      </a>
+      <a className="staff-action-card is-secondary" href="/staff/download">
+        <Download />
+        <span>
+          <strong>APKダウンロード</strong>
+          <small>Android最新版を保存</small>
         </span>
         <ChevronRight size={18} />
       </a>

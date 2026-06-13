@@ -29527,6 +29527,122 @@ a:focus-visible {
   line-height: 1.5;
 }
 
+.staff-download-shell {
+  display: grid;
+  align-content: start;
+  min-height: 100vh;
+  padding: 18px;
+  background: #f6f8f6;
+  color: var(--ink);
+}
+
+.staff-download-panel {
+  display: grid;
+  gap: 18px;
+  width: min(100%, 520px);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.staff-download-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.staff-download-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.staff-download-heading h1,
+.staff-download-heading p {
+  margin: 0;
+}
+
+.staff-download-heading h1 {
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.staff-download-heading p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.staff-download-button {
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  text-decoration: none;
+}
+
+.staff-download-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.staff-download-meta div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.staff-download-meta dt,
+.staff-download-meta dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.staff-download-meta dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.staff-download-meta dd {
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.staff-download-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.staff-download-notes div {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.staff-download-notes svg {
+  color: var(--green);
+}
+
+.staff-download-back {
+  justify-self: center;
+}
+
 @media (min-width: 860px) {
   .staff-shell {
     max-width: 820px;

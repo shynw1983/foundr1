@@ -10,6 +10,7 @@ type AuthMeResponse = {
 
 const allowedPaths = new Set([
   "/store/privacy-consent",
+  "/staff/download",
   "/staff/privacy-consent"
 ]);
 
