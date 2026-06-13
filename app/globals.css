@@ -28013,7 +28013,7 @@ body :where(
     align-items: center;
     column-gap: 10px;
     margin: -12px -12px 14px;
-    padding: calc(4px + env(safe-area-inset-top, 0px)) 12px 8px;
+    padding: 4px 12px 8px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(12px);
