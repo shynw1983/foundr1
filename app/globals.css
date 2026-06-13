@@ -29166,10 +29166,12 @@ a:focus-visible {
   gap: 10px;
 }
 
-.staff-brand .brand-mark {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
+.staff-app-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
 .staff-brand span:last-child {
@@ -29180,13 +29182,13 @@ a:focus-visible {
 
 .staff-brand small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .staff-brand strong {
   overflow: hidden;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -29230,6 +29232,11 @@ a:focus-visible {
   font-size: 11px;
   font-weight: 700;
   text-decoration: none;
+}
+
+.staff-nav a svg {
+  width: 16px;
+  height: 16px;
 }
 
 .staff-nav a.is-active {

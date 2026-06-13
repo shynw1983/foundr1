@@ -28,6 +28,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const productName = surface === "staff" ? "Foundr1 STAFF" : surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
+  const appIconSrc = surface === "staff" ? "/icons/foundr1-staff-192.png" : "/icons/foundr1-store-192.png";
 
   function redirectAfterLogin() {
     const params = new URLSearchParams(window.location.search);
@@ -144,7 +145,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
       <section className="login-card">
         <OsLanguagePicker />
         {surface === "store" || surface === "staff" ? (
-          <img className="login-app-icon" src="/icons/foundr1-store-192.png" alt="Foundr1 STORE" />
+          <img className="login-app-icon" src={appIconSrc} alt={productName} />
         ) : (
           <div className="brand-mark">F1</div>
         )}
