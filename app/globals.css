@@ -28092,8 +28092,14 @@ body :where(
   }
 
   .store-pos-notice {
+    position: fixed;
+    top: auto;
+    right: 88px;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    left: 16px;
     width: fit-content;
-    max-width: calc(100vw - 24px);
+    max-width: calc(100vw - 112px);
+    margin-inline: auto;
   }
 
   .store-pos-menu-panel,
