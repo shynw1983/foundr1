@@ -11,6 +11,7 @@ type StoreOrderRealtimePayload = {
     id?: string;
     status?: string;
     paymentStatus?: string;
+    orderSource?: string;
   };
 };
 
@@ -19,6 +20,7 @@ type StoreOrdersResponse = {
     id: string;
     status: string;
     paymentStatus: string;
+    orderSource?: string;
   }>;
 };
 
@@ -53,7 +55,10 @@ function formatStoreClock(date: Date) {
 }
 
 function isNewPaidOrder(order: StoreOrderRealtimePayload["order"]) {
-  return order?.paymentStatus === "paid" && order.status === "new" && Boolean(order.id);
+  return order?.paymentStatus === "paid" &&
+    order.status === "new" &&
+    order.orderSource !== "store_pos" &&
+    Boolean(order.id);
 }
 
 function shouldAlertOrder(order: StoreOrderRealtimePayload["order"]) {

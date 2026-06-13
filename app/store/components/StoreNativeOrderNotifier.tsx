@@ -9,6 +9,7 @@ type StoreOrderRealtimePayload = {
     pickupCode?: string;
     status?: string;
     paymentStatus?: string;
+    orderSource?: string;
     drink?: string;
   };
 };
@@ -18,11 +19,15 @@ type StoreOrdersResponse = {
     id: string;
     status: string;
     paymentStatus: string;
+    orderSource?: string;
   }>;
 };
 
 function shouldNotifyOrder(order: StoreOrderRealtimePayload["order"]) {
-  return order?.paymentStatus === "paid" && order.status === "new" && Boolean(order.id);
+  return order?.paymentStatus === "paid" &&
+    order.status === "new" &&
+    order.orderSource !== "store_pos" &&
+    Boolean(order.id);
 }
 
 function getOrderKey(order: { id: string; status: string; paymentStatus: string }) {
@@ -143,4 +148,3 @@ export function StoreNativeOrderNotifier() {
 
   return null;
 }
-

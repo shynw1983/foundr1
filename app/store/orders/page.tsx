@@ -128,6 +128,7 @@ const pendingPaymentVisibleMinutes = 30;
 function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
   return nextOrder.paymentStatus === "paid" &&
     nextOrder.status === "new" &&
+    nextOrder.orderSource !== "store_pos" &&
     (!previousOrder || previousOrder.paymentStatus !== "paid" || previousOrder.status !== "new");
 }
 
