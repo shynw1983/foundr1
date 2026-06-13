@@ -13,6 +13,7 @@ type ApkVersion = {
   buildType: string;
   fileName: string;
   downloadPath: string;
+  latestDownloadPath?: string;
   sizeBytes: number;
   builtAt: string;
   gitCommit: string;

@@ -6,12 +6,13 @@
   "versionCode": 2,
   "releaseLabel": "2026.06.13.2",
   "buildType": "debug",
-  "fileName": "latest.apk",
-  "downloadPath": "/downloads/os/latest.apk",
+  "fileName": "foundr1-os-0.1.2.apk",
+  "downloadPath": "/downloads/os/foundr1-os-0.1.2.apk",
   "legacyDownloadPath": "/downloads/foundr1-os-latest.apk",
   "sizeBytes": 838576,
   "sha256": "cc137f4cbfb3d1cdb6a3b84c9bce058cd86dd47039a7aa46c9a076f190afb531",
   "builtAt": "2026-06-13T13:18:39.372Z",
   "gitCommit": "b295c8af",
-  "gitSubject": "Add APK release version metadata"
+  "gitSubject": "Add APK release version metadata",
+  "latestDownloadPath": "/downloads/os/latest.apk"
 }

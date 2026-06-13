@@ -94,13 +94,21 @@ if (!element?.outputFile) {
   throw new Error(`Cannot find APK output in ${metadataPath}`);
 }
 
+function formatDownloadFileName(flavor, versionName) {
+  const safeVersion = String(versionName || "latest").replace(/[^0-9A-Za-z._-]/g, "-");
+  return `foundr1-${flavor}-${safeVersion}.apk`;
+}
+
 const sourceApk = join(outputDir, element.outputFile);
-const targetFileName = "latest.apk";
+const resolvedVersionName = String(element.versionName ?? nextVersionName);
+const targetFileName = formatDownloadFileName(flavor, resolvedVersionName);
 const targetApk = join(appDownloadDir, targetFileName);
+const latestApk = join(appDownloadDir, "latest.apk");
 const legacyApk = join(downloadsDir, appConfigs[flavor].legacyFileName);
 
 mkdirSync(appDownloadDir, { recursive: true });
 copyFileSync(sourceApk, targetApk);
+copyFileSync(sourceApk, latestApk);
 copyFileSync(sourceApk, legacyApk);
 
 const apkBytes = readFileSync(sourceApk);
@@ -118,12 +126,13 @@ const version = {
   app: flavor,
   title: appConfigs[flavor].title,
   packageName: appConfigs[flavor].packageName,
-  versionName: String(element.versionName ?? nextVersionName),
+  versionName: resolvedVersionName,
   versionCode: Number(element.versionCode ?? nextVersionCode),
   releaseLabel: `${dateKey.year}.${dateKey.month}.${dateKey.day}.${nextVersionCode}`,
   buildType: "debug",
   fileName: targetFileName,
   downloadPath: `/downloads/${flavor}/${targetFileName}`,
+  latestDownloadPath: `/downloads/${flavor}/latest.apk`,
   legacyDownloadPath: `/downloads/${appConfigs[flavor].legacyFileName}`,
   sizeBytes: apkStat.size,
   sha256: createHash("sha256").update(apkBytes).digest("hex"),

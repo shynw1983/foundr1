@@ -6,12 +6,13 @@
   "versionCode": 3,
   "releaseLabel": "2026.06.13.3",
   "buildType": "debug",
-  "fileName": "latest.apk",
-  "downloadPath": "/downloads/store/latest.apk",
+  "fileName": "foundr1-store-0.1.3.apk",
+  "downloadPath": "/downloads/store/foundr1-store-0.1.3.apk",
   "legacyDownloadPath": "/downloads/foundr1-store-latest.apk",
   "sizeBytes": 20261623,
   "sha256": "9acb607afbb930b2826d6cdcf993053f8634cc24db0f294a0ebf5e0a8ff2ffc5",
   "builtAt": "2026-06-13T13:34:14.511Z",
   "gitCommit": "97f2a037",
-  "gitSubject": "Fix store web reservation alerts for POS orders"
+  "gitSubject": "Fix store web reservation alerts for POS orders",
+  "latestDownloadPath": "/downloads/store/latest.apk"
 }
