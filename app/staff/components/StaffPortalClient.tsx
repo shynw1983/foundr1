@@ -9,7 +9,6 @@ import {
   FileText,
   Home,
   LogIn,
-  LogOut,
   RefreshCw,
   Send,
   UserRound,
@@ -18,6 +17,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatDuration, formatJstDateTime, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
+import { UserBadge } from "../../os/components/UserBadge";
 
 type StaffView = "home" | "timecard" | "shifts" | "requests" | "payroll" | "documents";
 
@@ -493,10 +493,9 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
             <strong>{currentEmployee?.name ?? "スタッフ"}</strong>
           </span>
         </a>
-        <a className="staff-account-link" href="/staff/logout">
-          <LogOut size={16} />
-          ログアウト
-        </a>
+        <div className="staff-user-tools">
+          <UserBadge showNotifications={false} showLanguagePicker={false} logoutHref="/staff/logout" />
+        </div>
       </header>
 
       <nav className="staff-nav" aria-label="スタッフメニュー">

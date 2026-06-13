@@ -23,10 +23,12 @@ function getInitial(name: string) {
 
 export function UserBadge({
   showNotifications = true,
-  showLanguagePicker = true
+  showLanguagePicker = true,
+  logoutHref = "/os/logout"
 }: {
   showNotifications?: boolean;
   showLanguagePicker?: boolean;
+  logoutHref?: string;
 }) {
   const [employee, setEmployee] = useState<CurrentEmployee | null>(() => getCachedCurrentEmployee());
   const accountMenuRef = useRef<HTMLDetailsElement | null>(null);
@@ -79,7 +81,7 @@ export function UserBadge({
               <span>{employee.loginId}</span>
             </div>
           </div>
-          <a href="/os/logout">
+          <a href={logoutHref}>
             <LogOut size={16} />
             ログアウト
           </a>

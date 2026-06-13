@@ -23,6 +23,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -55,6 +56,8 @@ public class MainActivity extends Activity {
     private static final int CAMERA_PERMISSION_REQUEST = 1001;
     private static final int FILE_CHOOSER_REQUEST = 1002;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 1003;
+    private static final int LOCATION_PERMISSION_REQUEST = 1004;
+    private static final int STARTUP_PERMISSION_REQUEST = 1005;
     private static final String NOTIFICATION_CHANNEL_ID = "foundr1_store_orders";
     private static final int LINE_CHARS_80MM = 48;
     private static final int LINE_CHARS_58MM = 32;
@@ -66,6 +69,8 @@ public class MainActivity extends Activity {
     private FrameLayout rootView;
     private WebView webView;
     private PermissionRequest pendingPermissionRequest;
+    private String pendingGeolocationOrigin;
+    private GeolocationPermissions.Callback pendingGeolocationCallback;
     private ValueCallback<Uri[]> filePathCallback;
 
     @SuppressLint({ "SetJavaScriptEnabled", "AddJavascriptInterface" })
@@ -97,7 +102,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
         createNotificationChannel();
-        requestNotificationPermissionIfNeeded();
+        requestStartupPermissionsIfNeeded();
         webView.addJavascriptInterface(new Foundr1PrinterBridge(), "Foundr1Printer");
         webView.addJavascriptInterface(new Foundr1NotificationBridge(), "Foundr1NativeNotifications");
         webView.setWebViewClient(new WebViewClient() {
@@ -119,6 +124,20 @@ public class MainActivity extends Activity {
                 } else {
                     requestPermissions(new String[] { Manifest.permission.CAMERA }, CAMERA_PERMISSION_REQUEST);
                 }
+            }
+
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                if (hasLocationPermission()) {
+                    callback.invoke(origin, true, false);
+                    return;
+                }
+                pendingGeolocationOrigin = origin;
+                pendingGeolocationCallback = callback;
+                requestPermissions(new String[] {
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                }, LOCATION_PERMISSION_REQUEST);
             }
 
             @Override
@@ -211,6 +230,25 @@ public class MainActivity extends Activity {
         requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, NOTIFICATION_PERMISSION_REQUEST);
     }
 
+    private void requestStartupPermissionsIfNeeded() {
+        List<String> permissions = new ArrayList<>();
+        if (!hasLocationPermission()) {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        if (!permissions.isEmpty()) {
+            requestPermissions(permissions.toArray(new String[0]), STARTUP_PERMISSION_REQUEST);
+        }
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
     private boolean canShowNotifications() {
         return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
     }
@@ -278,6 +316,12 @@ public class MainActivity extends Activity {
                 pendingPermissionRequest.deny();
             }
             pendingPermissionRequest = null;
+        }
+        if ((requestCode == LOCATION_PERMISSION_REQUEST || requestCode == STARTUP_PERMISSION_REQUEST) && pendingGeolocationCallback != null) {
+            boolean granted = hasLocationPermission();
+            pendingGeolocationCallback.invoke(pendingGeolocationOrigin, granted, false);
+            pendingGeolocationOrigin = null;
+            pendingGeolocationCallback = null;
         }
     }
 

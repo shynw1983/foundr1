@@ -29153,8 +29153,7 @@ a:focus-visible {
   gap: 10px;
 }
 
-.staff-brand,
-.staff-account-link {
+.staff-brand {
   display: inline-flex;
   align-items: center;
   min-width: 0;
@@ -29194,17 +29193,43 @@ a:focus-visible {
   white-space: nowrap;
 }
 
-.staff-account-link {
+.staff-user-tools {
   flex: 0 0 auto;
-  gap: 6px;
-  min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
+  min-width: 0;
+}
+
+.staff-user-tools .user-panel {
+  gap: 0;
+}
+
+.staff-user-tools .user-badge {
+  min-height: 40px;
+  max-width: min(44vw, 180px);
+  border-color: var(--line);
   background: white;
-  color: var(--muted);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.staff-user-tools .user-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.staff-user-tools .user-badge-name {
+  max-width: 72px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.staff-user-tools .user-badge-role {
+  display: none;
+}
+
+.staff-user-tools .account-menu-panel {
+  right: 0;
+  left: auto;
+  min-width: 220px;
 }
 
 .staff-nav {
