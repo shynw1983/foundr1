@@ -29170,6 +29170,7 @@ a:focus-visible {
   width: 40px;
   height: 40px;
   border-radius: 8px;
+  background: #ffffff url("/icons/foundr1-staff-512.png") center / 138% no-repeat;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
