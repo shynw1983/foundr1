@@ -9,6 +9,7 @@ import {
   FileText,
   Home,
   LogIn,
+  LogOut,
   RefreshCw,
   Send,
   UserRound,
