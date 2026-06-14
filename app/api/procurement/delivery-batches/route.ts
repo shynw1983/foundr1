@@ -63,7 +63,9 @@ export async function POST(request: Request) {
       id::text,
       batch_no as "batchNo",
       status,
-      to_char(created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdLabel"
+      to_char(created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdLabel",
+      '' as "deliveredLabel",
+      '' as "storeConfirmedLabel"
   `;
   const batch = batchRows[0];
 
@@ -93,7 +95,9 @@ export async function POST(request: Request) {
     itemIds: uniqueItemIds,
     batchNo: batch.batchNo,
     status: batch.status,
-    createdLabel: batch.createdLabel
+    createdLabel: batch.createdLabel,
+    deliveredLabel: batch.deliveredLabel,
+    storeConfirmedLabel: batch.storeConfirmedLabel
   });
 }
 

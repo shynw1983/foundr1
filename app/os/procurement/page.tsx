@@ -87,6 +87,7 @@ type DeliveryBatch = {
   itemIds: string[];
   status: "in_delivery" | "delivered" | "received";
   createdLabel: string;
+  deliveredLabel?: string;
   storeConfirmedLabel?: string;
 };
 type SupplierChoice = {
@@ -1263,8 +1264,23 @@ export default function ProcurementPage() {
   }
 
   function markDeliveryBatchStatus(batchId: string, status: "delivered" | "received") {
+    const statusLabel = new Intl.DateTimeFormat("ja-JP", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date());
     setDeliveryBatches((batches) =>
-      batches.map((batch) => (batch.id === batchId ? { ...batch, status } : batch))
+      batches.map((batch) => (
+        batch.id === batchId
+          ? {
+              ...batch,
+              status,
+              deliveredLabel: status === "delivered" ? statusLabel : batch.deliveredLabel,
+              storeConfirmedLabel: status === "received" ? statusLabel : batch.storeConfirmedLabel
+            }
+          : batch
+      ))
     );
     setProcurementTaskItems((items) => {
       const nextItems = items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: status === "received" ? "received" as const : "delivered" as const } : item));
@@ -1405,6 +1421,11 @@ export default function ProcurementPage() {
     })
     .sort((left, right) => getOrderDeadlineSortValue(left.order) - getOrderDeadlineSortValue(right.order)), [purchaseOrdersWithStatus, focusedOrderId, statusFilter, normalizedQuery]);
   const visiblePurchaseOrders = displayedPurchaseOrders.slice(0, visibleOrderLimit);
+  const procurementIssueItems = visiblePurchaseOrders.flatMap(({ order, items }) =>
+    items
+      .filter((item) => item.unavailable || item.priceExceptionNote || item.note)
+      .map((item) => ({ order, item }))
+  ).slice(0, 8);
   const hasMorePurchaseOrders = visibleOrderLimit < displayedPurchaseOrders.length;
   const dashboardSyncLabel = dashboardSyncState === "synced"
     ? "データ同期済み"
@@ -1478,22 +1499,43 @@ export default function ProcurementPage() {
             </div>
           ) : null}
           {!focusedOrderId ? (
-            <div className="queue-filter-bar" aria-label="購入管理ステータスフィルター">
-              {procurementStatusFilters.map((filter) => (
-                <button
-                  type="button"
-                  className={statusFilter === filter ? "queue-filter is-active" : "queue-filter"}
-                  onClick={() => startStatusTransition(() => {
-                    setVisibleOrderLimit(procurementOrderRenderBatchSize);
-                    setStatusFilter(filter);
-                  })}
-                  key={filter}
+            <>
+              <label className="mobile-status-filter">
+                <span>表示ステータス</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    const nextFilter = event.target.value as ProcurementStatusFilter;
+                    startStatusTransition(() => {
+                      setVisibleOrderLimit(procurementOrderRenderBatchSize);
+                      setStatusFilter(nextFilter);
+                    });
+                  }}
                 >
-                  <span>{filter}</span>
-                  <strong>{statusFilterCounts[filter]}</strong>
-                </button>
-              ))}
-            </div>
+                  {procurementStatusFilters.map((filter) => (
+                    <option value={filter} key={filter}>
+                      {filter}（{statusFilterCounts[filter]}）
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="queue-filter-bar" aria-label="購入管理ステータスフィルター">
+                {procurementStatusFilters.map((filter) => (
+                  <button
+                    type="button"
+                    className={statusFilter === filter ? "queue-filter is-active" : "queue-filter"}
+                    onClick={() => startStatusTransition(() => {
+                      setVisibleOrderLimit(procurementOrderRenderBatchSize);
+                      setStatusFilter(filter);
+                    })}
+                    key={filter}
+                  >
+                    <span>{filter}</span>
+                    <strong>{statusFilterCounts[filter]}</strong>
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
           <div className="procurement-order-list">
             {visiblePurchaseOrders.map(({ order, items, deliveryState, liveStatus }) => {
@@ -1804,7 +1846,26 @@ export default function ProcurementPage() {
         <section className="panel" id="連絡・報告">
           <PanelTitle title="現場連絡" subtitle="欠品や代替品の連絡を確認" />
           <div className="stack">
-            <div className="empty-state">現場連絡はありません</div>
+            {procurementIssueItems.length > 0 ? (
+              procurementIssueItems.map(({ order, item }) => (
+                <div className="procurement-issue-row" key={`${order.id}-${item.id}`}>
+                  <div>
+                    <strong>{item.productName}</strong>
+                    <span>{order.id} / {order.store} / {item.supplier || "発注先未設定"}</span>
+                  </div>
+                  <p>
+                    {item.unavailable ? "購入不可" : ""}
+                    {item.unavailable && (item.priceExceptionNote || item.note) ? " / " : ""}
+                    {[item.priceExceptionNote, item.note].filter(Boolean).join(" / ")}
+                  </p>
+                  <button type="button" className="text-button" onClick={() => setActiveExceptionItemId(item.id)}>
+                    確認
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state">現場連絡はありません</div>
+            )}
           </div>
         </section>
       </section>
@@ -2157,11 +2218,11 @@ function OrderFulfillmentPanel({
                   <div className="delivery-batch-info">
                     <strong>{getDeliveryBatchLabel(batch)}</strong>
                     <span>
-                      {batch.createdLabel} · {batch.itemIds.length} 件 · {
+                      配送開始 {batch.createdLabel} · {batch.itemIds.length} 件 · {
                         batch.status === "received"
                           ? `店舗確認済み${batch.storeConfirmedLabel ? ` ${batch.storeConfirmedLabel}` : ""}`
                           : batch.status === "delivered"
-                            ? "納品済み"
+                            ? `納品済み${batch.deliveredLabel ? ` ${batch.deliveredLabel}` : ""}`
                             : "配送中"
                       }
                     </span>

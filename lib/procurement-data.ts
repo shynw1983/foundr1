@@ -536,6 +536,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           delivery_batches.batch_no as "batchNo",
           delivery_batches.status,
           to_char(delivery_batches.created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdLabel",
+          to_char(delivery_batches.delivered_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "deliveredLabel",
           to_char(delivery_batches.store_confirmed_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "storeConfirmedLabel",
           coalesce(array_agg(delivery_batch_items.purchase_order_item_id::text order by delivery_batch_items.purchase_order_item_id), '{}') as "itemIds"
         from delivery_batches

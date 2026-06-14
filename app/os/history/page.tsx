@@ -37,6 +37,17 @@ type PurchaseOrderItem = {
   note?: string;
   priceExceptionNote?: string;
   deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
+  deliveryBatchId?: string;
+};
+type DeliveryBatch = {
+  id: string;
+  orderId: string;
+  batchNo?: number;
+  itemIds: string[];
+  status: "in_delivery" | "delivered" | "received";
+  createdLabel: string;
+  deliveredLabel?: string;
+  storeConfirmedLabel?: string;
 };
 type SupplierFulfillment = {
   id?: string;
@@ -63,6 +74,11 @@ type HistoryRow = {
   requestedQuantity: number;
   actualQuantity: number;
   actualPrice: string;
+  deliveryBatchId?: string;
+  deliveryBatchLabel?: string;
+  deliveryStartedLabel?: string;
+  deliveredLabel?: string;
+  storeConfirmedLabel?: string;
   unit: string;
   deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
   status: string;
@@ -129,6 +145,7 @@ type HistoryOrderRow = {
   unavailableCount: number;
   receivedCount: number;
   supplierSummary: string;
+  deliveryBatches: DeliveryBatch[];
 };
 
 const statusTone: Record<string, string> = {
@@ -302,6 +319,12 @@ function getItemStatus(item: PurchaseOrderItem) {
   return "未購入";
 }
 
+function getDeliveryBatchLabel(batch: DeliveryBatch) {
+  if (batch.batchNo) return `${batch.orderId}-DEL-${String(batch.batchNo).padStart(2, "0")}`;
+
+  return batch.id;
+}
+
 function formatPackageQuantity(product: ProductWithSpec) {
   const quantity = Number(product.packageQuantity ?? 0);
   if (!Number.isFinite(quantity) || quantity <= 0) return "";
@@ -323,15 +346,21 @@ function getProductDisplaySpec(product?: ProductWithSpec) {
 function createHistoryRows(
   purchaseOrders: PurchaseOrder[],
   orderItems: PurchaseOrderItem[],
-  products: ProductWithSpec[]
+  products: ProductWithSpec[],
+  deliveryBatches: DeliveryBatch[]
 ) {
   const orderMap = new Map(purchaseOrders.map((order) => [order.id, order]));
   const productMap = new Map(products.map((product) => [product.name, product]));
   const productById = new Map(products.flatMap((product) => product.id ? [[String(product.id), product] as const] : []));
+  const batchByItemId = new Map<string, DeliveryBatch>();
+  deliveryBatches.forEach((batch) => {
+    batch.itemIds.forEach((itemId) => batchByItemId.set(itemId, batch));
+  });
 
   return orderItems.map<HistoryRow>((item, index) => {
     const order = orderMap.get(item.orderId);
     const product = item.productId ? productById.get(item.productId) : productMap.get(item.productName);
+    const deliveryBatch = item.id ? batchByItemId.get(item.id) : undefined;
 
     return {
       id: item.id ?? `${item.orderId}-${index}`,
@@ -349,6 +378,11 @@ function createHistoryRows(
       requestedQuantity: item.requestedQuantity,
       actualQuantity: item.actualQuantity ?? item.requestedQuantity,
       actualPrice: item.actualPrice ?? "",
+      deliveryBatchId: item.deliveryBatchId,
+      deliveryBatchLabel: deliveryBatch ? getDeliveryBatchLabel(deliveryBatch) : "",
+      deliveryStartedLabel: deliveryBatch?.createdLabel ?? "",
+      deliveredLabel: deliveryBatch?.deliveredLabel ?? "",
+      storeConfirmedLabel: deliveryBatch?.storeConfirmedLabel ?? "",
       unit: item.unit,
       deliveryStatus: item.deliveryStatus,
       status: getItemStatus(item),
@@ -434,14 +468,19 @@ function getOrderStatus(items: HistoryRow[]) {
   return "未購入";
 }
 
-function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[]) {
+function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], deliveryBatches: DeliveryBatch[]) {
   const rowsByOrderId = new Map<string, HistoryRow[]>();
+  const batchesByOrderId = new Map<string, DeliveryBatch[]>();
   rows.forEach((row) => {
     rowsByOrderId.set(row.orderId, [...(rowsByOrderId.get(row.orderId) ?? []), row]);
+  });
+  deliveryBatches.forEach((batch) => {
+    batchesByOrderId.set(batch.orderId, [...(batchesByOrderId.get(batch.orderId) ?? []), batch]);
   });
 
   return purchaseOrders.map<HistoryOrderRow>((order) => {
     const items = rowsByOrderId.get(order.id) ?? [];
+    const batches = batchesByOrderId.get(order.id) ?? [];
     const productCount = new Set(items.map((item) => item.productName)).size;
     const suppliers = Array.from(new Set(items.map((item) => item.supplier).filter((supplier) => supplier !== "未設定")));
     const purchasedCount = items.filter((item) =>
@@ -466,7 +505,8 @@ function createHistoryOrderRows(purchaseOrders: PurchaseOrder[], rows: HistoryRo
       purchasedCount,
       unavailableCount: items.filter((item) => item.status === "購入不可").length,
       receivedCount: items.filter((item) => item.status === "店舗確認済み").length,
-      supplierSummary: suppliers.length > 0 ? `${suppliers.slice(0, 2).join(" / ")}${suppliers.length > 2 ? " ほか" : ""}` : "未設定"
+      supplierSummary: suppliers.length > 0 ? `${suppliers.slice(0, 2).join(" / ")}${suppliers.length > 2 ? " ほか" : ""}` : "未設定",
+      deliveryBatches: batches
     };
   }).sort((a, b) =>
     (b.deadline || "").localeCompare(a.deadline || "", "ja") ||
@@ -769,6 +809,7 @@ export default function ProcurementHistoryPage() {
   const [products, setProducts] = useState<ProductWithSpec[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
+  const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [supplierFulfillments, setSupplierFulfillments] = useState<SupplierFulfillment[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("すべて");
@@ -798,12 +839,14 @@ export default function ProcurementHistoryPage() {
       products?: ProductWithSpec[];
       orders?: PurchaseOrder[];
       purchaseOrderItems?: PurchaseOrderItem[];
+      deliveryBatches?: DeliveryBatch[];
       supplierFulfillments?: SupplierFulfillment[];
     };
 
     if (data.products) setProducts(data.products);
     if (data.orders) setPurchaseOrders(data.orders);
     if (data.purchaseOrderItems) setPurchaseOrderItems(data.purchaseOrderItems);
+    if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
     if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
     setDataSource("neon");
   }
@@ -813,10 +856,10 @@ export default function ProcurementHistoryPage() {
   }, []);
 
   const rows = useMemo(
-    () => createHistoryRows(purchaseOrders, purchaseOrderItems, products),
-    [purchaseOrders, purchaseOrderItems, products]
+    () => createHistoryRows(purchaseOrders, purchaseOrderItems, products, deliveryBatches),
+    [purchaseOrders, purchaseOrderItems, products, deliveryBatches]
   );
-  const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows), [purchaseOrders, rows]);
+  const orderRows = useMemo(() => createHistoryOrderRows(purchaseOrders, rows, deliveryBatches), [purchaseOrders, rows, deliveryBatches]);
   const receiptRows = useMemo(() => createReceiptRows(purchaseOrders, rows, supplierFulfillments), [purchaseOrders, rows, supplierFulfillments]);
   const orderStatusById = new Map(orderRows.map((row) => [row.id, row.status]));
   const stores = Array.from(new Set([...orderRows.map((row) => row.store), ...rows.map((row) => row.store)]));
@@ -1158,6 +1201,11 @@ export default function ProcurementHistoryPage() {
                   <div>
                     <strong>{row.deadline || "締切未設定"}</strong>
                     <p>{row.supplierSummary}</p>
+                    {row.deliveryBatches.length > 0 ? (
+                      <p>
+                        配送 {row.deliveryBatches.length} 便 · 納品済み {row.deliveryBatches.filter((batch) => batch.deliveredLabel || batch.status === "received").length} 便
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <strong>商品 {row.itemCount} 件</strong>
@@ -1187,9 +1235,19 @@ export default function ProcurementHistoryPage() {
                                 {item.productSpec ? <span>{item.productSpec}</span> : null}
                               </div>
                               <p>{item.supplier} · 適用ブランド: {item.productBrand}</p>
+                              {item.deliveryBatchLabel ? (
+                                <small>
+                                  {item.deliveryBatchLabel} · 配送開始 {item.deliveryStartedLabel || "未記録"}
+                                  {item.deliveredLabel ? ` · 納品 ${item.deliveredLabel}` : ""}
+                                  {item.storeConfirmedLabel ? ` · 店舗確認 ${item.storeConfirmedLabel}` : ""}
+                                </small>
+                              ) : null}
                               {item.note ? <small>{item.note}</small> : null}
                             </div>
-                            <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
+                            <div className="history-order-quantity">
+                              <strong>{item.actualQuantity} / {item.requestedQuantity} {item.unit}</strong>
+                              {item.actualPrice ? <p>実単価 {item.actualPrice}</p> : null}
+                            </div>
                             <div className="history-owner-actions">
                               <span className={`status-pill ${statusTone[item.status]}`}>{item.status}</span>
                               {canCorrectHistory ? (

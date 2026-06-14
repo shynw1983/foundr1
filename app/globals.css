@@ -18091,6 +18091,10 @@ body :where(
   background: var(--green);
 }
 
+.mobile-status-filter {
+  display: none;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -18863,6 +18867,17 @@ body :where(
   margin-top: 6px;
   color: var(--amber);
   font-weight: 800;
+}
+
+.history-order-quantity {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.history-order-quantity p {
+  margin: 0;
 }
 
 .history-owner-actions {
@@ -21655,6 +21670,45 @@ body :where(
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.procurement-issue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.procurement-issue-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.procurement-issue-row strong,
+.procurement-issue-row span,
+.procurement-issue-row p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.procurement-issue-row span,
+.procurement-issue-row p {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.procurement-issue-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+  white-space: normal;
 }
 
 .focused-order-bar {
@@ -25498,6 +25552,35 @@ body :where(
 
   .operation-panel .queue-filter-bar {
     margin: 0 0 14px;
+  }
+
+  .procurement-panel .queue-filter-bar {
+    display: none;
+  }
+
+  .mobile-status-filter {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 14px;
+  }
+
+  .mobile-status-filter span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .mobile-status-filter select {
+    min-height: 44px;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0 12px;
+    background: white;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    outline: 0;
   }
 
   .product-master-title {

@@ -1506,6 +1506,7 @@ create table if not exists delivery_batches (
 
 alter table delivery_batches add column if not exists store_confirmed_at timestamptz;
 alter table delivery_batches add column if not exists store_confirmed_by uuid references employees(id);
+alter table delivery_batches add column if not exists delivered_at timestamptz;
 
 create table if not exists delivery_batch_items (
   delivery_batch_id uuid not null references delivery_batches(id) on delete cascade,
