@@ -325,6 +325,7 @@ export default function LoyaltyPage() {
   const [emailTemplates, setEmailTemplates] = useState<EmailNotificationTemplate[]>([]);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
   const [announcementForm, setAnnouncementForm] = useState({
     kind: "campaign",
     title: "",
@@ -339,6 +340,12 @@ export default function LoyaltyPage() {
     const visits = dashboard.summary.lifetimeVisits || 0;
     return visits ? Math.round(dashboard.summary.lifetimeSpend / visits) : 0;
   }, [dashboard.summary.lifetimeSpend, dashboard.summary.lifetimeVisits]);
+  const selectedMemberLedger = selectedMember
+    ? dashboard.recentLedger.filter((entry) => entry.memberNumber === selectedMember.memberNumber).slice(0, 12)
+    : [];
+  const selectedMemberCoupons = selectedMember
+    ? dashboard.recentCoupons.filter((coupon) => coupon.memberNumber === selectedMember.memberNumber).slice(0, 12)
+    : [];
 
   async function load() {
     setLoading(true);
@@ -1069,10 +1076,22 @@ export default function LoyaltyPage() {
                 </thead>
                 <tbody>
                   {dashboard.recentMembers.length ? dashboard.recentMembers.map((member) => (
-                    <tr key={member.id}>
+                    <tr
+                      className="loyalty-member-row"
+                      key={member.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedMember(member)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedMember(member);
+                        }
+                      }}
+                    >
                       <td>
                         <strong>{member.displayName || member.phone || member.email || member.memberNumber}</strong>
-                        <small>{member.memberNumber} / {member.lastPurchaseAt ? formatDateTime(member.lastPurchaseAt) : "購入なし"}</small>
+                        <small>{member.memberNumber} / {member.lastPurchaseAt ? formatDateTime(member.lastPurchaseAt) : "購入なし"} / 詳細を見る</small>
                       </td>
                       <td>{member.currentTierKey}</td>
                       <td>{formatNumber(member.pointBalance)} pt</td>
@@ -1196,6 +1215,99 @@ export default function LoyaltyPage() {
             </table>
           </div>
         </section>
+
+        {selectedMember ? (
+          <div className="modal-backdrop" role="presentation" onClick={() => setSelectedMember(null)}>
+            <div className="edit-modal loyalty-member-detail-modal" role="dialog" aria-modal="true" aria-label="会員詳細" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-heading">
+                <div>
+                  <p className="eyebrow">Member Detail</p>
+                  <h3>{selectedMember.displayName || selectedMember.phone || selectedMember.email || selectedMember.memberNumber}</h3>
+                  <span>{selectedMember.memberNumber}</span>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => setSelectedMember(null)}>閉じる</button>
+              </div>
+
+              <div className="loyalty-member-detail-grid">
+                <div>
+                  <span>ランク</span>
+                  <strong>{selectedMember.currentTierKey}</strong>
+                </div>
+                <div>
+                  <span>ポイント</span>
+                  <strong>{formatNumber(selectedMember.pointBalance)} pt</strong>
+                </div>
+                <div>
+                  <span>累計購入</span>
+                  <strong>{formatYen(selectedMember.lifetimeSpendAmount)}</strong>
+                </div>
+                <div>
+                  <span>来店回数</span>
+                  <strong>{formatNumber(selectedMember.lifetimeVisitCount)} 回</strong>
+                </div>
+              </div>
+
+              <div className="loyalty-member-detail-info">
+                <div>
+                  <span>電話</span>
+                  <strong>{selectedMember.phone || "-"}</strong>
+                </div>
+                <div>
+                  <span>メール</span>
+                  <strong>{selectedMember.email || "-"}</strong>
+                </div>
+                <div>
+                  <span>最終購入</span>
+                  <strong>{selectedMember.lastPurchaseAt ? formatDateTime(selectedMember.lastPurchaseAt) : "購入なし"}</strong>
+                </div>
+                <div>
+                  <span>登録日</span>
+                  <strong>{formatDateTime(selectedMember.createdAt)}</strong>
+                </div>
+              </div>
+
+              <section className="loyalty-member-detail-section">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">Ledger</p>
+                    <h3>ポイント履歴</h3>
+                  </div>
+                </div>
+                <div className="loyalty-member-detail-list">
+                  {selectedMemberLedger.length ? selectedMemberLedger.map((entry) => (
+                    <div className="loyalty-member-detail-row" key={entry.id}>
+                      <div>
+                        <strong>{getMovementLabel(entry.movementType)}</strong>
+                        <span>{entry.storeName || "-"} / {formatDateTime(entry.createdAt)}</span>
+                      </div>
+                      <b>{entry.points > 0 ? "+" : ""}{formatNumber(entry.points)} pt</b>
+                    </div>
+                  )) : <p className="empty-state-text">ポイント履歴はまだありません。</p>}
+                </div>
+              </section>
+
+              <section className="loyalty-member-detail-section">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">Coupon</p>
+                    <h3>クーポン</h3>
+                  </div>
+                </div>
+                <div className="loyalty-member-detail-list">
+                  {selectedMemberCoupons.length ? selectedMemberCoupons.map((coupon) => (
+                    <div className="loyalty-member-detail-row" key={coupon.id}>
+                      <div>
+                        <strong>{coupon.name}</strong>
+                        <span>{coupon.couponCode} / {coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "期限なし"}</span>
+                      </div>
+                      <b>{coupon.status === "available" ? "利用可" : coupon.status === "used" ? "使用済み" : coupon.status}</b>
+                    </div>
+                  )) : <p className="empty-state-text">クーポン履歴はまだありません。</p>}
+                </div>
+              </section>
+            </div>
+          </div>
+        ) : null}
       </section>
     </main>
   );

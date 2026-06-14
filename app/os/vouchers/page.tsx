@@ -1795,6 +1795,10 @@ function VoucherUploadProgressView({ progress }: { progress: VoucherUploadProgre
         {progress.phase}：{progress.currentFile || "証憑"}
         {progress.failed ? ` / 要確認 ${progress.failed}件` : ""}
       </p>
+      <div className="voucher-upload-progress-notice">
+        <strong>処理中です</strong>
+        <span>完了するまでこのページを離れないでください。</span>
+      </div>
     </div>
   );
 }

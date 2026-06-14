@@ -2,7 +2,7 @@ import { del, put } from "@vercel/blob";
 import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
-import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, reconcileReceiptOcrItemWithPurchaseActual, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { resolveReceiptSupplierLink } from "../../../lib/supplier-ocr-linking";
 import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
@@ -607,6 +607,7 @@ export async function PATCH(request: Request) {
     if (nextUsageType === "shiire") {
       await updateReceiptOcrItemDetails(id, lines);
       await createProductCandidatesForOcrResult(id, session);
+      await reconcileVoucherPurchaseActuals(id, session.id);
     }
 
     return Response.json({ ok: true, lineCount: lines.length, amount });
@@ -1486,6 +1487,42 @@ async function updateReceiptOcrItemDetails(ocrResultId: string, lines: ReturnTyp
       where id::text = ${line.ocrItemId}
         and receipt_ocr_result_id::text = ${ocrResultId}
     `;
+  }
+}
+
+async function reconcileVoucherPurchaseActuals(ocrResultId: string, employeeId: string) {
+  const itemRows = await sql`
+    select
+      receipt_ocr_items.id::text,
+      receipt_ocr_items.matched_product_id::text as "productId",
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus"
+    from receipt_ocr_items
+    where receipt_ocr_items.receipt_ocr_result_id::text = ${ocrResultId}
+      and receipt_ocr_items.matched_product_id is not null
+      and coalesce(receipt_ocr_items.match_status, '') <> 'ignored'
+  `;
+
+  for (const item of itemRows) {
+    const itemId = String(item.id ?? "");
+    const productId = String(item.productId ?? "");
+    if (!itemId || !productId) continue;
+    if (item.purchaseActualId || item.reconciliationStatus === "auto_matched" || item.reconciliationStatus === "manual_matched") continue;
+
+    await reconcileReceiptOcrItemWithPurchaseActual(itemId, productId);
+
+    const statusRows = await sql`
+      select
+        receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+        coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus"
+      from receipt_ocr_items
+      where receipt_ocr_items.id::text = ${itemId}
+      limit 1
+    `;
+    const status = statusRows[0];
+    if (status?.purchaseActualId || status?.reconciliationStatus === "auto_matched" || status?.reconciliationStatus === "manual_matched") continue;
+
+    await createPurchaseActualFromReceiptItem(ocrResultId, itemId, employeeId);
   }
 }
 

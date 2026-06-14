@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foundr1 OS Mobile Promo</title>
+  <style>
+    :root{--ink:#17231d;--muted:#657186;--line:#dfe4ec;--green:#21745b;--green-soft:#e5f4ee;--blue:#2869a8;--blue-soft:#e8f1fb;--amber:#a96514;--amber-soft:#fff2d9;--red:#bd3a31;--red-soft:#fdebea;--panel:#fff}
+    *{box-sizing:border-box}
+    body{margin:0;padding:18px;background:#dfe7e2;color:var(--ink);font-family:"Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif}
+    .screen{position:relative;width:390px;height:844px;margin:0 auto 22px;padding:18px;overflow:hidden;background:linear-gradient(180deg,#fbfcfb 0%,#f3f7f5 100%);border:1px solid #d6ded8}
+    .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+    .eyebrow{display:inline-flex;width:fit-content;padding:5px 9px;border-radius:999px;background:var(--green-soft);color:var(--green);font-size:11px;font-weight:650}
+    h1{margin:8px 0 0;color:var(--ink);font-size:24px;font-weight:650;line-height:1.22;letter-spacing:0}
+    .sub{margin:8px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+    .brand{flex:0 0 auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--green);font-size:12px;font-weight:650}
+    .tabs,.chips{display:flex;gap:8px;overflow:hidden;margin:0 0 12px}
+    .tab,.chip{flex:0 0 auto;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#314155;font-size:11px;font-weight:600}
+    .tab.active,.chip.active{background:var(--green);border-color:var(--green);color:#fff}
+    .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
+    .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+    .card,.metric,.row,.ticket,.panel{border:1px solid var(--line);border-radius:8px;background:#fff}
+    .metric{display:grid;gap:5px;min-height:104px;padding:12px}
+    .metric span,.row span,.field span,.ticket span,.note{color:var(--muted);font-size:11px;line-height:1.4}
+    .metric strong{color:var(--ink);font-size:23px;font-weight:650;line-height:1.1}
+    .metric small{color:var(--green);font-size:11px;font-weight:650}
+    .rows{display:grid;gap:9px}
+    .row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:11px}
+    .row h3{margin:0 0 4px;color:var(--ink);font-size:14px;font-weight:650;line-height:1.35}
+    .row p{margin:0;color:#334155;font-size:12px;line-height:1.45}
+    .badge{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:650;white-space:nowrap}
+    .safe{background:var(--green-soft);color:var(--green)}.warn{background:var(--amber-soft);color:var(--amber)}.info{background:var(--blue-soft);color:var(--blue)}.danger{background:var(--red-soft);color:var(--red)}.muted{background:#eef1f4;color:#596476}
+    .panel{padding:13px;margin-bottom:12px}
+    .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px}
+    .panel-head h2{margin:0;font-size:15px;font-weight:650}.panel-head span{color:var(--muted);font-size:11px}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .field{display:grid;gap:5px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fafbfa}
+    .field strong{font-size:13px;font-weight:650}
+    .button-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .primary,.secondary{display:grid;place-items:center;min-height:42px;border-radius:8px;font-size:13px;font-weight:650}.primary{background:var(--green);color:#fff}.secondary{border:1px solid var(--line);background:#fff;color:#234036}
+    .pos-items{display:grid;gap:8px;margin-bottom:10px}.pos-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fafbfa}.pos-item strong{font-size:13px}.pos-item span{color:var(--muted);font-size:11px}.total{display:grid;gap:6px;padding:13px;border-radius:8px;background:#17231d;color:#fff}.total div{display:flex;justify-content:space-between}.total span{color:#cbd5d0;font-size:12px}.total strong{font-size:23px}
+    .map{height:170px;margin-bottom:12px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(135deg,#e5f4ee 0%,#fff 42%,#dcebe5 100%);position:relative;overflow:hidden}.map:before,.map:after{content:"";position:absolute;background:#c8d8d0;border-radius:999px}.map:before{width:340px;height:18px;left:-30px;top:74px;transform:rotate(22deg)}.map:after{width:260px;height:14px;right:-55px;top:112px;transform:rotate(-28deg)}.pin{position:absolute;left:164px;top:66px;width:48px;height:48px;border-radius:50%;background:rgba(33,116,91,.14);border:1px solid rgba(33,116,91,.22)}.pin i{position:absolute;left:15px;top:15px;width:18px;height:18px;border-radius:50%;background:var(--green)}
+    .request-type{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}.request-type div{padding:11px;border:1px solid var(--line);border-radius:8px;background:#fff}.request-type strong{font-size:13px}.request-type span{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+    .receipt{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.thumb{height:58px;border-radius:7px;background:linear-gradient(180deg,#fff 0%,#edf2ef 100%);border:1px solid #dbe4df}.receipt h3{margin:0 0 4px;font-size:13px}.receipt p{margin:0;color:var(--muted);font-size:11px}
+    .bars{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));align-items:end;height:150px;gap:8px;padding:10px 4px 0;border-top:1px solid var(--line)}.bar{display:grid;grid-template-rows:1fr auto;gap:7px;align-items:end;height:100%}.bar i{display:block;min-height:30px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--green),#8eb8a8)}.bar span{text-align:center;color:var(--muted);font-size:10px}
+    .ticket{display:grid;gap:9px;padding:13px}.ticket-head{display:flex;justify-content:space-between;align-items:center}.ticket-head b{font-size:18px}.ticket h3{margin:0;font-size:17px}.ticket p{margin:0;color:#334155;font-size:12px;line-height:1.5}.ingredient{display:flex;flex-wrap:wrap;gap:6px}.ingredient span{padding:5px 7px;border-radius:999px;background:#f0f5f2;color:#234036;font-size:11px}
+    .bottom-nav{position:absolute;left:18px;right:18px;bottom:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.92)}
+    .bottom-nav span{height:30px;display:grid;place-items:center;border-radius:8px;color:var(--muted);font-size:10px;font-weight:600}.bottom-nav .active{background:var(--green-soft);color:var(--green)}
+  </style>
+</head>
+<body>
+  <section id="mobile-procurement" class="screen">
+    <header class="top"><div><span class="eyebrow">購入管理</span><h1>発注先別に購入と納品を整理</h1><p class="sub">店舗からの依頼を、発注先・到着日・レシート状況で追跡。</p></div><div class="brand">Foundr1</div></header>
+    <div class="tabs"><span class="tab active">本日</span><span class="tab">納品待ち</span><span class="tab">店舗確認</span></div>
+    <div class="grid3"><article class="metric"><span>購入待ち</span><strong>14</strong><small>+3件</small></article><article class="metric"><span>納品予定</span><strong>9</strong><small>今日</small></article><article class="metric"><span>レシート未登録</span><strong>4</strong><small>確認要</small></article></div>
+    <div class="rows">
+      <article class="row"><div><h3>黒蜜パール 3kg</h3><p>星ノ森店 / メイン発注先 / 8袋</p></div><span class="badge safe">購入済み</span></article>
+      <article class="row"><div><h3>香味スープベース</h3><p>月ノ浦店 / 予備発注先 / 12缶</p></div><span class="badge warn">納品待ち</span></article>
+      <article class="row"><div><h3>テイクアウトカップ 700ml</h3><p>翠ヶ丘店 / オンライン / 6箱</p></div><span class="badge info">店舗確認</span></article>
+      <article class="row"><div><h3>季節野菜ミックス</h3><p>白樺テラス店 / 臨時発注先 / 20kg</p></div><span class="badge danger">購入不可</span></article>
+    </div>
+    <nav class="bottom-nav"><span>発注</span><span class="active">購入</span><span>納品</span><span>履歴</span></nav>
+  </section>
+
+  <section id="mobile-order" class="screen">
+    <header class="top"><div><span class="eyebrow">発注作成</span><h1>店舗から必要品をすばやく下注文</h1><p class="sub">商品 master から選択し、数量・希望納品日・発注先候補をまとめて送信。</p></div><div class="brand">Store</div></header>
+    <div class="panel"><div class="panel-head"><h2>新規発注</h2><span>白樺テラス店</span></div><div class="field-grid"><div class="field"><span>依頼者</span><strong>森田 彩</strong></div><div class="field"><span>希望納品日</span><strong>6/16 火</strong></div></div></div>
+    <div class="rows">
+      <article class="row"><div><h3>抹茶ベース 1kg</h3><p>在庫 2袋 / 推奨 6袋</p></div><span class="badge safe">6袋</span></article>
+      <article class="row"><div><h3>紙ストロー</h3><p>在庫 1箱 / 最低在庫 3箱</p></div><span class="badge warn">4箱</span></article>
+      <article class="row"><div><h3>冷凍マンゴー</h3><p>季節メニュー用 / 追加依頼</p></div><span class="badge info">5kg</span></article>
+    </div>
+    <div class="button-row"><div class="secondary">下書き保存</div><div class="primary">発注を送信</div></div>
+    <nav class="bottom-nav"><span class="active">作成</span><span>履歴</span><span>在庫</span><span>確認</span></nav>
+  </section>
+
+  <section id="mobile-pos" class="screen">
+    <header class="top"><div><span class="eyebrow">POS</span><h1>店頭会計とWeb予約を同じ売上へ</h1><p class="sub">税率、決済、会員ポイント、キッチン送信を一つの会計フローに統合。</p></div><div class="brand">POS</div></header>
+    <div class="chips"><span class="chip active">店内</span><span class="chip">持ち帰り</span><span class="chip">Web予約</span></div>
+    <div class="pos-items">
+      <div class="pos-item"><div><strong>黒蜜ミルクティー</strong><br><span>L / 氷少なめ / パール追加</span></div><b>¥720</b></div>
+      <div class="pos-item"><div><strong>星灯スパイスボウル</strong><br><span>辛さ2 / しびれ1 / 野菜追加</span></div><b>¥1,280</b></div>
+      <div class="pos-item"><div><strong>季節フルーツティー</strong><br><span>M / 甘さ30%</span></div><b>¥680</b></div>
+    </div>
+    <div class="total"><div><span>小計</span><b>¥2,680</b></div><div><span>税</span><b>¥214</b></div><div><span>会員ポイント</span><b>+26pt</b></div><div><span>合計</span><strong>¥2,894</strong></div></div>
+    <div class="button-row"><div class="secondary">キッチン送信</div><div class="primary">会計へ</div></div>
+    <nav class="bottom-nav"><span class="active">POS</span><span>注文</span><span>会員</span><span>締め</span></nav>
+  </section>
+
+  <section id="mobile-gps-timecard" class="screen">
+    <header class="top"><div><span class="eyebrow">GPS打刻</span><h1>店舗位置を確認して出退勤</h1><p class="sub">端末の位置情報と店舗範囲を照合し、不正打刻や打刻漏れを減らします。</p></div><div class="brand">Staff</div></header>
+    <div class="map"><div class="pin"><i></i></div></div>
+    <div class="grid2"><article class="metric"><span>現在地</span><strong>42m</strong><small>店舗範囲内</small></article><article class="metric"><span>勤務予定</span><strong>10:00</strong><small>開始まで 6分</small></article></div>
+    <div class="panel"><div class="panel-head"><h2>森田 彩</h2><span>翠ヶ丘店</span></div><div class="field-grid"><div class="field"><span>前回打刻</span><strong>昨日 18:04</strong></div><div class="field"><span>休憩予定</span><strong>14:00</strong></div></div></div>
+    <div class="button-row"><div class="secondary">休憩開始</div><div class="primary">出勤打刻</div></div>
+    <nav class="bottom-nav"><span class="active">打刻</span><span>シフト</span><span>申請</span><span>給与</span></nav>
+  </section>
+
+  <section id="mobile-attendance-request" class="screen">
+    <header class="top"><div><span class="eyebrow">考勤申請</span><h1>打刻修正・休暇・シフト希望を申請</h1><p class="sub">スタッフからの申請を店舗責任者が確認し、勤怠データへ反映。</p></div><div class="brand">Staff</div></header>
+    <div class="request-type"><div><strong>打刻修正</strong><span>退勤漏れ・時刻修正</span></div><div><strong>休暇申請</strong><span>有休・欠勤・早退</span></div><div><strong>シフト希望</strong><span>来週の希望提出</span></div><div><strong>残業確認</strong><span>承認フロー</span></div></div>
+    <div class="panel"><div class="panel-head"><h2>申請内容</h2><span>承認待ち</span></div><div class="field-grid"><div class="field"><span>対象日</span><strong>6/13 土</strong></div><div class="field"><span>修正後</span><strong>18:30 退勤</strong></div></div><p class="sub">閉店作業後に端末打刻を忘れたため、責任者確認をお願いします。</p></div>
+    <div class="rows"><article class="row"><div><h3>承認ルート</h3><p>店舗責任者 → 本部勤怠</p></div><span class="badge warn">確認中</span></article><article class="row"><div><h3>添付</h3><p>レジ締めログ・店舗日報</p></div><span class="badge info">2件</span></article></div>
+    <div class="button-row"><div class="secondary">下書き</div><div class="primary">申請する</div></div>
+    <nav class="bottom-nav"><span>打刻</span><span>シフト</span><span class="active">申請</span><span>給与</span></nav>
+  </section>
+
+  <section id="mobile-receipts" class="screen">
+    <header class="top"><div><span class="eyebrow">証憑整理</span><h1>レシートを撮影して購入記録へ紐づけ</h1><p class="sub">OCR、発注先、納品履歴、月次経費を同じ画面で整理。</p></div><div class="brand">OS</div></header>
+    <div class="grid3"><article class="metric"><span>未処理</span><strong>11</strong><small>OCR待ち</small></article><article class="metric"><span>紐づけ済み</span><strong>42</strong><small>今月</small></article><article class="metric"><span>要確認</span><strong>3</strong><small>金額差異</small></article></div>
+    <div class="rows">
+      <article class="receipt"><div class="thumb"></div><div><h3>発注先: 北辰フーズ</h3><p>¥18,420 / 食材原価 / 6品目</p></div><span class="badge safe">一致</span></article>
+      <article class="receipt"><div class="thumb"></div><div><h3>発注先: 青葉パック</h3><p>¥7,880 / 包材 / 納品待ち</p></div><span class="badge warn">確認</span></article>
+      <article class="receipt"><div class="thumb"></div><div><h3>月次経費</h3><p>¥12,300 / 通信費 / 変動費</p></div><span class="badge info">経費</span></article>
+      <article class="receipt"><div class="thumb"></div><div><h3>発注先: 港南市場</h3><p>¥9,640 / 食材原価 / 店舗確認済み</p></div><span class="badge safe">完了</span></article>
+    </div>
+    <div class="button-row"><div class="secondary">一括確認</div><div class="primary">撮影して追加</div></div>
+    <nav class="bottom-nav"><span>発注</span><span class="active">証憑</span><span>経費</span><span>履歴</span></nav>
+  </section>
+
+  <section id="mobile-cost-profit" class="screen">
+    <header class="top"><div><span class="eyebrow">原価・利益分析</span><h1>原価、経費、人件費を分けて利益を確認</h1><p class="sub">購買データとPOS売上から、店舗別の利益構造を可視化。</p></div><div class="brand">OS</div></header>
+    <div class="grid2"><article class="metric"><span>月次売上</span><strong>¥8.42M</strong><small>+12.4%</small></article><article class="metric"><span>営業利益</span><strong>¥1.18M</strong><small>14.0%</small></article><article class="metric"><span>原価率</span><strong>31.8%</strong><small>-1.6pt</small></article><article class="metric"><span>人件費率</span><strong>24.6%</strong><small>適正</small></article></div>
+    <article class="panel"><div class="panel-head"><h2>店舗別利益</h2><span>2026年6月</span></div><div class="bars"><div class="bar"><i style="height:72%"></i><span>翠丘</span></div><div class="bar"><i style="height:58%"></i><span>月浦</span></div><div class="bar"><i style="height:86%"></i><span>星森</span></div><div class="bar"><i style="height:64%"></i><span>白樺</span></div><div class="bar"><i style="height:92%"></i><span>灯台</span></div><div class="bar"><i style="height:49%"></i><span>森町</span></div></div></article>
+    <div class="rows"><article class="row"><div><h3>固定費</h3><p>家賃・設備リース</p></div><b>¥1.32M</b></article><article class="row"><div><h3>変動費</h3><p>水道光熱・通信費</p></div><b>¥0.48M</b></article></div>
+    <nav class="bottom-nav"><span>売上</span><span class="active">原価</span><span>経費</span><span>利益</span></nav>
+  </section>
+
+  <section id="mobile-kitchen" class="screen">
+    <header class="top"><div><span class="eyebrow">キッチン表示</span><h1>複雑な注文も構造化して調理へ</h1><p class="sub">Web予約とPOSから届く注文を、調理に必要な選択肢だけに整理。</p></div><div class="brand">Store</div></header>
+    <div class="grid3"><article class="metric"><span>調理待ち</span><strong>14</strong><small>ピーク</small></article><article class="metric"><span>平均待ち</span><strong>6分</strong><small>-2分</small></article><article class="metric"><span>受取待ち</span><strong>8</strong><small>呼出済み</small></article></div>
+    <div class="rows">
+      <article class="ticket"><div class="ticket-head"><b>K-184</b><span class="badge warn">優先</span></div><h3>星灯スパイスボウル</h3><p>サイズ M / 辛さ 2 / しびれ 1 / 薬膳なし</p><div class="ingredient"><span>牛肉</span><span>海鮮</span><span>青菜</span><span>きのこ</span></div></article>
+      <article class="ticket"><div class="ticket-head"><b>D-092</b><span class="badge safe">通常</span></div><h3>黒蜜ミルクティー</h3><p>L / Ice less / 甘さ 50%</p><div class="ingredient"><span>パール x2</span><span>仙草</span><span>持ち帰り</span></div></article>
+    </div>
+    <div class="button-row"><div class="secondary">保留</div><div class="primary">調理完了</div></div>
+    <nav class="bottom-nav"><span class="active">厨房</span><span>受取</span><span>POS</span><span>手順</span></nav>
+  </section>
+</body>
+</html>

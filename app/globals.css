@@ -13499,6 +13499,93 @@ body :where(
   color: #b91c1c;
 }
 
+.loyalty-member-row {
+  cursor: pointer;
+}
+
+.loyalty-member-row:hover td {
+  background: var(--green-soft);
+}
+
+.loyalty-member-detail-modal {
+  width: min(760px, 100%);
+}
+
+.loyalty-member-detail-grid,
+.loyalty-member-detail-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.loyalty-member-detail-grid > div,
+.loyalty-member-detail-info > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.loyalty-member-detail-grid span,
+.loyalty-member-detail-info span,
+.loyalty-member-detail-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.loyalty-member-detail-grid strong {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-member-detail-info strong,
+.loyalty-member-detail-row strong,
+.loyalty-member-detail-row b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-member-detail-section {
+  display: grid;
+  gap: 10px;
+}
+
+.loyalty-member-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.loyalty-member-detail-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.loyalty-member-detail-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.loyalty-member-detail-row b {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
 .loyalty-email-pill {
   display: inline-flex;
   align-items: center;
@@ -15591,6 +15678,11 @@ body :where(
     grid-template-columns: 1fr;
   }
 
+  .loyalty-member-detail-grid,
+  .loyalty-member-detail-info {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .loyalty-member-form,
   .loyalty-member-list,
   .loyalty-ledger-panel,
@@ -15599,6 +15691,13 @@ body :where(
   .loyalty-tier-panel,
   .loyalty-email-template-panel {
     padding: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .loyalty-member-detail-grid,
+  .loyalty-member-detail-info {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -19642,6 +19741,28 @@ body :where(
 .voucher-upload-progress p {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.voucher-upload-progress-notice {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(33, 116, 91, 0.18);
+  border-radius: 8px;
+  background: var(--green-soft);
+}
+
+.voucher-upload-progress-notice strong {
+  color: var(--green);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.voucher-upload-progress-notice span {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .voucher-upload-progress-bar {

@@ -477,21 +477,51 @@ export async function recordReceiptItemPrice(
       receipt_ocr_items.id::text as "itemId",
       receipt_ocr_items.unit,
       receipt_ocr_items.unit_price::float as "unitPrice",
+      receipt_ocr_items.quantity::float,
       receipt_ocr_items.amount::float,
+      receipt_ocr_items.tax_rate as "taxRate",
+      receipt_ocr_items.tax_mode as "taxMode",
+      coalesce((accounting_line.value->>'taxAmount')::float, 0) as "lineTaxAmount",
+      coalesce(accounting_line.value->>'taxMode', '') as "lineTaxMode",
       coalesce(receipt_ocr_results.supplier_name, '') as "supplierName",
       coalesce(receipt_ocr_results.vendor_name, '') as "vendorName"
     from receipt_ocr_items
     join receipt_ocr_results on receipt_ocr_results.id = receipt_ocr_items.receipt_ocr_result_id
+    left join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) as accounting_line(value)
+      on accounting_line.value->>'ocrItemId' = receipt_ocr_items.id::text
     where receipt_ocr_items.id::text = ${itemId}
     limit 1
   `;
   const row = rows[0];
   if (!row) return;
 
-  const price = Number(override?.price ?? row.unitPrice ?? row.amount ?? 0);
+  const quantity = Number(row.quantity ?? 0);
+  const amount = Number(row.amount ?? 0);
+  const lineTaxAmount = Number(row.lineTaxAmount ?? 0);
+  const taxMode = String(row.lineTaxMode || row.taxMode || "");
+  const taxRateText = String(row.taxRate || "");
+  const taxRate = taxRateText === "8%" ? 8 : taxRateText === "10%" ? 10 : 0;
+  const fallbackTaxAmount = taxMode === "外税" && taxRate > 0 ? Math.round(amount * taxRate / 100) : 0;
+  const taxAmount = lineTaxAmount > 0 ? lineTaxAmount : fallbackTaxAmount;
+  const derivedTaxIncludedPrice = quantity > 0 && amount > 0
+    ? Math.round(((taxMode === "外税" ? amount + Math.max(0, taxAmount) : amount) / quantity) * 100) / 100
+    : 0;
+  const price = Number(override?.price ?? (derivedTaxIncludedPrice > 0 ? derivedTaxIncludedPrice : row.unitPrice ?? row.amount ?? 0));
   if (!Number.isFinite(price) || price <= 0) return;
   const unit = String(override?.unit ?? row.unit ?? "").trim() || "個";
   const supplierName = String(row.supplierName || row.vendorName || "").trim();
+
+  await sql`
+    update receipt_ocr_items
+    set
+      unit_price = ${price},
+      updated_at = now()
+    where id::text = ${itemId}
+      and (
+        unit_price is null
+        or abs(unit_price::float - ${price}) > 0.009
+      )
+  `;
 
   await sql`
     delete from price_records
