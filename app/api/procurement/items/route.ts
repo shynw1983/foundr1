@@ -134,6 +134,7 @@ export async function PATCH(request: Request) {
     unavailable?: boolean;
     actualQuantity?: number;
     actualPrice?: string;
+    supplierLocationName?: string;
     note?: string;
     supplier?: string;
     deliveryStatus?: "pending" | "in_delivery" | "delivered" | "received";
@@ -268,6 +269,7 @@ export async function PATCH(request: Request) {
     ? body.deliveryStatus
     : null;
   const supplierName = String(body.supplier ?? "").trim();
+  const supplierLocationName = String(body.supplierLocationName ?? "").trim();
   const hasSupplierInput = supplierName.length > 0;
   const supplierRows = supplierName
     ? await sql`
@@ -278,6 +280,31 @@ export async function PATCH(request: Request) {
       `
     : [];
   const supplierId = supplierRows[0]?.id ?? null;
+  const isRecordingPurchase = body.purchased === true && body.unavailable !== true;
+  if (isRecordingPurchase && !supplierLocationName) {
+    return Response.json({ error: "実際に購入した分店を選択してください。" }, { status: 400 });
+  }
+  const supplierLocationRows = supplierLocationName && supplierId
+    ? await sql`
+        insert into supplier_locations (
+          supplier_id,
+          name,
+          location_type
+        )
+        values (
+          ${supplierId},
+          ${supplierLocationName},
+          '実店舗'
+        )
+        on conflict (supplier_id, name)
+        do update set name = excluded.name
+        returning id
+      `
+    : [];
+  const supplierLocationId = supplierLocationRows[0]?.id ?? null;
+  if (isRecordingPurchase && !supplierLocationId) {
+    return Response.json({ error: "発注先に分店を登録してから購入済みにしてください。" }, { status: 400 });
+  }
   const remainingSupplierName = String(body.remainingSupplier ?? "").trim();
   const hasRemainingSupplierInput = remainingSupplierName.length > 0;
   const remainingSupplierRows = remainingSupplierName
@@ -658,6 +685,7 @@ export async function PATCH(request: Request) {
       insert into purchase_actuals (
         purchase_order_item_id,
         supplier_id,
+        supplier_location_id,
         actual_quantity,
         actual_unit,
         actual_price,
@@ -667,6 +695,7 @@ export async function PATCH(request: Request) {
       select
         purchase_order_items.id,
         coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
+        ${supplierLocationId},
         coalesce(${actualQuantity}, purchase_order_items.requested_quantity),
         purchase_order_items.requested_unit,
         ${Number.isFinite(actualPrice) ? actualPrice : null},

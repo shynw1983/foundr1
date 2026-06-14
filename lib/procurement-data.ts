@@ -479,6 +479,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.actual_price::text,
             ''
           ) as "actualPrice",
+          coalesce(purchase_actual_locations.name, '') as "supplierLocationName",
           (
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
             or purchase_actuals.id is not null
@@ -518,6 +519,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.id,
             purchase_actuals.actual_quantity,
             purchase_actuals.actual_price,
+            purchase_actuals.supplier_location_id,
             purchase_actuals.note,
             purchase_actuals.price_is_exception
           from purchase_actuals
@@ -525,6 +527,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           order by purchase_actuals.recorded_at desc
           limit 1
         ) purchase_actuals on true
+        left join supplier_locations purchase_actual_locations on purchase_actual_locations.id = purchase_actuals.supplier_location_id
         left join delivery_batch_items on delivery_batch_items.purchase_order_item_id = purchase_order_items.id
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
         order by purchase_orders.created_at desc, purchase_order_items.id

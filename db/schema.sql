@@ -1490,6 +1490,7 @@ create table if not exists purchase_actuals (
 );
 
 alter table purchase_actuals add column if not exists actual_price numeric(12, 2);
+alter table purchase_actuals add column if not exists supplier_location_id uuid references supplier_locations(id);
 alter table purchase_actuals drop column if exists receipt_photo_url;
 
 create table if not exists delivery_batches (

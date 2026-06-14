@@ -53,6 +53,7 @@ type DashboardOrderItem = {
   requestedQuantity: number;
   actualQuantity?: number;
   actualPrice?: string;
+  supplierLocationName?: string;
   unit: string;
   purchased?: boolean;
   unavailable?: boolean;
@@ -70,6 +71,7 @@ type ProcurementTaskItem = {
   requestedQuantity: number;
   actualQuantity: number;
   actualPrice: string;
+  supplierLocationName: string;
   unit: string;
   supplier: string;
   purchased: boolean;
@@ -218,6 +220,7 @@ function createProcurementTaskItems(
           requestedQuantity: item.requestedQuantity,
           actualQuantity: item.unavailable ? 0 : item.actualQuantity ?? item.requestedQuantity,
           actualPrice: item.actualPrice ?? "",
+          supplierLocationName: item.supplierLocationName ?? "",
           unit: item.unit,
           supplier: item.supplier || product?.mainSupplier || "",
           purchased: item.purchased ?? false,
@@ -244,6 +247,7 @@ function createProcurementTaskItems(
         requestedQuantity: quantity,
         actualQuantity: quantity,
         actualPrice: "",
+        supplierLocationName: "",
         unit: product.unit,
         supplier: "",
         purchased: false,
@@ -639,6 +643,7 @@ async function saveProcurementTaskItem(item: ProcurementTaskItem) {
       unavailable: item.unavailable,
       actualQuantity: item.actualQuantity,
       actualPrice: item.actualPrice,
+      supplierLocationName: item.supplierLocationName,
       note: item.note,
       supplier: item.supplier,
       productId: item.productId ?? "",
@@ -1067,6 +1072,7 @@ export default function ProcurementPage() {
         unavailable: false,
         actualQuantity: purchasedQuantity,
         actualPrice: currentItem.actualPrice,
+        supplierLocationName: currentItem.supplierLocationName,
         note: currentItem.note,
         supplier: currentItem.supplier,
         productId: currentItem.productId ?? "",
@@ -1765,6 +1771,8 @@ export default function ProcurementPage() {
                                   const isDeliveryLocked = isDeliveryLockedItem(item);
                                   const remainingQuantity = Math.max(0, item.requestedQuantity - item.actualQuantity);
                                   const needsRemainingFollow = !item.unavailable && !isDeliveryLocked && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity;
+                                  const locationOptions = supplierLocationCandidates.map((location) => location.locationName);
+                                  const locationDatalistId = `supplier-locations-${item.id}`;
 
                                   return (
                                     <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
@@ -1773,14 +1781,18 @@ export default function ProcurementPage() {
                                           type="checkbox"
                                           checked={item.purchased || item.unavailable}
                                           disabled={item.unavailable || isDeliveryLocked}
-                                          onChange={(event) =>
+                                          onChange={(event) => {
+                                            if (event.target.checked && !item.supplierLocationName.trim()) {
+                                              window.alert("実際に購入した分店を入力してください。");
+                                              return;
+                                            }
                                             updateProcurementTaskItem(item.id, {
                                               purchased: event.target.checked,
                                               unavailable: false,
                                               deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
                                               deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
-                                            })
-                                          }
+                                            });
+                                          }}
                                         />
                                         <span>{item.unavailable ? "購入不可" : item.purchased ? "購入済み" : "未購入"}</span>
                                       </label>
@@ -1827,6 +1839,21 @@ export default function ProcurementPage() {
                                             <option value={quantity} key={quantity}>{quantity}</option>
                                           ))}
                                         </select>
+                                      </label>
+                                      <label className="task-location">
+                                        <span>購入分店</span>
+                                        <input
+                                          list={locationDatalistId}
+                                          value={item.supplierLocationName}
+                                          placeholder={locationOptions.length > 0 ? "分店を選択" : "分店名を入力"}
+                                          disabled={isDeliveryLocked}
+                                          onChange={(event) => updateProcurementTaskItem(item.id, { supplierLocationName: event.target.value })}
+                                        />
+                                        <datalist id={locationDatalistId}>
+                                          {locationOptions.map((locationName) => (
+                                            <option value={locationName} key={`${item.id}-${locationName}`} />
+                                          ))}
+                                        </datalist>
                                       </label>
                                       <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
                                         {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
@@ -2342,6 +2369,7 @@ function ExceptionReportDialog({
       purchased: false,
       unavailable: false,
       actualPrice: "",
+      supplierLocationName: "",
       deliveryStatus: "pending",
       deliveryBatchId: undefined,
       supplier: deferTemporarySupplier.trim() ? deferTemporarySupplier.trim() : deferSupplier,
@@ -2786,6 +2814,7 @@ function readPendingProcurementTaskItems() {
           requestedQuantity: Number(item.requestedQuantity ?? 0),
           actualQuantity: Number(item.actualQuantity ?? item.requestedQuantity ?? 0),
           actualPrice: String(item.actualPrice ?? ""),
+          supplierLocationName: String(item.supplierLocationName ?? ""),
           unit: String(item.unit ?? ""),
           supplier: String(item.supplier ?? ""),
           purchased: Boolean(item.purchased),
@@ -2848,6 +2877,7 @@ function applyPendingProcurementTaskItemsToDashboardItems(
       ...item,
       actualQuantity: pendingItem.actualQuantity,
       actualPrice: pendingItem.actualPrice,
+      supplierLocationName: pendingItem.supplierLocationName,
       purchased: pendingItem.purchased,
       unavailable: pendingItem.unavailable,
       supplier: pendingItem.supplier,
