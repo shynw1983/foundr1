@@ -19961,6 +19961,12 @@ body :where(
   box-shadow: inset 4px 0 0 rgba(189, 58, 49, 0.82);
 }
 
+.voucher-row.is-preview-selected {
+  border-color: rgba(33, 116, 91, 0.48);
+  background: var(--green-soft);
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
 .voucher-row-main {
   display: grid;
   gap: 6px;
@@ -20164,6 +20170,17 @@ body :where(
   background: #ffffff;
   color: var(--text);
   cursor: pointer;
+}
+
+.voucher-preview-panel-head .voucher-preview-locate-button {
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .voucher-preview-open-link {

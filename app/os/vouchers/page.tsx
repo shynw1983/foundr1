@@ -378,6 +378,7 @@ export default function VouchersPage() {
   const [referencePriceDialog, setReferencePriceDialog] = useState<ProductReferencePriceDialog | null>(null);
   const [createProductDialog, setCreateProductDialog] = useState<ProductCreateDialog | null>(null);
   const [pendingActions, setPendingActions] = useState<Record<string, VoucherPendingAction>>({});
+  const voucherRowRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     const snapshot = readVoucherWorkspaceSnapshot();
@@ -1144,11 +1145,25 @@ export default function VouchersPage() {
     });
   }
 
+  function scrollToVoucherRow(voucherId: string) {
+    const row = voucherRowRefs.current[voucherId];
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  }
+
+  function openVoucherPreview(voucher: VoucherRecord, shouldLocate = true) {
+    setPreviewVoucher(voucher);
+    if (!shouldLocate) return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => scrollToVoucherRow(voucher.id));
+    });
+  }
+
   function toggleVoucherExpanded(voucher: VoucherRecord) {
     const nextExpanded = !expandedVoucherIds[voucher.id];
     setExpandedVoucherIds((current) => ({ ...current, [voucher.id]: nextExpanded }));
     if (nextExpanded && voucher.sourceType === "voucher") {
-      setPreviewVoucher(voucher);
+      openVoucherPreview(voucher);
     }
   }
 
@@ -1446,7 +1461,7 @@ export default function VouchersPage() {
                     <button
                       className="text-button"
                       type="button"
-                      onClick={() => setPreviewVoucher(buildPreviewVoucherFromConfirmedLine(line))}
+                      onClick={() => openVoucherPreview(buildPreviewVoucherFromConfirmedLine(line))}
                       disabled={!line.voucherId}
                     >
                       証憑
@@ -1565,8 +1580,15 @@ export default function VouchersPage() {
               const pendingAction = pendingActions[voucher.id];
               const isVoucherBusy = Boolean(pendingAction);
               const isRecentDuplicate = Boolean(recentDuplicateVoucherIds[voucher.id]);
+              const isPreviewSelected = previewVoucher?.id === voucher.id;
               return (
-                <article className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""} ${isRecentDuplicate ? "is-duplicate-hit" : ""}`} key={voucher.id}>
+                <article
+                  className={`voucher-row ${!isExpanded ? "is-collapsed" : ""} ${isPendingReview && !isExpanded ? "needs-review" : ""} ${isRecentDuplicate ? "is-duplicate-hit" : ""} ${isPreviewSelected ? "is-preview-selected" : ""}`}
+                  key={voucher.id}
+                  ref={(node) => {
+                    voucherRowRefs.current[voucher.id] = node;
+                  }}
+                >
                   <div className="voucher-row-main">
                     <div className="voucher-row-heading">
                       <span className={`status-pill ${voucher.status === "failed" ? "is-danger" : isConfirmed ? "is-active" : "is-warning"}`}>
@@ -1654,7 +1676,7 @@ export default function VouchersPage() {
                         )}
                       </div>
                       <div className="voucher-actions">
-                        <button className="text-button voucher-preview-open" type="button" onClick={() => setPreviewVoucher(voucher)}>証憑を見る</button>
+                        <button className="text-button voucher-preview-open" type="button" onClick={() => openVoucherPreview(voucher)}>証憑を見る</button>
                         <a className="text-button voucher-preview-link" href={buildVoucherPreviewUrl(voucher)} target="_blank" rel="noreferrer">証憑を見る</a>
                         {voucher.canDelete ? (
                           <button className="danger-button" type="button" onClick={() => void deleteVoucher(voucher)} disabled={isVoucherBusy}>
@@ -1742,7 +1764,13 @@ export default function VouchersPage() {
           </div>
         </section>
       </section>
-      {previewVoucher ? <VoucherPreviewPanel voucher={previewVoucher} onClose={() => setPreviewVoucher(null)} /> : null}
+      {previewVoucher ? (
+        <VoucherPreviewPanel
+          voucher={previewVoucher}
+          onLocate={() => scrollToVoucherRow(previewVoucher.id)}
+          onClose={() => setPreviewVoucher(null)}
+        />
+      ) : null}
       {referencePriceDialog ? (
         <ProductReferencePriceDialogView
           dialog={referencePriceDialog}
@@ -2022,7 +2050,7 @@ function buildPreviewVoucherFromConfirmedLine(line: ConfirmedAccountingLine): Vo
   };
 }
 
-function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onClose: () => void }) {
+function VoucherPreviewPanel({ voucher, onLocate, onClose }: { voucher: VoucherRecord; onLocate: () => void; onClose: () => void }) {
   useModalHistory(true, onClose, "vouchers-preview");
 
   const title = buildVoucherTitle(voucher);
@@ -2168,6 +2196,9 @@ function VoucherPreviewPanel({ voucher, onClose }: { voucher: VoucherRecord; onC
           <span>証憑プレビュー</span>
           <strong>{title}</strong>
         </div>
+        <button className="voucher-preview-locate-button" type="button" onClick={onLocate}>
+          明細へ戻る
+        </button>
         {canOpenPreviewObject ? (
           <a className="voucher-preview-open-link" href={previewUrl} target="_blank" rel="noreferrer">開く</a>
         ) : null}
