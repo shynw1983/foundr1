@@ -22330,6 +22330,17 @@ body :where(
   white-space: nowrap;
 }
 
+.supplier-group-location-line {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .supplier-group-toggle {
   display: inline-flex;
   flex: 0 0 auto;
@@ -22395,14 +22406,24 @@ body :where(
   white-space: nowrap;
 }
 
-.supplier-group-amounts span:first-child {
+.supplier-group-amounts span.is-estimated {
   color: var(--green);
   background: var(--green-soft);
 }
 
-.supplier-group-amounts span:last-child {
+.supplier-group-amounts span.is-purchased {
   color: var(--blue);
   background: var(--blue-soft);
+}
+
+.supplier-group-amounts span.is-ready {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.supplier-group-amounts span.is-skipped {
+  color: var(--muted);
+  background: #f1f5f4;
 }
 
 .procurement-task {

@@ -31,6 +31,15 @@ type ProductSupplierGroup = Omit<typeof initialProductSupplierOptions[number], "
   options: Array<typeof initialProductSupplierOptions[number]["options"][number] & { purchaseUrl?: string }>;
 };
 type Supplier = typeof initialSuppliers[number];
+type SupplierLocation = {
+  supplier: string;
+  locationName: string;
+  type?: string;
+  area?: string;
+  hours?: string;
+  purchaseMethod?: string;
+  note?: string;
+};
 type PurchaseOrder = typeof orders[number] & {
   deadlineAt?: string | null;
   requesterName?: string;
@@ -770,6 +779,7 @@ export default function ProcurementPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productSupplierOptions, setProductSupplierOptions] = useState<ProductSupplierGroup[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierLocations, setSupplierLocations] = useState<SupplierLocation[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<DashboardOrderItem[]>([]);
   const [dashboardSyncState, setDashboardSyncState] = useState<DashboardSyncState>("loading");
@@ -853,6 +863,7 @@ export default function ProcurementPage() {
         products?: Product[];
         productSupplierOptions?: ProductSupplierGroup[];
         suppliers?: Supplier[];
+        supplierLocations?: SupplierLocation[];
         orders?: PurchaseOrder[];
         purchaseOrderItems?: DashboardOrderItem[];
         supplierFulfillments?: SupplierFulfillment[];
@@ -864,6 +875,7 @@ export default function ProcurementPage() {
       if (data.products) setProducts(data.products);
       if (data.productSupplierOptions) setProductSupplierOptions(data.productSupplierOptions);
       if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
       if (data.orders && data.purchaseOrderItems) {
         const orderIdsWithItems = new Set(data.purchaseOrderItems.map((item) => item.orderId));
         setPurchaseOrders(data.orders.filter((order) => orderIdsWithItems.has(order.id)));
@@ -1666,7 +1678,11 @@ export default function ProcurementPage() {
                           const supplierKey = `${order.id}:${group.supplier}`;
                           const supplierPanelId = `procurement-supplier-${supplierKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
                           const supplierEstimatedAmount = calculateProcurementOrderEstimatedAmount(group.items, productLookup);
+                          const supplierPurchasedAmount = calculateProcurementOrderCurrentAmount(group.items, productLookup);
                           const supplierReadyToDeliverAmount = calculateProcurementReadyToDeliverAmount(group.items, productLookup);
+                          const supplierLocationCandidates = supplierLocations.filter((location) => normalizeSupplierName(location.supplier) === normalizeSupplierName(group.supplier));
+                          const supplierPurchasedCount = group.items.filter((item) => item.purchased && !item.unavailable).length;
+                          const supplierUnavailableCount = group.items.filter((item) => item.unavailable).length;
                           const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
                           const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
                           const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
@@ -1678,6 +1694,12 @@ export default function ProcurementPage() {
                                   <div>
                                     <span>発注先</span>
                                     <strong>{group.supplier}</strong>
+                                    {supplierLocationCandidates.length > 0 ? (
+                                      <small className="supplier-group-location-line">
+                                        分店候補 {supplierLocationCandidates.slice(0, 2).map((location) => location.locationName).join(" / ")}
+                                        {supplierLocationCandidates.length > 2 ? " ほか" : ""}
+                                      </small>
+                                    ) : null}
                                   </div>
                                   <button
                                     type="button"
@@ -1691,8 +1713,15 @@ export default function ProcurementPage() {
                                   </button>
                                 </div>
                                 <div className="supplier-group-amounts">
-                                  <span>概算 {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
-                                  <span>今回購入済み {formatProcurementAmountSummary(supplierReadyToDeliverAmount)}</span>
+                                  <span className="is-estimated">概算 {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
+                                  {supplierPurchasedCount > 0 ? (
+                                    <span className="is-purchased">購入実績 {formatProcurementAmountSummary(supplierPurchasedAmount)}</span>
+                                  ) : supplierUnavailableCount > 0 ? (
+                                    <span className="is-skipped">購入なし / 見送り</span>
+                                  ) : null}
+                                  {supplierReadyToDeliverAmount.amount > 0 || supplierReadyToDeliverAmount.isPending ? (
+                                    <span className="is-ready">配送待ち {formatProcurementAmountSummary(supplierReadyToDeliverAmount)}</span>
+                                  ) : null}
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
