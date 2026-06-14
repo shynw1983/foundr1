@@ -21689,6 +21689,10 @@ body :where(
   gap: 12px;
 }
 
+.procurement-shell .procurement-panel + .procurement-confirmation-panel {
+  margin-top: 18px;
+}
+
 .procurement-list-more {
   display: flex;
   align-items: center;
@@ -25816,10 +25820,15 @@ body :where(
 
   .procurement-panel {
     --mobile-list-panel-inset: 14px;
+    margin-bottom: 18px;
     padding: 0 var(--mobile-list-panel-inset);
     border: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  .procurement-shell .procurement-panel + .procurement-confirmation-panel {
+    margin-top: 0;
   }
 
   .procurement-panel > .panel-title {

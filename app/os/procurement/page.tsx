@@ -1490,7 +1490,7 @@ export default function ProcurementPage() {
         : "読み込み中";
 
   return (
-    <main className="shell">
+    <main className="shell procurement-shell">
       <aside className="sidebar" aria-label="管理画面ナビゲーション">
         <a className="brand-block" href="/os" aria-label="OS ホームへ戻る">
           <div className="brand-mark">F1</div>
@@ -1937,8 +1937,8 @@ export default function ProcurementPage() {
           </div>
         </section>
 
-        <section className="panel" id="連絡・報告">
-          <PanelTitle title="現場連絡" subtitle="欠品や代替品の連絡を確認" />
+        <section className="panel procurement-confirmation-panel" id="店舗確認依頼">
+          <PanelTitle title="店舗確認依頼" subtitle="購入側で記録した欠品、残数、代替品を店舗側へ確認依頼" />
           <div className="stack">
             {procurementIssueItems.length > 0 ? (
               procurementIssueItems.map(({ order, item }) => (
@@ -1953,12 +1953,12 @@ export default function ProcurementPage() {
                     {[item.priceExceptionNote, item.note].filter(Boolean).join(" / ")}
                   </p>
                   <button type="button" className="text-button" onClick={() => setActiveExceptionItemId(item.id)}>
-                    確認
+                    内容を修正
                   </button>
                 </div>
               ))
             ) : (
-              <div className="empty-state">現場連絡はありません</div>
+              <div className="empty-state">店舗確認が必要な購入メモはありません</div>
             )}
           </div>
         </section>
