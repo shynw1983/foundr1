@@ -123,6 +123,7 @@ type ProductLookup = {
 type ProcurementAmountSummary = {
   amount: number;
   isPending: boolean;
+  missingPriceCount?: number;
 };
 type DashboardSyncState = "loading" | "synced" | "refreshing" | "error";
 type AdditionalPurchaseDraft = {
@@ -2744,13 +2745,20 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
       return { ...summary, isPending: true };
     }
 
-    const referencePrice = Number(product?.referencePrice ?? 0);
-    const price = actualPrice > 0 ? actualPrice : referencePrice;
+    if (actualPrice <= 0) {
+      return {
+        amount: summary.amount,
+        isPending: summary.isPending,
+        missingPriceCount: (summary.missingPriceCount ?? 0) + 1
+      };
+    }
+
     const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : 0;
 
     return {
-      amount: summary.amount + Math.max(0, quantity) * (Number.isFinite(price) ? price : 0),
-      isPending: summary.isPending
+      amount: summary.amount + Math.max(0, quantity) * actualPrice,
+      isPending: summary.isPending,
+      missingPriceCount: summary.missingPriceCount
     };
   }, { amount: 0, isPending: false });
 }
@@ -2784,6 +2792,10 @@ function formatEstimatedAmount(amount: number) {
 }
 
 function formatProcurementAmountSummary(summary: ProcurementAmountSummary) {
+  if ((summary.missingPriceCount ?? 0) > 0) {
+    if (summary.amount <= 0) return "価格未入力";
+    return `${formatEstimatedAmount(summary.amount)} + 未入力 ${summary.missingPriceCount} 件`;
+  }
   return summary.isPending ? "計算中" : formatEstimatedAmount(summary.amount);
 }
 
