@@ -324,27 +324,31 @@ function MemberAppPopup({
           </div>
         </div>
         <div className="member-app-popup-list">
-          {items.map((item) => (
-            <article key={item.id} className="member-app-popup-item">
-              <span className="member-app-popup-item-icon">
-                {item.kind === "coupon" ? <Gift size={18} /> : <Sparkles size={18} />}
-              </span>
-              <div>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-                {item.detail ? <small>{item.detail}</small> : null}
-                {item.couponId ? (
-                  <button type="button" onClick={() => onCouponSelect(item.couponId)}>
-                    {item.ctaLabel}
-                  </button>
-                ) : item.ctaUrl && item.ctaLabel ? (
-                  <a href={item.ctaUrl} target="_blank" rel="noreferrer">
-                    {item.ctaLabel}
-                  </a>
-                ) : null}
-              </div>
-            </article>
-          ))}
+          {items.map((item) => {
+            const couponId = item.couponId;
+
+            return (
+              <article key={item.id} className="member-app-popup-item">
+                <span className="member-app-popup-item-icon">
+                  {item.kind === "coupon" ? <Gift size={18} /> : <Sparkles size={18} />}
+                </span>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.body}</p>
+                  {item.detail ? <small>{item.detail}</small> : null}
+                  {couponId ? (
+                    <button type="button" onClick={() => onCouponSelect(couponId)}>
+                      {item.ctaLabel}
+                    </button>
+                  ) : item.ctaUrl && item.ctaLabel ? (
+                    <a href={item.ctaUrl} target="_blank" rel="noreferrer">
+                      {item.ctaLabel}
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     </div>
