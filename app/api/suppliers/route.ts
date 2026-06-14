@@ -15,12 +15,13 @@ export async function POST(request: Request) {
   const contactPerson = String(formData.get("contactPerson") ?? "").trim();
   const businessHours = String(formData.get("businessHours") ?? "").trim();
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
+  const locationNames = parseSupplierLocationNames(formData);
 
   if (!name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
   }
 
-  await sql`
+  const rows = await sql`
     insert into suppliers (
       name,
       category,
@@ -56,7 +57,11 @@ export async function POST(request: Request) {
       business_hours = excluded.business_hours,
       order_url = excluded.order_url,
       updated_at = now()
+    returning id
   `;
+  if (rows[0]?.id) {
+    await saveSupplierLocations(rows[0].id, locationNames);
+  }
 
   return Response.json({ ok: true });
 }
@@ -76,6 +81,7 @@ export async function PUT(request: Request) {
   const contactPerson = String(formData.get("contactPerson") ?? "").trim();
   const businessHours = String(formData.get("businessHours") ?? "").trim();
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
+  const locationNames = parseSupplierLocationNames(formData);
 
   if (!currentName || !name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -115,8 +121,37 @@ export async function PUT(request: Request) {
   if (!rows[0]?.id) {
     return Response.json({ error: "発注先が見つかりません。" }, { status: 404 });
   }
+  await saveSupplierLocations(rows[0].id, locationNames);
 
   return Response.json({ ok: true });
+}
+
+function parseSupplierLocationNames(formData: FormData) {
+  return Array.from(new Set(
+    String(formData.get("locationNames") ?? "")
+      .split(/[\n,、]/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ));
+}
+
+async function saveSupplierLocations(supplierId: string, locationNames: string[]) {
+  for (const locationName of locationNames) {
+    await sql`
+      insert into supplier_locations (
+        supplier_id,
+        name,
+        location_type
+      )
+      values (
+        ${supplierId},
+        ${locationName},
+        '実店舗'
+      )
+      on conflict (supplier_id, name)
+      do update set name = excluded.name
+    `;
+  }
 }
 
 export async function DELETE(request: Request) {

@@ -22385,6 +22385,27 @@ body :where(
   min-width: 0;
 }
 
+.supplier-group-location-picker {
+  display: grid;
+  min-width: 150px;
+  gap: 4px;
+}
+
+.supplier-group-location-picker span {
+  font-size: 11px;
+}
+
+.supplier-group-location-picker input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: white;
+  color: var(--text);
+  outline: 0;
+}
+
 .supplier-group-heading span {
   color: var(--muted);
   font-size: 12px;
@@ -22428,7 +22449,7 @@ body :where(
 
 .procurement-task {
   display: grid;
-  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px minmax(110px, 0.8fr) 86px auto;
+  grid-template-columns: 92px 42px minmax(180px, 1.4fr) 72px 86px auto;
   align-items: start;
   gap: 8px;
   min-height: 52px;
@@ -22450,7 +22471,6 @@ body :where(
 }
 
 .procurement-task .task-actual,
-.procurement-task .task-location,
 .procurement-task > .quantity-diff,
 .procurement-task > .exception-button {
   align-self: end;
@@ -24833,7 +24853,7 @@ body :where(
   }
 
   .procurement-task {
-    grid-template-columns: 92px 42px minmax(160px, 1fr) 72px minmax(108px, 0.8fr) 86px auto;
+    grid-template-columns: 92px 42px minmax(160px, 1fr) 72px 86px auto;
   }
 
   .panel.wide,
@@ -25931,8 +25951,12 @@ body :where(
 
   .supplier-group-heading .supplier-group-meta {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: end;
+    width: 100%;
+  }
+
+  .supplier-group-location-picker {
     width: 100%;
   }
 
@@ -26194,7 +26218,6 @@ body :where(
     grid-template-columns: 22px 52px minmax(0, 1fr) minmax(86px, 1.05fr);
     grid-template-areas:
       "check photo product product"
-      "location location location location"
       "actual actual diff exception";
     align-items: end;
     gap: 8px;
@@ -26228,11 +26251,6 @@ body :where(
 
   .procurement-task .task-actual {
     grid-area: actual;
-    width: 100%;
-  }
-
-  .procurement-task .task-location {
-    grid-area: location;
     width: 100%;
   }
 

@@ -47,17 +47,17 @@ export default function SuppliersPage() {
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
+  async function loadData() {
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as { suppliers?: Supplier[]; supplierLocations?: SupplierLocation[] };
+
+    if (data.suppliers) setSuppliers(data.suppliers);
+    if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
+    setDataSource("neon");
+  }
+
   useEffect(() => {
-    async function loadData() {
-      const response = await fetch("/api/dashboard", { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json() as { suppliers?: Supplier[]; supplierLocations?: SupplierLocation[] };
-
-      if (data.suppliers) setSuppliers(data.suppliers);
-      if (data.supplierLocations) setSupplierLocations(data.supplierLocations);
-      setDataSource("neon");
-    }
-
     void loadData();
   }, []);
 
@@ -103,10 +103,7 @@ export default function SuppliersPage() {
       return;
     }
 
-    setSuppliers((items) => [
-      ...items.filter((item) => item.name !== supplier.name),
-      supplier
-    ].sort((a, b) => a.name.localeCompare(b.name, "ja")));
+    await loadData();
     form.reset();
     showNotice("発注先を追加しました。");
   }
@@ -117,7 +114,6 @@ export default function SuppliersPage() {
 
     const formData = new FormData(event.currentTarget);
     formData.set("currentName", editingSupplier.name);
-    const supplier = readSupplierForm(formData);
 
     const response = await fetch("/api/suppliers", {
       method: "PUT",
@@ -130,11 +126,7 @@ export default function SuppliersPage() {
       return;
     }
 
-    setSuppliers((items) =>
-      items
-        .map((item) => (item.name === editingSupplier.name ? supplier : item))
-        .sort((a, b) => a.name.localeCompare(b.name, "ja"))
-    );
+    await loadData();
     setEditingSupplier(null);
     showNotice("発注先を更新しました。");
   }
@@ -249,6 +241,10 @@ export default function SuppliersPage() {
               <span>メモ</span>
               <input name="reliability" placeholder="例: 即日対応 / 欠品あり / 配送 1-2 日" />
             </label>
+            <label className="full-span">
+              <span>店舗・支店</span>
+              <textarea name="locationNames" placeholder="例: 春吉店&#10;博多駅南店&#10;東口店" />
+            </label>
             <button className="primary-button" type="submit">
               <Plus size={18} />
               追加
@@ -281,7 +277,7 @@ export default function SuppliersPage() {
                     ) : null}
                   </div>
                   {supplierLocationsByName[supplier.name]?.length ? (
-                    <div className="supplier-location-tags" aria-label={`${supplier.name} の分店・OCR表示名`}>
+                    <div className="supplier-location-tags" aria-label={`${supplier.name} の店舗・支店・OCR表示名`}>
                       {supplierLocationsByName[supplier.name].map((location) => (
                         <span key={`${supplier.name}-${location.locationName}`}>{location.locationName}</span>
                       ))}
@@ -356,6 +352,14 @@ export default function SuppliersPage() {
               <label>
                 <span>メモ</span>
                 <input name="reliability" defaultValue={editingSupplier.reliability} />
+              </label>
+              <label className="full-span">
+                <span>店舗・支店</span>
+                <textarea
+                  name="locationNames"
+                  defaultValue={(supplierLocationsByName[editingSupplier.name] ?? []).map((location) => location.locationName).join("\n")}
+                  placeholder="例: 春吉店&#10;博多駅南店"
+                />
               </label>
             </div>
             <div className="modal-actions">

@@ -271,18 +271,34 @@ export async function PATCH(request: Request) {
   const supplierName = String(body.supplier ?? "").trim();
   const supplierLocationName = String(body.supplierLocationName ?? "").trim();
   const hasSupplierInput = supplierName.length > 0;
+  const isRecordingPurchase = body.purchased === true && body.unavailable !== true;
   const supplierRows = supplierName
-    ? await sql`
-        select id
-        from suppliers
-        where name = ${supplierName}
-        limit 1
-      `
+    ? isRecordingPurchase
+      ? await sql`
+          insert into suppliers (
+            name,
+            channel_type,
+            updated_at
+          )
+          values (
+            ${supplierName},
+            '実店舗',
+            now()
+          )
+          on conflict (name)
+          do update set updated_at = now()
+          returning id
+        `
+      : await sql`
+          select id
+          from suppliers
+          where name = ${supplierName}
+          limit 1
+        `
     : [];
   const supplierId = supplierRows[0]?.id ?? null;
-  const isRecordingPurchase = body.purchased === true && body.unavailable !== true;
   if (isRecordingPurchase && !supplierLocationName) {
-    return Response.json({ error: "実際に購入した分店を選択してください。" }, { status: 400 });
+    return Response.json({ error: "実際に購入した店舗を選択してください。" }, { status: 400 });
   }
   const supplierLocationRows = supplierLocationName && supplierId
     ? await sql`
@@ -303,7 +319,7 @@ export async function PATCH(request: Request) {
     : [];
   const supplierLocationId = supplierLocationRows[0]?.id ?? null;
   if (isRecordingPurchase && !supplierLocationId) {
-    return Response.json({ error: "発注先に分店を登録してから購入済みにしてください。" }, { status: 400 });
+    return Response.json({ error: "発注先に店舗・支店を登録してから購入済みにしてください。" }, { status: 400 });
   }
   const remainingSupplierName = String(body.remainingSupplier ?? "").trim();
   const hasRemainingSupplierInput = remainingSupplierName.length > 0;

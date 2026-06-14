@@ -632,6 +632,16 @@ function isDeliveryLockedItem(item: Pick<ProcurementTaskItem, "deliveryStatus">)
   return ["in_delivery", "delivered", "received"].includes(item.deliveryStatus);
 }
 
+function getSupplierGroupLocation(items: ProcurementTaskItem[], locationOptions: string[]) {
+  const editableLocation = items.find((item) => !item.purchased && !item.unavailable && !isDeliveryLockedItem(item) && item.supplierLocationName.trim())?.supplierLocationName.trim();
+  if (editableLocation) return editableLocation;
+
+  const latestPurchasedLocation = items.find((item) => item.purchased && item.supplierLocationName.trim())?.supplierLocationName.trim();
+  if (latestPurchasedLocation) return latestPurchasedLocation;
+
+  return locationOptions.length === 1 ? locationOptions[0] : "";
+}
+
 async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   const response = await fetch("/api/procurement/items", {
     method: "PATCH",
@@ -799,6 +809,7 @@ export default function ProcurementPage() {
   const [visibleOrderLimit, setVisibleOrderLimit] = useState(procurementOrderRenderBatchSize);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
   const [supplierCollapseOverrides, setSupplierCollapseOverrides] = useState<Record<string, boolean>>({});
+  const [supplierLocationDrafts, setSupplierLocationDrafts] = useState<Record<string, string>>({});
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
   const productLookup = useMemo<ProductLookup>(() => ({
@@ -1012,6 +1023,20 @@ export default function ProcurementPage() {
     setSupplierCollapseOverrides((current) => {
       const next = { ...current, [supplierKey]: !currentCollapsed };
       return next;
+    });
+  }
+
+  function updateSupplierGroupLocation(supplierKey: string, itemIds: string[], locationName: string) {
+    setSupplierLocationDrafts((current) => ({ ...current, [supplierKey]: locationName }));
+    setProcurementTaskItems((items) => {
+      const targetIds = new Set(itemIds);
+      const nextItems = items.map((item) => (
+        targetIds.has(item.id) && !item.purchased && !item.unavailable && !isDeliveryLockedItem(item)
+          ? { ...item, supplierLocationName: locationName }
+          : item
+      ));
+      procurementTaskItemsRef.current = nextItems;
+      return nextItems;
     });
   }
 
@@ -1687,11 +1712,14 @@ export default function ProcurementPage() {
                           const supplierPurchasedAmount = calculateProcurementOrderCurrentAmount(group.items, productLookup);
                           const supplierReadyToDeliverAmount = calculateProcurementReadyToDeliverAmount(group.items, productLookup);
                           const supplierLocationCandidates = supplierLocations.filter((location) => normalizeSupplierName(location.supplier) === normalizeSupplierName(group.supplier));
+                          const supplierLocationOptions = supplierLocationCandidates.map((location) => location.locationName);
                           const supplierPurchasedCount = group.items.filter((item) => item.purchased && !item.unavailable).length;
                           const supplierUnavailableCount = group.items.filter((item) => item.unavailable).length;
                           const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
                           const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
                           const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
+                          const supplierLocationDatalistId = `supplier-group-locations-${supplierPanelId}`;
+                          const selectedSupplierLocation = supplierLocationDrafts[supplierKey] ?? getSupplierGroupLocation(group.items, supplierLocationOptions);
 
                           return (
                             <section className={isSupplierCollapsed ? "procurement-supplier-group is-collapsed" : "procurement-supplier-group"} key={`${order.id}-${group.supplier}`}>
@@ -1702,7 +1730,7 @@ export default function ProcurementPage() {
                                     <strong>{group.supplier}</strong>
                                     {supplierLocationCandidates.length > 0 ? (
                                       <small className="supplier-group-location-line">
-                                        分店候補 {supplierLocationCandidates.slice(0, 2).map((location) => location.locationName).join(" / ")}
+                                        店舗候補 {supplierLocationCandidates.slice(0, 2).map((location) => location.locationName).join(" / ")}
                                         {supplierLocationCandidates.length > 2 ? " ほか" : ""}
                                       </small>
                                     ) : null}
@@ -1731,6 +1759,20 @@ export default function ProcurementPage() {
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
+                                  <label className="supplier-group-location-picker">
+                                    <span>今回の購入店舗</span>
+                                    <input
+                                      list={supplierLocationDatalistId}
+                                      value={selectedSupplierLocation}
+                                      placeholder={supplierLocationOptions.length > 0 ? "店舗を選択" : "未登録店舗を入力"}
+                                      onChange={(event) => updateSupplierGroupLocation(supplierKey, group.items.map((item) => item.id), event.target.value)}
+                                    />
+                                    <datalist id={supplierLocationDatalistId}>
+                                      {supplierLocationOptions.map((locationName) => (
+                                        <option value={locationName} key={`${supplierKey}-${locationName}`} />
+                                      ))}
+                                    </datalist>
+                                  </label>
                                   <div className="receipt-upload-control">
                                     {supplierReceipt ? (
                                       <a href={supplierReceipt} target="_blank" rel="noreferrer">
@@ -1771,9 +1813,6 @@ export default function ProcurementPage() {
                                   const isDeliveryLocked = isDeliveryLockedItem(item);
                                   const remainingQuantity = Math.max(0, item.requestedQuantity - item.actualQuantity);
                                   const needsRemainingFollow = !item.unavailable && !isDeliveryLocked && item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity;
-                                  const locationOptions = supplierLocationCandidates.map((location) => location.locationName);
-                                  const locationDatalistId = `supplier-locations-${item.id}`;
-
                                   return (
                                     <div className={item.purchased || item.unavailable ? "procurement-task is-complete" : "procurement-task"} key={item.id}>
                                       <label className="task-check">
@@ -1782,13 +1821,15 @@ export default function ProcurementPage() {
                                           checked={item.purchased || item.unavailable}
                                           disabled={item.unavailable || isDeliveryLocked}
                                           onChange={(event) => {
-                                            if (event.target.checked && !item.supplierLocationName.trim()) {
-                                              window.alert("実際に購入した分店を入力してください。");
+                                            const purchaseLocationName = item.supplierLocationName.trim() || selectedSupplierLocation.trim();
+                                            if (event.target.checked && !purchaseLocationName) {
+                                              window.alert("実際に購入した店舗を入力してください。");
                                               return;
                                             }
                                             updateProcurementTaskItem(item.id, {
                                               purchased: event.target.checked,
                                               unavailable: false,
+                                              supplierLocationName: event.target.checked ? purchaseLocationName : item.supplierLocationName,
                                               deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
                                               deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
                                             });
@@ -1839,21 +1880,6 @@ export default function ProcurementPage() {
                                             <option value={quantity} key={quantity}>{quantity}</option>
                                           ))}
                                         </select>
-                                      </label>
-                                      <label className="task-location">
-                                        <span>購入分店</span>
-                                        <input
-                                          list={locationDatalistId}
-                                          value={item.supplierLocationName}
-                                          placeholder={locationOptions.length > 0 ? "分店を選択" : "分店名を入力"}
-                                          disabled={isDeliveryLocked}
-                                          onChange={(event) => updateProcurementTaskItem(item.id, { supplierLocationName: event.target.value })}
-                                        />
-                                        <datalist id={locationDatalistId}>
-                                          {locationOptions.map((locationName) => (
-                                            <option value={locationName} key={`${item.id}-${locationName}`} />
-                                          ))}
-                                        </datalist>
                                       </label>
                                       <div className={quantityDiff === 0 ? "quantity-diff" : "quantity-diff has-diff"}>
                                         {quantityDiff === 0 ? "差異なし" : `${quantityDiff > 0 ? "+" : ""}${quantityDiff} ${item.unit}`}
