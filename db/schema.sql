@@ -1372,6 +1372,18 @@ alter table suppliers add column if not exists contact_person text;
 alter table suppliers add column if not exists business_hours text;
 alter table suppliers add column if not exists order_url text;
 
+create table if not exists procurement_staff_unavailable_slots (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  unavailable_date date not null,
+  slot text not null check (slot in ('morning', 'afternoon', 'evening')),
+  note text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (employee_id, unavailable_date, slot)
+);
+
 create table if not exists purchase_order_supplier_fulfillments (
   id uuid primary key default gen_random_uuid(),
   purchase_order_id uuid not null references purchase_orders(id) on delete cascade,
@@ -3184,6 +3196,7 @@ cross join steps;
 
 create index if not exists idx_purchase_orders_store_status on purchase_orders(store_id, status);
 create index if not exists idx_purchase_orders_deadline on purchase_orders(deadline_at);
+create index if not exists idx_procurement_staff_unavailable_slots_staff_date on procurement_staff_unavailable_slots(employee_id, unavailable_date);
 create index if not exists idx_purchase_order_supplier_fulfillments_order on purchase_order_supplier_fulfillments(purchase_order_id);
 create index if not exists idx_delivery_batches_order_status on delivery_batches(purchase_order_id, status);
 create index if not exists idx_purchase_exceptions_status on purchase_exceptions(status);

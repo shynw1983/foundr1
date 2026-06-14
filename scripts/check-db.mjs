@@ -23,6 +23,7 @@ const tables = [
   "purchase_order_items",
   "purchase_actuals",
   "purchase_exceptions",
+  "procurement_staff_unavailable_slots",
   "price_records",
   "os_audit_logs",
   "os_notifications",

@@ -105,6 +105,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     purchaseOrderItems,
     deliveryBatches,
     supplierFulfillments,
+    procurementStaffAvailability,
     priceSignals
   ] =
     await Promise.all([
@@ -563,6 +564,27 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         order by purchase_orders.created_at desc, supplier
       `,
       sql`
+        select
+          procurement_staff_unavailable_slots.employee_id::text as "employeeId",
+          to_char(procurement_staff_unavailable_slots.unavailable_date, 'YYYY-MM-DD') as date,
+          procurement_staff_unavailable_slots.slot,
+          coalesce(procurement_staff_unavailable_slots.note, '') as note
+        from procurement_staff_unavailable_slots
+        join employees on employees.id = procurement_staff_unavailable_slots.employee_id
+        left join employee_scopes
+          on employee_scopes.employee_id = employees.id
+          and employee_scopes.scope_type = 'store'
+        where procurement_staff_unavailable_slots.unavailable_date >= (current_date - interval '14 days')
+          and procurement_staff_unavailable_slots.unavailable_date < (current_date + interval '90 days')
+          and (
+            ${scope.allStores}
+            or employees.id::text = ${session?.id ?? ""}
+            or employee_scopes.store_id::text = any(${scope.storeIds})
+          )
+        group by procurement_staff_unavailable_slots.employee_id, procurement_staff_unavailable_slots.unavailable_date, procurement_staff_unavailable_slots.slot, procurement_staff_unavailable_slots.note
+        order by procurement_staff_unavailable_slots.unavailable_date, procurement_staff_unavailable_slots.slot
+      `,
+      sql`
         with ranked_prices as (
           select
             price_records.product_id,
@@ -650,6 +672,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
     purchaseOrderItems,
     deliveryBatches,
     supplierFulfillments,
+    procurementStaffAvailability,
     priceSignals,
     currentUserId: session?.id ?? ""
   };

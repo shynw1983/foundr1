@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, CalendarDays, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -39,6 +39,13 @@ type StaffOption = {
   name: string;
   role: string;
   storeNames: string[];
+};
+type ProcurementTimeSlot = "morning" | "afternoon" | "evening";
+type ProcurementStaffUnavailableSlot = {
+  employeeId: string;
+  date: string;
+  slot: ProcurementTimeSlot;
+  note?: string;
 };
 type OrderItemDraft = {
   id: number;
@@ -185,6 +192,11 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 
 const queueFilters: QueueFilter[] = ["未完了", "今日対応", "配送待ち", "完了", "すべて"];
 const quantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
+const procurementTimeSlots: Array<{ slot: ProcurementTimeSlot; label: string; time: string; description: string }> = [
+  { slot: "morning", label: "午前", time: "10:00", description: "午前中" },
+  { slot: "afternoon", label: "午後", time: "14:00", description: "昼から夕方前" },
+  { slot: "evening", label: "夜", time: "18:00", description: "夕方以降" }
+];
 
 function getProductPhotoSrc(photoUrl?: string) {
   if (!photoUrl) return "";
@@ -229,6 +241,37 @@ function getDefaultDeadlineValue() {
   return `${year}-${month}-${day}T${hour}:00`;
 }
 
+function getTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function getDateKeyFromDateTime(value: string) {
+  return value.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? getTodayDateKey();
+}
+
+function setDateTimeSlot(value: string, slot: ProcurementTimeSlot) {
+  const dateKey = getDateKeyFromDateTime(value);
+  const slotConfig = procurementTimeSlots.find((item) => item.slot === slot) ?? procurementTimeSlots[0];
+
+  return `${dateKey}T${slotConfig.time}`;
+}
+
+function getSlotFromDateTime(value: string): ProcurementTimeSlot {
+  const hour = Number(value.match(/T(\d{2}):/)?.[1] ?? 0);
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+
+  return "evening";
+}
+
+function formatDateKeyLabel(dateKey: string) {
+  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return dateKey;
+
+  return `${match[2]}/${match[3]}`;
+}
+
 function labelToDeadlineValue(label: string) {
   const now = new Date();
   const year = now.getFullYear();
@@ -255,6 +298,44 @@ function labelToDeadlineValue(label: string) {
 
 function isTodayOrder(order: PurchaseOrder) {
   return order.deadline.includes("本日");
+}
+
+function getUnavailableSlotsForStaffDate(
+  availability: ProcurementStaffUnavailableSlot[],
+  employeeId: string,
+  date: string
+) {
+  return availability.filter((item) => item.employeeId === employeeId && item.date === date);
+}
+
+function getUnavailableSlotSet(
+  availability: ProcurementStaffUnavailableSlot[],
+  employeeId: string,
+  date: string
+) {
+  return new Set(getUnavailableSlotsForStaffDate(availability, employeeId, date).map((item) => item.slot));
+}
+
+function isUnavailableDeadline(
+  availability: ProcurementStaffUnavailableSlot[],
+  employeeId: string,
+  deadline: string
+) {
+  return getUnavailableSlotSet(availability, employeeId, getDateKeyFromDateTime(deadline)).has(getSlotFromDateTime(deadline));
+}
+
+function formatUnavailableNotice(
+  availability: ProcurementStaffUnavailableSlot[],
+  employeeId: string,
+  deadline: string
+) {
+  const date = getDateKeyFromDateTime(deadline);
+  const slot = getSlotFromDateTime(deadline);
+  const entry = availability.find((item) => item.employeeId === employeeId && item.date === date && item.slot === slot);
+  if (!entry) return "";
+
+  const label = procurementTimeSlots.find((item) => item.slot === slot)?.label ?? "";
+  return `${formatDateKeyLabel(date)} ${label} は購入担当の予定あり${entry.note ? `: ${entry.note}` : ""}`;
 }
 
 function getProductBrands(product: ProductWithCategory) {
@@ -465,6 +546,7 @@ export default function OrdersPage() {
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<PurchaseOrderItem[]>([]);
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
+  const [procurementStaffAvailability, setProcurementStaffAvailability] = useState<ProcurementStaffUnavailableSlot[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("未完了");
@@ -480,6 +562,11 @@ export default function OrdersPage() {
   const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
+  const [calendarStaffId, setCalendarStaffId] = useState("");
+  const [calendarDate, setCalendarDate] = useState(getTodayDateKey());
+  const [calendarSlots, setCalendarSlots] = useState<ProcurementTimeSlot[]>([]);
+  const [calendarNote, setCalendarNote] = useState("");
+  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
 
   async function loadDashboardData() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
@@ -492,6 +579,7 @@ export default function OrdersPage() {
       purchaseOrderItems?: PurchaseOrderItem[];
       deliveryBatches?: DeliveryBatch[];
       staffOptions?: StaffOption[];
+      procurementStaffAvailability?: ProcurementStaffUnavailableSlot[];
       currentUserId?: string;
     };
 
@@ -506,6 +594,7 @@ export default function OrdersPage() {
     if (data.staffOptions) {
       setStaffOptions(data.staffOptions);
     }
+    if (data.procurementStaffAvailability) setProcurementStaffAvailability(data.procurementStaffAvailability);
     if (data.currentUserId) setCurrentUserId(data.currentUserId);
     setDataSource("neon");
   }
@@ -593,6 +682,11 @@ export default function OrdersPage() {
   const selectedDraftStoreDefaultBuyerId = orderableStores.find((store) => store.name === selectedDraftStore)?.defaultProcurementStaffId ?? "";
   const selectedDraftRequesterStaffId = getSelectedRequesterStaffId(draftRequesterStaffId, draftAssignableStaff, selectedDraftStore, currentUserId);
   const selectedDraftBuyerStaffId = getSelectedBuyerStaffId(draftBuyerStaffId, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId);
+  const draftDeadlineDate = getDateKeyFromDateTime(draftDeadline);
+  const draftUnavailableSlots = getUnavailableSlotSet(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadlineDate);
+  const draftUnavailableNotice = formatUnavailableNotice(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadline);
+  const selectedCalendarStaffId = getSelectedStaffId(calendarStaffId || selectedDraftBuyerStaffId, staffOptions);
+  const calendarDayEntries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
   const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
@@ -616,6 +710,14 @@ export default function OrdersPage() {
   const editingProductCategories = Array.from(new Set(editingProducts.map((product) => product.category)));
   const editingProductSubcategories = Array.from(new Set(editingProducts.map((product) => product.subcategory ?? "未分類")));
   const editingAssignableStaff = editingOrder ? getAssignableStaffOptions(staffOptions, editingOrder.store, currentUserId) : [];
+  const selectedEditingBuyerStaffId = editingOrder ? getSelectedStaffId(editingOrder.buyerStaffId, editingAssignableStaff) : "";
+  const editingDeadlineDate = editingOrder ? getDateKeyFromDateTime(editingOrder.deadline) : getTodayDateKey();
+  const editingUnavailableSlots = editingOrder
+    ? getUnavailableSlotSet(procurementStaffAvailability, selectedEditingBuyerStaffId, editingDeadlineDate)
+    : new Set<ProcurementTimeSlot>();
+  const editingUnavailableNotice = editingOrder
+    ? formatUnavailableNotice(procurementStaffAvailability, selectedEditingBuyerStaffId, editingOrder.deadline)
+    : "";
   const draftEstimatedAmount = calculateDraftEstimatedAmount(orderItemDrafts, products);
   const editingEstimatedAmount = editingOrder
     ? calculateDraftEstimatedAmount(editingOrder.items, products)
@@ -637,6 +739,17 @@ export default function OrdersPage() {
     setDraftRequesterStaffId((current) => getSelectedRequesterStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
     setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId));
   }, [selectedDraftStore, currentUserId, staffOptions, selectedDraftStoreDefaultBuyerId]);
+
+  useEffect(() => {
+    setCalendarStaffId((current) => current || selectedDraftBuyerStaffId);
+  }, [selectedDraftBuyerStaffId]);
+
+  useEffect(() => {
+    if (!selectedCalendarStaffId || !calendarDate) return;
+    const entries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
+    setCalendarSlots(entries.map((entry) => entry.slot));
+    setCalendarNote(entries.find((entry) => entry.note)?.note ?? "");
+  }, [selectedCalendarStaffId, calendarDate, procurementStaffAvailability]);
 
   useEffect(() => {
     if (!hasRestoredNewOrderDraft.current || typeof window === "undefined") return;
@@ -716,6 +829,43 @@ export default function OrdersPage() {
 
     storeConfirmationSaveChainsRef.current[action.id] = nextSave;
     return nextSave;
+  }
+
+  function toggleCalendarSlot(slot: ProcurementTimeSlot) {
+    setCalendarSlots((current) =>
+      current.includes(slot)
+        ? current.filter((item) => item !== slot)
+        : [...current, slot]
+    );
+  }
+
+  async function saveProcurementCalendar() {
+    if (!selectedCalendarStaffId || isSavingCalendar) return;
+
+    setIsSavingCalendar(true);
+    try {
+      const response = await fetch("/api/procurement/availability", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: selectedCalendarStaffId,
+          date: calendarDate,
+          slots: calendarSlots,
+          note: calendarNote
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        window.alert(body.error ?? "購入担当の予定を保存できませんでした。");
+        return;
+      }
+
+      showNotice("購入担当の予定を保存しました。");
+      await loadDashboardData();
+    } finally {
+      setIsSavingCalendar(false);
+    }
   }
 
   function addOrderItemDraft() {
@@ -820,6 +970,11 @@ export default function OrdersPage() {
   async function submitNewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingOrder) return;
+
+    if (isUnavailableDeadline(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadline)) {
+      window.alert(`${draftUnavailableNotice}。別の時間帯を選択してください。`);
+      return;
+    }
 
     setIsSubmittingOrder(true);
     const form = event.currentTarget;
@@ -1032,6 +1187,11 @@ export default function OrdersPage() {
   async function saveEditingOrder() {
     if (!editingOrder) return;
 
+    if (isUnavailableDeadline(procurementStaffAvailability, selectedEditingBuyerStaffId, editingOrder.deadline)) {
+      window.alert(`${editingUnavailableNotice}。別の時間帯を選択してください。`);
+      return;
+    }
+
     const formData = new FormData();
     formData.set("orderId", editingOrder.order.id);
     formData.set("store", editingOrder.store);
@@ -1122,6 +1282,29 @@ export default function OrdersPage() {
               <span>締切</span>
               <input name="deadline" type="datetime-local" value={draftDeadline} onChange={(event) => setDraftDeadline(event.target.value)} />
             </label>
+            <div className="deadline-slot-picker">
+              <span>{formatDateKeyLabel(draftDeadlineDate)} の時間帯</span>
+              <div>
+                {procurementTimeSlots.map((slot) => {
+                  const isUnavailable = draftUnavailableSlots.has(slot.slot);
+                  const isSelected = getSlotFromDateTime(draftDeadline) === slot.slot;
+
+                  return (
+                    <button
+                      type="button"
+                      className={isSelected ? "slot-button is-active" : "slot-button"}
+                      disabled={isUnavailable}
+                      onClick={() => setDraftDeadline(setDateTimeSlot(draftDeadline, slot.slot))}
+                      key={slot.slot}
+                    >
+                      <strong>{slot.label}</strong>
+                      <small>{isUnavailable ? "予定あり" : slot.time}</small>
+                    </button>
+                  );
+                })}
+              </div>
+              {draftUnavailableNotice ? <p>{draftUnavailableNotice}</p> : null}
+            </div>
             <label>
               <span>優先度</span>
               <select name="priority" value={draftPriority} onChange={(event) => setDraftPriority(event.target.value)}>
@@ -1146,6 +1329,53 @@ export default function OrdersPage() {
                 ))}
               </select>
             </label>
+            <section className="procurement-calendar-panel" aria-label="購入担当カレンダー">
+              <div className="procurement-calendar-heading">
+                <CalendarDays size={18} />
+                <div>
+                  <strong>購入担当カレンダー</strong>
+                  <span>事前に予定がある日を登録し、発注依頼の締切選択から避けます。</span>
+                </div>
+              </div>
+              <label>
+                <span>購入担当</span>
+                <select value={selectedCalendarStaffId} onChange={(event) => setCalendarStaffId(event.target.value)}>
+                  {staffOptions.map((staff) => (
+                    <option value={staff.id} key={staff.id}>{staff.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>日付</span>
+                <input type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} />
+              </label>
+              <div className="calendar-slot-toggle">
+                <span>予定あり</span>
+                <div>
+                  {procurementTimeSlots.map((slot) => (
+                    <button
+                      type="button"
+                      className={calendarSlots.includes(slot.slot) ? "slot-button is-active" : "slot-button"}
+                      onClick={() => toggleCalendarSlot(slot.slot)}
+                      key={slot.slot}
+                    >
+                      <strong>{slot.label}</strong>
+                      <small>{slot.description}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label>
+                <span>メモ</span>
+                <input value={calendarNote} onChange={(event) => setCalendarNote(event.target.value)} placeholder="例: 外出、商談、会議" />
+              </label>
+              <button type="button" className="secondary-button" disabled={!selectedCalendarStaffId || isSavingCalendar} onClick={() => void saveProcurementCalendar()}>
+                {isSavingCalendar ? "保存中" : "予定を保存"}
+              </button>
+              {calendarDayEntries.length > 0 ? (
+                <p>{calendarDayEntries.map((entry) => procurementTimeSlots.find((slot) => slot.slot === entry.slot)?.label).filter(Boolean).join("、")} は予定あり</p>
+              ) : null}
+            </section>
             <label>
               <span>メモ</span>
               <textarea name="note" value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="欠品時の代替、配送希望など" />
@@ -1496,6 +1726,29 @@ export default function OrdersPage() {
                   onChange={(event) => setEditingOrder((current) => current ? { ...current, deadline: event.target.value } : current)}
                 />
               </label>
+              <div className="deadline-slot-picker">
+                <span>{formatDateKeyLabel(editingDeadlineDate)} の時間帯</span>
+                <div>
+                  {procurementTimeSlots.map((slot) => {
+                    const isUnavailable = editingUnavailableSlots.has(slot.slot);
+                    const isSelected = getSlotFromDateTime(editingOrder.deadline) === slot.slot;
+
+                    return (
+                      <button
+                        type="button"
+                        className={isSelected ? "slot-button is-active" : "slot-button"}
+                        disabled={isUnavailable}
+                        onClick={() => setEditingOrder((current) => current ? { ...current, deadline: setDateTimeSlot(current.deadline, slot.slot) } : current)}
+                        key={slot.slot}
+                      >
+                        <strong>{slot.label}</strong>
+                        <small>{isUnavailable ? "予定あり" : slot.time}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+                {editingUnavailableNotice ? <p>{editingUnavailableNotice}</p> : null}
+              </div>
               <label>
                 <span>優先度</span>
                 <select

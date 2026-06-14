@@ -21238,6 +21238,163 @@ body :where(
   resize: vertical;
 }
 
+.deadline-slot-picker,
+.calendar-slot-toggle {
+  display: grid;
+  gap: 6px;
+}
+
+.deadline-slot-picker > span,
+.calendar-slot-toggle > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.deadline-slot-picker > div,
+.calendar-slot-toggle > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.slot-button {
+  display: grid;
+  min-height: 42px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: white;
+  color: var(--text);
+  text-align: center;
+}
+
+.slot-button strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.slot-button small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-button.is-active {
+  border-color: rgba(37, 125, 97, 0.48);
+  background: var(--green-soft);
+  color: var(--green-strong);
+}
+
+.slot-button:disabled {
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+.deadline-slot-picker p,
+.procurement-calendar-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.procurement-calendar-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(140px, 0.6fr) minmax(260px, 1fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.procurement-calendar-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.procurement-calendar-heading svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.procurement-calendar-heading div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.procurement-calendar-heading strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.procurement-calendar-heading span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.procurement-calendar-panel > label {
+  display: grid;
+  gap: 6px;
+}
+
+.procurement-calendar-panel > button {
+  min-height: 42px;
+}
+
+@media (max-width: 1180px) {
+  .procurement-calendar-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .procurement-calendar-heading,
+  .procurement-calendar-panel p {
+    grid-column: 1 / -1;
+  }
+
+  .procurement-calendar-panel > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .deadline-slot-picker > div,
+  .calendar-slot-toggle > div {
+    grid-template-columns: repeat(3, minmax(68px, 1fr));
+  }
+
+  .procurement-calendar-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .procurement-calendar-heading,
+  .procurement-calendar-panel p {
+    grid-column: auto;
+  }
+
+  .procurement-calendar-heading span {
+    white-space: normal;
+  }
+}
+
 .inline-create-actions {
   display: flex;
   align-items: end;

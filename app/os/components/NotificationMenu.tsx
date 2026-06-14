@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import type { MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useCloseOnOutside } from "./useCloseOnOutside";
 
@@ -102,6 +103,20 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
     setIsOpen(false);
   }
 
+  async function handleNotificationClick(event: MouseEvent<HTMLAnchorElement>, item: OsNotification) {
+    event.preventDefault();
+    const targetHref = item.href || "/os/procurement";
+    setUnreadCount((current) => Math.max(0, current - (item.readAt ? 0 : 1)));
+    setNotifications((current) => current.filter((notification) => notification.id !== item.id));
+    setIsOpen(false);
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id })
+    }).catch(() => undefined);
+    window.location.assign(targetHref);
+  }
+
   async function sendTestNotification() {
     setPushMessage("");
     const response = await fetch("/api/notifications/test-push", { method: "POST" });
@@ -182,7 +197,12 @@ export function NotificationMenu({ className = "" }: { className?: string }) {
         {pushState === "enabled" ? <div className="notification-push-status">プッシュ通知は有効です</div> : null}
         {pushMessage ? <div className="notification-push-status">{pushMessage}</div> : null}
         {notifications.length > 0 ? notifications.map((item) => (
-          <a className={item.readAt ? "notification-item" : "notification-item is-unread"} href={item.href || "/os/procurement"} key={item.id}>
+          <a
+            className={item.readAt ? "notification-item" : "notification-item is-unread"}
+            href={item.href || "/os/procurement"}
+            key={item.id}
+            onClick={(event) => void handleNotificationClick(event, item)}
+          >
             <strong>{item.title}</strong>
             <span>{item.message}</span>
           </a>
