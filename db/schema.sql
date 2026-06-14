@@ -1392,6 +1392,7 @@ create table if not exists purchase_order_supplier_fulfillments (
   expected_arrival_date date,
   online_order_status text not null default 'not_started',
   receipt_photo_url text,
+  supplier_location_id uuid references supplier_locations(id) on delete set null,
   receipt_confirmed_at timestamptz,
   receipt_confirmed_by uuid references employees(id),
   created_at timestamptz not null default now(),
@@ -1404,6 +1405,7 @@ alter table purchase_order_supplier_fulfillments add column if not exists suppli
 alter table purchase_order_supplier_fulfillments add column if not exists expected_arrival_date date;
 alter table purchase_order_supplier_fulfillments add column if not exists online_order_status text not null default 'not_started';
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_photo_url text;
+alter table purchase_order_supplier_fulfillments add column if not exists supplier_location_id uuid references supplier_locations(id) on delete set null;
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_at timestamptz;
 alter table purchase_order_supplier_fulfillments add column if not exists receipt_confirmed_by uuid references employees(id);
 

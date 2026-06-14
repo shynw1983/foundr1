@@ -90,6 +90,7 @@ type SupplierFulfillment = DeliveryState & {
   orderId: string;
   supplier: string;
   receiptPhotoUrl?: string;
+  supplierLocationName?: string;
 };
 type DeliveryBatch = {
   id: string;
@@ -632,12 +633,14 @@ function isDeliveryLockedItem(item: Pick<ProcurementTaskItem, "deliveryStatus">)
   return ["in_delivery", "delivered", "received"].includes(item.deliveryStatus);
 }
 
-function getSupplierGroupLocation(items: ProcurementTaskItem[], locationOptions: string[]) {
+function getSupplierGroupLocation(items: ProcurementTaskItem[], locationOptions: string[], fallbackLocation = "") {
   const editableLocation = items.find((item) => !item.purchased && !item.unavailable && !isDeliveryLockedItem(item) && item.supplierLocationName.trim())?.supplierLocationName.trim();
   if (editableLocation) return editableLocation;
 
   const latestPurchasedLocation = items.find((item) => item.purchased && item.supplierLocationName.trim())?.supplierLocationName.trim();
   if (latestPurchasedLocation) return latestPurchasedLocation;
+
+  if (fallbackLocation.trim()) return fallbackLocation.trim();
 
   return locationOptions.length === 1 ? locationOptions[0] : "";
 }
@@ -679,13 +682,13 @@ async function uploadProcurementReceipt(orderId: string, supplier: string, file:
     method: "POST",
     body: formData
   });
-  const body = await response.json().catch(() => ({})) as { receiptUrl?: string; error?: string };
+  const body = await response.json().catch(() => ({})) as { receiptUrl?: string; supplierLocationName?: string; error?: string };
 
   if (!response.ok || !body.receiptUrl) {
     throw new Error(body.error ?? "レシート写真を保存できませんでした。");
   }
 
-  return body.receiptUrl;
+  return { receiptUrl: body.receiptUrl, supplierLocationName: String(body.supplierLocationName ?? "").trim() };
 }
 
 function isPdfReceiptFile(file: File) {
@@ -1136,20 +1139,27 @@ export default function ProcurementPage() {
 
         return uploadProcurementReceipt(orderId, supplier, uploadFile);
       })
-      .then((receiptUrl) => {
+      .then(({ receiptUrl, supplierLocationName }) => {
         setSupplierFulfillments((fulfillments) => {
           const existingIndex = fulfillments.findIndex(
             (fulfillment) => fulfillment.orderId === orderId && fulfillment.supplier === supplier
           );
           const nextFulfillment: SupplierFulfillment = {
             ...(existingIndex >= 0 ? fulfillments[existingIndex] : { orderId, supplier, status: "not_started", expectedArrivalDate: "" }),
-            receiptPhotoUrl: receiptUrl
+            receiptPhotoUrl: receiptUrl,
+            supplierLocationName: supplierLocationName || (existingIndex >= 0 ? fulfillments[existingIndex].supplierLocationName : "")
           };
 
           if (existingIndex < 0) return [...fulfillments, nextFulfillment];
 
           return fulfillments.map((fulfillment, index) => index === existingIndex ? nextFulfillment : fulfillment);
         });
+        if (supplierLocationName) {
+          setSupplierLocationDrafts((drafts) => ({
+            ...drafts,
+            [`${orderId}:${supplier}`]: drafts[`${orderId}:${supplier}`] || supplierLocationName
+          }));
+        }
         showNotice("レシートを保存しました。");
       })
       .catch((error: Error) => {
@@ -1703,7 +1713,8 @@ export default function ProcurementPage() {
                       <div className="procurement-supplier-list">
                         {supplierGroups.map((group) => {
                           const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
-                          const supplierReceipt = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier))?.receiptPhotoUrl ?? "";
+                          const supplierFulfillment = supplierFulfillmentByKey.get(getSupplierDeliveryStateKey(order.id, group.supplier));
+                          const supplierReceipt = supplierFulfillment?.receiptPhotoUrl ?? "";
                           const canUploadReceipt = group.items.some((item) => item.purchased && !item.unavailable);
                           const needsReceiptUpload = canUploadReceipt && !supplierReceipt;
                           const supplierKey = `${order.id}:${group.supplier}`;
@@ -1719,7 +1730,7 @@ export default function ProcurementPage() {
                           const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
                           const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
                           const supplierLocationDatalistId = `supplier-group-locations-${supplierPanelId}`;
-                          const selectedSupplierLocation = supplierLocationDrafts[supplierKey] ?? getSupplierGroupLocation(group.items, supplierLocationOptions);
+                          const selectedSupplierLocation = supplierLocationDrafts[supplierKey] ?? getSupplierGroupLocation(group.items, supplierLocationOptions, supplierFulfillment?.supplierLocationName ?? "");
 
                           return (
                             <section className={isSupplierCollapsed ? "procurement-supplier-group is-collapsed" : "procurement-supplier-group"} key={`${order.id}-${group.supplier}`}>

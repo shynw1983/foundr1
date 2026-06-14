@@ -1708,6 +1708,7 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
     select
       receipt_ocr_results.store_id::text as "storeId",
       receipt_ocr_results.supplier_id::text as "supplierId",
+      receipt_ocr_results.supplier_location_id::text as "supplierLocationId",
       coalesce(receipt_ocr_results.supplier_name, receipt_ocr_results.vendor_name, '') as "supplierName",
       coalesce(to_char(receipt_ocr_results.purchase_date, 'YYYY-MM-DD'), '') as "purchaseDate",
       coalesce(to_char(receipt_ocr_results.purchase_time, 'HH24:MI'), '') as "purchaseTime",
@@ -1835,6 +1836,7 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
     insert into purchase_actuals (
       purchase_order_item_id,
       supplier_id,
+      supplier_location_id,
       actual_quantity,
       actual_unit,
       actual_price,
@@ -1846,6 +1848,7 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
     values (
       ${purchaseOrderItemId},
       ${supplierId},
+      ${row.supplierLocationId || null},
       ${quantity},
       ${unit},
       ${unitPrice},

@@ -54,6 +54,7 @@ type SupplierFulfillment = {
   orderId: string;
   supplier: string;
   receiptPhotoUrl?: string;
+  supplierLocationName?: string;
   receiptUploadedLabel?: string;
   receiptConfirmedLabel?: string;
   receiptConfirmedBy?: string;
@@ -122,6 +123,7 @@ type ReceiptRow = {
   deadline: string;
   deadlineDate: string;
   supplier: string;
+  supplierLocationName: string;
   itemCount: number;
   receiptPhotoUrl: string;
   receiptUploadedLabel: string;
@@ -536,6 +538,7 @@ function createReceiptRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], 
       deadline: order?.deadline ?? row.deadline,
       deadlineDate: getOrderDateKey(order),
       supplier,
+      supplierLocationName: fulfillment?.supplierLocationName ?? "",
       itemCount: 0,
       receiptPhotoUrl: fulfillment?.receiptPhotoUrl ?? "",
       receiptUploadedLabel: fulfillment?.receiptUploadedLabel ?? "",
@@ -550,6 +553,7 @@ function createReceiptRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], 
     current.receiptUploadedLabel = fulfillment?.receiptUploadedLabel ?? current.receiptUploadedLabel;
     current.receiptConfirmedLabel = fulfillment?.receiptConfirmedLabel ?? current.receiptConfirmedLabel;
     current.receiptConfirmedBy = fulfillment?.receiptConfirmedBy ?? current.receiptConfirmedBy;
+    current.supplierLocationName = fulfillment?.supplierLocationName ?? current.supplierLocationName;
     current.status = current.receiptPhotoUrl
       ? current.receiptConfirmedLabel ? "確認済み" : "未確認"
       : "未アップロード";
@@ -1427,6 +1431,7 @@ export default function ProcurementHistoryPage() {
                   </div>
                   <div>
                     <strong>{row.supplier}</strong>
+                    {row.supplierLocationName ? <p>購入店舗 {row.supplierLocationName}</p> : null}
                     <p>{row.receiptUploadedLabel ? `アップロード ${row.receiptUploadedLabel}` : "未アップロード"}</p>
                   </div>
                   <div className="history-receipt-preview">
