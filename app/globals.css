@@ -18095,6 +18095,37 @@ body :where(
   display: none;
 }
 
+@media (max-width: 1180px) {
+  .procurement-panel .queue-filter-bar {
+    display: none;
+  }
+
+  .procurement-panel .mobile-status-filter {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 14px;
+  }
+
+  .procurement-panel .mobile-status-filter span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .procurement-panel .mobile-status-filter select {
+    min-height: 44px;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0 12px;
+    background: white;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    outline: 0;
+  }
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -25552,35 +25583,6 @@ body :where(
 
   .operation-panel .queue-filter-bar {
     margin: 0 0 14px;
-  }
-
-  .procurement-panel .queue-filter-bar {
-    display: none;
-  }
-
-  .mobile-status-filter {
-    display: grid;
-    gap: 6px;
-    margin: 0 0 14px;
-  }
-
-  .mobile-status-filter span {
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .mobile-status-filter select {
-    min-height: 44px;
-    width: 100%;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 0 12px;
-    background: white;
-    color: var(--text);
-    font-size: 16px;
-    font-weight: 600;
-    outline: 0;
   }
 
   .product-master-title {
