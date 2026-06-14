@@ -1600,7 +1600,7 @@ export default function ProcurementPage() {
                           const supplierKey = `${order.id}:${group.supplier}`;
                           const supplierPanelId = `procurement-supplier-${supplierKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
                           const supplierEstimatedAmount = calculateProcurementOrderEstimatedAmount(group.items, productLookup);
-                          const supplierCurrentAmount = calculateProcurementOrderCurrentAmount(group.items, productLookup);
+                          const supplierReadyToDeliverAmount = calculateProcurementReadyToDeliverAmount(group.items, productLookup);
                           const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
                           const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
                           const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
@@ -1626,7 +1626,7 @@ export default function ProcurementPage() {
                                 </div>
                                 <div className="supplier-group-amounts">
                                   <span>概算 {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
-                                  <span>購入済み {formatProcurementAmountSummary(supplierCurrentAmount)}</span>
+                                  <span>今回購入済み {formatProcurementAmountSummary(supplierReadyToDeliverAmount)}</span>
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
@@ -2479,6 +2479,13 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
       isPending: summary.isPending
     };
   }, { amount: 0, isPending: false });
+}
+
+function calculateProcurementReadyToDeliverAmount(items: ProcurementTaskItem[], productLookup: ProductLookup): ProcurementAmountSummary {
+  return calculateProcurementOrderCurrentAmount(
+    items.filter((item) => item.deliveryStatus === "pending"),
+    productLookup
+  );
 }
 
 function isProductLookupReady(productLookup: ProductLookup) {
