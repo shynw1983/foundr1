@@ -268,6 +268,7 @@ export async function PATCH(request: Request) {
     ? body.deliveryStatus
     : null;
   const supplierName = String(body.supplier ?? "").trim();
+  const hasSupplierInput = supplierName.length > 0;
   const supplierRows = supplierName
     ? await sql`
         select id
@@ -277,11 +278,8 @@ export async function PATCH(request: Request) {
       `
     : [];
   const supplierId = supplierRows[0]?.id ?? null;
-
-  if (supplierName && !supplierId) {
-    return Response.json({ error: "発注先が見つかりません。" }, { status: 400 });
-  }
   const remainingSupplierName = String(body.remainingSupplier ?? "").trim();
+  const hasRemainingSupplierInput = remainingSupplierName.length > 0;
   const remainingSupplierRows = remainingSupplierName
     ? await sql`
         select id
@@ -291,10 +289,6 @@ export async function PATCH(request: Request) {
       `
     : [];
   const remainingSupplierId = remainingSupplierRows[0]?.id ?? null;
-
-  if (remainingSupplierName && !remainingSupplierId) {
-    return Response.json({ error: "残数の発注先が見つかりません。" }, { status: 400 });
-  }
 
   const nextProductRows = nextProductId
     ? await sql`
@@ -520,7 +514,11 @@ export async function PATCH(request: Request) {
         when ${productActuallyChanged} then ${nextProduct ? String(nextProduct.unit ?? "") : nextUnit || itemDetail?.requestedUnit || "個"}
         else requested_unit
       end,
-      selected_supplier_id = coalesce(${supplierId}, ${productActuallyChanged ? nextProduct?.mainSupplierId ?? null : null}, selected_supplier_id),
+      selected_supplier_id = case
+        when ${hasSupplierInput} then ${supplierId}
+        when ${productActuallyChanged} then ${nextProduct?.mainSupplierId ?? null}
+        else selected_supplier_id
+      end,
       store_feedback_confirmed_at = case
         when ${body.confirmStoreFeedback === true} then now()
         when ${shouldResetStoreFeedbackConfirmation} then null
@@ -560,9 +558,10 @@ export async function PATCH(request: Request) {
         ${String(itemDetail.requestNote ?? "")},
         ${[
           String(itemDetail.currentNote ?? "").trim(),
+          hasRemainingSupplierInput && !remainingSupplierId ? `臨時購入先: ${remainingSupplierName}` : "",
           `残数フォロー: 元明細 ${itemDetail.itemId} / 元依頼 ${currentRequestedQuantity} ${itemDetail.requestedUnit} / 今回購入 ${splitPurchasedQuantity} ${itemDetail.requestedUnit} / 残数 ${splitRemainingQuantity} ${itemDetail.requestedUnit}`
         ].filter(Boolean).join("\n")},
-        ${remainingSupplierId ?? itemDetail.currentSupplierId ?? null},
+        ${hasRemainingSupplierInput ? remainingSupplierId : itemDetail.currentSupplierId ?? null},
         'requested'
       )
     `;

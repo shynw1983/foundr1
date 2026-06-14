@@ -366,6 +366,13 @@ function getTemporarySupplierNote(note: string) {
     .trim() ?? "";
 }
 
+function getDeferredSupplierNote(note: string) {
+  return note.split(/\r?\n/)
+    .find((line) => line.startsWith("購入先見送り:"))
+    ?.replace(/^購入先見送り:/, "")
+    .trim() ?? "";
+}
+
 function isAdditionalPurchaseNote(note: string) {
   return note.startsWith("追加購入");
 }
@@ -385,6 +392,22 @@ function setTemporarySupplierNote(note: string, temporarySupplier: string) {
   return [nextNote, normalizedSupplier ? `臨時購入先: ${normalizedSupplier}` : ""].filter(Boolean).join("\n");
 }
 
+function setDeferredSupplierNote(note: string, fromSupplier: string, toSupplier: string, reason: string) {
+  const nextNote = note
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("購入先見送り:"))
+    .join("\n")
+    .trim();
+  const normalizedReason = reason.trim() || "価格が高いため";
+  const line = `購入先見送り: ${fromSupplier || "現在の発注先"} → ${toSupplier || "次の購入先"} / ${normalizedReason}`;
+
+  return [nextNote, line].filter(Boolean).join("\n");
+}
+
+function getEffectiveProcurementSupplier(item: Pick<ProcurementTaskItem, "supplier" | "note" | "productName">, supplierByProductName: Map<string, string>) {
+  return getTemporarySupplierNote(item.note) || item.supplier || supplierByProductName.get(item.productName) || "未設定";
+}
+
 function formatSupplierRole(role: string) {
   if (role === "メイン") return "メイン発注先";
   if (role === "予備") return "予備発注先";
@@ -397,8 +420,9 @@ function groupTasksBySupplier(
   productList: Product[],
   supplierOptions: ProductSupplierGroup[]
 ) {
+  const supplierByProductName = new Map(productList.map((product) => [product.name, getProcurementSupplier(product.name, productList, supplierOptions)]));
   return items.reduce<Array<{ supplier: string; items: ProcurementTaskItem[] }>>((groups, item) => {
-    const supplier = item.supplier || getProcurementSupplier(item.productName, productList, supplierOptions);
+    const supplier = getEffectiveProcurementSupplier(item, supplierByProductName);
     const existingGroup = groups.find((group) => group.supplier === supplier);
 
     if (existingGroup) {
@@ -417,7 +441,7 @@ function groupTasksBySupplierFast(
   const groups = new Map<string, ProcurementTaskItem[]>();
 
   items.forEach((item) => {
-    const supplier = item.supplier || supplierByProductName.get(item.productName) || "未設定";
+    const supplier = getEffectiveProcurementSupplier(item, supplierByProductName);
     const groupItems = groups.get(supplier) ?? [];
     groupItems.push(item);
     groups.set(supplier, groupItems);
@@ -1663,6 +1687,7 @@ export default function ProcurementPage() {
                                   const productSpec = product?.variantName || product?.specNote;
                                   const referencePrice = Number(product?.referencePrice ?? 0);
                                   const temporarySupplierNote = getTemporarySupplierNote(item.note);
+                                  const deferredSupplierNote = getDeferredSupplierNote(item.note);
                                   const purchaseUrl = getPurchaseUrlForItem(item, productSupplierOptions);
                                   const isAdditionalPurchase = isAdditionalPurchaseNote(item.note);
                                   const isRemainingFollow = isRemainingFollowNote(item.note);
@@ -1704,6 +1729,7 @@ export default function ProcurementPage() {
                                           {item.unavailable ? <span>購入不可</span> : null}
                                           {isAdditionalPurchase ? <span>追加購入</span> : null}
                                           {isRemainingFollow ? <span className="is-follow">残数フォロー</span> : null}
+                                          {deferredSupplierNote ? <span className="is-info">見送り {deferredSupplierNote}</span> : null}
                                           {needsRemainingFollow ? <span className="is-warning">残数 {remainingQuantity} {item.unit}</span> : null}
                                           {temporarySupplierNote ? <span>臨時購入先 {temporarySupplierNote}</span> : null}
                                         </div>
@@ -2190,7 +2216,7 @@ function ExceptionReportDialog({
   const selectedVariantId = item.productId ?? "";
   const [temporaryVariantName, setTemporaryVariantName] = useState("");
   const [temporaryVariantUnit, setTemporaryVariantUnit] = useState(item.unit || "個");
-  const currentSupplier = item.supplier || plannedSupplier;
+  const currentSupplier = getTemporarySupplierNote(item.note) || item.supplier || plannedSupplier;
   const isDeliveryLocked = isDeliveryLockedItem(item);
   const normalizedTemporaryVariantName = temporaryVariantName.trim();
   const defaultSplitQuantity = item.actualQuantity > 0 && item.actualQuantity < item.requestedQuantity
@@ -2198,8 +2224,41 @@ function ExceptionReportDialog({
     : Math.max(1, item.requestedQuantity - 1);
   const [splitPurchasedQuantity, setSplitPurchasedQuantity] = useState(defaultSplitQuantity);
   const [splitRemainingSupplier, setSplitRemainingSupplier] = useState("");
+  const [splitRemainingTemporarySupplier, setSplitRemainingTemporarySupplier] = useState("");
+  const [deferSupplier, setDeferSupplier] = useState("");
+  const [deferTemporarySupplier, setDeferTemporarySupplier] = useState("");
+  const previousDeferredReason = getDeferredSupplierNote(item.note).split("/").at(-1)?.trim();
+  const [deferReason, setDeferReason] = useState(previousDeferredReason || "価格が高いため");
   const splitRemainingQuantity = Math.max(0, item.requestedQuantity - splitPurchasedQuantity);
   const canSplitRemaining = !isDeliveryLocked && !item.unavailable && splitPurchasedQuantity > 0 && splitPurchasedQuantity < item.requestedQuantity;
+  const deferTargetSupplier = deferTemporarySupplier.trim() || deferSupplier.trim();
+  const splitRemainingTargetSupplier = splitRemainingTemporarySupplier.trim() || splitRemainingSupplier;
+
+  function deferToNextSupplier() {
+    if (!deferTargetSupplier) {
+      window.alert("別の購入先を選択または入力してください。");
+      return;
+    }
+
+    const noteWithoutTemporarySupplier = setTemporarySupplierNote(item.note, "");
+    const nextNote = setDeferredSupplierNote(
+      setTemporarySupplierNote(noteWithoutTemporarySupplier, deferTemporarySupplier),
+      currentSupplier,
+      deferTargetSupplier,
+      deferReason
+    );
+
+    onChange({
+      purchased: false,
+      unavailable: false,
+      actualPrice: "",
+      deliveryStatus: "pending",
+      deliveryBatchId: undefined,
+      supplier: deferTemporarySupplier.trim() ? deferTemporarySupplier.trim() : deferSupplier,
+      note: nextNote
+    });
+    setTemporarySupplier(deferTemporarySupplier.trim());
+  }
 
   function selectPurchasedVariant(productId: string) {
     const product = products.find((item) => item.id === productId);
@@ -2352,6 +2411,57 @@ function ExceptionReportDialog({
               onChange={(event) => setTemporarySupplier(event.target.value)}
             />
           </label>
+          <div className="supplier-defer-panel">
+            <div>
+              <strong>発注先を見送り</strong>
+              <small>価格が高い、在庫が合わないなどの場合、未購入のまま別の購入先へ回します。</small>
+            </div>
+            <div className="remaining-split-fields">
+              <label>
+                <span>別の購入先</span>
+                <select
+                  value={deferSupplier}
+                  disabled={isDeliveryLocked || Boolean(deferTemporarySupplier.trim())}
+                  onChange={(event) => setDeferSupplier(event.target.value)}
+                >
+                  <option value="">選択してください</option>
+                  {choices
+                    .filter((choice) => choice.supplier !== currentSupplier)
+                    .map((choice) => (
+                      <option value={choice.supplier} key={`defer-${choice.role}-${choice.supplier}`}>
+                        {choice.supplier}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                <span>臨時の別購入先</span>
+                <input
+                  value={deferTemporarySupplier}
+                  disabled={isDeliveryLocked}
+                  placeholder="例: 業務スーパー別店舗"
+                  onChange={(event) => setDeferTemporarySupplier(event.target.value)}
+                />
+              </label>
+            </div>
+            <label>
+              <span>見送り理由</span>
+              <input
+                value={deferReason}
+                disabled={isDeliveryLocked}
+                placeholder="例: 価格が高いため"
+                onChange={(event) => setDeferReason(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isDeliveryLocked || !deferTargetSupplier}
+              onClick={deferToNextSupplier}
+            >
+              未購入のまま別の購入先へ回す
+            </button>
+          </div>
           <div className="remaining-split-panel">
             <div>
               <strong>残数フォロー</strong>
@@ -2377,7 +2487,7 @@ function ExceptionReportDialog({
                 <span>残数購入先</span>
                 <select
                   value={splitRemainingSupplier}
-                  disabled={isDeliveryLocked}
+                  disabled={isDeliveryLocked || Boolean(splitRemainingTemporarySupplier.trim())}
                   onChange={(event) => setSplitRemainingSupplier(event.target.value)}
                 >
                   <option value="">現在の発注先を引き継ぐ</option>
@@ -2388,12 +2498,21 @@ function ExceptionReportDialog({
                   ))}
                 </select>
               </label>
+              <label>
+                <span>臨時の残数購入先</span>
+                <input
+                  value={splitRemainingTemporarySupplier}
+                  disabled={isDeliveryLocked}
+                  placeholder="例: 近隣スーパー、別店舗"
+                  onChange={(event) => setSplitRemainingTemporarySupplier(event.target.value)}
+                />
+              </label>
             </div>
             <button
               type="button"
               className="secondary-button"
               disabled={!canSplitRemaining}
-              onClick={() => onSplit(splitPurchasedQuantity, splitRemainingSupplier)}
+              onClick={() => onSplit(splitPurchasedQuantity, splitRemainingTargetSupplier)}
             >
               {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} をフォローへ回す` : "残数をフォローへ回す"}
             </button>

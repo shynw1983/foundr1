@@ -22482,6 +22482,11 @@ body :where(
   background: var(--green-soft);
 }
 
+.task-product-line span.is-info {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
 .task-product-line span.is-warning {
   color: var(--amber);
   background: var(--amber-soft);
@@ -22625,27 +22630,43 @@ body :where(
   background: var(--blue-soft);
 }
 
-.remaining-split-panel {
+.remaining-split-panel,
+.supplier-defer-panel {
   display: grid;
   gap: 9px;
   padding: 10px;
-  border: 1px solid rgba(31, 126, 93, 0.18);
   border-radius: 8px;
+}
+
+.remaining-split-panel {
+  border: 1px solid rgba(31, 126, 93, 0.18);
   background: var(--green-soft);
 }
 
-.remaining-split-panel > div:first-child {
+.supplier-defer-panel {
+  border: 1px solid rgba(40, 105, 168, 0.18);
+  background: var(--blue-soft);
+}
+
+.remaining-split-panel > div:first-child,
+.supplier-defer-panel > div:first-child {
   display: grid;
   gap: 2px;
 }
 
-.remaining-split-panel strong {
+.remaining-split-panel strong,
+.supplier-defer-panel strong {
   color: var(--green);
   font-size: 13px;
   font-weight: 800;
 }
 
-.remaining-split-panel small {
+.supplier-defer-panel strong {
+  color: var(--blue);
+}
+
+.remaining-split-panel small,
+.supplier-defer-panel small {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -22653,11 +22674,12 @@ body :where(
 
 .remaining-split-fields {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 
-.remaining-split-panel .secondary-button {
+.remaining-split-panel .secondary-button,
+.supplier-defer-panel .secondary-button {
   justify-content: center;
   min-height: 38px;
   background: white;
