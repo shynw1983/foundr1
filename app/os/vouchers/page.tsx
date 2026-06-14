@@ -550,11 +550,11 @@ export default function VouchersPage() {
       if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
         updated.taxAmount = calculateDraftTaxAmount(Number(updated.amount || 0), updated.taxRate, updated.taxMode);
       }
-      if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
-        updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity, updated.taxRate, updated.taxMode);
+      if (!("unitPrice" in next) && ("amount" in next || "quantity" in next || "taxAmount" in next)) {
+        updated.unitPrice = calculateDraftUnitPrice(String(updated.amount || ""), updated.quantity, updated.taxRate, updated.taxMode, updated.taxAmount);
       }
       if (!("unitPrice" in next)) {
-        updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
+        updated.unitPrice = normalizeDraftUnitPrice(updated.unitPrice, updated.amount, updated.quantity, updated.taxRate, updated.taxMode, updated.taxAmount, { force: "taxAmount" in next });
       }
       return { ...current, [key]: "taxAmount" in next ? updated : normalizeConfirmedLineDetail(updated, { preserveUnitPrice: "unitPrice" in next }) };
     });
@@ -869,8 +869,8 @@ export default function VouchersPage() {
         if (shouldAutoCalculateTaxAmount(next, updated) || updated.taxRate !== previousTaxRate) {
           return normalizeAccountingLineTax(updated, draft.taxMode, { force: true, forceUnitPrice: true, preserveUnitPrice: "unitPrice" in next });
         }
-        if (!("unitPrice" in next) && ("amount" in next || "quantity" in next)) {
-          updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity, updated.taxRate, updated.taxMode);
+        if (!("unitPrice" in next) && ("amount" in next || "quantity" in next || "taxAmount" in next)) {
+          updated.unitPrice = calculateDraftUnitPrice(updated.amount, updated.quantity, updated.taxRate, updated.taxMode, updated.taxAmount);
         }
         return "taxAmount" in next ? updated : normalizeAccountingLineTax(updated, draft.taxMode, { preserveUnitPrice: "unitPrice" in next, autoFixStaleTax: false });
       });
@@ -1847,8 +1847,6 @@ function ProductReferencePriceDialogView({
   onCancel: () => void;
   onConfirm: (updateReferencePrice: boolean) => void;
 }) {
-  useModalHistory(true, onCancel, "vouchers-reference-price");
-
   const currentReferencePrice = Number(dialog.product.referencePrice ?? 0);
   const hasReferencePrice = Number.isFinite(currentReferencePrice) && currentReferencePrice > 0;
   const difference = hasReferencePrice ? Math.round(dialog.receiptUnitPrice - currentReferencePrice) : 0;
@@ -1928,8 +1926,6 @@ function ProductCreateDialogView({
   onCancel: () => void;
   onConfirm: (next: ProductCreateDialog) => void;
 }) {
-  useModalHistory(true, onCancel, "vouchers-product-create");
-
   const [draft, setDraft] = useState<ProductCreateDialog>(() => normalizeProductCreateDraft(dialog, productOptions));
   const categoryOptions = getProductCategoryOptions(productOptions);
   const subcategoryOptions = getProductSubcategoryOptions(productOptions, draft.category);
@@ -2763,7 +2759,7 @@ function buildVoucherAccountingLines(voucher?: VoucherRecord): VoucherAccounting
       taxAmount: String(calculateDraftTaxAmount(amount, taxRate, taxMode)),
       quantity: getDefaultQuantityText(item.quantity),
       unit: item.unit || "個",
-      unitPrice: getDefaultUnitPriceText(item.unitPrice, amount, item.quantity, taxRate, taxMode),
+      unitPrice: getDefaultUnitPriceText(item.unitPrice, amount, item.quantity, taxRate, taxMode, calculateDraftTaxAmount(amount, taxRate, taxMode)),
       note: item.rawName || ""
     }];
   });
@@ -3392,12 +3388,13 @@ function normalizeAccountingLineTax(
   const hasStaleTaxAmount = expectedTaxAmount > 0
     && shouldAutoFixStaleTax
     && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
+  const nextTaxAmount = options.force || hasStaleTaxAmount ? expectedTaxAmount : Math.max(0, currentTaxAmount);
   return {
     ...line,
     taxRate,
     taxMode: normalizedTaxMode,
-    taxAmount: options.force || hasStaleTaxAmount ? String(expectedTaxAmount) : String(Math.max(0, currentTaxAmount)),
-    unitPrice: normalizeDraftUnitPrice(line.unitPrice, amount, line.quantity, taxRate, normalizedTaxMode, {
+    taxAmount: String(nextTaxAmount),
+    unitPrice: normalizeDraftUnitPrice(line.unitPrice, amount, line.quantity, taxRate, normalizedTaxMode, nextTaxAmount, {
       force: options.forceUnitPrice,
       preserve: options.preserveUnitPrice
     })
@@ -3417,12 +3414,13 @@ function normalizeConfirmedLineDetail(
   const hasStaleTaxAmount = expectedTaxAmount > 0
     && shouldAutoFixStaleTax
     && (!Number.isFinite(currentTaxAmount) || Math.abs(currentTaxAmount - expectedTaxAmount) > TAX_AMOUNT_AUTO_FIX_TOLERANCE);
+  const nextTaxAmount = options.forceTax || hasStaleTaxAmount ? expectedTaxAmount : Math.max(0, currentTaxAmount);
   return {
     ...detail,
     taxRate,
     taxMode: normalizedTaxMode,
-    taxAmount: options.forceTax || hasStaleTaxAmount ? expectedTaxAmount : Math.max(0, currentTaxAmount),
-    unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity, taxRate, normalizedTaxMode, {
+    taxAmount: nextTaxAmount,
+    unitPrice: normalizeDraftUnitPrice(detail.unitPrice, detail.amount, detail.quantity, taxRate, normalizedTaxMode, nextTaxAmount, {
       force: options.forceUnitPrice,
       preserve: options.preserveUnitPrice
     })
@@ -3440,13 +3438,16 @@ function shouldAutoCalculateTaxAmount(
   return calculateDraftTaxAmount(Number(line.amount || 0), line.taxRate, line.taxMode) !== Number(line.taxAmount || 0);
 }
 
-function calculateDraftUnitPrice(amountValue: string, quantityValue: string, taxRate = "", taxMode = "") {
+function calculateDraftUnitPrice(amountValue: string, quantityValue: string, taxRate = "", taxMode = "", taxAmountValue: string | number = "") {
   const amount = Number(amountValue);
   const quantity = Number(quantityValue);
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return "";
+  const normalizedTaxMode = normalizeDraftTaxMode(taxMode);
+  const taxAmount = Number(taxAmountValue);
   const rate = getTaxRateNumber(taxRate);
-  const unitPrice = normalizeDraftTaxMode(taxMode) === "外税" && rate > 0
-    ? (amount * (1 + rate / 100)) / quantity
+  const fallbackTaxAmount = normalizedTaxMode === "外税" && rate > 0 ? Math.round(amount * rate / 100) : 0;
+  const unitPrice = normalizedTaxMode === "外税"
+    ? (amount + (Number.isFinite(taxAmount) && taxAmount > 0 ? taxAmount : fallbackTaxAmount)) / quantity
     : amount / quantity;
   return Number.isInteger(unitPrice) ? String(unitPrice) : unitPrice.toFixed(2);
 }
@@ -3457,12 +3458,13 @@ function normalizeDraftUnitPrice(
   quantity: string | number | null | undefined,
   taxRate = "",
   taxMode = "",
+  taxAmount: string | number = "",
   options: { force?: boolean; preserve?: boolean } = {}
 ) {
   const current = Number(value);
   if (options.preserve && Number.isFinite(current) && current > 0) return String(value);
   if (!options.force && Number.isFinite(current) && current > 0) return String(value);
-  return calculateDraftUnitPrice(String(amount || ""), getDefaultQuantityText(quantity), taxRate, taxMode);
+  return calculateDraftUnitPrice(String(amount || ""), getDefaultQuantityText(quantity), taxRate, taxMode, taxAmount);
 }
 
 function getDefaultQuantityText(value: string | number | null | undefined) {
@@ -3475,9 +3477,10 @@ function getDefaultUnitPriceText(
   amount: number,
   quantity: string | number | null | undefined,
   taxRate = "",
-  taxMode = ""
+  taxMode = "",
+  taxAmount: string | number = ""
 ) {
-  return normalizeDraftUnitPrice(value, amount, quantity, taxRate, taxMode, { force: normalizeDraftTaxMode(taxMode) === "外税" });
+  return normalizeDraftUnitPrice(value, amount, quantity, taxRate, taxMode, taxAmount, { force: normalizeDraftTaxMode(taxMode) === "外税" });
 }
 
 function normalizeMoneyInputText(value: unknown) {
@@ -3490,8 +3493,10 @@ function calculateTaxIncludedUnitPrice(line: VoucherAccountingLine) {
   const amount = Number(line.amount);
   const quantity = Number(line.quantity);
   if (!Number.isFinite(amount) || !Number.isFinite(quantity) || amount <= 0 || quantity <= 0) return 0;
+  const taxAmount = Number(line.taxAmount);
   const rate = getTaxRateNumber(line.taxRate);
-  const total = line.taxMode === "外税" && rate > 0 ? amount * (1 + rate / 100) : amount;
+  const fallbackTaxAmount = line.taxMode === "外税" && rate > 0 ? Math.round(amount * rate / 100) : 0;
+  const total = line.taxMode === "外税" ? amount + (Number.isFinite(taxAmount) && taxAmount > 0 ? taxAmount : fallbackTaxAmount) : amount;
   const unitPrice = total / quantity;
   return Number.isFinite(unitPrice) && unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : 0;
 }
@@ -3586,7 +3591,7 @@ function buildConfirmedDetailFromAccountingLine(line: VoucherAccountingSummaryLi
     taxAmount: line.taxAmount,
     quantity: getDefaultQuantityText(line.quantity),
     unit: line.unit || "個",
-    unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity, line.taxRate, line.taxMode),
+    unitPrice: getDefaultUnitPriceText(line.unitPrice, line.amount, line.quantity, line.taxRate, line.taxMode, line.taxAmount),
     ocrItemId: line.ocrItemId ?? "",
     matchedProductId: line.matchedProductId ?? "",
     matchedProductName: line.matchedProductName ?? "",
@@ -3617,7 +3622,7 @@ function buildVoucherAccountingLineFromConfirmedDetail(detail: ConfirmedAccounti
     taxAmount: String(detail.taxAmount || 0),
     quantity: detail.quantity || "1",
     unit: detail.unit || "個",
-    unitPrice: detail.unitPrice || calculateDraftUnitPrice(String(detail.amount || ""), detail.quantity || "1", detail.taxRate, detail.taxMode),
+    unitPrice: detail.unitPrice || calculateDraftUnitPrice(String(detail.amount || ""), detail.quantity || "1", detail.taxRate, detail.taxMode, detail.taxAmount),
     note: detail.note || detail.subAccountTitle || `原明細 ${detail.lineNo}`
   };
 }
