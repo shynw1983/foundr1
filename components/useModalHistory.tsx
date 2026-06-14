@@ -30,8 +30,9 @@ export function useModalHistory(enabled: boolean, onClose: () => void, key: stri
     isActiveRef.current = true;
     isClosingFromPopRef.current = false;
 
-    function handlePopState() {
+    function handlePopState(event: PopStateEvent) {
       if (!isActiveRef.current) return;
+      if (event.state?.[modalHistoryFlag] === modalKey) return;
       isClosingFromPopRef.current = true;
       isActiveRef.current = false;
       onCloseRef.current();

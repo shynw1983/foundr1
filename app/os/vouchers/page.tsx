@@ -486,7 +486,9 @@ export default function VouchersPage() {
       setStores(nextStores);
       setProductOptions(body.products ?? []);
       setCanUpload(Boolean(body.canUpload));
-      setVouchers(body.vouchers ?? []);
+      const nextVouchers = body.vouchers ?? [];
+      setVouchers(nextVouchers);
+      setPreviewVoucher((current) => current ? nextVouchers.find((voucher) => voucher.id === current.id) ?? current : current);
       setSelectedStoreId((current) => current || nextStores[0]?.id || "");
     } catch {
       setMessage("証憑一覧を再読み込みできませんでした。時間をおいて更新してください。");
@@ -1084,6 +1086,9 @@ export default function VouchersPage() {
       }
       setMessage(successMessage);
       await loadVouchers();
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => scrollToVoucherRow(voucher.id));
+      });
       setAccountingDrafts((current) => {
         const draft = current[voucher.id];
         if (!draft) {
