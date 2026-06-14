@@ -136,11 +136,11 @@ const pendingStoreConfirmationStorageKey = "foundr1-os:pending-store-confirmatio
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
-  一部購入済み: "tone-warning",
+  一部購入済み: "tone-route",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部納品済み: "tone-warning",
+  一部納品済み: "tone-route",
   確認待ち: "tone-confirm",
   完了: "tone-done"
 };

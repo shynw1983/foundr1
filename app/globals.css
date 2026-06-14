@@ -22644,19 +22644,25 @@ body :where(
   justify-content: center;
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(31, 111, 91, 0.28);
   border-radius: 8px;
-  color: var(--blue);
-  background: white;
+  color: var(--green);
+  background: var(--green-soft);
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .exception-button.has-report {
-  border-color: transparent;
+  border-color: rgba(179, 58, 50, 0.72);
   color: var(--red);
-  background: var(--red-soft);
+  background: white;
+}
+
+.exception-button.needs-follow {
+  border-color: var(--red);
+  color: white;
+  background: var(--red);
 }
 
 .exception-modal {
@@ -22854,8 +22860,8 @@ body :where(
 }
 
 .tone-confirm {
-  color: var(--violet);
-  background: var(--violet-soft);
+  color: var(--blue);
+  background: var(--blue-soft);
 }
 
 .tone-done {
@@ -29775,8 +29781,7 @@ body:has(.store-workbench-shell) {
 }
 
 .danger-button,
-.danger-text-button,
-.exception-button {
+.danger-text-button {
   border-color: var(--color-danger);
 }
 

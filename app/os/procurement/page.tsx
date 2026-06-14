@@ -139,12 +139,12 @@ const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-tas
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
-  一部購入済み: "tone-warning",
+  一部購入済み: "tone-route",
   購入完了: "tone-done",
   配送待ち: "tone-confirm",
   配送中: "tone-route",
-  一部納品済み: "tone-warning",
-  到着日入力待ち: "tone-warning",
+  一部納品済み: "tone-route",
+  到着日入力待ち: "tone-waiting",
   到着待ち: "tone-route",
   確認待ち: "tone-confirm",
   完了: "tone-done"
@@ -1897,7 +1897,7 @@ export default function ProcurementPage() {
                                       </div>
                                       <button
                                         type="button"
-                                        className={needsRemainingFollow || item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
+                                        className={needsRemainingFollow ? "exception-button needs-follow" : item.note || item.actualPrice ? "exception-button has-report" : "exception-button"}
                                         onClick={() => setActiveExceptionItemId(item.id)}
                                       >
                                         {needsRemainingFollow ? "残数フォロー" : "購入調整"}

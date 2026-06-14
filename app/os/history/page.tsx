@@ -1444,7 +1444,7 @@ export default function ProcurementHistoryPage() {
                     )}
                   </div>
                   <div>
-                    <span className={`status-pill ${row.status === "確認済み" ? "tone-done" : row.status === "未確認" ? "tone-warning" : "tone-waiting"}`}>
+                    <span className={`status-pill ${row.status === "確認済み" ? "tone-done" : row.status === "未確認" ? "tone-waiting" : "tone-muted"}`}>
                       {row.status}
                     </span>
                     {row.receiptConfirmedLabel ? <p>{row.receiptConfirmedLabel} · {row.receiptConfirmedBy || "確認者未設定"}</p> : null}
