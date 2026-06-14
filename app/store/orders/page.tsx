@@ -164,7 +164,7 @@ function isRecentPendingPaymentOrder(order: StoreOrder) {
 function getProductionTaskLabel(status: string) {
   if (status === "ready") return "完成";
   if (status === "preparing") return "制作中";
-  return "待ち";
+  return "制作待ち";
 }
 
 const storeOrderStatusPriority: Record<string, number> = {

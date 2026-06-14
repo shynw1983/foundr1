@@ -26,7 +26,7 @@ type StoreOption = {
 };
 
 const statusLabels: Record<string, string> = {
-  new: "待ち",
+  new: "制作待ち",
   preparing: "制作中",
   ready: "完成"
 };
@@ -259,7 +259,7 @@ export default function StoreKitchenPage() {
 
       <section className="store-kitchen-board">
         <div>
-          <h2>待ち / 制作中</h2>
+          <h2>制作待ち / 制作中</h2>
           <div className="store-kitchen-task-grid">
             {visibleTasks.map((task) => (
               <article className={`store-kitchen-task is-${task.status}`} key={task.id}>
@@ -299,7 +299,7 @@ export default function StoreKitchenPage() {
                 </div>
               </article>
             ))}
-            {!visibleTasks.length ? <p className="store-kitchen-empty">待ちの制作タスクはありません。</p> : null}
+            {!visibleTasks.length ? <p className="store-kitchen-empty">制作待ちの制作タスクはありません。</p> : null}
           </div>
         </div>
 
