@@ -1172,6 +1172,19 @@ create table if not exists products (
   brand_scope text not null default 'unset',
   is_key_item boolean not null default false,
   is_price_sensitive boolean not null default false,
+  is_imported boolean not null default false,
+  import_origin_country text,
+  import_currency text not null default 'CNY',
+  import_original_price numeric(12, 2),
+  import_exchange_rate numeric(12, 6) not null default 1,
+  import_price_jpy numeric(12, 2),
+  import_freight_rate_original_per_kg numeric(12, 2) not null default 20,
+  import_freight_rate_jpy_per_kg numeric(12, 2) not null default 0,
+  import_weight_strategy text not null default 'standard_1kg',
+  import_weight_kg numeric(12, 3) not null default 1,
+  import_freight_cost_jpy numeric(12, 2) not null default 0,
+  import_tax_cost_jpy numeric(12, 2) not null default 0,
+  import_other_cost_jpy numeric(12, 2) not null default 0,
   storage_type text,
   usage_type text not null default 'ingredient',
   created_at timestamptz not null default now(),
@@ -1194,6 +1207,19 @@ alter table products add column if not exists manufacturer text;
 alter table products add column if not exists japanese_note text;
 alter table products add column if not exists brand_scope text not null default 'unset';
 alter table products add column if not exists usage_type text not null default 'ingredient';
+alter table products add column if not exists is_imported boolean not null default false;
+alter table products add column if not exists import_origin_country text;
+alter table products add column if not exists import_currency text not null default 'CNY';
+alter table products add column if not exists import_original_price numeric(12, 2);
+alter table products add column if not exists import_exchange_rate numeric(12, 6) not null default 1;
+alter table products add column if not exists import_price_jpy numeric(12, 2);
+alter table products add column if not exists import_freight_rate_original_per_kg numeric(12, 2) not null default 20;
+alter table products add column if not exists import_freight_rate_jpy_per_kg numeric(12, 2) not null default 0;
+alter table products add column if not exists import_weight_strategy text not null default 'standard_1kg';
+alter table products add column if not exists import_weight_kg numeric(12, 3) not null default 1;
+alter table products add column if not exists import_freight_cost_jpy numeric(12, 2) not null default 0;
+alter table products add column if not exists import_tax_cost_jpy numeric(12, 2) not null default 0;
+alter table products add column if not exists import_other_cost_jpy numeric(12, 2) not null default 0;
 alter table products drop constraint if exists products_name_key;
 
 create table if not exists product_brand_usages (

@@ -36,6 +36,19 @@ type ProductWithCategory = Product & {
   mainPurchaseUrl?: string;
   backupPurchaseUrl?: string;
   usageType?: string;
+  isImported?: boolean;
+  importOriginCountry?: string;
+  importCurrency?: string;
+  importOriginalPrice?: number | string;
+  importExchangeRate?: number | string;
+  importPriceJpy?: number | string;
+  importFreightRateOriginalPerKg?: number | string;
+  importFreightRateJpyPerKg?: number | string;
+  importWeightStrategy?: string;
+  importWeightKg?: number | string;
+  importFreightCostJpy?: number | string;
+  importTaxCostJpy?: number | string;
+  importOtherCostJpy?: number | string;
 };
 type ProductDraft = Omit<ProductWithCategory, "referencePrice"> & { referencePrice: number | string };
 type Supplier = typeof initialSuppliers[number];
@@ -136,6 +149,10 @@ const sortableProductColumns: Array<{ key: ProductSortKey; label: string }> = [
   { key: "unitPrice", label: "規格単価" }
 ];
 const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "ml", "セット", "ケース", "パック", "缶", "瓶", "束", "玉", "ロール", "トレー", "カートン"];
+const importWeightStrategyOptions = [
+  { value: "standard_1kg", label: "標準1kgで計算" },
+  { value: "actual_weight", label: "実重量で計算" }
+];
 const customUnitOption = "__custom_unit__";
 const unsetSupplierFilterValue = "__unset_supplier__";
 const addSupplierOption = "__add_supplier__";
@@ -163,7 +180,8 @@ const productSummaryFieldOptions = [
   { value: "mainSupplier", label: "メイン発注先" },
   { value: "backupSupplier", label: "予備発注先" },
   { value: "referencePrice", label: "参考価格" },
-  { value: "unitPrice", label: "規格単価" }
+  { value: "unitPrice", label: "規格単価" },
+  { value: "importCost", label: "輸入コスト" }
 ];
 
 function getProductPhotoSrc(photoUrl?: string) {
@@ -191,10 +209,25 @@ function parseReferencePrice(value: number | string) {
   return Number.isFinite(price) ? price : 0;
 }
 
+function parsePositiveDraftNumber(value: number | string | undefined, fallback = 0) {
+  const normalizedValue = normalizeDecimalInput(String(value ?? ""));
+  const numberValue = Number(normalizedValue);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback;
+}
+
 function formatYenAmount(value: number) {
   return value.toLocaleString("ja-JP", {
     maximumFractionDigits: value >= 100 ? 0 : 2
   });
+}
+
+function formatForeignAmount(value: number, currency?: string) {
+  const normalizedCurrency = currency === "CNY" ? "CNY" : "JPY";
+  return new Intl.NumberFormat(normalizedCurrency === "CNY" ? "zh-CN" : "ja-JP", {
+    style: "currency",
+    currency: normalizedCurrency,
+    maximumFractionDigits: value >= 100 ? 0 : 2
+  }).format(value);
 }
 
 function formatHistoryPrice(value: number) {
@@ -301,8 +334,29 @@ function getProductSummaryFieldValue(product: ProductWithCategory, field: string
   if (field === "backupSupplier") return product.backupSupplier || "無";
   if (field === "referencePrice") return `¥${formatYenAmount(parseReferencePrice(product.referencePrice))}`;
   if (field === "unitPrice") return unitPriceLabel;
+  if (field === "importCost") return product.isImported ? formatProductImportCost(product) : "";
 
   return "";
+}
+
+function getProductLandedImportCost(product: ProductWithCategory) {
+  if (!product.isImported) return 0;
+
+  return (
+    parsePositiveDraftNumber(product.importPriceJpy) +
+    parsePositiveDraftNumber(product.importFreightCostJpy) +
+    parsePositiveDraftNumber(product.importTaxCostJpy) +
+    parsePositiveDraftNumber(product.importOtherCostJpy)
+  );
+}
+
+function formatProductImportCost(product: ProductWithCategory) {
+  if (!product.isImported) return "対象外";
+
+  const landedCost = getProductLandedImportCost(product);
+  const freightCost = parsePositiveDraftNumber(product.importFreightCostJpy);
+  const source = product.importOriginCountry || "中国";
+  return `¥${formatYenAmount(landedCost)} / ${source} / 運賃 ¥${formatYenAmount(freightCost)}`;
 }
 
 function getProductUsageTypeLabel(value?: string) {
@@ -664,6 +718,9 @@ export default function ProductsPage() {
       product.mainSupplier,
       product.backupSupplier,
       product.storageType,
+      product.isImported ? "海外輸入 中国 CNY 进口 海外进口" : "",
+      product.importOriginCountry,
+      product.importCurrency,
       getDisplayJapaneseNote(product),
       product.specNote
     ].join(" ");
@@ -832,7 +889,20 @@ export default function ProductsPage() {
         japaneseNote: "",
         photoUrl: "",
         storageType: "常温",
-        usageType: "ingredient"
+        usageType: "ingredient",
+        isImported: false,
+        importOriginCountry: "中国",
+        importCurrency: "CNY",
+        importOriginalPrice: "",
+        importExchangeRate: 1,
+        importPriceJpy: "",
+        importFreightRateOriginalPerKg: 20,
+        importFreightRateJpyPerKg: "",
+        importWeightStrategy: "standard_1kg",
+        importWeightKg: 1,
+        importFreightCostJpy: "",
+        importTaxCostJpy: "",
+        importOtherCostJpy: ""
       }
     });
   }
@@ -1451,6 +1521,7 @@ export default function ProductsPage() {
                                 <span>{product.name || "未設定の商品"}</span>
                                 <div className="product-variant-badges">
                                   {product.isDefaultVariant ? <span className="status-pill">標準バリエーション</span> : null}
+                                  {product.isImported ? <span className="status-pill is-watch">海外輸入</span> : null}
                                   {isReceiptIncompleteProduct(product) ? <span className="status-pill is-warning">情報未補完</span> : null}
                                 </div>
                               </div>
@@ -1558,6 +1629,36 @@ export default function ProductsPage() {
                                   <dt>数量</dt>
                                   <dd>{formatPackageQuantity(product)}</dd>
                                 </div>
+                                <div>
+                                  <dt>海外輸入</dt>
+                                  <dd>{product.isImported ? formatProductImportCost(product) : "対象外"}</dd>
+                                </div>
+                                {product.isImported ? (
+                                  <>
+                                    <div>
+                                      <dt>輸入元・通貨</dt>
+                                      <dd>{product.importOriginCountry || "中国"} / {product.importCurrency || "CNY"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>輸入価格</dt>
+                                      <dd>
+                                        {formatForeignAmount(parsePositiveDraftNumber(product.importOriginalPrice), product.importCurrency)}
+                                        {" / "}
+                                        1 {product.importCurrency || "CNY"} = ¥{formatYenAmount(parsePositiveDraftNumber(product.importExchangeRate, 1))}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>運賃・税費</dt>
+                                      <dd>
+                                        運賃 ¥{formatYenAmount(parsePositiveDraftNumber(product.importFreightCostJpy))}
+                                        {" / "}
+                                        税費 ¥{formatYenAmount(parsePositiveDraftNumber(product.importTaxCostJpy))}
+                                        {" / "}
+                                        その他 ¥{formatYenAmount(parsePositiveDraftNumber(product.importOtherCostJpy))}
+                                      </dd>
+                                    </div>
+                                  </>
+                                ) : null}
                                 <div>
                                   <dt>メモ</dt>
                                   <dd>{product.specNote || "未設定"}</dd>
@@ -1919,6 +2020,18 @@ function ProductEditDialog({
     Boolean(currentUnit && !commonUnitOptions.includes(currentUnit))
   );
   const generatedProductName = buildProductNameFromVariant(target.value) || String(target.value.name ?? "").trim();
+  const importCurrency = target.value.importCurrency === "CNY" ? "CNY" : "JPY";
+  const importExchangeRate = importCurrency === "JPY" ? 1 : parsePositiveDraftNumber(target.value.importExchangeRate, 1);
+  const importOriginalPrice = parsePositiveDraftNumber(target.value.importOriginalPrice);
+  const importPriceJpy = parsePositiveDraftNumber(target.value.importPriceJpy, importOriginalPrice * importExchangeRate);
+  const importFreightRateOriginal = parsePositiveDraftNumber(target.value.importFreightRateOriginalPerKg, 20);
+  const importFreightRateJpy = parsePositiveDraftNumber(target.value.importFreightRateJpyPerKg, importFreightRateOriginal * importExchangeRate);
+  const importWeightKg = parsePositiveDraftNumber(target.value.importWeightKg, target.value.importWeightStrategy === "actual_weight" ? 0 : 1);
+  const importFreightCostJpy = parsePositiveDraftNumber(target.value.importFreightCostJpy, importFreightRateJpy * importWeightKg);
+  const importTaxCostJpy = parsePositiveDraftNumber(target.value.importTaxCostJpy);
+  const importOtherCostJpy = parsePositiveDraftNumber(target.value.importOtherCostJpy);
+  const importLandedCostJpy = importPriceJpy + importFreightCostJpy + importTaxCostJpy + importOtherCostJpy;
+  const [exchangeRateStatus, setExchangeRateStatus] = useState("");
   useModalHistory(Boolean(supplierCreateTarget), () => setSupplierCreateTarget(null), "products-supplier-quick-create");
 
   useEffect(() => {
@@ -1942,6 +2055,14 @@ function ProductEditDialog({
     });
   }, [target.value.name, target.value.productFamilyName, target.value.variantName]);
 
+  useEffect(() => {
+    if (!target.value.isImported) return;
+    if (target.value.importCurrency && target.value.importCurrency !== "CNY") return;
+    if (parsePositiveDraftNumber(target.value.importExchangeRate) > 1) return;
+
+    void loadImportExchangeRate("CNY");
+  }, [target.value.isImported]);
+
   function setProductValue(key: string, value: string) {
     const nextValue = {
       ...target.value,
@@ -1956,6 +2077,72 @@ function ProductEditDialog({
     onChange({
       ...target,
       value: nextValue
+    });
+  }
+
+  function updateProductValue(values: Partial<ProductDraft>) {
+    onChange({
+      ...target,
+      value: {
+        ...target.value,
+        ...values
+      }
+    });
+  }
+
+  async function loadImportExchangeRate(currency: string) {
+    if (currency === "JPY") {
+      updateProductValue({
+        importCurrency: "JPY",
+        importExchangeRate: 1,
+        importFreightRateJpyPerKg: parsePositiveDraftNumber(target.value.importFreightRateOriginalPerKg, 20)
+      });
+      setExchangeRateStatus("");
+      return;
+    }
+
+    setExchangeRateStatus("為替レートを取得中...");
+    try {
+      const response = await fetch(`/api/exchange-rates?base=${currency}&target=JPY`);
+      if (!response.ok) throw new Error("rate fetch failed");
+      const data = await response.json() as { rate?: number; date?: string };
+      if (!Number.isFinite(data.rate) || !data.rate) throw new Error("invalid rate");
+      const nextFreightRate = parsePositiveDraftNumber(target.value.importFreightRateOriginalPerKg, 20) * data.rate;
+      updateProductValue({
+        importCurrency: currency,
+        importExchangeRate: data.rate,
+        importFreightRateJpyPerKg: nextFreightRate,
+        importFreightCostJpy: nextFreightRate * parsePositiveDraftNumber(target.value.importWeightKg, 1)
+      });
+      setExchangeRateStatus(data.date ? `為替取得済み: ${data.date}` : "為替取得済み");
+    } catch {
+      setExchangeRateStatus("為替レートを取得できませんでした。手入力してください。");
+    }
+  }
+
+  function setImportCalculationValue(values: Partial<ProductDraft>) {
+    const nextValue = {
+      ...target.value,
+      ...values
+    };
+    const nextCurrency = nextValue.importCurrency === "CNY" ? "CNY" : "JPY";
+    const nextRate = nextCurrency === "JPY" ? 1 : parsePositiveDraftNumber(nextValue.importExchangeRate, 1);
+    const nextOriginalPrice = parsePositiveDraftNumber(nextValue.importOriginalPrice);
+    const nextPriceJpy = nextOriginalPrice * nextRate;
+    const nextFreightOriginal = parsePositiveDraftNumber(nextValue.importFreightRateOriginalPerKg, 20);
+    const nextFreightJpy = nextFreightOriginal * nextRate;
+    const nextWeightKg = parsePositiveDraftNumber(nextValue.importWeightKg, nextValue.importWeightStrategy === "actual_weight" ? 0 : 1);
+    const nextFreightCost = nextFreightJpy * nextWeightKg;
+
+    onChange({
+      ...target,
+      value: {
+        ...nextValue,
+        importExchangeRate: nextRate,
+        importPriceJpy: nextPriceJpy || "",
+        importFreightRateJpyPerKg: nextFreightJpy,
+        importFreightCostJpy: nextFreightCost || ""
+      }
     });
   }
 
@@ -2301,6 +2488,144 @@ function ProductEditDialog({
               />
               <span>この商品の標準バリエーションにする</span>
             </label>
+            <label className="product-default-variant-toggle">
+              <input
+                type="checkbox"
+                checked={target.value.isImported === true}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    setImportCalculationValue({
+                      isImported: true,
+                      importOriginCountry: target.value.importOriginCountry || "中国",
+                      importCurrency: target.value.importCurrency || "CNY",
+                      importFreightRateOriginalPerKg: target.value.importFreightRateOriginalPerKg || 20,
+                      importWeightStrategy: target.value.importWeightStrategy || "standard_1kg",
+                      importWeightKg: target.value.importWeightKg || 1
+                    });
+                    return;
+                  }
+
+                  updateProductValue({
+                    isImported: false,
+                    importPriceJpy: "",
+                    importFreightCostJpy: "",
+                    importTaxCostJpy: "",
+                    importOtherCostJpy: ""
+                  });
+                }}
+              />
+              <span>海外輸入品として管理する</span>
+            </label>
+            {target.value.isImported ? (
+              <div className="product-import-fields">
+                <div className="product-import-heading">
+                  <strong>海外輸入コスト</strong>
+                  <span>標準1kgで計算すると、拼箱でも SKU ごとの原価を安定して見られます。</span>
+                </div>
+                <label>
+                  <span>輸入元</span>
+                  <select
+                    value={target.value.importOriginCountry || "中国"}
+                    onChange={(event) => updateProductValue({ importOriginCountry: event.target.value })}
+                  >
+                    <option value="中国">中国</option>
+                    <option value="台湾">台湾</option>
+                    <option value="韓国">韓国</option>
+                    <option value="その他">その他</option>
+                  </select>
+                </label>
+                <label>
+                  <span>通貨</span>
+                  <select
+                    value={importCurrency}
+                    onChange={(event) => {
+                      const nextCurrency = event.target.value;
+                      setImportCalculationValue({ importCurrency: nextCurrency });
+                      void loadImportExchangeRate(nextCurrency);
+                    }}
+                  >
+                    <option value="CNY">人民元</option>
+                    <option value="JPY">日本円</option>
+                  </select>
+                </label>
+                <label>
+                  <span>現地価格</span>
+                  <input
+                    value={target.value.importOriginalPrice ?? ""}
+                    inputMode="decimal"
+                    placeholder="例: 38"
+                    onChange={(event) => setImportCalculationValue({ importOriginalPrice: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>為替レート</span>
+                  <input
+                    value={target.value.importExchangeRate ?? 1}
+                    inputMode="decimal"
+                    onChange={(event) => setImportCalculationValue({ importExchangeRate: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>運賃単価 / kg</span>
+                  <input
+                    value={target.value.importFreightRateOriginalPerKg ?? 20}
+                    inputMode="decimal"
+                    placeholder="例: 20"
+                    onChange={(event) => setImportCalculationValue({ importFreightRateOriginalPerKg: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>計算方式</span>
+                  <select
+                    value={target.value.importWeightStrategy || "standard_1kg"}
+                    onChange={(event) => {
+                      const strategy = event.target.value;
+                      setImportCalculationValue({
+                        importWeightStrategy: strategy,
+                        importWeightKg: strategy === "standard_1kg" ? 1 : target.value.importWeightKg || ""
+                      });
+                    }}
+                  >
+                    {importWeightStrategyOptions.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>輸入計算重量 kg</span>
+                  <input
+                    value={target.value.importWeightKg ?? 1}
+                    inputMode="decimal"
+                    disabled={(target.value.importWeightStrategy || "standard_1kg") === "standard_1kg"}
+                    onChange={(event) => setImportCalculationValue({ importWeightKg: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>輸入税費 JPY</span>
+                  <input
+                    value={target.value.importTaxCostJpy ?? ""}
+                    inputMode="decimal"
+                    placeholder="任意"
+                    onChange={(event) => updateProductValue({ importTaxCostJpy: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>その他費用 JPY</span>
+                  <input
+                    value={target.value.importOtherCostJpy ?? ""}
+                    inputMode="decimal"
+                    placeholder="任意"
+                    onChange={(event) => updateProductValue({ importOtherCostJpy: normalizeDecimalInput(event.target.value) })}
+                  />
+                </label>
+                <div className="product-import-cost-preview">
+                  <span>換算価格 {formatForeignAmount(importOriginalPrice, importCurrency)} = ¥{formatYenAmount(importPriceJpy)}</span>
+                  <span>運賃 {formatForeignAmount(importFreightRateOriginal, importCurrency)}/kg = ¥{formatYenAmount(importFreightCostJpy)}</span>
+                  <strong>着地原価 ¥{formatYenAmount(importLandedCostJpy)}</strong>
+                  {exchangeRateStatus ? <small>{exchangeRateStatus}</small> : null}
+                </div>
+              </div>
+            ) : null}
             <label className="product-spec-note">
               <span>日本語メモ</span>
               <textarea
