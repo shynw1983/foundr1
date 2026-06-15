@@ -58,7 +58,6 @@ const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/set
 const systemUsageNavItem: OsNavItem = { label: "外部サービス利用量", href: "/os/system-usage", icon: Gauge };
 export const canonicalNavItems: OsNavItem[] = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
-  { label: "店舗ワークベンチ", href: "/store", icon: Store },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
   { label: "購入管理", href: "/os/procurement", icon: ClipboardList },
   { label: "発注履歴", href: "/os/history", icon: FileText },
@@ -114,15 +113,6 @@ export type OsNavModuleWithChildren = OsNavModule & {
 };
 
 export const navModules: OsNavModule[] = [
-  {
-    id: "store-workbench",
-    label: "店舗ワークベンチ",
-    icon: Store,
-    href: "/store",
-    paths: [
-      { href: "/store" }
-    ]
-  },
   {
     id: "orders",
     label: "発注・購入",

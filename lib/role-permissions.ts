@@ -16,15 +16,6 @@ export type RolePermissionDefinition = {
 
 export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   {
-    key: "module.storeWorkbench",
-    label: "店舗ワークベンチ",
-    description: "店舗現場画面を開けます。",
-    category: "モジュール",
-    defaultRoles: ["owner", "manager", "store_terminal"],
-    lockedRoles: ["owner"],
-    navPaths: ["/store"]
-  },
-  {
     key: "module.staffPortal",
     label: "スタッフ個人アプリ",
     description: "スタッフ本人の打刻、シフト、給与確認画面を開けます。",
