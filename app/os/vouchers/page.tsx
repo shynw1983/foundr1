@@ -1111,17 +1111,17 @@ export default function VouchersPage() {
               matchedProductId: linkedProduct.id,
               matchedProductName: linkedProduct.name,
               matchStatus: "matched",
-              purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : draftLine.purchaseActualId,
-              reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : draftLine.reconciliationStatus,
-              reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : draftLine.reconciliationNote
+              purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : line.purchaseActualId,
+              reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : line.reconciliationStatus,
+              reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : line.reconciliationNote
             }
             : payload.action === "create_product_from_item"
               ? {
                 matchedProductName: String(payload.productName ?? ""),
                 matchStatus: "matched",
-                purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : draftLine.purchaseActualId,
-                reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : draftLine.reconciliationStatus,
-                reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : draftLine.reconciliationNote
+                purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : line.purchaseActualId,
+                reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : line.reconciliationStatus,
+                reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : line.reconciliationNote
               }
               : {}
         );
