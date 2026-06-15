@@ -1,7 +1,7 @@
 import { canAccessStore, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
-import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
+import { ensureProductionTasksForOrder, refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
 import { canChangeOrderStatus, getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     ? getScopedStoreFilter(access, params.get("storeId"))
     : getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? null;
   if (storeFilter === "__forbidden__") return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (storeFilter) await refreshActiveProductionTasksForStore(storeFilter);
 
   const orders = await sql`
     select

@@ -40,6 +40,12 @@ function countLabels(labels: string[]) {
   return Array.from(counts.values()).map(({ label, count }) => `${label}${count > 1 ? ` x${count}` : ""}`);
 }
 
+function labeledDetail(label: string, value: string) {
+  const normalized = normalizeText(value);
+  if (!normalized) return "";
+  return /[:：]/.test(normalized) ? normalized : `${label}：${normalized}`;
+}
+
 function buildProductionItemLines(row: {
   itemName: string;
   quantity: number;
@@ -65,17 +71,42 @@ function buildProductionItemLines(row: {
     row.measuredQuantity && row.measuredUnit
       ? `${Number(row.measuredQuantity).toLocaleString("ja-JP", { maximumFractionDigits: 3 })}${row.measuredUnit}`
       : "",
-    ...sizeParts,
-    row.temperature,
-    row.sweetness,
-    row.ice,
-    ...optionParts,
-    ...countLabels(toppingLabels)
+    ...sizeParts.map((part) => labeledDetail("サイズ", part)),
+    labeledDetail("温度", row.temperature),
+    labeledDetail("甘さ", row.sweetness),
+    labeledDetail("氷", row.ice),
+    ...optionParts.map((part) => labeledDetail("オプション", part)),
+    ...countLabels(toppingLabels).map((part) => labeledDetail("トッピング", part))
   ]);
   return [
     `${row.itemName} x${row.quantity}`,
     ...details.map((detail) => `・${detail}`)
   ];
+}
+
+export async function refreshActiveProductionTasksForStore(storeId: string, limit = 30) {
+  const normalizedStoreId = normalizeText(storeId);
+  if (!normalizedStoreId) return;
+
+  const rows = await sql`
+    select store_customer_orders.id::text
+    from store_customer_orders
+    left join order_production_tasks on order_production_tasks.order_id = store_customer_orders.id
+    where store_customer_orders.store_id::text = ${normalizedStoreId}
+      and store_customer_orders.payment_status = 'paid'
+      and store_customer_orders.status in ('new', 'preparing', 'ready')
+      and store_customer_orders.created_at > now() - interval '14 days'
+      and (
+        order_production_tasks.id is null
+        or order_production_tasks.status <> 'ready'
+      )
+    group by store_customer_orders.id, store_customer_orders.created_at
+    order by store_customer_orders.created_at asc
+    limit ${Math.max(1, Math.min(100, Math.floor(limit)))}
+  `;
+  for (const order of rows as Array<{ id: string }>) {
+    await ensureProductionTasksForOrder(order.id);
+  }
 }
 
 export async function ensureProductionTasksForOrder(orderId: string) {

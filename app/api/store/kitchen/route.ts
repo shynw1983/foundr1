@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { findCustomerOrderById } from "../../../../lib/customer-orders";
 import { sql } from "../../../../lib/db";
-import { ensureProductionTasksForOrder, setProductionTaskStatus } from "../../../../lib/order-production";
+import { refreshActiveProductionTasksForStore, setProductionTaskStatus } from "../../../../lib/order-production";
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -59,20 +59,7 @@ export async function GET(request: Request) {
   const storeFilter = getScopedStoreFilter(access, params.get("storeId")) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const missingTaskOrders = await sql`
-    select store_customer_orders.id::text
-    from store_customer_orders
-    left join order_production_tasks on order_production_tasks.order_id = store_customer_orders.id
-    where store_customer_orders.store_id::text = ${storeFilter}
-      and store_customer_orders.payment_status = 'paid'
-      and store_customer_orders.status in ('new', 'preparing', 'ready')
-      and order_production_tasks.id is null
-      and store_customer_orders.created_at > now() - interval '14 days'
-    limit 30
-  `;
-  for (const order of missingTaskOrders as Array<{ id: string }>) {
-    await ensureProductionTasksForOrder(order.id);
-  }
+  await refreshActiveProductionTasksForStore(storeFilter);
 
   const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(params.get("area")));
   return Response.json({ access, selectedStoreId: storeFilter, tasks, areas }, { headers: { "Cache-Control": "no-store" } });

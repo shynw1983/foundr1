@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { ensureProductionTasksForOrder } from "../../../../lib/order-production";
+import { refreshActiveProductionTasksForStore } from "../../../../lib/order-production";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
@@ -24,20 +24,7 @@ export async function GET(request: Request) {
   const { selectedStoreId, forbidden } = await resolveStoreId(request, session);
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const missingTaskOrders = await sql`
-    select store_customer_orders.id::text
-    from store_customer_orders
-    left join order_production_tasks on order_production_tasks.order_id = store_customer_orders.id
-    where store_customer_orders.store_id::text = ${selectedStoreId}
-      and store_customer_orders.payment_status = 'paid'
-      and store_customer_orders.status in ('new', 'preparing', 'ready')
-      and order_production_tasks.id is null
-      and store_customer_orders.created_at > now() - interval '14 days'
-    limit 30
-  `;
-  for (const order of missingTaskOrders as Array<{ id: string }>) {
-    await ensureProductionTasksForOrder(order.id);
-  }
+  await refreshActiveProductionTasksForStore(selectedStoreId);
 
   const rows = await sql`
     select
