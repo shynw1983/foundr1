@@ -1079,7 +1079,13 @@ export default function VouchersPage() {
           ...payload
         })
       });
-      const body = await response.json().catch(() => ({})) as { error?: string; itemId?: string };
+      const body = await response.json().catch(() => ({})) as {
+        error?: string;
+        itemId?: string;
+        purchaseActualId?: string;
+        reconciliationStatus?: string;
+        reconciliationNote?: string;
+      };
       if (!response.ok) {
         setMessage(body.error ?? "商品マスタ紐付けを更新できませんでした。");
         return;

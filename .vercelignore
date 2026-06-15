@@ -5,3 +5,6 @@ node_modules
 *.log
 *.tsbuildinfo
 .env*
+Foundr1Android/app/build
+Foundr1Android/.gradle
+Foundr1iOS
