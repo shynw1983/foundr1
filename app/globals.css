@@ -30358,6 +30358,11 @@ a:focus-visible {
   background-size: 108%;
 }
 
+.os-home-shell .brand-mark {
+  border-color: transparent;
+  background: #000000 url("/icons/foundr1-os-512.png") center / 138% no-repeat;
+}
+
 .store-workbench-shell .brand-mark,
 .procedure-reader-shell .brand-mark {
   border-color: var(--line);
