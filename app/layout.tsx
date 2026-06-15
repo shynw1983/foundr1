@@ -2,8 +2,10 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { FloatingFeedbackButton } from "../components/feedback/FloatingFeedbackButton";
 import { AppZoomGuard } from "./os/components/AppZoomGuard";
+import { AppVersionNotice } from "./os/components/AppVersionNotice";
 import { OsTranslationProvider } from "./os/components/OsTranslationProvider";
 import { PwaRegister } from "./os/components/PwaRegister";
+import { getAppVersion, getShortAppVersion } from "../lib/app-version";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -39,11 +41,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const version = getAppVersion();
   const body = (
     <html lang="ja">
       <body>
         <AppZoomGuard />
         <PwaRegister />
+        <AppVersionNotice
+          appName="OS"
+          initialVersion={version}
+          initialShortVersion={getShortAppVersion(version)}
+          pathPrefixes={["/os"]}
+        />
         <OsTranslationProvider>{children}</OsTranslationProvider>
         <FloatingFeedbackButton />
       </body>

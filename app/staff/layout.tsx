@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
+import { AppVersionNotice } from "../os/components/AppVersionNotice";
 import { PrivacyConsentGate } from "../os/components/PrivacyConsentGate";
 
 export const metadata: Metadata = {
@@ -24,8 +26,10 @@ export default function StaffLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const version = getAppVersion();
   return (
     <>
+      <AppVersionNotice appName="Staff" initialVersion={version} initialShortVersion={getShortAppVersion(version)} pathPrefixes={["/staff"]} />
       <PrivacyConsentGate />
       {children}
     </>

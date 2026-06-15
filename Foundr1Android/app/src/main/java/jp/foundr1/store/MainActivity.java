@@ -3,6 +3,7 @@ package jp.foundr1.store;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -31,6 +32,9 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +46,7 @@ public class MainActivity extends Activity {
     private static final int LOCATION_PERMISSION_REQUEST = 1004;
     private static final int STARTUP_PERMISSION_REQUEST = 1005;
     private static final String NOTIFICATION_CHANNEL_ID = "foundr1_store_orders";
+    private static final long APP_UPDATE_CHECK_INTERVAL_MS = 60L * 60L * 1000L;
 
     private FrameLayout rootView;
     private WebView webView;
@@ -49,6 +54,9 @@ public class MainActivity extends Activity {
     private String pendingGeolocationOrigin;
     private GeolocationPermissions.Callback pendingGeolocationCallback;
     private ValueCallback<Uri[]> filePathCallback;
+    private long lastAppUpdateCheckAt = 0L;
+    private int lastPromptedVersionCode = 0;
+    private boolean appUpdateDialogShowing = false;
 
     @SuppressLint({ "SetJavaScriptEnabled", "AddJavascriptInterface" })
     @Override
@@ -130,6 +138,13 @@ public class MainActivity extends Activity {
 
         webView.loadUrl(getString(R.string.default_app_url));
         handleLaunchIntent(getIntent());
+        checkNativeAppUpdateIfNeeded(false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkNativeAppUpdateIfNeeded(true);
     }
 
     @Override
@@ -248,6 +263,108 @@ public class MainActivity extends Activity {
         } catch (Exception error) {
             return base;
         }
+    }
+
+    private void checkNativeAppUpdateIfNeeded(boolean throttled) {
+        long now = System.currentTimeMillis();
+        if (throttled && now - lastAppUpdateCheckAt < APP_UPDATE_CHECK_INTERVAL_MS) return;
+        lastAppUpdateCheckAt = now;
+        String appKey = getAppKey();
+        if (appKey.isEmpty()) return;
+        String manifestUrl = getAppOrigin() + "/downloads/" + appKey + "/version.json?t=" + now;
+
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(manifestUrl);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setRequestProperty("Cache-Control", "no-store");
+                if (connection.getResponseCode() < 200 || connection.getResponseCode() >= 300) return;
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder json = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    json.append(line);
+                }
+                reader.close();
+
+                JSONObject payload = new JSONObject(json.toString());
+                int latestVersionCode = payload.optInt("versionCode", 0);
+                int currentVersionCode = getCurrentVersionCode();
+                if (latestVersionCode <= currentVersionCode || latestVersionCode <= lastPromptedVersionCode) return;
+
+                String versionName = payload.optString("versionName", "");
+                String title = payload.optString("title", getString(R.string.app_name));
+                String downloadPath = payload.optString("latestDownloadPath", payload.optString("downloadPath", ""));
+                if (downloadPath.trim().isEmpty()) return;
+                String downloadUrl = resolveReleaseUrl(downloadPath);
+                runOnUiThread(() -> showAppUpdateDialog(title, versionName, latestVersionCode, downloadUrl));
+            } catch (Exception ignored) {
+                // Native app update checks should never block WebView operation.
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private int getCurrentVersionCode() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return (int) getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+            }
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception error) {
+            return 0;
+        }
+    }
+
+    private String getAppKey() {
+        String packageName = getPackageName();
+        if (packageName.endsWith(".store")) return "store";
+        if (packageName.endsWith(".os")) return "os";
+        if (packageName.endsWith(".member")) return "member";
+        if (packageName.endsWith(".staff")) return "staff";
+        return "";
+    }
+
+    private String getAppOrigin() {
+        try {
+            URL url = new URL(getString(R.string.default_app_url));
+            return url.getProtocol() + "://" + url.getHost();
+        } catch (Exception error) {
+            return "https://www.foundr1.jp";
+        }
+    }
+
+    private String resolveReleaseUrl(String pathOrUrl) {
+        String value = pathOrUrl == null ? "" : pathOrUrl.trim();
+        if (value.startsWith("https://") || value.startsWith("http://")) return value;
+        return getAppOrigin() + (value.startsWith("/") ? value : "/" + value);
+    }
+
+    private void showAppUpdateDialog(String title, String versionName, int versionCode, String downloadUrl) {
+        if (isFinishing() || appUpdateDialogShowing) return;
+        appUpdateDialogShowing = true;
+        lastPromptedVersionCode = versionCode;
+        String versionLabel = versionName == null || versionName.trim().isEmpty()
+            ? String.valueOf(versionCode)
+            : versionName + " (" + versionCode + ")";
+        new AlertDialog.Builder(this)
+            .setTitle("新しいアプリ版があります")
+            .setMessage(title + " " + versionLabel + " をダウンロードできます。")
+            .setPositiveButton("ダウンロード", (dialog, which) -> {
+                appUpdateDialogShowing = false;
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)));
+            })
+            .setNegativeButton("あとで", (dialog, which) -> {
+                appUpdateDialogShowing = false;
+                dialog.dismiss();
+            })
+            .setOnCancelListener((dialog) -> appUpdateDialogShowing = false)
+            .show();
     }
 
     private void showNativeNotification(String title, String body, String href, int notificationId) {

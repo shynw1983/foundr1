@@ -4387,6 +4387,26 @@ body :where(
   grid-column: 1 / -1;
 }
 
+.shell.has-voucher-preview .voucher-product-binding {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.shell.has-voucher-preview .voucher-product-binding-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.shell.has-voucher-preview .voucher-product-binding-actions small {
+  flex: 1 1 180px;
+  max-width: 100%;
+}
+
+.shell.has-voucher-preview .voucher-product-binding-actions .status-pill {
+  flex: 0 0 auto;
+}
+
 .receipt-line-delete-button {
   align-self: end;
 }
@@ -8266,6 +8286,7 @@ body :where(
   box-shadow: none;
 }
 
+.app-version-notice,
 .store-version-notice {
   position: fixed;
   right: 18px;
@@ -8283,22 +8304,26 @@ body :where(
   color: var(--ink);
 }
 
+.app-version-notice div,
 .store-version-notice div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
+.app-version-notice strong,
 .store-version-notice strong {
   font-size: 14px;
   font-weight: 700;
 }
 
+.app-version-notice span,
 .store-version-notice span {
   color: var(--muted);
   font-size: 12px;
 }
 
+.app-version-notice button,
 .store-version-notice button {
   flex: 0 0 auto;
   min-height: 38px;
@@ -27488,6 +27513,7 @@ body :where(
     padding: 0;
   }
 
+  .app-version-notice,
   .store-version-notice {
     right: 12px;
     bottom: 12px;
@@ -27497,6 +27523,7 @@ body :where(
     padding: 10px;
   }
 
+  .app-version-notice button,
   .store-version-notice button {
     min-height: 36px;
     padding-inline: 10px;
