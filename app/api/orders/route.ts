@@ -1,7 +1,8 @@
-import { canAccessStore, getSessionStoreScope, requireOwnerOsSession, requireWritableOsSession } from "../../../lib/api-auth";
+import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { sendPurchaseOrderLarkNotification } from "../../../lib/lark";
+import { roleHasPermission } from "../../../lib/role-permissions";
 
 function toTokyoDateParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -434,8 +435,11 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOwnerOsSession();
+  const session = await requireOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if (!(await roleHasPermission(session.role, "history.delete"))) {
+    return Response.json({ error: "履歴削除の権限がありません。" }, { status: 403 });
+  }
 
   const body = await request.json() as { orderId?: string };
 

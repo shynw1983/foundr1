@@ -1,7 +1,7 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { roleHasPermission } from "../../../../lib/role-permissions";
 
-const procedureEditorRoles = new Set(["owner", "manager"]);
 const settingTables = {
   action_types: "procedure_action_types",
   materials: "procedure_materials",
@@ -39,7 +39,7 @@ function parseSortOrder(value: unknown) {
 
 async function requireProcedureEditor() {
   const session = await requireOsSession();
-  return session && procedureEditorRoles.has(session.role) ? session : null;
+  return session && (await roleHasPermission(session.role, "procedures.edit")) ? session : null;
 }
 
 export async function POST(request: Request) {

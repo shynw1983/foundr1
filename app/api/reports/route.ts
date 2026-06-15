@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSessionStoreScope, requireOsSession, requireOwnerOsSession } from "../../../lib/api-auth";
+import { getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { roleHasPermission } from "../../../lib/role-permissions";
 
 type ReportRow = {
   id: string;
@@ -185,8 +186,11 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireOwnerOsSession();
+  const session = await requireOsSession();
   if (!session) return NextResponse.json({ error: "権限がありません。" }, { status: 403 });
+  if (!(await roleHasPermission(session.role, "history.delete"))) {
+    return NextResponse.json({ error: "履歴削除の権限がありません。" }, { status: 403 });
+  }
 
   const body = await request.json() as {
     id?: string;

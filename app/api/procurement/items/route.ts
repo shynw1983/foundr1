@@ -1,5 +1,6 @@
 import { canAccessStore, requireOwnerOsSession, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { roleHasPermission } from "../../../../lib/role-permissions";
 
 const additionalPurchaseNotePrefix = "追加購入";
 
@@ -217,7 +218,7 @@ export async function PATCH(request: Request) {
   const currentStatus = String(itemDetail?.currentStatus ?? "");
   const isDeliveryLocked = ["in_delivery", "delivered", "received"].includes(currentStatus);
   const isHistoryCorrection = body.historyCorrection === true;
-  if (isHistoryCorrection && !["owner", "manager"].includes(session.role)) {
+  if (isHistoryCorrection && !(await roleHasPermission(session.role, "history.correct"))) {
     return Response.json({ error: "履歴修正の権限がありません。" }, { status: 403 });
   }
   const requestedDeliveryStatus = String(body.deliveryStatus ?? "");

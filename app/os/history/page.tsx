@@ -825,7 +825,8 @@ export default function ProcurementHistoryPage() {
   const [historyView, setHistoryView] = useState<HistoryView>("orders");
   const [activeReceipt, setActiveReceipt] = useState<ReceiptRow | null>(null);
   const [activeCorrectionRow, setActiveCorrectionRow] = useState<HistoryRow | null>(null);
-  const [currentRole, setCurrentRole] = useState("");
+  const [canDeleteHistory, setCanDeleteHistory] = useState(false);
+  const [canCorrectHistory, setCanCorrectHistory] = useState(false);
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
 
   async function loadHistoryData() {
@@ -834,8 +835,10 @@ export default function ProcurementHistoryPage() {
       fetch("/api/auth/me", { cache: "no-store" })
     ]);
     if (meResponse.ok) {
-      const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
-      setCurrentRole(body.employee?.role ?? "");
+      const body = await meResponse.json().catch(() => ({})) as { employee?: { permissions?: string[] } };
+      const permissions = body.employee?.permissions ?? [];
+      setCanDeleteHistory(permissions.includes("history.delete"));
+      setCanCorrectHistory(permissions.includes("history.correct"));
     }
     if (!response.ok) return;
 
@@ -922,8 +925,6 @@ export default function ProcurementHistoryPage() {
       (receiptStatusFilter === "すべて" || row.status === receiptStatusFilter)
     );
   });
-  const canDeleteHistory = currentRole === "owner";
-  const canCorrectHistory = currentRole === "owner" || currentRole === "manager";
   const dateRangeLabel = `${formatDateLabel(dateRange.start)} - ${formatDateLabel(dateRange.end)}`;
 
   function selectDateRangeDay(dateKey: string) {

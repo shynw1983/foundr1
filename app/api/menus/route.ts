@@ -1,8 +1,8 @@
 import { requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { roleHasPermission } from "../../../lib/role-permissions";
 
-const menuEditorRoles = new Set(["owner", "manager"]);
 const defaultExternalPlatforms = [
   { key: "uber_eats", name: "Uber Eats" },
   { key: "wolt", name: "Wolt" },
@@ -10,8 +10,8 @@ const defaultExternalPlatforms = [
 ];
 const customerDisplayLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"];
 
-function canEditMenus(session: EmployeeSession) {
-  return menuEditorRoles.has(session.role);
+async function canEditMenus(session: EmployeeSession) {
+  return roleHasPermission(session.role, "menus.edit");
 }
 
 function cleanOptionalId(value: unknown) {
@@ -224,7 +224,7 @@ async function readMenuAdminData() {
 
 export async function GET() {
   const session = await requireOsSession();
-  if (!session || !canEditMenus(session)) {
+  if (!session || !(await canEditMenus(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
@@ -233,7 +233,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditMenus(session)) {
+  if (!session || !(await canEditMenus(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
@@ -258,7 +258,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditMenus(session)) {
+  if (!session || !(await canEditMenus(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

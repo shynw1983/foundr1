@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditMenuTranslations(session)) {
+  if (!session || !(await canEditMenuTranslations(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

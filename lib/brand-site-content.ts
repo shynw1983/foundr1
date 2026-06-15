@@ -1,5 +1,6 @@
 import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
+import { roleHasPermission } from "./role-permissions";
 import { menuTranslationLanguages } from "./menu-auto-translation";
 
 export type BrandSiteLanguage = typeof menuTranslationLanguages[number];
@@ -62,9 +63,6 @@ type OpenAiTranslationResult = {
   key?: unknown;
   text?: unknown;
 };
-
-const editorRoles = new Set(["owner", "manager"]);
-const approverRoles = new Set(["owner"]);
 
 export const brandSiteLanguageLabels: Record<BrandSiteLanguage, string> = {
   en: "English",
@@ -309,12 +307,12 @@ const maamaaSections: BrandSiteSectionSeed[] = [
   }
 ];
 
-export function canEditBrandSiteContent(session: EmployeeSession) {
-  return editorRoles.has(session.role);
+export async function canEditBrandSiteContent(session: EmployeeSession) {
+  return roleHasPermission(session.role, "menus.edit");
 }
 
-export function canApproveBrandSiteContent(session: EmployeeSession) {
-  return approverRoles.has(session.role);
+export async function canApproveBrandSiteContent(session: EmployeeSession) {
+  return roleHasPermission(session.role, "brandSites.publish");
 }
 
 function defaultSectionsForBrand(name: string) {

@@ -7,10 +7,10 @@ import {
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditBrandSiteContent(session)) {
+  if (!session || !(await canEditBrandSiteContent(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
-  if (!canApproveBrandSiteContent(session)) {
+  if (!(await canApproveBrandSiteContent(session))) {
     return Response.json({ error: "AI翻訳の書き込みは老板の承認が必要です。经理はプレビューを作成して老板へ依頼してください。" }, { status: 403 });
   }
 

@@ -1,11 +1,11 @@
 import { put } from "@vercel/blob";
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { recordExternalServiceUsage } from "../../../../../lib/external-service-usage";
+import { roleHasPermission } from "../../../../../lib/role-permissions";
 import { validateImageUpload } from "../../../../../lib/upload-security";
 
 export const dynamic = "force-dynamic";
 
-const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const maxImageSizeBytes = 8 * 1024 * 1024;
 const maxVideoSizeBytes = 80 * 1024 * 1024;
 const videoTypes = new Map([
@@ -20,7 +20,7 @@ function safeFilename(value: string) {
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !writableRoles.has(session.role)) {
+  if (!session || !(await roleHasPermission(session.role, "pos.manageSettings"))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

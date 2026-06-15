@@ -2,7 +2,7 @@
 
 import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, Upload, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import {
@@ -139,6 +139,13 @@ export default function OsSettingsPage() {
   const [uploadingSocialInsurance, setUploadingSocialInsurance] = useState(false);
   const [uploadingEmploymentInsurance, setUploadingEmploymentInsurance] = useState(false);
   const [savingRolePermissions, setSavingRolePermissions] = useState(false);
+  const groupedRolePermissionDefinitions = useMemo(() => {
+    const groups = new Map<string, RolePermissionDefinition[]>();
+    for (const definition of rolePermissionDefinitions) {
+      groups.set(definition.category, [...(groups.get(definition.category) ?? []), definition]);
+    }
+    return Array.from(groups.entries()).map(([category, definitions]) => ({ category, definitions }));
+  }, [rolePermissionDefinitions]);
 
   useEffect(() => {
     async function loadSettings() {
@@ -481,30 +488,36 @@ export default function OsSettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rolePermissionDefinitions.map((definition) => (
-                    <tr key={definition.key}>
-                      <th>
-                        <span>{definition.category}</span>
-                        <strong>{definition.label}</strong>
-                        <small>{definition.description}</small>
-                      </th>
-                      {rolePermissions.map((roleState) => {
-                        const permission = roleState.permissions.find((candidate) => candidate.key === definition.key);
-                        return (
-                          <td key={`${roleState.role}:${definition.key}`}>
-                            <label className="role-permission-check" aria-label={`${roleLabels[roleState.role] ?? roleState.role} ${definition.label}`}>
-                              <input
-                                type="checkbox"
-                                checked={permission?.enabled === true}
-                                disabled={!canEditRolePermissions || permission?.locked === true}
-                                onChange={(event) => toggleRolePermission(roleState.role, definition.key, event.currentTarget.checked)}
-                              />
-                              <span>{permission?.locked ? "固定" : permission?.enabled ? "許可" : "なし"}</span>
-                            </label>
-                          </td>
-                        );
-                      })}
-                    </tr>
+                  {groupedRolePermissionDefinitions.map((group) => (
+                    <Fragment key={group.category}>
+                      <tr className="role-permission-group-row">
+                        <th colSpan={rolePermissions.length + 1}>{group.category}</th>
+                      </tr>
+                      {group.definitions.map((definition) => (
+                        <tr key={definition.key}>
+                          <th>
+                            <strong>{definition.label}</strong>
+                            <small>{definition.description}</small>
+                          </th>
+                          {rolePermissions.map((roleState) => {
+                            const permission = roleState.permissions.find((candidate) => candidate.key === definition.key);
+                            return (
+                              <td key={`${roleState.role}:${definition.key}`}>
+                                <label className="role-permission-check" aria-label={`${roleLabels[roleState.role] ?? roleState.role} ${definition.label}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={permission?.enabled === true}
+                                    disabled={!canEditRolePermissions || permission?.locked === true}
+                                    onChange={(event) => toggleRolePermission(roleState.role, definition.key, event.currentTarget.checked)}
+                                  />
+                                  <span>{permission?.locked ? "固定" : permission?.enabled ? "許可" : "なし"}</span>
+                                </label>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

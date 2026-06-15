@@ -3,12 +3,11 @@ import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritable
 import { sql } from "../../../../lib/db";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
 import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/receipt-ocr";
+import { roleHasPermission } from "../../../../lib/role-permissions";
 import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
 const maxReceiptPdfSizeBytes = 50 * 1024 * 1024;
-const expenseEditRoles = new Set(["owner", "manager"]);
-
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
@@ -83,7 +82,7 @@ export async function GET(request: Request) {
 
   const scope = await getSessionStoreScope(session);
   return Response.json({
-    canEditExpenseReceipts: expenseEditRoles.has(session.role),
+    canEditExpenseReceipts: await roleHasPermission(session.role, "analytics.manageExpenses"),
     scopedStoreCount: scope.allStores ? null : scope.storeIds.length,
     receipts: rows.map((row) => ({
       id: String(row.id),
@@ -113,7 +112,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費レシートを登録する権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費レシートを登録する権限がありません。" }, { status: 403 });
 
   const formData = await request.formData();
   const storeId = String(formData.get("storeId") ?? "").trim();
@@ -228,7 +227,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費レシートを削除する権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費レシートを削除する権限がありません。" }, { status: 403 });
 
   const url = new URL(request.url);
   const id = String(url.searchParams.get("id") ?? "").trim();
@@ -276,7 +275,7 @@ export async function DELETE(request: Request) {
 export async function PATCH(request: Request) {
   const session = await requireWritableOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費レシートを登録済みにする権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費レシートを登録済みにする権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as {
     id?: string;

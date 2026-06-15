@@ -12,12 +12,12 @@ export type StaffAdminAccess = {
   permissions: Set<string>;
 };
 
-export async function requireStaffAdminSession(): Promise<StaffAdminAccess | null> {
+async function resolveStaffAccess(requiredPermission: "module.staff" | "staff.manage"): Promise<StaffAdminAccess | null> {
   const session = await requireOsSession();
   if (!session) return null;
   const permissions = await getPermissionsForRole(session.role);
 
-  if (!permissions.has("staff.manage")) return null;
+  if (!permissions.has(requiredPermission)) return null;
 
   if (session.role === "owner" || session.role === "manager") {
     return { session, allStores: true, storeIds: [], permissions };
@@ -31,7 +31,16 @@ export async function requireStaffAdminSession(): Promise<StaffAdminAccess | nul
   return null;
 }
 
+export async function requireStaffViewSession(): Promise<StaffAdminAccess | null> {
+  return resolveStaffAccess("module.staff");
+}
+
+export async function requireStaffAdminSession(): Promise<StaffAdminAccess | null> {
+  return resolveStaffAccess("staff.manage");
+}
+
 export function canAssignStaffRole(access: StaffAdminAccess, role: string) {
+  if (!access.permissions.has("staff.manage")) return false;
   if (access.session.role === "owner") return true;
   if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
   if (headquarterAssignableRoles.has(role)) return false;
@@ -39,6 +48,7 @@ export function canAssignStaffRole(access: StaffAdminAccess, role: string) {
 }
 
 export function canManageTargetRole(access: StaffAdminAccess, role: string) {
+  if (!access.permissions.has("staff.manage")) return false;
   if (access.session.role === "owner") return true;
   if (access.permissions.has("staff.assignHeadquarterRoles")) return role !== "owner";
   if (headquarterAssignableRoles.has(role)) return false;

@@ -69,7 +69,7 @@ export default function ReportsPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | ReportItem["type"]>("all");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [currentRole, setCurrentRole] = useState("");
+  const [canDeleteReports, setCanDeleteReports] = useState(false);
 
   useEffect(() => {
     async function loadReports() {
@@ -79,8 +79,8 @@ export default function ReportsPage() {
         fetch("/api/auth/me", { cache: "no-store" })
       ]);
       if (meResponse.ok) {
-        const body = await meResponse.json().catch(() => ({})) as { employee?: { role?: string } };
-        setCurrentRole(body.employee?.role ?? "");
+        const body = await meResponse.json().catch(() => ({})) as { employee?: { permissions?: string[] } };
+        setCanDeleteReports(body.employee?.permissions?.includes("history.delete") === true);
       }
       if (response.ok) {
         const data = await response.json() as { reports?: ReportItem[] };
@@ -115,7 +115,6 @@ export default function ReportsPage() {
 
   const openCount = reports.filter((report) => report.status === "open").length;
   const resolvedCount = reports.filter((report) => report.status === "resolved").length;
-  const canDeleteReports = currentRole === "owner";
 
   async function deleteReport(report: ReportItem) {
     if (!window.confirm(`${typeLabels[report.type]} の連絡・報告を削除しますか？`)) return;

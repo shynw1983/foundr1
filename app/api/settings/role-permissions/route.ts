@@ -1,11 +1,12 @@
 import { writeAuditLog } from "../../../../lib/audit-log";
-import { requireOwnerOsSession, requireOsSession } from "../../../../lib/api-auth";
+import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import {
   configurableRoles,
   getAllRolePermissions,
   normalizeConfigurableRole,
   normalizePermissionKeys,
+  roleHasPermission,
   rolePermissionDefinitions
 } from "../../../../lib/role-permissions";
 
@@ -19,13 +20,16 @@ export async function GET() {
     roles: configurableRoles,
     definitions: rolePermissionDefinitions,
     rolePermissions: await getAllRolePermissions(),
-    canEdit: session.role === "owner"
+    canEdit: await roleHasPermission(session.role, "settings.managePermissions")
   });
 }
 
 export async function POST(request: Request) {
-  const session = await requireOwnerOsSession();
+  const session = await requireOsSession();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "settings.managePermissions")) === false) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => null) as { rolePermissions?: Array<{ role?: string; permissions?: unknown }> } | null;
   const payload = Array.isArray(body?.rolePermissions) ? body.rolePermissions : [];

@@ -1,6 +1,7 @@
 import { getSessionStoreScope, requireOsSession } from "../../../lib/api-auth";
 import type { EmployeeSession } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { roleHasPermission } from "../../../lib/role-permissions";
 
 type ProcedureProductPayload = {
   productId?: string;
@@ -57,10 +58,8 @@ type ProcedureBookPayload = {
   steps?: ProcedureStepPayload[];
 };
 
-const procedureEditorRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
-
-function canEditProcedures(session: EmployeeSession) {
-  return procedureEditorRoles.has(session.role);
+async function canEditProcedures(session: EmployeeSession) {
+  return roleHasPermission(session.role, "procedures.edit");
 }
 
 function cleanStatus(value: unknown) {
@@ -98,7 +97,7 @@ function parseJsonObject(value: unknown) {
 
 async function readProcedures(session: EmployeeSession, mode: string) {
   const scope = await getSessionStoreScope(session);
-  const includeDraft = mode === "admin" && canEditProcedures(session);
+  const includeDraft = mode === "admin" && (await canEditProcedures(session));
 
   const books = await sql`
     select
@@ -458,20 +457,21 @@ export async function GET(request: Request) {
 
   const mode = new URL(request.url).searchParams.get("mode") ?? "";
   const procedures = await readProcedures(session, mode);
-  const options = mode === "admin" && canEditProcedures(session)
+  const canEdit = await canEditProcedures(session);
+  const options = mode === "admin" && canEdit
     ? await readAdminOptions()
     : { stores: [], brands: [], products: [], materials: [] };
 
   return Response.json({
     procedures,
-    canEdit: canEditProcedures(session),
+    canEdit,
     ...options
   });
 }
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditProcedures(session)) {
+  if (!session || !(await canEditProcedures(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
@@ -486,7 +486,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditProcedures(session)) {
+  if (!session || !(await canEditProcedures(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
@@ -504,7 +504,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditProcedures(session)) {
+  if (!session || !(await canEditProcedures(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

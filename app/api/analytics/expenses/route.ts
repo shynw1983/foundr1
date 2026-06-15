@@ -1,7 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
+import { roleHasPermission } from "../../../../lib/role-permissions";
 
-const expenseEditRoles = new Set(["owner", "manager"]);
 const expenseCategories = new Set(["fixed", "variable", "misc"]);
 
 function getCurrentMonth() {
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
     month,
     stores,
     selectedStoreId,
-    canEditExpenses: expenseEditRoles.has(session.role),
+    canEditExpenses: await roleHasPermission(session.role, "analytics.manageExpenses"),
     expenses: expenses.map((expense) => ({
       id: String(expense.id),
       storeId: String(expense.storeId),
@@ -174,7 +174,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as {
     storeId?: string;
@@ -237,7 +237,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as {
     id?: string;
@@ -309,7 +309,7 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
-  if (!expenseEditRoles.has(session.role)) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "analytics.manageExpenses")) === false) return Response.json({ error: "経費を変更する権限がありません。" }, { status: 403 });
 
   const url = new URL(request.url);
   const id = url.searchParams.get("id") ?? "";

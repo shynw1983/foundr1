@@ -1,14 +1,14 @@
 import { put } from "@vercel/blob";
 import { requireOsSession } from "../../../../lib/api-auth";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
+import { roleHasPermission } from "../../../../lib/role-permissions";
 import { validateImageUpload } from "../../../../lib/upload-security";
 
-const menuEditorRoles = new Set(["owner", "manager"]);
 const maxPhotoSizeBytes = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !menuEditorRoles.has(session.role)) {
+  if (!session || !(await roleHasPermission(session.role, "menus.edit"))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

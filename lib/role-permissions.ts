@@ -63,7 +63,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   {
     key: "module.staff",
     label: "スタッフ管理",
-    description: "スタッフ一覧とアカウント管理を表示します。",
+    description: "スタッフ一覧とスタッフ詳細を表示します。",
     category: "モジュール",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
@@ -126,9 +126,89 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
   {
     key: "staff.manage",
     label: "スタッフ作成・編集",
-    description: "許可された範囲のスタッフを作成、編集できます。",
+    description: "許可された範囲のスタッフを作成、編集、削除できます。未許可の場合は閲覧のみです。",
     category: "操作",
+    defaultRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "products.manage",
+    label: "商品マスタ編集",
+    description: "商品、カテゴリ、価格、発注先候補を作成・編集できます。未許可の場合は閲覧のみです。",
+    category: "商品マスタ",
+    defaultRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "procedures.edit",
+    label: "手順書編集",
+    description: "手順書と手順書用のアクション・材料・設備マスタを編集できます。",
+    category: "店舗運営",
     defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "pos.manageSettings",
+    label: "POS 設定編集",
+    description: "POS 税率、レシート、プリンタ、値引き、客面表示を編集できます。",
+    category: "POS",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "pos.refund",
+    label: "POS 返金・訂正",
+    description: "POS 取引の返金、取消、現金差異の訂正を操作できます。",
+    category: "POS",
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "menus.edit",
+    label: "メニュー編集",
+    description: "メニュー商品、選択肢、多言語表示、AI 翻訳を編集できます。",
+    category: "メニュー",
+    defaultRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "brandSites.publish",
+    label: "ブランドサイト公開",
+    description: "ブランドサイトの変更を承認し、公開 API に反映できます。",
+    category: "メニュー",
+    defaultRoles: ["owner"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "analytics.manageExpenses",
+    label: "経費編集",
+    description: "月次経費と経費レシートを登録、編集、削除、確認できます。",
+    category: "経営分析",
+    defaultRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "history.correct",
+    label: "履歴訂正",
+    description: "発注・購入履歴の数量、状態、レシート確認などを訂正できます。",
+    category: "発注・購入管理",
+    defaultRoles: ["owner", "manager"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "history.delete",
+    label: "履歴削除",
+    description: "発注履歴、商品、連絡報告などの削除操作を実行できます。",
+    category: "発注・購入管理",
+    defaultRoles: ["owner"],
+    lockedRoles: ["owner"]
+  },
+  {
+    key: "settings.managePermissions",
+    label: "権限設定編集",
+    description: "ユーザーグループ権限を変更できます。",
+    category: "システム設定",
+    defaultRoles: ["owner"],
     lockedRoles: ["owner"]
   },
   {

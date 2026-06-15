@@ -301,6 +301,7 @@ export default function StaffPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [canManageStaff, setCanManageStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [dataSource, setDataSource] = useState<"loading" | "neon" | "forbidden">("loading");
   const [error, setError] = useState("");
@@ -351,11 +352,13 @@ export default function StaffPage() {
       stores?: StoreOption[];
       currentUserId?: string;
       currentUserRole?: string;
+      canManageStaff?: boolean;
     };
     setStaff(body.employees ?? []);
     setStores(body.stores ?? []);
     setCurrentUserId(body.currentUserId ?? "");
     setCurrentUserRole(body.currentUserRole ?? "");
+    setCanManageStaff(body.canManageStaff === true);
     setDataSource("neon");
     return body.employees ?? [];
   }
@@ -434,6 +437,7 @@ export default function StaffPage() {
 
   async function createStaff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManageStaff) return;
     setError("");
     const form = event.currentTarget;
     const response = await fetch("/api/staff", {
@@ -455,7 +459,7 @@ export default function StaffPage() {
 
   async function updateStaff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editingStaff) return;
+    if (!editingStaff || !canManageStaff || editingStaff.canManage === false) return;
     setError("");
     const response = await fetch(`/api/staff/${editingStaff.id}`, {
       method: "PATCH",
@@ -475,7 +479,7 @@ export default function StaffPage() {
   }
 
   async function deleteEditingStaff() {
-    if (!editingStaff) return;
+    if (!editingStaff || !canManageStaff || editingStaff.canManage === false) return;
     if (editingStaff.id === currentUserId) {
       window.alert("自分自身のアカウントは削除できません。");
       return;
@@ -530,13 +534,13 @@ export default function StaffPage() {
           <div>
             <p className="eyebrow">社員アカウントと店舗権限</p>
             <h2>スタッフ管理</h2>
-            <span className="source-indicator">{dataSource === "neon" ? "データ同期済み" : dataSource === "forbidden" ? "スタッフ管理権限が必要" : "読み込み中"}</span>
+            <span className="source-indicator">{dataSource === "neon" ? (canManageStaff ? "データ同期済み" : "閲覧モード") : dataSource === "forbidden" ? "スタッフ管理権限が必要" : "読み込み中"}</span>
           </div>
         </header>
 
         {dataSource === "forbidden" ? (
           <section className="panel">
-            <PanelTitle title="スタッフ管理権限が必要です" subtitle="スタッフ管理は本部オーナー、本部マネージャー、店舗責任者のみ操作できます。" />
+            <PanelTitle title="スタッフ管理権限が必要です" subtitle="スタッフ情報を表示するには、システム設定でスタッフ管理モジュールの権限が必要です。" />
           </section>
         ) : (
           <section className="management-grid staff-management-grid">
@@ -618,13 +622,9 @@ export default function StaffPage() {
                       </small>
                     </div>
                     <div className="row-actions">
-                      {member.canManage !== false ? (
-                        <>
-                          <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
-                            編集
-                          </button>
-                        </>
-                      ) : null}
+                      <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
+                        {member.canManage !== false ? "編集" : "詳細"}
+                      </button>
                     </div>
                   </article>
                 )) : (
@@ -633,14 +633,20 @@ export default function StaffPage() {
               </div>
             </section>
 
-            <section className="panel">
-              <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、店舗権限を設定" />
-              {error ? <div className="login-error">{error}</div> : null}
-              <form className="management-form staff-form" onSubmit={createStaff}>
-                <StaffFormFields stores={stores} currentUserRole={currentUserRole} onNotice={showNotice} onError={setError} />
-                <button className="primary-button" type="submit">追加</button>
-              </form>
-            </section>
+            {canManageStaff ? (
+              <section className="panel">
+                <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、店舗権限を設定" />
+                {error ? <div className="login-error">{error}</div> : null}
+                <form className="management-form staff-form" onSubmit={createStaff}>
+                  <StaffFormFields stores={stores} currentUserRole={currentUserRole} onNotice={showNotice} onError={setError} />
+                  <button className="primary-button" type="submit">追加</button>
+                </form>
+              </section>
+            ) : (
+              <section className="panel">
+                <PanelTitle title="閲覧モード" subtitle="スタッフ情報の表示のみ可能です。作成・編集は本部オーナーの設定で許可された場合に使えます。" />
+              </section>
+            )}
           </section>
         )}
       </section>
@@ -652,30 +658,35 @@ export default function StaffPage() {
             <div className="modal-heading">
               <div>
                 <p className="eyebrow">Staff</p>
-                <h3 id="staff-edit-title">スタッフを編集</h3>
+                <h3 id="staff-edit-title">{editingStaff.canManage !== false ? "スタッフを編集" : "スタッフ詳細"}</h3>
               </div>
               <button className="secondary-button" type="button" onClick={() => setEditingStaff(null)}>閉じる</button>
             </div>
             {error ? <div className="login-error">{error}</div> : null}
             <form className="management-form staff-form" onSubmit={updateStaff}>
-              <StaffFormFields
-                member={editingStaff}
-                stores={stores}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                onHistoryChanged={reloadStaffKeepingEdit}
-                onNotice={showNotice}
-                onError={setError}
-              />
-              <button className="primary-button" type="submit">保存</button>
+              <div className={editingStaff.canManage !== false ? "" : "staff-readonly-fields"}>
+                <StaffFormFields
+                  member={editingStaff}
+                  stores={stores}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                  readOnly={editingStaff.canManage === false}
+                  onHistoryChanged={reloadStaffKeepingEdit}
+                  onNotice={showNotice}
+                  onError={setError}
+                />
+              </div>
+              {editingStaff.canManage !== false ? <button className="primary-button" type="submit">保存</button> : null}
             </form>
-            <details className="store-danger-zone">
-              <summary>退職・重複登録などでスタッフを削除する</summary>
-              <p>スタッフ削除は通常使いません。勤怠、給与、権限、操作履歴との関連を確認してから実行してください。</p>
-              <button className="danger-button" type="button" disabled={editingStaff.id === currentUserId} onClick={() => void deleteEditingStaff()}>
-                スタッフを削除
-              </button>
-            </details>
+            {editingStaff.canManage !== false ? (
+              <details className="store-danger-zone">
+                <summary>退職・重複登録などでスタッフを削除する</summary>
+                <p>スタッフ削除は通常使いません。勤怠、給与、権限、操作履歴との関連を確認してから実行してください。</p>
+                <button className="danger-button" type="button" disabled={editingStaff.id === currentUserId} onClick={() => void deleteEditingStaff()}>
+                  スタッフを削除
+                </button>
+              </details>
+            ) : null}
             </section>
           </div>
         </ModalHistoryScope>
@@ -714,6 +725,7 @@ function StaffFormFields({
   stores,
   currentUserId,
   currentUserRole,
+  readOnly = false,
   onHistoryChanged,
   onNotice,
   onError
@@ -722,6 +734,7 @@ function StaffFormFields({
   stores: StoreOption[];
   currentUserId?: string;
   currentUserRole?: string;
+  readOnly?: boolean;
   onHistoryChanged?: (employeeId: string) => Promise<void> | void;
   onNotice?: (message: string) => void;
   onError?: (message: string) => void;
@@ -761,12 +774,13 @@ function StaffFormFields({
 
   useEffect(() => {
     if (isStoreTerminal && activeTab === "payroll") setActiveTab("basic");
-  }, [activeTab, isStoreTerminal]);
+    if (readOnly && activeTab === "lifecycle") setActiveTab("basic");
+  }, [activeTab, isStoreTerminal, readOnly]);
 
   useEffect(() => {
-    if (!member || activeTab !== "lifecycle") return;
+    if (!member || readOnly || activeTab !== "lifecycle") return;
     void loadLifecycleCases();
-  }, [activeTab, member?.id]);
+  }, [activeTab, member?.id, readOnly]);
 
   function toggleWorkStore(storeId: string, checked: boolean) {
     setSelectedWorkStoreIdList((current) => {
@@ -992,7 +1006,7 @@ function StaffFormFields({
         {!isStoreTerminal ? (
           <button className={activeTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setActiveTab("payroll")}>勤務・給与情報</button>
         ) : null}
-        {member && !isStoreTerminal ? (
+        {member && !isStoreTerminal && !readOnly ? (
           <button className={activeTab === "lifecycle" ? "is-active" : ""} type="button" onClick={() => setActiveTab("lifecycle")}>手続き</button>
         ) : null}
         <button className={activeTab === "other" ? "is-active" : ""} type="button" onClick={() => setActiveTab("other")}>その他</button>
@@ -1378,7 +1392,7 @@ function StaffFormFields({
           <div className="staff-lifecycle-header">
             <div>
               <strong>入退社手続き</strong>
-              <p>勤務店舗ごとの入社日・退職日・税/保険設定から、このスタッフ本人のチェックリストを自動生成します。</p>
+              <p>勤務店舗ごとの入社日・退職日・税/保険設定から、このスタッフ本人のチェックリストを同期します。</p>
             </div>
             <div className="staff-lifecycle-actions">
               <button className="secondary-button" type="button" onClick={() => void createLifecycleCase("onboarding")}>
@@ -1392,7 +1406,7 @@ function StaffFormFields({
 
           {lifecycleLoading ? <p className="empty-state-text">手続きを読み込み中...</p> : null}
           {!lifecycleLoading && !lifecycleCases.length ? (
-            <p className="empty-state-text">まだ手続きがありません。勤務・給与情報で店舗ごとの入社日または退職日を入力すると自動生成されます。</p>
+            <p className="empty-state-text">まだ手続きがありません。勤務・給与情報で店舗ごとの入社日または退職日を入力し、同期ボタンを押すと生成されます。</p>
           ) : null}
 
           <div className="staff-lifecycle-case-list">

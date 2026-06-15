@@ -11,23 +11,23 @@ import {
 
 export async function GET() {
   const session = await requireOsSession();
-  if (!session || !canEditBrandSiteContent(session)) {
+  if (!session || !(await canEditBrandSiteContent(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
-  return Response.json({ ...(await readBrandSiteContent()), currentRole: session.role });
+  return Response.json({ ...(await readBrandSiteContent()), canPublish: await canApproveBrandSiteContent(session) });
 }
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditBrandSiteContent(session)) {
+  if (!session || !(await canEditBrandSiteContent(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   try {
     if (String(body.action ?? "") === "reviewRevision") {
-      if (!canApproveBrandSiteContent(session)) {
+      if (!(await canApproveBrandSiteContent(session))) {
         return Response.json({ error: "老板の承認が必要です。" }, { status: 403 });
       }
       return Response.json(await reviewBrandSiteSectionRevision({
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         reviewerId: session.id
       }));
     }
-    if (!canApproveBrandSiteContent(session)) {
+    if (!(await canApproveBrandSiteContent(session))) {
       return Response.json(await submitBrandSiteSectionRevision(body, session.id));
     }
     return Response.json(await upsertBrandSiteSection(body));
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditBrandSiteContent(session)) {
+  if (!session || !(await canEditBrandSiteContent(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

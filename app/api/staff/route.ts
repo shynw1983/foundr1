@@ -1,4 +1,4 @@
-import { requireStaffAdminSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../lib/staff-admin-access";
+import { requireStaffAdminSession, requireStaffViewSession, canAssignStaffRole, canManageTargetRole, filterStoreIdsForStaffAdmin, hasValidScopedStoreSelection } from "../../../lib/staff-admin-access";
 import { writeAuditLog } from "../../../lib/audit-log";
 import { hashPassword, shouldRequirePasswordChangeForRole, validatePasswordStrength } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
@@ -175,7 +175,7 @@ function getPayrollMonthStartDate(month: string, store?: StorePayrollConfig) {
 }
 
 export async function GET() {
-  const access = await requireStaffAdminSession();
+  const access = await requireStaffViewSession();
   if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
   const session = access.session;
 
@@ -358,7 +358,8 @@ export async function GET() {
     })),
     stores,
     currentUserId: session.id,
-    currentUserRole: session.role
+    currentUserRole: session.role,
+    canManageStaff: access.permissions.has("staff.manage")
   });
 }
 

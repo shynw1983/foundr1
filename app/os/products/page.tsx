@@ -139,7 +139,6 @@ const commonUnitOptions = ["個", "袋", "箱", "本", "枚", "kg", "g", "L", "m
 const customUnitOption = "__custom_unit__";
 const unsetSupplierFilterValue = "__unset_supplier__";
 const addSupplierOption = "__add_supplier__";
-const productManagerRoles = new Set(["owner", "manager"]);
 const missingProductInfoOptions = [
   { value: "すべて", label: "すべて" },
   { value: "receiptIncomplete", label: "情報未補完" },
@@ -507,7 +506,6 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
 export default function ProductsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [returnToOrdersAfterProduct, setReturnToOrdersAfterProduct] = useState(false);
-  const [currentRole, setCurrentRole] = useState("");
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -543,7 +541,7 @@ export default function ProductsPage() {
   const [candidateProductIds, setCandidateProductIds] = useState<Record<string, string>>({});
   const [candidateEdits, setCandidateEdits] = useState<Record<string, Partial<ProductCandidate>>>({});
   const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryState | null>(null);
-  const canManageProducts = productManagerRoles.has(currentRole);
+  const [canManageProducts, setCanManageProducts] = useState(false);
 
   useCloseOnOutside(productSummaryPickerRef, () => setIsProductSummaryPickerOpen(false), isProductSummaryPickerOpen);
 
@@ -557,12 +555,13 @@ export default function ProductsPage() {
       const body = await meResponse.json().catch(() => ({})) as {
         employee?: {
           role?: string;
+          permissions?: string[];
           uiPreferences?: {
             productMasterSummaryFields?: string[];
           };
         };
       };
-      setCurrentRole(body.employee?.role ?? "");
+      setCanManageProducts(body.employee?.permissions?.includes("products.manage") === true);
       const savedSummaryFields = body.employee?.uiPreferences?.productMasterSummaryFields;
       if (Array.isArray(savedSummaryFields) && savedSummaryFields.length > 0) {
         const validFields = savedSummaryFields.filter((field) =>

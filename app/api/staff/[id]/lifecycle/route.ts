@@ -1,4 +1,4 @@
-import { requireStaffAdminSession, type StaffAdminAccess } from "../../../../../lib/staff-admin-access";
+import { requireStaffAdminSession, requireStaffViewSession, type StaffAdminAccess } from "../../../../../lib/staff-admin-access";
 import { sql } from "../../../../../lib/db";
 
 type LifecycleCaseType = "onboarding" | "offboarding";
@@ -453,15 +453,14 @@ async function refreshCaseCompletion(caseId: string, sessionId: string) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const access = await requireStaffAdminSession();
+  const access = await requireStaffViewSession();
   if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const { id } = await context.params;
   if (!await canAccessEmployee(access, id)) {
-    return Response.json({ error: "このスタッフを操作する権限がありません。" }, { status: 403 });
+    return Response.json({ error: "このスタッフを表示する権限がありません。" }, { status: 403 });
   }
 
-  await syncLifecycleCases(id, access);
   return Response.json({ cases: await readLifecycleCases(id) });
 }
 

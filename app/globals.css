@@ -5242,6 +5242,14 @@ body :where(
   text-align: left;
 }
 
+.role-permission-table .role-permission-group-row th {
+  background: #eef6f1;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
 .role-permission-table tbody tr:last-child th,
 .role-permission-table tbody tr:last-child td {
   border-bottom: 0;
@@ -5701,6 +5709,26 @@ body :where(
 
 .staff-form-pane.is-active {
   display: grid;
+}
+
+.staff-readonly-fields input:not([type="hidden"]),
+.staff-readonly-fields select,
+.staff-readonly-fields textarea,
+.staff-readonly-fields button {
+  pointer-events: none;
+  background: #f8fafc;
+  color: var(--text);
+}
+
+.staff-readonly-fields .staff-form-tabs button {
+  pointer-events: auto;
+  background: transparent;
+  color: var(--muted);
+}
+
+.staff-readonly-fields .staff-form-tabs button.is-active {
+  background: white;
+  color: var(--green);
 }
 
 .management-form .staff-checkbox-field {

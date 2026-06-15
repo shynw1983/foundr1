@@ -1,11 +1,11 @@
 import { requireOsSession } from "../../../../../lib/api-auth";
 import { sql } from "../../../../../lib/db";
 import { normalizePosPrinterSettings } from "../../../../../lib/pos-printer";
+import { roleHasPermission } from "../../../../../lib/role-permissions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
 
-const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const priceTaxModes = new Set(["tax_included", "tax_excluded"]);
 const discountTypes = new Set(["percent", "amount"]);
 const discountTargetScopes = new Set(["all", "category", "item_kind", "brand"]);
@@ -268,9 +268,10 @@ export async function GET(request: Request) {
 
   const { access, selectedStoreId, forbidden } = await resolveStoreId(request, session);
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  const canManagePosSettings = await roleHasPermission(session.role, "pos.manageSettings");
 
   return Response.json({
-    access: { ...access, canManagePosSettings: writableRoles.has(session.role) },
+    access: { ...access, canManagePosSettings },
     selectedStoreId,
     settings: await getSettings(selectedStoreId)
   }, { headers: { "Cache-Control": "no-store" } });
@@ -279,7 +280,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (!writableRoles.has(session.role)) return Response.json({ error: "権限がありません。" }, { status: 403 });
+  if ((await roleHasPermission(session.role, "pos.manageSettings")) === false) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const body = await request.json().catch(() => ({})) as {
     storeId?: string;

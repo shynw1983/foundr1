@@ -218,7 +218,7 @@ export default function BrandSitesPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [sections, setSections] = useState<BrandSiteSection[]>([]);
   const [revisions, setRevisions] = useState<BrandSiteRevision[]>([]);
-  const [currentRole, setCurrentRole] = useState("");
+  const [canPublish, setCanPublish] = useState(false);
   const [activeBrandId, setActiveBrandId] = useState("");
   const [activePageKey, setActivePageKey] = useState("home");
   const [activeSectionId, setActiveSectionId] = useState("");
@@ -234,7 +234,6 @@ export default function BrandSitesPage() {
   const [imageUploading, setImageUploading] = useState(false);
 
   const activeBrand = useMemo(() => brands.find((brand) => brand.id === activeBrandId) ?? null, [activeBrandId, brands]);
-  const canPublish = currentRole === "owner";
   const brandSections = useMemo(() => sections.filter((section) => section.brandId === activeBrandId), [activeBrandId, sections]);
   const pendingRevisions = useMemo(() => revisions.filter((revision) => revision.brandId === activeBrandId && revision.status === "pending"), [activeBrandId, revisions]);
   const pageKeys = useMemo(() => uniqueValues(["home", "menu", "footer", ...brandSections.map((section) => section.pageKey)]), [brandSections]);
@@ -278,12 +277,12 @@ export default function BrandSitesPage() {
     setStatus("");
     try {
       const response = await fetch("/api/brand-sites", { cache: "no-store" });
-      const body = await response.json().catch(() => ({})) as { brands?: Brand[]; sections?: BrandSiteSection[]; revisions?: BrandSiteRevision[]; currentRole?: string; error?: string };
+      const body = await response.json().catch(() => ({})) as { brands?: Brand[]; sections?: BrandSiteSection[]; revisions?: BrandSiteRevision[]; canPublish?: boolean; error?: string };
       if (!response.ok) throw new Error(body.error || "読み込みに失敗しました。");
       setBrands(body.brands ?? []);
       setSections((body.sections ?? []).map((section) => normalizeSection(section, section.brandId)));
       setRevisions(body.revisions ?? []);
-      setCurrentRole(body.currentRole ?? "");
+      setCanPublish(body.canPublish === true);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "読み込みに失敗しました。");
     } finally {

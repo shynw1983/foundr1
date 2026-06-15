@@ -7,7 +7,7 @@ import {
 
 export async function POST(request: Request) {
   const session = await requireOsSession();
-  if (!session || !canEditBrandSiteContent(session)) {
+  if (!session || !(await canEditBrandSiteContent(session))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
 

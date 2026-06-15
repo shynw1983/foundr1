@@ -1,9 +1,9 @@
 import type { EmployeeSession } from "./auth";
 import { getSessionStoreScope } from "./api-auth";
 import { sql } from "./db";
+import { roleHasPermission } from "./role-permissions";
 
 const salesStatsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
-const cancelOrderRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const allStoreViewRoles = new Set(["owner", "manager"]);
 
 export type StoreOrderAccess = {
@@ -39,7 +39,7 @@ export async function getStoreOrderAccess(session: EmployeeSession): Promise<Sto
     role: session.role,
     allStores: scope.allStores,
     canViewSalesStats: salesStatsRoles.has(session.role),
-    canCancelOrders: cancelOrderRoles.has(session.role),
+    canCancelOrders: await roleHasPermission(session.role, "pos.refund"),
     canUseAllStoreView: allStoreViewRoles.has(session.role),
     stores: stores as Array<{ id: string; name: string }>,
     storeIds: scope.allStores ? [] : scope.storeIds

@@ -27,14 +27,65 @@ const tables = [
   "price_records",
   "os_audit_logs",
   "os_notifications",
+  "role_permissions",
   "employee_work_stores",
   "timecard_store_settings",
   "timecard_employee_settings",
   "timecard_punches",
   "timecard_shifts",
   "timecard_payroll_confirmations",
-  "timecard_workload_settings"
+  "timecard_workload_settings",
+  "employee_lifecycle_cases",
+  "employee_lifecycle_tasks",
+  "employee_lifecycle_documents"
 ];
+
+const requiredColumns = {
+  role_permissions: [
+    "role",
+    "permission_key",
+    "is_enabled",
+    "updated_by",
+    "updated_at"
+  ],
+  employee_lifecycle_cases: [
+    "employee_id",
+    "case_type",
+    "title",
+    "status",
+    "store_id",
+    "started_at",
+    "completed_at",
+    "created_by",
+    "updated_by"
+  ],
+  employee_lifecycle_tasks: [
+    "lifecycle_case_id",
+    "task_key",
+    "title",
+    "description",
+    "status",
+    "assignee_employee_id",
+    "due_date",
+    "completed_at",
+    "completed_by",
+    "note",
+    "required_document_types",
+    "sort_order"
+  ],
+  employee_lifecycle_documents: [
+    "lifecycle_case_id",
+    "lifecycle_task_id",
+    "document_type",
+    "file_name",
+    "file_url",
+    "file_size_bytes",
+    "content_type",
+    "uploaded_by",
+    "uploaded_at",
+    "note"
+  ]
+};
 
 const rows = await sql`
   select table_name
@@ -44,6 +95,28 @@ const rows = await sql`
   order by table_name
 `;
 
+const existingTables = new Set(rows.map((row) => row.table_name));
+const requiredColumnTables = Object.keys(requiredColumns).filter((tableName) => existingTables.has(tableName));
+const columnRows = requiredColumnTables.length ? await sql`
+  select table_name, column_name
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = any(${requiredColumnTables})
+  order by table_name, ordinal_position
+` : [];
+const existingColumns = new Set(columnRows.map((row) => `${row.table_name}.${row.column_name}`));
+const missingColumns = Object.entries(requiredColumns).flatMap(([tableName, columns]) => (
+  columns
+    .filter((columnName) => existingTables.has(tableName) && !existingColumns.has(`${tableName}.${columnName}`))
+    .map((columnName) => `${tableName}.${columnName}`)
+));
+
 console.log(JSON.stringify({
-  tables: rows.map((row) => row.table_name)
+  tables: rows.map((row) => row.table_name),
+  missingTables: tables.filter((tableName) => !existingTables.has(tableName)),
+  missingColumns
 }, null, 2));
+
+if (tables.some((tableName) => !existingTables.has(tableName)) || missingColumns.length > 0) {
+  process.exitCode = 1;
+}

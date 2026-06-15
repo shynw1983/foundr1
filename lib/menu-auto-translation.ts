@@ -1,5 +1,6 @@
 import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
+import { roleHasPermission } from "./role-permissions";
 
 export const menuTranslationLanguages = ["en", "zh", "zh-Hant", "ko", "vi", "ne"] as const;
 
@@ -31,7 +32,6 @@ type OpenAiTranslationResult = {
   text?: unknown;
 };
 
-const menuEditorRoles = new Set(["owner", "manager"]);
 const targetLanguageLabels: Record<MenuTranslationLanguage, string> = {
   en: "English",
   zh: "Simplified Chinese",
@@ -41,8 +41,8 @@ const targetLanguageLabels: Record<MenuTranslationLanguage, string> = {
   ne: "Nepali"
 };
 
-export function canEditMenuTranslations(session: EmployeeSession) {
-  return menuEditorRoles.has(session.role);
+export async function canEditMenuTranslations(session: EmployeeSession) {
+  return roleHasPermission(session.role, "menus.edit");
 }
 
 function cleanId(value: unknown) {
