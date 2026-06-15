@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, MonitorSmartphone, PackageCheck, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -97,7 +97,7 @@ type StaffOption = {
   storeNames: string[];
 };
 
-type StoreEditTab = "basic" | "hours" | "operations" | "sales" | "customer" | "payment" | "receipt" | "payroll";
+type StoreEditTab = "basic" | "hours" | "operations" | "sales" | "customer" | "devices" | "payment" | "receipt" | "payroll";
 
 type StoreTemporaryClosure = {
   id: string;
@@ -867,6 +867,12 @@ export default function StoresPage() {
         <section className="management-grid">
           <section className="panel">
             <PanelTitle title="店舗管理" subtitle="Foundr1 OS 全体で共有する店舗情報を管理。予約、販売状態、手順書、勤怠、POS の基礎データとして利用します。" />
+            <div className="store-management-actions">
+              <a className="secondary-button" href="/os/stores/devices">
+                <MonitorSmartphone size={16} />
+                表示・設備設定
+              </a>
+            </div>
             <div className="management-list">
               {storesData.map((store) => (
                 <article className="management-row" key={store.name}>
@@ -1041,6 +1047,7 @@ export default function StoresPage() {
               <button className={editingStoreTab === "operations" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("operations")}>受付・休業</button>
               <button className={editingStoreTab === "sales" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("sales")}>売上源</button>
               <button className={editingStoreTab === "customer" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("customer")}>顧客表示</button>
+              <button className={editingStoreTab === "devices" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("devices")}>表示・設備</button>
               <button className={editingStoreTab === "payment" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payment")}>決済</button>
               <button className={editingStoreTab === "receipt" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("receipt")}>会社・文書</button>
               <button className={editingStoreTab === "payroll" ? "is-active" : ""} type="button" onClick={() => setEditingStoreTab("payroll")}>給与計算</button>
@@ -1242,6 +1249,24 @@ export default function StoresPage() {
                   selectedSourceKeys={editingSalesSourceKeys}
                   onChange={setEditingCustomerDisplayNames}
                 />
+              ) : null}
+              {editingStoreTab === "devices" ? (
+                <div className="store-payroll-settings">
+                  <div className="store-payroll-summary">
+                    <strong>表示・設備設定</strong>
+                    <p>客席表示、厨房表示、POS レシート、Web予約・POS 共通の厨房プリンターなど、店舗端末に紐づく設定を管理します。</p>
+                  </div>
+                  <div className="store-device-settings-link">
+                    <MonitorSmartphone size={22} />
+                    <div>
+                      <strong>{editingStoreName || editingStore.name} の表示・設備設定</strong>
+                      <p>現在は客席表示の待機画面とプリンター接続を設定できます。今後、店頭端末や副屏の端末別設定もここに追加します。</p>
+                    </div>
+                    <a className="secondary-button" href={`/os/stores/devices${editingStore.id ? `?storeId=${encodeURIComponent(editingStore.id)}` : ""}`}>
+                      設定を開く
+                    </a>
+                  </div>
+                </div>
               ) : null}
               {editingStoreTab === "payment" ? (
                 <div className="store-payroll-settings">

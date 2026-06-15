@@ -4800,6 +4800,28 @@ body :where(
   line-height: 1.55;
 }
 
+.store-device-settings-link {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.store-device-settings-link > svg {
+  color: var(--green-700);
+}
+
+.store-device-settings-link p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .customer-display-name-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4823,6 +4845,18 @@ body :where(
 
 @media (max-width: 760px) {
   .customer-display-name-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .store-management-actions {
+    justify-content: stretch;
+  }
+
+  .store-management-actions .secondary-button {
+    width: 100%;
+  }
+
+  .store-device-settings-link {
     grid-template-columns: 1fr;
   }
 }
@@ -5066,6 +5100,16 @@ body :where(
 .management-list {
   display: grid;
   gap: 10px;
+}
+
+.store-management-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 12px;
+}
+
+.store-management-actions .secondary-button {
+  gap: 6px;
 }
 
 .management-subsection-title {

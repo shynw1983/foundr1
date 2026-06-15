@@ -586,6 +586,7 @@ export default function PosPage() {
             <a href="/os/menus"><MenuSquare size={16} />メニュー管理</a>
             <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
             <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
+            <a href={`/os/stores/devices${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`}><MonitorSmartphone size={16} />表示・設備設定</a>
             <a href="/os/stores"><Store size={16} />店舗設定</a>
           </div>
         </section>
