@@ -29,6 +29,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [terminalQr, setTerminalQr] = useState<{ token: string; qrCodeDataUrl: string; expiresAt: string } | null>(null);
   const [isQrLoading, setIsQrLoading] = useState(surface === "store");
+  const [storeAuthChecked, setStoreAuthChecked] = useState(surface !== "store");
   const [qrRefreshNonce, setQrRefreshNonce] = useState(0);
   const productName = surface === "staff" ? "Foundr1 STAFF" : surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
   const appIconSrc = surface === "staff" ? "/icons/foundr1-staff-192.png" : "/icons/foundr1-store-192.png";
@@ -38,7 +39,31 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     : `${productName} にログイン`;
 
   useEffect(() => {
-    if (surface !== "store" || mode !== "terminalQr") return;
+    if (surface !== "store") return;
+
+    let isActive = true;
+    async function redirectIfAlreadyLoggedIn() {
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!isActive) return;
+        if (response.ok) {
+          redirectAfterLogin();
+          return;
+        }
+      } catch {
+        // If the session check fails, fall back to the QR login flow.
+      }
+      if (isActive) setStoreAuthChecked(true);
+    }
+
+    void redirectIfAlreadyLoggedIn();
+    return () => {
+      isActive = false;
+    };
+  }, [surface]);
+
+  useEffect(() => {
+    if (surface !== "store" || mode !== "terminalQr" || !storeAuthChecked) return;
 
     let isActive = true;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -91,7 +116,7 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
       if (pollTimer) clearInterval(pollTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-  }, [mode, surface, qrRefreshNonce]);
+  }, [mode, surface, qrRefreshNonce, storeAuthChecked]);
 
   function redirectAfterLogin() {
     const params = new URLSearchParams(window.location.search);
