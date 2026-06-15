@@ -28,9 +28,9 @@ const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
   { label: "注文", href: "/store/orders", icon: ClipboardList },
   { label: "販売状態", href: "/store/menu", icon: Tags },
-  { label: "手順書", href: "/store/procedures", icon: BookOpen },
-  { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
+  { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
+  { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
   { label: "OS", href: "/os", icon: Settings }
 ];

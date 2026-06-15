@@ -19,10 +19,10 @@ const storeModules = [
     status: "利用可能"
   },
   {
-    title: "手順書",
-    description: "店舗・ブランド・メニュー条件に合う公開手順書を確認し、現場作業を進めます。",
-    href: "/store/procedures",
-    icon: BookOpen,
+    title: "POS",
+    description: "店頭会計、注文入力、決済、レジ開店・締め、取引履歴、返金を処理します。",
+    href: "/store/pos",
+    icon: ShoppingCart,
     status: "利用可能"
   },
   {
@@ -33,10 +33,10 @@ const storeModules = [
     status: "利用可能"
   },
   {
-    title: "POS",
-    description: "店頭会計、注文入力、決済、レジ開店・締め、取引履歴、返金を処理します。",
-    href: "/store/pos",
-    icon: ShoppingCart,
+    title: "手順書",
+    description: "店舗・ブランド・メニュー条件に合う公開手順書を確認し、現場作業を進めます。",
+    href: "/store/procedures",
+    icon: BookOpen,
     status: "利用可能"
   },
   {
