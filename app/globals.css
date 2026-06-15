@@ -13951,8 +13951,8 @@ body :where(
 
 .member-portal-brand img {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 156%;
+  height: 156%;
   object-fit: cover;
 }
 
@@ -30275,9 +30275,10 @@ a:focus-visible {
 
 .os-home-shell .brand-mark,
 .shell .brand-mark {
-  background-color: #000000;
-  background-image: url("/icons/foundr1-os-512.png");
-  background-size: 138%;
+  border-color: transparent;
+  background-color: transparent;
+  background-image: url("/icons/foundr1-os-ui.png");
+  background-size: 108%;
 }
 
 .store-workbench-shell .brand-mark,
