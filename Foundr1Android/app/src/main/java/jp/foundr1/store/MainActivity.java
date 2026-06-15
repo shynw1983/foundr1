@@ -99,6 +99,12 @@ public class MainActivity extends Activity {
                 }
                 return false;
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                persistWebSession();
+            }
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -144,7 +150,32 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (webView != null) webView.onResume();
         checkNativeAppUpdateIfNeeded(true);
+    }
+
+    @Override
+    protected void onPause() {
+        persistWebSession();
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        persistWebSession();
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        persistWebSession();
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -243,6 +274,14 @@ public class MainActivity extends Activity {
 
     private boolean canShowNotifications() {
         return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void persistWebSession() {
+        try {
+            CookieManager.getInstance().flush();
+        } catch (Exception ignored) {
+            // Session persistence should not interrupt store operation.
+        }
     }
 
     private void handleLaunchIntent(Intent intent) {
