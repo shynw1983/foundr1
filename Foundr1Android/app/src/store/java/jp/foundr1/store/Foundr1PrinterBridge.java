@@ -456,6 +456,24 @@ public class Foundr1PrinterBridge {
         if (!isKitchen && order == null) {
             addText(lines, "No order payload", normal, contentWidth);
         } else if (!isKitchen) {
+            boolean receiptRequested = order.optBoolean("receiptRequested", false);
+            String receiptTitle = order.optString("receiptTitle", "").trim();
+            if (receiptTitle.isEmpty()) {
+                receiptTitle = templateText(template, receiptRequested ? "invoiceTitle" : "receiptTitle");
+            }
+            if (receiptTitle.isEmpty()) receiptTitle = receiptRequested ? "領収書" : "レシート";
+            addCenter(lines, receiptTitle, bold);
+            if (receiptRequested) {
+                String recipient = order.optString("receiptRecipientName", "").trim();
+                if (recipient.isEmpty()) recipient = templateText(template, "invoiceRecipientName");
+                if (recipient.isEmpty()) recipient = "上様";
+                String purpose = order.optString("receiptPurposeText", "").trim();
+                if (purpose.isEmpty()) purpose = templateText(template, "invoicePurposeText");
+                if (purpose.isEmpty()) purpose = "飲食代";
+                addPair(lines, recipient, "様", bold, contentWidth);
+                addText(lines, "但し " + purpose + "として", small, contentWidth);
+                addSeparator(lines, contentWidth, normal);
+            }
             addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
             addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
             addSeparator(lines, contentWidth, normal);
@@ -686,9 +704,28 @@ public class Foundr1PrinterBridge {
 
     private void writeReceipt(ByteArrayOutputStream out, JSONObject payload, Charset charset, int columns) throws Exception {
         JSONObject order = payload.optJSONObject("order");
+        JSONObject template = payload.optJSONObject("receiptTemplate");
         if (order == null) {
             writeLine(out, "No order payload", charset);
             return;
+        }
+        boolean receiptRequested = order.optBoolean("receiptRequested", false);
+        String receiptTitle = order.optString("receiptTitle", "").trim();
+        if (receiptTitle.isEmpty() && template != null) {
+            receiptTitle = template.optString(receiptRequested ? "invoiceTitle" : "receiptTitle", "").trim();
+        }
+        if (receiptTitle.isEmpty()) receiptTitle = receiptRequested ? "領収書" : "レシート";
+        writeCentered(out, receiptTitle, charset, columns);
+        if (receiptRequested) {
+            String recipient = order.optString("receiptRecipientName", "").trim();
+            if (recipient.isEmpty() && template != null) recipient = template.optString("invoiceRecipientName", "").trim();
+            if (recipient.isEmpty()) recipient = "上様";
+            String purpose = order.optString("receiptPurposeText", "").trim();
+            if (purpose.isEmpty() && template != null) purpose = template.optString("invoicePurposeText", "").trim();
+            if (purpose.isEmpty()) purpose = "飲食代";
+            writeLine(out, fitLeftRight(recipient, "様", columns), charset);
+            writeWrapped(out, "但し " + purpose + "として", charset, columns);
+            writeLine(out, repeat("-", columns), charset);
         }
         writeLine(out, "No. " + order.optString("pickupCode", ""), charset);
         writeLine(out, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), charset);
@@ -757,6 +794,10 @@ public class Foundr1PrinterBridge {
             value = value.substring(columns);
         }
         writeLine(out, value, charset);
+    }
+
+    private void writeCentered(ByteArrayOutputStream out, String text, Charset charset, int columns) throws Exception {
+        writeLine(out, center(text, columns), charset);
     }
 
     private String fitLeftRight(String left, String right, int columns) {

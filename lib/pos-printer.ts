@@ -20,6 +20,10 @@ export type PosReceiptTemplateSettings = {
   showLogo: boolean;
   logoUrl: string;
   promotionImageUrl: string;
+  receiptTitle: string;
+  invoiceTitle: string;
+  invoiceRecipientName: string;
+  invoicePurposeText: string;
   businessName: string;
   companyInfo: string;
   taxRegistrationNumber: string;
@@ -82,6 +86,10 @@ export type PosPrintPayload = {
     paymentLabel: string;
     cashierName?: string;
     note?: string;
+    receiptRequested?: boolean;
+    receiptTitle?: string;
+    receiptRecipientName?: string;
+    receiptPurposeText?: string;
     subtotalAmount: number;
     discountAmount: number;
     couponDiscountAmount: number;
@@ -124,6 +132,10 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   showLogo: false,
   logoUrl: "",
   promotionImageUrl: "",
+  receiptTitle: "レシート",
+  invoiceTitle: "領収書",
+  invoiceRecipientName: "上様",
+  invoicePurposeText: "飲食代",
   businessName: "",
   companyInfo: "",
   taxRegistrationNumber: "",
@@ -193,10 +205,18 @@ export function normalizePosPrinterConnection(value: unknown, fallback: PosPrint
 export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptTemplateSettings {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosReceiptTemplateSettings> : {};
   const text = (next: unknown, max = 240) => String(next ?? "").trim().slice(0, max);
+  const textWithFallback = (next: unknown, fallback: string, max = 120) => {
+    const value = text(next, max);
+    return value || fallback;
+  };
   return {
     showLogo: source.showLogo === true,
     logoUrl: text(source.logoUrl, 500),
     promotionImageUrl: text(source.promotionImageUrl, 500),
+    receiptTitle: textWithFallback(source.receiptTitle, defaultPosReceiptTemplateSettings.receiptTitle, 80),
+    invoiceTitle: textWithFallback(source.invoiceTitle, defaultPosReceiptTemplateSettings.invoiceTitle, 80),
+    invoiceRecipientName: textWithFallback(source.invoiceRecipientName, defaultPosReceiptTemplateSettings.invoiceRecipientName, 120),
+    invoicePurposeText: textWithFallback(source.invoicePurposeText, defaultPosReceiptTemplateSettings.invoicePurposeText, 120),
     businessName: text(source.businessName, 120),
     companyInfo: text(source.companyInfo, 500),
     taxRegistrationNumber: text(source.taxRegistrationNumber, 80),

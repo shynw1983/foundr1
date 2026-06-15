@@ -56,6 +56,19 @@ function normalizeRequestedQuantity(value: number) {
   return Math.min(999, Math.max(1, Math.round(value)));
 }
 
+async function generatePurchaseOrderNo() {
+  const today = toTokyoDateParts(new Date());
+  const prefix = `PO-${today.year}${today.month}${today.day}`;
+  const rows = await sql`
+    select coalesce(max((substring(order_no from ${`^${prefix}-([0-9]{4})$`}))::int), 0)::int as "lastSequence"
+    from purchase_orders
+    where order_no like ${`${prefix}-%`}
+  `;
+  const nextSequence = Number(rows[0]?.lastSequence ?? 0) + 1;
+
+  return `${prefix}-${String(nextSequence).padStart(4, "0")}`;
+}
+
 async function validateOrderInput(session: EmployeeSession, storeName: string, productNames: string[], productIds: string[]) {
   if (!storeName) {
     return { error: Response.json({ error: "納品先店舗を選択してください。" }, { status: 400 }) };
@@ -229,7 +242,7 @@ export async function POST(request: Request) {
   const quantities = formData.getAll("requestedQuantity").map((value) => Number(value));
   const units = formData.getAll("requestedUnit").map((value) => String(value));
   const itemCount = productNames.length;
-  const orderNo = `PO-${new Date().toISOString().slice(5, 10).replace("-", "")}-${Date.now().toString().slice(-3)}`;
+  const orderNo = await generatePurchaseOrderNo();
   const validation = await validateOrderInput(session, storeName, productNames, productIds);
   if (validation.error) return validation.error;
   const requesterStaffId = await validateStaffAssignee(session, requesterStaffIdInput, validation.storeId, session.id);

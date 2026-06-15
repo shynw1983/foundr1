@@ -10991,14 +10991,21 @@ body :where(
 
 .store-pos-checkout-actions {
   display: grid;
-  grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1fr);
+  grid-template-columns: minmax(112px, 0.62fr) minmax(112px, 0.62fr) minmax(0, 1fr);
   gap: 8px;
 }
 
 .store-pos-cancel-transaction,
+.store-pos-receipt-request,
 .store-pos-checkout-actions .store-pos-checkout {
   width: 100%;
   min-height: 52px;
+}
+
+.store-pos-receipt-request.is-active {
+  border-color: var(--green);
+  background: rgba(47, 111, 88, 0.1);
+  color: var(--green);
 }
 
 .store-pos-page {
@@ -11161,6 +11168,7 @@ body :where(
 }
 
 .store-pos-cancel-transaction,
+.store-pos-receipt-request,
 .store-pos-checkout-actions .store-pos-checkout {
   min-height: 46px;
 }

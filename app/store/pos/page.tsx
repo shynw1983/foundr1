@@ -600,6 +600,7 @@ export default function StorePosPage() {
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
   const [note, setNote] = useState("");
+  const [receiptRequested, setReceiptRequested] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -1148,19 +1149,25 @@ export default function StorePosPage() {
 
   function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[]): PosPrintPayload {
     const printer = getReceiptPrinter(posSettings.printerSettings);
+    const receiptTemplate = posSettings.printerSettings.receiptTemplate;
+    const isInvoice = Boolean(body.receiptRequested ?? receiptRequested);
     return {
       version: 1,
       jobType: "receipt",
       printer,
       storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS",
       printedAt: new Date().toISOString(),
-      receiptTemplate: absolutizeReceiptTemplateMedia(posSettings.printerSettings.receiptTemplate),
+      receiptTemplate: absolutizeReceiptTemplateMedia(receiptTemplate),
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
         paymentMethod,
         paymentLabel: getPaymentDisplayLabel(paymentMethod),
         note,
+        receiptRequested: isInvoice,
+        receiptTitle: isInvoice ? receiptTemplate.invoiceTitle : receiptTemplate.receiptTitle,
+        receiptRecipientName: isInvoice ? receiptTemplate.invoiceRecipientName : "",
+        receiptPurposeText: isInvoice ? receiptTemplate.invoicePurposeText : "",
         subtotalAmount: subtotal,
         discountAmount: Number(body.discountAmount ?? posDiscountAmount) || 0,
         couponDiscountAmount: Number(body.couponDiscountAmount ?? couponDiscountAmount) || 0,
@@ -1505,6 +1512,7 @@ export default function StorePosPage() {
           memberLanguage: selectedMember?.preferredLanguage || undefined,
           couponId: couponBlockedByDiscount ? undefined : selectedCouponId || undefined,
           discountPresetKey: discountPresetKey || undefined,
+          receiptRequested,
           note,
           items: cart.map((item) => ({
             menuCatalogItemId: item.id,
@@ -1525,6 +1533,7 @@ export default function StorePosPage() {
       const kitchenPrintMessage = await printKitchenAfterCheckout(body, cartSnapshot);
       setCart([]);
       setNote("");
+      setReceiptRequested(false);
       setCashTenderedAmount("");
       setDiscountPresetKey("");
       clearSelectedMember();
@@ -1534,8 +1543,9 @@ export default function StorePosPage() {
       const discountLabel = body.discountAmount ? ` / 学割 -${formatYen(body.discountAmount)}` : "";
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
+      const receiptRequestLabel = receiptRequested ? " / 領収書" : "";
       const customerDisplayLanguage = getCustomerDisplayLanguage(selectedMember);
-      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
+      setMessage(`会計を保存しました。${body.pickupCode} / ${formatYen(body.amount)}${discountLabel}${couponLabel}${changeLabel}${receiptRequestLabel}${receiptPrintMessage}${kitchenPrintMessage}`);
       setCompletedDisplayState({
         status: "complete",
         storeName: stores.find((store) => store.id === selectedStoreId)?.name ?? "",
@@ -2201,6 +2211,16 @@ export default function StorePosPage() {
           <div className="store-pos-checkout-actions">
             <button className="danger-button store-pos-cancel-transaction" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>
               会計を中止
+            </button>
+            <button
+              className={receiptRequested ? "secondary-button store-pos-receipt-request is-active" : "secondary-button store-pos-receipt-request"}
+              type="button"
+              onClick={() => setReceiptRequested((current) => !current)}
+              disabled={saving}
+              aria-pressed={receiptRequested}
+            >
+              <ReceiptText size={16} />
+              領収書
             </button>
             <button className="primary-button store-pos-checkout" type="button" onClick={checkout} disabled={!canCheckout}>
               {saving ? "保存中..." : "会計を確定"}

@@ -34,6 +34,7 @@ type PosCheckoutBody = {
   memberLanguage?: string;
   couponId?: string;
   discountPresetKey?: string;
+  receiptRequested?: boolean;
   note?: string;
   items?: PosCheckoutItemInput[];
 };
@@ -604,6 +605,7 @@ export async function POST(request: Request) {
     ? null
     : Math.round(Number(body.cashTenderedAmount));
   const note = normalizeText(body.note);
+  const receiptRequested = body.receiptRequested === true;
   const cartItems = Array.isArray(body.items) ? body.items : [];
 
   if (!storeId || cartItems.length === 0) {
@@ -954,6 +956,7 @@ export async function POST(request: Request) {
         couponCode: coupon?.couponCode ?? "",
         couponName: coupon?.name ?? "",
         couponDiscountAmount,
+        receiptRequested,
         cashTenderedAmount,
         cashChangeAmount,
         itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -1069,6 +1072,7 @@ export async function POST(request: Request) {
     orderId,
     pickupCode,
     amount,
+    receiptRequested,
     subtotalAmount,
     taxableAmount: taxSummary.taxableAmount,
     taxAmount: taxSummary.taxAmount,
