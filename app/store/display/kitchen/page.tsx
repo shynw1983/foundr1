@@ -253,7 +253,7 @@ export default function StoreKitchenPage() {
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"}</small>
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
-          <a className="danger-button" href="/os/logout">ログアウト</a>
+          <a className="danger-button" href="/store/logout">ログアウト</a>
         </div>
       ) : null}
 

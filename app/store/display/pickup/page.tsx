@@ -251,7 +251,7 @@ export default function StorePickupDisplayPage() {
           {!speechSupported ? <small>このブラウザは音声案内に対応していません。</small> : null}
           <a className="secondary-button" href="/store/orders">注文ワーク台</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
-          <a className="danger-button" href="/os/logout">ログアウト</a>
+          <a className="danger-button" href="/store/logout">ログアウト</a>
         </div>
       ) : null}
 
