@@ -13,6 +13,7 @@ const tables = [
   "brands",
   "store_brands",
   "employees",
+  "employee_sessions",
   "employee_scopes",
   "products",
   "product_brand_usages",
@@ -41,6 +42,17 @@ const tables = [
 ];
 
 const requiredColumns = {
+  employee_sessions: [
+    "employee_id",
+    "session_version",
+    "surface",
+    "user_agent",
+    "ip_address",
+    "last_seen_at",
+    "expires_at",
+    "revoked_at",
+    "revoked_reason"
+  ],
   role_permissions: [
     "role",
     "permission_key",

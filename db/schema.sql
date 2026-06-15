@@ -237,6 +237,24 @@ set staff_category = 'device',
 where role = 'store_terminal'
   and staff_category <> 'device';
 
+create table if not exists employee_sessions (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  session_version integer not null,
+  surface text not null default 'os',
+  user_agent text not null default '',
+  ip_address text not null default '',
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '14 days'),
+  revoked_at timestamptz,
+  revoked_reason text
+);
+
+create index if not exists employee_sessions_employee_active_idx
+  on employee_sessions(employee_id, session_version, expires_at, last_seen_at)
+  where revoked_at is null;
+
 alter table stores add column if not exists default_procurement_staff_id uuid;
 alter table stores drop constraint if exists stores_default_procurement_staff_id_fkey;
 alter table stores

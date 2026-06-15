@@ -1,7 +1,8 @@
-import { authCookieName, createSessionToken, readPasswordActionToken, sessionCookieMaxAge, shouldRequirePasswordChangeForRole, validatePasswordStrength, verifyPassword, hashPassword } from "../../../../lib/auth";
+import { authCookieName, createSessionToken, readPasswordActionToken, shouldRequirePasswordChangeForRole, validatePasswordStrength, verifyPassword, hashPassword } from "../../../../lib/auth";
 import { touchEmployeeLastSeen } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
+import { createEmployeeSession, sessionCookieMaxAge } from "../../../../lib/employee-sessions";
 import { getNavPathsForPermissions, getPermissionsForRole } from "../../../../lib/role-permissions";
 
 type EmployeeRow = {
@@ -70,12 +71,20 @@ export async function POST(request: Request) {
   const permissionSet = await getPermissionsForRole(employee.role);
   const permissions = Array.from(permissionSet);
   const loginId = employee.login_id || employee.email || "";
+  const sessionId = await createEmployeeSession({
+    employeeId: employee.id,
+    role: employee.role,
+    sessionVersion,
+    surface: "staff",
+    request
+  });
   const sessionToken = createSessionToken({
     id: employee.id,
     name: employee.name,
     loginId,
     role: employee.role,
     sessionVersion,
+    sessionId,
     permissions,
     permittedNavPaths: getNavPathsForPermissions(permissions)
   });

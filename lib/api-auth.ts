@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { authCookieName, readSessionToken, type EmployeeSession } from "./auth";
 import { sql } from "./db";
+import { touchEmployeeSession } from "./employee-sessions";
 
 const writableRoles = new Set(["owner", "manager", "store_owner", "store_manager", "staff"]);
 const allStoreAccessRoles = new Set(["owner", "manager"]);
@@ -14,6 +15,7 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
   const cookieStore = await cookies();
   const session = readSessionToken(cookieStore.get(authCookieName)?.value);
   if (!session) return null;
+  if (!session.sessionId) return null;
 
   const rows = await sql`
     select
@@ -30,9 +32,11 @@ export async function requireOsSession(): Promise<EmployeeSession | null> {
   const employee = rows[0] as EmployeeSession | undefined;
   if (!employee) return null;
   if (employee.sessionVersion !== session.sessionVersion) return null;
+  const sessionIsActive = await touchEmployeeSession(session.sessionId, employee.id, employee.sessionVersion);
+  if (!sessionIsActive) return null;
 
   await touchEmployeeLastSeen(employee.id);
-  return employee;
+  return { ...employee, sessionId: session.sessionId };
 }
 
 export async function touchEmployeeLastSeen(employeeId: string) {

@@ -6,13 +6,13 @@ export type EmployeeSession = {
   loginId: string;
   role: string;
   sessionVersion: number;
+  sessionId?: string;
   permissions?: string[];
   permittedNavPaths?: string[];
 };
 
 export const authCookieName = "foundr1_os_session";
 export const passwordChangeRequiredRoles = new Set(["store_owner", "store_manager", "staff"]);
-const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 const passwordActionTokenMaxAgeSeconds = 15 * 60;
 const hashIterations = 210_000;
 const hashKeyLength = 32;
@@ -64,8 +64,7 @@ export function verifyPassword(password: string, storedHash: string) {
 }
 
 export function createSessionToken(employee: EmployeeSession) {
-  const expiresAt = Date.now() + sessionMaxAgeSeconds * 1000;
-  const payload = base64Url(JSON.stringify({ ...employee, expiresAt }));
+  const payload = base64Url(JSON.stringify(employee));
   return `${payload}.${signPayload(payload)}`;
 }
 
@@ -116,7 +115,7 @@ export function readPasswordActionToken(token?: string | null, purpose?: "initia
   }
 }
 
-export function readSessionToken(token?: string | null): (EmployeeSession & { expiresAt: number }) | null {
+export function readSessionToken(token?: string | null): (EmployeeSession & { expiresAt?: number }) | null {
   if (!token) return null;
 
   const [payload, signature] = token.split(".");
@@ -128,20 +127,16 @@ export function readSessionToken(token?: string | null): (EmployeeSession & { ex
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
 
   try {
-    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as EmployeeSession & { expiresAt: number };
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as EmployeeSession & { expiresAt?: number };
     if (
       !session.id ||
       !session.loginId ||
       !session.role ||
       !Number.isInteger(session.sessionVersion) ||
-      Date.now() > session.expiresAt
+      (typeof session.expiresAt === "number" && Date.now() > session.expiresAt)
     ) return null;
     return session;
   } catch {
     return null;
   }
-}
-
-export function sessionCookieMaxAge() {
-  return sessionMaxAgeSeconds;
 }
