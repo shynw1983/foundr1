@@ -3,10 +3,10 @@ export type StoreUserDisplayMode = "avatar" | "name" | "avatar_name";
 export type StoreOrderAlertSound = "foundr1_default" | "kitchen_bell" | "urgent_order" | "soft_chime";
 
 export const storeOrderAlertSoundOptions: Array<{ value: StoreOrderAlertSound; label: string; description: string }> = [
-  { value: "foundr1_default", label: "Foundr1 Default", description: "短い上昇音で日常運用向け。" },
-  { value: "kitchen_bell", label: "Kitchen Bell", description: "厨房でも気づきやすいベル風の三連音。" },
-  { value: "urgent_order", label: "Urgent Order", description: "漏れ防止向けの少し強い注意音。" },
-  { value: "soft_chime", label: "Soft Chime", description: "静かな店舗向けの柔らかいチャイム。" }
+  { value: "foundr1_default", label: "Foundr1 Default", description: "短く明るい二段チャイム。日常運用で耳に残りやすい音。" },
+  { value: "kitchen_bell", label: "Kitchen Bell", description: "厨房でも気づきやすい、澄んだベル風の通知音。" },
+  { value: "urgent_order", label: "Urgent Order", description: "漏れ防止向け。刺さりすぎない短い反復音。" },
+  { value: "soft_chime", label: "Soft Chime", description: "静かな店舗向け。柔らかいが最初の音で気づきやすいチャイム。" }
 ];
 
 export type StoreModuleSettings = {
