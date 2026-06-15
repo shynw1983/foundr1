@@ -536,11 +536,12 @@ async function getOpenCashSessionId(selectedStoreId: string) {
 }
 
 async function getPosSettings(selectedStoreId: string) {
-  const defaults = { dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null) };
+  const defaults = { dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: defaultDiscountPresets, customerDisplayMediaSettings: defaultCustomerDisplayMediaSettings, printerSettings: normalizePosPrinterSettings(null) };
   if (!selectedStoreId) return defaults;
   const rows = await sql`
     select
       coalesce(dine_in_enabled, true) as "dineInEnabled",
+      coalesce(takeout_enabled, true) as "takeoutEnabled",
       coalesce(dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
@@ -615,6 +616,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
   }
   const posSettings = await getPosSettings(storeId);
+  if (orderType === "eat_in" && !posSettings.dineInEnabled) {
+    return Response.json({ error: "この店舗では店内飲食の会計は無効です。" }, { status: 400 });
+  }
+  if (orderType === "takeout" && !posSettings.takeoutEnabled) {
+    return Response.json({ error: "この店舗では持ち帰りの会計は無効です。" }, { status: 400 });
+  }
 
   const requestedIds = Array.from(new Set(cartItems.map((item) => normalizeText(item.menuCatalogItemId)).filter(Boolean)));
   if (requestedIds.length === 0) {

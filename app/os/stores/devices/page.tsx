@@ -87,6 +87,7 @@ type StoreDeviceSettings = {
   storeId: string;
   storeName: string;
   dineInEnabled: boolean;
+  takeoutEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
@@ -137,6 +138,7 @@ function createEmptySettings(): StoreDeviceSettings {
     storeId: "",
     storeName: "",
     dineInEnabled: true,
+    takeoutEnabled: true,
     dineInTaxRate: 10,
     takeoutTaxRate: 8,
     externalPaymentTerminalBrand: "PayCAS",
@@ -272,6 +274,7 @@ export default function StoreDeviceSettingsPage() {
         body: JSON.stringify({
           storeId: selectedStoreId,
           dineInEnabled: settings.dineInEnabled,
+          takeoutEnabled: settings.takeoutEnabled,
           dineInTaxRate: settings.dineInTaxRate,
           takeoutTaxRate: settings.takeoutTaxRate,
           externalPaymentTerminalBrand: settings.externalPaymentTerminalBrand,

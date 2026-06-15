@@ -166,6 +166,7 @@ type PosDiscountPreset = {
 
 type PosSettings = {
   dineInEnabled: boolean;
+  takeoutEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
@@ -577,7 +578,7 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
-  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
+  const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -680,6 +681,7 @@ export default function StorePosPage() {
     setSummary((body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] }) as PosSummary);
     const nextPosSettings = {
       dineInEnabled: body.posSettings?.dineInEnabled !== false,
+      takeoutEnabled: body.posSettings?.takeoutEnabled !== false,
       dineInTaxRate: Number(body.posSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: Number(body.posSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: body.posSettings?.externalPaymentTerminalBrand ?? "PayCAS",
@@ -688,7 +690,11 @@ export default function StorePosPage() {
       printerSettings: body.posSettings?.printerSettings ?? defaultPosPrinterSettings
     };
     setPosSettings(nextPosSettings);
-    setOrderType((current) => nextPosSettings.dineInEnabled ? current : "takeout");
+    setOrderType((current) => {
+      if (current === "eat_in" && !nextPosSettings.dineInEnabled) return "takeout";
+      if (current === "takeout" && !nextPosSettings.takeoutEnabled) return "eat_in";
+      return current;
+    });
     setSelectedStoreId(responseStoreId);
     if (responseStoreId) setStoredStoreSelection(responseStoreId);
     await loadReconciliation(responseStoreId);
@@ -821,8 +827,11 @@ export default function StorePosPage() {
     });
   }, [items, query, selectedBrandId, selectedCategory]);
   const visibleOrderTypeOptions = useMemo(
-    () => orderTypeOptions.filter((option) => posSettings.dineInEnabled || option.value !== "eat_in"),
-    [posSettings.dineInEnabled]
+    () => orderTypeOptions.filter((option) => (
+      (option.value !== "eat_in" || posSettings.dineInEnabled) &&
+      (option.value !== "takeout" || posSettings.takeoutEnabled)
+    )),
+    [posSettings.dineInEnabled, posSettings.takeoutEnabled]
   );
 
   const subtotal = cart.reduce((sum, item) => sum + getCartItemAmount(item), 0);
