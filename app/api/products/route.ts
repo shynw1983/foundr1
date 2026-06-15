@@ -23,6 +23,19 @@ type ProductPayload = {
   backupSupplier?: string;
   mainPurchaseUrl?: string;
   backupPurchaseUrl?: string;
+  isImported?: boolean;
+  importOriginCountry?: string;
+  importCurrency?: string;
+  importOriginalPrice?: number | string;
+  importExchangeRate?: number | string;
+  importPriceJpy?: number | string;
+  importFreightRateOriginalPerKg?: number | string;
+  importFreightRateJpyPerKg?: number | string;
+  importWeightStrategy?: string;
+  importWeightKg?: number | string;
+  importFreightCostJpy?: number | string;
+  importTaxCostJpy?: number | string;
+  importOtherCostJpy?: number | string;
   specNote?: string;
   japaneseNote?: string;
   photoUrl?: string;
@@ -62,6 +75,36 @@ export async function PUT(request: Request) {
     .split("/")
     .map((item) => item.trim())
     .filter(Boolean);
+  const isImported = body.isImported === true || String(body.isImported ?? "") === "true";
+  const importOriginCountry = isImported
+    ? String(body.importOriginCountry ?? "中国").trim() || "中国"
+    : "";
+  const importCurrencyInput = String(body.importCurrency ?? "CNY").trim().toUpperCase();
+  const importCurrency = importCurrencyInput === "JPY" ? "JPY" : "CNY";
+  const importExchangeRate = isImported && importCurrency !== "JPY"
+    ? parsePositiveNumber(body.importExchangeRate, 1)
+    : 1;
+  const importOriginalPrice = isImported ? parseOptionalNumber(body.importOriginalPrice) : null;
+  const importPriceJpy = isImported
+    ? parsePositiveNumber(body.importPriceJpy, Number(importOriginalPrice ?? 0) * importExchangeRate)
+    : null;
+  const importFreightRateOriginalPerKg = isImported
+    ? parsePositiveNumber(body.importFreightRateOriginalPerKg, 20)
+    : 20;
+  const importFreightRateJpyPerKg = isImported
+    ? parsePositiveNumber(body.importFreightRateJpyPerKg, importFreightRateOriginalPerKg * importExchangeRate)
+    : 0;
+  const importWeightStrategy = isImported && String(body.importWeightStrategy ?? "") === "actual_weight"
+    ? "actual_weight"
+    : "standard_1kg";
+  const importWeightKg = isImported
+    ? parsePositiveNumber(body.importWeightKg, importWeightStrategy === "standard_1kg" ? 1 : 0)
+    : 1;
+  const importFreightCostJpy = isImported
+    ? parsePositiveNumber(body.importFreightCostJpy, importFreightRateJpyPerKg * importWeightKg)
+    : 0;
+  const importTaxCostJpy = isImported ? parsePositiveNumber(body.importTaxCostJpy, 0) : 0;
+  const importOtherCostJpy = isImported ? parsePositiveNumber(body.importOtherCostJpy, 0) : 0;
   const brandScope = selectedBrands.includes("共通")
     ? "common"
     : selectedBrands.filter((brandName) => brandName !== "未設定").length > 0
@@ -70,6 +113,14 @@ export async function PUT(request: Request) {
 
   if (!name) {
     return Response.json({ error: "商品名を入力してください。" }, { status: 400 });
+  }
+
+  if (isImported && (!Number.isFinite(importFreightRateOriginalPerKg) || importFreightRateOriginalPerKg <= 0)) {
+    return Response.json({ error: "海外輸入品は運賃単価を入力してください。" }, { status: 400 });
+  }
+
+  if (isImported && importWeightStrategy === "actual_weight" && (!Number.isFinite(importWeightKg) || importWeightKg <= 0)) {
+    return Response.json({ error: "実重量で計算する場合は輸入計算重量を入力してください。" }, { status: 400 });
   }
 
   const rows = id
@@ -94,6 +145,19 @@ export async function PUT(request: Request) {
           japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
+          is_imported = ${isImported},
+          import_origin_country = ${importOriginCountry},
+          import_currency = ${importCurrency},
+          import_original_price = ${importOriginalPrice},
+          import_exchange_rate = ${importExchangeRate},
+          import_price_jpy = ${importPriceJpy},
+          import_freight_rate_original_per_kg = ${importFreightRateOriginalPerKg},
+          import_freight_rate_jpy_per_kg = ${importFreightRateJpyPerKg},
+          import_weight_strategy = ${importWeightStrategy},
+          import_weight_kg = ${importWeightKg},
+          import_freight_cost_jpy = ${importFreightCostJpy},
+          import_tax_cost_jpy = ${importTaxCostJpy},
+          import_other_cost_jpy = ${importOtherCostJpy},
           storage_type = ${storageType},
           usage_type = ${usageType},
           updated_at = now()
@@ -122,6 +186,19 @@ export async function PUT(request: Request) {
           japanese_note = ${japaneseNote},
           photo_url = ${photoUrl},
           brand_scope = ${brandScope},
+          is_imported = ${isImported},
+          import_origin_country = ${importOriginCountry},
+          import_currency = ${importCurrency},
+          import_original_price = ${importOriginalPrice},
+          import_exchange_rate = ${importExchangeRate},
+          import_price_jpy = ${importPriceJpy},
+          import_freight_rate_original_per_kg = ${importFreightRateOriginalPerKg},
+          import_freight_rate_jpy_per_kg = ${importFreightRateJpyPerKg},
+          import_weight_strategy = ${importWeightStrategy},
+          import_weight_kg = ${importWeightKg},
+          import_freight_cost_jpy = ${importFreightCostJpy},
+          import_tax_cost_jpy = ${importTaxCostJpy},
+          import_other_cost_jpy = ${importOtherCostJpy},
           storage_type = ${storageType},
           usage_type = ${usageType},
           updated_at = now()
@@ -148,6 +225,19 @@ export async function PUT(request: Request) {
           japanese_note,
           photo_url,
           brand_scope,
+          is_imported,
+          import_origin_country,
+          import_currency,
+          import_original_price,
+          import_exchange_rate,
+          import_price_jpy,
+          import_freight_rate_original_per_kg,
+          import_freight_rate_jpy_per_kg,
+          import_weight_strategy,
+          import_weight_kg,
+          import_freight_cost_jpy,
+          import_tax_cost_jpy,
+          import_other_cost_jpy,
           storage_type,
           usage_type,
           updated_at
@@ -171,6 +261,19 @@ export async function PUT(request: Request) {
           ${japaneseNote},
           ${photoUrl},
           ${brandScope},
+          ${isImported},
+          ${importOriginCountry},
+          ${importCurrency},
+          ${importOriginalPrice},
+          ${importExchangeRate},
+          ${importPriceJpy},
+          ${importFreightRateOriginalPerKg},
+          ${importFreightRateJpyPerKg},
+          ${importWeightStrategy},
+          ${importWeightKg},
+          ${importFreightCostJpy},
+          ${importTaxCostJpy},
+          ${importOtherCostJpy},
           ${storageType},
           ${usageType},
           now()
@@ -231,6 +334,11 @@ function parseOptionalNumber(value: unknown) {
   if (!normalized) return null;
   const numberValue = Number(normalized);
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function parsePositiveNumber(value: unknown, fallback: number) {
+  const parsed = parseOptionalNumber(value);
+  return parsed ?? fallback;
 }
 
 function parseOptionalInteger(value: unknown) {
