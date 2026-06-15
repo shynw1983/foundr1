@@ -2067,6 +2067,111 @@ body :where(
   gap: 16px;
 }
 
+.os-home-module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.os-home-module-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 248px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.os-home-module-main {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.os-home-module-main:hover,
+.os-home-module-main:focus-visible {
+  background: var(--green-soft);
+  outline: none;
+}
+
+.os-home-module-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.os-home-module-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.os-home-module-title > span:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.os-home-module-links {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+
+.os-home-module-links a {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.os-home-module-links a:hover,
+.os-home-module-links a:focus-visible {
+  color: var(--green);
+  background: var(--green-soft);
+  outline: none;
+}
+
+.os-home-module-links a span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.os-home-module-note {
+  margin: 0;
+  padding: 0 16px 16px 80px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .os-home-feature-group {
   display: grid;
   gap: 12px;
@@ -25503,6 +25608,36 @@ body :where(
   .os-home-feature-group-heading {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .os-home-module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .os-home-module-card {
+    min-height: 0;
+  }
+
+  .os-home-module-main {
+    grid-template-columns: 44px minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .os-home-module-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .os-home-module-title {
+    font-size: 18px;
+  }
+
+  .os-home-module-links {
+    padding: 0 10px 10px;
+  }
+
+  .os-home-module-note {
+    padding: 0 14px 14px 70px;
   }
 
   .statutory-alert-heading,
