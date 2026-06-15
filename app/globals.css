@@ -12846,6 +12846,14 @@ body :where(
   font-size: 10px;
 }
 
+.store-kitchen-ticket-preview h5 {
+  font-size: 18px;
+}
+
+.store-kitchen-ticket-preview .pos-admin-receipt-paper-line.is-strong {
+  font-size: 17px;
+}
+
 .pos-admin-receipt-paper-logo,
 .pos-admin-receipt-paper-promo {
   justify-self: center;

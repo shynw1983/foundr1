@@ -368,16 +368,74 @@ public class Foundr1PrinterBridge {
         int paperDots = "58mm".equals(paperWidth) ? PAPER_DOTS_58MM : PAPER_DOTS_80MM;
         int padding = 18;
         int contentWidth = paperDots - padding * 2;
-        Paint normal = textPaint(24, false);
-        Paint small = textPaint(21, false);
-        Paint bold = textPaint(28, true);
-        List<RasterLine> lines = new ArrayList<>();
         JSONObject order = payload.optJSONObject("order");
         JSONObject template = payload.optJSONObject("receiptTemplate");
         boolean isReceipt = "receipt".equals(payload.optString("jobType", "receipt"));
+        boolean isKitchen = "kitchen".equals(payload.optString("jobType", ""));
+        JSONObject kitchenTemplate = payload.optJSONObject("kitchenTicketTemplate");
+        boolean largeKitchenText = isKitchen && kitchenBool(kitchenTemplate, "largeText", true);
+        Paint normal = textPaint(largeKitchenText ? 28 : 24, false);
+        Paint small = textPaint(largeKitchenText ? 24 : 21, false);
+        Paint bold = textPaint(largeKitchenText ? 34 : 28, true);
+        List<RasterLine> lines = new ArrayList<>();
         String displayName = templateText(template, "businessName");
 
-        if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
+        if (isKitchen) {
+            if (kitchenBool(kitchenTemplate, "showTitle", true)) {
+                addCenter(lines, kitchenText(kitchenTemplate, "title", "厨房伝票"), bold);
+            }
+            if (kitchenBool(kitchenTemplate, "showStoreName", true)) {
+                addCenter(lines, payload.optString("storeName", "Foundr1 OS"), normal);
+            }
+            addSeparator(lines, contentWidth, normal);
+            if (order == null) {
+                addText(lines, "No order payload", normal, contentWidth);
+            } else {
+                if (kitchenBool(kitchenTemplate, "showPickupCode", true)) {
+                    addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
+                }
+                if (kitchenBool(kitchenTemplate, "showOrderType", true)) {
+                    addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
+                }
+                if (kitchenBool(kitchenTemplate, "showItems", true)) {
+                    addSeparator(lines, contentWidth, normal);
+                    JSONArray items = order.optJSONArray("items");
+                    if (items != null) {
+                        for (int i = 0; i < items.length(); i += 1) {
+                            JSONObject item = items.optJSONObject(i);
+                            if (item == null) continue;
+                            String itemLabel = item.optString("name", "Item") + " x" + item.optInt("quantity", 1);
+                            if (kitchenBool(kitchenTemplate, "showAmounts", false)) {
+                                addPair(lines, itemLabel, yen(item.optInt("amount", 0)), normal, contentWidth);
+                            } else {
+                                addText(lines, itemLabel, normal, contentWidth);
+                            }
+                            if (kitchenBool(kitchenTemplate, "showOptions", true)) {
+                                JSONArray options = item.optJSONArray("options");
+                                if (options != null) {
+                                    for (int optionIndex = 0; optionIndex < options.length(); optionIndex += 1) {
+                                        addText(lines, "  " + options.optString(optionIndex), small, contentWidth);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (kitchenBool(kitchenTemplate, "showAmounts", false)) {
+                    addSeparator(lines, contentWidth, normal);
+                    addPair(lines, "合計", yen(order.optInt("totalAmount", 0)), bold, contentWidth);
+                }
+                String note = order.optString("note", "").trim();
+                if (!note.isEmpty() && kitchenBool(kitchenTemplate, "showNote", true)) {
+                    addSeparator(lines, contentWidth, normal);
+                    addText(lines, "備考: " + note, small, contentWidth);
+                }
+            }
+            addSeparator(lines, contentWidth, normal);
+            if (kitchenBool(kitchenTemplate, "showTimestamp", true)) {
+                addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
+            }
+        } else if (isReceipt && template != null && template.optBoolean("showLogo", false)) {
             int logoMaxWidth = Math.max(1, Math.round(contentWidth * LOGO_MAX_WIDTH_PERCENT / 100f));
             Bitmap logo = loadLogoBitmap(template.optString("logoUrl", ""), logoMaxWidth, "58mm".equals(paperWidth) ? LOGO_MAX_HEIGHT_58MM : LOGO_MAX_HEIGHT_80MM);
             if (logo != null) {
@@ -385,8 +443,8 @@ public class Foundr1PrinterBridge {
                 lines.add(RasterLine.spacer(LOGO_BOTTOM_GAP));
             }
         }
-        addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
-        if (isReceipt && template != null) {
+        if (!isKitchen) addCenter(lines, displayName.isEmpty() ? payload.optString("storeName", "Foundr1 OS") : displayName, bold);
+        if (!isKitchen && isReceipt && template != null) {
             addMultiline(lines, templateText(template, "companyInfo"), small, contentWidth);
             addMultiline(lines, templateText(template, "address"), small, contentWidth);
             addTextIfPresent(lines, "登録番号: " + templateText(template, "taxRegistrationNumber"), templateText(template, "taxRegistrationNumber"), small, contentWidth);
@@ -394,10 +452,10 @@ public class Foundr1PrinterBridge {
             addCenteredTextIfPresent(lines, templateText(template, "website"), small, contentWidth);
             addMultiline(lines, templateText(template, "headerMessage"), small, contentWidth);
         }
-        addSeparator(lines, contentWidth, normal);
-        if (order == null) {
+        if (!isKitchen) addSeparator(lines, contentWidth, normal);
+        if (!isKitchen && order == null) {
             addText(lines, "No order payload", normal, contentWidth);
-        } else {
+        } else if (!isKitchen) {
             addText(lines, "No. " + order.optString("pickupCode", ""), bold, contentWidth);
             addText(lines, joinReceiptMeta(formatOrderTypeLabel(order.optString("orderType", "")), formatPaymentLabel(order)), normal, contentWidth);
             addSeparator(lines, contentWidth, normal);
@@ -435,14 +493,14 @@ public class Foundr1PrinterBridge {
                 addText(lines, "備考: " + note, small, contentWidth);
             }
         }
-        addSeparator(lines, contentWidth, normal);
-        if (isReceipt && template != null) {
+        if (!isKitchen) addSeparator(lines, contentWidth, normal);
+        if (!isKitchen && isReceipt && template != null) {
             Bitmap promotionImage = loadTemplateBitmap(template.optString("promotionImageUrl", ""), contentWidth);
             if (promotionImage != null) lines.add(RasterLine.image(promotionImage));
             addMultiline(lines, templateText(template, "promotionMessage"), small, contentWidth);
             addMultiline(lines, templateText(template, "footerMessage"), small, contentWidth);
         }
-        if (template == null || template.optBoolean("showTimestamp", true)) {
+        if (!isKitchen && (template == null || template.optBoolean("showTimestamp", true))) {
             addText(lines, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.JAPAN).format(new Date()), normal, contentWidth);
         }
 
@@ -461,6 +519,15 @@ public class Foundr1PrinterBridge {
 
     private String templateText(JSONObject template, String key) {
         return template == null ? "" : template.optString(key, "").trim();
+    }
+
+    private boolean kitchenBool(JSONObject template, String key, boolean fallback) {
+        return template == null || !template.has(key) ? fallback : template.optBoolean(key, fallback);
+    }
+
+    private String kitchenText(JSONObject template, String key, String fallback) {
+        String value = template == null ? "" : template.optString(key, "").trim();
+        return value.isEmpty() ? fallback : value;
     }
 
     private void addTextIfPresent(List<RasterLine> lines, String text, String value, Paint paint, int contentWidth) {

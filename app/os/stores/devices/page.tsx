@@ -22,10 +22,12 @@ import { useEffect, useState } from "react";
 import { normalizeIntegerInput } from "../../../../lib/number-input";
 import {
   createTestPrintPayload,
+  defaultPosKitchenTicketTemplateSettings,
   defaultPosPrinterSettings,
   getKitchenPrinterForBrand,
   getReceiptPrinter,
   printWithAndroidBridge,
+  type PosKitchenTicketTemplateSettings,
   type PosPrinterConnection,
   type PosPrinterSettings
 } from "../../../../lib/pos-printer";
@@ -243,6 +245,19 @@ export default function StoreDeviceSettingsPage() {
     setSettings((current) => ({
       ...current,
       customerDisplayMediaSettings: { ...current.customerDisplayMediaSettings, ...patch }
+    }));
+  }
+
+  function updateKitchenTicketTemplate(patch: Partial<PosKitchenTicketTemplateSettings>) {
+    setSettings((current) => ({
+      ...current,
+      printerSettings: {
+        ...current.printerSettings,
+        kitchenTicketTemplate: {
+          ...(current.printerSettings.kitchenTicketTemplate ?? defaultPosKitchenTicketTemplateSettings),
+          ...patch
+        }
+      }
     }));
   }
 
@@ -605,9 +620,125 @@ export default function StoreDeviceSettingsPage() {
               </div>
             </div>
           ) : null}
+          <div className="pos-admin-printer-card">
+            <div>
+              <strong>厨房伝票テンプレート</strong>
+              <p>Web 予約と POS から厨房へ出す内部伝票の表示内容を設定します。お客様向けレシートとは別管理です。</p>
+            </div>
+            <div className="pos-admin-receipt-template-workspace store-kitchen-ticket-template-workspace">
+              <div className="pos-admin-receipt-template-editor">
+                <div className="pos-admin-printer-grid">
+                  <label>
+                    <span>タイトル</span>
+                    <input value={settings.printerSettings.kitchenTicketTemplate.title} onChange={(event) => updateKitchenTicketTemplate({ title: event.target.value })} disabled={!canManage} />
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.largeText} onChange={(event) => updateKitchenTicketTemplate({ largeText: event.target.checked })} disabled={!canManage} />
+                    <span>大きめの文字で印刷</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showTitle} onChange={(event) => updateKitchenTicketTemplate({ showTitle: event.target.checked })} disabled={!canManage} />
+                    <span>タイトルを表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showStoreName} onChange={(event) => updateKitchenTicketTemplate({ showStoreName: event.target.checked })} disabled={!canManage} />
+                    <span>店舗名・ブランド名を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showPickupCode} onChange={(event) => updateKitchenTicketTemplate({ showPickupCode: event.target.checked })} disabled={!canManage} />
+                    <span>受取番号を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showOrderType} onChange={(event) => updateKitchenTicketTemplate({ showOrderType: event.target.checked })} disabled={!canManage} />
+                    <span>注文区分を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showItems} onChange={(event) => updateKitchenTicketTemplate({ showItems: event.target.checked })} disabled={!canManage} />
+                    <span>商品を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showOptions} onChange={(event) => updateKitchenTicketTemplate({ showOptions: event.target.checked })} disabled={!canManage} />
+                    <span>サイズ・甘さ・氷などを表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showNote} onChange={(event) => updateKitchenTicketTemplate({ showNote: event.target.checked })} disabled={!canManage} />
+                    <span>備考を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showTimestamp} onChange={(event) => updateKitchenTicketTemplate({ showTimestamp: event.target.checked })} disabled={!canManage} />
+                    <span>印刷日時を表示</span>
+                  </label>
+                  <label className="pos-admin-discount-check">
+                    <input type="checkbox" checked={settings.printerSettings.kitchenTicketTemplate.showAmounts} onChange={(event) => updateKitchenTicketTemplate({ showAmounts: event.target.checked })} disabled={!canManage} />
+                    <span>金額を表示</span>
+                  </label>
+                </div>
+              </div>
+              <KitchenTicketPreview storeName={settings.storeName || "店舗名"} template={settings.printerSettings.kitchenTicketTemplate} />
+            </div>
+          </div>
         </section>
       </section>
     </main>
+  );
+}
+
+function KitchenTicketPreview({
+  storeName,
+  template
+}: {
+  storeName: string;
+  template: PosKitchenTicketTemplateSettings;
+}) {
+  return (
+    <aside className="pos-admin-receipt-preview-panel" aria-label="厨房伝票プレビュー">
+      <div className="pos-admin-receipt-preview-heading">
+        <strong>厨房伝票プレビュー</strong>
+        <span>{template.largeText ? "大きめ" : "通常"}</span>
+      </div>
+      <div className="pos-admin-receipt-paper store-kitchen-ticket-preview">
+        {template.showTitle ? <h5>{template.title || defaultPosKitchenTicketTemplateSettings.title}</h5> : null}
+        {template.showStoreName ? <p>{storeName} / ドリンク</p> : null}
+        <div className="pos-admin-receipt-paper-rule" />
+        {template.showPickupCode ? <div className="pos-admin-receipt-paper-line is-strong"><span>No. F1-1234</span><span /></div> : null}
+        {template.showOrderType ? <p>持ち帰り / 厨房</p> : null}
+        {template.showItems ? (
+          <>
+            <div className="pos-admin-receipt-paper-rule" />
+            <div className="pos-admin-receipt-paper-line">
+              <span>チョコミントタピオカフラッペ x1</span>
+              {template.showAmounts ? <span>¥650</span> : <span />}
+            </div>
+            {template.showOptions ? (
+              <>
+                <p className="is-sub">  サイズ：R レギュラー 500ml</p>
+                <p className="is-sub">  温度：ICE</p>
+                <p className="is-sub">  甘さ：ふつう</p>
+                <p className="is-sub">  氷：なし</p>
+              </>
+            ) : null}
+            <div className="pos-admin-receipt-paper-line">
+              <span>国産米トッポッキ x1</span>
+              {template.showAmounts ? <span>¥378</span> : <span />}
+            </div>
+          </>
+        ) : null}
+        {template.showAmounts ? (
+          <>
+            <div className="pos-admin-receipt-paper-rule" />
+            <div className="pos-admin-receipt-paper-line is-total"><span>合計</span><span>¥1,028</span></div>
+          </>
+        ) : null}
+        {template.showNote ? (
+          <>
+            <div className="pos-admin-receipt-paper-rule" />
+            <p>備考: ストロー不要</p>
+          </>
+        ) : null}
+        <div className="pos-admin-receipt-paper-rule" />
+        {template.showTimestamp ? <p>2026-06-15 12:34:56</p> : null}
+      </div>
+    </aside>
   );
 }
 

@@ -34,6 +34,20 @@ export type PosReceiptTemplateSettings = {
   showTimestamp: boolean;
 };
 
+export type PosKitchenTicketTemplateSettings = {
+  showTitle: boolean;
+  title: string;
+  showStoreName: boolean;
+  showPickupCode: boolean;
+  showOrderType: boolean;
+  showItems: boolean;
+  showOptions: boolean;
+  showNote: boolean;
+  showTimestamp: boolean;
+  showAmounts: boolean;
+  largeText: boolean;
+};
+
 export type PosPrinterSettings = PosPrinterConnection & {
   enabled: boolean;
   receiptEnabled: boolean;
@@ -42,6 +56,7 @@ export type PosPrinterSettings = PosPrinterConnection & {
   kitchenPrinter: PosPrinterConnection;
   brandKitchenPrinters: PosBrandKitchenPrinterSetting[];
   receiptTemplate: PosReceiptTemplateSettings;
+  kitchenTicketTemplate: PosKitchenTicketTemplateSettings;
 };
 
 export type PosPrintLineItem = {
@@ -59,6 +74,7 @@ export type PosPrintPayload = {
   storeName: string;
   printedAt: string;
   receiptTemplate?: PosReceiptTemplateSettings;
+  kitchenTicketTemplate?: PosKitchenTicketTemplateSettings;
   order?: {
     pickupCode: string;
     orderType: string;
@@ -122,6 +138,20 @@ export const defaultPosReceiptTemplateSettings: PosReceiptTemplateSettings = {
   showTimestamp: true
 };
 
+export const defaultPosKitchenTicketTemplateSettings: PosKitchenTicketTemplateSettings = {
+  showTitle: true,
+  title: "厨房伝票",
+  showStoreName: true,
+  showPickupCode: true,
+  showOrderType: true,
+  showItems: true,
+  showOptions: true,
+  showNote: true,
+  showTimestamp: true,
+  showAmounts: false,
+  largeText: true
+};
+
 export const defaultPosPrinterSettings: PosPrinterSettings = {
   enabled: false,
   receiptEnabled: true,
@@ -130,7 +160,8 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
   receiptPrinter: defaultPosPrinterConnection,
   kitchenPrinter: defaultPosPrinterConnection,
   brandKitchenPrinters: [],
-  receiptTemplate: defaultPosReceiptTemplateSettings
+  receiptTemplate: defaultPosReceiptTemplateSettings,
+  kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings
 };
 
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
@@ -181,6 +212,27 @@ export function normalizePosReceiptTemplateSettings(value: unknown): PosReceiptT
   };
 }
 
+export function normalizePosKitchenTicketTemplateSettings(value: unknown): PosKitchenTicketTemplateSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosKitchenTicketTemplateSettings> : {};
+  const text = (next: unknown, fallback: string, max = 80) => {
+    const value = String(next ?? "").trim();
+    return (value || fallback).slice(0, max);
+  };
+  return {
+    showTitle: source.showTitle !== false,
+    title: text(source.title, defaultPosKitchenTicketTemplateSettings.title),
+    showStoreName: source.showStoreName !== false,
+    showPickupCode: source.showPickupCode !== false,
+    showOrderType: source.showOrderType !== false,
+    showItems: source.showItems !== false,
+    showOptions: source.showOptions !== false,
+    showNote: source.showNote !== false,
+    showTimestamp: source.showTimestamp !== false,
+    showAmounts: source.showAmounts === true,
+    largeText: source.largeText !== false
+  };
+}
+
 export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterSettings> : {};
   const legacyPrinter = normalizePosPrinterConnection(source, defaultPosPrinterConnection);
@@ -195,6 +247,7 @@ export function normalizePosPrinterSettings(value: unknown): PosPrinterSettings 
     receiptPrinter,
     kitchenPrinter,
     receiptTemplate: normalizePosReceiptTemplateSettings(source.receiptTemplate),
+    kitchenTicketTemplate: normalizePosKitchenTicketTemplateSettings(source.kitchenTicketTemplate),
     brandKitchenPrinters: brandKitchenPrinters.flatMap((item) => {
       const record = item && typeof item === "object" && !Array.isArray(item) ? item as Partial<PosBrandKitchenPrinterSetting> : {};
       const brandId = String(record.brandId || "").trim();
@@ -228,6 +281,7 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
     storeName,
     printedAt: new Date().toISOString(),
     receiptTemplate: defaultPosReceiptTemplateSettings,
+    kitchenTicketTemplate: defaultPosKitchenTicketTemplateSettings,
     order: {
       pickupCode: "TEST",
       orderType: "takeout",

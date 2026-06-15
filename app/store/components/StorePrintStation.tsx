@@ -27,20 +27,6 @@ function hasAndroidPrinterBridge() {
   return typeof window !== "undefined" && Boolean(window.Foundr1Printer?.print);
 }
 
-function absoluteUrl(value: string) {
-  const url = String(value || "").trim();
-  if (!url || /^https?:\/\//i.test(url)) return url;
-  return new URL(url, window.location.origin).toString();
-}
-
-function withAbsoluteTemplateMedia(settings: PosPrinterSettings) {
-  return {
-    ...settings.receiptTemplate,
-    logoUrl: absoluteUrl(settings.receiptTemplate.logoUrl),
-    promotionImageUrl: absoluteUrl(settings.receiptTemplate.promotionImageUrl)
-  };
-}
-
 function splitKitchenItems(summary: string) {
   const items: NonNullable<PosPrintPayload["order"]>["items"] = [];
   const lines = String(summary || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
@@ -70,7 +56,7 @@ function createKitchenPayload(job: PrintJob, settings: PosPrinterSettings): PosP
     printer,
     storeName: `${job.storeName || "Foundr1 STORE"} / ${job.brandName || job.productionAreaLabel || "厨房"}`,
     printedAt: new Date().toISOString(),
-    receiptTemplate: withAbsoluteTemplateMedia(settings),
+    kitchenTicketTemplate: settings.kitchenTicketTemplate,
     order: {
       pickupCode: job.pickupCode,
       orderType: job.orderType || "web",

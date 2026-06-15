@@ -1180,6 +1180,7 @@ export default function StorePosPage() {
       storeName: `${stores.find((store) => store.id === selectedStoreId)?.name ?? "Foundr1 OS"} / ${brandName}`,
       printedAt: new Date().toISOString(),
       receiptTemplate: absolutizeReceiptTemplateMedia(posSettings.printerSettings.receiptTemplate),
+      kitchenTicketTemplate: posSettings.printerSettings.kitchenTicketTemplate,
       order: {
         pickupCode: String(body.pickupCode || ""),
         orderType,
