@@ -85,7 +85,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
           : `/store/${active}`;
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
-  const [employeeRole, setEmployeeRole] = useState("");
+  const [employeeRole, setEmployeeRole] = useState<string | null>(null);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
   const [mobileDisplayMenuOpen, setMobileDisplayMenuOpen] = useState(false);
@@ -96,8 +96,8 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const mobileDisplayMenuRef = useRef<HTMLDivElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
-  const visibleTabs = employeeRole === "store_terminal"
-    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
+  const visibleTabs = employeeRole === null || employeeRole === "store_terminal"
+    ? tabs.filter((tab) => tab.href !== "/os")
     : tabs;
   const visibleDisplayTabs = displayTabs;
   const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);

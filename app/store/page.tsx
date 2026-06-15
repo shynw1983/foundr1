@@ -1,7 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, Settings, ShoppingCart, Tags } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, ShoppingCart, Tags } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
@@ -46,40 +45,10 @@ const storeModules = [
     href: "/store/feedback",
     icon: MessageSquareWarning,
     status: "利用可能"
-  },
-  {
-    title: "Foundr1 OS",
-    description: "管理画面へ移動し、商品、メニュー、スタッフ、店舗、設定、分析を確認します。",
-    href: "/os",
-    icon: Settings,
-    status: "利用可能"
   }
 ];
 
 export default function StoreHomePage() {
-  const [employeeRole, setEmployeeRole] = useState("");
-  const visibleModules = useMemo(() => (
-    employeeRole === "store_terminal"
-      ? storeModules.filter((module) => ["/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
-      : storeModules
-  ), [employeeRole]);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function loadCurrentEmployee() {
-      const response = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!response.ok) return;
-      const body = await response.json() as { employee?: { role?: string; isTimecardEmployee?: boolean } | null };
-      if (isMounted) {
-        setEmployeeRole(String(body.employee?.role ?? ""));
-      }
-    }
-    void loadCurrentEmployee();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -94,7 +63,7 @@ export default function StoreHomePage() {
       </header>
 
       <section className="store-workbench-grid">
-        {visibleModules.map((module) => {
+        {storeModules.map((module) => {
           const Icon = module.icon;
           const content = (
             <>
