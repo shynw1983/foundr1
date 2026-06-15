@@ -30273,11 +30273,17 @@ a:focus-visible {
   text-indent: -999px;
 }
 
-.os-home-shell .brand-mark,
 .shell .brand-mark {
   border-color: transparent;
   background-color: transparent;
-  background-image: url("/icons/foundr1-os-ui.png");
+  background-image: url("/icons/foundr1-os-ui-dark.png");
+  background-size: 108%;
+}
+
+.os-home-shell .brand-mark {
+  border-color: var(--line);
+  background-color: #ffffff;
+  background-image: url("/icons/foundr1-os-ui-light.png");
   background-size: 108%;
 }
 
