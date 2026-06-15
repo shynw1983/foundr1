@@ -224,6 +224,7 @@ async function getSettings(storeId: string) {
       stores.id::text as "storeId",
       stores.name as "storeName",
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled",
+      coalesce(pos_store_settings.takeout_enabled, true) as "takeoutEnabled",
       coalesce(pos_store_settings.dine_in_tax_rate, 10)::float as "dineInTaxRate",
       coalesce(pos_store_settings.takeout_tax_rate, 8)::float as "takeoutTaxRate",
       coalesce(nullif(pos_store_settings.external_payment_terminal_brand, ''), 'PayCAS') as "externalPaymentTerminalBrand",
@@ -285,6 +286,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as {
     storeId?: string;
     dineInEnabled?: boolean;
+    takeoutEnabled?: boolean;
     dineInTaxRate?: number | string;
     takeoutTaxRate?: number | string;
     externalPaymentTerminalBrand?: string;
@@ -303,6 +305,11 @@ export async function POST(request: Request) {
 
   const dineInTaxRate = normalizeRate(body.dineInTaxRate, 10);
   const takeoutTaxRate = normalizeRate(body.takeoutTaxRate, 8);
+  const dineInEnabled = body.dineInEnabled !== false;
+  const takeoutEnabled = body.takeoutEnabled !== false;
+  if (!dineInEnabled && !takeoutEnabled) {
+    return Response.json({ error: "店内飲食または持ち帰りのどちらかを有効にしてください。" }, { status: 400 });
+  }
   const externalPaymentTerminalBrand = normalizeText(body.externalPaymentTerminalBrand) || "PayCAS";
   const discountPresets = normalizeDiscountPresets(body.discountPresets);
   const customerDisplayMediaSettings = normalizeCustomerDisplayMediaSettings(body.customerDisplayMediaSettings);
@@ -312,6 +319,7 @@ export async function POST(request: Request) {
     insert into pos_store_settings (
       store_id,
       dine_in_enabled,
+      takeout_enabled,
       dine_in_tax_rate,
       takeout_tax_rate,
       external_payment_terminal_brand,
@@ -324,7 +332,8 @@ export async function POST(request: Request) {
     )
     values (
       ${storeId},
-      ${body.dineInEnabled !== false},
+      ${dineInEnabled},
+      ${takeoutEnabled},
       ${dineInTaxRate},
       ${takeoutTaxRate},
       ${externalPaymentTerminalBrand},
@@ -338,6 +347,7 @@ export async function POST(request: Request) {
     on conflict (store_id)
     do update set
       dine_in_enabled = excluded.dine_in_enabled,
+      takeout_enabled = excluded.takeout_enabled,
       dine_in_tax_rate = excluded.dine_in_tax_rate,
       takeout_tax_rate = excluded.takeout_tax_rate,
       external_payment_terminal_brand = excluded.external_payment_terminal_brand,

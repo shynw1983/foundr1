@@ -105,6 +105,7 @@ type PosTaxSettings = {
   storeId: string;
   storeName: string;
   dineInEnabled: boolean;
+  takeoutEnabled: boolean;
   dineInTaxRate: number;
   takeoutTaxRate: number;
   externalPaymentTerminalBrand: string;
@@ -227,8 +228,9 @@ export default function PosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; printerSettings: PosPrinterSettings; posBrandSettings: PosBrandSetting[] }>({
+  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; takeoutEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; printerSettings: PosPrinterSettings; posBrandSettings: PosBrandSetting[] }>({
     dineInEnabled: true,
+    takeoutEnabled: true,
     dineInTaxRate: "10",
     takeoutTaxRate: "8",
     externalPaymentTerminalBrand: "PayCAS",
@@ -287,6 +289,7 @@ export default function PosPage() {
     setCanManagePosSettings(Boolean(settingsBody?.access?.canManagePosSettings));
     setTaxForm({
       dineInEnabled: nextSettings?.dineInEnabled !== false,
+      takeoutEnabled: nextSettings?.takeoutEnabled !== false,
       dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
       takeoutTaxRate: String(nextSettings?.takeoutTaxRate ?? 8),
       externalPaymentTerminalBrand: nextSettings?.externalPaymentTerminalBrand ?? "PayCAS",
@@ -381,6 +384,7 @@ export default function PosPage() {
         body: JSON.stringify({
           storeId: selectedStoreId,
           dineInEnabled: taxForm.dineInEnabled,
+          takeoutEnabled: taxForm.takeoutEnabled,
           dineInTaxRate: taxForm.dineInTaxRate,
           takeoutTaxRate: taxForm.takeoutTaxRate,
           externalPaymentTerminalBrand: taxForm.externalPaymentTerminalBrand,
@@ -396,6 +400,7 @@ export default function PosPage() {
       setTaxSettings(body.settings ?? null);
       setTaxForm({
         dineInEnabled: body.settings?.dineInEnabled !== false,
+        takeoutEnabled: body.settings?.takeoutEnabled !== false,
         dineInTaxRate: String(body.settings?.dineInTaxRate ?? taxForm.dineInTaxRate),
         takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
         externalPaymentTerminalBrand: body.settings?.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
@@ -610,6 +615,18 @@ export default function PosPage() {
                   disabled={!canManagePosSettings}
                 />
                 <strong>店内飲食を POS に表示する</strong>
+              </div>
+            </label>
+            <label className="pos-admin-tax-toggle">
+              <span>持ち帰り</span>
+              <div>
+                <input
+                  type="checkbox"
+                  checked={taxForm.takeoutEnabled}
+                  onChange={(event) => setTaxForm((current) => ({ ...current, takeoutEnabled: event.target.checked }))}
+                  disabled={!canManagePosSettings}
+                />
+                <strong>持ち帰りを POS に表示する</strong>
               </div>
             </label>
             <label>
@@ -1506,7 +1523,7 @@ export default function PosPage() {
           </div>
           <div className="pos-admin-tax-footer">
             <span>
-              現在: {taxSettings?.dineInEnabled === false ? "持ち帰りのみ" : `店内 ${taxSettings?.dineInTaxRate ?? 10}%`} / 持ち帰り {taxSettings?.takeoutTaxRate ?? 8}% / 外部決済 {taxSettings?.externalPaymentTerminalBrand ?? "PayCAS"} / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
+              現在: {taxSettings?.dineInEnabled === false ? "店内なし" : `店内 ${taxSettings?.dineInTaxRate ?? 10}%`} / {taxSettings?.takeoutEnabled === false ? "持ち帰りなし" : `持ち帰り ${taxSettings?.takeoutTaxRate ?? 8}%`} / 外部決済 {taxSettings?.externalPaymentTerminalBrand ?? "PayCAS"} / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
             </span>
             <button className="primary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
               {taxSaving ? "保存中..." : "保存"}
