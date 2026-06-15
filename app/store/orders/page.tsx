@@ -379,22 +379,39 @@ export default function StoreOrdersPage() {
     playStoreOrderAlertSound(audioContextRef.current, sound);
   };
 
+  const isUnhandledNewOrder = (order: StoreOrder, orderIds: string[]) => (
+    orderIds.includes(order.id) &&
+    order.paymentStatus === "paid" &&
+    order.status === "new" &&
+    order.orderSource !== "store_pos"
+  );
+
+  const playArrivalAlert = (orderIds: string[]) => {
+    playNewOrderSound();
+    const timer = window.setTimeout(() => {
+      const stillUnhandled = ordersRef.current.some((order) => isUnhandledNewOrder(order, orderIds));
+      if (stillUnhandled) playNewOrderSound();
+    }, 1600);
+    repeatAlertTimersRef.current.push(timer);
+  };
+
   const scheduleRepeatAlert = (orderIds: string[]) => {
     if (!storeSettings.orderAlerts.repeatUntilHandled || !orderIds.length) return;
-    for (const delay of [30000, 60000]) {
+    const startedAt = Date.now();
+
+    const queueNextAlert = () => {
       const timer = window.setTimeout(() => {
-        const stillUnhandled = ordersRef.current.some((order) => (
-          orderIds.includes(order.id) &&
-          order.paymentStatus === "paid" &&
-          order.status === "new" &&
-          order.orderSource !== "store_pos"
-        ));
-        if (stillUnhandled) {
-          playNewOrderSound(delay >= 60000 ? "urgent_order" : storeSettings.orderAlerts.sound);
-        }
-      }, delay);
+        const stillUnhandled = ordersRef.current.some((order) => isUnhandledNewOrder(order, orderIds));
+        if (!stillUnhandled) return;
+
+        const elapsed = Date.now() - startedAt;
+        playNewOrderSound(elapsed >= 60000 ? "urgent_order" : storeSettings.orderAlerts.sound);
+        queueNextAlert();
+      }, 30000);
       repeatAlertTimersRef.current.push(timer);
-    }
+    };
+
+    queueNextAlert();
   };
 
   const refresh = async () => {
@@ -455,7 +472,7 @@ export default function StoreOrdersPage() {
       if (incomingIds.length) {
         setNewOrderIds(incomingIds);
         setSelectedId((currentSelected) => currentSelected || incomingIds[0]);
-        playNewOrderSound();
+        playArrivalAlert(incomingIds);
         scheduleRepeatAlert(incomingIds);
         window.setTimeout(() => setNewOrderIds([]), 10000);
       }
@@ -534,7 +551,7 @@ export default function StoreOrdersPage() {
         if (shouldNotifyNewOrder(previousOrder, order)) {
           setNewOrderIds([order.id]);
           setSelectedId(order.id);
-          playNewOrderSound();
+          playArrivalAlert([order.id]);
           scheduleRepeatAlert([order.id]);
           window.setTimeout(() => setNewOrderIds([]), 10000);
         }
@@ -859,7 +876,7 @@ export default function StoreOrdersPage() {
             </button>
             <span>
               {soundEnabled && soundReady ? `${storeOrderAlertSoundOptions.find((option) => option.value === storeSettings.orderAlerts.sound)?.label ?? "通知音"} で通知します` : "通知音を有効にできます"}
-              {storeSettings.orderAlerts.repeatUntilHandled ? " / 未対応は再通知" : ""}
+              {storeSettings.orderAlerts.repeatUntilHandled ? " / 未対応は30秒ごとに再通知" : " / 新規注文時に2回通知"}
             </span>
           </div>
           <p className="store-orders-live-note">

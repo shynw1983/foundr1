@@ -1943,7 +1943,7 @@ body :where(
 .os-home-user .mobile-nav-menu summary {
   display: grid;
   width: 46px;
-  min-height: 42px;
+  min-height: 46px;
   place-items: center;
   border: 1px solid rgba(31, 111, 91, 0.28);
   border-radius: 8px;
@@ -25784,10 +25784,39 @@ body :where(
     padding: 14px;
   }
 
-  .os-home-topbar,
+  .os-home-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 46px;
+    align-items: center;
+    gap: 12px;
+  }
+
   .os-home-user {
-    align-items: stretch;
-    flex-direction: column;
+    display: contents;
+  }
+
+  .os-home-user .mobile-nav-actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    display: flex;
+    margin-left: 0;
+  }
+
+  .os-home-user .mobile-nav-menu {
+    flex-basis: 46px;
+    width: 46px;
+  }
+
+  .os-home-user .mobile-nav-menu summary {
+    width: 46px;
+    min-height: 46px;
+  }
+
+  .os-home-user .user-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .os-home-user .user-panel {
@@ -25801,7 +25830,12 @@ body :where(
     width: 100%;
   }
 
-  .os-home-topbar .brand-block,
+  .os-home-topbar .brand-block {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+  }
+
   .os-home-user .secondary-button {
     width: 100%;
   }
@@ -29439,24 +29473,29 @@ body :where(
   .os-home-shell .os-home-topbar {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 46px;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 16px;
   }
 
   .os-home-shell .os-home-topbar .brand-block {
+    grid-column: 1;
+    grid-row: 1;
     width: 100%;
     min-width: 0;
     padding-right: 0;
   }
 
   .os-home-shell .os-home-user {
-    width: 100%;
+    display: contents;
+    width: auto;
     min-width: 0;
   }
 
   .os-home-shell .os-home-user .user-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
     grid-template-columns: minmax(0, 1fr) 48px;
     width: 100%;
   }
@@ -29485,20 +29524,29 @@ body :where(
     min-width: 48px;
   }
 
+  .os-home-shell .mobile-nav-actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    display: flex;
+    margin-left: 0;
+  }
+
   .os-home-shell .topbar-actions .user-badge {
     display: none;
   }
 
   .os-home-shell .mobile-nav-menu {
     position: relative;
-    flex: 0 0 48px;
-    width: 48px;
+    flex: 0 0 46px;
+    width: 46px;
     display: block;
   }
 
   .os-home-shell .mobile-nav-menu summary {
-    width: 48px;
-    min-height: 48px;
+    width: 46px;
+    min-height: 46px;
     border-color: rgba(31, 111, 91, 0.28);
     background: var(--green);
     color: white;
