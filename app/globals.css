@@ -8129,6 +8129,7 @@ body :where(
 .store-nav-tabs {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
@@ -8138,13 +8139,11 @@ body :where(
   border-radius: 8px;
   padding: 5px;
   background: white;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
+  overflow: visible;
 }
 
 .store-nav-tabs a,
-.store-display-nav-menu summary {
+.store-display-nav-menu button {
   flex: 0 0 auto;
   min-height: 38px;
   display: inline-flex;
@@ -8164,18 +8163,14 @@ body :where(
   flex: 0 0 auto;
 }
 
-.store-display-nav-menu summary {
+.store-display-nav-menu button {
   cursor: pointer;
-  list-style: none;
+  font: inherit;
 }
 
-.store-display-nav-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.store-display-nav-menu[open] summary,
+.store-display-nav-menu[data-open="true"] button,
 .store-nav-tabs a.is-active,
-.store-display-nav-menu summary.is-active {
+.store-display-nav-menu button.is-active {
   background: #1f6f55;
   color: white;
   font-weight: 800;
@@ -8242,25 +8237,24 @@ body :where(
   width: 100%;
 }
 
-.store-nav-list .store-display-nav-menu summary {
+.store-nav-list .store-display-nav-menu button {
   display: flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   min-height: 38px;
   border: 1px solid transparent;
   border-radius: 7px;
   padding: 0 12px;
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
-  list-style: none;
+  font: inherit;
+  text-align: left;
 }
 
-.store-nav-list .store-display-nav-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.store-nav-list .store-display-nav-menu[open] summary,
-.store-nav-list .store-display-nav-menu summary.is-active {
+.store-nav-list .store-display-nav-menu[data-open="true"] button,
+.store-nav-list .store-display-nav-menu button.is-active {
   background: rgba(31, 111, 85, 0.12);
   color: var(--green);
   font-weight: 800;

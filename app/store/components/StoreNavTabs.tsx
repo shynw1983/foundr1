@@ -87,10 +87,13 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState("");
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
+  const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
+  const [mobileDisplayMenuOpen, setMobileDisplayMenuOpen] = useState(false);
   const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
   const hasInitializedOrderWatchRef = useRef(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
-  const displayMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const displayMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileDisplayMenuRef = useRef<HTMLDivElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
@@ -114,8 +117,11 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
     if (storeMenuRef.current) storeMenuRef.current.open = false;
   });
   useCloseOnOutside(displayMenuRef, () => {
-    if (displayMenuRef.current) displayMenuRef.current.open = false;
-  });
+    setDisplayMenuOpen(false);
+  }, displayMenuOpen);
+  useCloseOnOutside(mobileDisplayMenuRef, () => {
+    setMobileDisplayMenuOpen(false);
+  }, mobileDisplayMenuOpen);
 
   useEffect(() => {
     setNow(new Date());
@@ -276,24 +282,29 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
             </a>
           );
         })}
-        <details className="store-display-nav-menu" ref={displayMenuRef}>
-          <summary className={isDisplayActive ? "is-active" : ""}>
+        <div className="store-display-nav-menu" data-open={displayMenuOpen ? "true" : "false"} ref={displayMenuRef}>
+          <button
+            className={isDisplayActive ? "is-active" : ""}
+            type="button"
+            aria-expanded={displayMenuOpen}
+            onClick={() => setDisplayMenuOpen((open) => !open)}
+          >
             <Monitor size={17} />
             表示画面
             <ChevronDown size={15} />
-          </summary>
-          <div className="store-display-nav-list">
+          </button>
+          {displayMenuOpen ? <div className="store-display-nav-list">
             {visibleDisplayTabs.map((tab) => {
               const Icon = tab.icon;
               return (
-                <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href}>
+                <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href} onClick={() => setDisplayMenuOpen(false)}>
                   <Icon size={16} />
                   {tab.label}
                 </a>
               );
             })}
-          </div>
-        </details>
+          </div> : null}
+        </div>
       </nav>
       <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
         <summary aria-label="メニュー">
@@ -318,24 +329,29 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
               </a>
             );
           })}
-          <details className="store-display-nav-menu is-mobile">
-            <summary className={isDisplayActive ? "is-active" : ""}>
+          <div className="store-display-nav-menu is-mobile" data-open={mobileDisplayMenuOpen ? "true" : "false"} ref={mobileDisplayMenuRef}>
+            <button
+              className={isDisplayActive ? "is-active" : ""}
+              type="button"
+              aria-expanded={mobileDisplayMenuOpen}
+              onClick={() => setMobileDisplayMenuOpen((open) => !open)}
+            >
               <Monitor size={17} />
               <span>表示画面</span>
               <ChevronDown size={15} />
-            </summary>
-            <div className="store-display-nav-list">
+            </button>
+            {mobileDisplayMenuOpen ? <div className="store-display-nav-list">
               {visibleDisplayTabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
-                  <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href}>
+                  <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href} onClick={() => setMobileDisplayMenuOpen(false)}>
                     <Icon size={16} />
                     <span>{tab.label}</span>
                   </a>
                 );
               })}
-            </div>
-          </details>
+            </div> : null}
+          </div>
         </nav>
       </details>
     </div>
