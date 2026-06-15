@@ -213,7 +213,7 @@ alter table employees add column if not exists privacy_consent_reset_required bo
 alter table employees add column if not exists password_changed_at timestamptz;
 update employees
 set password_must_change = true
-where role in ('store_owner', 'store_manager', 'staff')
+where role in ('store_manager', 'staff')
   and password_hash is not null
   and password_changed_at is null
   and password_must_change = false;

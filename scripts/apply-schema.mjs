@@ -56,7 +56,7 @@ await sql.query("alter table employees add column if not exists password_changed
 await sql.query(`
   update employees
   set password_must_change = true
-  where role in ('store_owner', 'store_manager', 'staff')
+  where role in ('store_manager', 'staff')
     and password_hash is not null
     and password_changed_at is null
     and password_must_change = false

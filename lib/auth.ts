@@ -12,7 +12,7 @@ export type EmployeeSession = {
 };
 
 export const authCookieName = "foundr1_os_session";
-export const passwordChangeRequiredRoles = new Set(["store_owner", "store_manager", "staff"]);
+export const passwordChangeRequiredRoles = new Set(["store_manager", "staff"]);
 const passwordActionTokenMaxAgeSeconds = 15 * 60;
 const hashIterations = 210_000;
 const hashKeyLength = 32;

@@ -174,7 +174,7 @@ const roleOptions = [
   { value: "owner", label: "本部オーナー" }
 ];
 
-const passwordChangeEligibleRoles = new Set(["store_owner", "store_manager", "staff"]);
+const passwordChangeEligibleRoles = new Set(["store_manager", "staff"]);
 
 function canForcePasswordChange(role: string) {
   return passwordChangeEligibleRoles.has(role);

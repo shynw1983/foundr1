@@ -92,6 +92,7 @@ const storeTerminalAllowedPaths = [
 
 type ProxySession = {
   role?: string;
+  sessionId?: string;
   expiresAt?: number;
   permittedNavPaths?: string[];
 };
@@ -130,7 +131,8 @@ async function readValidSession(token?: string): Promise<ProxySession | null> {
 
   try {
     const session = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as ProxySession;
-    if (!session.expiresAt || Date.now() > session.expiresAt) return null;
+    if (typeof session.expiresAt === "number" && Date.now() > session.expiresAt) return null;
+    if (!session.sessionId && typeof session.expiresAt !== "number") return null;
     return session;
   } catch {
     return null;
