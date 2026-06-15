@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -27,14 +27,18 @@ type StoreOrdersResponse = {
 const tabs = [
   { label: "ホーム", href: "/store", icon: Home },
   { label: "注文", href: "/store/orders", icon: ClipboardList },
-  { label: "キッチン", href: "/store/display/kitchen", icon: ChefHat },
-  { label: "受取表示", href: "/store/display/pickup", icon: Monitor },
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
   { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
   { label: "OS", href: "/os", icon: Settings }
+];
+
+const displayTabs = [
+  { label: "キッチン", href: "/store/display/kitchen", icon: ChefHat },
+  { label: "受取表示", href: "/store/display/pickup", icon: Monitor },
+  { label: "POS客席表示", href: "/store/pos/customer-display", icon: Monitor }
 ];
 
 function formatStoreClock(date: Date) {
@@ -86,11 +90,14 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const knownActiveOrderKeysRef = useRef<Set<string>>(new Set());
   const hasInitializedOrderWatchRef = useRef(false);
   const storeMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const displayMenuRef = useRef<HTMLDetailsElement | null>(null);
   const clock = now ? formatStoreClock(now) : { dateText: "--/--", timeText: "--:--:--" };
   const shouldFlashOrdersTab = active !== "orders" && hasPendingOrderAlert;
   const visibleTabs = employeeRole === "store_terminal"
-    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
+    ? tabs.filter((tab) => ["/store", "/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(tab.href))
     : tabs;
+  const visibleDisplayTabs = displayTabs;
+  const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);
 
   const clearOrderAlert = () => {
     setHasPendingOrderAlert(false);
@@ -105,6 +112,9 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
 
   useCloseOnOutside(storeMenuRef, () => {
     if (storeMenuRef.current) storeMenuRef.current.open = false;
+  });
+  useCloseOnOutside(displayMenuRef, () => {
+    if (displayMenuRef.current) displayMenuRef.current.open = false;
   });
 
   useEffect(() => {
@@ -266,6 +276,24 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
             </a>
           );
         })}
+        <details className="store-display-nav-menu" ref={displayMenuRef}>
+          <summary className={isDisplayActive ? "is-active" : ""}>
+            <Monitor size={17} />
+            表示画面
+            <ChevronDown size={15} />
+          </summary>
+          <div className="store-display-nav-list">
+            {visibleDisplayTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href}>
+                  <Icon size={16} />
+                  {tab.label}
+                </a>
+              );
+            })}
+          </div>
+        </details>
       </nav>
       <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
         <summary aria-label="メニュー">
@@ -290,6 +318,24 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
               </a>
             );
           })}
+          <details className="store-display-nav-menu is-mobile">
+            <summary className={isDisplayActive ? "is-active" : ""}>
+              <Monitor size={17} />
+              <span>表示画面</span>
+              <ChevronDown size={15} />
+            </summary>
+            <div className="store-display-nav-list">
+              {visibleDisplayTabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <a className={tab.href === activeHref ? "is-active" : ""} href={tab.href} key={tab.href}>
+                    <Icon size={16} />
+                    <span>{tab.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </details>
         </nav>
       </details>
     </div>

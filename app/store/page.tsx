@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, Clock3, ClipboardList, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
@@ -10,20 +10,6 @@ const storeModules = [
     description: "Web予約注文を受け取り、制作開始、受け取り可、受け渡し完了まで処理します。",
     href: "/store/orders",
     icon: ClipboardList,
-    status: "利用可能"
-  },
-  {
-    title: "キッチン",
-    description: "Web予約と POS の制作タスクを、構造化された商品・オプション情報で確認します。",
-    href: "/store/display/kitchen",
-    icon: ChefHat,
-    status: "利用可能"
-  },
-  {
-    title: "受取表示",
-    description: "制作中と受け取り可能な番号を客席向け画面に表示し、受け渡しを案内します。",
-    href: "/store/display/pickup",
-    icon: Monitor,
     status: "利用可能"
   },
   {
@@ -74,7 +60,7 @@ export default function StoreHomePage() {
   const [employeeRole, setEmployeeRole] = useState("");
   const visibleModules = useMemo(() => (
     employeeRole === "store_terminal"
-      ? storeModules.filter((module) => ["/store/orders", "/store/display/kitchen", "/store/display/pickup", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
+      ? storeModules.filter((module) => ["/store/orders", "/store/menu", "/store/procedures", "/store/timecard", "/store/pos", "/store/feedback"].includes(module.href))
       : storeModules
   ), [employeeRole]);
 
