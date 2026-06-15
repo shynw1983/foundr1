@@ -288,6 +288,7 @@ export async function PATCH(request: Request) {
     };
     await updateReceiptOcrItemForProductLink(id, itemId, body, receiptUnitPrice);
     await linkVoucherItemToProduct(itemForLink, productId, session.id, receiptUnitPrice);
+    const reconciliation = await reconcileOrCreatePurchaseActualFromReceiptItem(id, String(item.id ?? ""), productId, session.id);
 
     if (body.updateReferencePrice) {
       const nextReferencePrice = normalizeNullableUnitPrice(body.referencePrice) ?? receiptUnitPrice;
@@ -299,7 +300,12 @@ export async function PATCH(request: Request) {
         `;
       }
     }
-    return Response.json({ ok: true, productId, itemId: String(item.id ?? "") });
+    return Response.json({
+      ok: true,
+      productId,
+      itemId: String(item.id ?? ""),
+      ...reconciliation
+    });
   }
 
   if (body.action === "create_purchase_actual_from_receipt_item") {
@@ -1524,6 +1530,50 @@ async function reconcileVoucherPurchaseActuals(ocrResultId: string, employeeId: 
 
     await createPurchaseActualFromReceiptItem(ocrResultId, itemId, employeeId);
   }
+}
+
+async function reconcileOrCreatePurchaseActualFromReceiptItem(ocrResultId: string, itemId: string, productId: string, employeeId: string) {
+  await reconcileReceiptOcrItemWithPurchaseActual(itemId, productId);
+
+  const statusRows = await sql`
+    select
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      coalesce(receipt_ocr_items.reconciliation_status, 'unmatched') as "reconciliationStatus",
+      coalesce(receipt_ocr_items.reconciliation_note, '') as "reconciliationNote"
+    from receipt_ocr_items
+    where receipt_ocr_items.id::text = ${itemId}
+    limit 1
+  `;
+  const status = statusRows[0];
+  if (status?.purchaseActualId || status?.reconciliationStatus === "auto_matched" || status?.reconciliationStatus === "manual_matched") {
+    return {
+      purchaseActualId: String(status.purchaseActualId ?? ""),
+      reconciliationStatus: String(status.reconciliationStatus ?? "unmatched"),
+      reconciliationNote: String(status.reconciliationNote ?? "")
+    };
+  }
+
+  const created = await createPurchaseActualFromReceiptItem(ocrResultId, itemId, employeeId);
+  if (created.error) {
+    return {
+      purchaseActualId: "",
+      reconciliationStatus: "unmatched",
+      reconciliationNote: "商品紐付け後、購入実績の自動作成に失敗しました。"
+    };
+  }
+
+  await sql`
+    update receipt_ocr_items
+    set reconciliation_note = 'レシート明細から購入実績を自動作成しました。'
+    where id::text = ${itemId}
+  `;
+
+  return {
+    purchaseActualId: created.purchaseActualId,
+    reconciliationStatus: "manual_matched",
+    reconciliationNote: "レシート明細から購入実績を自動作成しました。",
+    orderNo: created.orderNo
+  };
 }
 
 async function getVoucherOcrItemForProductLink(ocrResultId: string, itemId: string) {

@@ -1104,12 +1104,18 @@ export default function VouchersPage() {
             ? {
               matchedProductId: linkedProduct.id,
               matchedProductName: linkedProduct.name,
-              matchStatus: "matched"
+              matchStatus: "matched",
+              purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : draftLine.purchaseActualId,
+              reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : draftLine.reconciliationStatus,
+              reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : draftLine.reconciliationNote
             }
             : payload.action === "create_product_from_item"
               ? {
                 matchedProductName: String(payload.productName ?? ""),
-                matchStatus: "matched"
+                matchStatus: "matched",
+                purchaseActualId: typeof body.purchaseActualId === "string" ? body.purchaseActualId : draftLine.purchaseActualId,
+                reconciliationStatus: typeof body.reconciliationStatus === "string" ? body.reconciliationStatus : draftLine.reconciliationStatus,
+                reconciliationNote: typeof body.reconciliationNote === "string" ? body.reconciliationNote : draftLine.reconciliationNote
               }
               : {}
         );
