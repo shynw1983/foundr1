@@ -33,7 +33,7 @@ export function PwaRegister() {
         : "/manifest-os.webmanifest";
     const appleTitle = isMemberApp ? "Foundr1 MEMBER" : isStoreApp ? "Foundr1 STORE" : "Foundr1 OS";
     const appleIconHref = isMemberApp
-      ? "/icons/foundr1-store-apple-touch.png"
+      ? "/icons/foundr1-member-apple-touch.png"
       : isStoreApp
       ? "/icons/foundr1-store-apple-touch.png"
       : "/icons/foundr1-os-apple-touch.png";
