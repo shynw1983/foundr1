@@ -255,6 +255,25 @@ create index if not exists employee_sessions_employee_active_idx
   on employee_sessions(employee_id, session_version, expires_at, last_seen_at)
   where revoked_at is null;
 
+create table if not exists store_terminal_login_requests (
+  id uuid primary key default gen_random_uuid(),
+  token_hash text not null unique,
+  status text not null default 'pending',
+  terminal_employee_id uuid references employees(id) on delete set null,
+  store_id uuid references stores(id) on delete set null,
+  requested_user_agent text not null default '',
+  requested_ip_address text not null default '',
+  approved_by uuid references employees(id) on delete set null,
+  approved_at timestamptz,
+  consumed_at timestamptz,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists store_terminal_login_requests_status_idx
+  on store_terminal_login_requests(status, expires_at);
+
 alter table stores add column if not exists default_procurement_staff_id uuid;
 alter table stores drop constraint if exists stores_default_procurement_staff_id_fkey;
 alter table stores

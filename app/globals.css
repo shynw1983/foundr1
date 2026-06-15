@@ -24474,6 +24474,141 @@ body :where(
   text-decoration: underline;
 }
 
+.terminal-login-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.terminal-login-qr-frame {
+  display: grid;
+  place-items: center;
+  min-height: 292px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.terminal-login-qr-frame img {
+  width: min(280px, 100%);
+  height: auto;
+}
+
+.terminal-login-qr-placeholder {
+  display: grid;
+  place-items: center;
+  width: 220px;
+  height: 220px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.terminal-login-status {
+  display: grid;
+  gap: 4px;
+}
+
+.terminal-login-status strong {
+  color: var(--ink);
+}
+
+.terminal-login-status span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.terminal-approval-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 22px;
+  background: #f4f7fb;
+}
+
+.terminal-approval-panel {
+  display: grid;
+  gap: 18px;
+  width: min(460px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.terminal-approval-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.terminal-approval-panel h1,
+.terminal-approval-panel p {
+  margin: 0;
+}
+
+.terminal-approval-panel p:not(.eyebrow) {
+  color: var(--muted);
+}
+
+.terminal-approval-form {
+  display: grid;
+  gap: 14px;
+}
+
+.terminal-approval-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.terminal-approval-form span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.terminal-approval-form select {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+  outline: 0;
+}
+
+.terminal-approval-form select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+
+.terminal-approval-loading,
+.terminal-approval-form .primary-button,
+.terminal-approval-panel .login-text-button,
+.terminal-approval-login-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.terminal-approval-loading {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.terminal-approval-login-link {
+  margin-top: 10px;
+  color: var(--red);
+  text-decoration: underline;
+}
+
 .privacy-consent-shell {
   display: grid;
   min-height: 100vh;

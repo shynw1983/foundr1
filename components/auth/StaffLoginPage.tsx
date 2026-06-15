@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { OsLanguagePicker } from "../../app/os/components/OsTranslationProvider";
 
 type LoginSurface = "os" | "store" | "staff";
@@ -17,7 +17,7 @@ function isSameSurfacePath(pathname: string, surface: LoginSurface) {
 }
 
 export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
-  const [mode, setMode] = useState<"login" | "initialChange" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "terminalQr" | "initialChange" | "forgot">(surface === "store" ? "terminalQr" : "login");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -27,12 +27,71 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [terminalQr, setTerminalQr] = useState<{ token: string; qrCodeDataUrl: string; expiresAt: string } | null>(null);
+  const [isQrLoading, setIsQrLoading] = useState(surface === "store");
+  const [qrRefreshNonce, setQrRefreshNonce] = useState(0);
   const productName = surface === "staff" ? "Foundr1 STAFF" : surface === "store" ? "Foundr1 STORE" : "Foundr1 OS";
   const appIconSrc = surface === "staff" ? "/icons/foundr1-staff-192.png" : "/icons/foundr1-store-192.png";
   const loginTitle = surface === "store" ? "店舗ワークベンチログイン" : "スタッフログイン";
   const loginDescription = surface === "store"
     ? "店舗端末または管理者アカウントでログイン"
     : `${productName} にログイン`;
+
+  useEffect(() => {
+    if (surface !== "store" || mode !== "terminalQr") return;
+
+    let isActive = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function createQr() {
+      setIsQrLoading(true);
+      setError("");
+      const response = await fetch("/api/store/terminal-login/request", { method: "POST" });
+      const body = await response.json().catch(() => ({})) as {
+        token?: string;
+        qrCodeDataUrl?: string;
+        expiresAt?: string;
+        error?: string;
+      };
+      if (!isActive) return;
+      if (!response.ok || !body.token || !body.qrCodeDataUrl) {
+        setError(body.error ?? "QRコードを作成できませんでした。");
+        setIsQrLoading(false);
+        return;
+      }
+      setTerminalQr({ token: body.token, qrCodeDataUrl: body.qrCodeDataUrl, expiresAt: body.expiresAt ?? "" });
+      setIsQrLoading(false);
+
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        const statusResponse = await fetch(`/api/store/terminal-login/status?token=${encodeURIComponent(body.token ?? "")}`, { cache: "no-store" });
+        const statusBody = await statusResponse.json().catch(() => ({})) as { status?: string; error?: string };
+        if (!isActive) return;
+        if (statusBody.status === "authenticated") {
+          window.location.href = "/store";
+          return;
+        }
+        if (statusBody.status === "expired") {
+          setNotice("QRコードを更新しています。");
+          await createQr();
+        }
+      }, 2200);
+
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        if (isActive) void createQr();
+      }, 4 * 60 * 1000);
+    }
+
+    void createQr();
+
+    return () => {
+      isActive = false;
+      if (pollTimer) clearInterval(pollTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [mode, surface, qrRefreshNonce]);
 
   function redirectAfterLogin() {
     const params = new URLSearchParams(window.location.search);
@@ -155,15 +214,57 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
         )}
         <div>
           <p className="eyebrow">{productName}</p>
-          <h1>{mode === "forgot" ? "パスワード再設定" : mode === "initialChange" ? "新しいパスワード設定" : loginTitle}</h1>
+          <h1>{mode === "forgot" ? "パスワード再設定" : mode === "initialChange" ? "新しいパスワード設定" : mode === "terminalQr" ? "QR端末ログイン" : loginTitle}</h1>
           <p>
             {mode === "forgot"
               ? "登録メールアドレスを確認して新しいパスワードを設定します。"
               : mode === "initialChange"
                 ? "初期パスワードから変更してください。"
-                : loginDescription}
+                : mode === "terminalQr"
+                  ? "管理者のスマートフォンで読み取り、店舗Padアカウントを選択します。"
+                  : loginDescription}
           </p>
         </div>
+        {mode === "terminalQr" ? (
+          <div className="terminal-login-panel">
+            <div className="terminal-login-qr-frame">
+              {terminalQr?.qrCodeDataUrl ? (
+                <img src={terminalQr.qrCodeDataUrl} alt="店舗端末ログインQR" />
+              ) : (
+                <div className="terminal-login-qr-placeholder">{isQrLoading ? "作成中" : "更新してください"}</div>
+              )}
+            </div>
+            <div className="terminal-login-status">
+              <strong>{isQrLoading ? "QRコードを作成しています" : "承認待ちです"}</strong>
+              <span>有効期限内にスマートフォンで読み取ってください。</span>
+            </div>
+            {notice ? <div className="login-notice">{notice}</div> : null}
+            {error ? <div className="login-error">{error}</div> : null}
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                setNotice("");
+                setError("");
+                setTerminalQr(null);
+                setQrRefreshNonce((current) => current + 1);
+              }}
+            >
+              QRを更新
+            </button>
+            <button
+              className="login-text-button"
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setError("");
+                setNotice("");
+              }}
+            >
+              ログインIDでログイン
+            </button>
+          </div>
+        ) : null}
         {mode === "login" ? (
           <form className="login-form" onSubmit={submitLogin}>
             <label>
@@ -188,6 +289,19 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
             <button className="primary-button" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "ログイン中" : "ログイン"}
             </button>
+            {surface === "store" ? (
+              <button
+                className="login-text-button"
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                  setMode("terminalQr");
+                }}
+              >
+                QR端末ログインに戻る
+              </button>
+            ) : null}
             <button
               className="login-text-button"
               type="button"

@@ -14,6 +14,7 @@ const tables = [
   "store_brands",
   "employees",
   "employee_sessions",
+  "store_terminal_login_requests",
   "employee_scopes",
   "products",
   "product_brand_usages",
@@ -52,6 +53,16 @@ const requiredColumns = {
     "expires_at",
     "revoked_at",
     "revoked_reason"
+  ],
+  store_terminal_login_requests: [
+    "token_hash",
+    "status",
+    "terminal_employee_id",
+    "store_id",
+    "approved_by",
+    "approved_at",
+    "consumed_at",
+    "expires_at"
   ],
   role_permissions: [
     "role",
