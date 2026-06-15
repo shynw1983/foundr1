@@ -1,5 +1,13 @@
 export type StoreAvailabilityDisplayMode = "separate_category" | "mixed" | "hidden";
 export type StoreUserDisplayMode = "avatar" | "name" | "avatar_name";
+export type StoreOrderAlertSound = "foundr1_default" | "kitchen_bell" | "urgent_order" | "soft_chime";
+
+export const storeOrderAlertSoundOptions: Array<{ value: StoreOrderAlertSound; label: string; description: string }> = [
+  { value: "foundr1_default", label: "Foundr1 Default", description: "短い上昇音で日常運用向け。" },
+  { value: "kitchen_bell", label: "Kitchen Bell", description: "厨房でも気づきやすいベル風の三連音。" },
+  { value: "urgent_order", label: "Urgent Order", description: "漏れ防止向けの少し強い注意音。" },
+  { value: "soft_chime", label: "Soft Chime", description: "静かな店舗向けの柔らかいチャイム。" }
+];
 
 export type StoreModuleSettings = {
   availability: {
@@ -16,6 +24,10 @@ export type StoreModuleSettings = {
     showNotifications: boolean;
     showLanguagePicker: boolean;
     userDisplay: StoreUserDisplayMode;
+  };
+  orderAlerts: {
+    sound: StoreOrderAlertSound;
+    repeatUntilHandled: boolean;
   };
 };
 
@@ -34,6 +46,10 @@ export const defaultStoreModuleSettings: StoreModuleSettings = {
     showNotifications: true,
     showLanguagePicker: true,
     userDisplay: "avatar"
+  },
+  orderAlerts: {
+    sound: "kitchen_bell",
+    repeatUntilHandled: true
   }
 };
 
@@ -53,11 +69,16 @@ function normalizeUserDisplay(value: unknown): StoreUserDisplayMode {
   return value === "name" || value === "avatar_name" || value === "avatar" ? value : "avatar";
 }
 
+function normalizeOrderAlertSound(value: unknown): StoreOrderAlertSound {
+  return storeOrderAlertSoundOptions.some((option) => option.value === value) ? value as StoreOrderAlertSound : "kitchen_bell";
+}
+
 export function normalizeStoreModuleSettings(value: unknown): StoreModuleSettings {
   const source = asObject(value);
   const availability = asObject(source.availability);
   const targets = asObject(availability.targets);
   const header = asObject(source.header);
+  const orderAlerts = asObject(source.orderAlerts);
 
   return {
     availability: {
@@ -74,6 +95,10 @@ export function normalizeStoreModuleSettings(value: unknown): StoreModuleSetting
       showNotifications: asBoolean(header.showNotifications, defaultStoreModuleSettings.header.showNotifications),
       showLanguagePicker: asBoolean(header.showLanguagePicker, defaultStoreModuleSettings.header.showLanguagePicker),
       userDisplay: normalizeUserDisplay(header.userDisplay)
+    },
+    orderAlerts: {
+      sound: normalizeOrderAlertSound(orderAlerts.sound),
+      repeatUntilHandled: asBoolean(orderAlerts.repeatUntilHandled, defaultStoreModuleSettings.orderAlerts.repeatUntilHandled)
     }
   };
 }

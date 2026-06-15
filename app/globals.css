@@ -5468,6 +5468,14 @@ body :where(
   gap: 10px;
 }
 
+.settings-option-help {
+  margin: -2px 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 .settings-role-permissions-panel {
   grid-column: 1 / -1;
 }
@@ -9349,6 +9357,7 @@ body :where(
 .store-orders-sound-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }

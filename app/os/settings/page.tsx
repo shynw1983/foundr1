@@ -3,7 +3,7 @@
 import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, Upload, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
+import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import {
   defaultNavigationMenuSettings,
@@ -800,6 +800,32 @@ export default function OsSettingsPage() {
                   <option value="avatar_name">アイコン + 名前</option>
                 </select>
               </label>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-title">
+              <div>
+                <h3>Store 注文通知音</h3>
+                <p>Web予約の新規注文を店舗現場で見落とさないための前面通知音を設定します。APK では手動の音声有効化なしで再生できます。</p>
+              </div>
+            </div>
+            <div className="settings-option-list">
+              <label className="settings-field">
+                <span>通知音</span>
+                <select
+                  value={settings.orderAlerts.sound}
+                  onChange={(event) => setSettings((current) => ({ ...current, orderAlerts: { ...current.orderAlerts, sound: event.target.value as StoreModuleSettings["orderAlerts"]["sound"] } }))}
+                >
+                  {storeOrderAlertSoundOptions.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="settings-option-help">
+                {storeOrderAlertSoundOptions.find((option) => option.value === settings.orderAlerts.sound)?.description}
+              </div>
+              <ToggleRow label="未対応の新規注文を30秒・60秒後に再通知" checked={settings.orderAlerts.repeatUntilHandled} onChange={(checked) => setSettings((current) => ({ ...current, orderAlerts: { ...current.orderAlerts, repeatUntilHandled: checked } }))} />
             </div>
           </section>
 

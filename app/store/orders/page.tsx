@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { clearStoredStoreSelection, getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
 
@@ -125,6 +126,39 @@ const nextActions: Record<string, Array<{ status: string; label: string }>> = {
 
 const pendingPaymentVisibleMinutes = 30;
 
+type AlertTone = {
+  at: number;
+  frequency: number;
+  duration: number;
+  volume: number;
+  type: OscillatorType;
+};
+
+const orderAlertTones: Record<StoreOrderAlertSound, AlertTone[]> = {
+  foundr1_default: [
+    { at: 0, frequency: 1046.5, duration: 0.14, volume: 0.34, type: "square" },
+    { at: 0.18, frequency: 1568, duration: 0.16, volume: 0.42, type: "square" },
+    { at: 0.48, frequency: 1046.5, duration: 0.14, volume: 0.34, type: "square" },
+    { at: 0.66, frequency: 1568, duration: 0.2, volume: 0.44, type: "square" }
+  ],
+  kitchen_bell: [
+    { at: 0, frequency: 1174.66, duration: 0.1, volume: 0.5, type: "triangle" },
+    { at: 0.16, frequency: 1567.98, duration: 0.12, volume: 0.48, type: "triangle" },
+    { at: 0.34, frequency: 1174.66, duration: 0.16, volume: 0.5, type: "triangle" }
+  ],
+  urgent_order: [
+    { at: 0, frequency: 880, duration: 0.1, volume: 0.38, type: "square" },
+    { at: 0.14, frequency: 1318.51, duration: 0.11, volume: 0.46, type: "square" },
+    { at: 0.28, frequency: 1567.98, duration: 0.13, volume: 0.5, type: "square" },
+    { at: 0.52, frequency: 659.25, duration: 0.18, volume: 0.38, type: "triangle" }
+  ],
+  soft_chime: [
+    { at: 0, frequency: 659.25, duration: 0.22, volume: 0.26, type: "sine" },
+    { at: 0.2, frequency: 880, duration: 0.26, volume: 0.3, type: "sine" },
+    { at: 0.43, frequency: 1174.66, duration: 0.34, volume: 0.28, type: "sine" }
+  ]
+};
+
 function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
   return nextOrder.paymentStatus === "paid" &&
     nextOrder.status === "new" &&
@@ -220,6 +254,7 @@ export default function StoreOrdersPage() {
   const [access, setAccess] = useState<StoreOrderAccess | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [stats, setStats] = useState<StoreOrderStats | null>(null);
+  const [storeSettings, setStoreSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [statsDays, setStatsDays] = useState(1);
   const [operation, setOperation] = useState<StoreOperation | null>(null);
   const [minimumPickupOffsetDraft, setMinimumPickupOffsetDraft] = useState(0);
@@ -238,12 +273,35 @@ export default function StoreOrdersPage() {
   const [error, setError] = useState("");
   const [cancelNotice, setCancelNotice] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
+  const ordersRef = useRef<StoreOrder[]>([]);
+  const repeatAlertTimersRef = useRef<number[]>([]);
   const selectedStoreIdRef = useRef("");
   const lastResumeRefreshAtRef = useRef(0);
 
   useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  useEffect(() => {
     selectedStoreIdRef.current = selectedStoreId;
   }, [selectedStoreId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/settings?module=store", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { settings?: StoreModuleSettings } | null) => {
+        if (isMounted && body?.settings) setStoreSettings(body.settings);
+      })
+      .catch(() => {
+        // Store orders should keep working even if module settings cannot be loaded.
+      });
+    return () => {
+      isMounted = false;
+      repeatAlertTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      repeatAlertTimersRef.current = [];
+    };
+  }, []);
 
   const selectStore = (storeId: string) => {
     selectedStoreIdRef.current = storeId;
@@ -348,16 +406,17 @@ export default function StoreOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const playNewOrderSound = () => {
+  const playNewOrderSound = (sound: StoreOrderAlertSound = storeSettings.orderAlerts.sound) => {
     if (!soundEnabled || !audioContextRef.current || audioContextRef.current.state !== "running") return;
     const context = audioContextRef.current;
-    const playTone = (frequency: number, startAt: number, duration: number, volume = 0.42) => {
+    const playTone = ({ frequency, at, duration, volume, type }: AlertTone) => {
+      const startAt = context.currentTime + at;
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = "square";
+      oscillator.type = type;
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
       oscillator.connect(gain);
       gain.connect(context.destination);
@@ -365,11 +424,27 @@ export default function StoreOrdersPage() {
       oscillator.stop(startAt + duration + 0.02);
     };
 
-    const now = context.currentTime;
-    playTone(1046.5, now, 0.16, 0.38);
-    playTone(1568, now + 0.18, 0.18, 0.46);
-    playTone(1046.5, now + 0.48, 0.16, 0.38);
-    playTone(1568, now + 0.66, 0.22, 0.48);
+    for (const tone of orderAlertTones[sound] ?? orderAlertTones.kitchen_bell) {
+      playTone(tone);
+    }
+  };
+
+  const scheduleRepeatAlert = (orderIds: string[]) => {
+    if (!storeSettings.orderAlerts.repeatUntilHandled || !orderIds.length) return;
+    for (const delay of [30000, 60000]) {
+      const timer = window.setTimeout(() => {
+        const stillUnhandled = ordersRef.current.some((order) => (
+          orderIds.includes(order.id) &&
+          order.paymentStatus === "paid" &&
+          order.status === "new" &&
+          order.orderSource !== "store_pos"
+        ));
+        if (stillUnhandled) {
+          playNewOrderSound(delay >= 60000 ? "urgent_order" : storeSettings.orderAlerts.sound);
+        }
+      }, delay);
+      repeatAlertTimersRef.current.push(timer);
+    }
   };
 
   const refresh = async () => {
@@ -431,6 +506,7 @@ export default function StoreOrdersPage() {
         setNewOrderIds(incomingIds);
         setSelectedId((currentSelected) => currentSelected || incomingIds[0]);
         playNewOrderSound();
+        scheduleRepeatAlert(incomingIds);
         window.setTimeout(() => setNewOrderIds([]), 10000);
       }
 
@@ -509,6 +585,7 @@ export default function StoreOrdersPage() {
           setNewOrderIds([order.id]);
           setSelectedId(order.id);
           playNewOrderSound();
+          scheduleRepeatAlert([order.id]);
           window.setTimeout(() => setNewOrderIds([]), 10000);
         }
 
@@ -576,7 +653,7 @@ export default function StoreOrdersPage() {
       });
       pusher?.disconnect();
     };
-  }, [soundEnabled, selectedStoreId]);
+  }, [soundEnabled, selectedStoreId, storeSettings.orderAlerts.repeatUntilHandled, storeSettings.orderAlerts.sound]);
 
   const visibleOrders = useMemo(() => orders
     .filter((order) => {
@@ -819,7 +896,21 @@ export default function StoreOrdersPage() {
             >
               {soundEnabled ? "通知音 ON" : "通知音 OFF"}
             </button>
-            <span>{soundEnabled && soundReady ? "新規注文を音で通知します" : "通知音を有効にできます"}</span>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!soundEnabled}
+              onClick={async () => {
+                await ensureAudioReady();
+                playNewOrderSound();
+              }}
+            >
+              試聴
+            </button>
+            <span>
+              {soundEnabled && soundReady ? `${storeOrderAlertSoundOptions.find((option) => option.value === storeSettings.orderAlerts.sound)?.label ?? "通知音"} で通知します` : "通知音を有効にできます"}
+              {storeSettings.orderAlerts.repeatUntilHandled ? " / 未対応は再通知" : ""}
+            </span>
           </div>
           <p className="store-orders-live-note">
             {realtimeStatus === "connected" ? "リアルタイム接続中" : "自動更新中"}
