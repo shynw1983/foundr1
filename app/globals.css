@@ -5476,6 +5476,17 @@ body :where(
   line-height: 1.5;
 }
 
+.settings-sound-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-sound-preview-grid .secondary-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .settings-role-permissions-panel {
   grid-column: 1 / -1;
 }

@@ -2,8 +2,8 @@
 
 import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, Upload, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { defaultStoreModuleSettings, storeOrderAlertSoundOptions, type StoreModuleSettings, type StoreOrderAlertSound } from "../../../lib/module-setting-defaults";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import {
   defaultNavigationMenuSettings,
@@ -14,6 +14,7 @@ import { MobileNavMenu } from "../components/MobileNavMenu";
 import { canonicalNavItems, navModules, OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 import { setCachedNavigationSettings } from "../components/navigationSettingsStore";
+import { playStoreOrderAlertSound } from "../../../lib/store-order-alert-sounds";
 
 const employmentInsuranceManualRows = [
   { businessType: "general", label: "一般の事業", employeeRate: "5", employerRate: "8.5", benefitRate: "5", twoProjectsRate: "3.5", totalRate: "13.5" },
@@ -114,6 +115,7 @@ const roleLabels: Record<string, string> = {
 
 export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
+  const alertPreviewAudioContextRef = useRef<AudioContext | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [navigationSettings, setNavigationSettings] = useState<NavigationMenuSettings>(defaultNavigationMenuSettings);
   const [taxTables, setTaxTables] = useState<WithholdingTaxTable[]>([]);
@@ -146,6 +148,21 @@ export default function OsSettingsPage() {
     }
     return Array.from(groups.entries()).map(([category, definitions]) => ({ category, definitions }));
   }, [rolePermissionDefinitions]);
+
+  async function previewStoreOrderAlertSound(sound: StoreOrderAlertSound) {
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) {
+      showNotice("この端末では通知音を試聴できません。", "info");
+      return;
+    }
+    if (!alertPreviewAudioContextRef.current) {
+      alertPreviewAudioContextRef.current = new AudioContextClass();
+    }
+    if (alertPreviewAudioContextRef.current.state === "suspended") {
+      await alertPreviewAudioContextRef.current.resume();
+    }
+    playStoreOrderAlertSound(alertPreviewAudioContextRef.current, sound);
+  }
 
   useEffect(() => {
     async function loadSettings() {
@@ -824,6 +841,13 @@ export default function OsSettingsPage() {
               </label>
               <div className="settings-option-help">
                 {storeOrderAlertSoundOptions.find((option) => option.value === settings.orderAlerts.sound)?.description}
+              </div>
+              <div className="settings-sound-preview-grid" aria-label="通知音を試聴">
+                {storeOrderAlertSoundOptions.map((option) => (
+                  <button className="secondary-button" type="button" key={option.value} onClick={() => void previewStoreOrderAlertSound(option.value)}>
+                    {option.label} 試聴
+                  </button>
+                ))}
               </div>
               <ToggleRow label="未対応の新規注文を30秒・60秒後に再通知" checked={settings.orderAlerts.repeatUntilHandled} onChange={(checked) => setSettings((current) => ({ ...current, orderAlerts: { ...current.orderAlerts, repeatUntilHandled: checked } }))} />
             </div>
