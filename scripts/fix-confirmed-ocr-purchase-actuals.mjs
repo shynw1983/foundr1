@@ -14,9 +14,34 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function toDateKey(value) {
+function normalizeDateKey(value) {
   const text = String(value ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : new Date().toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function validateReceiptPurchaseDate(value) {
+  const date = normalizeDateKey(value);
+  if (!date) return { date: "", reason: "missing_or_invalid_format" };
+
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const year = Number(match?.[1]);
+  const month = Number(match?.[2]);
+  const day = Number(match?.[3]);
+  const parsed = new Date(`${date}T00:00:00+09:00`);
+  if (
+    !Number.isFinite(parsed.getTime())
+    || parsed.getFullYear() !== year
+    || parsed.getMonth() + 1 !== month
+    || parsed.getDate() !== day
+  ) {
+    return { date: "", reason: "nonexistent_date" };
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const ageDays = (Date.now() - parsed.getTime()) / dayMs;
+  if (ageDays > 730) return { date: "", reason: "too_old" };
+  if (ageDays < -7) return { date: "", reason: "future_date" };
+  return { date, reason: "" };
 }
 
 async function findExistingActual(item) {
@@ -86,7 +111,7 @@ async function createReceiptBackfilledActual(item) {
   const product = productRows[0];
   if (!product) return "";
 
-  const purchaseDate = toDateKey(item.purchaseDate);
+  const purchaseDate = item.purchaseDate;
   const purchaseTime = String(item.purchaseTime || "00:00").slice(0, 5) || "00:00";
   const recordedAt = new Date(`${purchaseDate}T${purchaseTime}:00+09:00`);
   const orderNo = `RCPT-${purchaseDate.replaceAll("-", "")}-${item.itemId.replaceAll("-", "").slice(0, 8).toUpperCase()}`;
@@ -261,16 +286,28 @@ const rows = await sql`
 let autoMatched = 0;
 let created = 0;
 let skipped = 0;
+let skippedSuspiciousDate = 0;
 
 for (const row of rows) {
   const processed = autoMatched + created + skipped;
   if (processed > 0 && processed % 10 === 0) {
-    console.log(JSON.stringify({ progress: processed, total: rows.length, autoMatched, created, skipped }));
+    console.log(JSON.stringify({ progress: processed, total: rows.length, autoMatched, created, skipped, skippedSuspiciousDate }));
   }
 
   const quantity = toNumber(row.quantity, 0);
   const amount = toNumber(row.amount, 0);
   const unitPrice = toNumber(row.unitPrice, 0) || (quantity > 0 && amount > 0 ? Math.round((amount / quantity) * 100) / 100 : 0);
+  const purchaseDateCheck = validateReceiptPurchaseDate(row.purchaseDate);
+  if (!purchaseDateCheck.date) {
+    skipped += 1;
+    skippedSuspiciousDate += 1;
+    console.log(JSON.stringify({
+      skippedSuspiciousDate: String(row.itemId),
+      rawPurchaseDate: String(row.purchaseDate ?? ""),
+      reason: purchaseDateCheck.reason
+    }));
+    continue;
+  }
   const item = {
     itemId: String(row.itemId),
     rawName: String(row.rawName ?? ""),
@@ -283,7 +320,7 @@ for (const row of rows) {
     supplierId: String(row.supplierId ?? ""),
     supplierLocationId: String(row.supplierLocationId ?? ""),
     supplierName: String(row.supplierName ?? ""),
-    purchaseDate: toDateKey(row.purchaseDate),
+    purchaseDate: purchaseDateCheck.date,
     purchaseTime: String(row.purchaseTime ?? ""),
     employeeId: String(row.employeeId ?? "")
   };
@@ -310,4 +347,4 @@ for (const row of rows) {
   }
 }
 
-console.log(JSON.stringify({ scanned: rows.length, autoMatched, created, skipped }, null, 2));
+console.log(JSON.stringify({ scanned: rows.length, autoMatched, created, skipped, skippedSuspiciousDate }, null, 2));

@@ -1797,10 +1797,18 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
   const unit = String(row.unit || product.unit || "個").trim() || "個";
   const amount = normalizeNullableMoney(row.amount);
   const unitPrice = normalizeNullableUnitPrice(row.unitPrice) ?? (amount && quantity > 0 ? Math.round((amount / quantity) * 100) / 100 : null);
-  const purchaseDate = String(row.purchaseDate ?? "");
+  const purchaseDateCheck = validateReceiptPurchaseDateForActual(row.purchaseDate);
+  if (!purchaseDateCheck.date) {
+    return {
+      error: Response.json({
+        error: purchaseDateCheck.error || "レシート日付を確認してから購入実績に変換してください。"
+      }, { status: 400 })
+    };
+  }
+  const purchaseDate = purchaseDateCheck.date;
   const purchaseTime = String(row.purchaseTime ?? "00:00") || "00:00";
-  const recordedAt = purchaseDate ? new Date(`${purchaseDate}T${purchaseTime}:00+09:00`) : new Date();
-  const compactDate = purchaseDate ? purchaseDate.replaceAll("-", "") : new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const recordedAt = new Date(`${purchaseDate}T${purchaseTime}:00+09:00`);
+  const compactDate = purchaseDate.replaceAll("-", "");
   const shortItemId = itemId.replaceAll("-", "").slice(0, 8).toUpperCase();
   const orderNo = `RCPT-${compactDate}-${shortItemId}`;
   const supplierId = row.supplierId ?? product.mainSupplierId ?? null;
@@ -2110,6 +2118,41 @@ function normalizeDate(value: unknown) {
   const date = String(value ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   return "";
+}
+
+function validateReceiptPurchaseDateForActual(value: unknown) {
+  const date = normalizeDate(value);
+  if (!date) {
+    return { date: "", error: "レシート日付が未確認です。証憑管理で購入日を確認してから購入実績に変換してください。" };
+  }
+
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return { date: "", error: "レシート日付の形式が不正です。証憑管理で購入日を確認してください。" };
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(`${date}T00:00:00+09:00`);
+  if (
+    !Number.isFinite(parsed.getTime())
+    || parsed.getFullYear() !== year
+    || parsed.getMonth() + 1 !== month
+    || parsed.getDate() !== day
+  ) {
+    return { date: "", error: "レシート日付が実在しません。証憑管理で購入日を確認してください。" };
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const ageDays = (Date.now() - parsed.getTime()) / dayMs;
+  if (ageDays > 730) {
+    return { date: "", error: `レシート日付 ${date} が古すぎます。OCR誤読の可能性があるため、証憑管理で購入日を確認してください。` };
+  }
+  if (ageDays < -7) {
+    return { date: "", error: `レシート日付 ${date} が未来日です。証憑管理で購入日を確認してください。` };
+  }
+
+  return { date, error: "" };
 }
 
 function normalizeTime(value: unknown) {
