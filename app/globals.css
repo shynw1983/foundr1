@@ -30273,6 +30273,11 @@ a:focus-visible {
   text-indent: -999px;
 }
 
+.shell .brand-mark {
+  border-color: transparent;
+  background-color: transparent;
+}
+
 .store-workbench-shell .brand-mark,
 .procedure-reader-shell .brand-mark {
   border-color: var(--line);
