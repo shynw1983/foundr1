@@ -3,6 +3,7 @@ import { sql } from "../../../../lib/db";
 import { roleHasPermission } from "../../../../lib/role-permissions";
 
 const additionalPurchaseNotePrefix = "追加購入";
+const priceExceptionPercentThreshold = 5;
 
 export async function POST(request: Request) {
   const session = await requireWritableOsSession();
@@ -370,35 +371,37 @@ export async function PATCH(request: Request) {
     if (body.clearActualPrice === true) {
       const currentActualPrice = Number(itemDetail.currentActualPrice ?? 0);
       const referencePrice = Number(itemDetail.referencePrice ?? 0);
-      if (currentActualPrice > 0 && referencePrice > 0 && currentActualPrice !== referencePrice) {
+      if (currentActualPrice > 0 && referencePrice > 0) {
         const diffRate = Math.round(((currentActualPrice - referencePrice) / referencePrice) * 1000) / 10;
-        await sql`
-          insert into purchase_exceptions (
-            purchase_order_id,
-            purchase_order_item_id,
-            exception_type,
-            message,
-            resolution_note,
-            needs_store_confirmation,
-            affects_operation,
-            status,
-            resolved_by,
-            resolved_at,
-            updated_at
-          ) values (
-            ${itemDetail.purchaseOrderId},
-            ${itemDetail.itemId},
-            'price',
-            ${`実際 ¥${formatPriceForMessage(currentActualPrice)} / 基準 ¥${formatPriceForMessage(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`},
-            '店舗確認済み',
-            true,
-            false,
-            'resolved',
-            ${session.id},
-            now(),
-            now()
-          )
-        `;
+        if (Math.abs(diffRate) >= priceExceptionPercentThreshold) {
+          await sql`
+            insert into purchase_exceptions (
+              purchase_order_id,
+              purchase_order_item_id,
+              exception_type,
+              message,
+              resolution_note,
+              needs_store_confirmation,
+              affects_operation,
+              status,
+              resolved_by,
+              resolved_at,
+              updated_at
+            ) values (
+              ${itemDetail.purchaseOrderId},
+              ${itemDetail.itemId},
+              'price',
+              ${`実際 ¥${formatPriceForMessage(currentActualPrice)} / 基準 ¥${formatPriceForMessage(referencePrice)} (${diffRate > 0 ? "+" : ""}${diffRate}%)`},
+              '店舗確認済み',
+              true,
+              false,
+              'resolved',
+              ${session.id},
+              now(),
+              now()
+            )
+          `;
+        }
       }
     }
 

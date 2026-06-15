@@ -470,6 +470,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           where purchase_order_items.purchase_order_id = purchase_orders.id
         ) order_progress on true
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+          and purchase_orders.order_no not like 'RCPT-%'
         order by purchase_orders.created_at desc
       `,
       sql`
@@ -543,6 +544,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         left join supplier_locations purchase_actual_locations on purchase_actual_locations.id = purchase_actuals.supplier_location_id
         left join delivery_batch_items on delivery_batch_items.purchase_order_item_id = purchase_order_items.id
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+          and purchase_orders.order_no not like 'RCPT-%'
         order by purchase_orders.created_at desc, purchase_order_items.id
       `,
       sql`
@@ -559,6 +561,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         join purchase_orders on purchase_orders.id = delivery_batches.purchase_order_id
         left join delivery_batch_items on delivery_batch_items.delivery_batch_id = delivery_batches.id
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+          and purchase_orders.order_no not like 'RCPT-%'
         group by delivery_batches.id, purchase_orders.order_no
         order by delivery_batches.created_at desc
       `,
@@ -580,6 +583,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
         left join supplier_locations on supplier_locations.id = purchase_order_supplier_fulfillments.supplier_location_id
         left join employees receipt_confirmers on receipt_confirmers.id = purchase_order_supplier_fulfillments.receipt_confirmed_by
         where (${scope.allStores} or purchase_orders.store_id::text = any(${scope.storeIds}))
+          and purchase_orders.order_no not like 'RCPT-%'
         order by purchase_orders.created_at desc, supplier
       `,
       sql`

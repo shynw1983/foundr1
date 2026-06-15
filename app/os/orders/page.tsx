@@ -133,6 +133,7 @@ type PendingStoreConfirmationAction = {
 
 const newOrderDraftStorageKey = "foundr1-os:new-order-draft";
 const pendingStoreConfirmationStorageKey = "foundr1-os:pending-store-confirmations:v1";
+const priceExceptionPercentThreshold = 5;
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -149,6 +150,25 @@ function formatPurchaseOrderStatus(status: string) {
   if (status === "確認待ち") return "店舗確認待ち";
 
   return status;
+}
+
+function getLivePurchaseOrderStatus(order: PurchaseOrder, items: PurchaseOrderItem[]) {
+  if (items.length === 0) return order.status;
+
+  const unavailableCount = items.filter((item) => item.unavailable).length;
+  const purchasedCount = items.filter((item) => item.unavailable || ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "") || parsePriceValue(item.actualPrice) > 0).length;
+  const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
+  const deliveredCount = items.filter((item) => item.deliveryStatus === "delivered").length;
+  const receivedCount = items.filter((item) => item.deliveryStatus === "received").length;
+
+  if (receivedCount + unavailableCount === items.length) return "完了";
+  if (deliveredCount + receivedCount + unavailableCount === items.length) return "確認待ち";
+  if (inDeliveryCount > 0) return "配送中";
+  if (deliveredCount > 0) return "一部納品済み";
+  if (purchasedCount === 0) return "購入待ち";
+  if (purchasedCount < items.length) return "一部購入済み";
+
+  return "配送待ち";
 }
 
 function getStoreFeedbackConfirmLabel(kind?: StoreFeedback["kind"]) {
@@ -475,8 +495,10 @@ function createStoreFeedbackItems(
 
     if (item.unavailable) return items;
 
-    if (actualPrice > 0 && referencePrice > 0 && actualPrice !== referencePrice && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
+    if (actualPrice > 0 && referencePrice > 0 && ["in_delivery", "delivered", "received"].includes(item.deliveryStatus ?? "")) {
       const diffRate = Math.round(((actualPrice - referencePrice) / referencePrice) * 1000) / 10;
+      if (Math.abs(diffRate) < priceExceptionPercentThreshold) return items;
+
       items.push({
         id: `${baseId}-price`,
         itemId: item.id,
@@ -655,8 +677,10 @@ export default function OrdersPage() {
   const storeFeedbackItems = createStoreFeedbackItems(purchaseOrders, purchaseOrderItems, []);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPurchaseOrders = purchaseOrders.filter((order) => {
+    const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+    const liveStatus = getLivePurchaseOrderStatus(order, orderItems);
+
     if (normalizedQuery) {
-      const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
       const targetText = [
         order.id,
         order.store,
@@ -670,10 +694,10 @@ export default function OrdersPage() {
       if (!targetText.includes(normalizedQuery)) return false;
     }
 
-    if (queueFilter === "未完了") return order.status !== "完了";
-    if (queueFilter === "今日対応") return order.status !== "完了" && isTodayOrder(order);
-    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部納品済み"].includes(order.status);
-    if (queueFilter === "完了") return order.status === "完了";
+    if (queueFilter === "未完了") return liveStatus !== "完了";
+    if (queueFilter === "今日対応") return liveStatus !== "完了" && isTodayOrder(order);
+    if (queueFilter === "配送待ち") return ["配送待ち", "配送中", "一部納品済み"].includes(liveStatus);
+    if (queueFilter === "完了") return liveStatus === "完了";
 
     return true;
   });
@@ -790,12 +814,17 @@ export default function OrdersPage() {
   ]);
 
   function getQueueFilterCount(filter: QueueFilter) {
-    if (filter === "未完了") return purchaseOrders.filter((order) => order.status !== "完了").length;
-    if (filter === "今日対応") return purchaseOrders.filter((order) => order.status !== "完了" && isTodayOrder(order)).length;
+    const ordersWithLiveStatus = purchaseOrders.map((order) => ({
+      order,
+      liveStatus: getLivePurchaseOrderStatus(order, purchaseOrderItems.filter((item) => item.orderId === order.id))
+    }));
+
+    if (filter === "未完了") return ordersWithLiveStatus.filter(({ liveStatus }) => liveStatus !== "完了").length;
+    if (filter === "今日対応") return ordersWithLiveStatus.filter(({ order, liveStatus }) => liveStatus !== "完了" && isTodayOrder(order)).length;
     if (filter === "配送待ち") {
-      return purchaseOrders.filter((order) => ["配送待ち", "配送中", "一部納品済み"].includes(order.status)).length;
+      return ordersWithLiveStatus.filter(({ liveStatus }) => ["配送待ち", "配送中", "一部納品済み"].includes(liveStatus)).length;
     }
-    if (filter === "完了") return purchaseOrders.filter((order) => order.status === "完了").length;
+    if (filter === "完了") return ordersWithLiveStatus.filter(({ liveStatus }) => liveStatus === "完了").length;
 
     return purchaseOrders.length;
   }
@@ -1515,6 +1544,8 @@ export default function OrdersPage() {
             </div>
             <div className="order-list">
               {filteredPurchaseOrders.map((order) => {
+                const orderItems = purchaseOrderItems.filter((item) => item.orderId === order.id);
+                const liveStatus = getLivePurchaseOrderStatus(order, orderItems);
                 const estimatedAmount = calculateOrderEstimatedAmount(order.id, purchaseOrderItems, products);
                 const storeConfirmationBatches = deliveryBatches.filter(
                   (batch) => batch.orderId === order.id && ["delivered", "received"].includes(batch.status)
@@ -1534,7 +1565,7 @@ export default function OrdersPage() {
                     <div>
                       <div className="row-heading">
                         <strong>{order.id}</strong>
-                        <span className={`status-pill ${statusTone[order.status]}`}>{formatPurchaseOrderStatus(order.status)}</span>
+                        <span className={`status-pill ${statusTone[liveStatus]}`}>{formatPurchaseOrderStatus(liveStatus)}</span>
                       </div>
                       <p>{order.store} / {order.brand}</p>
                     </div>
