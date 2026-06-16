@@ -31351,12 +31351,12 @@ a:focus-visible {
 
 .shell .brand-mark {
   border-color: transparent;
-  background: transparent url("/icons/foundr1-os-512.png") center / 138% no-repeat;
+  background: transparent url("/icons/foundr1-os-512.png") center / 100% no-repeat;
 }
 
 .os-home-shell .brand-mark {
   border-color: transparent;
-  background: transparent url("/icons/foundr1-os-512.png") center / 138% no-repeat;
+  background: transparent url("/icons/foundr1-os-512.png") center / 100% no-repeat;
 }
 
 .store-workbench-shell .brand-mark,
@@ -32053,6 +32053,13 @@ a:focus-visible {
     background: var(--green);
     color: white;
     box-shadow: 0 8px 18px rgba(24, 64, 52, 0.18);
+  }
+
+  .shell .brand-mark,
+  .os-home-shell .brand-mark {
+    flex-basis: 46px;
+    width: 46px;
+    height: 46px;
   }
 
   .shell .sidebar .mobile-nav-menu summary:hover,
