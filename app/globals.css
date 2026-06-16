@@ -15,7 +15,7 @@
   --violet: #6850a8;
   --violet-soft: #eeeafd;
   --shadow: 0 18px 45px rgba(34, 45, 62, 0.08);
-  --font-cjk-ja: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Noto Sans JP", "Noto Sans CJK JP", "Meiryo", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-cjk-ja: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic", "YuGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
   --font-cjk-sc: -apple-system, BlinkMacSystemFont, "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-cjk-tc: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
@@ -1889,8 +1889,15 @@ body :where(
 .os-home-user {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   min-width: 0;
+}
+
+.os-home-user .mobile-nav-actions {
+  flex: 0 0 46px;
+  margin-left: 0;
+  order: 10;
 }
 
 .os-home-user .user-panel {
@@ -16633,7 +16640,7 @@ body :where(
   padding: 0 12px;
   background: white;
   color: var(--ink);
-  font-weight: 750;
+  font-weight: 500;
 }
 
 .timecard-toolbar.is-left {
@@ -16661,7 +16668,7 @@ body :where(
   border-radius: 8px;
   background: white;
   color: var(--ink);
-  font-weight: 850;
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -16699,7 +16706,7 @@ body :where(
 .timecard-settings-form .timecard-checkbox span {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .timecard-store-name {
@@ -17306,7 +17313,7 @@ body :where(
   background: #fbfcfe;
   color: var(--muted);
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .shift-schedule-period-label svg {
@@ -17338,7 +17345,7 @@ body :where(
 .shift-coverage-head strong {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .shift-coverage-timeline {
@@ -17352,7 +17359,7 @@ body :where(
   gap: 12px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-coverage-axis span:first-child {
@@ -17671,14 +17678,14 @@ body :where(
 .shift-editor label span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .shift-editor-status {
   min-height: 18px;
   color: transparent;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 500;
   transition: color 0.16s ease;
 }
 
@@ -17699,7 +17706,7 @@ body :where(
   padding: 0 10px;
   background: white;
   color: var(--ink);
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .shift-patterns,
@@ -17720,13 +17727,13 @@ body :where(
   border-radius: 8px;
   background: var(--green-soft);
   color: var(--green);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-patterns span {
   color: var(--amber);
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 500;
 }
 
 .shift-editor-actions {
@@ -17751,7 +17758,7 @@ body :where(
   min-width: 1120px;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .shift-grid th,
@@ -17772,7 +17779,7 @@ body :where(
   height: 48px;
   background: #f4f6f9;
   color: var(--ink);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-grid thead th span,
@@ -17788,16 +17795,16 @@ body :where(
 
 .shift-grid thead th em {
   display: inline-grid;
-  min-width: 18px;
-  height: 18px;
+  min-width: 16px;
+  height: 16px;
   margin-top: 3px;
   place-items: center;
   border-radius: 999px;
-  background: var(--red);
-  color: white;
-  font-size: 10px;
+  background: #f6d8d6;
+  color: var(--red);
+  font-size: 9px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-grid .is-weekend,
@@ -17807,7 +17814,7 @@ body :where(
 
 .shift-grid .has-uncovered-shift,
 .shift-grid thead th.has-uncovered-shift {
-  background: var(--red-soft);
+  background: #fff7f6;
 }
 
 .shift-grid .shift-employee-head,
@@ -17825,7 +17832,7 @@ body :where(
   background: #f8fbf4;
   padding: 0 10px;
   color: var(--green);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-grid .shift-cost-head,
@@ -17838,7 +17845,7 @@ body :where(
   border-left: 2px solid var(--line);
   background: #f8fbff;
   color: var(--ink);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .shift-grid .shift-cost-head {
@@ -17858,13 +17865,13 @@ body :where(
   width: 100%;
   height: 58px;
   place-items: center;
-  gap: 2px;
+  gap: 1px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .shift-cell.has-shift {
@@ -17873,11 +17880,12 @@ body :where(
 }
 
 .has-uncovered-shift .shift-cell:not(.has-shift) {
-  background: rgba(207, 59, 59, 0.08);
+  background: transparent;
 }
 
 .has-uncovered-shift .shift-cell.has-shift {
-  background: linear-gradient(135deg, var(--green-soft) 0 70%, rgba(207, 59, 59, 0.14) 70% 100%);
+  background: var(--green-soft);
+  box-shadow: inset 0 -2px 0 rgba(189, 58, 49, 0.28);
 }
 
 .shift-cell.is-selected {
@@ -17901,7 +17909,8 @@ body :where(
 
 .shift-cell strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .shift-empty {
@@ -17918,7 +17927,7 @@ body :where(
   top: 4px;
   right: 4px;
   display: inline-grid;
-  min-width: 28px;
+  min-width: 24px;
   height: 16px;
   place-items: center;
   border-radius: 999px;
@@ -17926,14 +17935,14 @@ body :where(
   color: white;
   font-size: 9px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .actual-shift-cell small {
   display: block;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 900;
+  font-size: 9px;
+  font-weight: 500;
 }
 
 .actual-shift-cell.is-complete {
@@ -17951,8 +17960,13 @@ body :where(
 }
 
 .actual-shift-cell.is-missing {
-  background: var(--red-soft);
+  background: #fff7f6;
   color: var(--red);
+}
+
+.actual-shift-cell.is-future {
+  background: transparent;
+  color: #b8c1ce;
 }
 
 .actual-shift-cell.is-manual-correction {
@@ -17973,7 +17987,7 @@ body :where(
   .shift-grid {
     min-width: 0;
     table-layout: fixed;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .shift-grid th,
@@ -18011,11 +18025,11 @@ body :where(
   .shift-cell {
     height: 42px;
     gap: 1px;
-    font-size: 9px;
+    font-size: 8px;
   }
 
   .shift-cell strong {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .actual-shift-cell em {
@@ -30120,6 +30134,33 @@ html:lang(ja) body {
 }
 
 html:lang(ja) :where(
+  .shell,
+  .workspace,
+  .panel,
+  .topbar,
+  .metric-card,
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .danger-button,
+  .status-pill,
+  .source-indicator,
+  .nav-item,
+  .nav-sub-list a,
+  .mobile-nav-list a,
+  .timecard-workspace,
+  .timecard-workspace table,
+  .timecard-workspace button,
+  .timecard-workspace input,
+  .timecard-workspace select,
+  .store-timecard-grid,
+  .store-timecard-grid button
+) {
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+
+html:lang(ja) :where(
   .brand-mark,
   .source-indicator,
   .status-pill,
@@ -30144,7 +30185,7 @@ html:lang(ja) :where(
   .staff-employment-more summary,
   .staff-payroll-history > span
 ) {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 html:lang(ja) :where(
@@ -30162,7 +30203,7 @@ html:lang(ja) :where(
   .staff-payroll-history-actions .secondary-button,
   .staff-payroll-history-actions .danger-button
 ) {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 html:lang(ja) :where(
@@ -30180,7 +30221,7 @@ html:lang(ja) :where(
   .task-product strong,
   .delivery-batch-row strong
 ) {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 html:lang(ja) :where(
@@ -30220,6 +30261,37 @@ body {
 
 html:lang(ja) body {
   letter-spacing: 0;
+}
+
+html:lang(ja) .shell :where(
+  button,
+  select,
+  input,
+  textarea,
+  th,
+  .status-pill,
+  .source-indicator,
+  .nav-item,
+  .nav-sub-list a,
+  .mobile-nav-list a,
+  .mobile-nav-module-link,
+  .panel-title p,
+  label span,
+  small
+) {
+  font-weight: 500;
+}
+
+html:lang(ja) .shell :where(
+  h2,
+  h3,
+  strong,
+  .metric-card strong,
+  .row-heading strong,
+  .management-row strong,
+  .module-card strong
+) {
+  font-weight: 650;
 }
 
 .workspace {

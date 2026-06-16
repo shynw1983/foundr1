@@ -392,9 +392,9 @@ function getJstTimeText(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | undefined) {
+function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | undefined, isFutureDate = false) {
   if (!actual) {
-    return shift ? { className: " is-missing", label: "未打刻" } satisfies ActualStatus : { className: "", label: "" } satisfies ActualStatus;
+    return shift && !isFutureDate ? { className: " is-missing", label: "未打刻" } satisfies ActualStatus : { className: "", label: "" } satisfies ActualStatus;
   }
 
   const labels = [...actual.alerts];
@@ -669,6 +669,7 @@ export function TimecardPage({
   );
   const canConfirmPayrollPeriod = Boolean(payrollPeriod && getTodayJstDateKey() >= payrollPeriod.endDate);
   const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
+  const todayKey = getTodayJstDateKey();
   const selectedStoreBusinessHours = useMemo(
     () => normalizeBusinessHours(selectedStore?.businessHours),
     [selectedStore?.businessHours]
@@ -732,12 +733,12 @@ export function TimecardPage({
       for (const day of monthDays) {
         const actual = actualByCell.get(`${employee.id}:${day.key}`);
         const shift = shiftByCell.get(`${employee.id}:${day.key}`);
-        const status = getActualStatus(actual, shift);
+        const status = getActualStatus(actual, shift, day.key > todayKey);
         if ((status.className && status.className !== " is-complete") || actual?.isManualCorrection) count += 1;
       }
     }
     return count;
-  }, [actualByCell, monthDays, scheduleEmployees, shiftByCell]);
+  }, [actualByCell, monthDays, scheduleEmployees, shiftByCell, todayKey]);
   const selectedShiftEmployee = shiftDraft
     ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
     : null;
@@ -1467,15 +1468,21 @@ export function TimecardPage({
                           {monthDays.map((day) => {
                             const actual = actualByCell.get(`${employee.id}:${day.key}`);
                             const shift = shiftByCell.get(`${employee.id}:${day.key}`);
-                            const status = getActualStatus(actual, shift);
+                            const isFutureDate = day.key > todayKey;
+                            const shouldShowMissing = Boolean(shift && !actual && !isFutureDate);
+                            const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             return (
                               <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
                                 <button
-                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
+                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isFutureDate && !actual ? " is-future" : ""}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"
                                   disabled={!data?.canEditActualTime}
-                                  title={[actual?.isManualCorrection ? "手動修正あり" : "", status.label].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
+                                  title={[
+                                    actual?.isManualCorrection ? "手動修正あり" : "",
+                                    status.label,
+                                    shouldShowMissing && shift ? `予定 ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}` : ""
+                                  ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
                                   onClick={() => openActualEditor(employee.id, day.key)}
                                 >
                                   {actual ? (
@@ -1485,10 +1492,9 @@ export function TimecardPage({
                                       <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
                                     </>
-                                  ) : shift ? (
+                                  ) : shouldShowMissing ? (
                                     <>
                                       <span className="shift-empty">未打刻</span>
-                                      <small>{shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</small>
                                     </>
                                   ) : (
                                     <span className="shift-empty">-</span>

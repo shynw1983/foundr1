@@ -445,8 +445,8 @@ export default function Foundr1OsHome() {
           </div>
         </a>
         <div className="os-home-user">
-          <MobileNavMenu navItems={canonicalNavItems} />
           <UserBadge />
+          <MobileNavMenu navItems={canonicalNavItems} />
         </div>
       </header>
 
