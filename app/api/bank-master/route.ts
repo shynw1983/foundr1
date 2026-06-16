@@ -134,7 +134,10 @@ export async function GET(request: Request) {
   `;
 
   const remoteBanks = await getRemoteBanks();
-  const bankByCode = new Map((remoteBanks.length ? remoteBanks : builtInBanks).map((bank) => [bank.code, bank]));
+  const bankByCode = new Map(builtInBanks.map((bank) => [bank.code, bank]));
+  for (const bank of remoteBanks) {
+    bankByCode.set(bank.code, bank);
+  }
   for (const bank of savedBanks) {
     const code = digits(String(bank.code ?? ""));
     const name = String(bank.name ?? "").trim();
