@@ -1,6 +1,7 @@
 import { requireStaffViewSession } from "../../../lib/staff-admin-access";
 import { sql } from "../../../lib/db";
 import { builtInBanks, builtInBranches } from "../../../lib/bank-master";
+import type { BankMasterBank, BankMasterBranch } from "../../../lib/bank-master";
 
 function normalizeQuery(value: string | null) {
   return String(value ?? "").trim().toLowerCase();
@@ -8,6 +9,84 @@ function normalizeQuery(value: string | null) {
 
 function digits(value: string | null) {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+type TerarenBank = {
+  code?: string;
+  name?: string;
+  kana?: string;
+  hira?: string;
+  normalize?: {
+    name?: string;
+    kana?: string;
+    hira?: string;
+  };
+};
+
+async function fetchJsonWithTimeout<T>(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "application/json" },
+      next: { revalidate: 60 * 60 * 24 },
+      signal: controller.signal
+    });
+    if (!response.ok) return null;
+    return await response.json() as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeBank(item: TerarenBank): BankMasterBank | null {
+  const code = digits(item.code ?? "");
+  const name = String(item.normalize?.name ?? item.name ?? "").trim();
+  if (!code || !name) return null;
+  return {
+    code,
+    name,
+    kana: String(item.normalize?.kana ?? item.kana ?? ""),
+    hira: String(item.normalize?.hira ?? item.hira ?? "")
+  };
+}
+
+function normalizeBranch(bankCode: string, item: TerarenBank): BankMasterBranch | null {
+  const code = digits(item.code ?? "");
+  const name = String(item.normalize?.name ?? item.name ?? "").trim();
+  if (!bankCode || !code || !name) return null;
+  return {
+    bankCode,
+    code,
+    name,
+    kana: String(item.normalize?.kana ?? item.kana ?? ""),
+    hira: String(item.normalize?.hira ?? item.hira ?? "")
+  };
+}
+
+async function getRemoteBanks() {
+  const data = await fetchJsonWithTimeout<TerarenBank[]>("https://bank.teraren.com/banks.json");
+  return Array.isArray(data) ? data.map(normalizeBank).filter((bank): bank is BankMasterBank => Boolean(bank)) : [];
+}
+
+async function getRemoteBranches(bankCode: string) {
+  if (!bankCode) return [];
+  const data = await fetchJsonWithTimeout<TerarenBank[]>(`https://bank.teraren.com/banks/${bankCode}/branches.json`);
+  return Array.isArray(data) ? data.map((branch) => normalizeBranch(bankCode, branch)).filter((branch): branch is BankMasterBranch => Boolean(branch)) : [];
+}
+
+function matchesQuery(item: { code: string; name: string; kana?: string; hira?: string }, query: string) {
+  if (!query) return true;
+  return item.code.includes(query)
+    || item.name.toLowerCase().includes(query)
+    || String(item.kana ?? "").toLowerCase().includes(query)
+    || String(item.hira ?? "").toLowerCase().includes(query);
+}
+
+function sortByHiraThenCode<T extends { code: string; hira?: string; kana?: string; name: string }>(a: T, b: T) {
+  return String(a.hira || a.kana || a.name).localeCompare(String(b.hira || b.kana || b.name), "ja") || a.code.localeCompare(b.code);
 }
 
 export async function GET(request: Request) {
@@ -43,20 +122,18 @@ export async function GET(request: Request) {
       )
   `;
 
-  const bankByCode = new Map(builtInBanks.map((bank) => [bank.code, bank]));
+  const remoteBanks = await getRemoteBanks();
+  const bankByCode = new Map((remoteBanks.length ? remoteBanks : builtInBanks).map((bank) => [bank.code, bank]));
   for (const bank of savedBanks) {
     const code = digits(String(bank.code ?? ""));
     const name = String(bank.name ?? "").trim();
-    if (code && name && !bankByCode.has(code)) bankByCode.set(code, { code, name, kana: "" });
+    if (code && name && !bankByCode.has(code)) bankByCode.set(code, { code, name, kana: "", hira: "" });
   }
 
   const banks = Array.from(bankByCode.values())
-    .filter((bank) => {
-      if (!query) return true;
-      return bank.code.includes(query) || bank.name.toLowerCase().includes(query) || bank.kana.toLowerCase().includes(query);
-    })
-    .sort((a, b) => a.code.localeCompare(b.code))
-    .slice(0, 40);
+    .filter((bank) => matchesQuery(bank, query))
+    .sort(sortByHiraThenCode)
+    .slice(0, query ? 80 : 300);
 
   const savedBranches = bankCode ? await sql`
     select distinct
@@ -84,24 +161,22 @@ export async function GET(request: Request) {
       )
   ` : [];
 
+  const remoteBranches = await getRemoteBranches(bankCode);
   const branchesByCode = new Map(
-    builtInBranches
+    (remoteBranches.length ? remoteBranches : builtInBranches)
       .filter((branch) => !bankCode || branch.bankCode === bankCode)
       .map((branch) => [branch.code, branch])
   );
   for (const branch of savedBranches) {
     const code = digits(String(branch.code ?? ""));
     const name = String(branch.name ?? "").trim();
-    if (code && name && !branchesByCode.has(code)) branchesByCode.set(code, { bankCode, code, name, kana: "" });
+    if (code && name && !branchesByCode.has(code)) branchesByCode.set(code, { bankCode, code, name, kana: "", hira: "" });
   }
 
   const branches = Array.from(branchesByCode.values())
-    .filter((branch) => {
-      if (!query) return true;
-      return branch.code.includes(query) || branch.name.toLowerCase().includes(query) || branch.kana.toLowerCase().includes(query);
-    })
-    .sort((a, b) => a.code.localeCompare(b.code))
-    .slice(0, 80);
+    .filter((branch) => matchesQuery(branch, query))
+    .sort(sortByHiraThenCode)
+    .slice(0, query ? 80 : 300);
 
   return Response.json({ banks, branches });
 }

@@ -2,6 +2,7 @@ export type BankMasterBank = {
   code: string;
   name: string;
   kana: string;
+  hira?: string;
 };
 
 export type BankMasterBranch = {
@@ -9,6 +10,7 @@ export type BankMasterBranch = {
   code: string;
   name: string;
   kana: string;
+  hira?: string;
 };
 
 export const builtInBanks: BankMasterBank[] = [

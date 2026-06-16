@@ -151,6 +151,7 @@ type BankMasterBank = {
   code: string;
   name: string;
   kana?: string;
+  hira?: string;
 };
 
 type BankMasterBranch = {
@@ -158,6 +159,7 @@ type BankMasterBranch = {
   code: string;
   name: string;
   kana?: string;
+  hira?: string;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -1076,10 +1078,11 @@ function StaffFormFields({
     if (bankCode) params.set("bankCode", bankCode.replace(/\D/g, ""));
     if (query) params.set("query", query);
     const response = await fetch(`/api/bank-master?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) return;
+    if (!response.ok) return { banks: [] as BankMasterBank[], branches: [] as BankMasterBranch[] };
     const body = await response.json().catch(() => ({})) as { banks?: BankMasterBank[]; branches?: BankMasterBranch[] };
     if (!bankCode) setBankOptions(body.banks ?? []);
     setBranchOptions(body.branches ?? []);
+    return { banks: body.banks ?? [], branches: body.branches ?? [] };
   }
 
   function setPayrollBankField(form: HTMLFormElement, name: string, value: string) {
@@ -1090,21 +1093,28 @@ function StaffFormFields({
   function findBankByCodeOrName(value: string) {
     const text = value.trim().toLowerCase();
     const code = value.replace(/\D/g, "");
-    return bankOptions.find((bank) => bank.code === code || bank.name.toLowerCase() === text || bank.name.toLowerCase().includes(text));
+    return bankOptions.find((bank) => bank.code === code || bank.name.toLowerCase() === text || bank.name.toLowerCase().includes(text) || String(bank.hira ?? "").includes(text) || String(bank.kana ?? "").toLowerCase().includes(text));
   }
 
   function findBranchByCodeOrName(value: string) {
     const text = value.trim().toLowerCase();
     const code = value.replace(/\D/g, "");
-    return branchOptions.find((branch) => branch.code === code || branch.name.toLowerCase() === text || branch.name.toLowerCase().includes(text));
+    return branchOptions.find((branch) => branch.code === code || branch.name.toLowerCase() === text || branch.name.toLowerCase().includes(text) || String(branch.hira ?? "").includes(text) || String(branch.kana ?? "").toLowerCase().includes(text));
   }
 
-  function applyPayrollBank(event: FormEvent<HTMLInputElement>) {
+  async function applyPayrollBank(event: FormEvent<HTMLInputElement>) {
     const form = event.currentTarget.form;
     if (!form) return;
-    const bank = findBankByCodeOrName(event.currentTarget.value);
+    const value = event.currentTarget.value;
+    let bank = findBankByCodeOrName(value);
     if (!bank) {
-      void loadBankMaster(undefined, event.currentTarget.value);
+      const result = await loadBankMaster(undefined, value);
+      const text = value.trim().toLowerCase();
+      const code = value.replace(/\D/g, "");
+      bank = result?.banks.find((candidate) => candidate.code === code || candidate.name.toLowerCase() === text)
+        ?? result?.banks[0];
+    }
+    if (!bank) {
       return;
     }
     setPayrollBankField(form, "payrollBankCode", bank.code);
@@ -1114,10 +1124,19 @@ function StaffFormFields({
     void loadBankMaster(bank.code);
   }
 
-  function applyPayrollBranch(event: FormEvent<HTMLInputElement>) {
+  async function applyPayrollBranch(event: FormEvent<HTMLInputElement>) {
     const form = event.currentTarget.form;
     if (!form) return;
-    const branch = findBranchByCodeOrName(event.currentTarget.value);
+    const value = event.currentTarget.value;
+    const bankCode = (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value.replace(/\D/g, "") ?? "";
+    let branch = findBranchByCodeOrName(value);
+    if (!branch && bankCode) {
+      const result = await loadBankMaster(bankCode, value);
+      const text = value.trim().toLowerCase();
+      const code = value.replace(/\D/g, "");
+      branch = result?.branches.find((candidate) => candidate.code === code || candidate.name.toLowerCase() === text)
+        ?? result?.branches[0];
+    }
     if (!branch) return;
     setPayrollBankField(form, "payrollBranchCode", branch.code);
     setPayrollBankField(form, "payrollBranchName", branch.name);
