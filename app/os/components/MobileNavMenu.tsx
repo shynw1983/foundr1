@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ExternalLink, Menu } from "lucide-react";
 import { useRef } from "react";
 import { usePathname } from "next/navigation";
-import { NotificationMenu } from "./NotificationMenu";
 import { type OsNavItem, usePermittedNavModules } from "./OsNavList";
 import { UserBadge } from "./UserBadge";
 import { useCloseOnOutside } from "./useCloseOnOutside";
@@ -20,7 +19,6 @@ export function MobileNavMenu({ navItems }: { navItems: OsNavItem[] }) {
 
   return (
     <div className="mobile-nav-actions">
-      <NotificationMenu className="mobile-visible-notification" />
       <details className="mobile-nav-menu" ref={mobileMenuRef}>
         <summary aria-label="メニュー">
           <span className="hamburger-button" aria-hidden="true">

@@ -31614,10 +31614,19 @@ a:focus-visible {
   .shell .sidebar .mobile-nav-user .user-panel,
   .os-home-shell .mobile-nav-user .user-panel {
     gap: 10px;
+    width: 100%;
+  }
+
+  .shell .sidebar .mobile-nav-user .account-menu,
+  .os-home-shell .mobile-nav-user .account-menu {
+    width: 100%;
+    min-width: 0;
   }
 
   .shell .sidebar .mobile-nav-user .user-badge,
   .os-home-shell .mobile-nav-user .user-badge {
+    box-sizing: border-box;
+    width: 100%;
     min-height: 46px;
     border-color: var(--line);
     background: var(--panel);
@@ -31668,6 +31677,7 @@ a:focus-visible {
 @media (max-width: 1120px) {
   .shell .sidebar .mobile-nav-user .account-menu summary.user-badge,
   .os-home-shell .mobile-nav-user .account-menu summary.user-badge {
+    box-sizing: border-box;
     display: inline-flex;
     justify-content: flex-start;
     gap: 8px;
