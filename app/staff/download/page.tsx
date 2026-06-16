@@ -11,7 +11,6 @@ type ApkVersion = {
   buildType: string;
   fileName: string;
   downloadPath: string;
-  latestDownloadPath?: string;
   sizeBytes: number;
   sha256: string;
   builtAt: string;
@@ -62,7 +61,7 @@ export default function StaffDownloadPage() {
 
         <a
           className="primary-button staff-download-button"
-          href={apk.latestDownloadPath ?? apk.downloadPath}
+          href={apk.downloadPath}
           download={apk.fileName}
         >
           <Download size={18} />
