@@ -634,6 +634,10 @@ function isDeliveryLockedItem(item: Pick<ProcurementTaskItem, "deliveryStatus">)
   return ["in_delivery", "delivered", "received"].includes(item.deliveryStatus);
 }
 
+function isChainSupplier(supplier: string, supplierByName: Map<string, Supplier>) {
+  return supplierByName.get(supplier)?.channelType === "チェーン店";
+}
+
 function getSupplierGroupLocation(items: ProcurementTaskItem[], locationOptions: string[], fallbackLocation = "") {
   const editableLocation = items.find((item) => !item.purchased && !item.unavailable && !isDeliveryLockedItem(item) && item.supplierLocationName.trim())?.supplierLocationName.trim();
   if (editableLocation) return editableLocation;
@@ -1725,6 +1729,7 @@ export default function ProcurementPage() {
                           const supplierReadyToDeliverAmount = calculateProcurementReadyToDeliverAmount(group.items, productLookup);
                           const supplierLocationCandidates = supplierLocations.filter((location) => normalizeSupplierName(location.supplier) === normalizeSupplierName(group.supplier));
                           const supplierLocationOptions = supplierLocationCandidates.map((location) => location.locationName);
+                          const supplierRequiresLocation = isChainSupplier(group.supplier, supplierByName);
                           const supplierPurchasedCount = group.items.filter((item) => item.purchased && !item.unavailable).length;
                           const supplierUnavailableCount = group.items.filter((item) => item.unavailable).length;
                           const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
@@ -1740,7 +1745,7 @@ export default function ProcurementPage() {
                                   <div>
                                     <span>発注先</span>
                                     <strong>{group.supplier}</strong>
-                                    {supplierLocationCandidates.length > 0 ? (
+                                    {supplierRequiresLocation && supplierLocationCandidates.length > 0 ? (
                                       <small className="supplier-group-location-line">
                                         店舗候補 {supplierLocationCandidates.slice(0, 2).map((location) => location.locationName).join(" / ")}
                                         {supplierLocationCandidates.length > 2 ? " ほか" : ""}
@@ -1771,20 +1776,22 @@ export default function ProcurementPage() {
                                 </div>
                                 <div className="supplier-group-meta">
                                   <small>{supplierCompletedCount} / {group.items.length} 処理済み</small>
-                                  <label className="supplier-group-location-picker">
-                                    <span>今回の購入店舗</span>
-                                    <input
-                                      list={supplierLocationDatalistId}
-                                      value={selectedSupplierLocation}
-                                      placeholder={supplierLocationOptions.length > 0 ? "店舗を選択" : "未登録店舗を入力"}
-                                      onChange={(event) => updateSupplierGroupLocation(supplierKey, group.items.map((item) => item.id), event.target.value)}
-                                    />
-                                    <datalist id={supplierLocationDatalistId}>
-                                      {supplierLocationOptions.map((locationName) => (
-                                        <option value={locationName} key={`${supplierKey}-${locationName}`} />
-                                      ))}
-                                    </datalist>
-                                  </label>
+                                  {supplierRequiresLocation ? (
+                                    <label className="supplier-group-location-picker">
+                                      <span>今回の購入店舗</span>
+                                      <input
+                                        list={supplierLocationDatalistId}
+                                        value={selectedSupplierLocation}
+                                        placeholder={supplierLocationOptions.length > 0 ? "店舗を選択" : "未登録店舗を入力"}
+                                        onChange={(event) => updateSupplierGroupLocation(supplierKey, group.items.map((item) => item.id), event.target.value)}
+                                      />
+                                      <datalist id={supplierLocationDatalistId}>
+                                        {supplierLocationOptions.map((locationName) => (
+                                          <option value={locationName} key={`${supplierKey}-${locationName}`} />
+                                        ))}
+                                      </datalist>
+                                    </label>
+                                  ) : null}
                                   <div className="receipt-upload-control">
                                     {supplierReceipt ? (
                                       <a href={supplierReceipt} target="_blank" rel="noreferrer">
@@ -1834,14 +1841,14 @@ export default function ProcurementPage() {
                                           disabled={item.unavailable || isDeliveryLocked}
                                           onChange={(event) => {
                                             const purchaseLocationName = item.supplierLocationName.trim() || selectedSupplierLocation.trim();
-                                            if (event.target.checked && !purchaseLocationName) {
+                                            if (event.target.checked && supplierRequiresLocation && !purchaseLocationName) {
                                               window.alert("実際に購入した店舗を入力してください。");
                                               return;
                                             }
                                             updateProcurementTaskItem(item.id, {
                                               purchased: event.target.checked,
                                               unavailable: false,
-                                              supplierLocationName: event.target.checked ? purchaseLocationName : item.supplierLocationName,
+                                              supplierLocationName: event.target.checked && supplierRequiresLocation ? purchaseLocationName : "",
                                               deliveryStatus: event.target.checked ? item.deliveryStatus : "pending",
                                               deliveryBatchId: event.target.checked ? item.deliveryBatchId : undefined
                                             });

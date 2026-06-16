@@ -299,10 +299,19 @@ export async function PATCH(request: Request) {
         `
     : [];
   const supplierId = supplierRows[0]?.id ?? null;
-  if (isRecordingPurchase && !supplierLocationName) {
-    return Response.json({ error: "実際に購入した店舗を選択してください。" }, { status: 400 });
+  const effectiveSupplierRows = isRecordingPurchase
+    ? await sql`
+        select channel_type as "channelType"
+        from suppliers
+        where id = coalesce(${supplierId}, ${itemDetail?.currentSupplierId ?? null})
+        limit 1
+      `
+    : [];
+  const supplierRequiresLocation = String(effectiveSupplierRows[0]?.channelType ?? "") === "チェーン店";
+  if (isRecordingPurchase && supplierRequiresLocation && !supplierLocationName) {
+    return Response.json({ error: "チェーン店で購入する場合は、実際に購入した店舗を選択または入力してください。" }, { status: 400 });
   }
-  const supplierLocationRows = supplierLocationName && supplierId
+  const supplierLocationRows = supplierRequiresLocation && supplierLocationName && supplierId
     ? await sql`
         insert into supplier_locations (
           supplier_id,
@@ -320,7 +329,7 @@ export async function PATCH(request: Request) {
       `
     : [];
   const supplierLocationId = supplierLocationRows[0]?.id ?? null;
-  if (isRecordingPurchase && !supplierLocationId) {
+  if (isRecordingPurchase && supplierRequiresLocation && !supplierLocationId) {
     return Response.json({ error: "発注先に店舗・支店を登録してから購入済みにしてください。" }, { status: 400 });
   }
   const remainingSupplierName = String(body.remainingSupplier ?? "").trim();
