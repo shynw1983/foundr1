@@ -11,6 +11,10 @@ function digits(value: string | null) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+function normalizeKanaGroup(value: string | null) {
+  return String(value ?? "").trim();
+}
+
 type TerarenBank = {
   code?: string;
   name?: string;
@@ -85,6 +89,12 @@ function matchesQuery(item: { code: string; name: string; kana?: string; hira?: 
     || String(item.hira ?? "").toLowerCase().includes(query);
 }
 
+function matchesKanaGroup(item: { hira?: string }, kanaGroup: string) {
+  if (!kanaGroup) return true;
+  const hira = String(item.hira ?? "");
+  return Boolean(hira) && Array.from(kanaGroup).some((kana) => hira.startsWith(kana));
+}
+
 function sortByHiraThenCode<T extends { code: string; hira?: string; kana?: string; name: string }>(a: T, b: T) {
   return String(a.hira || a.kana || a.name).localeCompare(String(b.hira || b.kana || b.name), "ja") || a.code.localeCompare(b.code);
 }
@@ -95,6 +105,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const query = normalizeQuery(url.searchParams.get("query"));
+  const kanaGroup = normalizeKanaGroup(url.searchParams.get("kanaGroup"));
   const bankCode = digits(url.searchParams.get("bankCode"));
 
   const savedBanks = await sql`
@@ -132,8 +143,9 @@ export async function GET(request: Request) {
 
   const banks = Array.from(bankByCode.values())
     .filter((bank) => matchesQuery(bank, query))
+    .filter((bank) => matchesKanaGroup(bank, kanaGroup))
     .sort(sortByHiraThenCode)
-    .slice(0, query ? 80 : 20);
+    .slice(0, query || kanaGroup ? 80 : 20);
 
   const savedBranches = bankCode ? await sql`
     select distinct
@@ -175,8 +187,9 @@ export async function GET(request: Request) {
 
   const branches = Array.from(branchesByCode.values())
     .filter((branch) => matchesQuery(branch, query))
+    .filter((branch) => matchesKanaGroup(branch, kanaGroup))
     .sort(sortByHiraThenCode)
-    .slice(0, query ? 80 : 20);
+    .slice(0, query || kanaGroup ? 80 : 20);
 
   return Response.json({ banks, branches });
 }

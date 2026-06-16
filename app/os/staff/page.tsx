@@ -248,16 +248,16 @@ const employeeTypeLabels: Record<string, string> = {
 const ALL_FILTER = "__all__";
 const UNKNOWN_COMPANY = "会社未設定";
 const bankKanaQuickFilters = [
-  { label: "あ", query: "あ" },
-  { label: "か", query: "か" },
-  { label: "さ", query: "さ" },
-  { label: "た", query: "た" },
-  { label: "な", query: "な" },
-  { label: "は", query: "は" },
-  { label: "ま", query: "ま" },
-  { label: "や", query: "や" },
-  { label: "ら", query: "ら" },
-  { label: "わ", query: "わ" }
+  { label: "あ", kanaGroup: "あいうえお" },
+  { label: "か", kanaGroup: "かきくけこがぎぐげご" },
+  { label: "さ", kanaGroup: "さしすせそざじずぜぞ" },
+  { label: "た", kanaGroup: "たちつてとだぢづでど" },
+  { label: "な", kanaGroup: "なにぬねの" },
+  { label: "は", kanaGroup: "はひふへほばびぶべぼぱぴぷぺぽ" },
+  { label: "ま", kanaGroup: "まみむめも" },
+  { label: "や", kanaGroup: "やゆよ" },
+  { label: "ら", kanaGroup: "らりるれろ" },
+  { label: "わ", kanaGroup: "わをん" }
 ];
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
@@ -1089,10 +1089,11 @@ function StaffFormFields({
     if (input) input.checked = checked;
   }
 
-  async function loadBankMaster(bankCode?: string, query?: string) {
+  async function loadBankMaster(bankCode?: string, query?: string, kanaGroup?: string) {
     const params = new URLSearchParams();
     if (bankCode) params.set("bankCode", bankCode.replace(/\D/g, ""));
     if (query) params.set("query", query);
+    if (kanaGroup) params.set("kanaGroup", kanaGroup);
     const response = await fetch(`/api/bank-master?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) return { banks: [] as BankMasterBank[], branches: [] as BankMasterBranch[] };
     const body = await response.json().catch(() => ({})) as { banks?: BankMasterBank[]; branches?: BankMasterBranch[] };
@@ -1101,8 +1102,8 @@ function StaffFormFields({
     return { banks: body.banks ?? [], branches: body.branches ?? [] };
   }
 
-  async function searchBanks(value: string) {
-    const result = await loadBankMaster(undefined, value);
+  async function searchBanks(value: string, kanaGroup?: string) {
+    const result = await loadBankMaster(undefined, value, kanaGroup);
     setBankSearchStatus(result.banks.length ? `${result.banks.length}件の候補` : "候補がありません。コードまたはカナを確認してください。");
   }
 
@@ -1289,9 +1290,8 @@ function StaffFormFields({
               <div className="staff-bank-kana-filter" aria-label="銀行カナ検索">
                 {bankKanaQuickFilters.map((filter) => (
                   <button type="button" key={filter.label} onClick={(event) => {
-                    const form = event.currentTarget.form;
-                    setPayrollBankField(form!, "payrollBankName", filter.query);
-                    void searchBanks(filter.query);
+                    event.preventDefault();
+                    void searchBanks("", filter.kanaGroup);
                   }}>
                     {filter.label}
                   </button>
