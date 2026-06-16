@@ -247,6 +247,18 @@ const employeeTypeLabels: Record<string, string> = {
 
 const ALL_FILTER = "__all__";
 const UNKNOWN_COMPANY = "会社未設定";
+const bankKanaQuickFilters = [
+  { label: "あ", query: "あ" },
+  { label: "か", query: "か" },
+  { label: "さ", query: "さ" },
+  { label: "た", query: "た" },
+  { label: "な", query: "な" },
+  { label: "は", query: "は" },
+  { label: "ま", query: "ま" },
+  { label: "や", query: "や" },
+  { label: "ら", query: "ら" },
+  { label: "わ", query: "わ" }
+];
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -867,6 +879,8 @@ function StaffFormFields({
   ));
   const [bankOptions, setBankOptions] = useState<BankMasterBank[]>([]);
   const [branchOptions, setBranchOptions] = useState<BankMasterBranch[]>([]);
+  const [bankSearchStatus, setBankSearchStatus] = useState("銀行名・カナ・コードで検索");
+  const [branchSearchStatus, setBranchSearchStatus] = useState("銀行を選ぶと支店検索できます");
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -877,6 +891,8 @@ function StaffFormFields({
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
+    setBankSearchStatus("銀行名・カナ・コードで検索");
+    setBranchSearchStatus("銀行を選ぶと支店検索できます");
     setLifecycleCases([]);
     setLifecycleLoading(false);
   }, [member]);
@@ -1085,9 +1101,43 @@ function StaffFormFields({
     return { banks: body.banks ?? [], branches: body.branches ?? [] };
   }
 
+  async function searchBanks(value: string) {
+    const result = await loadBankMaster(undefined, value);
+    setBankSearchStatus(result.banks.length ? `${result.banks.length}件の候補` : "候補がありません。コードまたはカナを確認してください。");
+  }
+
+  async function searchBranches(form: HTMLFormElement | null, value: string) {
+    const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value.replace(/\D/g, "") ?? "" : "";
+    if (!bankCode) {
+      setBranchOptions([]);
+      setBranchSearchStatus("先に銀行を選択してください");
+      return;
+    }
+    const result = await loadBankMaster(bankCode, value);
+    setBranchSearchStatus(result.branches.length ? `${result.branches.length}件の候補` : "候補がありません。支店名またはコードを確認してください。");
+  }
+
   function setPayrollBankField(form: HTMLFormElement, name: string, value: string) {
     const input = form.elements.namedItem(name) as HTMLInputElement | null;
     if (input) input.value = value;
+  }
+
+  function selectPayrollBank(form: HTMLFormElement | null, bank: BankMasterBank) {
+    if (!form) return;
+    setPayrollBankField(form, "payrollBankCode", bank.code);
+    setPayrollBankField(form, "payrollBankName", bank.name);
+    setPayrollBankField(form, "payrollBranchCode", "");
+    setPayrollBankField(form, "payrollBranchName", "");
+    setBankSearchStatus(`${bank.name} を選択`);
+    setBranchSearchStatus("支店名・カナ・コードで検索");
+    void loadBankMaster(bank.code);
+  }
+
+  function selectPayrollBranch(form: HTMLFormElement | null, branch: BankMasterBranch) {
+    if (!form) return;
+    setPayrollBankField(form, "payrollBranchCode", branch.code);
+    setPayrollBankField(form, "payrollBranchName", branch.name);
+    setBranchSearchStatus(`${branch.name} を選択`);
   }
 
   function findBankByCodeOrName(value: string) {
@@ -1117,11 +1167,7 @@ function StaffFormFields({
     if (!bank) {
       return;
     }
-    setPayrollBankField(form, "payrollBankCode", bank.code);
-    setPayrollBankField(form, "payrollBankName", bank.name);
-    setPayrollBankField(form, "payrollBranchCode", "");
-    setPayrollBankField(form, "payrollBranchName", "");
-    void loadBankMaster(bank.code);
+    selectPayrollBank(form, bank);
   }
 
   async function applyPayrollBranch(event: FormEvent<HTMLInputElement>) {
@@ -1138,8 +1184,7 @@ function StaffFormFields({
         ?? result?.branches[0];
     }
     if (!branch) return;
-    setPayrollBankField(form, "payrollBranchCode", branch.code);
-    setPayrollBankField(form, "payrollBranchName", branch.name);
+    selectPayrollBranch(form, branch);
   }
 
   function convertPayrollHolderKana(event: FormEvent<HTMLInputElement>) {
@@ -1239,30 +1284,69 @@ function StaffFormFields({
               <strong>給与振込口座</strong>
               <p>給与確定後の銀行アップロードファイルに使います。受取人名義は銀行指定の半角カナ・英数で入力してください。</p>
             </div>
+            <div className="staff-bank-finder">
+              <span>銀行検索</span>
+              <div className="staff-bank-kana-filter" aria-label="銀行カナ検索">
+                {bankKanaQuickFilters.map((filter) => (
+                  <button type="button" key={filter.label} onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    setPayrollBankField(form!, "payrollBankName", filter.query);
+                    void searchBanks(filter.query);
+                  }}>
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <small>{bankSearchStatus}</small>
+            </div>
             <label>
               <span>銀行コード</span>
-              <input name="payrollBankCode" inputMode="numeric" maxLength={4} defaultValue={member?.payrollBankCode ?? ""} placeholder="例: 0177" list="payroll-bank-code-options" onBlur={applyPayrollBank} />
+              <input name="payrollBankCode" inputMode="numeric" maxLength={4} defaultValue={member?.payrollBankCode ?? ""} placeholder="例: 0177" onChange={(event) => void searchBanks(event.currentTarget.value)} onBlur={applyPayrollBank} />
             </label>
             <label>
               <span>銀行名</span>
-              <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行" list="payroll-bank-name-options" onBlur={applyPayrollBank} />
+              <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行 / ふくおか / 0177" onChange={(event) => void searchBanks(event.currentTarget.value)} onBlur={applyPayrollBank} />
             </label>
+            {bankOptions.length ? (
+              <div className="staff-bank-option-list">
+                {bankOptions.slice(0, 8).map((bank) => (
+                  <button type="button" key={bank.code} onClick={(event) => selectPayrollBank(event.currentTarget.form, bank)}>
+                    <strong>{bank.name}</strong>
+                    <span>{bank.code} / {bank.hira || bank.kana}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="staff-bank-finder">
+              <span>支店検索</span>
+              <small>{branchSearchStatus}</small>
+            </div>
             <label>
               <span>支店コード</span>
-              <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" list="payroll-branch-code-options" onFocus={(event) => {
+              <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" onFocus={(event) => {
                 const form = event.currentTarget.form;
                 const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
                 if (bankCode) void loadBankMaster(bankCode);
-              }} onBlur={applyPayrollBranch} />
+              }} onChange={(event) => void searchBranches(event.currentTarget.form, event.currentTarget.value)} onBlur={applyPayrollBranch} />
             </label>
             <label>
               <span>支店名</span>
-              <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神町支店" list="payroll-branch-name-options" onFocus={(event) => {
+              <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神 / てんじん / 200" onFocus={(event) => {
                 const form = event.currentTarget.form;
                 const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
                 if (bankCode) void loadBankMaster(bankCode);
-              }} onBlur={applyPayrollBranch} />
+              }} onChange={(event) => void searchBranches(event.currentTarget.form, event.currentTarget.value)} onBlur={applyPayrollBranch} />
             </label>
+            {branchOptions.length ? (
+              <div className="staff-bank-option-list">
+                {branchOptions.slice(0, 8).map((branch) => (
+                  <button type="button" key={`${branch.bankCode}-${branch.code}`} onClick={(event) => selectPayrollBranch(event.currentTarget.form, branch)}>
+                    <strong>{branch.name}</strong>
+                    <span>{branch.code} / {branch.hira || branch.kana}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <label>
               <span>口座種別</span>
               <select name="payrollAccountType" defaultValue={member?.payrollAccountType ?? "ordinary"}>
@@ -1279,18 +1363,6 @@ function StaffFormFields({
               <span>受取人名義カナ</span>
               <input name="payrollAccountHolderKana" defaultValue={member?.payrollAccountHolderKana ?? ""} placeholder="例: ﾔﾏﾀﾞ ﾀﾛｳ" onInput={convertPayrollHolderKana} onBlur={convertPayrollHolderKana} />
             </label>
-            <datalist id="payroll-bank-code-options">
-              {bankOptions.map((bank) => <option value={bank.code} label={bank.name} key={`bank-code-${bank.code}`} />)}
-            </datalist>
-            <datalist id="payroll-bank-name-options">
-              {bankOptions.map((bank) => <option value={bank.name} label={bank.code} key={`bank-name-${bank.code}`} />)}
-            </datalist>
-            <datalist id="payroll-branch-code-options">
-              {branchOptions.map((branch) => <option value={branch.code} label={branch.name} key={`branch-code-${branch.bankCode}-${branch.code}`} />)}
-            </datalist>
-            <datalist id="payroll-branch-name-options">
-              {branchOptions.map((branch) => <option value={branch.name} label={branch.code} key={`branch-name-${branch.bankCode}-${branch.code}`} />)}
-            </datalist>
           </>
         ) : null}
         <label>

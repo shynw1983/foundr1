@@ -6202,6 +6202,76 @@ body :where(
   font-weight: 900;
 }
 
+.staff-bank-finder {
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.staff-bank-finder > span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-bank-finder small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.staff-bank-kana-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.staff-bank-kana-filter button,
+.staff-bank-option-list button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.staff-bank-kana-filter button {
+  min-height: 30px;
+  min-width: 34px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.staff-bank-option-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.staff-bank-option-list button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.staff-bank-option-list strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.staff-bank-option-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
 .staff-payroll-store-list {
   display: grid;
   gap: 12px;
@@ -26426,6 +26496,10 @@ body :where(
   }
 
   .staff-payroll-store-row {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-bank-option-list {
     grid-template-columns: 1fr;
   }
 

@@ -133,7 +133,7 @@ export async function GET(request: Request) {
   const banks = Array.from(bankByCode.values())
     .filter((bank) => matchesQuery(bank, query))
     .sort(sortByHiraThenCode)
-    .slice(0, query ? 80 : 300);
+    .slice(0, query ? 80 : 20);
 
   const savedBranches = bankCode ? await sql`
     select distinct
@@ -176,7 +176,7 @@ export async function GET(request: Request) {
   const branches = Array.from(branchesByCode.values())
     .filter((branch) => matchesQuery(branch, query))
     .sort(sortByHiraThenCode)
-    .slice(0, query ? 80 : 300);
+    .slice(0, query ? 80 : 20);
 
   return Response.json({ banks, branches });
 }
