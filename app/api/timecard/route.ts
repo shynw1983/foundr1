@@ -1482,8 +1482,16 @@ export async function POST(request: Request) {
       return Response.json({ error: "出勤または退勤時刻を入力してください。" }, { status: 400 });
     }
 
+    const nextClockInAt = clockIn ? toPunchDateTime(workDate, clockIn) : null;
+    const nextClockOutAt = clockOut ? toPunchDateTime(workDate, clockOut, clockIn) : null;
+    const now = Date.now();
+    const futurePunch = [nextClockInAt, nextClockOutAt].find((value) => value && new Date(value).getTime() > now);
+    if (futurePunch) {
+      return Response.json({ error: "未来の実勤務時刻は保存できません。実際に打刻時刻を過ぎてから修正してください。" }, { status: 400 });
+    }
+
     const insertedIds: string[] = [];
-    if (clockIn) {
+    if (clockIn && nextClockInAt) {
       const rows = await sql`
         insert into timecard_punches (
           employee_id,
@@ -1498,7 +1506,7 @@ export async function POST(request: Request) {
           ${employeeId},
           ${storeId},
           'clock_in',
-          ${toPunchDateTime(workDate, clockIn)},
+          ${nextClockInAt},
           'manager_correction',
           ${String(body.note ?? "").trim() || null},
           ${session.id}
@@ -1508,7 +1516,7 @@ export async function POST(request: Request) {
       insertedIds.push(String(rows[0]?.id ?? ""));
     }
 
-    if (clockOut) {
+    if (clockOut && nextClockOutAt) {
       const rows = await sql`
         insert into timecard_punches (
           employee_id,
@@ -1523,7 +1531,7 @@ export async function POST(request: Request) {
           ${employeeId},
           ${storeId},
           'clock_out',
-          ${toPunchDateTime(workDate, clockOut, clockIn)},
+          ${nextClockOutAt},
           'manager_correction',
           ${String(body.note ?? "").trim() || null},
           ${session.id}
