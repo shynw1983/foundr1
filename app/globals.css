@@ -5994,6 +5994,37 @@ body :where(
   background: #eef2f6;
 }
 
+.payroll-bank-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.payroll-bank-pill.is-active {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.payroll-bank-pill.is-warning {
+  color: #9a6a12;
+  background: #fff4d7;
+}
+
+.payroll-bank-pill.is-muted {
+  color: var(--muted);
+  background: #eef2f6;
+}
+
+.staff-payroll-bank-detail {
+  display: block;
+}
+
 .management-row p,
 .management-row small {
   margin: 0;

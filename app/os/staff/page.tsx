@@ -147,6 +147,19 @@ type LifecycleCase = {
   documents: LifecycleDocument[];
 };
 
+type BankMasterBank = {
+  code: string;
+  name: string;
+  kana?: string;
+};
+
+type BankMasterBranch = {
+  bankCode: string;
+  code: string;
+  name: string;
+  kana?: string;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -608,13 +621,18 @@ export default function StaffPage() {
                 </button>
               </div>
               <div className="management-list">
-                {filteredStaff.length ? filteredStaff.map((member) => (
-                  <article className="management-row staff-row" key={member.id}>
+                {filteredStaff.length ? filteredStaff.map((member) => {
+                  const payrollBankStatus = getPayrollBankStatus(member);
+                  return (
+                    <article className="management-row staff-row" key={member.id}>
                     <div>
                       <div className="staff-row-heading">
                         <strong>{member.name}</strong>
                         <span className={`presence-pill ${getPresenceState(member.lastSeenAt).tone}`}>
                           {getPresenceState(member.lastSeenAt).label}
+                        </span>
+                        <span className={`payroll-bank-pill ${payrollBankStatus.className}`}>
+                          {payrollBankStatus.label}
                         </span>
                       </div>
                       <p>
@@ -635,6 +653,7 @@ export default function StaffPage() {
                         {member.privacyConsentResetRequired ? " ・ 個人情報文書の再同意待ち" : ""}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
+                      {payrollBankStatus.detail ? <small className="staff-payroll-bank-detail">{payrollBankStatus.detail}</small> : null}
                     </div>
                     <div className="row-actions">
                       <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
@@ -642,7 +661,8 @@ export default function StaffPage() {
                       </button>
                     </div>
                   </article>
-                )) : (
+                  );
+                }) : (
                   <p className="empty-state-text">条件に一致するスタッフがいません。</p>
                 )}
               </div>
@@ -747,6 +767,63 @@ function formatStaffScopeSummary(member: StaffMember) {
   return `管理範囲: ${visibleStoreText} ・ 勤務: ${workStoreText}`;
 }
 
+function getPayrollBankMissingFields(member: StaffMember) {
+  if (member.role === "store_terminal") return [];
+  return [
+    member.payrollBankCode ? "" : "銀行",
+    member.payrollBranchCode ? "" : "支店",
+    member.payrollAccountNumber ? "" : "口座番号",
+    member.payrollAccountHolderKana ? "" : "名義"
+  ].filter(Boolean);
+}
+
+function getPayrollBankStatus(member: StaffMember) {
+  const missing = getPayrollBankMissingFields(member);
+  if (member.role === "store_terminal") return { label: "給与対象外", className: "is-muted", detail: "" };
+  if (!missing.length) return { label: "振込口座OK", className: "is-active", detail: `${member.payrollBankName ?? "銀行名未設定"} ${member.payrollBranchName ?? ""}`.trim() };
+  if (missing.length === 4) return { label: "口座未入力", className: "is-warning", detail: "給与振込口座が未入力" };
+  return { label: "口座確認", className: "is-warning", detail: `不足: ${missing.join("・")}` };
+}
+
+const halfWidthKanaMap: Record<string, string> = {
+  "ア": "ｱ", "イ": "ｲ", "ウ": "ｳ", "エ": "ｴ", "オ": "ｵ",
+  "カ": "ｶ", "キ": "ｷ", "ク": "ｸ", "ケ": "ｹ", "コ": "ｺ",
+  "サ": "ｻ", "シ": "ｼ", "ス": "ｽ", "セ": "ｾ", "ソ": "ｿ",
+  "タ": "ﾀ", "チ": "ﾁ", "ツ": "ﾂ", "テ": "ﾃ", "ト": "ﾄ",
+  "ナ": "ﾅ", "ニ": "ﾆ", "ヌ": "ﾇ", "ネ": "ﾈ", "ノ": "ﾉ",
+  "ハ": "ﾊ", "ヒ": "ﾋ", "フ": "ﾌ", "ヘ": "ﾍ", "ホ": "ﾎ",
+  "マ": "ﾏ", "ミ": "ﾐ", "ム": "ﾑ", "メ": "ﾒ", "モ": "ﾓ",
+  "ヤ": "ﾔ", "ユ": "ﾕ", "ヨ": "ﾖ",
+  "ラ": "ﾗ", "リ": "ﾘ", "ル": "ﾙ", "レ": "ﾚ", "ロ": "ﾛ",
+  "ワ": "ﾜ", "ヲ": "ｦ", "ン": "ﾝ",
+  "ァ": "ｧ", "ィ": "ｨ", "ゥ": "ｩ", "ェ": "ｪ", "ォ": "ｫ",
+  "ャ": "ｬ", "ュ": "ｭ", "ョ": "ｮ", "ッ": "ｯ",
+  "ー": "ｰ", "ヴ": "ｳﾞ", "ガ": "ｶﾞ", "ギ": "ｷﾞ", "グ": "ｸﾞ", "ゲ": "ｹﾞ", "ゴ": "ｺﾞ",
+  "ザ": "ｻﾞ", "ジ": "ｼﾞ", "ズ": "ｽﾞ", "ゼ": "ｾﾞ", "ゾ": "ｿﾞ",
+  "ダ": "ﾀﾞ", "ヂ": "ﾁﾞ", "ヅ": "ﾂﾞ", "デ": "ﾃﾞ", "ド": "ﾄﾞ",
+  "バ": "ﾊﾞ", "ビ": "ﾋﾞ", "ブ": "ﾌﾞ", "ベ": "ﾍﾞ", "ボ": "ﾎﾞ",
+  "パ": "ﾊﾟ", "ピ": "ﾋﾟ", "プ": "ﾌﾟ", "ペ": "ﾍﾟ", "ポ": "ﾎﾟ",
+  "。": "｡", "「": "｢", "」": "｣", "、": "､", "・": "･"
+};
+
+function toHalfWidthKana(value: string) {
+  const katakana = value
+    .replace(/[ぁ-ゖ]/g, (char) => String.fromCharCode(char.charCodeAt(0) + 0x60))
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/　/g, " ");
+  let converted = "";
+  for (let index = 0; index < katakana.length; index += 1) {
+    const pair = katakana.slice(index, index + 2);
+    if (halfWidthKanaMap[pair]) {
+      converted += halfWidthKanaMap[pair];
+      index += 1;
+      continue;
+    }
+    converted += halfWidthKanaMap[katakana[index]] ?? katakana[index];
+  }
+  return converted.toUpperCase().replace(/\s+/g, " ").trim();
+}
+
 function StaffFormFields({
   member,
   stores,
@@ -786,6 +863,8 @@ function StaffFormFields({
   const [forcePrivacyConsentReset, setForcePrivacyConsentReset] = useState(() => (
     member ? Boolean(member.privacyConsentResetRequired) : false
   ));
+  const [bankOptions, setBankOptions] = useState<BankMasterBank[]>([]);
+  const [branchOptions, setBranchOptions] = useState<BankMasterBranch[]>([]);
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -799,6 +878,12 @@ function StaffFormFields({
     setLifecycleCases([]);
     setLifecycleLoading(false);
   }, [member]);
+
+  useEffect(() => {
+    if (isStoreTerminal) return;
+    void loadBankMaster();
+    if (member?.payrollBankCode) void loadBankMaster(member.payrollBankCode);
+  }, [isStoreTerminal, member?.id, member?.payrollBankCode]);
 
   useEffect(() => {
     if (isStoreTerminal && activeTab === "payroll") setActiveTab("basic");
@@ -986,6 +1071,62 @@ function StaffFormFields({
     if (input) input.checked = checked;
   }
 
+  async function loadBankMaster(bankCode?: string, query?: string) {
+    const params = new URLSearchParams();
+    if (bankCode) params.set("bankCode", bankCode.replace(/\D/g, ""));
+    if (query) params.set("query", query);
+    const response = await fetch(`/api/bank-master?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json().catch(() => ({})) as { banks?: BankMasterBank[]; branches?: BankMasterBranch[] };
+    if (!bankCode) setBankOptions(body.banks ?? []);
+    setBranchOptions(body.branches ?? []);
+  }
+
+  function setPayrollBankField(form: HTMLFormElement, name: string, value: string) {
+    const input = form.elements.namedItem(name) as HTMLInputElement | null;
+    if (input) input.value = value;
+  }
+
+  function findBankByCodeOrName(value: string) {
+    const text = value.trim().toLowerCase();
+    const code = value.replace(/\D/g, "");
+    return bankOptions.find((bank) => bank.code === code || bank.name.toLowerCase() === text || bank.name.toLowerCase().includes(text));
+  }
+
+  function findBranchByCodeOrName(value: string) {
+    const text = value.trim().toLowerCase();
+    const code = value.replace(/\D/g, "");
+    return branchOptions.find((branch) => branch.code === code || branch.name.toLowerCase() === text || branch.name.toLowerCase().includes(text));
+  }
+
+  function applyPayrollBank(event: FormEvent<HTMLInputElement>) {
+    const form = event.currentTarget.form;
+    if (!form) return;
+    const bank = findBankByCodeOrName(event.currentTarget.value);
+    if (!bank) {
+      void loadBankMaster(undefined, event.currentTarget.value);
+      return;
+    }
+    setPayrollBankField(form, "payrollBankCode", bank.code);
+    setPayrollBankField(form, "payrollBankName", bank.name);
+    setPayrollBankField(form, "payrollBranchCode", "");
+    setPayrollBankField(form, "payrollBranchName", "");
+    void loadBankMaster(bank.code);
+  }
+
+  function applyPayrollBranch(event: FormEvent<HTMLInputElement>) {
+    const form = event.currentTarget.form;
+    if (!form) return;
+    const branch = findBranchByCodeOrName(event.currentTarget.value);
+    if (!branch) return;
+    setPayrollBankField(form, "payrollBranchCode", branch.code);
+    setPayrollBankField(form, "payrollBranchName", branch.name);
+  }
+
+  function convertPayrollHolderKana(event: FormEvent<HTMLInputElement>) {
+    event.currentTarget.value = toHalfWidthKana(event.currentTarget.value);
+  }
+
   function applyPayrollHistory(event: MouseEvent<HTMLButtonElement>, store: StoreOption, record: PayrollHistoryEntry) {
     const form = event.currentTarget.form;
     if (!form) return;
@@ -1081,19 +1222,27 @@ function StaffFormFields({
             </div>
             <label>
               <span>銀行コード</span>
-              <input name="payrollBankCode" inputMode="numeric" maxLength={4} defaultValue={member?.payrollBankCode ?? ""} placeholder="例: 0177" />
+              <input name="payrollBankCode" inputMode="numeric" maxLength={4} defaultValue={member?.payrollBankCode ?? ""} placeholder="例: 0177" list="payroll-bank-code-options" onBlur={applyPayrollBank} />
             </label>
             <label>
               <span>銀行名</span>
-              <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行" />
+              <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行" list="payroll-bank-name-options" onBlur={applyPayrollBank} />
             </label>
             <label>
               <span>支店コード</span>
-              <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" />
+              <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" list="payroll-branch-code-options" onFocus={(event) => {
+                const form = event.currentTarget.form;
+                const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
+                if (bankCode) void loadBankMaster(bankCode);
+              }} onBlur={applyPayrollBranch} />
             </label>
             <label>
               <span>支店名</span>
-              <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神町支店" />
+              <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神町支店" list="payroll-branch-name-options" onFocus={(event) => {
+                const form = event.currentTarget.form;
+                const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
+                if (bankCode) void loadBankMaster(bankCode);
+              }} onBlur={applyPayrollBranch} />
             </label>
             <label>
               <span>口座種別</span>
@@ -1109,8 +1258,20 @@ function StaffFormFields({
             </label>
             <label>
               <span>受取人名義カナ</span>
-              <input name="payrollAccountHolderKana" defaultValue={member?.payrollAccountHolderKana ?? ""} placeholder="例: ﾔﾏﾀﾞ ﾀﾛｳ" />
+              <input name="payrollAccountHolderKana" defaultValue={member?.payrollAccountHolderKana ?? ""} placeholder="例: ﾔﾏﾀﾞ ﾀﾛｳ" onInput={convertPayrollHolderKana} onBlur={convertPayrollHolderKana} />
             </label>
+            <datalist id="payroll-bank-code-options">
+              {bankOptions.map((bank) => <option value={bank.code} label={bank.name} key={`bank-code-${bank.code}`} />)}
+            </datalist>
+            <datalist id="payroll-bank-name-options">
+              {bankOptions.map((bank) => <option value={bank.name} label={bank.code} key={`bank-name-${bank.code}`} />)}
+            </datalist>
+            <datalist id="payroll-branch-code-options">
+              {branchOptions.map((branch) => <option value={branch.code} label={branch.name} key={`branch-code-${branch.bankCode}-${branch.code}`} />)}
+            </datalist>
+            <datalist id="payroll-branch-name-options">
+              {branchOptions.map((branch) => <option value={branch.name} label={branch.code} key={`branch-name-${branch.bankCode}-${branch.code}`} />)}
+            </datalist>
           </>
         ) : null}
         <label>
