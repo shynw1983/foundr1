@@ -108,6 +108,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "店舗ワークベンチは店舗端末アカウント、または owner / manager アカウントでログインしてください。スタッフ個人機能は Foundr1 STAFF を利用してください。" }, { status: 403 });
   }
 
+  if (surface === "os" && employee.role === "staff") {
+    await writeAuditLog({
+      actorEmployeeId: employee.id,
+      action: "auth.login_rejected_for_surface",
+      targetType: "employee",
+      targetId: employee.id,
+      metadata: { surface, role: employee.role },
+      request
+    });
+    return Response.json({ error: "店舗スタッフは Foundr1 STAFF を利用してください。OS 管理画面は店長・管理者向けです。" }, { status: 403 });
+  }
+
   if (surface === "staff" && employee.role === "store_terminal") {
     await writeAuditLog({
       actorEmployeeId: employee.id,

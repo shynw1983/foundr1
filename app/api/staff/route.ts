@@ -391,8 +391,8 @@ export async function POST(request: Request) {
   const status = normalizeStatus(body.status);
   const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
-  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
   const workStoreIds = role === "store_terminal" ? [] : filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
+  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, role === "staff" ? requestedWorkStoreIds : requestedVisibleStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
   const effectiveEmail = role === "store_terminal" ? "" : email;
   const effectiveNameKana = role === "store_terminal" ? null : nameKana;
@@ -690,7 +690,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

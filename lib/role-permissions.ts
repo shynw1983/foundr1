@@ -29,7 +29,7 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
     label: "発注・購入管理",
     description: "発注依頼、購入管理、履歴、証憑、現場記録を表示します。",
     category: "モジュール",
-    defaultRoles: ["owner", "manager", "store_owner", "store_manager", "staff"],
+    defaultRoles: ["owner", "manager", "store_owner", "store_manager"],
     lockedRoles: ["owner"],
     navPaths: ["/os/orders", "/os/procurement", "/os/history", "/os/vouchers", "/os/field-notes", "/os/reports", "/os/feedback"]
   },
@@ -214,6 +214,11 @@ export const rolePermissionDefinitions: RolePermissionDefinition[] = [
 
 const permissionByKey = new Map(rolePermissionDefinitions.map((definition) => [definition.key, definition]));
 
+function isPermissionAvailableForRole(role: ConfigurableRole, permissionKey: string) {
+  if (role === "staff") return permissionKey === "module.staffPortal";
+  return true;
+}
+
 export function normalizeConfigurableRole(role: string): ConfigurableRole | null {
   return configurableRoles.includes(role as ConfigurableRole) ? role as ConfigurableRole : null;
 }
@@ -221,7 +226,9 @@ export function normalizeConfigurableRole(role: string): ConfigurableRole | null
 export function getDefaultPermissionsForRole(role: string) {
   const normalizedRole = normalizeConfigurableRole(role);
   if (!normalizedRole) return new Set<string>();
-  return new Set(rolePermissionDefinitions.filter((definition) => definition.defaultRoles.includes(normalizedRole)).map((definition) => definition.key));
+  return new Set(rolePermissionDefinitions
+    .filter((definition) => definition.defaultRoles.includes(normalizedRole) && isPermissionAvailableForRole(normalizedRole, definition.key))
+    .map((definition) => definition.key));
 }
 
 export function isLockedRolePermission(role: string, permissionKey: string) {
@@ -236,8 +243,9 @@ export function normalizePermissionKeys(role: string, permissionKeys: unknown) {
   const normalizedKeys = new Set<string>();
 
   for (const definition of rolePermissionDefinitions) {
+    if (!normalizedRole || !isPermissionAvailableForRole(normalizedRole, definition.key)) continue;
     if (requestedKeys.has(definition.key)) normalizedKeys.add(definition.key);
-    if (normalizedRole && definition.lockedRoles?.includes(normalizedRole)) normalizedKeys.add(definition.key);
+    if (definition.lockedRoles?.includes(normalizedRole)) normalizedKeys.add(definition.key);
   }
 
   return Array.from(normalizedKeys);
@@ -256,6 +264,7 @@ export async function getPermissionsForRole(role: string) {
   const permissions = new Set<string>();
 
   for (const definition of rolePermissionDefinitions) {
+    if (!isPermissionAvailableForRole(normalizedRole, definition.key)) continue;
     const enabled = saved.has(definition.key) ? saved.get(definition.key) === true : definition.defaultRoles.includes(normalizedRole);
     if (enabled || definition.lockedRoles?.includes(normalizedRole)) permissions.add(definition.key);
   }
@@ -275,11 +284,12 @@ export async function getAllRolePermissions() {
     role,
     permissions: rolePermissionDefinitions.map((definition) => {
       const savedKey = `${role}:${definition.key}`;
-      const enabled = saved.has(savedKey) ? saved.get(savedKey) === true : definition.defaultRoles.includes(role);
+      const available = isPermissionAvailableForRole(role, definition.key);
+      const enabled = available && (saved.has(savedKey) ? saved.get(savedKey) === true : definition.defaultRoles.includes(role));
       return {
         key: definition.key,
-        enabled: enabled || Boolean(definition.lockedRoles?.includes(role)),
-        locked: Boolean(definition.lockedRoles?.includes(role))
+        enabled: enabled || (available && Boolean(definition.lockedRoles?.includes(role))),
+        locked: Boolean(definition.lockedRoles?.includes(role)) || !available
       };
     })
   }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
@@ -23,6 +23,13 @@ const storeModules = [
     description: "店頭会計、注文入力、決済、レジ開店・締め、取引履歴、返金を処理します。",
     href: "/store/pos",
     icon: ShoppingCart,
+    status: "利用可能"
+  },
+  {
+    title: "納品確認",
+    description: "購入済みの商品が店に届いたら、数量と状態を確認して店舗確認済みにします。",
+    href: "/store/receiving",
+    icon: PackageCheck,
     status: "利用可能"
   },
   {

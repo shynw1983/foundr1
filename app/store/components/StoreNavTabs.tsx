@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
@@ -29,6 +29,7 @@ const tabs = [
   { label: "注文", href: "/store/orders", icon: ClipboardList },
   { label: "販売状態", href: "/store/menu", icon: Tags },
   { label: "POS", href: "/store/pos", icon: ShoppingCart },
+  { label: "納品確認", href: "/store/receiving", icon: PackageCheck },
   { label: "タイムカード", href: "/store/timecard", icon: Clock3 },
   { label: "手順書", href: "/store/procedures", icon: BookOpen },
   { label: "問題報告", href: "/store/feedback", icon: MessageSquareWarning },
@@ -73,7 +74,7 @@ function getAlertOrderKey(order: { id: string; status: string; paymentStatus: st
   return `${order.id}:${order.status}:${order.paymentStatus}`;
 }
 
-export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "feedback" }) {
+export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen" | "pickup-display" | "menu" | "procedures" | "timecard" | "pos" | "receiving" | "feedback" }) {
   const activeHref = active === "home"
     ? "/store"
     : active === "kitchen"

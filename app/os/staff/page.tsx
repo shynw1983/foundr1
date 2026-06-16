@@ -614,8 +614,9 @@ export default function StaffPage() {
                       </p>
                       <small>
                         {member.role === "store_terminal"
-                          ? `${member.status === "active" ? "有効" : "停止中"} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
-                          : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ 閲覧: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "全店舗"} ・ 勤務: ${getWorkStores(member).length ? getWorkStores(member).map(formatWorkStoreSummary).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`}
+                          ? `${member.status === "active" ? "有効" : "停止中"} ・ 利用店舗: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
+                          : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ ${formatStaffScopeSummary(member)} ・ ${formatLastSeen(member.lastSeenAt)}`
+                        }
                         {member.passwordMustChange ? " ・ 初回パスワード変更待ち" : ""}
                         {member.privacyConsentResetRequired ? " ・ 個人情報文書の再同意待ち" : ""}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
@@ -635,7 +636,7 @@ export default function StaffPage() {
 
             {canManageStaff ? (
               <section className="panel">
-                <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、店舗権限を設定" />
+                <PanelTitle title="スタッフ追加" subtitle="ログインID、初期パスワード、勤務店舗を設定" />
                 {error ? <div className="login-error">{error}</div> : null}
                 <form className="management-form staff-form" onSubmit={createStaff}>
                   <StaffFormFields stores={stores} currentUserRole={currentUserRole} onNotice={showNotice} onError={setError} />
@@ -720,6 +721,18 @@ function formatWorkStoreSummary(store: WorkStoreOption) {
   return details.length ? `${store.name}（${details.join(" / ")}）` : store.name;
 }
 
+function formatStaffScopeSummary(member: StaffMember) {
+  const workStoreText = getWorkStores(member).length
+    ? getWorkStores(member).map(formatWorkStoreSummary).join("、")
+    : "未設定";
+  if (member.role === "staff") return `勤務: ${workStoreText}`;
+
+  const visibleStoreText = getVisibleStores(member).length
+    ? getVisibleStores(member).map((store) => store.name).join("、")
+    : "全店舗";
+  return `管理範囲: ${visibleStoreText} ・ 勤務: ${workStoreText}`;
+}
+
 function StaffFormFields({
   member,
   stores,
@@ -752,6 +765,7 @@ function StaffFormFields({
     : assignableRoleOptions;
   const [selectedRole, setSelectedRole] = useState(member?.role ?? "staff");
   const isStoreTerminal = selectedRole === "store_terminal";
+  const isStaffRole = selectedRole === "staff";
   const [forcePasswordChange, setForcePasswordChange] = useState(() => (
     member ? Boolean(member.passwordMustChange) : canForcePasswordChange(selectedRole)
   ));
@@ -1509,16 +1523,23 @@ function StaffFormFields({
       ) : null}
 
       <section className={activeTab === "other" ? "staff-form-pane is-active" : "staff-form-pane"}>
-        <fieldset className="checkbox-group staff-store-scope">
-          <span>閲覧可能店舗（権限）</span>
-          <small>{isStoreTerminal ? "店舗Pad を利用する店舗を選択します。" : "ここは閲覧・管理できる店舗の範囲です。実際に勤務して給与計算する店舗は「給与情報」タブで設定します。"}</small>
-          {stores.length ? stores.map((store) => (
-            <label key={store.id}>
-              <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
-              {store.name}
-            </label>
-          )) : <small>店舗データがありません。</small>}
-        </fieldset>
+        {isStaffRole ? (
+          <div className="staff-payroll-guide">
+            <strong>店舗スタッフの利用範囲</strong>
+            <p>店舗スタッフは OS 管理画面を利用しません。打刻、シフト、給与、今後の現場タスクで使う店舗は「勤務・給与情報」の勤務店舗から自動で判定します。</p>
+          </div>
+        ) : (
+          <fieldset className="checkbox-group staff-store-scope">
+            <span>{isStoreTerminal ? "利用店舗" : "管理範囲店舗"}</span>
+            <small>{isStoreTerminal ? "店舗Pad を利用する店舗を選択します。" : "このアカウントが OS で閲覧・管理できる店舗の範囲です。実際に勤務して給与計算する店舗は「給与情報」タブで設定します。"}</small>
+            {stores.length ? stores.map((store) => (
+              <label key={store.id}>
+                <input type="checkbox" name="visibleStoreIds" value={store.id} defaultChecked={selectedVisibleStoreIds.has(store.id)} />
+                {store.name}
+              </label>
+            )) : <small>店舗データがありません。</small>}
+          </fieldset>
+        )}
         {!isStoreTerminal ? (
           <>
             <label>

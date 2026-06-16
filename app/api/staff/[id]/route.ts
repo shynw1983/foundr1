@@ -231,8 +231,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const status = id === session.id ? "active" : normalizeStatus(body.status);
   const requestedVisibleStoreIds = Array.isArray(body.visibleStoreIds) ? body.visibleStoreIds.map(String) : Array.isArray(body.storeIds) ? body.storeIds.map(String) : [];
   const requestedWorkStoreIds = Array.isArray(body.workStoreIds) ? body.workStoreIds.map(String) : [];
-  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, requestedVisibleStoreIds);
   const workStoreIds = role === "store_terminal" ? [] : filterStoreIdsForStaffAdmin(access, requestedWorkStoreIds);
+  const visibleStoreIds = filterStoreIdsForStaffAdmin(access, role === "staff" ? requestedWorkStoreIds : requestedVisibleStoreIds);
   const workStoreSettings = Array.isArray(body.workStoreSettings) ? body.workStoreSettings : [];
   const effectiveEmail = role === "store_terminal" ? "" : email;
   const effectiveNameKana = role === "store_terminal" ? null : nameKana;
@@ -606,7 +606,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), privacyConsentResetRequired, visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), privacyConsentResetRequired, scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 
