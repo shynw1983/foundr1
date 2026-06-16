@@ -18174,6 +18174,100 @@ body :where(
   line-height: 1.45;
 }
 
+.payroll-ledger-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.payroll-ledger-search {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.44fr) minmax(180px, 0.44fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-ledger-search label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.payroll-ledger-search span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payroll-ledger-search input,
+.payroll-ledger-search select {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.payroll-ledger-search .primary-button {
+  min-width: 104px;
+}
+
+.payroll-ledger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.payroll-ledger-actions .timecard-subtabs {
+  margin-bottom: 0;
+}
+
+.payroll-ledger-summary {
+  display: grid;
+  grid-template-columns: 0.48fr repeat(5, minmax(118px, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  overflow: hidden;
+}
+
+.payroll-ledger-summary div {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  align-content: center;
+  padding: 11px 14px;
+  border-right: 1px solid var(--line);
+  text-align: center;
+}
+
+.payroll-ledger-summary div:last-child {
+  border-right: 0;
+}
+
+.payroll-ledger-summary span,
+.payroll-ledger-summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.payroll-ledger-summary strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
 .timecard-table {
   width: 100%;
   min-width: 860px;
@@ -18182,7 +18276,35 @@ body :where(
 }
 
 .payroll-summary-table-wrap .timecard-table {
-  min-width: 1180px;
+  min-width: 1240px;
+}
+
+.payroll-ledger-table {
+  font-size: 13px;
+}
+
+.payroll-ledger-table th,
+.payroll-ledger-table td {
+  padding: 9px 10px;
+}
+
+.payroll-ledger-table th {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.payroll-ledger-table td:not(:first-child),
+.payroll-ledger-table th:not(:first-child) {
+  text-align: right;
+}
+
+.payroll-ledger-table td:first-child {
+  min-width: 150px;
+}
+
+.payroll-ledger-table td:last-child,
+.payroll-ledger-table th:last-child {
+  text-align: center;
 }
 
 .timecard-table th,
@@ -25778,6 +25900,32 @@ body :where(
 }
 
 @media (max-width: 960px) {
+  .payroll-ledger-search {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payroll-ledger-search .primary-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .payroll-ledger-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payroll-ledger-summary div {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .payroll-ledger-summary div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .payroll-ledger-summary div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
   .payroll-summary-table-wrap {
     display: none;
   }
@@ -25972,6 +26120,21 @@ body :where(
   .payroll-row-card-head .status-pill {
     max-width: 100%;
     width: fit-content;
+  }
+
+  .payroll-ledger-search,
+  .payroll-ledger-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .payroll-ledger-summary div,
+  .payroll-ledger-summary div:nth-child(2n) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .payroll-ledger-summary div:last-child {
+    border-bottom: 0;
   }
 
   .staff-payroll-store-row {

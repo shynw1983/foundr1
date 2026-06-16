@@ -1103,10 +1103,11 @@ export function TimecardPage({
         <header className="topbar">
           <div>
             <p className="eyebrow">出退勤、実績、給与計算</p>
-            <h2>タイムカード</h2>
+            <h2>{mainView === "payroll" ? "給与" : "タイムカード"}</h2>
             <span className="source-indicator">{isLoading ? "読み込み中" : `給与期間 ${payrollPeriod?.label ?? "月度"} 集計済み`}</span>
             {loadError ? <p className="timecard-import-message">{loadError}</p> : null}
           </div>
+          {mainView !== "payroll" ? (
           <div className="timecard-toolbar">
             <input type="month" value={month} onChange={(event) => {
               setMonth(event.target.value);
@@ -1127,8 +1128,10 @@ export function TimecardPage({
               ))}
             </select>
           </div>
+          ) : null}
         </header>
 
+        {mainView !== "payroll" ? (
         <section className="metric-grid">
               <MetricCard label="勤務日数" value={`${canViewPayroll ? totals.workDays : attendanceTotals.workDays}日`} note={`${canViewPayroll ? totals.punchCount : attendanceTotals.punchCount}件の実績`} />
               <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`時間外 ${formatDuration(canViewPayroll ? totals.overtimeMinutes ?? 0 : 0)} / 深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
@@ -1139,6 +1142,7 @@ export function TimecardPage({
             </>
           ) : null}
         </section>
+        ) : null}
 
         {data?.canEditActualTime && mainView === "schedule" ? (
           <section className="timecard-import-panel">
@@ -1537,31 +1541,94 @@ export function TimecardPage({
                 </button>
               ) : null}
             </section>
+            {payrollView === "employee" ? (
             <section className="timecard-subtabs" aria-label="給与メニュー">
-              <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>
+              <button type="button" onClick={() => setPayrollView("summary")}>
                 月別給与
               </button>
-              <button className={payrollView === "employee" ? "is-active" : ""} type="button" onClick={() => setPayrollView("employee")}>
+              <button className="is-active" type="button" onClick={() => setPayrollView("employee")}>
                 従業員別明細
               </button>
             </section>
+            ) : null}
 
             {payrollView === "summary" ? (
-              <section className="panel">
-                <div className="panel-title">
-                  <WalletCards />
+              <section className="panel payroll-ledger-panel">
+                <div className="payroll-ledger-search">
+                  <label>
+                    <span>月度（勤怠）</span>
+                    <input type="month" value={month} onChange={(event) => {
+                      setMonth(event.target.value);
+                      storeTimecardSelection(event.target.value, selectedStoreId);
+                      void loadTimecard(event.target.value, selectedStoreId);
+                    }} />
+                  </label>
+                  <label>
+                    <span>事業所</span>
+                    <select value={selectedStoreId} onChange={(event) => {
+                      setSelectedStoreId(event.target.value);
+                      storeTimecardSelection(month, event.target.value);
+                      void loadTimecard(month, event.target.value);
+                    }}>
+                      {data?.stores.map((store) => (
+                        <option value={store.id} key={store.id}>{store.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="primary-button" type="button" onClick={() => void loadTimecard(month, selectedStoreId)}>
+                    検索
+                  </button>
+                </div>
+                <div className="payroll-ledger-actions">
+                  <div className="timecard-subtabs" aria-label="給与メニュー">
+                    <button className="is-active" type="button" onClick={() => setPayrollView("summary")}>
+                      月別給与
+                    </button>
+                    <button type="button" onClick={() => setPayrollView("employee")}>
+                      従業員別明細
+                    </button>
+                  </div>
+                  {canConfirmPayrollPeriod ? (
+                    <button className="secondary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
+                      {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "最新設定で再確定" : payrollConfirmation ? "再確定" : "給与を確定"}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="payroll-ledger-summary" aria-label="月別給与合計">
                   <div>
-                    <h3>月別 給与</h3>
-                    <p>スタッフ管理の人事情報と打刻実績から概算支給額を計算します。</p>
+                    <span>勤務回数</span>
+                    <strong>{displayedPayrollTotals.punchCount}回</strong>
+                  </div>
+                  <div>
+                    <span>勤務日数</span>
+                    <strong>{displayedPayrollTotals.workDays}日</strong>
+                  </div>
+                  <div>
+                    <span>勤務時間（内深夜）</span>
+                    <strong>{formatDuration(displayedPayrollTotals.workMinutes)}</strong>
+                    <small>{formatDuration(displayedPayrollTotals.nightMinutes)}</small>
+                  </div>
+                  <div>
+                    <span>人件費</span>
+                    <strong>{formatMoney(displayedPayrollTotals.laborCost)}</strong>
+                  </div>
+                  <div>
+                    <span>交通費</span>
+                    <strong>{formatMoney(displayedPayrollTotals.commuteAllowance)}</strong>
+                  </div>
+                  <div>
+                    <span>差引支給額</span>
+                    <strong>{formatMoney(displayedPayrollTotals.totalPay)}</strong>
                   </div>
                 </div>
                 <div className="timecard-table-wrap payroll-summary-table-wrap">
-                  <table className="timecard-table">
+                  <table className="timecard-table payroll-ledger-table">
                     <thead>
                       <tr>
                         <th>従業員</th>
-                        <th>勤務</th>
-                        <th>勤務時間</th>
+                        <th>賃金設定</th>
+                        <th>勤務回数<br />勤務日数</th>
+                        <th>勤務時間<br />（内深夜）</th>
                         <th>基本給</th>
                         <th>時間外</th>
                         <th>深夜割増</th>
@@ -1581,8 +1648,9 @@ export function TimecardPage({
                             <strong>{row.employeeName}</strong>
                             <span>{row.storeNames.join("、") || "店舗未設定"}</span>
                           </td>
-                          <td>{row.workDays}日 / {row.punchCount}回</td>
-                          <td>{formatDuration(row.workMinutes)}</td>
+                          <td>{row.employmentType === "monthly" ? "月給" : row.employmentType === "hourly" ? "時給" : "店舗別"}<span>深夜・時間外</span></td>
+                          <td>{row.punchCount}回<span>{row.workDays}日</span></td>
+                          <td>{formatDuration(row.workMinutes)}<span>{formatDuration(row.nightMinutes)}</span></td>
                           <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
                           <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
                           <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
