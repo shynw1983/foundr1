@@ -18,6 +18,13 @@ type StaffPayload = {
   businessType?: string;
   isForeignNational?: boolean;
   employeeType?: string;
+  payrollBankCode?: string;
+  payrollBankName?: string;
+  payrollBranchCode?: string;
+  payrollBranchName?: string;
+  payrollAccountType?: string;
+  payrollAccountNumber?: string;
+  payrollAccountHolderKana?: string;
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
@@ -104,12 +111,25 @@ function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
 }
 
+function normalizePayrollAccountType(type?: string) {
+  return type === "current" || type === "savings" ? type : "ordinary";
+}
+
 function normalizeIncomeTaxCategory(category?: string) {
   return category === "kou" || category === "otsu" ? category : "none";
 }
 
 function toNullableText(value: string | undefined) {
   const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function toDigits(value: string | undefined) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function normalizeBankKana(value: string | undefined) {
+  const text = String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
   return text || null;
 }
 
@@ -217,6 +237,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
   const isForeignNational = Boolean(body.isForeignNational);
+  const payrollBankCode = toDigits(body.payrollBankCode);
+  const payrollBankName = toNullableText(body.payrollBankName);
+  const payrollBranchCode = toDigits(body.payrollBranchCode);
+  const payrollBranchName = toNullableText(body.payrollBranchName);
+  const payrollAccountType = normalizePayrollAccountType(body.payrollAccountType);
+  const payrollAccountNumber = toDigits(body.payrollAccountNumber);
+  const payrollAccountHolderKana = normalizeBankKana(body.payrollAccountHolderKana);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -240,6 +267,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
   const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
   const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
+  const effectivePayrollBankCode = role === "store_terminal" ? null : payrollBankCode || null;
+  const effectivePayrollBankName = role === "store_terminal" ? null : payrollBankName;
+  const effectivePayrollBranchCode = role === "store_terminal" ? null : payrollBranchCode || null;
+  const effectivePayrollBranchName = role === "store_terminal" ? null : payrollBranchName;
+  const effectivePayrollAccountType = role === "store_terminal" ? "ordinary" : payrollAccountType;
+  const effectivePayrollAccountNumber = role === "store_terminal" ? null : payrollAccountNumber || null;
+  const effectivePayrollAccountHolderKana = role === "store_terminal" ? null : payrollAccountHolderKana;
   const effectiveLarkOpenId = role === "store_terminal" ? "" : larkOpenId;
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
@@ -283,6 +317,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           address = ${effectiveAddress},
           birth_date = ${effectiveBirthDate},
           is_foreign_national = ${effectiveIsForeignNational},
+          payroll_bank_code = ${effectivePayrollBankCode},
+          payroll_bank_name = ${effectivePayrollBankName},
+          payroll_branch_code = ${effectivePayrollBranchCode},
+          payroll_branch_name = ${effectivePayrollBranchName},
+          payroll_account_type = ${effectivePayrollAccountType},
+          payroll_account_number = ${effectivePayrollAccountNumber},
+          payroll_account_holder_kana = ${effectivePayrollAccountHolderKana},
           lark_open_id = ${effectiveLarkOpenId || null},
           lark_user_id = ${effectiveLarkUserId || null},
           role = ${role},
@@ -308,6 +349,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           address = ${effectiveAddress},
           birth_date = ${effectiveBirthDate},
           is_foreign_national = ${effectiveIsForeignNational},
+          payroll_bank_code = ${effectivePayrollBankCode},
+          payroll_bank_name = ${effectivePayrollBankName},
+          payroll_branch_code = ${effectivePayrollBranchCode},
+          payroll_branch_name = ${effectivePayrollBranchName},
+          payroll_account_type = ${effectivePayrollAccountType},
+          payroll_account_number = ${effectivePayrollAccountNumber},
+          payroll_account_holder_kana = ${effectivePayrollAccountHolderKana},
           lark_open_id = ${effectiveLarkOpenId || null},
           lark_user_id = ${effectiveLarkUserId || null},
           role = ${role},

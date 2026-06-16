@@ -3,7 +3,7 @@
 import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import type { MouseEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -126,6 +126,19 @@ type PayrollConfirmation = {
   payrollTotals: PayrollTotals;
 };
 
+type PayrollPaymentBatch = {
+  id: string;
+  payrollMonth: string;
+  paymentDate: string;
+  bankProvider: string;
+  fileFormat: string;
+  fileName: string;
+  totalAmount: number;
+  transferCount: number;
+  status: string;
+  createdAt: string;
+  createdByName: string | null;
+};
 
 type TimecardPayload = {
   month: string;
@@ -798,6 +811,9 @@ export function TimecardPage({
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
   const [isConfirmingPayroll, setIsConfirmingPayroll] = useState(false);
+  const [isCreatingPayrollPayment, setIsCreatingPayrollPayment] = useState(false);
+  const [payrollPaymentMessage, setPayrollPaymentMessage] = useState("");
+  const [payrollPaymentBatches, setPayrollPaymentBatches] = useState<PayrollPaymentBatch[]>([]);
   const [attendanceCsvFile, setAttendanceCsvFile] = useState<File | null>(null);
   const [attendanceImportMessage, setAttendanceImportMessage] = useState("");
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
@@ -822,6 +838,11 @@ export function TimecardPage({
       setMonth(body.month);
       setSelectedStoreId(body.selectedStoreId);
       storeTimecardSelection(body.month, body.selectedStoreId);
+      if (body.canViewPayroll) {
+        void loadPayrollPaymentBatches(body.month, body.selectedStoreId);
+      } else {
+        setPayrollPaymentBatches([]);
+      }
       if (!options.keepShiftDraft) setShiftDraft(null);
       if (!options.keepActualDraft) setActualDraft(null);
     } catch {
@@ -912,6 +933,7 @@ export function TimecardPage({
     [month, selectedStore]
   );
   const canConfirmPayrollPeriod = Boolean(payrollPeriod && getTodayJstDateKey() >= payrollPeriod.endDate);
+  const canCreatePayrollPaymentFile = Boolean(payrollConfirmation && !payrollConfirmationNeedsRefresh && displayedPayrollRows.length);
   const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
   const todayKey = getTodayJstDateKey();
   const selectedStoreBusinessHours = useMemo(
@@ -1310,6 +1332,84 @@ export function TimecardPage({
       window.alert(body.error ?? "給与を確定できませんでした。");
     }
     setIsConfirmingPayroll(false);
+  }
+
+  async function loadPayrollPaymentBatches(nextMonth = month, nextStoreId = selectedStoreId) {
+    if (!nextStoreId) return;
+    const params = new URLSearchParams({ month: nextMonth, storeId: nextStoreId });
+    const response = await fetch(`/api/timecard/payroll-payments?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) {
+      setPayrollPaymentBatches([]);
+      return;
+    }
+    const body = await response.json().catch(() => ({})) as { batches?: PayrollPaymentBatch[] };
+    setPayrollPaymentBatches(body.batches ?? []);
+  }
+
+  async function createPayrollPaymentFile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canCreatePayrollPaymentFile || !selectedStoreId) {
+      setPayrollPaymentMessage("給与確定後に振込ファイルを作成できます。");
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    setIsCreatingPayrollPayment(true);
+    setPayrollPaymentMessage("");
+    const response = await fetch("/api/timecard/payroll-payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeId: selectedStoreId,
+        month,
+        paymentDate: String(formData.get("paymentDate") ?? ""),
+        bankProvider: String(formData.get("bankProvider") ?? "fukuoka"),
+        fileFormat: String(formData.get("fileFormat") ?? "zengin"),
+        transferType: String(formData.get("transferType") ?? "salary"),
+        companyCode: String(formData.get("companyCode") ?? ""),
+        companyName: String(formData.get("companyName") ?? ""),
+        debitBankCode: String(formData.get("debitBankCode") ?? ""),
+        debitBankName: String(formData.get("debitBankName") ?? ""),
+        debitBranchCode: String(formData.get("debitBranchCode") ?? ""),
+        debitBranchName: String(formData.get("debitBranchName") ?? ""),
+        debitAccountType: String(formData.get("debitAccountType") ?? "ordinary"),
+        debitAccountNumber: String(formData.get("debitAccountNumber") ?? ""),
+        debitAccountHolderKana: String(formData.get("debitAccountHolderKana") ?? "")
+      })
+    });
+    const body = await response.json().catch(() => ({})) as {
+      error?: string;
+      fileName?: string;
+      fileContent?: string;
+      totalAmount?: number;
+      transferCount?: number;
+      itemErrors?: Array<{ employeeName?: string; alerts?: string[] }>;
+      originAlerts?: string[];
+    };
+    if (!response.ok || !body.fileName || typeof body.fileContent !== "string") {
+      const detail = body.itemErrors?.length
+        ? body.itemErrors.slice(0, 4).map((item) => `${item.employeeName ?? "スタッフ"}: ${(item.alerts ?? []).join("、")}`).join(" / ")
+        : body.originAlerts?.length
+          ? body.originAlerts.join("、")
+          : "";
+      setPayrollPaymentMessage(`${body.error ?? "振込ファイルを作成できませんでした。"}${detail ? ` ${detail}` : ""}`);
+      setIsCreatingPayrollPayment(false);
+      return;
+    }
+
+    const blob = new Blob([body.fileContent], { type: body.fileName.endsWith(".csv") ? "text/csv;charset=utf-8" : "text/plain;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = body.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    setPayrollPaymentMessage(`振込ファイルを作成しました。${body.transferCount ?? 0}件 / ${formatMoney(body.totalAmount ?? 0)}`);
+    await loadPayrollPaymentBatches(month, selectedStoreId);
+    setIsCreatingPayrollPayment(false);
   }
 
   async function fileToBase64(file: File) {
@@ -1871,6 +1971,97 @@ export function TimecardPage({
                     </button>
                   ) : null}
                 </div>
+                <form className="payroll-payment-panel" onSubmit={createPayrollPaymentFile}>
+                  <div className="payroll-payment-head">
+                    <div>
+                      <strong>給与振込ファイル</strong>
+                      <span>{canCreatePayrollPaymentFile ? "確定済み給与から銀行アップロード用ファイルを作成します。" : "給与確定後に作成できます。"}</span>
+                    </div>
+                    <button className="secondary-button" type="submit" disabled={!canCreatePayrollPaymentFile || isCreatingPayrollPayment}>
+                      <Download size={16} />
+                      {isCreatingPayrollPayment ? "作成中" : "ファイル作成"}
+                    </button>
+                  </div>
+                  <div className="payroll-payment-grid">
+                    <label>
+                      <span>銀行</span>
+                      <select name="bankProvider" defaultValue="fukuoka">
+                        <option value="fukuoka">福岡銀行</option>
+                        <option value="gmo_aozora">GMOあおぞら</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>形式</span>
+                      <select name="fileFormat" defaultValue="zengin">
+                        <option value="zengin">全銀テキスト</option>
+                        <option value="gmo_csv">GMO CSV</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>種別</span>
+                      <select name="transferType" defaultValue="salary">
+                        <option value="salary">給与振込</option>
+                        <option value="bonus">賞与振込</option>
+                        <option value="general">総合振込</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>振込指定日</span>
+                      <input name="paymentDate" type="date" defaultValue={getTodayJstDateKey()} />
+                    </label>
+                    <label>
+                      <span>委託者コード</span>
+                      <input name="companyCode" inputMode="numeric" maxLength={10} placeholder="銀行契約の10桁" />
+                    </label>
+                    <label>
+                      <span>委託者名カナ</span>
+                      <input name="companyName" placeholder="例: FOUNDR1" />
+                    </label>
+                    <label>
+                      <span>出金銀行コード</span>
+                      <input name="debitBankCode" inputMode="numeric" maxLength={4} placeholder="例: 0177" />
+                    </label>
+                    <label>
+                      <span>出金銀行名</span>
+                      <input name="debitBankName" placeholder="例: 福岡銀行" />
+                    </label>
+                    <label>
+                      <span>出金支店コード</span>
+                      <input name="debitBranchCode" inputMode="numeric" maxLength={3} placeholder="例: 200" />
+                    </label>
+                    <label>
+                      <span>出金支店名</span>
+                      <input name="debitBranchName" placeholder="例: 天神町支店" />
+                    </label>
+                    <label>
+                      <span>出金口座種別</span>
+                      <select name="debitAccountType" defaultValue="ordinary">
+                        <option value="ordinary">普通</option>
+                        <option value="current">当座</option>
+                        <option value="savings">貯蓄</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>出金口座番号</span>
+                      <input name="debitAccountNumber" inputMode="numeric" maxLength={7} placeholder="7桁" />
+                    </label>
+                    <label>
+                      <span>出金口座名義カナ</span>
+                      <input name="debitAccountHolderKana" placeholder="例: FOUNDR1" />
+                    </label>
+                  </div>
+                  {payrollPaymentMessage ? <p className="payroll-payment-message">{payrollPaymentMessage}</p> : null}
+                  {payrollPaymentBatches.length ? (
+                    <div className="payroll-payment-history">
+                      {payrollPaymentBatches.slice(0, 3).map((batch) => (
+                        <div key={batch.id}>
+                          <strong>{batch.fileName}</strong>
+                          <span>{batch.paymentDate} / {batch.transferCount}件 / {formatMoney(batch.totalAmount)} / {batch.createdByName ?? "作成者未記録"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </form>
                 <div className="payroll-ledger-summary" aria-label="月別給与合計">
                   <div>
                     <span>勤務回数</span>

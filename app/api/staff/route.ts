@@ -18,6 +18,13 @@ type StaffPayload = {
   businessType?: string;
   isForeignNational?: boolean;
   employeeType?: string;
+  payrollBankCode?: string;
+  payrollBankName?: string;
+  payrollBranchCode?: string;
+  payrollBranchName?: string;
+  payrollAccountType?: string;
+  payrollAccountNumber?: string;
+  payrollAccountHolderKana?: string;
   larkOpenId?: string;
   larkUserId?: string;
   password?: string;
@@ -104,12 +111,25 @@ function normalizeEmploymentType(type?: string) {
   return type === "monthly" ? "monthly" : "hourly";
 }
 
+function normalizePayrollAccountType(type?: string) {
+  return type === "current" || type === "savings" ? type : "ordinary";
+}
+
 function normalizeIncomeTaxCategory(category?: string) {
   return category === "kou" || category === "otsu" ? category : "none";
 }
 
 function toNullableText(value: string | undefined) {
   const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function toDigits(value: string | undefined) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function normalizeBankKana(value: string | undefined) {
+  const text = String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
   return text || null;
 }
 
@@ -190,6 +210,13 @@ export async function GET() {
       employees.address,
       employees.birth_date as "birthDate",
       employees.is_foreign_national as "isForeignNational",
+      employees.payroll_bank_code as "payrollBankCode",
+      employees.payroll_bank_name as "payrollBankName",
+      employees.payroll_branch_code as "payrollBranchCode",
+      employees.payroll_branch_name as "payrollBranchName",
+      coalesce(employees.payroll_account_type, 'ordinary') as "payrollAccountType",
+      employees.payroll_account_number as "payrollAccountNumber",
+      employees.payroll_account_holder_kana as "payrollAccountHolderKana",
       employees.lark_open_id as "larkOpenId",
       employees.lark_user_id as "larkUserId",
       coalesce(employees.password_must_change, false) as "passwordMustChange",
@@ -377,6 +404,13 @@ export async function POST(request: Request) {
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
   const isForeignNational = Boolean(body.isForeignNational);
+  const payrollBankCode = toDigits(body.payrollBankCode);
+  const payrollBankName = toNullableText(body.payrollBankName);
+  const payrollBranchCode = toDigits(body.payrollBranchCode);
+  const payrollBranchName = toNullableText(body.payrollBranchName);
+  const payrollAccountType = normalizePayrollAccountType(body.payrollAccountType);
+  const payrollAccountNumber = toDigits(body.payrollAccountNumber);
+  const payrollAccountHolderKana = normalizeBankKana(body.payrollAccountHolderKana);
   const larkOpenId = String(body.larkOpenId ?? "").trim();
   const larkUserId = String(body.larkUserId ?? "").trim();
   const password = String(body.password ?? "");
@@ -400,6 +434,13 @@ export async function POST(request: Request) {
   const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
   const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
   const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
+  const effectivePayrollBankCode = role === "store_terminal" ? null : payrollBankCode || null;
+  const effectivePayrollBankName = role === "store_terminal" ? null : payrollBankName;
+  const effectivePayrollBranchCode = role === "store_terminal" ? null : payrollBranchCode || null;
+  const effectivePayrollBranchName = role === "store_terminal" ? null : payrollBranchName;
+  const effectivePayrollAccountType = role === "store_terminal" ? "ordinary" : payrollAccountType;
+  const effectivePayrollAccountNumber = role === "store_terminal" ? null : payrollAccountNumber || null;
+  const effectivePayrollAccountHolderKana = role === "store_terminal" ? null : payrollAccountHolderKana;
   const effectiveLarkOpenId = role === "store_terminal" ? "" : larkOpenId;
   const effectiveLarkUserId = role === "store_terminal" ? "" : larkUserId;
   const effectiveStaffCategory = role === "store_terminal" ? "device" : staffCategory;
@@ -433,6 +474,13 @@ export async function POST(request: Request) {
       address,
       birth_date,
       is_foreign_national,
+      payroll_bank_code,
+      payroll_bank_name,
+      payroll_branch_code,
+      payroll_branch_name,
+      payroll_account_type,
+      payroll_account_number,
+      payroll_account_holder_kana,
       lark_open_id,
       lark_user_id,
       role,
@@ -453,6 +501,13 @@ export async function POST(request: Request) {
       ${effectiveAddress},
       ${effectiveBirthDate},
       ${effectiveIsForeignNational},
+      ${effectivePayrollBankCode},
+      ${effectivePayrollBankName},
+      ${effectivePayrollBranchCode},
+      ${effectivePayrollBranchName},
+      ${effectivePayrollAccountType},
+      ${effectivePayrollAccountNumber},
+      ${effectivePayrollAccountHolderKana},
       ${effectiveLarkOpenId || null},
       ${effectiveLarkUserId || null},
       ${role},

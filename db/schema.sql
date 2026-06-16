@@ -231,6 +231,13 @@ alter table employees add column if not exists resignation_reason text;
 alter table employees add column if not exists business_type text;
 alter table employees add column if not exists is_foreign_national boolean not null default false;
 alter table employees add column if not exists employee_type text not null default 'part_time';
+alter table employees add column if not exists payroll_bank_code text;
+alter table employees add column if not exists payroll_bank_name text;
+alter table employees add column if not exists payroll_branch_code text;
+alter table employees add column if not exists payroll_branch_name text;
+alter table employees add column if not exists payroll_account_type text not null default 'ordinary';
+alter table employees add column if not exists payroll_account_number text;
+alter table employees add column if not exists payroll_account_holder_kana text;
 update employees
 set staff_category = 'device',
     payroll_subject = 'none'
@@ -989,6 +996,77 @@ create table if not exists timecard_payroll_confirmations (
 
 create index if not exists idx_timecard_payroll_confirmations_store_month
   on timecard_payroll_confirmations(store_id, payroll_month);
+
+create table if not exists payroll_payment_batches (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  payroll_confirmation_id uuid references timecard_payroll_confirmations(id) on delete set null,
+  payroll_month text not null,
+  payment_date date not null,
+  bank_provider text not null default 'zengin',
+  transfer_type text not null default 'salary',
+  company_name text not null default '',
+  debit_bank_code text not null default '',
+  debit_bank_name text not null default '',
+  debit_branch_code text not null default '',
+  debit_branch_name text not null default '',
+  debit_account_type text not null default 'ordinary',
+  debit_account_number text not null default '',
+  debit_account_holder_kana text not null default '',
+  total_amount numeric(12, 0) not null default 0,
+  transfer_count integer not null default 0,
+  file_format text not null default 'zengin',
+  file_name text not null default '',
+  file_sha256 text not null default '',
+  status text not null default 'exported',
+  bank_receipt_number text,
+  bank_result_note text not null default '',
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table payroll_payment_batches add column if not exists payroll_confirmation_id uuid references timecard_payroll_confirmations(id) on delete set null;
+alter table payroll_payment_batches add column if not exists transfer_type text not null default 'salary';
+alter table payroll_payment_batches add column if not exists debit_bank_code text not null default '';
+alter table payroll_payment_batches add column if not exists debit_bank_name text not null default '';
+alter table payroll_payment_batches add column if not exists debit_branch_code text not null default '';
+alter table payroll_payment_batches add column if not exists debit_branch_name text not null default '';
+alter table payroll_payment_batches add column if not exists debit_account_type text not null default 'ordinary';
+alter table payroll_payment_batches add column if not exists debit_account_number text not null default '';
+alter table payroll_payment_batches add column if not exists debit_account_holder_kana text not null default '';
+alter table payroll_payment_batches add column if not exists file_sha256 text not null default '';
+alter table payroll_payment_batches add column if not exists bank_receipt_number text;
+alter table payroll_payment_batches add column if not exists bank_result_note text not null default '';
+
+create index if not exists payroll_payment_batches_store_month_idx
+  on payroll_payment_batches(store_id, payroll_month, created_at desc);
+
+create table if not exists payroll_payment_batch_items (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null references payroll_payment_batches(id) on delete cascade,
+  employee_id uuid references employees(id) on delete set null,
+  employee_name text not null default '',
+  employee_name_kana text,
+  bank_code text not null default '',
+  bank_name text not null default '',
+  branch_code text not null default '',
+  branch_name text not null default '',
+  account_type text not null default 'ordinary',
+  account_number text not null default '',
+  account_holder_kana text not null default '',
+  transfer_amount numeric(12, 0) not null default 0,
+  row_alerts jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table payroll_payment_batch_items add column if not exists employee_name_kana text;
+alter table payroll_payment_batch_items add column if not exists bank_name text not null default '';
+alter table payroll_payment_batch_items add column if not exists branch_name text not null default '';
+alter table payroll_payment_batch_items add column if not exists row_alerts jsonb not null default '[]'::jsonb;
+
+create index if not exists payroll_payment_batch_items_batch_idx
+  on payroll_payment_batch_items(batch_id);
 
 create table if not exists timecard_workload_settings (
   id uuid primary key default gen_random_uuid(),

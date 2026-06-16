@@ -18268,6 +18268,101 @@ body :where(
   line-height: 1.2;
 }
 
+.payroll-payment-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.payroll-payment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.payroll-payment-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.payroll-payment-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.payroll-payment-head span,
+.payroll-payment-message,
+.payroll-payment-history span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.payroll-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.payroll-payment-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.payroll-payment-grid span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payroll-payment-grid input,
+.payroll-payment-grid select {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.payroll-payment-message {
+  margin: 0;
+  color: var(--danger);
+}
+
+.payroll-payment-history {
+  display: grid;
+  gap: 6px;
+}
+
+.payroll-payment-history div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-payment-history strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-all;
+}
 
 .timecard-table {
   width: 100%;
@@ -26064,6 +26159,9 @@ body :where(
     border-bottom: 0;
   }
 
+  .payroll-payment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   .payroll-statement-summary,
   .payroll-statement-breakdown {
@@ -26276,10 +26374,15 @@ body :where(
   }
 
   .payroll-ledger-search,
-  .payroll-ledger-summary {
+  .payroll-ledger-summary,
+  .payroll-payment-grid {
     grid-template-columns: 1fr;
   }
 
+  .payroll-payment-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
 
   .payroll-ledger-summary div,
   .payroll-ledger-summary div:nth-child(2n) {

@@ -80,6 +80,13 @@ type StaffMember = {
   address?: string | null;
   birthDate?: string | null;
   isForeignNational?: boolean | null;
+  payrollBankCode?: string | null;
+  payrollBankName?: string | null;
+  payrollBranchCode?: string | null;
+  payrollBranchName?: string | null;
+  payrollAccountType?: string | null;
+  payrollAccountNumber?: string | null;
+  payrollAccountHolderKana?: string | null;
   larkOpenId?: string | null;
   larkUserId?: string | null;
   passwordMustChange?: boolean | null;
@@ -386,6 +393,13 @@ export default function StaffPage() {
       address: String(formData.get("address") ?? ""),
       birthDate: String(formData.get("birthDate") ?? ""),
       isForeignNational: formData.get("isForeignNational") === "true",
+      payrollBankCode: String(formData.get("payrollBankCode") ?? ""),
+      payrollBankName: String(formData.get("payrollBankName") ?? ""),
+      payrollBranchCode: String(formData.get("payrollBranchCode") ?? ""),
+      payrollBranchName: String(formData.get("payrollBranchName") ?? ""),
+      payrollAccountType: String(formData.get("payrollAccountType") ?? "ordinary"),
+      payrollAccountNumber: String(formData.get("payrollAccountNumber") ?? ""),
+      payrollAccountHolderKana: String(formData.get("payrollAccountHolderKana") ?? ""),
       larkOpenId: String(formData.get("larkOpenId") ?? ""),
       larkUserId: String(formData.get("larkUserId") ?? ""),
       password: String(formData.get("password") ?? ""),
@@ -1060,6 +1074,42 @@ function StaffFormFields({
                 <option value="false">該当しない</option>
                 <option value="true">該当する</option>
               </select>
+            </label>
+            <div className="staff-payroll-guide">
+              <strong>給与振込口座</strong>
+              <p>給与確定後の銀行アップロードファイルに使います。受取人名義は銀行指定の半角カナ・英数で入力してください。</p>
+            </div>
+            <label>
+              <span>銀行コード</span>
+              <input name="payrollBankCode" inputMode="numeric" maxLength={4} defaultValue={member?.payrollBankCode ?? ""} placeholder="例: 0177" />
+            </label>
+            <label>
+              <span>銀行名</span>
+              <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行" />
+            </label>
+            <label>
+              <span>支店コード</span>
+              <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" />
+            </label>
+            <label>
+              <span>支店名</span>
+              <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神町支店" />
+            </label>
+            <label>
+              <span>口座種別</span>
+              <select name="payrollAccountType" defaultValue={member?.payrollAccountType ?? "ordinary"}>
+                <option value="ordinary">普通</option>
+                <option value="current">当座</option>
+                <option value="savings">貯蓄</option>
+              </select>
+            </label>
+            <label>
+              <span>口座番号</span>
+              <input name="payrollAccountNumber" inputMode="numeric" maxLength={7} defaultValue={member?.payrollAccountNumber ?? ""} placeholder="7桁" />
+            </label>
+            <label>
+              <span>受取人名義カナ</span>
+              <input name="payrollAccountHolderKana" defaultValue={member?.payrollAccountHolderKana ?? ""} placeholder="例: ﾔﾏﾀﾞ ﾀﾛｳ" />
             </label>
           </>
         ) : null}
