@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { MouseEvent } from "react";
@@ -126,6 +126,7 @@ type PayrollConfirmation = {
   payrollTotals: PayrollTotals;
 };
 
+
 type TimecardPayload = {
   month: string;
   canViewPayroll: boolean;
@@ -233,6 +234,241 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getPayrollStatementFilename(row: PayrollRow, month: string) {
+  const safeName = row.employeeName.replace(/[\\/:*?"<>|]+/g, "_").trim() || "employee";
+  return `給与明細${month.replace("-", "年")}月_${safeName}.pdf`;
+}
+
+function buildPayrollStatementPrintHtml(row: PayrollRow, days: DailySummary[], month: string, periodLabel: string) {
+  const dailyRows = days.length
+    ? days.map((day) => `
+      <tr>
+        <td>${escapeHtml(day.workDate)}</td>
+        <td>${escapeHtml(day.storeName)}</td>
+        <td>${escapeHtml(formatJstTime(day.clockIn) ?? "--:--")} - ${escapeHtml(formatJstTime(day.clockOut) ?? "--:--")}</td>
+        <td>${escapeHtml(formatDuration(day.workMinutes))}</td>
+        <td>${escapeHtml(formatDuration(day.breakMinutes))}</td>
+        <td>${escapeHtml(formatDuration(day.nightMinutes))}</td>
+        <td>${escapeHtml(day.alerts.length ? day.alerts.join("、") : "OK")}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="7">この従業員の打刻実績はまだありません。</td></tr>`;
+
+  const detailRows = [
+    ["勤務日数", `${row.workDays}日 / ${row.punchCount}回`],
+    ["勤務時間", formatDuration(row.workMinutes)],
+    ["時間外", `${formatPayrollDetailMoney(row.overtimePay ?? 0)} / ${formatDuration(row.overtimeMinutes ?? 0)}`],
+    ["深夜割増", `${formatPayrollDetailMoney(row.nightPremiumPay ?? 0)} / ${formatDuration(row.nightMinutes)}`],
+    ["基本給", formatMoney(row.regularPay ?? row.basePay)],
+    ["交通費", formatMoney(row.commuteAllowance)],
+    ["社会保険", formatMoney(row.socialInsurance ?? 0)],
+    ["雇用保険", formatMoney(row.employmentInsurance ?? 0)],
+    ["源泉所得税", formatMoney(row.incomeTax ?? 0)],
+    ["住民税", formatMoney(row.residentTax ?? 0)],
+    ["差引支給額", formatMoney(row.totalPay)]
+  ];
+
+  return `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(getPayrollStatementFilename(row, month))}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef2f5;
+      color: #16211f;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 16px auto;
+      padding: 18mm;
+      background: white;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
+    }
+    .print-actions {
+      position: sticky;
+      top: 0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px;
+      background: rgba(238, 242, 245, 0.92);
+      backdrop-filter: blur(8px);
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 14px;
+      background: #137a5f;
+      color: white;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .head {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 2px solid #16211f;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .meta {
+      color: #64736f;
+      text-align: right;
+    }
+    .employee {
+      margin-bottom: 18px;
+      padding: 12px 14px;
+      border: 1px solid #d8e2df;
+      border-radius: 8px;
+      background: #f7faf9;
+    }
+    .employee strong {
+      display: block;
+      font-size: 18px;
+      font-weight: 650;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid #d8e2df;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .summary div {
+      padding: 10px 12px;
+      border-right: 1px solid #d8e2df;
+      background: #fbfdfc;
+    }
+    .summary div:last-child { border-right: 0; }
+    .summary span {
+      display: block;
+      color: #64736f;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .summary strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 18px;
+      font-weight: 650;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 18px;
+    }
+    th, td {
+      border: 1px solid #d8e2df;
+      padding: 8px 9px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eff5f3;
+      color: #41504c;
+      font-weight: 650;
+    }
+    td:last-child,
+    .amount {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .total-row th,
+    .total-row td {
+      background: #e9f6f1;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: white; }
+      .print-actions { display: none; }
+      .sheet {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-actions">
+    <button type="button" onclick="window.print()">PDFとして保存 / 印刷</button>
+  </div>
+  <main class="sheet">
+    <header class="head">
+      <div>
+        <h1>給与明細</h1>
+        <p>${escapeHtml(periodLabel)}</p>
+      </div>
+      <div class="meta">
+        <p>Foundr1 OS</p>
+        <p>${escapeHtml(new Date().toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }))}</p>
+      </div>
+    </header>
+    <section class="employee">
+      <span>従業員</span>
+      <strong>${escapeHtml(row.employeeName)}</strong>
+      <span>${escapeHtml(row.storeNames.join("、") || "店舗未設定")}</span>
+    </section>
+    <section class="summary">
+      <div><span>勤務日数</span><strong>${escapeHtml(`${row.workDays}日`)}</strong></div>
+      <div><span>勤務時間</span><strong>${escapeHtml(formatDuration(row.workMinutes))}</strong></div>
+      <div><span>総支給額</span><strong>${escapeHtml(formatMoney(row.basePay + row.commuteAllowance))}</strong></div>
+      <div><span>差引支給額</span><strong>${escapeHtml(formatMoney(row.totalPay))}</strong></div>
+    </section>
+    <table>
+      <tbody>
+        ${detailRows.map(([label, value]) => `
+          <tr class="${label === "差引支給額" ? "total-row" : ""}">
+            <th>${escapeHtml(label)}</th>
+            <td class="amount">${escapeHtml(value)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>店舗</th>
+          <th>出退勤</th>
+          <th>勤務時間</th>
+          <th>休憩</th>
+          <th>深夜</th>
+          <th>確認</th>
+        </tr>
+      </thead>
+      <tbody>${dailyRows}</tbody>
+    </table>
+  </main>
+</body>
+</html>`;
 }
 
 function MetricCard({ label, value, note }: { label: string; value: string; note: string }) {
@@ -504,6 +740,12 @@ type TimecardMainView = "overview" | "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
 type TimecardPayrollView = "summary" | "employee";
 
+function getTimecardPageTitle(mainView: TimecardMainView) {
+  if (mainView === "schedule") return "シフト";
+  if (mainView === "payroll") return "給与";
+  return "タイムカード";
+}
+
 const timecardMonthStorageKey = "foundr1:timecard:selected-month";
 const timecardStoreStorageKey = "foundr1:timecard:selected-store-id";
 
@@ -542,6 +784,7 @@ export function TimecardPage({
   const [scheduleView, setScheduleView] = useState<TimecardScheduleView>(initialScheduleView);
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
+  const [isPayrollStatementOpen, setIsPayrollStatementOpen] = useState(initialPayrollView === "employee");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
   const [isShiftMultiSelectMode, setIsShiftMultiSelectMode] = useState(false);
   const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
@@ -560,6 +803,7 @@ export function TimecardPage({
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
   const [isAttendanceImportOpen, setIsAttendanceImportOpen] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
+  const payrollStatementRef = useRef<HTMLElement | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
     setIsLoading(true);
@@ -964,6 +1208,33 @@ export function TimecardPage({
     });
   }
 
+  function openPayrollStatement(employeeId: string) {
+    setSelectedPayrollEmployeeId(employeeId);
+    setPayrollView("employee");
+    setIsPayrollStatementOpen(true);
+    window.setTimeout(() => {
+      payrollStatementRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
+  function openPayrollStatementPdf(row: PayrollRow) {
+    const statementDays = data?.dailySummaries.filter((day) => day.employeeId === row.employeeId) ?? [];
+    const periodLabel = payrollPeriod
+      ? `${payrollPeriod.startDate} - ${payrollPeriod.endDate}`
+      : month;
+    const printWindow = window.open("", "_blank", "width=920,height=1200");
+    if (!printWindow) {
+      window.alert("給与明細PDFを開けませんでした。ポップアップ許可を確認してください。");
+      return;
+    }
+    printWindow.document.write(buildPayrollStatementPrintHtml(row, statementDays, month, periodLabel));
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => {
+      printWindow.print();
+    }, 400);
+  }
+
   async function saveActualTime() {
     if (!actualDraft || !selectedStoreId) return;
     setIsSavingShift(true);
@@ -1103,7 +1374,7 @@ export function TimecardPage({
         <header className="topbar">
           <div>
             <p className="eyebrow">出退勤、実績、給与計算</p>
-            <h2>{mainView === "payroll" ? "給与" : "タイムカード"}</h2>
+            <h2>{getTimecardPageTitle(mainView)}</h2>
             <span className="source-indicator">{isLoading ? "読み込み中" : `給与期間 ${payrollPeriod?.label ?? "月度"} 集計済み`}</span>
             {loadError ? <p className="timecard-import-message">{loadError}</p> : null}
           </div>
@@ -1546,13 +1817,16 @@ export function TimecardPage({
               <button type="button" onClick={() => setPayrollView("summary")}>
                 月別給与
               </button>
-              <button className="is-active" type="button" onClick={() => setPayrollView("employee")}>
+              <button className="is-active" type="button" onClick={() => {
+                setPayrollView("employee");
+                setIsPayrollStatementOpen(true);
+              }}>
                 従業員別明細
               </button>
             </section>
             ) : null}
 
-            {payrollView === "summary" ? (
+            {payrollView === "summary" || isPayrollStatementOpen ? (
               <section className="panel payroll-ledger-panel">
                 <div className="payroll-ledger-search">
                   <label>
@@ -1584,7 +1858,10 @@ export function TimecardPage({
                     <button className="is-active" type="button" onClick={() => setPayrollView("summary")}>
                       月別給与
                     </button>
-                    <button type="button" onClick={() => setPayrollView("employee")}>
+                    <button type="button" onClick={() => {
+                      setPayrollView("employee");
+                      setIsPayrollStatementOpen(true);
+                    }}>
                       従業員別明細
                     </button>
                   </div>
@@ -1639,6 +1916,7 @@ export function TimecardPage({
                         <th>住民税</th>
                         <th>差引支給額</th>
                         <th>確認</th>
+                        <th>給与明細</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1661,10 +1939,20 @@ export function TimecardPage({
                           <td>{formatMoney(row.residentTax ?? 0)}</td>
                           <td><strong>{formatMoney(row.totalPay)}</strong></td>
                           <td>{row.alerts.length ? <span className="status-pill is-warning">{row.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                          <td>
+                            <div className="payroll-statement-actions">
+                              <button className="text-button" type="button" onClick={() => openPayrollStatement(row.employeeId)}>
+                                明細
+                              </button>
+                              <button className="text-button" type="button" onClick={() => openPayrollStatementPdf(row)}>
+                                PDF
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={13}>この月の打刻実績はまだありません。</td>
+                          <td colSpan={15}>この月の打刻実績はまだありません。</td>
                         </tr>
                       )}
                     </tbody>
@@ -1730,11 +2018,101 @@ export function TimecardPage({
                           <strong>{formatMoney(row.residentTax ?? 0)}</strong>
                         </div>
                       </div>
+                      <div className="payroll-row-card-actions">
+                        <button className="secondary-button" type="button" onClick={() => openPayrollStatement(row.employeeId)}>
+                          明細
+                        </button>
+                        <button className="text-button" type="button" onClick={() => openPayrollStatementPdf(row)}>
+                          PDF
+                        </button>
+                      </div>
                     </article>
                   )) : (
                     <div className="payroll-card-empty">この月の打刻実績はまだありません。</div>
                   )}
                 </div>
+                {isPayrollStatementOpen && selectedPayrollRow ? (
+                  <section className="payroll-statement-panel" ref={payrollStatementRef}>
+                    <div className="payroll-statement-heading">
+                      <div>
+                        <p>給与明細</p>
+                        <h3>{selectedPayrollRow.employeeName}</h3>
+                        <span>{selectedPayrollRow.storeNames.join("、") || "店舗未設定"} / {month}</span>
+                      </div>
+                      <div className="payroll-statement-toolbar">
+                        <button className="secondary-button" type="button" onClick={() => openPayrollStatementPdf(selectedPayrollRow)}>
+                          <Download size={16} />
+                          PDF
+                        </button>
+                        <button className="icon-button" type="button" aria-label="給与明細を閉じる" onClick={() => setIsPayrollStatementOpen(false)}>
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="payroll-statement-sheet">
+                      <div className="payroll-statement-summary">
+                        <div>
+                          <span>勤務日数</span>
+                          <strong>{selectedPayrollRow.workDays}日</strong>
+                          <small>{selectedPayrollRow.punchCount}回</small>
+                        </div>
+                        <div>
+                          <span>勤務時間</span>
+                          <strong>{formatDuration(selectedPayrollRow.workMinutes)}</strong>
+                          <small>時間外 {formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)} / 深夜 {formatDuration(selectedPayrollRow.nightMinutes)}</small>
+                        </div>
+                        <div>
+                          <span>基本給</span>
+                          <strong>{formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)}</strong>
+                          <small>{selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`}</small>
+                        </div>
+                        <div>
+                          <span>差引支給額</span>
+                          <strong>{formatMoney(selectedPayrollRow.totalPay)}</strong>
+                          <small>交通費 {formatMoney(selectedPayrollRow.commuteAllowance)}</small>
+                        </div>
+                      </div>
+                      <div className="payroll-statement-breakdown">
+                        <div><span>時間外労働賃金</span><strong>{formatPayrollDetailMoney(selectedPayrollRow.overtimePay ?? 0)}</strong><small>{formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)}</small></div>
+                        <div><span>深夜割増</span><strong>{formatPayrollDetailMoney(selectedPayrollRow.nightPremiumPay ?? 0)}</strong><small>{formatDuration(selectedPayrollRow.nightMinutes)}</small></div>
+                        <div><span>社会保険</span><strong>{formatMoney(selectedPayrollRow.socialInsurance ?? 0)}</strong><small>控除</small></div>
+                        <div><span>雇用保険</span><strong>{formatMoney(selectedPayrollRow.employmentInsurance ?? 0)}</strong><small>控除</small></div>
+                        <div><span>源泉所得税</span><strong>{formatMoney(selectedPayrollRow.incomeTax ?? 0)}</strong><small>控除</small></div>
+                        <div><span>住民税</span><strong>{formatMoney(selectedPayrollRow.residentTax ?? 0)}</strong><small>控除</small></div>
+                      </div>
+                      <div className="timecard-table-wrap payroll-statement-days">
+                        <table className="timecard-table">
+                          <thead>
+                            <tr>
+                              <th>日付</th>
+                              <th>店舗</th>
+                              <th>勤務時間</th>
+                              <th>休憩</th>
+                              <th>深夜</th>
+                              <th>確認</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedPayrollDays.length ? selectedPayrollDays.map((day) => (
+                              <tr key={`statement-${day.key}`}>
+                                <td>{day.workDate}</td>
+                                <td>{day.storeName}</td>
+                                <td>{formatJstTime(day.clockIn) ?? "--:--"} - {formatJstTime(day.clockOut) ?? "--:--"}<span>{formatDuration(day.workMinutes)}</span></td>
+                                <td>{formatDuration(day.breakMinutes)}</td>
+                                <td>{formatDuration(day.nightMinutes)}</td>
+                                <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan={6}>この従業員の打刻実績はまだありません。</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
               </section>
             ) : (
               <section className="panel">
