@@ -11,6 +11,7 @@ type ApkVersion = {
   buildType: string;
   fileName: string;
   downloadPath: string;
+  latestDownloadPath?: string;
   sizeBytes: number;
   sha256: string;
   builtAt: string;
@@ -59,7 +60,11 @@ export default function StaffDownloadPage() {
           <p>最新版のスタッフ用アプリをダウンロードできます。</p>
         </div>
 
-        <a className="primary-button staff-download-button" href={apk.downloadPath} download={apk.fileName}>
+        <a
+          className="primary-button staff-download-button"
+          href={apk.latestDownloadPath ?? apk.downloadPath}
+          download={apk.fileName}
+        >
           <Download size={18} />
           APKをダウンロード
         </a>

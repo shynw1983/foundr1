@@ -97,7 +97,11 @@ export default function DownloadsPage() {
                 </div>
               ) : null}
             </dl>
-            <a className="primary-button apk-download-card-button" href={apk.downloadPath} download={apk.fileName}>
+            <a
+              className="primary-button apk-download-card-button"
+              href={apk.latestDownloadPath ?? apk.downloadPath}
+              download={apk.fileName}
+            >
               <Download size={18} />
               ダウンロード
             </a>
