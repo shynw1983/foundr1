@@ -1451,7 +1451,7 @@ export async function POST(request: Request) {
         and store_id = ${storeId}
         and (
           (
-            punch_type = 'clock_in'
+            punch_type in ('clock_in', 'break_start', 'break_end')
             and punched_at >= ${start.toISOString()}
             and punched_at < ${end.toISOString()}
           )
