@@ -18087,20 +18087,26 @@ body :where(
   cursor: default;
 }
 
+.actual-time-range {
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  line-height: 1.1;
+}
+
 .actual-shift-cell em {
-  position: absolute;
-  top: 4px;
-  right: 4px;
   display: inline-grid;
   min-width: 24px;
-  height: 16px;
+  min-height: 14px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 4px;
+  padding: 1px 4px;
   background: #111827;
   color: white;
   font-size: 9px;
   font-style: normal;
   font-weight: 600;
+  line-height: 1;
 }
 
 .actual-shift-cell small {
@@ -18198,10 +18204,9 @@ body :where(
   }
 
   .actual-shift-cell em {
-    top: 2px;
-    right: 2px;
     min-width: 22px;
-    height: 13px;
+    min-height: 12px;
+    padding: 1px 3px;
     font-size: 8px;
   }
 

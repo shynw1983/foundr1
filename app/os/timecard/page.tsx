@@ -1865,9 +1865,11 @@ export function TimecardPage({
                                 >
                                   {actual ? (
                                     <>
-                                      {actual.isManualCorrection ? <em>修正</em> : null}
-                                      <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
-                                      <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
+                                      <span className="actual-time-range">
+                                        <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
+                                        <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
+                                      </span>
+                                      {actual.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
                                     </>
                                   ) : shouldShowMissing ? (
