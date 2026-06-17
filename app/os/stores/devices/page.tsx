@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useUnsavedChangesGuard } from "../../../../components/UnsavedChangesGuard";
 import { normalizeIntegerInput } from "../../../../lib/number-input";
 import {
   createTestPrintPayload,
@@ -150,10 +151,15 @@ function createEmptySettings(): StoreDeviceSettings {
   };
 }
 
+function createStoreDeviceSettingsSnapshot(settings: StoreDeviceSettings) {
+  return JSON.stringify(settings);
+}
+
 export default function StoreDeviceSettingsPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [settings, setSettings] = useState<StoreDeviceSettings>(createEmptySettings);
+  const [savedSettingsSnapshot, setSavedSettingsSnapshot] = useState("");
   const [canManage, setCanManage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -178,14 +184,16 @@ export default function StoreDeviceSettingsPage() {
     setStores(body.access?.stores ?? []);
     setSelectedStoreId(body.selectedStoreId ?? nextSettings.storeId ?? "");
     setCanManage(Boolean(body.access?.canManagePosSettings));
-    setSettings({
+    const nextSettingsState: StoreDeviceSettings = {
       ...createEmptySettings(),
       ...nextSettings,
       discountPresets: Array.isArray(nextSettings.discountPresets) ? nextSettings.discountPresets : [],
       customerDisplayMediaSettings: nextSettings.customerDisplayMediaSettings ?? defaultCustomerDisplayMediaSettings,
       printerSettings: nextSettings.printerSettings ?? defaultPosPrinterSettings,
       posBrandSettings: Array.isArray(nextSettings.posBrandSettings) ? nextSettings.posBrandSettings : []
-    });
+    };
+    setSettings(nextSettingsState);
+    setSavedSettingsSnapshot(createStoreDeviceSettingsSnapshot(nextSettingsState));
     setMessage("");
     setLoading(false);
   }
@@ -287,7 +295,9 @@ export default function StoreDeviceSettingsPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "表示・設備設定を保存できませんでした。");
-      setSettings((current) => ({ ...current, ...(body.settings ?? {}) }));
+      const nextSettingsState = { ...settings, ...(body.settings ?? {}) };
+      setSettings(nextSettingsState);
+      setSavedSettingsSnapshot(createStoreDeviceSettingsSnapshot(nextSettingsState));
       if (!options.quiet) setMessage("表示・設備設定を保存しました。");
       return true;
     } catch (error) {
@@ -381,6 +391,14 @@ export default function StoreDeviceSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const hasUnsavedDeviceSettings = Boolean(savedSettingsSnapshot && createStoreDeviceSettingsSnapshot(settings) !== savedSettingsSnapshot);
+  const { guardAction, unsavedChangesDialog } = useUnsavedChangesGuard({
+    isDirty: hasUnsavedDeviceSettings,
+    onSave: () => saveSettings(),
+    title: "表示・設備設定に未保存の変更があります",
+    message: "店舗を切り替える、または別ページへ移動する前に、現在の表示・設備設定を保存できます。"
+  });
+
   useEffect(() => {
     const detectNativePrintBridge = () => {
       setHasNativePrintBridge(Boolean(window.Foundr1Printer?.print));
@@ -442,8 +460,10 @@ export default function StoreDeviceSettingsPage() {
               value={selectedStoreId}
               onChange={(event) => {
                 const storeId = event.target.value;
-                setSelectedStoreId(storeId);
-                void load(storeId);
+                guardAction(() => {
+                  setSelectedStoreId(storeId);
+                  void load(storeId);
+                }, "店舗を切替");
               }}
             >
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
@@ -458,6 +478,8 @@ export default function StoreDeviceSettingsPage() {
             </button>
           </div>
         </section>
+
+        {hasUnsavedDeviceSettings ? <div className="action-notice is-warning">表示・設備設定に未保存の変更があります。移動前に保存してください。</div> : null}
 
         <section className="panel pos-admin-tax-settings">
           <div className="panel-title">
@@ -683,6 +705,7 @@ export default function StoreDeviceSettingsPage() {
             </div>
           </div>
         </section>
+        {unsavedChangesDialog}
       </section>
     </main>
   );

@@ -13516,6 +13516,13 @@ body :where(
   flex-wrap: wrap;
 }
 
+.pos-admin-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .pos-admin-discount-heading h4 {
   margin: 0;
   color: var(--ink);

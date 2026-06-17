@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useUnsavedChangesGuard } from "../../../components/UnsavedChangesGuard";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
@@ -116,6 +117,21 @@ type PosTaxSettings = {
   posBrandSettings: PosBrandSetting[];
   updatedAt: string;
 };
+
+type PosTaxFormState = {
+  dineInEnabled: boolean;
+  takeoutEnabled: boolean;
+  dineInTaxRate: string;
+  takeoutTaxRate: string;
+  externalPaymentTerminalBrand: string;
+  priceTaxMode: string;
+  discountPresets: PosDiscountPreset[];
+  customerDisplayMediaSettings: CustomerDisplayMediaSettings;
+  printerSettings: PosPrinterSettings;
+  posBrandSettings: PosBrandSetting[];
+};
+
+type PosSettingsSaveSection = "all" | "receipt" | "discount";
 
 type CustomerDisplayMediaAsset = {
   id: string;
@@ -223,12 +239,16 @@ function getPaymentLabel(value: string) {
   return value || "-";
 }
 
+function createPosTaxFormSnapshot(form: PosTaxFormState) {
+  return JSON.stringify(form);
+}
+
 export default function PosPage() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [taxSettings, setTaxSettings] = useState<PosTaxSettings | null>(null);
-  const [taxForm, setTaxForm] = useState<{ dineInEnabled: boolean; takeoutEnabled: boolean; dineInTaxRate: string; takeoutTaxRate: string; externalPaymentTerminalBrand: string; priceTaxMode: string; discountPresets: PosDiscountPreset[]; customerDisplayMediaSettings: CustomerDisplayMediaSettings; printerSettings: PosPrinterSettings; posBrandSettings: PosBrandSetting[] }>({
+  const [taxForm, setTaxForm] = useState<PosTaxFormState>({
     dineInEnabled: true,
     takeoutEnabled: true,
     dineInTaxRate: "10",
@@ -240,6 +260,8 @@ export default function PosPage() {
     printerSettings: defaultPosPrinterSettings,
     posBrandSettings: []
   });
+  const [savedTaxForm, setSavedTaxForm] = useState<PosTaxFormState | null>(null);
+  const [savedTaxFormSnapshot, setSavedTaxFormSnapshot] = useState("");
   const [canManagePosSettings, setCanManagePosSettings] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
   const [mediaUploadStatus, setMediaUploadStatus] = useState("");
@@ -287,7 +309,7 @@ export default function PosPage() {
     setSummary(body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] });
     setTaxSettings(nextSettings);
     setCanManagePosSettings(Boolean(settingsBody?.access?.canManagePosSettings));
-    setTaxForm({
+    const nextTaxForm: PosTaxFormState = {
       dineInEnabled: nextSettings?.dineInEnabled !== false,
       takeoutEnabled: nextSettings?.takeoutEnabled !== false,
       dineInTaxRate: String(nextSettings?.dineInTaxRate ?? 10),
@@ -298,7 +320,10 @@ export default function PosPage() {
       customerDisplayMediaSettings: nextSettings?.customerDisplayMediaSettings ?? defaultCustomerDisplayMediaSettings,
       printerSettings: nextSettings?.printerSettings ?? defaultPosPrinterSettings,
       posBrandSettings: Array.isArray(nextSettings?.posBrandSettings) ? nextSettings.posBrandSettings : []
-    });
+    };
+    setTaxForm(nextTaxForm);
+    setSavedTaxForm(nextTaxForm);
+    setSavedTaxFormSnapshot(createPosTaxFormSnapshot(nextTaxForm));
     setReconciliation({
       businessDate: cashBody?.businessDate ?? "",
       activeSession: cashBody?.activeSession ?? null,
@@ -333,44 +358,73 @@ export default function PosPage() {
     }));
   }
 
-  async function savePosSettings(options: { quiet?: boolean } = {}) {
+  function createSavePayloadForm(section: PosSettingsSaveSection = "all") {
+    if (section === "all" || !savedTaxForm) return taxForm;
+    if (section === "receipt") return { ...savedTaxForm, printerSettings: taxForm.printerSettings };
+    if (section === "discount") return { ...savedTaxForm, discountPresets: taxForm.discountPresets };
+    return taxForm;
+  }
+
+  function applySavedSection(section: PosSettingsSaveSection, settings: Partial<PosTaxSettings>) {
+    const normalizedSaved: PosTaxFormState = {
+      dineInEnabled: settings.dineInEnabled !== false,
+      takeoutEnabled: settings.takeoutEnabled !== false,
+      dineInTaxRate: String(settings.dineInTaxRate ?? taxForm.dineInTaxRate),
+      takeoutTaxRate: String(settings.takeoutTaxRate ?? taxForm.takeoutTaxRate),
+      externalPaymentTerminalBrand: settings.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
+      priceTaxMode: settings.priceTaxMode ?? taxForm.priceTaxMode,
+      discountPresets: Array.isArray(settings.discountPresets) ? settings.discountPresets : taxForm.discountPresets,
+      customerDisplayMediaSettings: settings.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings,
+      printerSettings: settings.printerSettings ?? taxForm.printerSettings,
+      posBrandSettings: Array.isArray(settings.posBrandSettings) ? settings.posBrandSettings : taxForm.posBrandSettings
+    };
+
+    if (section === "all" || !savedTaxForm) {
+      setTaxForm(normalizedSaved);
+      setSavedTaxForm(normalizedSaved);
+      setSavedTaxFormSnapshot(createPosTaxFormSnapshot(normalizedSaved));
+      return;
+    }
+
+    const nextSaved = section === "receipt"
+      ? { ...savedTaxForm, printerSettings: normalizedSaved.printerSettings }
+      : { ...savedTaxForm, discountPresets: normalizedSaved.discountPresets };
+    setTaxForm((current) => section === "receipt"
+      ? { ...current, printerSettings: normalizedSaved.printerSettings }
+      : { ...current, discountPresets: normalizedSaved.discountPresets }
+    );
+    setSavedTaxForm(nextSaved);
+    setSavedTaxFormSnapshot(createPosTaxFormSnapshot(nextSaved));
+  }
+
+  async function savePosSettings(options: { quiet?: boolean; successMessage?: string; section?: PosSettingsSaveSection } = {}) {
     if (!selectedStoreId || taxSaving) return false;
     setTaxSaving(true);
     if (!options.quiet) setMessage("");
+    const payloadForm = createSavePayloadForm(options.section ?? "all");
     try {
       const response = await fetch("/api/os/pos/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           storeId: selectedStoreId,
-          dineInEnabled: taxForm.dineInEnabled,
-          takeoutEnabled: taxForm.takeoutEnabled,
-          dineInTaxRate: taxForm.dineInTaxRate,
-          takeoutTaxRate: taxForm.takeoutTaxRate,
-          externalPaymentTerminalBrand: taxForm.externalPaymentTerminalBrand,
-          priceTaxMode: taxForm.priceTaxMode,
-          discountPresets: taxForm.discountPresets,
-          customerDisplayMediaSettings: taxForm.customerDisplayMediaSettings,
-          printerSettings: taxForm.printerSettings,
-          posBrandSettings: taxForm.posBrandSettings
+          dineInEnabled: payloadForm.dineInEnabled,
+          takeoutEnabled: payloadForm.takeoutEnabled,
+          dineInTaxRate: payloadForm.dineInTaxRate,
+          takeoutTaxRate: payloadForm.takeoutTaxRate,
+          externalPaymentTerminalBrand: payloadForm.externalPaymentTerminalBrand,
+          priceTaxMode: payloadForm.priceTaxMode,
+          discountPresets: payloadForm.discountPresets,
+          customerDisplayMediaSettings: payloadForm.customerDisplayMediaSettings,
+          printerSettings: payloadForm.printerSettings,
+          posBrandSettings: payloadForm.posBrandSettings
         })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "POS 設定を保存できませんでした。");
       setTaxSettings(body.settings ?? null);
-      setTaxForm({
-        dineInEnabled: body.settings?.dineInEnabled !== false,
-        takeoutEnabled: body.settings?.takeoutEnabled !== false,
-        dineInTaxRate: String(body.settings?.dineInTaxRate ?? taxForm.dineInTaxRate),
-        takeoutTaxRate: String(body.settings?.takeoutTaxRate ?? taxForm.takeoutTaxRate),
-        externalPaymentTerminalBrand: body.settings?.externalPaymentTerminalBrand ?? taxForm.externalPaymentTerminalBrand,
-        priceTaxMode: body.settings?.priceTaxMode ?? taxForm.priceTaxMode,
-        discountPresets: Array.isArray(body.settings?.discountPresets) ? body.settings.discountPresets : taxForm.discountPresets,
-        customerDisplayMediaSettings: body.settings?.customerDisplayMediaSettings ?? taxForm.customerDisplayMediaSettings,
-        printerSettings: body.settings?.printerSettings ?? taxForm.printerSettings,
-        posBrandSettings: Array.isArray(body.settings?.posBrandSettings) ? body.settings.posBrandSettings : taxForm.posBrandSettings
-      });
-      if (!options.quiet) setMessage("POS 設定を保存しました。");
+      applySavedSection(options.section ?? "all", body.settings ?? {});
+      if (!options.quiet) setMessage(options.successMessage ?? "POS 設定を保存しました。");
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "POS 設定を保存できませんでした。";
@@ -402,7 +456,7 @@ export default function PosPage() {
     }
     setTestPrinting(true);
     setTestPrintStatus("");
-    const saved = await savePosSettings({ quiet: true });
+    const saved = await savePosSettings({ quiet: true, section: "receipt" });
     if (!saved) {
       setTestPrinting(false);
       return;
@@ -486,6 +540,14 @@ export default function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const hasUnsavedPosSettings = Boolean(savedTaxFormSnapshot && createPosTaxFormSnapshot(taxForm) !== savedTaxFormSnapshot);
+  const { guardAction, unsavedChangesDialog } = useUnsavedChangesGuard({
+    isDirty: hasUnsavedPosSettings,
+    onSave: () => savePosSettings(),
+    title: "POS 設定に未保存の変更があります",
+    message: "店舗を切り替える、または別ページへ移動する前に、現在の店舗設定を保存できます。"
+  });
+
   useEffect(() => {
     const detectNativePrintBridge = () => {
       setHasNativePrintBridge(Boolean(window.Foundr1Printer?.print));
@@ -541,8 +603,10 @@ export default function PosPage() {
               value={selectedStoreId}
               onChange={(event) => {
                 const storeId = event.target.value;
-                setSelectedStoreId(storeId);
-                void load(storeId);
+                guardAction(() => {
+                  setSelectedStoreId(storeId);
+                  void load(storeId);
+                }, "店舗を切替");
               }}
             >
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
@@ -557,6 +621,8 @@ export default function PosPage() {
             <a href="/os/stores"><Store size={16} />店舗設定</a>
           </div>
         </section>
+
+        {hasUnsavedPosSettings ? <div className="action-notice is-warning">POS 設定に未保存の変更があります。移動前に保存してください。</div> : null}
 
         <section className="panel pos-admin-tax-settings">
           <div className="panel-title">
@@ -872,8 +938,8 @@ export default function PosPage() {
                 <p>店頭会計後のレシート印刷に使う接続情報とテンプレートを管理します。</p>
               </div>
               <div className="pos-admin-printer-actions">
-                <button className="secondary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
-                  {taxSaving ? "保存中..." : "保存"}
+                <button className="secondary-button" type="button" onClick={() => void savePosSettings({ successMessage: "レシート設定を保存しました。", section: "receipt" })} disabled={!canManagePosSettings || taxSaving}>
+                  {taxSaving ? "保存中..." : "レシート設定を保存"}
                 </button>
                 <button className="secondary-button" type="button" onClick={() => void testPrint()} disabled={!canManagePosSettings || taxSaving || testPrinting || !hasNativePrintBridge}>
                   <Printer size={15} />
@@ -1252,15 +1318,20 @@ export default function PosPage() {
                 <h4>割引プリセット</h4>
                 <p>店舗 POS に表示する割引ボタン、割引率、対象範囲を管理します。</p>
               </div>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => setTaxForm((current) => ({ ...current, discountPresets: [...current.discountPresets, createDiscountPreset()] }))}
-                disabled={!canManagePosSettings}
-              >
-                <Plus size={15} />
-                追加
-              </button>
+              <div className="pos-admin-section-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setTaxForm((current) => ({ ...current, discountPresets: [...current.discountPresets, createDiscountPreset()] }))}
+                  disabled={!canManagePosSettings}
+                >
+                  <Plus size={15} />
+                  追加
+                </button>
+                <button className="secondary-button" type="button" onClick={() => void savePosSettings({ successMessage: "割引プリセットを保存しました。", section: "discount" })} disabled={!canManagePosSettings || taxSaving}>
+                  {taxSaving ? "保存中..." : "割引を保存"}
+                </button>
+              </div>
             </div>
             <div className="pos-admin-discount-list">
               {taxForm.discountPresets.length ? taxForm.discountPresets.map((preset, index) => (
@@ -1384,8 +1455,8 @@ export default function PosPage() {
             <span>
               現在: {taxSettings?.dineInEnabled === false ? "店内なし" : `店内 ${taxSettings?.dineInTaxRate ?? 10}%`} / {taxSettings?.takeoutEnabled === false ? "持ち帰りなし" : `持ち帰り ${taxSettings?.takeoutTaxRate ?? 8}%`} / 外部決済 {taxSettings?.externalPaymentTerminalBrand ?? "PayCAS"} / {taxSettings?.priceTaxMode === "tax_excluded" ? "税抜価格" : "税込価格"}
             </span>
-            <button className="primary-button" type="button" onClick={() => void savePosSettings()} disabled={!canManagePosSettings || taxSaving}>
-              {taxSaving ? "保存中..." : "保存"}
+            <button className="primary-button" type="button" onClick={() => void savePosSettings({ successMessage: "POS 設定をすべて保存しました。" })} disabled={!canManagePosSettings || taxSaving}>
+              {taxSaving ? "保存中..." : "POS 設定をすべて保存"}
             </button>
           </div>
         </section>
@@ -1498,6 +1569,7 @@ export default function PosPage() {
             </div>
           )}
         </section>
+        {unsavedChangesDialog}
       </section>
     </main>
   );
