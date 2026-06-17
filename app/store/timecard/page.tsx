@@ -120,7 +120,6 @@ export default function StoreTimecardPage() {
 
   const state = getPunchState(selectedLatestPunch);
   const statusLabel = state === "working" ? "勤務中" : state === "break" ? "休憩中" : "未出勤";
-  const selectedStoreName = data?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択";
 
   async function punch(punchType: string) {
     if (!selectedStoreId || !selectedEmployee) return;
@@ -165,33 +164,11 @@ export default function StoreTimecardPage() {
             <Clock3 />
             <div>
               <h2>店舗端末打刻</h2>
-              <p>{selectedStoreName}・{isLoading ? "読み込み中" : selectedEmployee ? `${selectedEmployee.name} / ${statusLabel}` : "従業員を選択"}</p>
+              <p>{isLoading ? "読み込み中" : selectedEmployee ? `${selectedEmployee.name} / ${statusLabel}` : "従業員を選択"}</p>
             </div>
           </div>
 
           <div className="timecard-store-select">
-            {isStoreTerminal ? (
-              <label className="store-context-selector is-store is-locked">
-                <span>打刻店舗</span>
-                <strong className="timecard-store-name">{selectedStoreName}</strong>
-                <small>この Pad の固定店舗</small>
-              </label>
-            ) : (
-              <label className="store-context-selector is-store">
-                <span>打刻店舗</span>
-                <strong className="timecard-store-name">{selectedStoreName}</strong>
-                <select value={selectedStoreId} onChange={(event) => {
-                  setSelectedStoreId(event.target.value);
-                  setStoredStoreSelection(event.target.value);
-                  void loadTimecard(event.target.value);
-                }}>
-                  {data?.stores.map((store) => (
-                    <option value={store.id} key={store.id}>{store.name}</option>
-                  ))}
-                </select>
-                <small>高権限ユーザーの代理打刻用</small>
-              </label>
-            )}
             <button className="secondary-button" type="button" onClick={() => loadTimecard(selectedStoreId)}>
               <RefreshCw size={16} />
               更新

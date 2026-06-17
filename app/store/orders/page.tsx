@@ -271,14 +271,6 @@ export default function StoreOrdersPage() {
     };
   }, []);
 
-  const selectStore = (storeId: string) => {
-    selectedStoreIdRef.current = storeId;
-    setSelectedStoreId(storeId);
-    setStoredStoreSelection(storeId);
-    setSelectedId("");
-    setOrders([]);
-  };
-
   const loadOperation = async (storeId = selectedStoreId) => {
     if (!storeId) {
       setOperation(null);
@@ -693,17 +685,7 @@ export default function StoreOrdersPage() {
       <section className="store-orders-layout">
         <aside className="panel store-orders-list">
           <div className="store-stats-heading">
-            <h2>{access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗"}</h2>
-            {access && access.stores.length > 1 ? (
-              <label className="store-context-selector is-store is-compact">
-                <span>注文店舗</span>
-                <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} aria-label="店舗">
-                  {access.stores.map((store) => (
-                    <option value={store.id} key={store.id}>{store.name}</option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+            <h2>注文</h2>
           </div>
           {access?.canViewSalesStats ? (
             <>

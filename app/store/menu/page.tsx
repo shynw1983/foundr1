@@ -101,8 +101,6 @@ function getCategories(items: StoreMenuItem[], categories: StoreMenuCategory[], 
 }
 
 export default function StoreMenuPage() {
-  const [access, setAccess] = useState<StoreMenuAccess | null>(null);
-  const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [categories, setCategories] = useState<StoreMenuCategory[]>([]);
   const [items, setItems] = useState<StoreMenuItem[]>([]);
@@ -147,8 +145,6 @@ export default function StoreMenuPage() {
     const nextItems = body.items as StoreMenuItem[];
     const nextOptions = body.options as StoreMenuOption[];
     if (body.settings) setSettings(body.settings as StoreMenuSettings);
-    setAccess(nextAccess);
-    setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
     setCategories(nextCategories ?? []);
     setItems(nextItems ?? []);
@@ -261,12 +257,6 @@ export default function StoreMenuPage() {
     }
   }
 
-  function selectStore(storeId: string) {
-    setSelectedStoreId(storeId);
-    setStoredStoreSelection(storeId);
-    void load(storeId, true);
-  }
-
   return (
     <main className="store-workbench-shell">
       <header className="store-workbench-topbar">
@@ -294,12 +284,6 @@ export default function StoreMenuPage() {
         </div>
 
         <div className="store-menu-controls panel">
-          <label className="store-context-selector is-store is-compact">
-            <span>操作店舗</span>
-            <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} disabled={!access?.canUseAllStoreView && stores.length <= 1}>
-              {stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-            </select>
-          </label>
           <label>
             <span>ブランド</span>
             <select value={selectedBrandId} onChange={(event) => {

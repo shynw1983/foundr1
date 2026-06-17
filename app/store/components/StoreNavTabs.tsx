@@ -1,10 +1,11 @@
 "use client";
 
-import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, ChefHat, ChevronDown, Clock3, ClipboardList, Home, Menu, MessageSquareWarning, Monitor, PackageCheck, Settings, ShoppingCart, Store, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { UserBadge } from "../../os/components/UserBadge";
 import { useCloseOnOutside } from "../../os/components/useCloseOnOutside";
 import { defaultStoreModuleSettings, type StoreModuleSettings } from "../../../lib/module-setting-defaults";
+import { getStoredStoreSelection, setStoredStoreSelection } from "./store-selection";
 
 type StoreOrderRealtimePayload = {
   order?: {
@@ -22,6 +23,15 @@ type StoreOrdersResponse = {
     paymentStatus: string;
     orderSource?: string;
   }>;
+};
+
+type StoreContextResponse = {
+  access?: {
+    role: string;
+    canUseAllStoreView: boolean;
+    stores: Array<{ id: string; name: string }>;
+  };
+  selectedStoreId?: string;
 };
 
 const tabs = [
@@ -87,6 +97,7 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
   const [now, setNow] = useState<Date | null>(null);
   const [settings, setSettings] = useState<StoreModuleSettings>(defaultStoreModuleSettings);
   const [employeeRole, setEmployeeRole] = useState<string | null>(null);
+  const [storeContext, setStoreContext] = useState<StoreContextResponse | null>(null);
   const [hasPendingOrderAlert, setHasPendingOrderAlert] = useState(false);
   const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
   const [mobileDisplayMenuOpen, setMobileDisplayMenuOpen] = useState(false);
@@ -102,6 +113,14 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
     : tabs;
   const visibleDisplayTabs = displayTabs;
   const isDisplayActive = visibleDisplayTabs.some((tab) => tab.href === activeHref);
+  const storeOptions = storeContext?.access?.stores ?? [];
+  const selectedStoreId = storeContext?.selectedStoreId ?? "";
+  const selectedStoreName = storeOptions.find((store) => store.id === selectedStoreId)?.name ?? "";
+  const canSwitchStore = Boolean(
+    storeOptions.length > 1 &&
+    storeContext?.access &&
+    (storeContext.access.canUseAllStoreView || !["staff", "store_terminal"].includes(storeContext.access.role))
+  );
 
   const clearOrderAlert = () => {
     setHasPendingOrderAlert(false);
@@ -128,6 +147,24 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStoreContext() {
+      const storedStoreId = getStoredStoreSelection();
+      const params = storedStoreId ? `?storeId=${encodeURIComponent(storedStoreId)}` : "";
+      const response = await fetch(`/api/store/context${params}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as StoreContextResponse;
+      if (!isMounted) return;
+      setStoreContext(body);
+      if (body.selectedStoreId) setStoredStoreSelection(body.selectedStoreId);
+    }
+    void loadStoreContext();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -255,6 +292,12 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
     };
   }, [active]);
 
+  function handleStoreSwitch(storeId: string) {
+    if (!storeId || storeId === selectedStoreId) return;
+    setStoredStoreSelection(storeId);
+    window.location.reload();
+  }
+
   return (
     <div className="store-nav-cluster">
       {settings.header.showClock ? (
@@ -306,6 +349,17 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
             })}
           </div> : null}
         </div>
+        {canSwitchStore ? (
+          <label className="store-nav-store-switch" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
+            <Store size={17} />
+            <span>店舗切替</span>
+            <select value={selectedStoreId} onChange={(event) => handleStoreSwitch(event.target.value)} aria-label="店舗切替">
+              {storeOptions.map((store) => (
+                <option value={store.id} key={store.id}>{store.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </nav>
       <details className="mobile-nav-menu store-nav-menu" ref={storeMenuRef}>
         <summary aria-label="メニュー">
@@ -353,6 +407,17 @@ export function StoreNavTabs({ active }: { active: "home" | "orders" | "kitchen"
               })}
             </div> : null}
           </div>
+          {canSwitchStore ? (
+            <label className="store-nav-store-switch is-mobile" title={selectedStoreName ? `現在: ${selectedStoreName}` : "店舗切替"}>
+              <Store size={17} />
+              <span>店舗切替</span>
+              <select value={selectedStoreId} onChange={(event) => handleStoreSwitch(event.target.value)} aria-label="店舗切替">
+                {storeOptions.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </nav>
       </details>
     </div>

@@ -571,7 +571,6 @@ export default function StorePosPage() {
   const memberScannerStreamRef = useRef<MediaStream | null>(null);
   const memberScannerActiveRef = useRef(false);
   const selectedStoreIdRef = useRef("");
-  const [access, setAccess] = useState<PosAccess | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [categories, setCategories] = useState<PosMenuCategory[]>([]);
@@ -673,7 +672,6 @@ export default function StorePosPage() {
     const nextBrandId = nextBrands.some((brand) => brand.id === selectedBrandId)
       ? selectedBrandId
       : nextBrands[0]?.id || "";
-    setAccess(nextAccess);
     setStores(nextAccess.stores ?? []);
     setBrands(nextBrands ?? []);
     setCategories(nextCategories);
@@ -954,33 +952,6 @@ export default function StorePosPage() {
   ) {
     const normalized = normalizeIntegerInput(value);
     setter((current) => ({ ...current, [String(denomination)]: normalized }));
-  }
-
-  function handleStoreChange(storeId: string) {
-    setSelectedStoreId(storeId);
-    setStoredStoreSelection(storeId);
-    setCart([]);
-    setCashTenderedAmount("");
-    setMemberLookupInput("");
-    setSelectedMember(null);
-    setMemberCoupons([]);
-    setSelectedCouponId("");
-    setCustomerSelectedCouponId("");
-    setCashOpeningBreakdown(createCashBreakdownInput());
-    setCashOpeningNote("");
-    setCashCountedBreakdown(createCashBreakdownInput());
-    setCashClosingNote("");
-    setCashClosingResponsibleEmployeeId("");
-    setCashDialog(null);
-    setTransactionDialogOpen(false);
-    setTransactions([]);
-    setSelectedTransaction(null);
-    setRefundReason("");
-    setRefundingTransactionId("");
-    setExternalRefundConfirmed(false);
-    setCompletedDisplayState(null);
-    setCustomerDisplayMode("business");
-    void load(storeId);
   }
 
   async function lookupMember(scannedCode?: string) {
@@ -1797,18 +1768,6 @@ export default function StorePosPage() {
           <h2>店頭会計</h2>
         </div>
         <div className="store-pos-head-actions">
-          <label className="store-pos-store-select store-context-selector is-store">
-            <span>操作店舗</span>
-            <strong>{stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択"}</strong>
-            <select
-              value={selectedStoreId}
-              onChange={(event) => handleStoreChange(event.target.value)}
-              disabled={!access?.canUseAllStoreView && stores.length <= 1}
-            >
-              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
-            <small>会計を登録する店舗</small>
-          </label>
           <div className="store-pos-summary">
             <span>本日 {summary.orderCount} 件</span>
             <strong>{formatYen(summary.total)}</strong>
