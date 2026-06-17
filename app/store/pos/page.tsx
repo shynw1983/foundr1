@@ -1797,8 +1797,9 @@ export default function StorePosPage() {
           <h2>店頭会計</h2>
         </div>
         <div className="store-pos-head-actions">
-          <label className="store-pos-store-select">
-            <span>店舗</span>
+          <label className="store-pos-store-select store-context-selector is-store">
+            <span>操作店舗</span>
+            <strong>{stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択"}</strong>
             <select
               value={selectedStoreId}
               onChange={(event) => handleStoreChange(event.target.value)}
@@ -1806,6 +1807,7 @@ export default function StorePosPage() {
             >
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
+            <small>会計を登録する店舗</small>
           </label>
           <div className="store-pos-summary">
             <span>本日 {summary.orderCount} 件</span>

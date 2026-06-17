@@ -695,11 +695,14 @@ export default function StoreOrdersPage() {
           <div className="store-stats-heading">
             <h2>{access?.stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗"}</h2>
             {access && access.stores.length > 1 ? (
-              <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} aria-label="店舗">
-                {access.stores.map((store) => (
-                  <option value={store.id} key={store.id}>{store.name}</option>
-                ))}
-              </select>
+              <label className="store-context-selector is-store is-compact">
+                <span>注文店舗</span>
+                <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} aria-label="店舗">
+                  {access.stores.map((store) => (
+                    <option value={store.id} key={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </label>
             ) : null}
           </div>
           {access?.canViewSalesStats ? (

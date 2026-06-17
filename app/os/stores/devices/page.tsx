@@ -435,8 +435,9 @@ export default function StoreDeviceSettingsPage() {
         {message ? <div className="action-notice">{message}</div> : null}
 
         <section className="panel pos-admin-toolbar">
-          <label>
-            <span>店舗</span>
+          <label className="store-context-selector is-os">
+            <span>設定対象店舗</span>
+            <strong>{stores.find((store) => store.id === selectedStoreId)?.name ?? "店舗未選択"}</strong>
             <select
               value={selectedStoreId}
               onChange={(event) => {
@@ -447,6 +448,7 @@ export default function StoreDeviceSettingsPage() {
             >
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
+            <small>この店舗の表示・設備設定を編集中</small>
           </label>
           <div className="pos-admin-actions">
             <a href="/os/stores"><Store size={16} />店舗管理</a>

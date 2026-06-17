@@ -32325,3 +32325,86 @@ a:focus-visible {
     color: var(--green);
   }
 }
+
+.store-context-selector,
+.pos-admin-toolbar label.store-context-selector,
+.timecard-store-select label.store-context-selector,
+.store-menu-controls label.store-context-selector,
+.voucher-upload-form label.store-context-selector,
+.store-stats-heading label.store-context-selector {
+  display: grid;
+  gap: 5px;
+  min-width: min(300px, 100%);
+  border: 1px solid rgba(31, 111, 85, 0.28);
+  border-radius: 8px;
+  padding: 10px;
+  background: linear-gradient(180deg, #f3faf6 0%, #ffffff 100%);
+}
+
+.store-context-selector > span,
+.pos-admin-toolbar label.store-context-selector > span,
+.timecard-store-select label.store-context-selector > span,
+.store-menu-controls label.store-context-selector > span,
+.voucher-upload-form label.store-context-selector > span {
+  color: #1f6f55;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.store-context-selector > strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.store-context-selector > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.store-context-selector select,
+.store-pos-store-select.store-context-selector select,
+.timecard-toolbar .store-context-selector select,
+.timecard-store-select .store-context-selector select,
+.store-menu-controls .store-context-selector select,
+.voucher-upload-form .store-context-selector select,
+.store-display-menu .store-context-selector select {
+  min-height: 38px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.34);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #143f33;
+  font-weight: 650;
+}
+
+.store-context-selector.is-os {
+  border-color: rgba(31, 111, 85, 0.38);
+  background: #f3faf6;
+}
+
+.store-context-selector.is-store {
+  border-color: rgba(31, 111, 85, 0.3);
+  background: #ffffff;
+}
+
+.store-context-selector.is-compact {
+  min-width: min(230px, 100%);
+  padding: 8px;
+}
+
+.store-context-selector.is-compact > strong,
+.store-context-selector.is-compact > small {
+  display: none;
+}
+
+.store-context-selector.is-locked {
+  background: #f8fafc;
+}

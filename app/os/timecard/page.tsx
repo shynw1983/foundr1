@@ -1487,17 +1487,20 @@ export function TimecardPage({
               setSelectedShiftCells([]);
               void loadTimecard(event.target.value, selectedStoreId);
             }} />
-            <select value={selectedStoreId} onChange={(event) => {
-              setSelectedStoreId(event.target.value);
-              storeTimecardSelection(month, event.target.value);
-              setIsShiftMultiSelectMode(false);
-              setSelectedShiftCells([]);
-              void loadTimecard(month, event.target.value);
-            }}>
-              {data?.stores.map((store) => (
-                <option value={store.id} key={store.id}>{store.name}</option>
-              ))}
-            </select>
+            <label className="store-context-selector is-os is-compact">
+              <span>対象店舗</span>
+              <select value={selectedStoreId} onChange={(event) => {
+                setSelectedStoreId(event.target.value);
+                storeTimecardSelection(month, event.target.value);
+                setIsShiftMultiSelectMode(false);
+                setSelectedShiftCells([]);
+                void loadTimecard(month, event.target.value);
+              }}>
+                {data?.stores.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
           ) : null}
         </header>
@@ -1937,7 +1940,7 @@ export function TimecardPage({
                       void loadTimecard(event.target.value, selectedStoreId);
                     }} />
                   </label>
-                  <label>
+                  <label className="store-context-selector is-os is-compact">
                     <span>事業所</span>
                     <select value={selectedStoreId} onChange={(event) => {
                       setSelectedStoreId(event.target.value);

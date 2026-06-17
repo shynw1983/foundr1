@@ -231,15 +231,18 @@ export default function StoreKitchenPage() {
         <div className="store-display-menu">
           <strong>キッチン</strong>
           {stores.length > 1 ? (
-            <select value={selectedStoreId} onChange={(event) => {
-              const storeId = event.target.value;
-              setSelectedStoreId(storeId);
-              selectedStoreIdRef.current = storeId;
-              setStoredStoreSelection(storeId);
-              void load(storeId, selectedArea);
-            }}>
-              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
+            <label className="store-context-selector is-store is-compact">
+              <span>表示店舗</span>
+              <select value={selectedStoreId} onChange={(event) => {
+                const storeId = event.target.value;
+                setSelectedStoreId(storeId);
+                selectedStoreIdRef.current = storeId;
+                setStoredStoreSelection(storeId);
+                void load(storeId, selectedArea);
+              }}>
+                {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+              </select>
+            </label>
           ) : null}
           <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="制作区">
             <option value="">全部</option>

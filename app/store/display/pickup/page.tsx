@@ -221,15 +221,18 @@ export default function StorePickupDisplayPage() {
         <div className="store-display-menu">
           <strong>受取表示</strong>
           {stores.length > 1 ? (
-            <select value={selectedStoreId} onChange={(event) => {
-              const storeId = event.target.value;
-              setSelectedStoreId(storeId);
-              selectedStoreIdRef.current = storeId;
-              setStoredStoreSelection(storeId);
-              void load(storeId);
-            }}>
-              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
+            <label className="store-context-selector is-store is-compact">
+              <span>表示店舗</span>
+              <select value={selectedStoreId} onChange={(event) => {
+                const storeId = event.target.value;
+                setSelectedStoreId(storeId);
+                selectedStoreIdRef.current = storeId;
+                setStoredStoreSelection(storeId);
+                void load(storeId);
+              }}>
+                {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+              </select>
+            </label>
           ) : null}
           <button className="secondary-button" type="button" onClick={() => void load()}>更新</button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>

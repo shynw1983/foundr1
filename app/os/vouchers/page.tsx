@@ -1337,8 +1337,8 @@ export default function VouchersPage() {
             </div>
           </div>
           <form className="voucher-upload-form" onSubmit={uploadVouchers}>
-            <label>
-              <span>店舗</span>
+            <label className="store-context-selector is-os is-compact">
+              <span>証憑の店舗</span>
               <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)} disabled={!canUpload || isUploading}>
                 {stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
               </select>

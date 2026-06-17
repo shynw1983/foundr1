@@ -294,8 +294,8 @@ export default function StoreMenuPage() {
         </div>
 
         <div className="store-menu-controls panel">
-          <label>
-            <span>店舗</span>
+          <label className="store-context-selector is-store is-compact">
+            <span>操作店舗</span>
             <select value={selectedStoreId} onChange={(event) => selectStore(event.target.value)} disabled={!access?.canUseAllStoreView && stores.length <= 1}>
               {stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
             </select>

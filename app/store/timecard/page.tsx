@@ -171,13 +171,15 @@ export default function StoreTimecardPage() {
 
           <div className="timecard-store-select">
             {isStoreTerminal ? (
-              <label>
+              <label className="store-context-selector is-store is-locked">
                 <span>打刻店舗</span>
                 <strong className="timecard-store-name">{selectedStoreName}</strong>
+                <small>この Pad の固定店舗</small>
               </label>
             ) : (
-              <label>
+              <label className="store-context-selector is-store">
                 <span>打刻店舗</span>
+                <strong className="timecard-store-name">{selectedStoreName}</strong>
                 <select value={selectedStoreId} onChange={(event) => {
                   setSelectedStoreId(event.target.value);
                   setStoredStoreSelection(event.target.value);
@@ -187,6 +189,7 @@ export default function StoreTimecardPage() {
                     <option value={store.id} key={store.id}>{store.name}</option>
                   ))}
                 </select>
+                <small>高権限ユーザーの代理打刻用</small>
               </label>
             )}
             <button className="secondary-button" type="button" onClick={() => loadTimecard(selectedStoreId)}>
