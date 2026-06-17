@@ -881,6 +881,8 @@ function StaffFormFields({
   const [branchOptions, setBranchOptions] = useState<BankMasterBranch[]>([]);
   const [bankSearchStatus, setBankSearchStatus] = useState("銀行名・カナ・コードで検索");
   const [branchSearchStatus, setBranchSearchStatus] = useState("銀行を選ぶと支店検索できます");
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
@@ -893,6 +895,8 @@ function StaffFormFields({
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
     setBankSearchStatus("銀行名・カナ・コードで検索");
     setBranchSearchStatus("銀行を選ぶと支店検索できます");
+    setIsBankPickerOpen(false);
+    setIsBranchPickerOpen(false);
     setLifecycleCases([]);
     setLifecycleLoading(false);
   }, [member]);
@@ -1105,6 +1109,7 @@ function StaffFormFields({
   async function searchBanks(value: string, kanaGroup?: string) {
     const result = await loadBankMaster(undefined, value, kanaGroup);
     setBankSearchStatus(result.banks.length ? `${result.banks.length}件の候補` : "候補がありません。コードまたはカナを確認してください。");
+    setIsBankPickerOpen(true);
   }
 
   async function searchBranches(form: HTMLFormElement | null, value: string) {
@@ -1112,10 +1117,12 @@ function StaffFormFields({
     if (!bankCode) {
       setBranchOptions([]);
       setBranchSearchStatus("先に銀行を選択してください");
+      setIsBranchPickerOpen(false);
       return;
     }
     const result = await loadBankMaster(bankCode, value);
     setBranchSearchStatus(result.branches.length ? `${result.branches.length}件の候補` : "候補がありません。支店名またはコードを確認してください。");
+    setIsBranchPickerOpen(true);
   }
 
   function setPayrollBankField(form: HTMLFormElement, name: string, value: string) {
@@ -1131,6 +1138,8 @@ function StaffFormFields({
     setPayrollBankField(form, "payrollBranchName", "");
     setBankSearchStatus(`${bank.name} を選択`);
     setBranchSearchStatus("支店名・カナ・コードで検索");
+    setIsBankPickerOpen(false);
+    setIsBranchPickerOpen(false);
     void loadBankMaster(bank.code);
   }
 
@@ -1139,17 +1148,20 @@ function StaffFormFields({
     setPayrollBankField(form, "payrollBranchCode", branch.code);
     setPayrollBankField(form, "payrollBranchName", branch.name);
     setBranchSearchStatus(`${branch.name} を選択`);
+    setIsBranchPickerOpen(false);
   }
 
   function findBankByCodeOrName(value: string) {
     const text = value.trim().toLowerCase();
     const code = value.replace(/\D/g, "");
+    if (!text && !code) return undefined;
     return bankOptions.find((bank) => bank.code === code || bank.name.toLowerCase() === text || bank.name.toLowerCase().includes(text) || String(bank.hira ?? "").includes(text) || String(bank.kana ?? "").toLowerCase().includes(text));
   }
 
   function findBranchByCodeOrName(value: string) {
     const text = value.trim().toLowerCase();
     const code = value.replace(/\D/g, "");
+    if (!text && !code) return undefined;
     return branchOptions.find((branch) => branch.code === code || branch.name.toLowerCase() === text || branch.name.toLowerCase().includes(text) || String(branch.hira ?? "").includes(text) || String(branch.kana ?? "").toLowerCase().includes(text));
   }
 
@@ -1307,9 +1319,9 @@ function StaffFormFields({
               <span>銀行名</span>
               <input name="payrollBankName" defaultValue={member?.payrollBankName ?? ""} placeholder="例: 福岡銀行 / ふくおか / 0177" onChange={(event) => void searchBanks(event.currentTarget.value)} onBlur={applyPayrollBank} />
             </label>
-            {bankOptions.length ? (
-              <div className="staff-bank-option-list">
-                {bankOptions.slice(0, 8).map((bank) => (
+            {isBankPickerOpen && bankOptions.length ? (
+              <div className="staff-bank-option-list is-open" aria-label="銀行候補">
+                {bankOptions.map((bank) => (
                   <button type="button" key={bank.code} onClick={(event) => selectPayrollBank(event.currentTarget.form, bank)}>
                     <strong>{bank.name}</strong>
                     <span>{bank.code} / {bank.hira || bank.kana}</span>
@@ -1325,21 +1337,19 @@ function StaffFormFields({
               <span>支店コード</span>
               <input name="payrollBranchCode" inputMode="numeric" maxLength={3} defaultValue={member?.payrollBranchCode ?? ""} placeholder="例: 200" onFocus={(event) => {
                 const form = event.currentTarget.form;
-                const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
-                if (bankCode) void loadBankMaster(bankCode);
+                if (form) void searchBranches(form, "");
               }} onChange={(event) => void searchBranches(event.currentTarget.form, event.currentTarget.value)} onBlur={applyPayrollBranch} />
             </label>
             <label>
               <span>支店名</span>
               <input name="payrollBranchName" defaultValue={member?.payrollBranchName ?? ""} placeholder="例: 天神 / てんじん / 200" onFocus={(event) => {
                 const form = event.currentTarget.form;
-                const bankCode = form ? (form.elements.namedItem("payrollBankCode") as HTMLInputElement | null)?.value : "";
-                if (bankCode) void loadBankMaster(bankCode);
+                if (form) void searchBranches(form, "");
               }} onChange={(event) => void searchBranches(event.currentTarget.form, event.currentTarget.value)} onBlur={applyPayrollBranch} />
             </label>
-            {branchOptions.length ? (
-              <div className="staff-bank-option-list">
-                {branchOptions.slice(0, 8).map((branch) => (
+            {isBranchPickerOpen && branchOptions.length ? (
+              <div className="staff-bank-option-list is-open" aria-label="支店候補">
+                {branchOptions.map((branch) => (
                   <button type="button" key={`${branch.bankCode}-${branch.code}`} onClick={(event) => selectPayrollBranch(event.currentTarget.form, branch)}>
                     <strong>{branch.name}</strong>
                     <span>{branch.code} / {branch.hira || branch.kana}</span>

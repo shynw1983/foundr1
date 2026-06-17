@@ -2,6 +2,7 @@ import { requireStaffViewSession } from "../../../lib/staff-admin-access";
 import { sql } from "../../../lib/db";
 import { builtInBanks, builtInBranches } from "../../../lib/bank-master";
 import type { BankMasterBank, BankMasterBranch } from "../../../lib/bank-master";
+import zenginCode from "zengin-code";
 
 function normalizeQuery(value: string | null) {
   return String(value ?? "").trim().toLowerCase();
@@ -27,6 +28,10 @@ type TerarenBank = {
   };
 };
 
+type SearchMode = "initial" | "search" | "kana";
+const bankLikeCodeThreshold = 1000;
+const institutionTypePattern = /(銀行|信金|信用金庫|信用組合|信組|労働金庫|農協|漁協|信連|信農連|信漁連)$/;
+
 async function fetchJsonWithTimeout<T>(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -43,6 +48,44 @@ async function fetchJsonWithTimeout<T>(url: string) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function shouldAppendBankSuffix(code: string, name: string) {
+  const numericCode = Number(code);
+  return code === "9900" || (Number.isFinite(numericCode) && numericCode < bankLikeCodeThreshold && !institutionTypePattern.test(name));
+}
+
+function appendBankSuffix(code: string, name: string, suffix: string) {
+  return shouldAppendBankSuffix(code, name) ? `${name}${suffix}` : name;
+}
+
+function normalizeZenginBank(item: { code: string; name: string; kana: string; hira: string }): BankMasterBank {
+  return {
+    code: item.code,
+    name: appendBankSuffix(item.code, item.name, "銀行"),
+    kana: appendBankSuffix(item.code, item.kana, "ギンコウ"),
+    hira: appendBankSuffix(item.code, item.hira, "ぎんこう")
+  };
+}
+
+function normalizeZenginBranch(bankCode: string, item: { code: string; name: string; kana: string; hira: string }): BankMasterBranch {
+  return {
+    bankCode,
+    code: item.code,
+    name: item.name.endsWith("支店") || item.name.endsWith("出張所") ? item.name : `${item.name}支店`,
+    kana: item.name.endsWith("支店") || item.name.endsWith("出張所") ? item.kana : `${item.kana}シテン`,
+    hira: item.name.endsWith("支店") || item.name.endsWith("出張所") ? item.hira : `${item.hira}してん`
+  };
+}
+
+function getZenginBanks() {
+  return Object.values(zenginCode).map(normalizeZenginBank);
+}
+
+function getZenginBranches(bankCode: string) {
+  const bank = zenginCode[bankCode];
+  if (!bank) return [];
+  return Object.values(bank.branches).map((branch) => normalizeZenginBranch(bankCode, branch));
 }
 
 function normalizeBank(item: TerarenBank): BankMasterBank | null {
@@ -99,6 +142,12 @@ function sortByHiraThenCode<T extends { code: string; hira?: string; kana?: stri
   return String(a.hira || a.kana || a.name).localeCompare(String(b.hira || b.kana || b.name), "ja") || a.code.localeCompare(b.code);
 }
 
+function getLimit(mode: SearchMode) {
+  if (mode === "kana") return 1000;
+  if (mode === "search") return 80;
+  return 20;
+}
+
 export async function GET(request: Request) {
   const access = await requireStaffViewSession();
   if (!access) return Response.json({ error: "権限がありません。" }, { status: 403 });
@@ -107,6 +156,7 @@ export async function GET(request: Request) {
   const query = normalizeQuery(url.searchParams.get("query"));
   const kanaGroup = normalizeKanaGroup(url.searchParams.get("kanaGroup"));
   const bankCode = digits(url.searchParams.get("bankCode"));
+  const mode: SearchMode = kanaGroup ? "kana" : query ? "search" : "initial";
 
   const savedBanks = await sql`
     select distinct
@@ -133,8 +183,9 @@ export async function GET(request: Request) {
       )
   `;
 
-  const remoteBanks = await getRemoteBanks();
-  const bankByCode = new Map(builtInBanks.map((bank) => [bank.code, bank]));
+  const zenginBanks = getZenginBanks();
+  const remoteBanks = zenginBanks.length ? [] : await getRemoteBanks();
+  const bankByCode = new Map([...builtInBanks, ...zenginBanks].map((bank) => [bank.code, bank]));
   for (const bank of remoteBanks) {
     bankByCode.set(bank.code, bank);
   }
@@ -148,7 +199,7 @@ export async function GET(request: Request) {
     .filter((bank) => matchesQuery(bank, query))
     .filter((bank) => matchesKanaGroup(bank, kanaGroup))
     .sort(sortByHiraThenCode)
-    .slice(0, query || kanaGroup ? 80 : 20);
+    .slice(0, getLimit(mode));
 
   const savedBranches = bankCode ? await sql`
     select distinct
@@ -176,9 +227,10 @@ export async function GET(request: Request) {
       )
   ` : [];
 
-  const remoteBranches = await getRemoteBranches(bankCode);
+  const zenginBranches = getZenginBranches(bankCode);
+  const remoteBranches = zenginBranches.length ? [] : await getRemoteBranches(bankCode);
   const branchesByCode = new Map(
-    (remoteBranches.length ? remoteBranches : builtInBranches)
+    (zenginBranches.length ? zenginBranches : remoteBranches.length ? remoteBranches : builtInBranches)
       .filter((branch) => !bankCode || branch.bankCode === bankCode)
       .map((branch) => [branch.code, branch])
   );
@@ -192,7 +244,7 @@ export async function GET(request: Request) {
     .filter((branch) => matchesQuery(branch, query))
     .filter((branch) => matchesKanaGroup(branch, kanaGroup))
     .sort(sortByHiraThenCode)
-    .slice(0, query || kanaGroup ? 80 : 20);
+    .slice(0, getLimit(mode));
 
   return Response.json({ banks, branches });
 }
