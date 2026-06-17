@@ -78,6 +78,8 @@ type ImportBatch = {
   brandName: string;
   fileName: string;
   importedOrderCount: number;
+  createdOrderCount: number;
+  updatedOrderCount: number;
   rawRowCount: number;
   createdAt: string;
 };
@@ -404,6 +406,8 @@ function buildSalesAnalysisFacts(summary: SalesSummary, storeName: string) {
       brandName: item.brandName,
       fileName: item.fileName,
       importedOrderCount: item.importedOrderCount,
+      createdOrderCount: item.createdOrderCount,
+      updatedOrderCount: item.updatedOrderCount,
       createdAt: item.createdAt
     })),
     untrackedDays
@@ -588,14 +592,20 @@ export default function SalesPage() {
       method: "POST",
       body: formData
     });
-    const body = await response.json().catch(() => ({})) as { error?: string; importedOrderCount?: number; rawRowCount?: number };
+    const body = await response.json().catch(() => ({})) as {
+      error?: string;
+      importedOrderCount?: number;
+      createdOrderCount?: number;
+      updatedOrderCount?: number;
+      rawRowCount?: number;
+    };
     setUploadingSourceId("");
     if (!response.ok) {
       setMessage(body.error ?? "売上ファイルを取り込めませんでした。");
       return;
     }
     setFilesBySource((current) => ({ ...current, [source.id]: null }));
-    setMessage(`${source.sourceLabel} の売上ファイルを取り込みました。注文 ${body.importedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
+    setMessage(`${source.sourceLabel} の売上ファイルを取り込みました。解析 ${body.importedOrderCount ?? 0} 件・新規 ${body.createdOrderCount ?? 0} 件・更新 ${body.updatedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
     await loadSales(month, selectedStoreId);
   }
 
@@ -868,7 +878,7 @@ export default function SalesPage() {
                       </div>
                       <small>
                         {imported
-                          ? `${imported.fileName} / ${formatDateTime(imported.createdAt)} / ${imported.importedOrderCount}件`
+                          ? `${imported.fileName} / ${formatDateTime(imported.createdAt)} / 解析 ${imported.importedOrderCount}件・新規 ${imported.createdOrderCount}件・更新 ${imported.updatedOrderCount}件`
                           : source.importSupported
                             ? "この月の売上ファイルを取り込んでください。"
                             : `${source.sourceLabel} の売上ファイル取込は次フェーズで対応します。`}
@@ -904,7 +914,7 @@ export default function SalesPage() {
                     <strong>{item.fileName}</strong>
                     <small>{item.sourcePlatform} / {formatDateTime(item.createdAt)}</small>
                   </div>
-                  <span>{item.importedOrderCount}件</span>
+                  <span>解析 {item.importedOrderCount}件 / 新規 {item.createdOrderCount}件 / 更新 {item.updatedOrderCount}件</span>
                 </div>
               ))}
               {summary && summary.imports.length === 0 ? <div className="empty-state">この月の取込履歴はありません</div> : null}

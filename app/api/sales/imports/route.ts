@@ -153,6 +153,8 @@ export async function GET(request: Request) {
       fileName: String(row.fileName),
       rawRowCount: Number(row.rawRowCount ?? 0),
       importedOrderCount: Number(row.importedOrderCount ?? 0),
+      createdOrderCount: Number(row.metadata?.createdOrderCount ?? row.importedOrderCount ?? 0),
+      updatedOrderCount: Number(row.metadata?.updatedOrderCount ?? 0),
       skippedRowCount: Number(row.skippedRowCount ?? 0),
       createdAt: new Date(String(row.createdAt)).toISOString(),
       brandName: String(row.metadata?.brandName ?? ""),
@@ -234,6 +236,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "対象月を判定できませんでした。" }, { status: 400 });
   }
 
+  const sourceExternalIds = Array.from(new Set(parsed.orders.map((order) => order.sourceExternalId).filter(Boolean)));
+  const existingOrderRows = sourceExternalIds.length ? await sql`
+    select source_external_id as "sourceExternalId"
+    from sales_orders
+    where source_platform = ${sourcePlatform}
+      and source_external_id = any(${sourceExternalIds})
+  ` : [];
+  const existingOrderIds = new Set(existingOrderRows.map((row) => String(row.sourceExternalId)));
+  const updatedOrderCount = parsed.orders.filter((order) => existingOrderIds.has(order.sourceExternalId)).length;
+  const createdOrderCount = parsed.orders.length - updatedOrderCount;
+
   const brandName = source.brandName ? String(source.brandName) : "";
   const brandId = await getStoreBrandId(storeId, brandName);
   const batchRows = await sql`
@@ -260,7 +273,7 @@ export async function POST(request: Request) {
       ${parsed.orders.length},
       ${parsed.skippedRowCount},
       ${session.id},
-      ${JSON.stringify({ detectedMonth: parsed.detectedMonth, salesSourceId, brandName })}::jsonb,
+      ${JSON.stringify({ detectedMonth: parsed.detectedMonth, salesSourceId, brandName, createdOrderCount, updatedOrderCount })}::jsonb,
       now()
     )
     returning id::text
@@ -379,7 +392,7 @@ export async function POST(request: Request) {
     action: `sales.import.${sourcePlatform}`,
     targetType: "sales_import_batch",
     targetId: batchId,
-    metadata: { storeId, salesSourceId, sourcePlatform, importMonth, fileName: file.name, importedOrderCount: parsed.orders.length },
+    metadata: { storeId, salesSourceId, sourcePlatform, importMonth, fileName: file.name, importedOrderCount: parsed.orders.length, createdOrderCount, updatedOrderCount },
     request
   });
 
@@ -389,6 +402,8 @@ export async function POST(request: Request) {
     importMonth,
     rawRowCount: parsed.rawRows.length,
     importedOrderCount: parsed.orders.length,
+    createdOrderCount,
+    updatedOrderCount,
     skippedRowCount: parsed.skippedRowCount
   });
 }

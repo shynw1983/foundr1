@@ -751,6 +751,8 @@ export async function GET(request: Request) {
       sourcePlatform: String(row.sourcePlatform),
       fileName: String(row.fileName),
       importedOrderCount: Number(row.importedOrderCount ?? 0),
+      createdOrderCount: Number(row.metadata?.createdOrderCount ?? row.importedOrderCount ?? 0),
+      updatedOrderCount: Number(row.metadata?.updatedOrderCount ?? 0),
       rawRowCount: Number(row.rawRowCount ?? 0),
       createdAt: new Date(String(row.createdAt)).toISOString(),
       brandName: String(row.metadata?.brandName ?? "")
