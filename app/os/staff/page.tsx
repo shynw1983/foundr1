@@ -636,7 +636,7 @@ export default function StaffPage() {
               </div>
               <div className="management-list">
                 {filteredStaff.length ? filteredStaff.map((member) => {
-                  const payrollBankStatus = getPayrollBankStatus(member);
+                  const profileStatus = getStaffProfileStatus(member);
                   return (
                     <article className="management-row staff-row" key={member.id}>
                     <div>
@@ -645,8 +645,8 @@ export default function StaffPage() {
                         <span className={`presence-pill ${getPresenceState(member.lastSeenAt).tone}`}>
                           {getPresenceState(member.lastSeenAt).label}
                         </span>
-                        <span className={`payroll-bank-pill ${payrollBankStatus.className}`}>
-                          {payrollBankStatus.label}
+                        <span className={`staff-profile-pill ${profileStatus.className}`}>
+                          {profileStatus.label}
                         </span>
                       </div>
                       <p>
@@ -667,7 +667,7 @@ export default function StaffPage() {
                         {member.privacyConsentResetRequired ? " ・ 個人情報文書の再同意待ち" : ""}
                         {member.larkOpenId || member.larkUserId ? " ・ Lark 連携済み" : ""}
                       </small>
-                      {payrollBankStatus.detail ? <small className="staff-payroll-bank-detail">{payrollBankStatus.detail}</small> : null}
+                      {profileStatus.detail ? <small className="staff-profile-status-detail">{profileStatus.detail}</small> : null}
                     </div>
                     <div className="row-actions">
                       <button className="secondary-button" type="button" onClick={() => setEditingStaff(member)}>
@@ -791,12 +791,47 @@ function getPayrollBankMissingFields(member: StaffMember) {
   ].filter(Boolean);
 }
 
-function getPayrollBankStatus(member: StaffMember) {
-  const missing = getPayrollBankMissingFields(member);
-  if (member.role === "store_terminal") return { label: "給与対象外", className: "is-muted", detail: "" };
-  if (!missing.length) return { label: "振込口座OK", className: "is-active", detail: `${member.payrollBankName ?? "銀行名未設定"} ${member.payrollBranchName ?? ""}`.trim() };
-  if (missing.length === 4) return { label: "口座未入力", className: "is-warning", detail: "給与振込口座が未入力" };
-  return { label: "口座確認", className: "is-warning", detail: `不足: ${missing.join("・")}` };
+function getPayrollWageMissingFields(member: StaffMember) {
+  if (member.role === "store_terminal") return [];
+  return getWorkStores(member)
+    .filter((store) => store.payrollEnabled !== false)
+    .flatMap((store) => {
+      const employmentType = store.employmentType ?? member.employmentType ?? "hourly";
+      const wageMissing = employmentType === "monthly" ? !store.monthlySalary : !store.hourlyWage;
+      return [
+        store.employeeNumber ? "" : "社員番号",
+        store.hireDate ? "" : "入社日",
+        wageMissing ? "給与単価" : ""
+      ].filter(Boolean);
+    });
+}
+
+function getStaffProfileStatus(member: StaffMember) {
+  if (member.role === "store_terminal") {
+    const missing = [
+      member.name ? "" : "端末名",
+      member.loginId ? "" : "ログインID",
+      getVisibleStores(member).length ? "" : "利用店舗"
+    ].filter(Boolean);
+    if (!missing.length) return { label: "端末OK", className: "is-active", detail: "端末名・ログイン・利用店舗 入力済み" };
+    return { label: "端末確認", className: "is-warning", detail: `不足: ${missing.join("・")}` };
+  }
+
+  const missingGroups = [
+    [
+      member.nameKana ? "" : "フリガナ",
+      member.gender && member.gender !== "unspecified" ? "" : "性別",
+      member.birthDate ? "" : "生年月日",
+      member.address ? "" : "住所"
+    ].filter(Boolean).length ? "基本情報" : "",
+    getWorkStores(member).length ? "" : "勤務店舗",
+    getPayrollWageMissingFields(member).length ? "勤務・給与" : "",
+    member.payrollSubject === "paid" && getPayrollBankMissingFields(member).length ? "振込口座" : ""
+  ].filter(Boolean);
+
+  if (!missingGroups.length) return { label: "資料OK", className: "is-active", detail: "基本情報・勤務・給与・振込口座 入力済み" };
+  if (missingGroups.length >= 3) return { label: "未入力多い", className: "is-warning", detail: `不足: ${missingGroups.join("・")}` };
+  return { label: "要確認", className: "is-warning", detail: `不足: ${missingGroups.join("・")}` };
 }
 
 const halfWidthKanaMap: Record<string, string> = {

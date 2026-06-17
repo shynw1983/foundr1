@@ -5994,7 +5994,7 @@ body :where(
   background: #eef2f6;
 }
 
-.payroll-bank-pill {
+.staff-profile-pill {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -6006,22 +6006,22 @@ body :where(
   white-space: nowrap;
 }
 
-.payroll-bank-pill.is-active {
+.staff-profile-pill.is-active {
   color: var(--green);
   background: var(--green-soft);
 }
 
-.payroll-bank-pill.is-warning {
+.staff-profile-pill.is-warning {
   color: #9a6a12;
   background: #fff4d7;
 }
 
-.payroll-bank-pill.is-muted {
+.staff-profile-pill.is-muted {
   color: var(--muted);
   background: #eef2f6;
 }
 
-.staff-payroll-bank-detail {
+.staff-profile-status-detail {
   display: block;
 }
 
