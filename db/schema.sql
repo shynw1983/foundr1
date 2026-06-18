@@ -182,6 +182,7 @@ create table if not exists employees (
   name_kana text,
   address text,
   birth_date date,
+  my_number text,
   employee_number text,
   hire_date date,
   resignation_date date,
@@ -224,6 +225,7 @@ alter table employees add column if not exists gender text not null default 'uns
 alter table employees add column if not exists name_kana text;
 alter table employees add column if not exists address text;
 alter table employees add column if not exists birth_date date;
+alter table employees add column if not exists my_number text;
 alter table employees add column if not exists employee_number text;
 alter table employees add column if not exists hire_date date;
 alter table employees add column if not exists resignation_date date;

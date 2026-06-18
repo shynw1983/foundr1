@@ -11,6 +11,7 @@ type StaffPayload = {
   nameKana?: string;
   address?: string;
   birthDate?: string;
+  myNumber?: string;
   employeeNumber?: string;
   hireDate?: string;
   resignationDate?: string;
@@ -128,6 +129,11 @@ function toDigits(value: string | undefined) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+function normalizeMyNumber(value: string | undefined) {
+  const digits = toDigits(value);
+  return digits || null;
+}
+
 function normalizeBankKana(value: string | undefined) {
   const text = String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
   return text || null;
@@ -209,6 +215,7 @@ export async function GET() {
       employees.name_kana as "nameKana",
       employees.address,
       employees.birth_date as "birthDate",
+      employees.my_number as "myNumber",
       employees.is_foreign_national as "isForeignNational",
       employees.payroll_bank_code as "payrollBankCode",
       employees.payroll_bank_name as "payrollBankName",
@@ -378,11 +385,18 @@ export async function GET() {
   `;
 
   return Response.json({
-    employees: employees.map((employee) => ({
-      ...employee,
-      stores: employee.visibleStores,
-      canManage: canManageTargetRole(access, String(employee.role ?? ""))
-    })),
+    employees: employees.map((employee) => {
+      const canManage = canManageTargetRole(access, String(employee.role ?? ""));
+      const myNumberDigits = String(employee.myNumber ?? "").replace(/\D/g, "");
+      return {
+        ...employee,
+        myNumber: canManage ? employee.myNumber : null,
+        myNumberRegistered: Boolean(myNumberDigits),
+        myNumberLast4: canManage && myNumberDigits ? myNumberDigits.slice(-4) : null,
+        stores: employee.visibleStores,
+        canManage
+      };
+    }),
     stores,
     currentUserId: session.id,
     currentUserRole: session.role,
@@ -403,6 +417,7 @@ export async function POST(request: Request) {
   const nameKana = toNullableText(body.nameKana);
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
+  const myNumber = normalizeMyNumber(body.myNumber);
   const isForeignNational = Boolean(body.isForeignNational);
   const payrollBankCode = toDigits(body.payrollBankCode);
   const payrollBankName = toNullableText(body.payrollBankName);
@@ -432,6 +447,7 @@ export async function POST(request: Request) {
   const effectiveNameKana = role === "store_terminal" ? null : nameKana;
   const effectiveAddress = role === "store_terminal" ? null : address;
   const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
+  const effectiveMyNumber = role === "store_terminal" ? null : myNumber;
   const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
   const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
   const effectivePayrollBankCode = role === "store_terminal" ? null : payrollBankCode || null;
@@ -463,6 +479,9 @@ export async function POST(request: Request) {
   if (passwordError) {
     return Response.json({ error: passwordError }, { status: 400 });
   }
+  if (myNumber && myNumber.length !== 12) {
+    return Response.json({ error: "マイナンバーは12桁で入力してください。" }, { status: 400 });
+  }
 
   const rows = await sql`
     insert into employees (
@@ -473,6 +492,7 @@ export async function POST(request: Request) {
       name_kana,
       address,
       birth_date,
+      my_number,
       is_foreign_national,
       payroll_bank_code,
       payroll_bank_name,
@@ -500,6 +520,7 @@ export async function POST(request: Request) {
       ${effectiveNameKana},
       ${effectiveAddress},
       ${effectiveBirthDate},
+      ${effectiveMyNumber},
       ${effectiveIsForeignNational},
       ${effectivePayrollBankCode},
       ${effectivePayrollBankName},
@@ -745,7 +766,7 @@ export async function POST(request: Request) {
     action: "staff.created",
     targetType: "employee",
     targetId: String(employeeId ?? ""),
-    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, myNumberSet: Boolean(effectiveMyNumber), scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 

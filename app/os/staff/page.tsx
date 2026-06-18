@@ -79,6 +79,9 @@ type StaffMember = {
   nameKana?: string | null;
   address?: string | null;
   birthDate?: string | null;
+  myNumber?: string | null;
+  myNumberRegistered?: boolean | null;
+  myNumberLast4?: string | null;
   isForeignNational?: boolean | null;
   payrollBankCode?: string | null;
   payrollBankName?: string | null;
@@ -419,6 +422,7 @@ export default function StaffPage() {
       nameKana: String(formData.get("nameKana") ?? ""),
       address: String(formData.get("address") ?? ""),
       birthDate: String(formData.get("birthDate") ?? ""),
+      myNumber: String(formData.get("myNumber") ?? ""),
       isForeignNational: formData.get("isForeignNational") === "true",
       payrollBankCode: String(formData.get("payrollBankCode") ?? ""),
       payrollBankName: String(formData.get("payrollBankName") ?? ""),
@@ -661,7 +665,7 @@ export default function StaffPage() {
                       <small>
                         {member.role === "store_terminal"
                           ? `${member.status === "active" ? "有効" : "停止中"} ・ 利用店舗: ${getVisibleStores(member).length ? getVisibleStores(member).map((store) => store.name).join("、") : "未設定"} ・ ${formatLastSeen(member.lastSeenAt)}`
-                          : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ ${formatStaffScopeSummary(member)} ・ ${formatLastSeen(member.lastSeenAt)}`
+                          : `${member.status === "active" ? "有効" : "停止中"} ・ ${payrollSubjectLabels[member.payrollSubject] ?? member.payrollSubject} ・ ${formatMyNumberStatus(member)} ・ ${formatStaffScopeSummary(member)} ・ ${formatLastSeen(member.lastSeenAt)}`
                         }
                         {member.passwordMustChange ? " ・ 初回パスワード変更待ち" : ""}
                         {member.privacyConsentResetRequired ? " ・ 個人情報文書の再同意待ち" : ""}
@@ -769,6 +773,19 @@ function formatWorkStoreSummary(store: WorkStoreOption) {
   return details.length ? `${store.name}（${details.join(" / ")}）` : store.name;
 }
 
+function hasMyNumber(member: StaffMember) {
+  return member.myNumberRegistered === true || Boolean(String(member.myNumber ?? "").replace(/\D/g, ""));
+}
+
+function formatMyNumberStatus(member: StaffMember) {
+  const digits = String(member.myNumber ?? "").replace(/\D/g, "");
+  const last4 = member.myNumberLast4 || (digits ? digits.slice(-4) : "");
+  if (hasMyNumber(member) && last4) return `マイナンバー登録済み（下4桁 ${last4}）`;
+  if (hasMyNumber(member)) return "マイナンバー登録済み";
+  if (!digits) return "マイナンバー未登録";
+  return "マイナンバー未登録";
+}
+
 function formatStaffScopeSummary(member: StaffMember) {
   const workStoreText = getWorkStores(member).length
     ? getWorkStores(member).map(formatWorkStoreSummary).join("、")
@@ -791,7 +808,7 @@ function getPayrollBankMissingFields(member: StaffMember) {
   ].filter(Boolean);
 }
 
-function getPayrollWageMissingFields(member: StaffMember) {
+function getEmploymentPayrollMissingFields(member: StaffMember) {
   if (member.role === "store_terminal") return [];
   return getWorkStores(member)
     .filter((store) => store.payrollEnabled !== false)
@@ -822,14 +839,15 @@ function getStaffProfileStatus(member: StaffMember) {
       member.nameKana ? "" : "フリガナ",
       member.gender && member.gender !== "unspecified" ? "" : "性別",
       member.birthDate ? "" : "生年月日",
+      hasMyNumber(member) ? "" : "マイナンバー",
       member.address ? "" : "住所"
     ].filter(Boolean).length ? "基本情報" : "",
     getWorkStores(member).length ? "" : "勤務店舗",
-    getPayrollWageMissingFields(member).length ? "勤務・給与" : "",
+    getEmploymentPayrollMissingFields(member).length ? "雇用・給与" : "",
     member.payrollSubject === "paid" && getPayrollBankMissingFields(member).length ? "振込口座" : ""
   ].filter(Boolean);
 
-  if (!missingGroups.length) return { label: "資料OK", className: "is-active", detail: "基本情報・勤務・給与・振込口座 入力済み" };
+  if (!missingGroups.length) return { label: "資料OK", className: "is-active", detail: "基本情報・勤務店舗・雇用・給与・振込口座 入力済み" };
   if (missingGroups.length >= 3) return { label: "未入力多い", className: "is-warning", detail: `不足: ${missingGroups.join("・")}` };
   return { label: "要確認", className: "is-warning", detail: `不足: ${missingGroups.join("・")}` };
 }
@@ -912,6 +930,7 @@ function StaffFormFields({
   const [forcePrivacyConsentReset, setForcePrivacyConsentReset] = useState(() => (
     member ? Boolean(member.privacyConsentResetRequired) : false
   ));
+  const [showMyNumber, setShowMyNumber] = useState(false);
   const [bankOptions, setBankOptions] = useState<BankMasterBank[]>([]);
   const [branchOptions, setBranchOptions] = useState<BankMasterBranch[]>([]);
   const [bankSearchStatus, setBankSearchStatus] = useState("銀行名・カナ・コードで検索");
@@ -928,6 +947,7 @@ function StaffFormFields({
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
+    setShowMyNumber(false);
     setBankSearchStatus("銀行名・カナ・コードで検索");
     setBranchSearchStatus("銀行を選ぶと支店検索できます");
     setIsBankPickerOpen(false);
@@ -1317,6 +1337,24 @@ function StaffFormFields({
               <span>生年月日</span>
               <input name="birthDate" type="date" defaultValue={toDateInputValue(member?.birthDate)} />
             </label>
+            <label>
+              <span>マイナンバー</span>
+              <input
+                name="myNumber"
+                type={showMyNumber ? "text" : "password"}
+                inputMode="numeric"
+                maxLength={12}
+                defaultValue={member?.myNumber ?? ""}
+                placeholder="12桁"
+                autoComplete="off"
+                onInput={(event) => {
+                  event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 12);
+                }}
+              />
+            </label>
+            <button className="secondary-button" type="button" onClick={() => setShowMyNumber((current) => !current)}>
+              {showMyNumber ? "マイナンバーを隠す" : "マイナンバーを表示"}
+            </button>
             <label>
               <span>住所</span>
               <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />

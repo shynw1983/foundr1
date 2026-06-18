@@ -11,6 +11,7 @@ type StaffPayload = {
   nameKana?: string;
   address?: string;
   birthDate?: string;
+  myNumber?: string;
   employeeNumber?: string;
   hireDate?: string;
   resignationDate?: string;
@@ -128,6 +129,11 @@ function toDigits(value: string | undefined) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+function normalizeMyNumber(value: string | undefined) {
+  const digits = toDigits(value);
+  return digits || null;
+}
+
 function normalizeBankKana(value: string | undefined) {
   const text = String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
   return text || null;
@@ -236,6 +242,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const nameKana = toNullableText(body.nameKana);
   const address = toNullableText(body.address);
   const birthDate = toNullableDate(body.birthDate);
+  const myNumber = normalizeMyNumber(body.myNumber);
   const isForeignNational = Boolean(body.isForeignNational);
   const payrollBankCode = toDigits(body.payrollBankCode);
   const payrollBankName = toNullableText(body.payrollBankName);
@@ -265,6 +272,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const effectiveNameKana = role === "store_terminal" ? null : nameKana;
   const effectiveAddress = role === "store_terminal" ? null : address;
   const effectiveBirthDate = role === "store_terminal" ? null : birthDate;
+  const effectiveMyNumber = role === "store_terminal" ? null : myNumber;
   const effectiveGender = role === "store_terminal" ? "unspecified" : gender;
   const effectiveIsForeignNational = role === "store_terminal" ? false : isForeignNational;
   const effectivePayrollBankCode = role === "store_terminal" ? null : payrollBankCode || null;
@@ -305,6 +313,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return Response.json({ error: passwordError }, { status: 400 });
     }
   }
+  if (myNumber && myNumber.length !== 12) {
+    return Response.json({ error: "マイナンバーは12桁で入力してください。" }, { status: 400 });
+  }
 
   if (password) {
     await sql`
@@ -316,6 +327,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           name_kana = ${effectiveNameKana},
           address = ${effectiveAddress},
           birth_date = ${effectiveBirthDate},
+          my_number = ${effectiveMyNumber},
           is_foreign_national = ${effectiveIsForeignNational},
           payroll_bank_code = ${effectivePayrollBankCode},
           payroll_bank_name = ${effectivePayrollBankName},
@@ -348,6 +360,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           name_kana = ${effectiveNameKana},
           address = ${effectiveAddress},
           birth_date = ${effectiveBirthDate},
+          my_number = ${effectiveMyNumber},
           is_foreign_national = ${effectiveIsForeignNational},
           payroll_bank_code = ${effectivePayrollBankCode},
           payroll_bank_name = ${effectivePayrollBankName},
@@ -654,7 +667,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     action: "staff.updated",
     targetType: "employee",
     targetId: id,
-    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), privacyConsentResetRequired, scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
+    metadata: { role, staffCategory: effectiveStaffCategory, payrollSubject: effectivePayrollSubject, status, passwordChanged: Boolean(password), privacyConsentResetRequired, myNumberSet: Boolean(effectiveMyNumber), scopeSource: role === "staff" ? "work_stores" : "visible_stores", visibleStoreCount: visibleStoreIds.length, workStoreCount: workStoreIds.length },
     request
   });
 
