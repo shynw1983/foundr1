@@ -1742,7 +1742,12 @@ export function TimecardPage({
                             >
                               <span>{day.label}</span>
                               <small>{day.weekdayLabel}</small>
-                              {isUncovered ? <em>未</em> : null}
+                              {isUncovered || isToday ? (
+                                <span className="shift-day-badges">
+                                  {isUncovered ? <span className="shift-day-badge is-uncovered">未</span> : null}
+                                  {isToday ? <span className="shift-day-badge is-today">今日</span> : null}
+                                </span>
+                              ) : null}
                             </th>
                           );
                         })}
@@ -1836,6 +1841,11 @@ export function TimecardPage({
                           <th className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`.trim()} key={day.key}>
                             <span>{day.label}</span>
                             <small>{day.weekdayLabel}</small>
+                            {day.key === todayKey ? (
+                              <span className="shift-day-badges">
+                                <span className="shift-day-badge is-today">今日</span>
+                              </span>
+                            ) : null}
                           </th>
                         ))}
                         <th className="shift-cost-head">概算人件費</th>
