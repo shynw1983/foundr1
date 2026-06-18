@@ -46,7 +46,8 @@ function addMinutesToTime(time: string, minutes: number) {
   return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
 }
 
-const maamaaSameDayReceptionStartTime = "12:00";
+const maamaaSameDayReceptionStartTime = "11:30";
+const maamaaSameDayPickupStartTime = "12:00";
 const maamaaSameDayPickupCutoffTime = "23:00";
 
 function findChoice(items: MaamaaPricedOption[], id: string, required = true) {
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
   const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
   const tokyoNow = getTokyoNow();
   const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
-  const earliestPickupTime = addMinutesToTime(maamaaSameDayReceptionStartTime, minimumPickupMinutes);
+  const earliestPickupTime = addMinutesToTime(maamaaSameDayPickupStartTime, minimumPickupMinutes);
   if (pickupDate !== tokyoNow.date) {
     return Response.json({ error: "Maamaa web reservations are only available for same-day pickup" }, { status: 400 });
   }
