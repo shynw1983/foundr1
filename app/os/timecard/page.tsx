@@ -1733,9 +1733,10 @@ export function TimecardPage({
                         {monthDays.map((day) => {
                           const coverage = coverageByDate.get(day.key);
                           const isUncovered = coverage?.status === "uncovered";
+                          const isToday = day.key === todayKey;
                           return (
                             <th
-                              className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()}
+                              className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`.trim()}
                               title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : undefined}
                               key={day.key}
                             >
@@ -1759,8 +1760,9 @@ export function TimecardPage({
                             const isBulkSelected = selectedShiftCellKeys.has(cellKey);
                             const coverage = coverageByDate.get(day.key);
                             const isUncovered = coverage?.status === "uncovered";
+                            const isToday = day.key === todayKey;
                             return (
-                              <td className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}`.trim()} key={day.key}>
+                              <td className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
                                   className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
                                   type="button"
@@ -1831,7 +1833,7 @@ export function TimecardPage({
                       <tr>
                         <th className="shift-employee-head">従業員</th>
                         {monthDays.map((day) => (
-                          <th className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                          <th className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`.trim()} key={day.key}>
                             <span>{day.label}</span>
                             <small>{day.weekdayLabel}</small>
                           </th>
@@ -1850,8 +1852,9 @@ export function TimecardPage({
                             const shouldShowMissing = Boolean(shift && !actual && !isFutureDate);
                             const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
+                            const isToday = day.key === todayKey;
                             return (
-                              <td className={day.isWeekend ? "is-weekend" : ""} key={day.key}>
+                              <td className={`${day.isWeekend ? "is-weekend" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
                                   className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isFutureDate && !actual ? " is-future" : ""}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"

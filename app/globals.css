@@ -17983,6 +17983,40 @@ body :where(
   background: #fff7f6;
 }
 
+.shift-grid td.is-today,
+.shift-grid thead th.is-today {
+  background: #edf8f3;
+}
+
+.shift-grid thead th.is-today {
+  color: var(--green);
+  box-shadow: inset 0 -3px 0 rgba(33, 116, 91, 0.78);
+}
+
+.shift-grid thead th.is-today::after {
+  content: "今日";
+  display: inline-grid;
+  min-width: 26px;
+  height: 15px;
+  margin-top: 3px;
+  place-items: center;
+  border: 1px solid rgba(33, 116, 91, 0.22);
+  border-radius: 999px;
+  background: white;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.shift-grid td.is-today {
+  box-shadow: inset 1px 0 0 rgba(33, 116, 91, 0.24), inset -1px 0 0 rgba(33, 116, 91, 0.24);
+}
+
+.shift-grid td.is-today .shift-cell.has-shift {
+  background: #dcefe8;
+}
+
 .shift-grid .shift-employee-head,
 .shift-grid .shift-employee-cell {
   position: sticky;
