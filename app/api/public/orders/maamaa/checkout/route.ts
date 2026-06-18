@@ -34,6 +34,12 @@ function getTokyoMinimumPickup(leadMinutes: number) {
   return { date, time };
 }
 
+function getTokyoToday() {
+  return getTokyoMinimumPickup(0).date;
+}
+
+const maamaaSameDayPickupCutoffTime = "23:00";
+
 function findChoice(items: MaamaaPricedOption[], id: string, required = true) {
   if (!id && !required) return null;
   return items.find((item) => item.id === id || item.name === id) ?? null;
@@ -188,6 +194,12 @@ export async function POST(request: Request) {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate) || !/^\d{2}:\d{2}$/.test(pickup)) {
     return Response.json({ error: "Invalid pickup time" }, { status: 400 });
+  }
+  if (pickupDate !== getTokyoToday()) {
+    return Response.json({ error: "Maamaa web reservations are only available for same-day pickup" }, { status: 400 });
+  }
+  if (pickup > maamaaSameDayPickupCutoffTime) {
+    return Response.json({ error: `Maamaa web reservations are available until ${maamaaSameDayPickupCutoffTime}` }, { status: 400 });
   }
   const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
   const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
