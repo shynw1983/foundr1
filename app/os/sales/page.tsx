@@ -118,7 +118,8 @@ type SalesSummary = {
     estimatedDeposit: number;
     deliveryShare: number;
     averageOrderValue: number;
-    activeDayCount: number;
+    salesPostedDayCount: number;
+    workTrackedDayCount: number;
   };
   weatherLocation: {
     name: string;
@@ -862,7 +863,7 @@ export default function SalesPage() {
           <article className="metric-card">
             <span>売上高</span>
             <strong>{formatMoney(summary?.totals.sales ?? 0)}</strong>
-            <small>注文 {summary?.totals.orderCount ?? 0}件 / 稼働日 {summary?.totals.activeDayCount ?? 0}日</small>
+            <small>注文 {summary?.totals.orderCount ?? 0}件 / 売上計上日数 {summary?.totals.salesPostedDayCount ?? 0}日 / 在店記録 {summary?.totals.workTrackedDayCount ?? 0}日</small>
           </article>
           <article className="metric-card">
             <span>推定入金額</span>

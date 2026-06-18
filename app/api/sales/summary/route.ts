@@ -679,6 +679,7 @@ export async function GET(request: Request) {
   const estimatedFeeTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedFee, 0);
   const estimatedDepositTotal = revenueGroups.reduce((sum, group) => sum + group.estimatedDeposit, 0);
   const deliverySales = revenueGroups.find((group) => group.key === "delivery")?.sales ?? 0;
+  const salesPostedDays = daily.filter((day) => day.orderCount > 0);
   const activeDays = daily.filter((day) => day.workMinutes > 0);
   const busiestDays = [...activeDays].sort((a, b) => (
     b.peakLoadLevelScore - a.peakLoadLevelScore
@@ -729,7 +730,8 @@ export async function GET(request: Request) {
       estimatedDeposit: estimatedDepositTotal,
       deliveryShare: totalSales > 0 ? (deliverySales / totalSales) * 100 : 0,
       averageOrderValue: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0,
-      activeDayCount: activeDays.length
+      salesPostedDayCount: salesPostedDays.length,
+      workTrackedDayCount: activeDays.length
     },
     weatherLocation: {
       name: weatherLocationName,
