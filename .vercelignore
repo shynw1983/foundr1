@@ -1,10 +1,13 @@
 .git
+.git.*
 .next
 .next*
 node_modules
 *.log
 *.tsbuildinfo
 .env*
+output
+outputs
 Foundr1Android/app/build
 Foundr1Android/.gradle
 Foundr1iOS
