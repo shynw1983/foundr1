@@ -67,23 +67,27 @@ export async function getStoreReservationWindowsForDate(input: {
     order by timecard_shifts.work_date, timecard_shifts.scheduled_start
   ` as Array<{ workDate: string; scheduledStart: string; scheduledEnd: string }>;
 
-  const pickupWindows = rows.flatMap((row) => {
+  const staffedWindows = rows.flatMap((row) => {
     const workDateOffset = row.workDate === input.pickupDate ? 0 : -24 * 60;
     const start = workDateOffset + toMinutes(row.scheduledStart);
     let end = workDateOffset + toMinutes(row.scheduledEnd);
     if (end <= start) end += 24 * 60;
-    const bufferedStart = start + startBuffer;
-    const bufferedEnd = end - endBuffer;
-    const clippedStart = Math.max(0, bufferedStart);
-    const clippedEnd = Math.min(24 * 60, bufferedEnd);
-    return clippedEnd > clippedStart ? [{ start: clippedStart, end: clippedEnd }] : [];
+    return end > start ? [{ start, end }] : [];
   });
 
-  return mergeWindows(pickupWindows).map((window) => ({
-    date: input.pickupDate,
-    start: formatMinutes(window.start),
-    end: formatMinutes(window.end)
-  }));
+  return mergeWindows(staffedWindows)
+    .flatMap((window) => {
+      const bufferedStart = window.start + startBuffer;
+      const bufferedEnd = window.end - endBuffer;
+      const clippedStart = Math.max(0, bufferedStart);
+      const clippedEnd = Math.min(24 * 60, bufferedEnd);
+      return clippedEnd > clippedStart ? [{ start: clippedStart, end: clippedEnd }] : [];
+    })
+    .map((window) => ({
+      date: input.pickupDate,
+      start: formatMinutes(window.start),
+      end: formatMinutes(window.end)
+    }));
 }
 
 export async function isPickupWithinReservationWindows(input: {
