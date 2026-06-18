@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { AppVersionNotice } from "../os/components/AppVersionNotice";
 import { PrivacyConsentGate } from "../os/components/PrivacyConsentGate";
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   manifest: "/manifest-staff.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Foundr1 STAFF"
   },
   icons: {
@@ -19,6 +19,14 @@ export const metadata: Metadata = {
     ],
     apple: "/icons/foundr1-staff-apple-touch.png"
   }
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#202a36"
 };
 
 export default function StaffLayout({

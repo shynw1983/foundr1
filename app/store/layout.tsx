@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { getAppVersion, getShortAppVersion } from "../../lib/app-version";
 import { StoreNativeOrderNotifier } from "./components/StoreNativeOrderNotifier";
 import { StorePrintStation } from "./components/StorePrintStation";
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   manifest: "/manifest-store.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Foundr1 STORE"
   },
   icons: {
@@ -20,6 +20,14 @@ export const metadata: Metadata = {
     ],
     apple: "/icons/foundr1-store-apple-touch.png"
   }
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#202a36"
 };
 
 export default function StoreLayout({

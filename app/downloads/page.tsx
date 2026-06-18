@@ -27,6 +27,9 @@ export const metadata: Metadata = {
   description: "Foundr1 Android APK downloads"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function readVersion(app: string) {
   const json = readFileSync(join(process.cwd(), "public", "downloads", app, "version.json"), "utf8");
   return JSON.parse(json) as ApkVersion;

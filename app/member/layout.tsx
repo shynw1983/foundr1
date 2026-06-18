@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   manifest: "/manifest-member.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Foundr1 MEMBER"
   },
   icons: {
@@ -24,7 +24,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#ffffff"
+  themeColor: "#202a36"
 };
 
 export default function MemberLayout({
