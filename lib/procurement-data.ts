@@ -493,6 +493,11 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.actual_price::text,
             ''
           ) as "actualPrice",
+          coalesce(
+            to_char(purchase_actuals.recorded_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD'),
+            to_char(coalesce(purchase_orders.deadline_at, purchase_orders.updated_at) at time zone 'Asia/Tokyo', 'YYYY-MM-DD'),
+            ''
+          ) as "purchasedDate",
           coalesce(purchase_actual_locations.name, '') as "supplierLocationName",
           (
             purchase_order_items.status in ('purchased', 'in_delivery', 'delivered', 'received')
@@ -535,7 +540,8 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
             purchase_actuals.actual_price,
             purchase_actuals.supplier_location_id,
             purchase_actuals.note,
-            purchase_actuals.price_is_exception
+            purchase_actuals.price_is_exception,
+            purchase_actuals.recorded_at
           from purchase_actuals
           where purchase_actuals.purchase_order_item_id = purchase_order_items.id
           order by purchase_actuals.recorded_at desc

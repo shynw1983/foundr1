@@ -19999,6 +19999,85 @@ body :where(
   gap: 8px;
 }
 
+.purchase-history-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.55fr) minmax(520px, 1.45fr);
+  gap: 14px;
+}
+
+.purchase-supplier-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.purchase-supplier-summary-row div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.purchase-supplier-summary-row div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.purchase-supplier-summary-row span,
+.purchase-history-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.purchase-history-table {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.purchase-history-head,
+.purchase-history-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(150px, 0.85fr) minmax(220px, 1.35fr) minmax(100px, 0.55fr) minmax(110px, 0.6fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.purchase-history-head {
+  padding: 0 12px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.purchase-history-row {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.purchase-history-row > div {
+  min-width: 0;
+}
+
+.purchase-history-row p {
+  margin-top: 4px;
+}
+
+.purchase-history-amount {
+  display: grid;
+  justify-items: end;
+  text-align: right;
+}
+
 .receipt-summary-strip {
   display: flex;
   flex-wrap: wrap;
@@ -27570,6 +27649,10 @@ body :where(
   .history-order-head,
   .history-order-row,
   .history-order-item,
+  .purchase-history-layout,
+  .purchase-history-head,
+  .purchase-history-row,
+  .purchase-supplier-summary-row,
   .history-table-head,
   .history-row,
   .history-receipt-row,
@@ -27581,6 +27664,7 @@ body :where(
   }
 
   .history-order-head,
+  .purchase-history-head,
   .history-table-head,
   .history-receipt-head {
     display: none;
@@ -27591,6 +27675,12 @@ body :where(
   }
 
   .history-report-quantity {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .purchase-supplier-summary-row div:last-child,
+  .purchase-history-amount {
     justify-items: start;
     text-align: left;
   }

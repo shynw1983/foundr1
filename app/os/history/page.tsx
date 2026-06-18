@@ -30,6 +30,8 @@ type PurchaseOrderItem = {
   requestedQuantity: number;
   actualQuantity?: number;
   actualPrice?: string;
+  purchasedDate?: string;
+  supplierLocationName?: string;
   unit: string;
   purchased?: boolean;
   unavailable?: boolean;
@@ -75,6 +77,8 @@ type HistoryRow = {
   requestedQuantity: number;
   actualQuantity: number;
   actualPrice: string;
+  purchasedDate: string;
+  supplierLocationName: string;
   deliveryBatchId?: string;
   deliveryBatchLabel?: string;
   deliveryStartedLabel?: string;
@@ -131,7 +135,18 @@ type ReceiptRow = {
   receiptConfirmedBy: string;
   status: Exclude<ReceiptStatusFilter, "すべて">;
 };
-type HistoryView = "orders" | "usage" | "items" | "receipts";
+type HistoryView = "orders" | "usage" | "items" | "purchases" | "receipts";
+type PurchaseHistoryRow = HistoryRow & {
+  amount: number;
+  unitPrice: number;
+};
+type PurchaseSupplierSummaryRow = {
+  supplier: string;
+  itemCount: number;
+  orderCount: number;
+  totalAmount: number;
+  totalQuantity: number;
+};
 type HistoryOrderRow = {
   id: string;
   store: string;
@@ -380,6 +395,8 @@ function createHistoryRows(
       requestedQuantity: item.requestedQuantity,
       actualQuantity: item.actualQuantity ?? item.requestedQuantity,
       actualPrice: item.actualPrice ?? "",
+      purchasedDate: item.purchasedDate || getOrderDateKey(order),
+      supplierLocationName: item.supplierLocationName ?? "",
       deliveryBatchId: item.deliveryBatchId,
       deliveryBatchLabel: deliveryBatch ? getDeliveryBatchLabel(deliveryBatch) : "",
       deliveryStartedLabel: deliveryBatch?.createdLabel ?? "",
@@ -391,6 +408,71 @@ function createHistoryRows(
       note: [item.note, item.priceExceptionNote].filter(Boolean).join(" / ")
     };
   });
+}
+
+function parsePurchasePrice(value: string) {
+  const normalized = value.replace(/[^\d.-]/g, "");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function createPurchaseHistoryRows(rows: HistoryRow[]) {
+  return rows
+    .filter((row) =>
+      row.status !== "未購入" &&
+      row.status !== "購入不可" &&
+      row.actualQuantity > 0
+    )
+    .map<PurchaseHistoryRow>((row) => {
+      const unitPrice = parsePurchasePrice(row.actualPrice);
+
+      return {
+        ...row,
+        unitPrice,
+        amount: Math.round(unitPrice * row.actualQuantity)
+      };
+    })
+    .sort((a, b) =>
+      b.purchasedDate.localeCompare(a.purchasedDate, "ja") ||
+      b.orderId.localeCompare(a.orderId, "ja") ||
+      a.supplier.localeCompare(b.supplier, "ja") ||
+      a.productName.localeCompare(b.productName, "ja")
+    );
+}
+
+function createPurchaseSupplierSummaryRows(rows: PurchaseHistoryRow[]) {
+  const summaryMap = new Map<string, PurchaseSupplierSummaryRow & { orderIds: Set<string> }>();
+
+  rows.forEach((row) => {
+    const current = summaryMap.get(row.supplier) ?? {
+      supplier: row.supplier,
+      itemCount: 0,
+      orderCount: 0,
+      totalAmount: 0,
+      totalQuantity: 0,
+      orderIds: new Set<string>()
+    };
+
+    current.itemCount += 1;
+    current.totalAmount += row.amount;
+    current.totalQuantity += row.actualQuantity;
+    current.orderIds.add(row.orderId);
+    summaryMap.set(row.supplier, current);
+  });
+
+  return Array.from(summaryMap.values())
+    .map((row) => ({
+      supplier: row.supplier,
+      itemCount: row.itemCount,
+      orderCount: row.orderIds.size,
+      totalAmount: row.totalAmount,
+      totalQuantity: Math.round(row.totalQuantity * 100) / 100
+    }))
+    .sort((a, b) =>
+      b.totalAmount - a.totalAmount ||
+      b.itemCount - a.itemCount ||
+      a.supplier.localeCompare(b.supplier, "ja")
+    );
 }
 
 function createHistoryReportRows(rows: HistoryRow[]) {
@@ -569,6 +651,11 @@ function createReceiptRows(purchaseOrders: PurchaseOrder[], rows: HistoryRow[], 
 
 function formatQuantity(value: number) {
   return value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+}
+
+function formatMoney(value: number) {
+  if (!value) return "-";
+  return `¥${Math.round(value).toLocaleString("ja-JP")}`;
 }
 
 function isPdfReceiptUrl(receiptPhotoUrl: string) {
@@ -881,6 +968,8 @@ export default function ProcurementHistoryPage() {
       row.productName,
       row.productSpec,
       row.supplier,
+      row.supplierLocationName,
+      row.purchasedDate,
       row.status,
       row.note
     ].join(" ");
@@ -914,6 +1003,11 @@ export default function ProcurementHistoryPage() {
   });
   const reportRows = createHistoryReportRows(filteredRows).slice(0, 12);
   const storeReportRows = createStoreReportRows(reportBaseRows);
+  const purchaseHistoryRows = createPurchaseHistoryRows(filteredRows);
+  const allPurchaseSupplierSummaryRows = createPurchaseSupplierSummaryRows(purchaseHistoryRows);
+  const purchaseSupplierSummaryRows = allPurchaseSupplierSummaryRows.slice(0, 8);
+  const purchaseHistoryTotalAmount = purchaseHistoryRows.reduce((sum, row) => sum + row.amount, 0);
+  const purchaseHistoryMissingPriceCount = purchaseHistoryRows.filter((row) => row.unitPrice <= 0).length;
   const filteredReceiptRows = receiptRows.filter((row) => {
     const targetText = [row.orderId, row.store, row.brand, row.supplier, row.status].join(" ");
 
@@ -1098,6 +1192,9 @@ export default function ProcurementHistoryPage() {
           </button>
           <button type="button" className={historyView === "items" ? "is-active" : ""} onClick={() => setHistoryView("items")}>
             明細一覧
+          </button>
+          <button type="button" className={historyView === "purchases" ? "is-active" : ""} onClick={() => setHistoryView("purchases")}>
+            購入履歴
           </button>
           <button type="button" className={historyView === "receipts" ? "is-active" : ""} onClick={() => setHistoryView("receipts")}>
             レシート確認
@@ -1397,6 +1494,82 @@ export default function ProcurementHistoryPage() {
               {filteredRows.length === 0 ? (
                 <div className="empty-state">該当する発注明細はありません</div>
               ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {historyView === "purchases" ? (
+          <section className="panel history-panel">
+            <div className="panel-title product-master-title">
+              <div>
+                <h3>購入履歴</h3>
+                <p>購入済み明細を発注先、購入店舗、数量、単価、金額で確認</p>
+              </div>
+              <span className="source-indicator">{purchaseHistoryRows.length} 件</span>
+            </div>
+            <div className="receipt-summary-strip">
+              <span>購入金額 {formatMoney(purchaseHistoryTotalAmount)}</span>
+              <span>発注先 {allPurchaseSupplierSummaryRows.length} 件</span>
+              <span>単価未入力 {purchaseHistoryMissingPriceCount} 件</span>
+            </div>
+            <div className="purchase-history-layout">
+              <div className="history-report-card">
+                <h4>発注先別</h4>
+                <div className="history-report-list">
+                  {purchaseSupplierSummaryRows.map((row) => (
+                    <article className="purchase-supplier-summary-row" key={row.supplier}>
+                      <div>
+                        <strong>{row.supplier}</strong>
+                        <span>{row.itemCount} 明細 / {row.orderCount} 発注</span>
+                      </div>
+                      <div>
+                        <strong>{formatMoney(row.totalAmount)}</strong>
+                        <span>{formatQuantity(row.totalQuantity)} 点</span>
+                      </div>
+                    </article>
+                  ))}
+                  {purchaseSupplierSummaryRows.length === 0 ? <div className="empty-state">集計できる購入履歴はありません</div> : null}
+                </div>
+              </div>
+              <div className="purchase-history-table">
+                <div className="purchase-history-head">
+                  <span>購入日 / 店舗</span>
+                  <span>発注先</span>
+                  <span>商品</span>
+                  <span>数量</span>
+                  <span>金額</span>
+                </div>
+                {purchaseHistoryRows.map((row) => (
+                  <article className="purchase-history-row" key={`${row.id}-${row.purchasedDate}`}>
+                    <div>
+                      <strong>{formatDateLabel(row.purchasedDate)}</strong>
+                      <p>{row.store} · {row.orderId}</p>
+                    </div>
+                    <div>
+                      <strong>{row.supplier}</strong>
+                      {row.supplierLocationName ? <p>{row.supplierLocationName}</p> : null}
+                    </div>
+                    <div>
+                      <div className="history-product-name">
+                        <strong>{row.productName}</strong>
+                        {row.productSpec ? <span>{row.productSpec}</span> : null}
+                      </div>
+                      <p>適用ブランド: {row.productBrand}</p>
+                    </div>
+                    <div>
+                      <strong>{formatQuantity(row.actualQuantity)} {row.unit}</strong>
+                      <p>依頼 {formatQuantity(row.requestedQuantity)} {row.unit}</p>
+                    </div>
+                    <div className="purchase-history-amount">
+                      <strong>{formatMoney(row.amount)}</strong>
+                      <p>{row.unitPrice > 0 ? `単価 ${formatMoney(row.unitPrice)}` : "単価未入力"}</p>
+                    </div>
+                  </article>
+                ))}
+                {purchaseHistoryRows.length === 0 ? (
+                  <div className="empty-state">該当する購入履歴はありません</div>
+                ) : null}
+              </div>
             </div>
           </section>
         ) : null}
