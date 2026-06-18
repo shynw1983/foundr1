@@ -3237,6 +3237,7 @@ body :where(
   display: flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid var(--color-brand-border);
@@ -3246,6 +3247,7 @@ body :where(
   color: var(--color-brand-ink);
   font-size: 14px;
   font-weight: 900;
+  text-align: left;
   box-shadow: none;
 }
 
@@ -3263,6 +3265,28 @@ body :where(
 
 .mobile-nav-section-heading svg {
   color: var(--green);
+}
+
+.mobile-nav-section-heading span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-nav-section.is-active .mobile-nav-section-heading {
+  border-color: rgba(33, 116, 91, 0.32);
+  background: #edf8f3;
+}
+
+.mobile-nav-section-chevron {
+  flex: 0 0 auto;
+  transition: transform 0.16s ease;
+}
+
+.mobile-nav-section.is-open .mobile-nav-section-chevron {
+  transform: rotate(180deg);
 }
 
 .mobile-nav-section-links {
