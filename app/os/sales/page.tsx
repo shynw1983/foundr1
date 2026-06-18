@@ -1006,15 +1006,29 @@ export default function SalesPage() {
                 const imported = isDeliverySource ? null : importedSourceMap.get(source.id) ?? null;
                 const selectedFile = filesBySource[source.id] ?? null;
                 const isUploading = uploadingSourceId === source.id;
+                const importedDeliveryPeriodCount = deliveryPeriods.filter((period) => importedDeliveryPeriodMap.has(`${source.id}:${period.key}`)).length;
+                const hasSomeDeliveryPeriodsImported = importedDeliveryPeriodCount > 0;
                 const allDeliveryPeriodsImported = deliveryPeriods.length > 0
-                  && deliveryPeriods.every((period) => importedDeliveryPeriodMap.has(`${source.id}:${period.key}`));
+                  && importedDeliveryPeriodCount === deliveryPeriods.length;
+                const sourceStatusLabel = imported || allDeliveryPeriodsImported
+                  ? "取込済み"
+                  : hasSomeDeliveryPeriodsImported
+                    ? "一部取込済み"
+                    : source.importSupported
+                      ? "未取込"
+                      : "準備中";
+                const sourceStatusClass = imported || allDeliveryPeriodsImported || hasSomeDeliveryPeriodsImported
+                  ? "is-active"
+                  : source.importSupported
+                    ? ""
+                    : "is-muted";
                 return (
-                  <div className={`sales-source-upload-row${imported || allDeliveryPeriodsImported ? " is-uploaded" : ""}`} key={source.id}>
+                  <div className={`sales-source-upload-row${imported || allDeliveryPeriodsImported || hasSomeDeliveryPeriodsImported ? " is-uploaded" : ""}`} key={source.id}>
                     <div className="sales-source-upload-main">
                       <div className="sales-source-upload-heading">
                         <strong>{source.sourceLabel}</strong>
-                        <span className={`status-pill ${imported || allDeliveryPeriodsImported ? "is-active" : source.importSupported ? "" : "is-muted"}`}>
-                          {imported || allDeliveryPeriodsImported ? "取込済み" : source.importSupported ? "未取込" : "準備中"}
+                        <span className={`status-pill ${sourceStatusClass}`}>
+                          {sourceStatusLabel}
                         </span>
                       </div>
                       <small>
@@ -1036,7 +1050,12 @@ export default function SalesPage() {
                           return (
                             <div className={`sales-delivery-period-row${periodImported ? " is-uploaded" : ""}${isDue && !periodImported ? " is-due" : ""}`} key={period.key}>
                               <div className="sales-delivery-period-main">
-                                <strong>{period.label}分</strong>
+                                <div className="sales-delivery-period-heading">
+                                  <strong>{period.label}分</strong>
+                                  <span className={`status-pill ${periodImported ? "is-active" : ""}`}>
+                                    {periodImported ? "取込済み" : "未取込"}
+                                  </span>
+                                </div>
                                 <small>
                                   対象 {period.targetStartDate}〜{period.targetEndDate} / 取得範囲 {period.downloadStartDate}〜{period.downloadEndDate} / 期限 {period.dueDate}
                                 </small>

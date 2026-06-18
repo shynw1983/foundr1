@@ -29545,6 +29545,14 @@ body :where(
   min-width: 0;
 }
 
+.sales-delivery-period-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
 .sales-delivery-period-main strong {
   color: var(--ink);
   font-size: 13px;
