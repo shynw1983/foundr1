@@ -7,7 +7,9 @@ import {
   ClipboardList,
   LineChart,
   LogOut,
+  Search,
   Settings,
+  Trash2,
   Upload,
   WalletCards
 } from "lucide-react";
@@ -99,6 +101,7 @@ type SalesSummary = {
   stores: StoreOption[];
   selectedStoreId: string;
   canEditSalesAnalysisSettings: boolean;
+  canDeleteTestSalesOrders: boolean;
   salesAnalysisSettings: SalesAnalysisSettings;
   salesAnalysisBaseline: {
     averageOrdersPerHour: number;
@@ -146,6 +149,23 @@ type AiAnalysisState = {
   text: string;
   model: string;
   error: string;
+};
+type TestSalesOrder = {
+  id: string;
+  orderNo: string;
+  channel: string;
+  sourcePlatform: string;
+  status: string;
+  paymentStatus: string;
+  total: number;
+  sourceOrderId: string;
+  orderedAtLabel: string;
+  pickupCode: string;
+  customerStatus: string;
+  customerPaymentStatus: string;
+  customerName: string;
+  customerPhone: string;
+  hasCustomerOrder: boolean;
 };
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
@@ -484,6 +504,14 @@ export default function SalesPage() {
   const [message, setMessage] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisState>({ text: "", model: "", error: "" });
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false);
+  const [testOrderSourceType, setTestOrderSourceType] = useState("web");
+  const [testOrderQuery, setTestOrderQuery] = useState("");
+  const [testOrders, setTestOrders] = useState<TestSalesOrder[]>([]);
+  const [selectedTestOrderIds, setSelectedTestOrderIds] = useState<string[]>([]);
+  const [isLoadingTestOrders, setIsLoadingTestOrders] = useState(false);
+  const [isDeletingTestOrders, setIsDeletingTestOrders] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState("");
 
   async function loadSales(nextMonth = month, nextStoreId = selectedStoreId, nextRange = range) {
     setIsLoading(true);
@@ -555,9 +583,79 @@ export default function SalesPage() {
     }
     return map;
   }, [importState.salesSources, summary?.imports]);
+  const selectedTestOrders = useMemo(() => {
+    const selectedIds = new Set(selectedTestOrderIds);
+    return testOrders.filter((order) => selectedIds.has(order.id));
+  }, [selectedTestOrderIds, testOrders]);
+  const selectedTestOrderTotal = selectedTestOrders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
 
   function updateSettingsDraft(key: SalesAnalysisSettingKey, value: number) {
     setSettingsDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleTestOrderSelection(orderId: string) {
+    setSelectedTestOrderIds((current) => (
+      current.includes(orderId)
+        ? current.filter((id) => id !== orderId)
+        : [...current, orderId]
+    ));
+  }
+
+  async function loadTestOrders() {
+    if (!selectedStoreId || !summary?.canDeleteTestSalesOrders) return;
+    setIsLoadingTestOrders(true);
+    setDeleteMessage("");
+    const params = new URLSearchParams({
+      storeId: selectedStoreId,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      sourceType: testOrderSourceType,
+      query: testOrderQuery
+    });
+    const response = await fetch(`/api/sales/test-orders?${params.toString()}`, { cache: "no-store" });
+    const body = await response.json().catch(() => ({})) as { orders?: TestSalesOrder[]; error?: string };
+    setIsLoadingTestOrders(false);
+    if (!response.ok) {
+      setDeleteMessage(body.error ?? "削除候補を読み込めませんでした。");
+      return;
+    }
+    setTestOrders(body.orders ?? []);
+    setSelectedTestOrderIds([]);
+    setDeleteConfirmation("");
+  }
+
+  async function deleteSelectedTestOrders() {
+    if (!selectedStoreId || selectedTestOrderIds.length === 0) return;
+    setIsDeletingTestOrders(true);
+    setDeleteMessage("");
+    const response = await fetch("/api/sales/test-orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeId: selectedStoreId,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        salesOrderIds: selectedTestOrderIds,
+        confirmation: deleteConfirmation
+      })
+    });
+    const body = await response.json().catch(() => ({})) as {
+      error?: string;
+      deletedSalesOrderCount?: number;
+      deletedCustomerOrderCount?: number;
+    };
+    setIsDeletingTestOrders(false);
+    if (!response.ok) {
+      setDeleteMessage(body.error ?? "テストデータを削除できませんでした。");
+      return;
+    }
+    setDeleteMessage(`削除しました。売上 ${body.deletedSalesOrderCount ?? 0}件・Web/POS注文 ${body.deletedCustomerOrderCount ?? 0}件`);
+    setSelectedTestOrderIds([]);
+    setDeleteConfirmation("");
+    await Promise.all([
+      loadSales(month, selectedStoreId, range),
+      loadTestOrders()
+    ]);
   }
 
   async function saveSalesAnalysisSettings() {
@@ -920,6 +1018,82 @@ export default function SalesPage() {
               {summary && summary.imports.length === 0 ? <div className="empty-state">この月の取込履歴はありません</div> : null}
             </div>
           </article>
+
+          {summary?.canDeleteTestSalesOrders ? (
+            <article className="panel sales-test-delete-panel">
+              <div className="panel-title">
+                <Trash2 size={18} />
+                <div>
+                  <h3>テストデータ削除</h3>
+                  <p>取消・未払いの通常注文は残します。ここではテストや誤取込だけを選んで物理削除します。</p>
+                </div>
+              </div>
+              <div className="sales-test-delete-controls">
+                <label>
+                  <span>区分</span>
+                  <select value={testOrderSourceType} onChange={(event) => setTestOrderSourceType(event.target.value)}>
+                    <option value="all">すべて</option>
+                    <option value="web">Web予約</option>
+                    <option value="pos">POS</option>
+                    <option value="delivery">デリバリー取込</option>
+                  </select>
+                </label>
+                <label>
+                  <span>検索</span>
+                  <input
+                    value={testOrderQuery}
+                    onChange={(event) => setTestOrderQuery(event.target.value)}
+                    placeholder="注文番号・名前・電話"
+                  />
+                </label>
+                <button className="secondary-button" type="button" disabled={!selectedStoreId || isLoadingTestOrders} onClick={() => void loadTestOrders()}>
+                  <Search size={16} />{isLoadingTestOrders ? "検索中" : "候補を検索"}
+                </button>
+              </div>
+              {deleteMessage ? <div className="inline-alert is-warning">{deleteMessage}</div> : null}
+              <div className="sales-test-order-list">
+                {testOrders.map((order) => (
+                  <label className="sales-test-order-row" key={order.id}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTestOrderIds.includes(order.id)}
+                      onChange={() => toggleTestOrderSelection(order.id)}
+                    />
+                    <div>
+                      <strong>{order.orderNo || order.pickupCode || "注文番号なし"}</strong>
+                      <small>
+                        {order.orderedAtLabel} / {order.sourcePlatform} / {order.status}・{order.paymentStatus}
+                        {order.hasCustomerOrder ? "" : " / 売上のみ残存"}
+                      </small>
+                      {(order.customerName || order.customerPhone) ? <small>{order.customerName} {order.customerPhone}</small> : null}
+                    </div>
+                    <b>{formatMoney(order.total)}</b>
+                  </label>
+                ))}
+                {testOrders.length === 0 ? <div className="empty-state">候補を検索してください</div> : null}
+              </div>
+              <div className="sales-test-delete-actions">
+                <div>
+                  <strong>{selectedTestOrderIds.length}件選択</strong>
+                  <small>合計 {formatMoney(selectedTestOrderTotal)} / 確認欄に DELETE と入力</small>
+                </div>
+                <input
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  placeholder="DELETE"
+                  aria-label="削除確認"
+                />
+                <button
+                  className="danger-button"
+                  type="button"
+                  disabled={selectedTestOrderIds.length === 0 || deleteConfirmation !== "DELETE" || isDeletingTestOrders}
+                  onClick={() => void deleteSelectedTestOrders()}
+                >
+                  {isDeletingTestOrders ? "削除中" : "選択データを削除"}
+                </button>
+              </div>
+            </article>
+          ) : null}
 
           <article className="panel">
             <div className="panel-title">

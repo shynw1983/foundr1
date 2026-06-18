@@ -29394,6 +29394,105 @@ body :where(
   font-size: 13px;
 }
 
+.sales-test-delete-panel {
+  gap: var(--sales-inner-gap);
+}
+
+.sales-test-delete-controls {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sales-test-delete-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sales-test-delete-controls span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-test-delete-controls input,
+.sales-test-delete-controls select,
+.sales-test-delete-actions input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sales-test-order-list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.sales-test-order-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.sales-test-order-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
+.sales-test-order-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sales-test-order-row strong,
+.sales-test-order-row small {
+  overflow-wrap: anywhere;
+}
+
+.sales-test-order-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sales-test-order-row b {
+  white-space: nowrap;
+}
+
+.sales-test-delete-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.sales-test-delete-actions div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sales-test-delete-actions small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .sales-import-guidance {
   margin: 0 0 var(--sales-inner-gap);
   padding: 10px 12px;
@@ -30701,6 +30800,16 @@ body :where(
   .sales-revenue-row > span,
   .sales-revenue-row > strong:last-child {
     text-align: left;
+  }
+
+  .sales-test-delete-controls,
+  .sales-test-delete-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-test-delete-controls .secondary-button,
+  .sales-test-delete-actions .danger-button {
+    width: 100%;
   }
 
   .workload-chart-grid {
