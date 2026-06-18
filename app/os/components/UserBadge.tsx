@@ -70,8 +70,10 @@ export function UserBadge({
       <details className="account-menu" ref={accountMenuRef}>
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
           <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
-          <span className="user-badge-name">{employee.name}</span>
-          <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
+          <span className="user-badge-meta">
+            <span className="user-badge-name">{employee.name}</span>
+            <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
+          </span>
         </summary>
         <div className="account-menu-panel">
           <div className="account-menu-user">

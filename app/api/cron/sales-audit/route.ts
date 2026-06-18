@@ -1,3 +1,4 @@
+import { notifyOwnersForDueDeliveryImports } from "../../../../lib/sales-delivery-import-reminders";
 import { auditSalesOrders, notifySalesOrderAuditProblems } from "../../../../lib/sales-order-audit";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ async function runSalesAuditCron(request: Request) {
 
   const report = await auditSalesOrders();
   const notification = await notifySalesOrderAuditProblems(report);
-  return Response.json({ ...report, notification }, { headers: { "Cache-Control": "no-store" } });
+  const deliveryImportReminder = await notifyOwnersForDueDeliveryImports();
+  return Response.json({ ...report, notification, deliveryImportReminder }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function GET(request: Request) {

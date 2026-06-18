@@ -84,6 +84,10 @@ type ImportBatch = {
   updatedOrderCount: number;
   rawRowCount: number;
   createdAt: string;
+  deliveryImportPeriodKey?: string;
+  deliveryImportPeriodLabel?: string;
+  deliveryDownloadStartDate?: string;
+  deliveryDownloadEndDate?: string;
 };
 type SalesSourceOption = {
   id: string;
@@ -144,6 +148,19 @@ type ImportState = {
   stores: StoreOption[];
   selectedStoreId: string;
   salesSources: SalesSourceOption[];
+  deliveryImportPeriods: DeliveryImportPeriod[];
+  currentDueDeliveryImportPeriod: DeliveryImportPeriod | null;
+};
+type DeliveryImportPeriod = {
+  key: string;
+  importMonth: string;
+  half: "first" | "second";
+  label: string;
+  targetStartDate: string;
+  targetEndDate: string;
+  downloadStartDate: string;
+  downloadEndDate: string;
+  dueDate: string;
 };
 type AiAnalysisState = {
   text: string;
@@ -494,7 +511,14 @@ export default function SalesPage() {
   const [range, setRange] = useState(getStoredSalesRange);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [summary, setSummary] = useState<SalesSummary | null>(null);
-  const [importState, setImportState] = useState<ImportState>({ canImport: false, stores: [], selectedStoreId: "", salesSources: [] });
+  const [importState, setImportState] = useState<ImportState>({
+    canImport: false,
+    stores: [],
+    selectedStoreId: "",
+    salesSources: [],
+    deliveryImportPeriods: [],
+    currentDueDeliveryImportPeriod: null
+  });
   const [filesBySource, setFilesBySource] = useState<Record<string, File | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [settingsDraft, setSettingsDraft] = useState<SalesAnalysisSettings>(defaultSalesAnalysisSettings);
@@ -545,7 +569,9 @@ export default function SalesPage() {
         canImport: body.canImport,
         stores: body.stores ?? [],
         selectedStoreId: body.selectedStoreId ?? resolvedStoreId,
-        salesSources
+        salesSources,
+        deliveryImportPeriods: body.deliveryImportPeriods ?? [],
+        currentDueDeliveryImportPeriod: body.currentDueDeliveryImportPeriod ?? null
       });
       storeSalesSelection(resolvedMonth, resolvedStoreId || body.selectedStoreId || "");
     } else {
@@ -583,6 +609,15 @@ export default function SalesPage() {
     }
     return map;
   }, [importState.salesSources, summary?.imports]);
+  const importedDeliveryPeriodMap = useMemo(() => {
+    const map = new Map<string, ImportBatch>();
+    for (const item of summary?.imports ?? []) {
+      if (!item.salesSourceId || !item.deliveryImportPeriodKey) continue;
+      map.set(`${item.salesSourceId}:${item.deliveryImportPeriodKey}`, item);
+    }
+    return map;
+  }, [summary?.imports]);
+  const dueDeliveryImportKey = importState.currentDueDeliveryImportPeriod?.key ?? "";
   const selectedTestOrders = useMemo(() => {
     const selectedIds = new Set(selectedTestOrderIds);
     return testOrders.filter((order) => selectedIds.has(order.id));
@@ -676,15 +711,17 @@ export default function SalesPage() {
     setIsSavingSettings(false);
   }
 
-  async function uploadSalesFile(source: SalesSourceOption) {
+  async function uploadSalesFile(source: SalesSourceOption, deliveryImportPeriod?: DeliveryImportPeriod) {
     const selectedFile = filesBySource[source.id];
     if (!selectedFile || !selectedStoreId || !source.id) return;
-    setUploadingSourceId(source.id);
+    const uploadKey = deliveryImportPeriod ? `${source.id}:${deliveryImportPeriod.key}` : source.id;
+    setUploadingSourceId(uploadKey);
     setMessage("");
     const formData = new FormData();
     formData.set("storeId", selectedStoreId);
     formData.set("month", month);
     formData.set("salesSourceId", source.id);
+    if (deliveryImportPeriod) formData.set("deliveryImportPeriodKey", deliveryImportPeriod.key);
     formData.set("file", selectedFile);
     const response = await fetch("/api/sales/imports", {
       method: "POST",
@@ -703,7 +740,8 @@ export default function SalesPage() {
       return;
     }
     setFilesBySource((current) => ({ ...current, [source.id]: null }));
-    setMessage(`${source.sourceLabel} の売上ファイルを取り込みました。解析 ${body.importedOrderCount ?? 0} 件・新規 ${body.createdOrderCount ?? 0} 件・更新 ${body.updatedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
+    const periodLabel = deliveryImportPeriod ? `（${deliveryImportPeriod.label}分）` : "";
+    setMessage(`${source.sourceLabel}${periodLabel} の売上ファイルを取り込みました。解析 ${body.importedOrderCount ?? 0} 件・新規 ${body.createdOrderCount ?? 0} 件・更新 ${body.updatedOrderCount ?? 0} 件 / 行 ${body.rawRowCount ?? 0} 件`);
     await loadSales(month, selectedStoreId);
   }
 
@@ -962,27 +1000,74 @@ export default function SalesPage() {
             </p>
             <div className="sales-source-upload-list" aria-label="売上源別の取込状況">
               {importState.salesSources.map((source) => {
-                const imported = importedSourceMap.get(source.id) ?? null;
+                const isDeliverySource = source.sourceType === "delivery";
+                const deliveryPeriods = isDeliverySource ? importState.deliveryImportPeriods : [];
+                const imported = isDeliverySource ? null : importedSourceMap.get(source.id) ?? null;
                 const selectedFile = filesBySource[source.id] ?? null;
                 const isUploading = uploadingSourceId === source.id;
+                const allDeliveryPeriodsImported = deliveryPeriods.length > 0
+                  && deliveryPeriods.every((period) => importedDeliveryPeriodMap.has(`${source.id}:${period.key}`));
                 return (
-                  <div className={`sales-source-upload-row${imported ? " is-uploaded" : ""}`} key={source.id}>
+                  <div className={`sales-source-upload-row${imported || allDeliveryPeriodsImported ? " is-uploaded" : ""}`} key={source.id}>
                     <div className="sales-source-upload-main">
                       <div className="sales-source-upload-heading">
                         <strong>{source.sourceLabel}</strong>
-                        <span className={`status-pill ${imported ? "is-active" : source.importSupported ? "" : "is-muted"}`}>
-                          {imported ? "取込済み" : source.importSupported ? "未取込" : "準備中"}
+                        <span className={`status-pill ${imported || allDeliveryPeriodsImported ? "is-active" : source.importSupported ? "" : "is-muted"}`}>
+                          {imported || allDeliveryPeriodsImported ? "取込済み" : source.importSupported ? "未取込" : "準備中"}
                         </span>
                       </div>
                       <small>
-                        {imported
+                        {isDeliverySource && source.importSupported
+                          ? "デリバリー売上は毎月2回、1〜15日分と16日〜月末分に分けて取り込みます。"
+                          : imported
                           ? `${imported.fileName} / ${formatDateTime(imported.createdAt)} / 解析 ${imported.importedOrderCount}件・新規 ${imported.createdOrderCount}件・更新 ${imported.updatedOrderCount}件`
                           : source.importSupported
                             ? "この月の売上ファイルを取り込んでください。"
                             : `${source.sourceLabel} の売上ファイル取込は次フェーズで対応します。`}
                       </small>
                     </div>
-                    {source.importSupported && !imported ? (
+                    {isDeliverySource && source.importSupported ? (
+                      <div className="sales-delivery-period-list">
+                        {deliveryPeriods.map((period) => {
+                          const periodImported = importedDeliveryPeriodMap.get(`${source.id}:${period.key}`) ?? null;
+                          const isPeriodUploading = uploadingSourceId === `${source.id}:${period.key}`;
+                          const isDue = dueDeliveryImportKey === period.key;
+                          return (
+                            <div className={`sales-delivery-period-row${periodImported ? " is-uploaded" : ""}${isDue && !periodImported ? " is-due" : ""}`} key={period.key}>
+                              <div className="sales-delivery-period-main">
+                                <strong>{period.label}分</strong>
+                                <small>
+                                  対象 {period.targetStartDate}〜{period.targetEndDate} / 取得範囲 {period.downloadStartDate}〜{period.downloadEndDate} / 期限 {period.dueDate}
+                                </small>
+                                {periodImported ? (
+                                  <small>{periodImported.fileName} / {formatDateTime(periodImported.createdAt)} / 解析 {periodImported.importedOrderCount}件・新規 {periodImported.createdOrderCount}件・更新 {periodImported.updatedOrderCount}件</small>
+                                ) : null}
+                              </div>
+                              {!periodImported ? (
+                                <button className="primary-button" type="button" disabled={!selectedFile || !selectedStoreId || !importState.canImport || Boolean(uploadingSourceId)} onClick={() => void uploadSalesFile(source, period)}>
+                                  {isPeriodUploading ? "取込中" : "この期間を取込"}
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                        {!selectedFile && deliveryPeriods.some((period) => !importedDeliveryPeriodMap.has(`${source.id}:${period.key}`)) ? (
+                          <small className="sales-delivery-period-note">未取込の期間を選ぶ前に、下のファイル選択でCSV・Excelを選択してください。</small>
+                        ) : null}
+                        {deliveryPeriods.length === 0 ? <small className="sales-delivery-period-note">対象月を選ぶと半月ごとの取込期間を表示します。</small> : null}
+                        <div className="sales-source-upload-control">
+                          <input
+                            type="file"
+                            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            disabled={!importState.canImport || Boolean(uploadingSourceId)}
+                            onChange={(event) => {
+                              const nextFile = event.target.files?.[0] ?? null;
+                              setFilesBySource((current) => ({ ...current, [source.id]: nextFile }));
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : source.importSupported && !imported ? (
                       <div className="sales-source-upload-control">
                         <input
                           type="file"

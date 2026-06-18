@@ -706,7 +706,7 @@ export async function GET(request: Request) {
     where store_id::text = ${selectedStoreId}
       and import_month = ${month}
     order by created_at desc
-    limit 5
+    limit 20
   ` : [];
 
   return Response.json({
@@ -757,7 +757,11 @@ export async function GET(request: Request) {
       updatedOrderCount: Number(row.metadata?.updatedOrderCount ?? 0),
       rawRowCount: Number(row.rawRowCount ?? 0),
       createdAt: new Date(String(row.createdAt)).toISOString(),
-      brandName: String(row.metadata?.brandName ?? "")
+      brandName: String(row.metadata?.brandName ?? ""),
+      deliveryImportPeriodKey: String(row.metadata?.deliveryImportPeriodKey ?? ""),
+      deliveryImportPeriodLabel: String(row.metadata?.deliveryImportPeriodLabel ?? ""),
+      deliveryDownloadStartDate: String(row.metadata?.deliveryDownloadStartDate ?? ""),
+      deliveryDownloadEndDate: String(row.metadata?.deliveryDownloadEndDate ?? "")
     }))
   });
 }

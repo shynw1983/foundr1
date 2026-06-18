@@ -2,6 +2,11 @@ import { getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
 import {
+  getCurrentDueDeliveryImportPeriod,
+  getDeliveryImportPeriodsForMonth
+} from "../../../../lib/sales-delivery-import-rules";
+import { notifyOwnersForDueDeliveryImportsForStore } from "../../../../lib/sales-delivery-import-reminders";
+import {
   parseRocketNowSalesXlsx,
   parseSmaregiSalesCsv,
   parseUberSalesCsv,
@@ -110,6 +115,10 @@ export async function GET(request: Request) {
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
   const salesSources = await getStoreSalesSources(selectedStoreId);
+  const selectedStoreName = String(stores.find((store) => String(store.id) === selectedStoreId)?.name ?? "");
+  if (salesImportRoles.has(session.role)) {
+    await notifyOwnersForDueDeliveryImportsForStore({ storeId: selectedStoreId, storeName: selectedStoreName, salesSources });
+  }
   const imports = visibleStoreIds.length ? await sql`
     select
       sales_import_batches.id::text,
@@ -158,8 +167,14 @@ export async function GET(request: Request) {
       skippedRowCount: Number(row.skippedRowCount ?? 0),
       createdAt: new Date(String(row.createdAt)).toISOString(),
       brandName: String(row.metadata?.brandName ?? ""),
+      deliveryImportPeriodKey: String(row.metadata?.deliveryImportPeriodKey ?? ""),
+      deliveryImportPeriodLabel: String(row.metadata?.deliveryImportPeriodLabel ?? ""),
+      deliveryDownloadStartDate: String(row.metadata?.deliveryDownloadStartDate ?? ""),
+      deliveryDownloadEndDate: String(row.metadata?.deliveryDownloadEndDate ?? ""),
       importedByName: row.importedByName ? String(row.importedByName) : ""
-    }))
+    })),
+    deliveryImportPeriods: requestedMonth ? getDeliveryImportPeriodsForMonth(requestedMonth) : [],
+    currentDueDeliveryImportPeriod: getCurrentDueDeliveryImportPeriod()
   });
 }
 
@@ -235,6 +250,12 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}$/.test(importMonth)) {
     return Response.json({ error: "対象月を判定できませんでした。" }, { status: 400 });
   }
+  const deliveryImportPeriodKey = String(formData.get("deliveryImportPeriodKey") ?? "");
+  const deliveryImportPeriod = getDeliveryImportPeriodsForMonth(importMonth)
+    .find((period) => period.key === deliveryImportPeriodKey);
+  if (String(source.sourceType || sourceDefinition?.sourceType || "") === "delivery" && !deliveryImportPeriod) {
+    return Response.json({ error: "デリバリー売上の取込期間を選択してください。" }, { status: 400 });
+  }
 
   const sourceExternalIds = Array.from(new Set(parsed.orders.map((order) => order.sourceExternalId).filter(Boolean)));
   const existingOrderRows = sourceExternalIds.length ? await sql`
@@ -273,7 +294,20 @@ export async function POST(request: Request) {
       ${parsed.orders.length},
       ${parsed.skippedRowCount},
       ${session.id},
-      ${JSON.stringify({ detectedMonth: parsed.detectedMonth, salesSourceId, brandName, createdOrderCount, updatedOrderCount })}::jsonb,
+      ${JSON.stringify({
+        detectedMonth: parsed.detectedMonth,
+        salesSourceId,
+        brandName,
+        createdOrderCount,
+        updatedOrderCount,
+        deliveryImportPeriodKey: deliveryImportPeriod?.key ?? "",
+        deliveryImportPeriodLabel: deliveryImportPeriod?.label ?? "",
+        deliveryTargetStartDate: deliveryImportPeriod?.targetStartDate ?? "",
+        deliveryTargetEndDate: deliveryImportPeriod?.targetEndDate ?? "",
+        deliveryDownloadStartDate: deliveryImportPeriod?.downloadStartDate ?? "",
+        deliveryDownloadEndDate: deliveryImportPeriod?.downloadEndDate ?? "",
+        deliveryDueDate: deliveryImportPeriod?.dueDate ?? ""
+      })}::jsonb,
       now()
     )
     returning id::text

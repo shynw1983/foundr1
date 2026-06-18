@@ -3323,8 +3323,7 @@ body :where(
   }
 
   .sidebar .brand-block > div:last-child,
-  .sidebar-user .user-badge-name,
-  .sidebar-user .user-badge-role {
+  .sidebar-user .user-badge-meta {
     display: none;
   }
 
@@ -3346,8 +3345,7 @@ body :where(
     white-space: nowrap;
   }
 
-  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-name,
-  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-role {
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-meta {
     display: inline-flex;
   }
 
@@ -3423,6 +3421,34 @@ body :where(
     width: 100%;
     min-height: 42px;
     padding: 0 8px;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    overflow: hidden;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-name {
+    max-width: 100%;
+    overflow: hidden;
+    color: #f7fafc;
+    font-size: 13px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-badge-role {
+    max-width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 0;
+    background: transparent;
+    color: #a9c0d8;
+    font-size: 11px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
   }
 
   .sidebar:has(.nav-shell.is-expanded) .sidebar-user .user-panel {
@@ -3652,6 +3678,7 @@ body :where(
 
 .user-avatar {
   display: inline-grid;
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   place-items: center;
@@ -3660,6 +3687,13 @@ body :where(
   color: white;
   font-size: 12px;
   font-weight: 900;
+}
+
+.user-badge-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .account-menu-panel {
@@ -3728,6 +3762,7 @@ body :where(
 
 .user-badge-name,
 .user-badge-role {
+  min-width: 0;
   font-size: 13px;
   font-weight: 800;
 }
@@ -29476,6 +29511,52 @@ body :where(
   padding: 8px;
   background: var(--surface);
   color: var(--text);
+}
+
+.sales-delivery-period-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sales-delivery-period-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.sales-delivery-period-row.is-uploaded {
+  border-color: #c9eadc;
+  background: #f7fffb;
+}
+
+.sales-delivery-period-row.is-due {
+  border-color: rgba(169, 101, 20, 0.34);
+  background: var(--amber-soft);
+}
+
+.sales-delivery-period-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sales-delivery-period-main strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sales-delivery-period-main small,
+.sales-delivery-period-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .sales-import-message {
