@@ -56,7 +56,7 @@ let receiptBaseCss = "";
 
 function getReceiptFontFaceCss() {
   if (receiptFontFaceCss) return receiptFontFaceCss;
-  const fontPath = join(process.cwd(), "fonts/NotoSansCJKjp-Regular.otf");
+  const fontPath = join(/*turbopackIgnore: true*/ process.cwd(), "fonts/NotoSansCJKjp-Regular.otf");
   if (!existsSync(fontPath)) return "";
   const fontUrl = pathToFileURL(fontPath).href;
   receiptFontFaceCss = `
@@ -76,7 +76,7 @@ body,
 
 function getReceiptCss() {
   if (receiptBaseCss) return `${getReceiptFontFaceCss()}\n${receiptBaseCss}`;
-  const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+  const css = readFileSync(join(/*turbopackIgnore: true*/ process.cwd(), "app/globals.css"), "utf8");
   const receiptCssEnd = css.indexOf("\nbutton {\n  cursor: pointer;");
   receiptBaseCss = receiptCssEnd > 0 ? css.slice(0, receiptCssEnd) : css;
   return `${getReceiptFontFaceCss()}\n${receiptBaseCss}`;
@@ -84,11 +84,11 @@ function getReceiptCss() {
 
 const receiptPublicAssets: Record<string, { path: string; mime: string }> = {
   "/brands/maamaa-logo.png": {
-    path: join(process.cwd(), "public/brands/maamaa-logo.png"),
+    path: join(/*turbopackIgnore: true*/ process.cwd(), "public/brands/maamaa-logo.png"),
     mime: "image/png"
   },
   "/brands/nanacha-logo.png": {
-    path: join(process.cwd(), "public/brands/nanacha-logo.png"),
+    path: join(/*turbopackIgnore: true*/ process.cwd(), "public/brands/nanacha-logo.png"),
     mime: "image/png"
   }
 };

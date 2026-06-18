@@ -41,7 +41,29 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/public/orders/receipt/preview-pdf": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
-      "./fonts/**/*"
+      "./fonts/**/*",
+      "./app/globals.css",
+      "./public/brands/*.png"
+    ],
+    "/api/public/orders/receipt/pdf/[filename]": [
+      "./node_modules/@sparticuz/chromium/bin/**/*",
+      "./fonts/**/*",
+      "./app/globals.css",
+      "./public/brands/*.png"
+    ]
+  },
+  outputFileTracingExcludes: {
+    "/api/public/orders/receipt/preview-pdf": [
+      "./public/downloads/**/*",
+      "./Foundr1Android/**/*",
+      "./output/**/*",
+      "./outputs/**/*"
+    ],
+    "/api/public/orders/receipt/pdf/[filename]": [
+      "./public/downloads/**/*",
+      "./Foundr1Android/**/*",
+      "./output/**/*",
+      "./outputs/**/*"
     ]
   },
   async headers() {
