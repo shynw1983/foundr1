@@ -343,8 +343,8 @@ export async function GET(request: Request) {
     where store_id::text = ${selectedStoreId}
       and ordered_at >= ${startUtc.toISOString()}
       and ordered_at < ${endUtc.toISOString()}
-      and status <> 'cancelled'
-      and payment_status <> 'failed'
+      and status not in ('cancelled', 'refund_pending')
+      and payment_status in ('paid', 'partial_refunded')
       and total > 0
     order by ordered_at asc
   ` : [];
