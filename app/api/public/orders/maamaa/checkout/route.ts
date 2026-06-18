@@ -34,10 +34,19 @@ function getTokyoMinimumPickup(leadMinutes: number) {
   return { date, time };
 }
 
-function getTokyoToday() {
-  return getTokyoMinimumPickup(0).date;
+function getTokyoNow() {
+  return getTokyoMinimumPickup(0);
 }
 
+function addMinutesToTime(time: string, minutes: number) {
+  const [hour, minute] = time.split(":").map(Number);
+  const total = hour * 60 + minute + minutes;
+  const nextHour = Math.floor(total / 60);
+  const nextMinute = total % 60;
+  return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+}
+
+const maamaaSameDayReceptionStartTime = "12:00";
 const maamaaSameDayPickupCutoffTime = "23:00";
 
 function findChoice(items: MaamaaPricedOption[], id: string, required = true) {
@@ -195,14 +204,22 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate) || !/^\d{2}:\d{2}$/.test(pickup)) {
     return Response.json({ error: "Invalid pickup time" }, { status: 400 });
   }
-  if (pickupDate !== getTokyoToday()) {
+  const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
+  const tokyoNow = getTokyoNow();
+  const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
+  const earliestPickupTime = addMinutesToTime(maamaaSameDayReceptionStartTime, minimumPickupMinutes);
+  if (pickupDate !== tokyoNow.date) {
     return Response.json({ error: "Maamaa web reservations are only available for same-day pickup" }, { status: 400 });
+  }
+  if (tokyoNow.time < maamaaSameDayReceptionStartTime || minimumPickup.date !== tokyoNow.date || minimumPickup.time > maamaaSameDayPickupCutoffTime) {
+    return Response.json({ error: `Maamaa web reservations are available from ${earliestPickupTime} until ${maamaaSameDayPickupCutoffTime}` }, { status: 400 });
+  }
+  if (pickup < earliestPickupTime) {
+    return Response.json({ error: `Maamaa web reservations are available from ${earliestPickupTime}` }, { status: 400 });
   }
   if (pickup > maamaaSameDayPickupCutoffTime) {
     return Response.json({ error: `Maamaa web reservations are available until ${maamaaSameDayPickupCutoffTime}` }, { status: 400 });
   }
-  const minimumPickupMinutes = normalizeMinimumPickupMinutes(operation.minimumPickupMinutes, 15);
-  const minimumPickup = getTokyoMinimumPickup(minimumPickupMinutes);
   if (compareDateTime(pickupDate, pickup, minimumPickup.date, minimumPickup.time) < 0) {
     return Response.json({ error: `Pickup time must be at least ${minimumPickupMinutes} minutes from now` }, { status: 400 });
   }
