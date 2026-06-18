@@ -857,7 +857,7 @@ export default function StoreOrdersPage() {
                 playNewOrderSound();
               }}
             >
-              試聴
+              再生
             </button>
             <span>
               {soundEnabled && soundReady ? `${storeOrderAlertSoundOptions.find((option) => option.value === storeSettings.orderAlerts.sound)?.label ?? "通知音"} で通知します` : "通知音を有効にできます"}

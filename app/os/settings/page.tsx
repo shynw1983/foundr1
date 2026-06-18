@@ -152,7 +152,7 @@ export default function OsSettingsPage() {
   async function previewStoreOrderAlertSound(sound: StoreOrderAlertSound) {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) {
-      showNotice("この端末では通知音を試聴できません。", "info");
+      showNotice("この端末では通知音を再生できません。", "info");
       return;
     }
     if (!alertPreviewAudioContextRef.current) {
@@ -842,10 +842,10 @@ export default function OsSettingsPage() {
               <div className="settings-option-help">
                 {storeOrderAlertSoundOptions.find((option) => option.value === settings.orderAlerts.sound)?.description}
               </div>
-              <div className="settings-sound-preview-grid" aria-label="通知音を試聴">
+              <div className="settings-sound-preview-grid" aria-label="通知音を再生">
                 {storeOrderAlertSoundOptions.map((option) => (
                   <button className="secondary-button" type="button" key={option.value} onClick={() => void previewStoreOrderAlertSound(option.value)}>
-                    {option.label} 試聴
+                    {option.label} 再生
                   </button>
                 ))}
               </div>
