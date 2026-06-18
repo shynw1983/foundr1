@@ -786,6 +786,11 @@ function formatMyNumberStatus(member: StaffMember) {
   return "マイナンバー未登録";
 }
 
+function formatMyNumberInput(value?: string | null) {
+  const digits = String(value ?? "").replace(/\D/g, "").slice(0, 12);
+  return digits.match(/.{1,4}/g)?.join(" ") ?? "";
+}
+
 function formatStaffScopeSummary(member: StaffMember) {
   const workStoreText = getWorkStores(member).length
     ? getWorkStores(member).map(formatWorkStoreSummary).join("、")
@@ -930,7 +935,6 @@ function StaffFormFields({
   const [forcePrivacyConsentReset, setForcePrivacyConsentReset] = useState(() => (
     member ? Boolean(member.privacyConsentResetRequired) : false
   ));
-  const [showMyNumber, setShowMyNumber] = useState(false);
   const [bankOptions, setBankOptions] = useState<BankMasterBank[]>([]);
   const [branchOptions, setBranchOptions] = useState<BankMasterBranch[]>([]);
   const [bankSearchStatus, setBankSearchStatus] = useState("銀行名・カナ・コードで検索");
@@ -947,7 +951,6 @@ function StaffFormFields({
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
-    setShowMyNumber(false);
     setBankSearchStatus("銀行名・カナ・コードで検索");
     setBranchSearchStatus("銀行を選ぶと支店検索できます");
     setIsBankPickerOpen(false);
@@ -1341,20 +1344,16 @@ function StaffFormFields({
               <span>マイナンバー</span>
               <input
                 name="myNumber"
-                type={showMyNumber ? "text" : "password"}
+                type="text"
                 inputMode="numeric"
-                maxLength={12}
-                defaultValue={member?.myNumber ?? ""}
-                placeholder="12桁"
+                defaultValue={formatMyNumberInput(member?.myNumber)}
+                placeholder="1234 5678 9012"
                 autoComplete="off"
                 onInput={(event) => {
-                  event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 12);
+                  event.currentTarget.value = formatMyNumberInput(event.currentTarget.value);
                 }}
               />
             </label>
-            <button className="secondary-button" type="button" onClick={() => setShowMyNumber((current) => !current)}>
-              {showMyNumber ? "マイナンバーを隠す" : "マイナンバーを表示"}
-            </button>
             <label>
               <span>住所</span>
               <textarea name="address" defaultValue={member?.address ?? ""} placeholder="郵便番号・住所" />
