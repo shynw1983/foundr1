@@ -82,13 +82,28 @@ function getReceiptCss() {
   return `${getReceiptFontFaceCss()}\n${receiptBaseCss}`;
 }
 
+const receiptPublicAssets: Record<string, { path: string; mime: string }> = {
+  "/brands/maamaa-logo.png": {
+    path: join(process.cwd(), "public/brands/maamaa-logo.png"),
+    mime: "image/png"
+  },
+  "/brands/nanacha-logo.png": {
+    path: join(process.cwd(), "public/brands/nanacha-logo.png"),
+    mime: "image/png"
+  }
+};
+
+const receiptAssetDataUrlCache = new Map<string, string>();
+
 function getPublicDataUrl(src: string) {
-  if (!src.startsWith("/")) return src;
-  const filePath = join(process.cwd(), "public", src.replace(/^\/+/, ""));
-  if (!existsSync(filePath)) return src;
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  const mime = ext === "svg" ? "image/svg+xml" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
-  return `data:${mime};base64,${readFileSync(filePath).toString("base64")}`;
+  const asset = receiptPublicAssets[src];
+  if (!asset) return src;
+  const cached = receiptAssetDataUrlCache.get(src);
+  if (cached) return cached;
+  if (!existsSync(asset.path)) return src;
+  const dataUrl = `data:${asset.mime};base64,${readFileSync(asset.path).toString("base64")}`;
+  receiptAssetDataUrlCache.set(src, dataUrl);
+  return dataUrl;
 }
 
 function escapeHtml(value: unknown) {
