@@ -46,7 +46,8 @@ function addMinutesToTime(time: string, minutes: number) {
   return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
 }
 
-const maamaaSameDayReceptionStartTime = "11:30";
+// Conservative launch setting while staffing/opening time is unstable; consider allowing pre-open reservations after operations stabilize.
+const maamaaSameDayReceptionStartTime = "12:00";
 const maamaaSameDayPickupStartTime = "12:00";
 const maamaaSameDayPickupCutoffTime = "23:00";
 
