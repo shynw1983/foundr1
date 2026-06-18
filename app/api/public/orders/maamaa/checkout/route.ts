@@ -3,6 +3,7 @@ import { calculateCouponDiscount, getUsableMemberCoupon, resolveMemberForOrder }
 import { getMaamaaCompatibleMenu, type MaamaaMenuSection, type MaamaaPricedOption } from "../../../../../../lib/maamaa-compatible-menu";
 import { getActiveStorePaymentAccount } from "../../../../../../lib/store-payment-accounts";
 import { isPickupWithinBusinessHours } from "../../../../../../lib/store-business-hours";
+import { isPickupWithinReservationWindows } from "../../../../../../lib/store-reservation-windows";
 import { getTemporaryClosureForPickup } from "../../../../../../lib/store-temporary-closures";
 
 export const dynamic = "force-dynamic";
@@ -227,6 +228,9 @@ export async function POST(request: Request) {
   }
   if (!isPickupWithinBusinessHours(operation.businessHours, pickupDate, pickup)) {
     return Response.json({ error: "Pickup time is outside store business hours" }, { status: 409 });
+  }
+  if (!await isPickupWithinReservationWindows({ storeId: publicStore.osStoreId, pickupDate, pickupTime: pickup })) {
+    return Response.json({ error: "Pickup time is outside confirmed staff schedule" }, { status: 409 });
   }
   const temporaryClosure = await getTemporaryClosureForPickup(publicStore.osStoreId, pickupDate, pickup);
   if (temporaryClosure) {

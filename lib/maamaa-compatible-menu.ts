@@ -1,6 +1,7 @@
 import { sql } from "./db";
 import { resolveCustomerStoreDisplayName } from "./customer-display-names";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "./store-staff-presence";
+import { getStoreReservationWindowsForDate, type ReservationWindow } from "./store-reservation-windows";
 
 export type MaamaaPricedOption = {
   id: string;
@@ -42,6 +43,7 @@ export type MaamaaCompatibleMenu = {
     businessHours: unknown;
     reservationNote: string;
     minimumPickupMinutes?: number | null;
+    reservationWindows?: ReservationWindow[];
   };
 };
 
@@ -276,6 +278,15 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       minimumPickupMinutes: null
     }
   );
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  const reservationWindows = selectedStore?.osStoreId
+    ? await getStoreReservationWindowsForDate({ storeId: selectedStore.osStoreId, pickupDate: today })
+    : [];
 
   return {
     brandId: brand.id,
@@ -298,7 +309,10 @@ export async function getMaamaaCompatibleMenu(storeQuery = ""): Promise<{ brandI
       menuSections,
       stores: publicStores,
       selectedStoreId: selectedStore?.id ?? publicStores[0]?.id ?? "",
-      storeOperation
+      storeOperation: {
+        ...storeOperation,
+        reservationWindows
+      }
     }
   };
 }

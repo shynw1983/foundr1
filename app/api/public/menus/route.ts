@@ -1,5 +1,6 @@
 import { sql } from "../../../../lib/db";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
+import { getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
 
 const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
 const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
@@ -276,11 +277,23 @@ export async function GET(request: Request) {
       minimumPickupMinutes: null
     }
   );
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  const reservationWindows = store?.id
+    ? await getStoreReservationWindowsForDate({ storeId: store.id, pickupDate: today })
+    : [];
 
   return Response.json({
     brand,
     store,
-    storeOperation,
+    storeOperation: {
+      ...storeOperation,
+      reservationWindows
+    },
     categories,
     optionGroups: [...globalGroups, ...Array.from(groupsByItem.values()).flat()],
     items: items.map((item) => {
