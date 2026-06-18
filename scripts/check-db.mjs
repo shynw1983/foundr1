@@ -43,6 +43,9 @@ const tables = [
 ];
 
 const requiredColumns = {
+  employees: [
+    "my_number"
+  ],
   employee_sessions: [
     "employee_id",
     "session_version",
