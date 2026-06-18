@@ -667,6 +667,10 @@ export async function DELETE(request: Request) {
     where product_candidates.receipt_ocr_item_id = receipt_ocr_items.id
       and receipt_ocr_items.receipt_ocr_result_id::text = ${id}
   `;
+  await sql`
+    delete from analytics_expenses
+    where position(${`証憑ID ${id}`} in note) > 0
+  `;
   await sql`delete from receipt_ocr_results where id::text = ${id}`;
   if (pathname) await del(pathname).catch(() => undefined);
 
