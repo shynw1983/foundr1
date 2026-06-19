@@ -71,14 +71,14 @@ export function UserBadge({
         <summary className="user-badge" title={`ログインID: ${employee.loginId}`}>
           <span className="user-avatar" aria-hidden="true">{getInitial(employee.name)}</span>
           <span className="user-badge-meta">
-            <span className="user-badge-name">{employee.name}</span>
+            <span className="user-badge-name" data-i18n-ignore>{employee.name}</span>
             <span className="user-badge-role">{roleLabels[employee.role] ?? employee.role}</span>
           </span>
         </summary>
         <div className="account-menu-panel">
           <div className="account-menu-user">
             <UserRound size={16} />
-            <div>
+            <div data-i18n-ignore>
               <strong>{employee.name}</strong>
               <span>{employee.loginId}</span>
             </div>

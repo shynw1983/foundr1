@@ -32781,8 +32781,18 @@ a:focus-visible {
     box-shadow: none;
   }
 
+  .shell .sidebar .mobile-nav-user .user-badge-meta,
+  .os-home-shell .mobile-nav-user .user-badge-meta {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .shell .sidebar .mobile-nav-user .user-avatar,
   .os-home-shell .mobile-nav-user .user-avatar {
+    display: inline-grid;
     flex: 0 0 30px;
     width: 30px;
     height: 30px;
