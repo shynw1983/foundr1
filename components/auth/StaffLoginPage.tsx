@@ -134,11 +134,18 @@ export function StaffLoginPage({ surface = "os" }: { surface?: LoginSurface }) {
     setNotice("");
     setIsSubmitting(true);
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loginId, password, surface })
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loginId, password, surface })
+      });
+    } catch {
+      setError("ログイン通信に失敗しました。通信状態を確認して、もう一度お試しください。");
+      setIsSubmitting(false);
+      return;
+    }
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
