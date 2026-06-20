@@ -1,7 +1,5 @@
 import { getNanachaCompatibleMenu } from "../../../../../lib/nanacha-compatible-menu";
-
-const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
-const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
+import { publicMenuCacheHeaders } from "../../../../../lib/public-cache";
 
 export async function GET(request: Request) {
   try {
@@ -12,9 +10,7 @@ export async function GET(request: Request) {
       baseMenu,
       generatedAt: new Date().toISOString()
     }, {
-      headers: {
-        "Cache-Control": store ? storeMenuCacheHeader : brandMenuCacheHeader
-      }
+      headers: publicMenuCacheHeaders(Boolean(store))
     });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "menu not found" }, { status: 404 });

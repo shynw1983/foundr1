@@ -1,9 +1,7 @@
 import { sql } from "../../../../lib/db";
+import { publicMenuCacheHeaders } from "../../../../lib/public-cache";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
 import { getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
-
-const brandMenuCacheHeader = "s-maxage=300, stale-while-revalidate=3600";
-const storeMenuCacheHeader = "s-maxage=15, stale-while-revalidate=60";
 
 type MenuOption = {
   id: string;
@@ -320,8 +318,6 @@ export async function GET(request: Request) {
     }),
     generatedAt: new Date().toISOString()
   }, {
-    headers: {
-      "Cache-Control": store ? storeMenuCacheHeader : brandMenuCacheHeader
-    }
+    headers: publicMenuCacheHeaders(Boolean(store))
   });
 }
