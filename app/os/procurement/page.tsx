@@ -137,6 +137,7 @@ type AdditionalPurchaseDraft = {
 
 const additionalPurchaseDraftStorageKey = "foundr1-os:procurement-additional-purchase-drafts:v1";
 const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-task-items:v1";
+const recentProcurementTaskItemRetentionMs = 10000;
 
 const statusTone: Record<string, string> = {
   購入待ち: "tone-waiting",
@@ -796,6 +797,7 @@ export default function ProcurementPage() {
   const [, startStatusTransition] = useTransition();
   const itemSaveChainsRef = useRef<Record<string, Promise<void>>>({});
   const procurementTaskItemsRef = useRef<ProcurementTaskItem[]>([]);
+  const recentProcurementTaskItemsRef = useRef<Record<string, PendingProcurementTaskItemEntry>>({});
   const dashboardLoadRequestRef = useRef(0);
   const lastDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
@@ -906,7 +908,7 @@ export default function ProcurementPage() {
         setPurchaseOrders(data.orders);
       }
       if (data.purchaseOrderItems) {
-        setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, readPendingProcurementTaskItems()));
+        setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, getOptimisticProcurementTaskItems()));
       }
       if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
       if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
@@ -932,10 +934,10 @@ export default function ProcurementPage() {
 
   useEffect(() => {
     setProcurementTaskItems(() => {
-      const pendingItems = readPendingProcurementTaskItems();
+      const optimisticItems = getOptimisticProcurementTaskItems();
 
       const nextItems = createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
-        (item) => pendingItems[item.id]?.item ?? item
+        (item) => optimisticItems[item.id]?.item ?? item
       );
       procurementTaskItemsRef.current = nextItems;
       return nextItems;
@@ -1052,6 +1054,7 @@ export default function ProcurementPage() {
     updatedAt = Date.now(),
     options: { alreadyPending?: boolean; silentFailure?: boolean } = {}
   ) {
+    recentProcurementTaskItemsRef.current[item.id] = { item, updatedAt };
     if (!options.alreadyPending) writePendingProcurementTaskItem(item, updatedAt);
 
     const previousSave = itemSaveChainsRef.current[item.id];
@@ -1059,7 +1062,10 @@ export default function ProcurementPage() {
       ? previousSave.catch(() => undefined).then(() => saveProcurementTaskItem(item))
       : saveProcurementTaskItem(item);
     const nextSave = saveRequest
-      .then(() => removePendingProcurementTaskItem(item.id, updatedAt))
+      .then(() => {
+        recentProcurementTaskItemsRef.current[item.id] = { item, updatedAt: Date.now() };
+        removePendingProcurementTaskItem(item.id, updatedAt);
+      })
       .catch((error: unknown) => {
         if (!options.silentFailure) {
           const message = error instanceof Error && error.message
@@ -1076,6 +1082,24 @@ export default function ProcurementPage() {
 
     itemSaveChainsRef.current[item.id] = nextSave;
     return nextSave;
+  }
+
+  function getRecentProcurementTaskItems(now = Date.now()) {
+    const recentItems = recentProcurementTaskItemsRef.current;
+    Object.entries(recentItems).forEach(([itemId, entry]) => {
+      if (now - entry.updatedAt > recentProcurementTaskItemRetentionMs) {
+        delete recentItems[itemId];
+      }
+    });
+
+    return recentItems;
+  }
+
+  function getOptimisticProcurementTaskItems() {
+    return {
+      ...getRecentProcurementTaskItems(),
+      ...readPendingProcurementTaskItems()
+    };
   }
 
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
