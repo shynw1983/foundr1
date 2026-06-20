@@ -653,7 +653,6 @@ function getSupplierGroupLocation(items: ProcurementTaskItem[], locationOptions:
 async function saveProcurementTaskItem(item: ProcurementTaskItem) {
   const response = await fetch("/api/procurement/items", {
     method: "PATCH",
-    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       itemId: item.id,
@@ -1061,9 +1060,12 @@ export default function ProcurementPage() {
       : saveProcurementTaskItem(item);
     const nextSave = saveRequest
       .then(() => removePendingProcurementTaskItem(item.id, updatedAt))
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!options.silentFailure) {
-          window.alert("保存できませんでした。通信が戻ると自動で再保存します。");
+          const message = error instanceof Error && error.message
+            ? error.message
+            : "保存できませんでした。通信が戻ると自動で再保存します。";
+          window.alert(message);
         }
       })
       .finally(() => {
