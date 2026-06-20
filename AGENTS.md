@@ -183,6 +183,7 @@ Rules:
 - A single order may have multiple online/wholesale suppliers with different arrival dates.
 - Unavailable items can be marked as `購入不可`; the order can still be completed.
 - Completed disabled buttons should use black background and white text.
+- Procurement UI actions are optimistic and `/os/procurement` refreshes `/api/dashboard` in the background. Any new purchase, delivery, arrival, receipt, or confirmation action must merge pending/recent local state into refreshed dashboard data so a stale refresh cannot visually undo a user's tap, such as `購入済み`, `配送中`, `納品済み`, or `店舗確認済み`.
 
 ## Future Operations Modules
 

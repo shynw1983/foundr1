@@ -798,6 +798,8 @@ export default function ProcurementPage() {
   const itemSaveChainsRef = useRef<Record<string, Promise<void>>>({});
   const procurementTaskItemsRef = useRef<ProcurementTaskItem[]>([]);
   const recentProcurementTaskItemsRef = useRef<Record<string, PendingProcurementTaskItemEntry>>({});
+  const recentDeliveryBatchesRef = useRef<Record<string, { batch: DeliveryBatch; updatedAt: number }>>({});
+  const recentDeliveryStatesRef = useRef<Record<string, { state: DeliveryState; updatedAt: number }>>({});
   const dashboardLoadRequestRef = useRef(0);
   const lastDashboardLoadedAtRef = useRef(0);
   const [products, setProducts] = useState<Product[]>([]);
@@ -911,7 +913,7 @@ export default function ProcurementPage() {
         setPurchaseOrderItems(applyPendingProcurementTaskItemsToDashboardItems(data.purchaseOrderItems, getOptimisticProcurementTaskItems()));
       }
       if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
-      if (data.deliveryBatches) setDeliveryBatches(data.deliveryBatches);
+      if (data.deliveryBatches) setDeliveryBatches(mergeOptimisticDeliveryBatches(data.deliveryBatches));
       setDashboardSyncState("synced");
       lastDashboardLoadedAtRef.current = Date.now();
       return true;
@@ -1008,7 +1010,10 @@ export default function ProcurementPage() {
         };
       });
 
-      return nextStates;
+      return {
+        ...nextStates,
+        ...getRecentDeliveryStates()
+      };
     });
   }, [supplierFulfillments]);
 
@@ -1054,7 +1059,7 @@ export default function ProcurementPage() {
     updatedAt = Date.now(),
     options: { alreadyPending?: boolean; silentFailure?: boolean } = {}
   ) {
-    recentProcurementTaskItemsRef.current[item.id] = { item, updatedAt };
+    rememberRecentProcurementTaskItem(item, updatedAt);
     if (!options.alreadyPending) writePendingProcurementTaskItem(item, updatedAt);
 
     const previousSave = itemSaveChainsRef.current[item.id];
@@ -1063,7 +1068,7 @@ export default function ProcurementPage() {
       : saveProcurementTaskItem(item);
     const nextSave = saveRequest
       .then(() => {
-        recentProcurementTaskItemsRef.current[item.id] = { item, updatedAt: Date.now() };
+        rememberRecentProcurementTaskItem(item);
         removePendingProcurementTaskItem(item.id, updatedAt);
       })
       .catch((error: unknown) => {
@@ -1100,6 +1105,56 @@ export default function ProcurementPage() {
       ...getRecentProcurementTaskItems(),
       ...readPendingProcurementTaskItems()
     };
+  }
+
+  function rememberRecentProcurementTaskItem(item: ProcurementTaskItem, updatedAt = Date.now()) {
+    recentProcurementTaskItemsRef.current[item.id] = { item, updatedAt };
+  }
+
+  function getRecentDeliveryBatches(now = Date.now()) {
+    const recentBatches = recentDeliveryBatchesRef.current;
+    Object.entries(recentBatches).forEach(([batchId, entry]) => {
+      if (now - entry.updatedAt > recentProcurementTaskItemRetentionMs) {
+        delete recentBatches[batchId];
+      }
+    });
+
+    return recentBatches;
+  }
+
+  function rememberRecentDeliveryBatch(batch: DeliveryBatch, updatedAt = Date.now()) {
+    recentDeliveryBatchesRef.current[batch.id] = { batch, updatedAt };
+  }
+
+  function forgetRecentDeliveryBatch(batchId: string) {
+    delete recentDeliveryBatchesRef.current[batchId];
+  }
+
+  function mergeOptimisticDeliveryBatches(batches: DeliveryBatch[]) {
+    const batchMap = new Map(batches.map((batch) => [batch.id, batch]));
+    Object.values(getRecentDeliveryBatches()).forEach((entry) => {
+      batchMap.set(entry.batch.id, {
+        ...batchMap.get(entry.batch.id),
+        ...entry.batch
+      });
+    });
+
+    return Array.from(batchMap.values());
+  }
+
+  function getRecentDeliveryStates(now = Date.now()) {
+    const recentStates = recentDeliveryStatesRef.current;
+    Object.entries(recentStates).forEach(([stateKey, entry]) => {
+      if (now - entry.updatedAt > recentProcurementTaskItemRetentionMs) {
+        delete recentStates[stateKey];
+      }
+    });
+
+    return Object.fromEntries(Object.entries(recentStates).map(([stateKey, entry]) => [stateKey, entry.state]));
+  }
+
+  function rememberRecentDeliveryState(stateKey: string, state: DeliveryState, updatedAt = Date.now()) {
+    recentDeliveryStatesRef.current[stateKey] = { state, updatedAt };
   }
 
   function updateProcurementTaskItem(id: string, next: Partial<ProcurementTaskItem>) {
@@ -1212,9 +1267,12 @@ export default function ProcurementPage() {
 
     queueMicrotask(() => {
       if (!nextState) return;
+      const savedState = nextState;
+      rememberRecentDeliveryState(stateKey, savedState);
 
-      void saveOrderDeliveryState(orderId, supplier, nextState)
+      void saveOrderDeliveryState(orderId, supplier, savedState)
         .then(() => {
+          rememberRecentDeliveryState(stateKey, savedState);
           if (successMessage) showNotice(successMessage);
         })
         .catch((error: Error) => {
@@ -1253,6 +1311,7 @@ export default function ProcurementPage() {
       .map((item) => ({ ...item, deliveryStatus: "delivered" as const }));
 
     if (targetItems.length === 0) return;
+    targetItems.forEach((item) => rememberRecentProcurementTaskItem(item));
 
     setProcurementTaskItems((items) => {
       const nextItems = items.map((item) => {
@@ -1290,23 +1349,25 @@ export default function ProcurementPage() {
       minute: "2-digit"
     }).format(new Date());
 
-    setDeliveryBatches((batches) => [
-      ...batches,
-      {
-        id: batchId,
-        orderId,
-        batchNo,
-        itemIds: readyItems.map((item) => item.id),
-        status: "in_delivery",
-        createdLabel
-      }
-    ]);
+    const pendingBatch: DeliveryBatch = {
+      id: batchId,
+      orderId,
+      batchNo,
+      itemIds: readyItems.map((item) => item.id),
+      status: "in_delivery",
+      createdLabel
+    };
+    rememberRecentDeliveryBatch(pendingBatch);
+    setDeliveryBatches((batches) => [...batches, pendingBatch]);
     setProcurementTaskItems((items) => {
       const nextItems = items.map((item) =>
         readyItems.some((readyItem) => readyItem.id === item.id)
           ? { ...item, deliveryStatus: "in_delivery" as const, deliveryBatchId: batchId }
           : item
       );
+      nextItems
+        .filter((item) => item.deliveryBatchId === batchId)
+        .forEach((item) => rememberRecentProcurementTaskItem(item));
       procurementTaskItemsRef.current = nextItems;
       return nextItems;
     });
@@ -1322,6 +1383,11 @@ export default function ProcurementPage() {
       .then((response) => (response.ok ? response.json() : null))
       .then((savedBatch: DeliveryBatch | null) => {
         if (!savedBatch) return;
+        forgetRecentDeliveryBatch(batchId);
+        rememberRecentDeliveryBatch({
+          ...savedBatch,
+          itemIds: readyItems.map((item) => item.id)
+        });
 
         setDeliveryBatches((batches) =>
           batches.map((batch) =>
@@ -1337,6 +1403,9 @@ export default function ProcurementPage() {
           const nextItems = items.map((item) =>
             item.deliveryBatchId === batchId ? { ...item, deliveryBatchId: savedBatch.id } : item
           );
+          nextItems
+            .filter((item) => item.deliveryBatchId === savedBatch.id)
+            .forEach((item) => rememberRecentProcurementTaskItem(item));
           procurementTaskItemsRef.current = nextItems;
           return nextItems;
         });
@@ -1355,19 +1424,23 @@ export default function ProcurementPage() {
       minute: "2-digit"
     }).format(new Date());
     setDeliveryBatches((batches) =>
-      batches.map((batch) => (
-        batch.id === batchId
-          ? {
-              ...batch,
-              status,
-              deliveredLabel: status === "delivered" ? statusLabel : batch.deliveredLabel,
-              storeConfirmedLabel: status === "received" ? statusLabel : batch.storeConfirmedLabel
-            }
-          : batch
-      ))
+      batches.map((batch) => {
+        if (batch.id !== batchId) return batch;
+        const updatedBatch = {
+          ...batch,
+          status,
+          deliveredLabel: status === "delivered" ? statusLabel : batch.deliveredLabel,
+          storeConfirmedLabel: status === "received" ? statusLabel : batch.storeConfirmedLabel
+        };
+        rememberRecentDeliveryBatch(updatedBatch);
+        return updatedBatch;
+      })
     );
     setProcurementTaskItems((items) => {
       const nextItems = items.map((item) => (item.deliveryBatchId === batchId ? { ...item, deliveryStatus: status === "received" ? "received" as const : "delivered" as const } : item));
+      nextItems
+        .filter((item) => item.deliveryBatchId === batchId)
+        .forEach((item) => rememberRecentProcurementTaskItem(item));
       procurementTaskItemsRef.current = nextItems;
       return nextItems;
     });
