@@ -299,13 +299,16 @@ export async function PATCH(request: Request) {
         `
     : [];
   const supplierId = supplierRows[0]?.id ?? null;
+  const effectiveSupplierId = String(supplierId ?? itemDetail?.currentSupplierId ?? "").trim();
   const effectiveSupplierRows = isRecordingPurchase
-    ? await sql`
+    ? effectiveSupplierId
+      ? await sql`
         select channel_type as "channelType"
         from suppliers
-        where id = coalesce(${supplierId}, ${itemDetail?.currentSupplierId ?? null})
+        where id = ${effectiveSupplierId}::uuid
         limit 1
       `
+      : []
     : [];
   const supplierRequiresLocation = String(effectiveSupplierRows[0]?.channelType ?? "") === "チェーン店";
   if (isRecordingPurchase && supplierRequiresLocation && !supplierLocationName) {
@@ -319,7 +322,7 @@ export async function PATCH(request: Request) {
           location_type
         )
         values (
-          ${supplierId},
+          ${supplierId}::uuid,
           ${supplierLocationName},
           '実店舗'
         )
@@ -571,8 +574,8 @@ export async function PATCH(request: Request) {
         else requested_unit
       end,
       selected_supplier_id = case
-        when ${hasSupplierInput} then ${supplierId}
-        when ${productActuallyChanged} then ${nextProduct?.mainSupplierId ?? null}
+        when ${hasSupplierInput} then ${supplierId}::uuid
+        when ${productActuallyChanged} then ${nextProduct?.mainSupplierId ?? null}::uuid
         else selected_supplier_id
       end,
       store_feedback_confirmed_at = case
@@ -617,7 +620,7 @@ export async function PATCH(request: Request) {
           hasRemainingSupplierInput && !remainingSupplierId ? `臨時購入先: ${remainingSupplierName}` : "",
           `残数フォロー: 元明細 ${itemDetail.itemId} / 元依頼 ${currentRequestedQuantity} ${itemDetail.requestedUnit} / 今回購入 ${splitPurchasedQuantity} ${itemDetail.requestedUnit} / 残数 ${splitRemainingQuantity} ${itemDetail.requestedUnit}`
         ].filter(Boolean).join("\n")},
-        ${hasRemainingSupplierInput ? remainingSupplierId : itemDetail.currentSupplierId ?? null},
+        ${hasRemainingSupplierInput ? remainingSupplierId : itemDetail.currentSupplierId ?? null}::uuid,
         'requested'
       )
     `;
@@ -723,8 +726,8 @@ export async function PATCH(request: Request) {
       )
       select
         purchase_order_items.id,
-        coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
-        ${supplierLocationId},
+        coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
+        ${supplierLocationId}::uuid,
         coalesce(${actualQuantity}, purchase_order_items.requested_quantity),
         purchase_order_items.requested_unit,
         ${Number.isFinite(actualPrice) ? actualPrice : null},
@@ -753,7 +756,7 @@ export async function PATCH(request: Request) {
         )
         select
           purchase_order_items.product_id,
-          coalesce(${supplierId}, purchase_order_items.selected_supplier_id),
+          coalesce(${supplierId}::uuid, purchase_order_items.selected_supplier_id),
           ${actualPrice},
           purchase_order_items.requested_unit,
           'purchase_actual',
