@@ -2402,6 +2402,8 @@ function ExceptionReportDialog({
   const familyName = getProductFamilyLabel(currentProduct, item.productName);
   const variantOptions = getAlternativeVariantOptions(item, products);
   const selectedVariantId = item.productId ?? "";
+  const [replacementProductQuery, setReplacementProductQuery] = useState("");
+  const [replacementProductId, setReplacementProductId] = useState("");
   const [temporaryVariantName, setTemporaryVariantName] = useState("");
   const [temporaryVariantUnit, setTemporaryVariantUnit] = useState(item.unit || "個");
   const currentSupplier = getTemporarySupplierNote(item.note) || item.supplier || plannedSupplier;
@@ -2421,6 +2423,28 @@ function ExceptionReportDialog({
   const canSplitRemaining = !isDeliveryLocked && !item.unavailable && splitPurchasedQuantity > 0 && splitPurchasedQuantity < item.requestedQuantity;
   const deferTargetSupplier = deferTemporarySupplier.trim() || deferSupplier.trim();
   const splitRemainingTargetSupplier = splitRemainingTemporarySupplier.trim() || splitRemainingSupplier;
+  const replacementProductCandidates = useMemo(() => {
+    const normalizedQuery = replacementProductQuery.trim().toLowerCase();
+
+    return products
+      .filter((product) => product.id && product.id !== item.productId)
+      .filter((product) => {
+        if (!normalizedQuery) return true;
+        return [
+          product.name,
+          product.category,
+          product.subcategory,
+          product.productBrandName,
+          product.productFamilyName,
+          product.variantName,
+          product.mainSupplier
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+      })
+      .slice(0, 80);
+  }, [products, item.productId, replacementProductQuery]);
+  const selectedReplacementProduct = products.find((product) => product.id === replacementProductId);
 
   function deferToNextSupplier() {
     if (!deferTargetSupplier) {
@@ -2473,6 +2497,21 @@ function ExceptionReportDialog({
       note: appendReplacementNote(item.note, item.productName, temporaryProductName)
     });
     setTemporaryVariantName("");
+  }
+
+  function applyReplacementProduct() {
+    if (!selectedReplacementProduct?.id) {
+      window.alert("代替商品を選択してください。");
+      return;
+    }
+
+    onChange({
+      productId: selectedReplacementProduct.id,
+      productName: selectedReplacementProduct.name,
+      unit: selectedReplacementProduct.unit,
+      supplier: selectedReplacementProduct.mainSupplier || item.supplier,
+      note: appendReplacementNote(item.note, item.productName, selectedReplacementProduct.name)
+    });
   }
 
   return (
@@ -2549,6 +2588,46 @@ function ExceptionReportDialog({
               onClick={useTemporaryVariant}
             >
               臨時で適用
+            </button>
+          </div>
+          <div className="supplier-defer-panel">
+            <div>
+              <strong>代替商品</strong>
+              <small>同じバリエーションではない商品で代替購入する場合、商品マスタから選んで明細を切り替えます。</small>
+            </div>
+            <div className="remaining-split-fields">
+              <label>
+                <span>商品検索</span>
+                <input
+                  value={replacementProductQuery}
+                  disabled={isDeliveryLocked}
+                  placeholder="商品名、カテゴリ、発注先で検索"
+                  onChange={(event) => setReplacementProductQuery(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>代替商品</span>
+                <select
+                  value={replacementProductId}
+                  disabled={isDeliveryLocked || replacementProductCandidates.length === 0}
+                  onChange={(event) => setReplacementProductId(event.target.value)}
+                >
+                  <option value="">選択してください</option>
+                  {replacementProductCandidates.map((product) => (
+                    <option value={product.id ?? ""} key={`replacement-${product.id ?? product.name}`}>
+                      {product.name}{product.unit ? ` / ${product.unit}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isDeliveryLocked || !selectedReplacementProduct}
+              onClick={applyReplacementProduct}
+            >
+              代替商品として適用
             </button>
           </div>
           <label className="exception-toggle">
