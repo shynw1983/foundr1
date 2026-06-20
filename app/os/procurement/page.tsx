@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, ChevronDown, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, CalendarDays, ChevronDown, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -134,6 +134,19 @@ type AdditionalPurchaseDraft = {
   quantity: number;
   note: string;
 };
+type StaffOption = {
+  id: string;
+  name: string;
+  role: string;
+  storeNames: string[];
+};
+type ProcurementTimeSlot = "morning" | "afternoon" | "evening";
+type ProcurementStaffUnavailableSlot = {
+  employeeId: string;
+  date: string;
+  slot: ProcurementTimeSlot;
+  note?: string;
+};
 
 const additionalPurchaseDraftStorageKey = "foundr1-os:procurement-additional-purchase-drafts:v1";
 const pendingProcurementTaskItemStorageKey = "foundr1-os:procurement-pending-task-items:v1";
@@ -171,6 +184,11 @@ const actualQuantityOptions = Array.from({ length: 1000 }, (_, index) => index);
 const purchaseQuantityOptions = Array.from({ length: 999 }, (_, index) => index + 1);
 const procurementOrderRenderBatchSize = 20;
 const temporaryProductUnitOptions = ["個", "袋", "本", "箱", "kg", "g", "L", "ml", "枚"];
+const procurementTimeSlots: Array<{ slot: ProcurementTimeSlot; label: string; description: string }> = [
+  { slot: "morning", label: "午前", description: "午前中" },
+  { slot: "afternoon", label: "午後", description: "昼から夕方前" },
+  { slot: "evening", label: "夜", description: "夕方以降" }
+];
 const maxReceiptUploadBytes = 4 * 1024 * 1024;
 const maxReceiptPdfUploadBytes = 50 * 1024 * 1024;
 const receiptCompressionTargetBytes = 2 * 1024 * 1024;
@@ -191,6 +209,24 @@ function getProductPhotoSrc(photoUrl?: string) {
   }
 
   return photoUrl;
+}
+
+function getTodayDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function getUnavailableSlotsForStaffDate(
+  availability: ProcurementStaffUnavailableSlot[],
+  employeeId: string,
+  date: string
+) {
+  return availability.filter((item) => item.employeeId === employeeId && item.date === date);
+}
+
+function getSelectedStaffId(currentId: string, staffOptions: StaffOption[]) {
+  if (staffOptions.some((staffMember) => staffMember.id === currentId)) return currentId;
+  return staffOptions[0]?.id ?? "";
 }
 
 function createProcurementTaskItems(
@@ -823,6 +859,13 @@ export default function ProcurementPage() {
   const [supplierLocationDrafts, setSupplierLocationDrafts] = useState<Record<string, string>>({});
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
+  const [procurementStaffAvailability, setProcurementStaffAvailability] = useState<ProcurementStaffUnavailableSlot[]>([]);
+  const [calendarStaffId, setCalendarStaffId] = useState("");
+  const [calendarDate, setCalendarDate] = useState(getTodayDateKey());
+  const [calendarSlots, setCalendarSlots] = useState<ProcurementTimeSlot[]>([]);
+  const [calendarNote, setCalendarNote] = useState("");
+  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   const productLookup = useMemo<ProductLookup>(() => ({
     byId: new Map(products.flatMap((product) => product.id ? [[product.id, product] as const] : [])),
     byName: new Map(products.map((product) => [product.name, product]))
@@ -895,6 +938,8 @@ export default function ProcurementPage() {
         purchaseOrderItems?: DashboardOrderItem[];
         supplierFulfillments?: SupplierFulfillment[];
         deliveryBatches?: DeliveryBatch[];
+        staffOptions?: StaffOption[];
+        procurementStaffAvailability?: ProcurementStaffUnavailableSlot[];
       };
 
       if (dashboardLoadRequestRef.current !== requestId) return false;
@@ -914,6 +959,11 @@ export default function ProcurementPage() {
       }
       if (data.supplierFulfillments) setSupplierFulfillments(data.supplierFulfillments);
       if (data.deliveryBatches) setDeliveryBatches(mergeOptimisticDeliveryBatches(data.deliveryBatches));
+      if (data.staffOptions) {
+        setStaffOptions(data.staffOptions);
+        setCalendarStaffId((current) => getSelectedStaffId(current, data.staffOptions ?? []));
+      }
+      if (data.procurementStaffAvailability) setProcurementStaffAvailability(data.procurementStaffAvailability);
       setDashboardSyncState("synced");
       lastDashboardLoadedAtRef.current = Date.now();
       return true;
@@ -928,6 +978,53 @@ export default function ProcurementPage() {
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
+
+  const selectedCalendarStaffId = getSelectedStaffId(calendarStaffId, staffOptions);
+  const calendarDayEntries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
+
+  useEffect(() => {
+    if (!selectedCalendarStaffId || !calendarDate) return;
+    const entries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
+    setCalendarSlots(entries.map((entry) => entry.slot));
+    setCalendarNote(entries.find((entry) => entry.note)?.note ?? "");
+  }, [selectedCalendarStaffId, calendarDate, procurementStaffAvailability]);
+
+  function toggleCalendarSlot(slot: ProcurementTimeSlot) {
+    setCalendarSlots((current) =>
+      current.includes(slot)
+        ? current.filter((item) => item !== slot)
+        : [...current, slot]
+    );
+  }
+
+  async function saveProcurementCalendar() {
+    if (!selectedCalendarStaffId || isSavingCalendar) return;
+
+    setIsSavingCalendar(true);
+    try {
+      const response = await fetch("/api/procurement/availability", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: selectedCalendarStaffId,
+          date: calendarDate,
+          slots: calendarSlots,
+          note: calendarNote
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        window.alert(body.error ?? "購入担当の予定を保存できませんでした。");
+        return;
+      }
+
+      showNotice("購入担当の予定を保存しました。");
+      await loadDashboardData({ background: true });
+    } finally {
+      setIsSavingCalendar(false);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1643,6 +1740,57 @@ export default function ProcurementPage() {
             </button>
           </div>
         ) : null}
+
+        <section className="panel">
+          <PanelTitle title="購入担当カレンダー" subtitle="予定がある日を登録し、発注依頼の締切選択から避けます。" />
+          <div className="procurement-calendar-panel" aria-label="購入担当カレンダー">
+            <div className="procurement-calendar-heading">
+              <CalendarDays size={18} />
+              <div>
+                <strong>購入担当の予定</strong>
+                <span>購入できない時間帯を日単位で管理します。</span>
+              </div>
+            </div>
+            <label>
+              <span>購入担当</span>
+              <select value={selectedCalendarStaffId} onChange={(event) => setCalendarStaffId(event.target.value)}>
+                {staffOptions.map((staff) => (
+                  <option value={staff.id} key={staff.id}>{staff.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>日付</span>
+              <input type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} />
+            </label>
+            <div className="calendar-slot-toggle">
+              <span>予定あり</span>
+              <div>
+                {procurementTimeSlots.map((slot) => (
+                  <button
+                    type="button"
+                    className={calendarSlots.includes(slot.slot) ? "slot-button is-active" : "slot-button"}
+                    onClick={() => toggleCalendarSlot(slot.slot)}
+                    key={slot.slot}
+                  >
+                    <strong>{slot.label}</strong>
+                    <small>{slot.description}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label>
+              <span>メモ</span>
+              <input value={calendarNote} onChange={(event) => setCalendarNote(event.target.value)} placeholder="例: 外出、商談、会議" />
+            </label>
+            <button type="button" className="secondary-button" disabled={!selectedCalendarStaffId || isSavingCalendar} onClick={() => void saveProcurementCalendar()}>
+              {isSavingCalendar ? "保存中" : "予定を保存"}
+            </button>
+            {calendarDayEntries.length > 0 ? (
+              <p>{calendarDayEntries.map((entry) => procurementTimeSlots.find((slot) => slot.slot === entry.slot)?.label).filter(Boolean).join("、")} は予定あり</p>
+            ) : null}
+          </div>
+        </section>
 
         <section className="panel procurement-panel">
           <PanelTitle

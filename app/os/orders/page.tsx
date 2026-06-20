@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, CalendarDays, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
+import { Boxes, ClipboardList, FileText, Lightbulb, MessageSquareWarning, PackageCheck, Plus, Search, Store, Truck, LogOut, UserCog } from "lucide-react";
 import { UserBadge } from "../components/UserBadge";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
@@ -584,11 +584,6 @@ export default function OrdersPage() {
   const [draftSubcategoryFilter, setDraftSubcategoryFilter] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
-  const [calendarStaffId, setCalendarStaffId] = useState("");
-  const [calendarDate, setCalendarDate] = useState(getTodayDateKey());
-  const [calendarSlots, setCalendarSlots] = useState<ProcurementTimeSlot[]>([]);
-  const [calendarNote, setCalendarNote] = useState("");
-  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
 
   async function loadDashboardData() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
@@ -709,8 +704,6 @@ export default function OrdersPage() {
   const draftDeadlineDate = getDateKeyFromDateTime(draftDeadline);
   const draftUnavailableSlots = getUnavailableSlotSet(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadlineDate);
   const draftUnavailableNotice = formatUnavailableNotice(procurementStaffAvailability, selectedDraftBuyerStaffId, draftDeadline);
-  const selectedCalendarStaffId = getSelectedStaffId(calendarStaffId || selectedDraftBuyerStaffId, staffOptions);
-  const calendarDayEntries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
   const draftProducts = getProductsForStore(products, orderableStores, selectedDraftStore);
   const draftProductCategories = Array.from(new Set(draftProducts.map((product) => product.category)));
   const selectedDraftCategory = draftProductCategories.includes(draftCategoryFilter)
@@ -763,17 +756,6 @@ export default function OrdersPage() {
     setDraftRequesterStaffId((current) => getSelectedRequesterStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId));
     setDraftBuyerStaffId((current) => getSelectedBuyerStaffId(current, draftAssignableStaff, selectedDraftStore, currentUserId, selectedDraftStoreDefaultBuyerId));
   }, [selectedDraftStore, currentUserId, staffOptions, selectedDraftStoreDefaultBuyerId]);
-
-  useEffect(() => {
-    setCalendarStaffId((current) => current || selectedDraftBuyerStaffId);
-  }, [selectedDraftBuyerStaffId]);
-
-  useEffect(() => {
-    if (!selectedCalendarStaffId || !calendarDate) return;
-    const entries = getUnavailableSlotsForStaffDate(procurementStaffAvailability, selectedCalendarStaffId, calendarDate);
-    setCalendarSlots(entries.map((entry) => entry.slot));
-    setCalendarNote(entries.find((entry) => entry.note)?.note ?? "");
-  }, [selectedCalendarStaffId, calendarDate, procurementStaffAvailability]);
 
   useEffect(() => {
     if (!hasRestoredNewOrderDraft.current || typeof window === "undefined") return;
@@ -858,43 +840,6 @@ export default function OrdersPage() {
 
     storeConfirmationSaveChainsRef.current[action.id] = nextSave;
     return nextSave;
-  }
-
-  function toggleCalendarSlot(slot: ProcurementTimeSlot) {
-    setCalendarSlots((current) =>
-      current.includes(slot)
-        ? current.filter((item) => item !== slot)
-        : [...current, slot]
-    );
-  }
-
-  async function saveProcurementCalendar() {
-    if (!selectedCalendarStaffId || isSavingCalendar) return;
-
-    setIsSavingCalendar(true);
-    try {
-      const response = await fetch("/api/procurement/availability", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: selectedCalendarStaffId,
-          date: calendarDate,
-          slots: calendarSlots,
-          note: calendarNote
-        })
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        window.alert(body.error ?? "購入担当の予定を保存できませんでした。");
-        return;
-      }
-
-      showNotice("購入担当の予定を保存しました。");
-      await loadDashboardData();
-    } finally {
-      setIsSavingCalendar(false);
-    }
   }
 
   function addOrderItemDraft() {
@@ -1358,53 +1303,6 @@ export default function OrdersPage() {
                 ))}
               </select>
             </label>
-            <section className="procurement-calendar-panel" aria-label="購入担当カレンダー">
-              <div className="procurement-calendar-heading">
-                <CalendarDays size={18} />
-                <div>
-                  <strong>購入担当カレンダー</strong>
-                  <span>事前に予定がある日を登録し、発注依頼の締切選択から避けます。</span>
-                </div>
-              </div>
-              <label>
-                <span>購入担当</span>
-                <select value={selectedCalendarStaffId} onChange={(event) => setCalendarStaffId(event.target.value)}>
-                  {staffOptions.map((staff) => (
-                    <option value={staff.id} key={staff.id}>{staff.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>日付</span>
-                <input type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} />
-              </label>
-              <div className="calendar-slot-toggle">
-                <span>予定あり</span>
-                <div>
-                  {procurementTimeSlots.map((slot) => (
-                    <button
-                      type="button"
-                      className={calendarSlots.includes(slot.slot) ? "slot-button is-active" : "slot-button"}
-                      onClick={() => toggleCalendarSlot(slot.slot)}
-                      key={slot.slot}
-                    >
-                      <strong>{slot.label}</strong>
-                      <small>{slot.description}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label>
-                <span>メモ</span>
-                <input value={calendarNote} onChange={(event) => setCalendarNote(event.target.value)} placeholder="例: 外出、商談、会議" />
-              </label>
-              <button type="button" className="secondary-button" disabled={!selectedCalendarStaffId || isSavingCalendar} onClick={() => void saveProcurementCalendar()}>
-                {isSavingCalendar ? "保存中" : "予定を保存"}
-              </button>
-              {calendarDayEntries.length > 0 ? (
-                <p>{calendarDayEntries.map((entry) => procurementTimeSlots.find((slot) => slot.slot === entry.slot)?.label).filter(Boolean).join("、")} は予定あり</p>
-              ) : null}
-            </section>
             <label>
               <span>メモ</span>
               <textarea name="note" value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="欠品時の代替、配送希望など" />
