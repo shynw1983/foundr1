@@ -46,7 +46,13 @@ function browserLanguage(): MemberLanguage {
 function initialLanguage() {
   if (typeof window === "undefined") return "ja";
   const params = new URLSearchParams(window.location.search);
-  return params.get("lang") ? normalizeMemberLanguage(params.get("lang")) : browserLanguage();
+  const urlLanguage = params.get("lang");
+  if (urlLanguage) return normalizeMemberLanguage(urlLanguage);
+  const storedLanguage = window.localStorage.getItem(memberLanguageStorageKey);
+  if (storedLanguage && memberLanguageOptions.some((option) => option.value === storedLanguage)) {
+    return storedLanguage as MemberLanguage;
+  }
+  return browserLanguage();
 }
 
 function savePreferredLanguage(language: MemberLanguage) {
@@ -64,8 +70,11 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const storedLanguage = window.localStorage.getItem(memberLanguageStorageKey);
     const nextLanguage = initialLanguage();
-    userSelectedLanguageRef.current = Boolean(params.get("lang"));
+    userSelectedLanguageRef.current = Boolean(
+      params.get("lang") || (storedLanguage && memberLanguageOptions.some((option) => option.value === storedLanguage))
+    );
     setLanguageState(nextLanguage);
     window.localStorage.setItem(memberLanguageStorageKey, nextLanguage);
     if (params.get("lang")) savePreferredLanguage(nextLanguage);
@@ -91,7 +100,6 @@ export function MemberLanguageProvider({ children }: { children: React.ReactNode
     },
     syncPreferredLanguage: (preferredLanguage) => {
       if (!preferredLanguage) return;
-      if (typeof window !== "undefined" && !new URLSearchParams(window.location.search).get("lang")) return;
       const normalized = normalizeMemberLanguage(preferredLanguage);
       if (userSelectedLanguageRef.current) return;
       setLanguageState(normalized);

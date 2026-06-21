@@ -4,15 +4,20 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.view.DisplayCutout;
 import android.view.View;
 import android.view.Window;
@@ -47,6 +52,7 @@ public class MainActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 1003;
     private static final int LOCATION_PERMISSION_REQUEST = 1004;
     private static final int STARTUP_PERMISSION_REQUEST = 1005;
+    private static final int INSTALL_PERMISSION_REQUEST = 1006;
     private static final String NOTIFICATION_CHANNEL_ID = "foundr1_store_orders";
     private static final long APP_UPDATE_CHECK_INTERVAL_MS = 60L * 60L * 1000L;
 
@@ -59,6 +65,16 @@ public class MainActivity extends Activity {
     private long lastAppUpdateCheckAt = 0L;
     private int lastPromptedVersionCode = 0;
     private boolean appUpdateDialogShowing = false;
+    private long pendingApkDownloadId = -1L;
+    private final BroadcastReceiver appUpdateDownloadReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
+            long downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+            if (downloadId < 0 || downloadId != pendingApkDownloadId) return;
+            installDownloadedApk(downloadId);
+        }
+    };
 
     @SuppressLint({ "SetJavaScriptEnabled", "AddJavascriptInterface" })
     @Override
@@ -89,6 +105,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
         createNotificationChannel();
+        registerAppUpdateDownloadReceiver();
         requestStartupPermissionsIfNeeded();
         addStorePrinterBridgeIfAvailable();
         webView.addJavascriptInterface(new Foundr1NotificationBridge(), "Foundr1NativeNotifications");
@@ -153,6 +170,9 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        if (pendingApkDownloadId >= 0 && canInstallUnknownApps()) {
+            installDownloadedApk(pendingApkDownloadId);
+        }
         checkNativeAppUpdateIfNeeded(true);
     }
 
@@ -172,6 +192,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         persistWebSession();
+        try {
+            unregisterReceiver(appUpdateDownloadReceiver);
+        } catch (Exception ignored) {
+            // Receiver may already be unregistered if the activity is recreated quickly.
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
@@ -203,6 +228,9 @@ public class MainActivity extends Activity {
             Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
             filePathCallback.onReceiveValue(results);
             filePathCallback = null;
+        }
+        if (requestCode == INSTALL_PERMISSION_REQUEST && pendingApkDownloadId >= 0 && canInstallUnknownApps()) {
+            installDownloadedApk(pendingApkDownloadId);
         }
     }
 
@@ -412,7 +440,7 @@ public class MainActivity extends Activity {
             .setMessage(title + " " + versionLabel + " をダウンロードできます。")
             .setPositiveButton("ダウンロード", (dialog, which) -> {
                 appUpdateDialogShowing = false;
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)));
+                downloadNativeAppUpdate(title, versionLabel, downloadUrl);
             })
             .setNegativeButton("あとで", (dialog, which) -> {
                 appUpdateDialogShowing = false;
@@ -420,6 +448,93 @@ public class MainActivity extends Activity {
             })
             .setOnCancelListener((dialog) -> appUpdateDialogShowing = false)
             .show();
+    }
+
+    private void registerAppUpdateDownloadReceiver() {
+        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(appUpdateDownloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(appUpdateDownloadReceiver, filter);
+        }
+    }
+
+    private void downloadNativeAppUpdate(String title, String versionLabel, String downloadUrl) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (manager == null) {
+                openExternalDownload(downloadUrl);
+                return;
+            }
+
+            String appKey = getAppKey().isEmpty() ? "app" : getAppKey();
+            String fileName = "foundr1-" + appKey + "-" + sanitizeFileName(versionLabel) + ".apk";
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+            request.setTitle(title);
+            request.setDescription("アプリ更新をダウンロードしています。");
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
+            pendingApkDownloadId = manager.enqueue(request);
+            Toast.makeText(this, "アプリ更新のダウンロードを開始しました。", Toast.LENGTH_LONG).show();
+        } catch (Exception error) {
+            openExternalDownload(downloadUrl);
+        }
+    }
+
+    private void installDownloadedApk(long downloadId) {
+        DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) return;
+        Uri apkUri = manager.getUriForDownloadedFile(downloadId);
+        if (apkUri == null) {
+            Toast.makeText(this, "更新ファイルを開けませんでした。", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!canInstallUnknownApps()) {
+            showInstallPermissionDialog();
+            return;
+        }
+        try {
+            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+            installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(installIntent);
+            pendingApkDownloadId = -1L;
+        } catch (Exception error) {
+            Toast.makeText(this, "更新ファイルを開けませんでした。ダウンロード通知から開いてください。", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private boolean canInstallUnknownApps() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || getPackageManager().canRequestPackageInstalls();
+    }
+
+    private void showInstallPermissionDialog() {
+        if (isFinishing()) return;
+        new AlertDialog.Builder(this)
+            .setTitle("インストール許可が必要です")
+            .setMessage("ダウンロードした更新をインストールするには、このアプリからのインストールを許可してください。")
+            .setPositiveButton("設定を開く", (dialog, which) -> {
+                Intent intent = new Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName())
+                );
+                startActivityForResult(intent, INSTALL_PERMISSION_REQUEST);
+            })
+            .setNegativeButton("あとで", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private void openExternalDownload(String downloadUrl) {
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)));
+    }
+
+    private String sanitizeFileName(String value) {
+        String safe = value == null ? "latest" : value.trim().replaceAll("[^0-9A-Za-z._-]+", "-");
+        return safe.isEmpty() ? "latest" : safe;
     }
 
     private void showNativeNotification(String title, String body, String href, int notificationId) {
