@@ -32629,7 +32629,12 @@ a:focus-visible {
     box-shadow: 0 8px 18px rgba(24, 64, 52, 0.18);
   }
 
-  .shell .brand-mark,
+  .shell .brand-mark {
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
+  }
+
   .os-home-shell .brand-mark {
     flex-basis: 46px;
     width: 46px;
