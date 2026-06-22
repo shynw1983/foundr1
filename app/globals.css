@@ -31912,7 +31912,7 @@ a:focus-visible {
   overflow: hidden;
   border: 0;
   border-radius: 8px;
-  background: transparent url("/icons/foundr1-os-512.png") center / contain no-repeat;
+  background: transparent url("/icons/foundr1-os-512.png") center / 166% no-repeat;
   box-shadow: none;
   color: transparent;
   font-size: 0;
@@ -31921,14 +31921,14 @@ a:focus-visible {
 }
 
 .shell .brand-mark {
-  background: transparent url("/icons/foundr1-os-512.png") center / contain no-repeat;
+  background: transparent url("/icons/foundr1-os-512.png") center / 166% no-repeat;
 }
 
 .os-home-shell .brand-mark {
   flex: 0 0 46px;
   width: 46px;
   height: 46px;
-  background: transparent url("/icons/foundr1-os-512.png") center / contain no-repeat;
+  background: transparent url("/icons/foundr1-os-512.png") center / 166% no-repeat;
 }
 
 .store-workbench-shell .brand-mark,
