@@ -31922,7 +31922,7 @@ a:focus-visible {
 
 .shell .brand-mark {
   border-color: rgba(255, 255, 255, 0.16);
-  background: #000000 url("/icons/foundr1-os-512.png") center / cover no-repeat;
+  background: #000000 url("/icons/foundr1-os-512.png") center / 138% no-repeat;
 }
 
 .os-home-shell .brand-mark {
