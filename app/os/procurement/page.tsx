@@ -1930,39 +1930,6 @@ export default function ProcurementPage() {
                           <a href={`/os/orders#order-${order.id}`}>店舗確認へ</a>
                         </div>
                       ) : null}
-                      <AdditionalPurchasePanel
-                        orderId={order.id}
-                        products={products}
-                        draft={additionalPurchaseDrafts[order.id] ?? createDefaultAdditionalPurchaseDraft(products)}
-                        isSubmitting={submittingAdditionalPurchaseOrderId === order.id}
-                        onChange={(next) => updateAdditionalPurchaseDraft(order.id, next)}
-                        onSubmit={() => void createAdditionalPurchaseItem(order.id)}
-                      />
-                      <OrderFulfillmentPanel
-                        hasOnlineOrderItems={hasOnlineOrderItems}
-                        hasStoreDeliveryItems={hasStoreDeliveryItems}
-                        hasPurchasedItems={hasPurchasedItems}
-                        purchasedCount={completedCount}
-                        unavailableCount={unavailableCount}
-                        onlinePurchasedCount={onlinePurchasedCount}
-                        onlineUnavailableCount={onlineUnavailableCount}
-                        onlineDeliveredCount={onlineDeliveredCount}
-                        onlineReceivedCount={onlineReceivedCount}
-                        onlineTotalCount={onlineOrderItems.length}
-                        onlineSupplierGroups={onlineSupplierGroups}
-                        deliveredCount={deliveredCount}
-                        receivedCount={receivedCount}
-                        inDeliveryCount={inDeliveryCount}
-                        readyToDeliverCount={readyToDeliverCount}
-                        totalCount={items.length}
-                        state={deliveryState}
-                        onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
-                        onConfirmOnlineOrder={(supplier) => confirmOnlineOrder(order.id, supplier)}
-                        onMarkOnlineArrived={(supplier) => markOnlineOrderArrived(order.id, supplier)}
-                        batches={orderDeliveryBatches}
-                        onCreateBatch={() => createDeliveryBatch(order.id)}
-                        onMarkStatus={markDeliveryBatchStatus}
-                      />
                       <div className="procurement-supplier-list">
                         {supplierGroups.map((group) => {
                           const supplierCompletedCount = group.items.filter((item) => item.purchased || item.unavailable).length;
@@ -1980,6 +1947,7 @@ export default function ProcurementPage() {
                           const supplierRequiresLocation = isChainSupplier(group.supplier, supplierByName);
                           const supplierPurchasedCount = group.items.filter((item) => item.purchased && !item.unavailable).length;
                           const supplierUnavailableCount = group.items.filter((item) => item.unavailable).length;
+                          const supplierPendingCount = group.items.length - supplierCompletedCount;
                           const isSupplierComplete = group.items.length > 0 && supplierCompletedCount >= group.items.length;
                           const defaultSupplierCollapsed = isSupplierComplete && !focusedOrderId;
                           const isSupplierCollapsed = supplierCollapseOverrides[supplierKey] ?? defaultSupplierCollapsed;
@@ -2012,12 +1980,13 @@ export default function ProcurementPage() {
                                   </button>
                                 </div>
                                 <div className="supplier-group-amounts">
-                                  <span className="is-estimated">概算 {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
+                                  <span className="is-estimated">購入見込み {formatProcurementAmountSummary(supplierEstimatedAmount)}</span>
                                   {supplierPurchasedCount > 0 ? (
-                                    <span className="is-purchased">購入実績 {formatProcurementAmountSummary(supplierPurchasedAmount)}</span>
+                                    <span className="is-purchased">購入済み {formatProcurementAmountSummary(supplierPurchasedAmount)}</span>
                                   ) : supplierUnavailableCount > 0 ? (
                                     <span className="is-skipped">購入なし / 見送り</span>
                                   ) : null}
+                                  {supplierPendingCount > 0 ? <span className="is-open">未購入 {supplierPendingCount}</span> : null}
                                   {supplierReadyToDeliverAmount.amount > 0 || supplierReadyToDeliverAmount.isPending ? (
                                     <span className="is-ready">配送待ち {formatProcurementAmountSummary(supplierReadyToDeliverAmount)}</span>
                                   ) : null}
@@ -2167,6 +2136,39 @@ export default function ProcurementPage() {
                           );
                         })}
                       </div>
+                      <OrderFulfillmentPanel
+                        hasOnlineOrderItems={hasOnlineOrderItems}
+                        hasStoreDeliveryItems={hasStoreDeliveryItems}
+                        hasPurchasedItems={hasPurchasedItems}
+                        purchasedCount={completedCount}
+                        unavailableCount={unavailableCount}
+                        onlinePurchasedCount={onlinePurchasedCount}
+                        onlineUnavailableCount={onlineUnavailableCount}
+                        onlineDeliveredCount={onlineDeliveredCount}
+                        onlineReceivedCount={onlineReceivedCount}
+                        onlineTotalCount={onlineOrderItems.length}
+                        onlineSupplierGroups={onlineSupplierGroups}
+                        deliveredCount={deliveredCount}
+                        receivedCount={receivedCount}
+                        inDeliveryCount={inDeliveryCount}
+                        readyToDeliverCount={readyToDeliverCount}
+                        totalCount={items.length}
+                        state={deliveryState}
+                        onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
+                        onConfirmOnlineOrder={(supplier) => confirmOnlineOrder(order.id, supplier)}
+                        onMarkOnlineArrived={(supplier) => markOnlineOrderArrived(order.id, supplier)}
+                        batches={orderDeliveryBatches}
+                        onCreateBatch={() => createDeliveryBatch(order.id)}
+                        onMarkStatus={markDeliveryBatchStatus}
+                      />
+                      <AdditionalPurchasePanel
+                        orderId={order.id}
+                        products={products}
+                        draft={additionalPurchaseDrafts[order.id] ?? createDefaultAdditionalPurchaseDraft(products)}
+                        isSubmitting={submittingAdditionalPurchaseOrderId === order.id}
+                        onChange={(next) => updateAdditionalPurchaseDraft(order.id, next)}
+                        onSubmit={() => void createAdditionalPurchaseItem(order.id)}
+                      />
                     </div>
                   ) : null}
                 </article>
@@ -2460,34 +2462,37 @@ function OrderFulfillmentPanel({
   const onlineDeliveredTotalCount = onlineDeliveredCount + onlineReceivedCount + onlineUnavailableCount;
   const onlineArrived = hasOnlineOrderItems && onlineDeliveredTotalCount >= onlineTotalCount;
   const isMixedOrder = hasOnlineOrderItems && hasStoreDeliveryItems;
+  const showDeliveryDetails = hasOnlineOrderItems || batches.length > 0;
 
   return (
     <div className={hasPurchasedItems ? "fulfillment-panel is-ready" : "fulfillment-panel"}>
-      <div>
-        <span>{isMixedOrder ? "配送・到着フロー" : hasOnlineOrderItems ? "配送発注" : "配送フロー"}</span>
-        <strong>
-          {hasOnlineOrderItems && !hasStoreDeliveryItems
-            ? completedTotalCount === totalCount
-              ? "店舗確認済み"
-              : deliveredTotalCount === totalCount
-                ? "店舗確認待ち"
-                : isOnlineOrdered && expectedArrivalLabel
-                  ? `到着予定 ${expectedArrivalLabel}`
-                  : state.expectedArrivalDate
-                    ? "到着予定日を確認して発注済みにする"
-                    : "発注先へ発注後に到着予定日を入力"
-            : completedTotalCount === totalCount
-              ? "店舗確認済み"
-              : deliveredTotalCount === totalCount
-                ? "店舗確認待ち"
-              : inDeliveryCount > 0
-                ? "配送中"
-                : readyToDeliverCount > 0
-                  ? "配送待ち"
-                  : hasOnlineOrderItems
-                    ? "到着予定日と配送をそれぞれ処理"
-                    : "購入完了後に配送へ"}
-        </strong>
+      <div className="fulfillment-summary">
+        <div>
+          <span>{isMixedOrder ? "配送・到着管理" : hasOnlineOrderItems ? "配送発注" : "配送管理"}</span>
+          <strong>
+            {hasOnlineOrderItems && !hasStoreDeliveryItems
+              ? completedTotalCount === totalCount
+                ? "店舗確認済み"
+                : deliveredTotalCount === totalCount
+                  ? "店舗確認待ち"
+                  : isOnlineOrdered && expectedArrivalLabel
+                    ? `到着予定 ${expectedArrivalLabel}`
+                    : state.expectedArrivalDate
+                      ? "到着予定日を確認して発注済みにする"
+                      : "発注先へ発注後に到着予定日を入力"
+              : completedTotalCount === totalCount
+                ? "店舗確認済み"
+                : deliveredTotalCount === totalCount
+                  ? "店舗確認待ち"
+                : inDeliveryCount > 0
+                  ? "配送中"
+                  : readyToDeliverCount > 0
+                    ? "配送待ち"
+                    : hasOnlineOrderItems
+                      ? "到着予定日と配送をそれぞれ処理"
+                      : "購入完了後に配送へ"}
+          </strong>
+        </div>
         <div className="fulfillment-metrics">
           <span>処理 {handledTotalCount} / {totalCount}</span>
           {unavailableCount > 0 ? <span>購入不可 {unavailableCount}</span> : null}
@@ -2495,8 +2500,21 @@ function OrderFulfillmentPanel({
           <span>納品済み {deliveredCount}</span>
           <span>店舗確認 {receivedCount}</span>
         </div>
+        {hasStoreDeliveryItems ? (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={readyToDeliverCount === 0}
+            onClick={onCreateBatch}
+          >
+            購入済み分を配送
+          </button>
+        ) : null}
       </div>
-      {hasOnlineOrderItems ? (
+      {showDeliveryDetails ? (
+        <details className="fulfillment-details">
+          <summary>配送明細を開く</summary>
+          {hasOnlineOrderItems ? (
         <div className="online-fulfillment-list">
           {onlineSupplierGroups.map((group) => {
             const groupHandledCount = group.purchasedCount + group.unavailableCount;
@@ -2547,19 +2565,9 @@ function OrderFulfillmentPanel({
             );
           })}
         </div>
-      ) : null}
-      {hasStoreDeliveryItems ? (
+          ) : null}
+          {hasStoreDeliveryItems ? (
         <div className="fulfillment-delivery-area">
-          <div className="fulfillment-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={readyToDeliverCount === 0}
-              onClick={onCreateBatch}
-            >
-              購入済み分を配送
-            </button>
-          </div>
           {batches.length > 0 ? (
             <div className="delivery-batch-list">
               {batches.map((batch) => (
@@ -2591,6 +2599,8 @@ function OrderFulfillmentPanel({
             </div>
           ) : null}
         </div>
+          ) : null}
+        </details>
       ) : null}
     </div>
   );

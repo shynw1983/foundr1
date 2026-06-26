@@ -23405,9 +23405,7 @@ body :where(
 
 .fulfillment-panel {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  align-items: start;
-  gap: 12px;
+  gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -23419,9 +23417,18 @@ body :where(
   background: #f7fcfa;
 }
 
-.fulfillment-panel > div:first-child {
+.fulfillment-summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fulfillment-summary > div:first-child {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .fulfillment-panel span,
@@ -23433,6 +23440,7 @@ body :where(
 
 .fulfillment-panel strong {
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .fulfillment-metrics {
@@ -23451,6 +23459,30 @@ body :where(
   color: var(--blue);
   background: var(--blue-soft);
   font-size: 11px;
+}
+
+.fulfillment-summary > .secondary-button {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.fulfillment-details {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.fulfillment-details summary {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 30px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .fulfillment-actions {
@@ -23790,6 +23822,11 @@ body :where(
 .supplier-group-amounts span.is-ready {
   color: var(--blue);
   background: var(--blue-soft);
+}
+
+.supplier-group-amounts span.is-open {
+  color: var(--amber);
+  background: var(--amber-soft);
 }
 
 .supplier-group-amounts span.is-skipped {
@@ -27528,11 +27565,25 @@ body :where(
   }
 
   .fulfillment-panel {
-    grid-template-columns: 1fr;
     gap: 8px;
-    padding: 0;
-    border: 0;
-    background: transparent;
+    padding: 10px;
+    border-color: rgba(31, 126, 93, 0.14);
+    background: #fbfcfe;
+  }
+
+  .fulfillment-summary {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .fulfillment-summary > .secondary-button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .fulfillment-details {
+    padding-top: 6px;
   }
 
   .fulfillment-actions {
@@ -27576,19 +27627,19 @@ body :where(
   }
 
   .procurement-supplier-group {
-    gap: 8px;
+    gap: 0;
     padding: 0;
     overflow: hidden;
-    border-color: rgba(31, 126, 93, 0.22);
+    border-color: var(--line);
     background: white;
   }
 
   .supplier-group-heading {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    gap: 7px;
     padding: 10px;
     border-bottom: 0;
-    background: var(--green-soft);
+    background: white;
   }
 
   .supplier-group-title-row {
@@ -27602,12 +27653,13 @@ body :where(
   }
 
   .supplier-group-title-row > div strong {
-    color: var(--green);
-    font-size: 17px;
+    color: var(--ink);
+    font-size: 16px;
   }
 
   .supplier-group-toggle {
-    min-height: 34px;
+    min-height: 32px;
+    padding-inline: 9px;
   }
 
   .supplier-group-amounts {
@@ -27615,7 +27667,8 @@ body :where(
   }
 
   .supplier-group-amounts span {
-    min-height: 26px;
+    min-height: 24px;
+    padding-inline: 8px;
     font-size: 11px;
   }
 
@@ -27634,9 +27687,12 @@ body :where(
     min-width: 0;
   }
 
-  .supplier-group-heading .supplier-group-meta small,
+  .supplier-group-heading .supplier-group-meta small {
+    min-height: 24px;
+  }
+
   .supplier-group-heading .supplier-group-meta .receipt-upload-button {
-    min-height: 48px;
+    min-height: 38px;
   }
 
   .supplier-group-heading .supplier-group-meta .receipt-upload-control a {
