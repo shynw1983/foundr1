@@ -1036,7 +1036,7 @@ export default function ProcurementPage() {
       const optimisticItems = getOptimisticProcurementTaskItems();
 
       const nextItems = createProcurementTaskItems(purchaseOrders, products, purchaseOrderItems).map(
-        (item) => optimisticItems[item.id]?.item ?? item
+        (item) => mergePendingProcurementTaskItem(item, optimisticItems[item.id]?.item)
       );
       procurementTaskItemsRef.current = nextItems;
       return nextItems;
@@ -3255,20 +3255,54 @@ function applyPendingProcurementTaskItemsToDashboardItems(
     const pendingItem = pendingItems[item.id]?.item;
     if (!pendingItem) return item;
 
+    const deliveryStatus = getMostAdvancedDeliveryStatus(item.deliveryStatus ?? "pending", pendingItem.deliveryStatus);
+    const serverUnavailable = Boolean(item.unavailable);
+    const pendingUnavailable = Boolean(pendingItem.unavailable);
+
     return {
       ...item,
       actualQuantity: pendingItem.actualQuantity,
       actualPrice: pendingItem.actualPrice,
       supplierLocationName: pendingItem.supplierLocationName,
       purchased: pendingItem.purchased,
-      unavailable: pendingItem.unavailable,
+      unavailable: serverUnavailable || pendingUnavailable,
       supplier: pendingItem.supplier,
       note: pendingItem.note,
       priceExceptionNote: pendingItem.priceExceptionNote,
-      deliveryStatus: pendingItem.deliveryStatus,
-      deliveryBatchId: pendingItem.deliveryBatchId
+      deliveryStatus,
+      deliveryBatchId: deliveryStatus === pendingItem.deliveryStatus ? pendingItem.deliveryBatchId : item.deliveryBatchId
     };
   });
+}
+
+function mergePendingProcurementTaskItem(
+  serverItem: ProcurementTaskItem,
+  pendingItem?: ProcurementTaskItem
+) {
+  if (!pendingItem) return serverItem;
+
+  const deliveryStatus = getMostAdvancedDeliveryStatus(serverItem.deliveryStatus, pendingItem.deliveryStatus);
+
+  return {
+    ...pendingItem,
+    unavailable: serverItem.unavailable || pendingItem.unavailable,
+    deliveryStatus,
+    deliveryBatchId: deliveryStatus === pendingItem.deliveryStatus ? pendingItem.deliveryBatchId : serverItem.deliveryBatchId
+  };
+}
+
+function getMostAdvancedDeliveryStatus(
+  left: ProcurementTaskItem["deliveryStatus"],
+  right: ProcurementTaskItem["deliveryStatus"]
+) {
+  return getDeliveryStatusRank(right) > getDeliveryStatusRank(left) ? right : left;
+}
+
+function getDeliveryStatusRank(status: ProcurementTaskItem["deliveryStatus"]) {
+  if (status === "received") return 3;
+  if (status === "delivered") return 2;
+  if (status === "in_delivery") return 1;
+  return 0;
 }
 
 function isProcurementDeliveryStatus(value: unknown): value is ProcurementTaskItem["deliveryStatus"] {
