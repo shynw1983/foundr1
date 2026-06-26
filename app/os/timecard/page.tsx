@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards, X } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ChevronDown, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
@@ -964,7 +964,6 @@ export function TimecardPage({
   const [scheduleView, setScheduleView] = useState<TimecardScheduleView>(initialScheduleView);
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
-  const [isPayrollStatementOpen, setIsPayrollStatementOpen] = useState(initialPayrollView === "employee");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
   const [isShiftMultiSelectMode, setIsShiftMultiSelectMode] = useState(false);
   const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
@@ -979,6 +978,7 @@ export function TimecardPage({
   const [isSavingShift, setIsSavingShift] = useState(false);
   const [isConfirmingPayroll, setIsConfirmingPayroll] = useState(false);
   const [isCreatingPayrollPayment, setIsCreatingPayrollPayment] = useState(false);
+  const [isPayrollPaymentOpen, setIsPayrollPaymentOpen] = useState(false);
   const [payrollPaymentMessage, setPayrollPaymentMessage] = useState("");
   const [payrollPaymentBatches, setPayrollPaymentBatches] = useState<PayrollPaymentBatch[]>([]);
   const [attendanceCsvFile, setAttendanceCsvFile] = useState<File | null>(null);
@@ -986,7 +986,6 @@ export function TimecardPage({
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
   const [isAttendanceImportOpen, setIsAttendanceImportOpen] = useState(false);
   const shiftMessageTimerRef = useRef<number | null>(null);
-  const payrollStatementRef = useRef<HTMLElement | null>(null);
 
   async function loadTimecard(nextMonth = month, nextStoreId = selectedStoreId, options: { keepShiftDraft?: boolean; keepActualDraft?: boolean } = {}) {
     setIsLoading(true);
@@ -1395,10 +1394,6 @@ export function TimecardPage({
   function openPayrollStatement(employeeId: string) {
     setSelectedPayrollEmployeeId(employeeId);
     setPayrollView("employee");
-    setIsPayrollStatementOpen(true);
-    window.setTimeout(() => {
-      payrollStatementRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }
 
   function openPayrollStatementPdf(row: PayrollRow) {
@@ -2110,14 +2105,20 @@ export function TimecardPage({
               </button>
               <button className={payrollView === "employee" ? "is-active" : ""} type="button" onClick={() => {
                 setPayrollView("employee");
-                setIsPayrollStatementOpen(true);
               }}>
                 従業員別明細
               </button>
             </section>
 
-            {payrollView === "summary" || isPayrollStatementOpen ? (
+            {payrollView === "summary" ? (
               <section className="panel payroll-ledger-panel">
+                <div className="panel-title">
+                  <WalletCards />
+                  <div>
+                    <h3>月別給与</h3>
+                    <p>選択した月度と事業所の全員分を集計し、給与確定と振込ファイル作成を行います。</p>
+                  </div>
+                </div>
                 <div className="payroll-ledger-search">
                   <label>
                     <span>月度（勤怠）</span>
@@ -2150,95 +2151,105 @@ export function TimecardPage({
                     </button>
                   ) : null}
                 </div>
-                <form className="payroll-payment-panel" onSubmit={createPayrollPaymentFile}>
+                <form className={`payroll-payment-panel${isPayrollPaymentOpen ? " is-open" : ""}`} onSubmit={createPayrollPaymentFile}>
                   <div className="payroll-payment-head">
                     <div>
                       <strong>給与振込ファイル</strong>
                       <span>{canCreatePayrollPaymentFile ? "確定済み給与から銀行アップロード用ファイルを作成します。" : "給与確定後に作成できます。"}</span>
                     </div>
-                    <button className="secondary-button" type="submit" disabled={!canCreatePayrollPaymentFile || isCreatingPayrollPayment}>
-                      <Download size={16} />
-                      {isCreatingPayrollPayment ? "作成中" : "ファイル作成"}
+                    <button className="secondary-button payroll-payment-toggle" type="button" aria-expanded={isPayrollPaymentOpen} onClick={() => setIsPayrollPaymentOpen((current) => !current)}>
+                      <ChevronDown size={16} />
+                      {isPayrollPaymentOpen ? "閉じる" : "詳細を開く"}
                     </button>
                   </div>
-                  <div className="payroll-payment-grid">
-                    <label>
-                      <span>銀行</span>
-                      <select name="bankProvider" defaultValue="fukuoka">
-                        <option value="fukuoka">福岡銀行</option>
-                        <option value="gmo_aozora">GMOあおぞら</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>形式</span>
-                      <select name="fileFormat" defaultValue="zengin">
-                        <option value="zengin">全銀テキスト</option>
-                        <option value="gmo_csv">GMO CSV</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>種別</span>
-                      <select name="transferType" defaultValue="salary">
-                        <option value="salary">給与振込</option>
-                        <option value="bonus">賞与振込</option>
-                        <option value="general">総合振込</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>振込指定日</span>
-                      <input name="paymentDate" type="date" defaultValue={getTodayJstDateKey()} />
-                    </label>
-                    <label>
-                      <span>委託者コード</span>
-                      <input name="companyCode" inputMode="numeric" maxLength={10} placeholder="銀行契約の10桁" />
-                    </label>
-                    <label>
-                      <span>委託者名カナ</span>
-                      <input name="companyName" placeholder="例: FOUNDR1" />
-                    </label>
-                    <label>
-                      <span>出金銀行コード</span>
-                      <input name="debitBankCode" inputMode="numeric" maxLength={4} placeholder="例: 0177" />
-                    </label>
-                    <label>
-                      <span>出金銀行名</span>
-                      <input name="debitBankName" placeholder="例: 福岡銀行" />
-                    </label>
-                    <label>
-                      <span>出金支店コード</span>
-                      <input name="debitBranchCode" inputMode="numeric" maxLength={3} placeholder="例: 200" />
-                    </label>
-                    <label>
-                      <span>出金支店名</span>
-                      <input name="debitBranchName" placeholder="例: 天神町支店" />
-                    </label>
-                    <label>
-                      <span>出金口座種別</span>
-                      <select name="debitAccountType" defaultValue="ordinary">
-                        <option value="ordinary">普通</option>
-                        <option value="current">当座</option>
-                        <option value="savings">貯蓄</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>出金口座番号</span>
-                      <input name="debitAccountNumber" inputMode="numeric" maxLength={7} placeholder="7桁" />
-                    </label>
-                    <label>
-                      <span>出金口座名義カナ</span>
-                      <input name="debitAccountHolderKana" placeholder="例: FOUNDR1" />
-                    </label>
-                  </div>
-                  {payrollPaymentMessage ? <p className="payroll-payment-message">{payrollPaymentMessage}</p> : null}
-                  {payrollPaymentBatches.length ? (
-                    <div className="payroll-payment-history">
-                      {payrollPaymentBatches.slice(0, 3).map((batch) => (
-                        <div key={batch.id}>
-                          <strong>{batch.fileName}</strong>
-                          <span>{batch.paymentDate} / {batch.transferCount}件 / {formatMoney(batch.totalAmount)} / {batch.createdByName ?? "作成者未記録"}</span>
+                  {isPayrollPaymentOpen ? (
+                    <>
+                      <div className="payroll-payment-grid">
+                        <label>
+                          <span>銀行</span>
+                          <select name="bankProvider" defaultValue="fukuoka">
+                            <option value="fukuoka">福岡銀行</option>
+                            <option value="gmo_aozora">GMOあおぞら</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>形式</span>
+                          <select name="fileFormat" defaultValue="zengin">
+                            <option value="zengin">全銀テキスト</option>
+                            <option value="gmo_csv">GMO CSV</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>種別</span>
+                          <select name="transferType" defaultValue="salary">
+                            <option value="salary">給与振込</option>
+                            <option value="bonus">賞与振込</option>
+                            <option value="general">総合振込</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>振込指定日</span>
+                          <input name="paymentDate" type="date" defaultValue={getTodayJstDateKey()} />
+                        </label>
+                        <label>
+                          <span>委託者コード</span>
+                          <input name="companyCode" inputMode="numeric" maxLength={10} placeholder="銀行契約の10桁" />
+                        </label>
+                        <label>
+                          <span>委託者名カナ</span>
+                          <input name="companyName" placeholder="例: FOUNDR1" />
+                        </label>
+                        <label>
+                          <span>出金銀行コード</span>
+                          <input name="debitBankCode" inputMode="numeric" maxLength={4} placeholder="例: 0177" />
+                        </label>
+                        <label>
+                          <span>出金銀行名</span>
+                          <input name="debitBankName" placeholder="例: 福岡銀行" />
+                        </label>
+                        <label>
+                          <span>出金支店コード</span>
+                          <input name="debitBranchCode" inputMode="numeric" maxLength={3} placeholder="例: 200" />
+                        </label>
+                        <label>
+                          <span>出金支店名</span>
+                          <input name="debitBranchName" placeholder="例: 天神町支店" />
+                        </label>
+                        <label>
+                          <span>出金口座種別</span>
+                          <select name="debitAccountType" defaultValue="ordinary">
+                            <option value="ordinary">普通</option>
+                            <option value="current">当座</option>
+                            <option value="savings">貯蓄</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>出金口座番号</span>
+                          <input name="debitAccountNumber" inputMode="numeric" maxLength={7} placeholder="7桁" />
+                        </label>
+                        <label>
+                          <span>出金口座名義カナ</span>
+                          <input name="debitAccountHolderKana" placeholder="例: FOUNDR1" />
+                        </label>
+                      </div>
+                      <div className="payroll-payment-actions">
+                        <button className="secondary-button" type="submit" disabled={!canCreatePayrollPaymentFile || isCreatingPayrollPayment}>
+                          <Download size={16} />
+                          {isCreatingPayrollPayment ? "作成中" : "ファイル作成"}
+                        </button>
+                      </div>
+                      {payrollPaymentMessage ? <p className="payroll-payment-message">{payrollPaymentMessage}</p> : null}
+                      {payrollPaymentBatches.length ? (
+                        <div className="payroll-payment-history">
+                          {payrollPaymentBatches.slice(0, 3).map((batch) => (
+                            <div key={batch.id}>
+                              <strong>{batch.fileName}</strong>
+                              <span>{batch.paymentDate} / {batch.transferCount}件 / {formatMoney(batch.totalAmount)} / {batch.createdByName ?? "作成者未記録"}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </form>
                 <div className="payroll-ledger-summary" aria-label="月別給与合計">
@@ -2401,88 +2412,6 @@ export function TimecardPage({
                     <div className="payroll-card-empty">この月の打刻実績はまだありません。</div>
                   )}
                 </div>
-                {isPayrollStatementOpen && selectedPayrollRow ? (
-                  <section className="payroll-statement-panel" ref={payrollStatementRef}>
-                    <div className="payroll-statement-heading">
-                      <div>
-                        <p>給与明細</p>
-                        <h3>{selectedPayrollRow.employeeName}</h3>
-                        <span>{selectedPayrollRow.storeNames.join("、") || "店舗未設定"} / {month}</span>
-                      </div>
-                      <div className="payroll-statement-toolbar">
-                        <button className="secondary-button" type="button" onClick={() => openPayrollStatementPdf(selectedPayrollRow)}>
-                          <Download size={16} />
-                          PDF
-                        </button>
-                        <button className="icon-button" type="button" aria-label="給与明細を閉じる" onClick={() => setIsPayrollStatementOpen(false)}>
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="payroll-statement-sheet">
-                      <div className="payroll-statement-summary">
-                        <div>
-                          <span>勤務日数</span>
-                          <strong>{selectedPayrollRow.workDays}日</strong>
-                          <small>{selectedPayrollRow.punchCount}回</small>
-                        </div>
-                        <div>
-                          <span>勤務時間</span>
-                          <strong>{formatDuration(selectedPayrollRow.workMinutes)}</strong>
-                          <small>時間外 {formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)} / 深夜 {formatDuration(selectedPayrollRow.nightMinutes)}</small>
-                        </div>
-                        <div>
-                          <span>基本給</span>
-                          <strong>{formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)}</strong>
-                          <small>{selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`}</small>
-                        </div>
-                        <div>
-                          <span>差引支給額</span>
-                          <strong>{formatMoney(selectedPayrollRow.totalPay)}</strong>
-                          <small>交通費 {formatMoney(selectedPayrollRow.commuteAllowance)}</small>
-                        </div>
-                      </div>
-                      <div className="payroll-statement-breakdown">
-                        <div><span>時間外労働賃金</span><strong>{formatPayrollDetailMoney(selectedPayrollRow.overtimePay ?? 0)}</strong><small>{formatDuration(selectedPayrollRow.overtimeMinutes ?? 0)}</small></div>
-                        <div><span>深夜割増</span><strong>{formatPayrollDetailMoney(selectedPayrollRow.nightPremiumPay ?? 0)}</strong><small>{formatDuration(selectedPayrollRow.nightMinutes)}</small></div>
-                        <div><span>社会保険</span><strong>{formatMoney(selectedPayrollRow.socialInsurance ?? 0)}</strong><small>控除</small></div>
-                        <div><span>雇用保険</span><strong>{formatMoney(selectedPayrollRow.employmentInsurance ?? 0)}</strong><small>控除</small></div>
-                        <div><span>源泉所得税</span><strong>{formatMoney(selectedPayrollRow.incomeTax ?? 0)}</strong><small>控除</small></div>
-                        <div><span>住民税</span><strong>{formatMoney(selectedPayrollRow.residentTax ?? 0)}</strong><small>控除</small></div>
-                      </div>
-                      <div className="timecard-table-wrap payroll-statement-days">
-                        <table className="timecard-table">
-                          <thead>
-                            <tr>
-                              <th>日付</th>
-                              <th>店舗</th>
-                              <th>勤務時間</th>
-                              <th>休憩</th>
-                              <th>深夜</th>
-                              <th>確認</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedPayrollDays.length ? selectedPayrollDays.map((day) => (
-                              <tr key={`statement-${day.key}`}>
-                                <td>{day.workDate}</td>
-                                <td>{day.storeName}</td>
-                                <td>{formatJstTime(day.clockIn) ?? "--:--"} - {formatJstTime(day.clockOut) ?? "--:--"}<span>{formatDuration(day.workMinutes)}</span></td>
-                                <td>{formatDuration(day.breakMinutes)}</td>
-                                <td>{formatDuration(day.nightMinutes)}</td>
-                                <td>{day.alerts.length ? <span className="status-pill is-warning">{day.alerts.join("、")}</span> : <span className="status-pill is-active">OK</span>}</td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={6}>この従業員の打刻実績はまだありません。</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
               </section>
             ) : (
               <section className="panel">

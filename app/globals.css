@@ -18601,6 +18601,14 @@ body :where(
   line-height: 1.45;
 }
 
+.payroll-payment-toggle svg {
+  transition: transform 0.16s ease;
+}
+
+.payroll-payment-panel.is-open .payroll-payment-toggle svg {
+  transform: rotate(180deg);
+}
+
 .payroll-payment-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
@@ -18630,6 +18638,11 @@ body :where(
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
+}
+
+.payroll-payment-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .payroll-payment-message {
