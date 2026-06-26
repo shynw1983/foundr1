@@ -28,6 +28,7 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
       employment_type as "employmentType",
       hourly_wage as "hourlyWage",
       monthly_salary as "monthlySalary",
+      prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes",
       commute_allowance_per_workday as "commuteAllowancePerWorkday",
       commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
       apply_social_insurance as "applySocialInsurance",
@@ -53,6 +54,7 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
       employment_type as "employmentType",
       hourly_wage as "hourlyWage",
       monthly_salary as "monthlySalary",
+      prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes",
       apply_social_insurance as "applySocialInsurance",
       apply_employment_insurance as "applyEmploymentInsurance",
       apply_labor_insurance as "applyLaborInsurance",
@@ -84,6 +86,7 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
   const employmentType = normalizeEmploymentType(String(wage.employmentType ?? current.employmentType ?? ""));
   const hourlyWage = employmentType === "hourly" ? toNullableNumber(wage.hourlyWage ?? current.hourlyWage) : null;
   const monthlySalary = employmentType === "monthly" ? toNullableNumber(wage.monthlySalary ?? current.monthlySalary) : null;
+  const prescribedMonthlyWorkMinutes = toNullableNumber(wage.prescribedMonthlyWorkMinutes ?? current.prescribedMonthlyWorkMinutes);
 
   await sql`
     update employee_work_stores
@@ -91,6 +94,7 @@ async function refreshCurrentWorkStore(employeeId: string, storeId: string) {
         employment_type = ${employmentType},
         hourly_wage = ${hourlyWage},
         monthly_salary = ${monthlySalary},
+        prescribed_monthly_work_minutes = ${prescribedMonthlyWorkMinutes},
         commute_allowance_per_workday = ${toNullableNumber(commute.commuteAllowancePerWorkday ?? current.commuteAllowancePerWorkday) ?? 0},
         commute_allowance_monthly_cap = ${toNullableNumber(commute.commuteAllowanceMonthlyCap ?? current.commuteAllowanceMonthlyCap)},
         apply_social_insurance = ${Boolean(wage.applySocialInsurance ?? current.applySocialInsurance)},

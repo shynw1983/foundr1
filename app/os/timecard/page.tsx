@@ -87,6 +87,8 @@ type PayrollRow = {
   regularPay?: number;
   overtimePay?: number;
   nightPremiumPay?: number;
+  allowancePay?: number;
+  allowancePremiumPay?: number;
   basePay: number;
   socialInsurance?: number;
   employmentInsurance?: number;
@@ -94,6 +96,17 @@ type PayrollRow = {
   residentTax?: number;
   commuteAllowance: number;
   totalPay: number;
+  allowanceItems?: Array<{
+    ruleId: string;
+    name: string;
+    ruleType: "fixed_monthly" | "one_person_busy_hourly";
+    storeId: string | null;
+    workDate: string | null;
+    minutes: number;
+    amount: number;
+    premiumAmount: number;
+    note: string;
+  }>;
   alerts: string[];
 };
 
@@ -106,6 +119,8 @@ type PayrollTotals = {
   laborCost: number;
   overtimePay?: number;
   nightPremiumPay?: number;
+  allowancePay?: number;
+  allowancePremiumPay?: number;
   socialInsurance?: number;
   employmentInsurance?: number;
   incomeTax?: number;
@@ -1038,6 +1053,8 @@ export function TimecardPage({
     laborCost: 0,
     overtimePay: 0,
     nightPremiumPay: 0,
+    allowancePay: 0,
+    allowancePremiumPay: 0,
     socialInsurance: 0,
     employmentInsurance: 0,
     incomeTax: 0,
@@ -2271,6 +2288,10 @@ export function TimecardPage({
                     <strong>{formatMoney(displayedPayrollTotals.laborCost)}</strong>
                   </div>
                   <div>
+                    <span>手当・加給</span>
+                    <strong>{formatMoney((displayedPayrollTotals.allowancePay ?? 0) + (displayedPayrollTotals.allowancePremiumPay ?? 0))}</strong>
+                  </div>
+                  <div>
                     <span>交通費</span>
                     <strong>{formatMoney(displayedPayrollTotals.commuteAllowance)}</strong>
                   </div>
@@ -2290,6 +2311,7 @@ export function TimecardPage({
                         <th>基本給</th>
                         <th>時間外</th>
                         <th>深夜割増</th>
+                        <th>手当・加給</th>
                         <th>交通費</th>
                         <th>社会保険</th>
                         <th>雇用保険</th>
@@ -2313,6 +2335,7 @@ export function TimecardPage({
                           <td>{formatMoney(row.regularPay ?? row.basePay)}</td>
                           <td>{formatPayrollDetailMoney(row.overtimePay ?? 0)}<span>{formatDuration(row.overtimeMinutes ?? 0)}</span></td>
                           <td>{formatPayrollDetailMoney(row.nightPremiumPay ?? 0)}<span>{formatDuration(row.nightMinutes)}</span></td>
+                          <td>{formatMoney((row.allowancePay ?? 0) + (row.allowancePremiumPay ?? 0))}</td>
                           <td>{formatMoney(row.commuteAllowance)}</td>
                           <td>{formatMoney(row.socialInsurance ?? 0)}</td>
                           <td>{formatMoney(row.employmentInsurance ?? 0)}</td>
@@ -2333,7 +2356,7 @@ export function TimecardPage({
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={15}>この月の打刻実績はまだありません。</td>
+                          <td colSpan={16}>この月の打刻実績はまだありません。</td>
                         </tr>
                       )}
                     </tbody>
@@ -2359,6 +2382,10 @@ export function TimecardPage({
                           <strong>{formatMoney(row.regularPay ?? row.basePay)}</strong>
                         </div>
                         <div>
+                          <span>手当・加給</span>
+                          <strong>{formatMoney((row.allowancePay ?? 0) + (row.allowancePremiumPay ?? 0))}</strong>
+                        </div>
+                        <div>
                           <span>勤務</span>
                           <strong>{row.workDays}日 / {row.punchCount}回</strong>
                         </div>
@@ -2382,6 +2409,13 @@ export function TimecardPage({
                           <span>交通費</span>
                           <strong>{formatMoney(row.commuteAllowance)}</strong>
                         </div>
+                        {(row.allowanceItems ?? []).slice(0, 3).map((item) => (
+                          <div key={`${row.employeeId}-${item.ruleId}-${item.workDate ?? "month"}-${item.note}`}>
+                            <span>{item.name}</span>
+                            <strong>{formatMoney(item.amount + item.premiumAmount)}</strong>
+                            <small>{item.workDate ? `${item.workDate} ${item.note} / ${formatDuration(item.minutes)}` : item.note}</small>
+                          </div>
+                        ))}
                         <div>
                           <span>社会保険</span>
                           <strong>{formatMoney(row.socialInsurance ?? 0)}</strong>
@@ -2437,12 +2471,39 @@ export function TimecardPage({
                       <MetricCard label="基本給" value={formatMoney(selectedPayrollRow.regularPay ?? selectedPayrollRow.basePay)} note={selectedPayrollRow.employmentType === "mixed" ? "店舗別設定" : selectedPayrollRow.employmentType === "monthly" ? "月給" : `時給 ${formatMoney(selectedPayrollRow.hourlyWage ?? 0)}`} />
                       <MetricCard label="時間外労働賃金" value={formatPayrollDetailMoney(selectedPayrollRow.overtimePay ?? 0)} note="1日8時間超過を1.25倍で計算" />
                       <MetricCard label="深夜割増" value={formatPayrollDetailMoney(selectedPayrollRow.nightPremiumPay ?? 0)} note="22:00-05:00を0.25倍で計算" />
+                      <MetricCard label="手当・加給" value={formatMoney((selectedPayrollRow.allowancePay ?? 0) + (selectedPayrollRow.allowancePremiumPay ?? 0))} note={`加給割増 ${formatMoney(selectedPayrollRow.allowancePremiumPay ?? 0)}`} />
                       <MetricCard label="社会保険" value={formatMoney(selectedPayrollRow.socialInsurance ?? 0)} note="店舗の社会保険所在地と標準報酬月額で計算" />
                       <MetricCard label="雇用保険" value={formatMoney(selectedPayrollRow.employmentInsurance ?? 0)} note="一般の事業の労働者負担率で計算" />
                       <MetricCard label="源泉所得税" value={formatMoney(selectedPayrollRow.incomeTax ?? 0)} note="税額表に基づく控除" />
                       <MetricCard label="住民税" value={formatMoney(selectedPayrollRow.residentTax ?? 0)} note="6月分と7月以降分を年度で控除" />
                       <MetricCard label="差引支給額" value={formatMoney(selectedPayrollRow.totalPay)} note={`交通費 ${formatMoney(selectedPayrollRow.commuteAllowance)}`} />
                     </div>
+                    {(selectedPayrollRow.allowanceItems ?? []).length ? (
+                      <div className="timecard-table-wrap">
+                        <table className="timecard-table">
+                          <thead>
+                            <tr>
+                              <th>手当・加給</th>
+                              <th>日付</th>
+                              <th>対象</th>
+                              <th>金額</th>
+                              <th>加給割増</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(selectedPayrollRow.allowanceItems ?? []).map((item) => (
+                              <tr key={`${item.ruleId}-${item.workDate ?? "month"}-${item.note}`}>
+                                <td>{item.name}</td>
+                                <td>{item.workDate ?? "月額"}</td>
+                                <td>{item.workDate ? `${item.note} / ${formatDuration(item.minutes)}` : item.note}</td>
+                                <td>{formatMoney(item.amount)}</td>
+                                <td>{formatMoney(item.premiumAmount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
                     <div className="timecard-table-wrap">
                       <table className="timecard-table">
                         <thead>

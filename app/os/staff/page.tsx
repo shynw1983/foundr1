@@ -16,6 +16,7 @@ type StoreOption = {
   companyName?: string | null;
   payrollCycleType?: string | null;
   payrollClosingDay?: number | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
 };
 
 type WorkStoreOption = StoreOption & {
@@ -29,6 +30,8 @@ type WorkStoreOption = StoreOption & {
   employmentType?: string | null;
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
+  storePrescribedMonthlyWorkMinutes?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
@@ -54,6 +57,7 @@ type PayrollHistoryEntry = {
   employmentType?: string | null;
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean | null;
@@ -102,6 +106,7 @@ type StaffMember = {
   employmentType?: string | null;
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   payrollEnabled?: boolean | null;
@@ -312,6 +317,14 @@ function formatPayrollAmount(value?: number | string | null) {
   return `${numberValue.toLocaleString("ja-JP")}円`;
 }
 
+function formatMonthlyWorkHours(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") return "";
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "";
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function formatPayrollMonth(value?: string | null, store?: StoreOption) {
   if (!value) return "";
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
@@ -459,6 +472,7 @@ export default function StaffPage() {
         employmentType: String(formData.get(`employmentType:${store.id}`) ?? "hourly"),
         hourlyWage: String(formData.get(`hourlyWage:${store.id}`) ?? ""),
         monthlySalary: String(formData.get(`monthlySalary:${store.id}`) ?? ""),
+        prescribedMonthlyWorkHours: String(formData.get(`prescribedMonthlyWorkHours:${store.id}`) ?? ""),
         commuteAllowancePerWorkday: String(formData.get(`commuteAllowancePerWorkday:${store.id}`) ?? "0"),
         commuteAllowanceMonthlyCap: String(formData.get(`commuteAllowanceMonthlyCap:${store.id}`) ?? ""),
         applySocialInsurance: formData.getAll("applySocialInsuranceStoreIds").map((value) => String(value)).includes(store.id),
@@ -1271,6 +1285,7 @@ function StaffFormFields({
     setNamedInputValue(form, `employmentType:${store.id}`, record.employmentType === "monthly" ? "monthly" : "hourly");
     setNamedInputValue(form, `hourlyWage:${store.id}`, record.hourlyWage ?? "");
     setNamedInputValue(form, `monthlySalary:${store.id}`, record.monthlySalary ?? "");
+    setNamedInputValue(form, `prescribedMonthlyWorkHours:${store.id}`, formatMonthlyWorkHours(record.prescribedMonthlyWorkMinutes));
     syncPayrollWageInputs(form, store.id, record.employmentType === "monthly" ? "monthly" : "hourly");
     setNamedInputValue(form, `commuteAllowancePerWorkday:${store.id}`, record.commuteAllowancePerWorkday ?? 0);
     setNamedInputValue(form, `commuteAllowanceMonthlyCap:${store.id}`, record.commuteAllowanceMonthlyCap ?? "");
@@ -1543,6 +1558,7 @@ function StaffFormFields({
         <input name="employmentType" type="hidden" value={member?.employmentType ?? "hourly"} readOnly />
         <input name="hourlyWage" type="hidden" value={String(member?.hourlyWage ?? "")} readOnly />
         <input name="monthlySalary" type="hidden" value={String(member?.monthlySalary ?? "")} readOnly />
+        <input name="prescribedMonthlyWorkMinutes" type="hidden" value={String(member?.prescribedMonthlyWorkMinutes ?? "")} readOnly />
         <input name="commuteAllowancePerWorkday" type="hidden" value={String(member?.commuteAllowancePerWorkday ?? 0)} readOnly />
         <input name="commuteAllowanceMonthlyCap" type="hidden" value={String(member?.commuteAllowanceMonthlyCap ?? "")} readOnly />
         <div className="staff-payroll-store-list">
@@ -1635,6 +1651,17 @@ function StaffFormFields({
                   <label>
                     <span>月給</span>
                     <input name={`monthlySalary:${store.id}`} type="number" min="0" step="1" defaultValue={defaultEmploymentType === "monthly" ? setting?.monthlySalary ?? member?.monthlySalary ?? "" : ""} placeholder="月給のみ" disabled={defaultEmploymentType !== "monthly"} />
+                  </label>
+                  <label>
+                    <span>月所定労働時間</span>
+                    <input
+                      name={`prescribedMonthlyWorkHours:${store.id}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={formatMonthlyWorkHours(setting?.prescribedMonthlyWorkMinutes)}
+                      placeholder={formatMonthlyWorkHours(setting?.storePrescribedMonthlyWorkMinutes ?? store.prescribedMonthlyWorkMinutes) || "店舗既定を使用"}
+                    />
                   </label>
                   <label>
                     <span>交通費 / 勤務日</span>
@@ -1761,7 +1788,7 @@ function StaffFormFields({
                   {history.length ? history.map((record, index) => (
                     <div className="staff-payroll-history-row" key={`${store.id}-${record.id ?? record.validFrom ?? index}`}>
                       <small>
-                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"} / 住民税 {record.applyResidentTax ? `${record.residentTaxYear ?? "-"}年度 6月${formatPayrollAmount(record.residentTaxJuneAmount)} 7月以降${formatPayrollAmount(record.residentTaxMonthlyAmount)}` : "なし"}
+                        賃金 {formatPayrollMonthLabel(record.wageValidFrom ?? record.validFrom, store)} {record.employmentType === "monthly" ? `月給 ${formatPayrollAmount(record.monthlySalary)}` : `時給 ${formatPayrollAmount(record.hourlyWage)}`} / 月所定 {formatMonthlyWorkHours(record.prescribedMonthlyWorkMinutes) || "店舗既定"}h / 交通費 {formatPayrollMonthLabel(record.commuteValidFrom ?? record.validFrom, store)} {formatPayrollAmount(record.commuteAllowancePerWorkday)} / 源泉 {record.applyIncomeTax ? `${record.incomeTaxCategory === "otsu" ? "乙" : record.incomeTaxCategory === "kou" ? "甲" : "未設定"} ${record.dependentCount ?? 0}人` : "なし"} / 住民税 {record.applyResidentTax ? `${record.residentTaxYear ?? "-"}年度 6月${formatPayrollAmount(record.residentTaxJuneAmount)} 7月以降${formatPayrollAmount(record.residentTaxMonthlyAmount)}` : "なし"}
                       </small>
                       <span className="staff-payroll-history-actions">
                         <button className="secondary-button" type="button" onClick={(event) => applyPayrollHistory(event, store, record)}>

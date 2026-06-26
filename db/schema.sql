@@ -12,6 +12,7 @@ create table if not exists stores (
   reservation_note text not null default '',
   payroll_cycle_type text not null default 'month_end',
   payroll_closing_day integer not null default 31,
+  prescribed_monthly_work_minutes integer,
   social_insurance_prefecture text not null default '福岡県',
   status text not null default 'active',
   created_at timestamptz not null default now(),
@@ -25,6 +26,7 @@ alter table stores add column if not exists business_hours jsonb not null defaul
 alter table stores add column if not exists reservation_note text not null default '';
 alter table stores add column if not exists payroll_cycle_type text not null default 'month_end';
 alter table stores add column if not exists payroll_closing_day integer not null default 31;
+alter table stores add column if not exists prescribed_monthly_work_minutes integer;
 alter table stores add column if not exists social_insurance_prefecture text not null default '福岡県';
 alter table stores add column if not exists weather_location_name text;
 alter table stores add column if not exists weather_latitude numeric(10, 6);
@@ -407,6 +409,7 @@ create table if not exists employee_work_stores (
   employment_type text not null default 'hourly',
   hourly_wage numeric,
   monthly_salary numeric,
+  prescribed_monthly_work_minutes integer,
   commute_allowance_per_workday numeric not null default 0,
   commute_allowance_monthly_cap numeric,
   apply_social_insurance boolean not null default false,
@@ -434,6 +437,7 @@ alter table employee_work_stores add column if not exists employee_type text not
 alter table employee_work_stores add column if not exists employment_type text not null default 'hourly';
 alter table employee_work_stores add column if not exists hourly_wage numeric;
 alter table employee_work_stores add column if not exists monthly_salary numeric;
+alter table employee_work_stores add column if not exists prescribed_monthly_work_minutes integer;
 alter table employee_work_stores add column if not exists commute_allowance_per_workday numeric not null default 0;
 alter table employee_work_stores add column if not exists commute_allowance_monthly_cap numeric;
 alter table employee_work_stores add column if not exists apply_social_insurance boolean not null default false;
@@ -549,6 +553,7 @@ create table if not exists timecard_employee_settings (
   employment_type text not null default 'hourly',
   hourly_wage numeric(12, 2),
   monthly_salary numeric(12, 2),
+  prescribed_monthly_work_minutes integer,
   commute_allowance_per_workday numeric(12, 2) not null default 0,
   commute_allowance_monthly_cap numeric(12, 2),
   apply_social_insurance boolean not null default false,
@@ -565,6 +570,7 @@ create table if not exists timecard_employee_settings (
 );
 
 alter table timecard_employee_settings add column if not exists commute_allowance_monthly_cap numeric(12, 2);
+alter table timecard_employee_settings add column if not exists prescribed_monthly_work_minutes integer;
 alter table timecard_employee_settings add column if not exists apply_social_insurance boolean not null default false;
 alter table timecard_employee_settings add column if not exists social_insurance_standard_monthly_amount numeric(12, 2);
 alter table timecard_employee_settings add column if not exists social_insurance_deduction_from date;
@@ -584,6 +590,7 @@ create table if not exists employee_work_store_payroll_history (
   employment_type text not null default 'hourly',
   hourly_wage numeric(12, 2),
   monthly_salary numeric(12, 2),
+  prescribed_monthly_work_minutes integer,
   commute_allowance_per_workday numeric(12, 2) not null default 0,
   commute_allowance_monthly_cap numeric(12, 2),
   apply_social_insurance boolean not null default false,
@@ -606,6 +613,7 @@ create table if not exists employee_work_store_payroll_history (
 );
 
 alter table employee_work_store_payroll_history add column if not exists commute_allowance_monthly_cap numeric(12, 2);
+alter table employee_work_store_payroll_history add column if not exists prescribed_monthly_work_minutes integer;
 alter table employee_work_store_payroll_history add column if not exists apply_social_insurance boolean not null default false;
 alter table employee_work_store_payroll_history add column if not exists social_insurance_standard_monthly_amount numeric(12, 2);
 alter table employee_work_store_payroll_history add column if not exists social_insurance_deduction_from date;
@@ -735,6 +743,7 @@ set
   employment_type = coalesce(latest_settings.employment_type, employee_work_stores.employment_type),
   hourly_wage = coalesce(employee_work_stores.hourly_wage, latest_settings.hourly_wage),
   monthly_salary = coalesce(employee_work_stores.monthly_salary, latest_settings.monthly_salary),
+  prescribed_monthly_work_minutes = coalesce(employee_work_stores.prescribed_monthly_work_minutes, latest_settings.prescribed_monthly_work_minutes),
   commute_allowance_per_workday = coalesce(nullif(employee_work_stores.commute_allowance_per_workday, 0), latest_settings.commute_allowance_per_workday, 0),
   commute_allowance_monthly_cap = coalesce(employee_work_stores.commute_allowance_monthly_cap, latest_settings.commute_allowance_monthly_cap),
   apply_social_insurance = coalesce(latest_settings.apply_social_insurance, employee_work_stores.apply_social_insurance),
@@ -753,6 +762,7 @@ from (
     employment_type,
     hourly_wage,
     monthly_salary,
+    prescribed_monthly_work_minutes,
     commute_allowance_per_workday,
     commute_allowance_monthly_cap,
     apply_social_insurance,
@@ -1069,6 +1079,41 @@ alter table payroll_payment_batch_items add column if not exists row_alerts json
 
 create index if not exists payroll_payment_batch_items_batch_idx
   on payroll_payment_batch_items(batch_id);
+
+create table if not exists payroll_allowance_rules (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  rule_type text not null check (rule_type in ('fixed_monthly', 'one_person_busy_hourly')),
+  store_id uuid references stores(id) on delete cascade,
+  employee_id uuid references employees(id) on delete cascade,
+  amount numeric(12, 2) not null default 0,
+  include_in_premium_base boolean not null default true,
+  valid_from date not null default '1970-01-01',
+  valid_to date,
+  is_enabled boolean not null default true,
+  created_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table payroll_allowance_rules add column if not exists include_in_premium_base boolean not null default true;
+alter table payroll_allowance_rules add column if not exists valid_to date;
+alter table payroll_allowance_rules add column if not exists is_enabled boolean not null default true;
+
+create table if not exists payroll_allowance_rule_windows (
+  id uuid primary key default gen_random_uuid(),
+  rule_id uuid not null references payroll_allowance_rules(id) on delete cascade,
+  weekday integer not null check (weekday between 0 and 6),
+  start_time time not null,
+  end_time time not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists payroll_allowance_rules_lookup_idx
+  on payroll_allowance_rules(store_id, employee_id, rule_type, valid_from, valid_to, is_enabled);
+
+create index if not exists payroll_allowance_rule_windows_rule_idx
+  on payroll_allowance_rule_windows(rule_id, weekday);
 
 create table if not exists timecard_workload_settings (
   id uuid primary key default gen_random_uuid(),

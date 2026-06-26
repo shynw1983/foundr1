@@ -11,6 +11,7 @@ import {
   type EmploymentInsuranceRateRow,
   type SocialInsuranceRow,
   type TimecardEmployee,
+  type TimecardPayrollAllowanceRule,
   type TimecardPunch,
   type WithholdingTaxRow
 } from "../../../lib/timecard";
@@ -70,6 +71,8 @@ const emptyPayrollTotals = {
   laborCost: 0,
   overtimePay: 0,
   nightPremiumPay: 0,
+  allowancePay: 0,
+  allowancePremiumPay: 0,
   socialInsurance: 0,
   employmentInsurance: 0,
   incomeTax: 0,
@@ -170,6 +173,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
             'employmentType', payroll_settings.employment_type,
             'hourlyWage', payroll_settings.hourly_wage,
             'monthlySalary', payroll_settings.monthly_salary,
+            'prescribedMonthlyWorkMinutes', payroll_settings.prescribed_monthly_work_minutes,
             'commuteAllowancePerWorkday', payroll_settings.commute_allowance_per_workday,
             'commuteAllowanceMonthlyCap', payroll_settings.commute_allowance_monthly_cap,
             'socialInsurancePrefecture', stores.social_insurance_prefecture,
@@ -204,6 +208,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_stores.employment_type,
         employee_work_stores.hourly_wage,
         employee_work_stores.monthly_salary,
+        coalesce(employee_work_stores.prescribed_monthly_work_minutes, stores.prescribed_monthly_work_minutes) as prescribed_monthly_work_minutes,
         employee_work_stores.commute_allowance_per_workday,
         employee_work_stores.commute_allowance_monthly_cap,
         employee_work_stores.apply_social_insurance,
@@ -228,6 +233,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         employee_work_store_payroll_history.employment_type,
         employee_work_store_payroll_history.hourly_wage,
         employee_work_store_payroll_history.monthly_salary,
+        coalesce(employee_work_store_payroll_history.prescribed_monthly_work_minutes, stores.prescribed_monthly_work_minutes) as prescribed_monthly_work_minutes,
         employee_work_store_payroll_history.commute_allowance_per_workday,
         employee_work_store_payroll_history.commute_allowance_monthly_cap,
         employee_work_store_payroll_history.apply_social_insurance,
@@ -272,6 +278,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
       employmentType: setting.employmentType === "monthly" ? "monthly" : "hourly",
       hourlyWage: toMoneyNumber(setting.hourlyWage),
       monthlySalary: toMoneyNumber(setting.monthlySalary),
+      prescribedMonthlyWorkMinutes: Number.isFinite(Number(setting.prescribedMonthlyWorkMinutes)) ? Math.round(Number(setting.prescribedMonthlyWorkMinutes)) : null,
       commuteAllowancePerWorkday: toMoneyNumber(setting.commuteAllowancePerWorkday) ?? 0,
       commuteAllowanceMonthlyCap: toMoneyNumber(setting.commuteAllowanceMonthlyCap),
       socialInsurancePrefecture: String(setting.socialInsurancePrefecture ?? "福岡県"),
@@ -378,6 +385,59 @@ async function getEmploymentInsuranceRateRowsForMonth(month: string) {
     businessType: String(row.businessType),
     employeeRate: Number(row.employeeRate ?? 0)
   })) satisfies EmploymentInsuranceRateRow[];
+}
+
+async function getPayrollAllowanceRules(visibleStoreIds: string[]) {
+  if (!visibleStoreIds.length) return [] satisfies TimecardPayrollAllowanceRule[];
+  const rows = await sql`
+    select
+      payroll_allowance_rules.id::text,
+      payroll_allowance_rules.name,
+      payroll_allowance_rules.rule_type as "ruleType",
+      payroll_allowance_rules.store_id::text as "storeId",
+      payroll_allowance_rules.employee_id::text as "employeeId",
+      payroll_allowance_rules.amount,
+      payroll_allowance_rules.include_in_premium_base as "includeInPremiumBase",
+      to_char(payroll_allowance_rules.valid_from, 'YYYY-MM-DD') as "validFrom",
+      to_char(payroll_allowance_rules.valid_to, 'YYYY-MM-DD') as "validTo",
+      payroll_allowance_rules.is_enabled as "isEnabled",
+      coalesce(
+        json_agg(
+          json_build_object(
+            'weekday', payroll_allowance_rule_windows.weekday,
+            'startTime', to_char(payroll_allowance_rule_windows.start_time, 'HH24:MI'),
+            'endTime', to_char(payroll_allowance_rule_windows.end_time, 'HH24:MI')
+          )
+          order by payroll_allowance_rule_windows.weekday, payroll_allowance_rule_windows.start_time
+        ) filter (where payroll_allowance_rule_windows.id is not null),
+        '[]'::json
+      ) as windows
+    from payroll_allowance_rules
+    left join payroll_allowance_rule_windows on payroll_allowance_rule_windows.rule_id = payroll_allowance_rules.id
+    where payroll_allowance_rules.is_enabled = true
+      and (payroll_allowance_rules.store_id is null or payroll_allowance_rules.store_id::text = any(${visibleStoreIds}))
+    group by payroll_allowance_rules.id
+    order by payroll_allowance_rules.created_at desc
+  `;
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    ruleType: row.ruleType === "fixed_monthly" ? "fixed_monthly" : "one_person_busy_hourly",
+    storeId: row.storeId ? String(row.storeId) : null,
+    employeeId: row.employeeId ? String(row.employeeId) : null,
+    amount: Number(row.amount ?? 0),
+    includeInPremiumBase: row.includeInPremiumBase !== false,
+    validFrom: String(row.validFrom),
+    validTo: row.validTo ? String(row.validTo) : null,
+    isEnabled: row.isEnabled !== false,
+    windows: Array.isArray(row.windows)
+      ? row.windows.map((window) => ({
+        weekday: Number(window.weekday ?? 0),
+        startTime: String(window.startTime ?? "00:00"),
+        endTime: String(window.endTime ?? "00:00")
+      }))
+      : []
+  })) satisfies TimecardPayrollAllowanceRule[];
 }
 
 async function canPunchForEmployee(storeId: string, employeeId: string) {
@@ -819,6 +879,7 @@ export async function GET(request: Request) {
   const withholdingTaxRows = canViewPayroll ? await getWithholdingTaxRowsForMonth(month) : [];
   const socialInsuranceRows = canViewPayroll ? await getSocialInsuranceRowsForMonth(month) : [];
   const employmentInsuranceRateRows = canViewPayroll ? await getEmploymentInsuranceRateRowsForMonth(month) : [];
+  const allowanceRules = canViewPayroll ? await getPayrollAllowanceRules(visibleStoreIds) : [];
 
   const punches = selectedStoreId ? await sql`
     select
@@ -864,7 +925,8 @@ export async function GET(request: Request) {
     month,
     withholdingTaxRows,
     socialInsuranceRows,
-    employmentInsuranceRateRows
+    employmentInsuranceRateRows,
+    allowanceRules
   }) : { rows: [], totals: emptyPayrollTotals };
   const payrollConfirmation = canViewPayroll && selectedStoreId
     ? await getPayrollConfirmation(selectedStoreId, month)
@@ -1152,9 +1214,11 @@ export async function POST(request: Request) {
     const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
     const scope = await getTimecardStoreScope(session);
     const employees = await getVisibleEmployees(scope.allStores, scope.storeIds);
+    const visibleStoreIds = scope.allStores ? [storeId] : scope.storeIds;
     const withholdingTaxRows = await getWithholdingTaxRowsForMonth(month);
     const socialInsuranceRows = await getSocialInsuranceRowsForMonth(month);
     const employmentInsuranceRateRows = await getEmploymentInsuranceRateRowsForMonth(month);
+    const allowanceRules = await getPayrollAllowanceRules(visibleStoreIds);
     const punches = await sql`
       select
         timecard_punches.id::text,
@@ -1196,7 +1260,8 @@ export async function POST(request: Request) {
       month,
       withholdingTaxRows,
       socialInsuranceRows,
-      employmentInsuranceRateRows
+      employmentInsuranceRateRows,
+      allowanceRules
     });
 
     const upserted = await sql`

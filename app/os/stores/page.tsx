@@ -49,6 +49,7 @@ type StoreItem = {
   reservationNote?: string;
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
+  prescribedMonthlyWorkMinutes?: number | null;
   socialInsurancePrefecture?: string;
   weatherLocationName?: string;
   weatherLatitude?: number | null;
@@ -194,6 +195,14 @@ function parseOptionalCoordinate(value: FormDataEntryValue | string | null) {
   return Number.isFinite(coordinate) ? coordinate : null;
 }
 
+function formatMonthlyWorkHours(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") return "";
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "";
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 export default function StoresPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const [storesData, setStoresData] = useState<StoreItem[]>([]);
@@ -238,6 +247,7 @@ export default function StoresPage() {
   const [editingStoreTab, setEditingStoreTab] = useState<StoreEditTab>("basic");
   const [editingPayrollCycleType, setEditingPayrollCycleType] = useState<"month_end" | "specified_day">("month_end");
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
+  const [editingPrescribedMonthlyWorkHours, setEditingPrescribedMonthlyWorkHours] = useState("");
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
   const [editingShiftFirstHalfDeadlineDay, setEditingShiftFirstHalfDeadlineDay] = useState(25);
   const [editingShiftSecondHalfDeadlineDay, setEditingShiftSecondHalfDeadlineDay] = useState(10);
@@ -425,6 +435,7 @@ export default function StoresPage() {
     formData.set("businessHours", serializeBusinessHours(newBusinessHours));
     formData.set("payrollCycleType", "month_end");
     formData.set("payrollClosingDay", "31");
+    formData.set("prescribedMonthlyWorkHours", "");
     formData.set("socialInsurancePrefecture", "福岡県");
     selectedSalesSourceKeys.forEach((key) => {
       const [platform, brandName = ""] = key.split("::");
@@ -456,6 +467,7 @@ export default function StoresPage() {
         reservationNote,
         payrollCycleType: "month_end",
         payrollClosingDay: 31,
+        prescribedMonthlyWorkMinutes: null,
         socialInsurancePrefecture: "福岡県",
         weatherLocationName,
         weatherLatitude,
@@ -627,6 +639,8 @@ export default function StoresPage() {
     const attendanceAccuracyThresholdMeters = Math.max(10, Math.min(2000, Math.round(Number(formData.get("attendanceAccuracyThresholdMeters") ?? editingAttendanceAccuracyThresholdMeters) || 100)));
     const payrollCycleType = String(formData.get("payrollCycleType") ?? "month_end") === "specified_day" ? "specified_day" : "month_end";
     const payrollClosingDay = payrollCycleType === "month_end" ? 31 : Math.max(1, Math.min(30, Math.round(Number(formData.get("payrollClosingDay") ?? editingPayrollClosingDay) || editingPayrollClosingDay)));
+    const prescribedMonthlyWorkHours = String(formData.get("prescribedMonthlyWorkHours") ?? editingPrescribedMonthlyWorkHours).trim();
+    const prescribedMonthlyWorkMinutes = prescribedMonthlyWorkHours ? Math.round(Number(prescribedMonthlyWorkHours) * 60) : null;
     const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
     const shiftFirstHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? editingShiftFirstHalfDeadlineDay) || editingShiftFirstHalfDeadlineDay)));
     const shiftSecondHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? editingShiftSecondHalfDeadlineDay) || editingShiftSecondHalfDeadlineDay)));
@@ -686,6 +700,7 @@ export default function StoresPage() {
         reservationNote,
         payrollCycleType,
         payrollClosingDay,
+        prescribedMonthlyWorkMinutes: Number.isFinite(Number(prescribedMonthlyWorkMinutes)) ? prescribedMonthlyWorkMinutes : null,
         socialInsurancePrefecture,
         weatherLocationName,
         weatherLatitude,
@@ -722,6 +737,7 @@ export default function StoresPage() {
     setEditingAttendanceLongitude("");
     setEditingAttendanceRadiusMeters("100");
     setEditingAttendanceAccuracyThresholdMeters("100");
+    setEditingPrescribedMonthlyWorkHours("");
     setEditingShiftFirstHalfDeadlineDay(25);
     setEditingShiftSecondHalfDeadlineDay(10);
     setEditingShiftDeadlineTime("23:59");
@@ -761,6 +777,7 @@ export default function StoresPage() {
     setEditingStoreTab("basic");
     setEditingPayrollCycleType(store.payrollCycleType === "specified_day" ? "specified_day" : "month_end");
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
+    setEditingPrescribedMonthlyWorkHours(formatMonthlyWorkHours(store.prescribedMonthlyWorkMinutes));
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
     setEditingShiftFirstHalfDeadlineDay(store.shiftFirstHalfSubmissionDeadlineDay ?? 25);
     setEditingShiftSecondHalfDeadlineDay(store.shiftSecondHalfSubmissionDeadlineDay ?? 10);
@@ -885,7 +902,7 @@ export default function StoresPage() {
                     <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
                     <small>通常の購入担当: {getStaffName(store.defaultProcurementStaffId) || "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
-                    <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
+                    <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 月所定 {formatMonthlyWorkHours(store.prescribedMonthlyWorkMinutes) || "未設定"}h / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
                     <small>天気: {store.attendanceLatitude !== null && store.attendanceLatitude !== undefined && store.attendanceLongitude !== null && store.attendanceLongitude !== undefined ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
                     <small>打刻地点: {store.attendanceLocationEnabled ? `${store.attendanceLatitude ?? "--"}, ${store.attendanceLongitude ?? "--"} / ${store.attendanceRadiusMeters ?? 100}m` : "位置制限なし"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
@@ -1407,6 +1424,18 @@ export default function StoresPage() {
                     />
                   </label>
                   <label>
+                    <span>月所定労働時間</span>
+                    <input
+                      name="prescribedMonthlyWorkHours"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editingPrescribedMonthlyWorkHours}
+                      onChange={(event) => setEditingPrescribedMonthlyWorkHours(event.target.value)}
+                      placeholder="例: 173.8"
+                    />
+                  </label>
+                  <label>
                     <span>社保地区</span>
                     <select name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} onChange={(event) => setEditingSocialInsurancePrefecture(event.target.value)}>
                       {prefectureOptions.map((prefecture) => (
@@ -1458,6 +1487,7 @@ export default function StoresPage() {
                 <>
                   <input type="hidden" name="payrollCycleType" value={editingPayrollCycleType} />
                   <input type="hidden" name="payrollClosingDay" value={editingPayrollClosingDay} />
+                  <input type="hidden" name="prescribedMonthlyWorkHours" value={editingPrescribedMonthlyWorkHours} />
                   <input type="hidden" name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} />
                   <input type="hidden" name="shiftFirstHalfSubmissionDeadlineDay" value={editingShiftFirstHalfDeadlineDay} />
                   <input type="hidden" name="shiftSecondHalfSubmissionDeadlineDay" value={editingShiftSecondHalfDeadlineDay} />

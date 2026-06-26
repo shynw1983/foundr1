@@ -30,6 +30,7 @@ export type TimecardStorePayrollSetting = {
   employmentType: "hourly" | "monthly";
   hourlyWage: number | null;
   monthlySalary: number | null;
+  prescribedMonthlyWorkMinutes?: number | null;
   commuteAllowancePerWorkday: number;
   commuteAllowanceMonthlyCap: number | null;
   socialInsurancePrefecture?: string | null;
@@ -87,6 +88,37 @@ export type TimecardDailySummary = {
   isOpen: boolean;
   isManualCorrection: boolean;
   alerts: string[];
+  breakIntervals?: Array<{ start: string; end: string }>;
+};
+
+export type TimecardPayrollAllowanceItem = {
+  ruleId: string;
+  name: string;
+  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  storeId: string | null;
+  workDate: string | null;
+  minutes: number;
+  amount: number;
+  premiumAmount: number;
+  note: string;
+};
+
+export type TimecardPayrollAllowanceRule = {
+  id: string;
+  name: string;
+  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  storeId: string | null;
+  employeeId: string | null;
+  amount: number;
+  includeInPremiumBase: boolean;
+  validFrom: string;
+  validTo: string | null;
+  isEnabled: boolean;
+  windows: Array<{
+    weekday: number;
+    startTime: string;
+    endTime: string;
+  }>;
 };
 
 export type TimecardPayrollRow = {
@@ -106,6 +138,8 @@ export type TimecardPayrollRow = {
   regularPay: number;
   overtimePay: number;
   nightPremiumPay: number;
+  allowancePay: number;
+  allowancePremiumPay: number;
   basePay: number;
   socialInsurance: number;
   employmentInsurance: number;
@@ -113,6 +147,7 @@ export type TimecardPayrollRow = {
   residentTax: number;
   commuteAllowance: number;
   totalPay: number;
+  allowanceItems: TimecardPayrollAllowanceItem[];
   alerts: string[];
 };
 
@@ -125,6 +160,8 @@ export type TimecardPayrollTotals = {
   laborCost: number;
   overtimePay: number;
   nightPremiumPay: number;
+  allowancePay: number;
+  allowancePremiumPay: number;
   socialInsurance: number;
   employmentInsurance: number;
   incomeTax: number;
@@ -257,6 +294,80 @@ function addYearsMinusOneDay(date: string, years: number) {
   const target = new Date(Date.UTC(year + years, month - 1, day));
   target.setUTCDate(target.getUTCDate() - 1);
   return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
+}
+
+function timeTextToMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return 0;
+  return hour * 60 + minute;
+}
+
+function minutesSinceWorkDateStart(workDate: string, value: string) {
+  const base = new Date(`${workDate}T00:00:00+09:00`).getTime();
+  const target = new Date(value).getTime();
+  if (!Number.isFinite(base) || !Number.isFinite(target)) return 0;
+  return Math.round((target - base) / minuteMs);
+}
+
+function getDailyActiveMinutes(day: TimecardDailySummary) {
+  if (!day.clockIn || !day.clockOut) return [] as number[];
+  const start = minutesSinceWorkDateStart(day.workDate, day.clockIn);
+  const end = minutesSinceWorkDateStart(day.workDate, day.clockOut);
+  if (end <= start) return [] as number[];
+  const breakMinutes = new Set<number>();
+  for (const interval of day.breakIntervals ?? []) {
+    const breakStart = minutesSinceWorkDateStart(day.workDate, interval.start);
+    const breakEnd = minutesSinceWorkDateStart(day.workDate, interval.end);
+    for (let minute = breakStart; minute < breakEnd; minute += 1) {
+      breakMinutes.add(minute);
+    }
+  }
+  const activeMinutes: number[] = [];
+  for (let minute = start; minute < end; minute += 1) {
+    if (!breakMinutes.has(minute)) activeMinutes.push(minute);
+  }
+  return activeMinutes;
+}
+
+function isNightMinute(minute: number) {
+  const hour = Math.floor((((minute % 1440) + 1440) % 1440) / 60);
+  return hour >= 22 || hour < 5;
+}
+
+function getWeekdayIndex(workDate: string) {
+  return new Date(`${workDate}T12:00:00+09:00`).getDay();
+}
+
+function isMinuteInWindow(minute: number, startTime: string, endTime: string) {
+  const start = timeTextToMinutes(startTime);
+  const endBase = timeTextToMinutes(endTime);
+  const end = endBase <= start ? endBase + 1440 : endBase;
+  return minute >= start && minute < end;
+}
+
+function formatAllowanceMinuteRange(minutes: number[]) {
+  if (!minutes.length) return "";
+  const first = minutes[0];
+  const last = minutes[minutes.length - 1] + 1;
+  const toTime = (minute: number) => {
+    const normalized = ((minute % 1440) + 1440) % 1440;
+    return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+  };
+  return `${toTime(first)}-${toTime(last)}`;
+}
+
+function getPrescribedMonthlyWorkMinutes(setting: TimecardStorePayrollSetting) {
+  const minutes = Number(setting.prescribedMonthlyWorkMinutes ?? 0);
+  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : null;
+}
+
+function getPayrollHourlyBase(setting: TimecardStorePayrollSetting) {
+  if (setting.employmentType === "monthly") {
+    const prescribedMinutes = getPrescribedMonthlyWorkMinutes(setting);
+    if (!prescribedMinutes) return 0;
+    return (setting.monthlySalary ?? 0) / (prescribedMinutes / 60);
+  }
+  return setting.hourlyWage ?? 0;
 }
 
 function isCareInsuranceAge(month: string, birthDate?: string | null) {
@@ -397,7 +508,8 @@ export function summarizeTimecardDays(
       nightMinutes,
       isOpen: Boolean(firstClockIn && !lastClockOut),
       isManualCorrection,
-      alerts
+      alerts,
+      breakIntervals
     });
   }
 
@@ -412,15 +524,39 @@ export function summarizePayroll(
     withholdingTaxRows?: WithholdingTaxRow[];
     socialInsuranceRows?: SocialInsuranceRow[];
     employmentInsuranceRateRows?: EmploymentInsuranceRateRow[];
+    allowanceRules?: TimecardPayrollAllowanceRule[];
   } = {}
 ) {
   const payrollMonth = options.month ?? getJstMonthLabel();
   const withholdingTaxRows = options.withholdingTaxRows ?? [];
   const socialInsuranceRows = options.socialInsuranceRows ?? [];
   const employmentInsuranceRateRows = options.employmentInsuranceRateRows ?? [];
+  const allowanceRules = (options.allowanceRules ?? []).filter((rule) => rule.isEnabled !== false);
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const rowsByEmployee = new Map<string, TimecardPayrollRow>();
   const daysByEmployeeAndStore = new Map<string, TimecardDailySummary[]>();
+  const activeMinutesByDay = new Map<string, number[]>();
+  const employeeMinuteWorkOrderByDay = new Map<string, Map<number, number>>();
+  const storeMinuteCoverageByDate = new Map<string, Map<number, Set<string>>>();
+
+  for (const day of dailySummaries) {
+    const activeMinutes = getDailyActiveMinutes(day);
+    activeMinutesByDay.set(day.key, activeMinutes);
+    const workOrder = new Map<number, number>();
+    activeMinutes.forEach((minute, index) => workOrder.set(minute, index + 1));
+    const employeeWorkOrderKey = `${day.employeeId}:${day.storeId}:${day.workDate}`;
+    const employeeWorkOrder = employeeMinuteWorkOrderByDay.get(employeeWorkOrderKey) ?? new Map<number, number>();
+    for (const [minute, order] of workOrder.entries()) employeeWorkOrder.set(minute, order);
+    employeeMinuteWorkOrderByDay.set(employeeWorkOrderKey, employeeWorkOrder);
+    const storeCoverageKey = `${day.storeId}:${day.workDate}`;
+    const storeCoverage = storeMinuteCoverageByDate.get(storeCoverageKey) ?? new Map<number, Set<string>>();
+    for (const minute of activeMinutes) {
+      const employeesAtMinute = storeCoverage.get(minute) ?? new Set<string>();
+      employeesAtMinute.add(day.employeeId);
+      storeCoverage.set(minute, employeesAtMinute);
+    }
+    storeMinuteCoverageByDate.set(storeCoverageKey, storeCoverage);
+  }
 
   for (const day of dailySummaries) {
     const employee = employeeById.get(day.employeeId);
@@ -443,6 +579,8 @@ export function summarizePayroll(
       regularPay: 0,
       overtimePay: 0,
       nightPremiumPay: 0,
+      allowancePay: 0,
+      allowancePremiumPay: 0,
       basePay: 0,
       socialInsurance: 0,
       employmentInsurance: 0,
@@ -450,6 +588,7 @@ export function summarizePayroll(
       residentTax: 0,
       commuteAllowance: 0,
       totalPay: 0,
+      allowanceItems: [],
       alerts: []
     };
 
@@ -486,6 +625,9 @@ export function summarizePayroll(
     let regularPay = 0;
     let overtimePay = 0;
     let nightPremiumPay = 0;
+    let allowancePay = 0;
+    let allowancePremiumPay = 0;
+    const allowanceItems: TimecardPayrollAllowanceItem[] = [];
     let socialInsurance = 0;
     let employmentInsurance = 0;
     let incomeTax = 0;
@@ -499,28 +641,113 @@ export function summarizePayroll(
         .filter((day) => getEffectiveCommuteSetting(employee, day.storeId, day.workDate) === setting);
       const workDays = storeDays.filter((day) => day.workMinutes > 0).length;
       const workMinutes = storeDays.reduce((sum, day) => sum + day.workMinutes, 0);
-      const storeRegularMinutes = storeDays.reduce((sum, day) => sum + Math.min(day.workMinutes, dailyLegalWorkMinutes), 0);
-      const storeOvertimeMinutes = storeDays.reduce((sum, day) => sum + Math.max(0, day.workMinutes - dailyLegalWorkMinutes), 0);
+      const prescribedMonthlyWorkMinutes = getPrescribedMonthlyWorkMinutes(setting);
       const storeNightMinutes = storeDays.reduce((sum, day) => sum + day.nightMinutes, 0);
+      const hourlyBase = getPayrollHourlyBase(setting);
+      const overtimeMinutesByDay = new Map<string, Set<number>>();
+      let monthlyWorkOrder = 0;
+      for (const day of storeDays.slice().sort((a, b) => `${a.workDate}:${a.clockIn ?? ""}`.localeCompare(`${b.workDate}:${b.clockIn ?? ""}`))) {
+        const overtimeMinuteSet = overtimeMinutesByDay.get(day.key) ?? new Set<number>();
+        const activeMinutes = activeMinutesByDay.get(day.key) ?? [];
+        const workOrder = employeeMinuteWorkOrderByDay.get(`${day.employeeId}:${day.storeId}:${day.workDate}`) ?? new Map<number, number>();
+        for (const minute of activeMinutes) {
+          monthlyWorkOrder += 1;
+          if ((workOrder.get(minute) ?? 0) > dailyLegalWorkMinutes) overtimeMinuteSet.add(minute);
+          if (prescribedMonthlyWorkMinutes !== null && monthlyWorkOrder > prescribedMonthlyWorkMinutes) overtimeMinuteSet.add(minute);
+        }
+        overtimeMinutesByDay.set(day.key, overtimeMinuteSet);
+      }
+      const storeOvertimeMinutes = Array.from(overtimeMinutesByDay.values()).reduce((sum, minutes) => sum + minutes.size, 0);
+      const storeRegularMinutes = Math.max(0, workMinutes - storeOvertimeMinutes);
       const commuteWorkDays = commuteDays.filter((day) => day.workMinutes > 0).length;
       let storeTaxablePay = 0;
       let storeCommuteAllowance = 0;
       if (workDays > 0 || workMinutes > 0) {
         if (setting.employmentType === "monthly") {
-          regularWorkMinutes += workMinutes;
+          const storeOvertimePay = (storeOvertimeMinutes / 60) * hourlyBase * overtimePremiumRate;
+          const storeNightPremiumPay = (storeNightMinutes / 60) * hourlyBase * nightPremiumRate;
+          regularWorkMinutes += storeRegularMinutes;
+          overtimeMinutes += storeOvertimeMinutes;
           const storeMonthlyPay = Math.ceil(setting.monthlySalary ?? 0);
           regularPay += storeMonthlyPay;
-          storeTaxablePay = storeMonthlyPay;
+          overtimePay += storeOvertimePay;
+          nightPremiumPay += storeNightPremiumPay;
+          storeTaxablePay = Math.ceil(storeMonthlyPay + storeOvertimePay + storeNightPremiumPay);
         } else {
-          const storeRegularPay = (storeRegularMinutes / 60) * (setting.hourlyWage ?? 0);
-          const storeOvertimePay = (storeOvertimeMinutes / 60) * (setting.hourlyWage ?? 0) * overtimePremiumRate;
-          const storeNightPremiumPay = (storeNightMinutes / 60) * (setting.hourlyWage ?? 0) * nightPremiumRate;
+          const storeRegularPay = (storeRegularMinutes / 60) * hourlyBase;
+          const storeOvertimePay = (storeOvertimeMinutes / 60) * hourlyBase * overtimePremiumRate;
+          const storeNightPremiumPay = (storeNightMinutes / 60) * hourlyBase * nightPremiumRate;
           regularWorkMinutes += storeRegularMinutes;
           overtimeMinutes += storeOvertimeMinutes;
           regularPay += storeRegularPay;
           overtimePay += storeOvertimePay;
           nightPremiumPay += storeNightPremiumPay;
           storeTaxablePay = Math.ceil(storeRegularPay + storeOvertimePay + storeNightPremiumPay);
+        }
+      }
+      const effectiveAllowanceRules = allowanceRules.filter((rule) => {
+        if (rule.storeId !== null && rule.storeId !== setting.storeId) return false;
+        if (rule.employeeId !== null && rule.employeeId !== row.employeeId) return false;
+        return storeDays.some((day) => day.workDate >= rule.validFrom && (!rule.validTo || day.workDate <= rule.validTo));
+      });
+      for (const rule of effectiveAllowanceRules) {
+        if (rule.ruleType === "fixed_monthly") {
+          const hasEligibleWork = storeDays.some((day) => day.workMinutes > 0 && day.workDate >= rule.validFrom && (!rule.validTo || day.workDate <= rule.validTo));
+          if (!hasEligibleWork) continue;
+          const amount = Math.ceil(rule.amount);
+          allowancePay += amount;
+          storeTaxablePay += amount;
+          allowanceItems.push({
+            ruleId: rule.id,
+            name: rule.name,
+            ruleType: rule.ruleType,
+            storeId: rule.storeId,
+            workDate: null,
+            minutes: 0,
+            amount,
+            premiumAmount: 0,
+            note: "月額"
+          });
+          continue;
+        }
+
+        for (const day of storeDays) {
+          if (day.workDate < rule.validFrom || (rule.validTo && day.workDate > rule.validTo)) continue;
+          const weekday = getWeekdayIndex(day.workDate);
+          const windows = rule.windows.filter((window) => window.weekday === weekday);
+          if (!windows.length) continue;
+          const activeMinutes = activeMinutesByDay.get(day.key) ?? [];
+          const storeCoverage = storeMinuteCoverageByDate.get(`${day.storeId}:${day.workDate}`) ?? new Map<number, Set<string>>();
+          for (const window of windows) {
+            const eligibleMinutes = activeMinutes.filter((minute) => {
+              if (!isMinuteInWindow(minute, window.startTime, window.endTime)) return false;
+              const employeesAtMinute = storeCoverage.get(minute);
+              return employeesAtMinute?.size === 1 && employeesAtMinute.has(day.employeeId);
+            });
+            if (!eligibleMinutes.length) continue;
+            const amount = (eligibleMinutes.length / 60) * rule.amount;
+            const overtimeMinuteSet = overtimeMinutesByDay.get(day.key) ?? new Set<number>();
+            const overtimeMinutesForAllowance = eligibleMinutes.filter((minute) => overtimeMinuteSet.has(minute)).length;
+            const nightMinutesForAllowance = eligibleMinutes.filter(isNightMinute).length;
+            const premiumAmount = rule.includeInPremiumBase
+              ? (overtimeMinutesForAllowance / 60) * rule.amount * (overtimePremiumRate - 1)
+                + (nightMinutesForAllowance / 60) * rule.amount * nightPremiumRate
+              : 0;
+            allowancePay += amount;
+            allowancePremiumPay += premiumAmount;
+            storeTaxablePay += Math.ceil(amount + premiumAmount);
+            allowanceItems.push({
+              ruleId: rule.id,
+              name: rule.name,
+              ruleType: rule.ruleType,
+              storeId: rule.storeId,
+              workDate: day.workDate,
+              minutes: eligibleMinutes.length,
+              amount: Math.ceil(amount),
+              premiumAmount: Math.ceil(premiumAmount),
+              note: formatAllowanceMinuteRange(eligibleMinutes)
+            });
+          }
         }
       }
       if (commuteWorkDays > 0) {
@@ -539,6 +766,8 @@ export function summarizePayroll(
       residentTax += getResidentTaxDeduction(setting, payrollMonth);
     }
     const basePay = Math.ceil(regularPay + overtimePay + nightPremiumPay);
+    const roundedAllowancePay = Math.ceil(allowancePay);
+    const roundedAllowancePremiumPay = Math.ceil(allowancePremiumPay);
     return {
       ...row,
       regularWorkMinutes,
@@ -546,13 +775,16 @@ export function summarizePayroll(
       regularPay,
       overtimePay,
       nightPremiumPay,
-      basePay,
+      allowancePay: roundedAllowancePay,
+      allowancePremiumPay: roundedAllowancePremiumPay,
+      basePay: basePay + roundedAllowancePay + roundedAllowancePremiumPay,
       socialInsurance,
       employmentInsurance,
       incomeTax,
       residentTax,
       commuteAllowance,
-      totalPay: basePay + commuteAllowance - socialInsurance - employmentInsurance - incomeTax - residentTax
+      allowanceItems,
+      totalPay: basePay + roundedAllowancePay + roundedAllowancePremiumPay + commuteAllowance - socialInsurance - employmentInsurance - incomeTax - residentTax
     };
   }).sort((a, b) => a.employeeName.localeCompare(b.employeeName, "ja"));
 
@@ -565,6 +797,8 @@ export function summarizePayroll(
     laborCost: acc.laborCost + row.basePay,
     overtimePay: acc.overtimePay + row.overtimePay,
     nightPremiumPay: acc.nightPremiumPay + row.nightPremiumPay,
+    allowancePay: acc.allowancePay + row.allowancePay,
+    allowancePremiumPay: acc.allowancePremiumPay + row.allowancePremiumPay,
     socialInsurance: acc.socialInsurance + row.socialInsurance,
     employmentInsurance: acc.employmentInsurance + row.employmentInsurance,
     incomeTax: acc.incomeTax + row.incomeTax,
@@ -580,6 +814,8 @@ export function summarizePayroll(
     laborCost: 0,
     overtimePay: 0,
     nightPremiumPay: 0,
+    allowancePay: 0,
+    allowancePremiumPay: 0,
     socialInsurance: 0,
     employmentInsurance: 0,
     incomeTax: 0,

@@ -88,6 +88,27 @@ type PayrollStatutoryAlert = {
   dueLabel: string;
 };
 
+type PayrollAllowanceRule = {
+  id: string;
+  name: string;
+  ruleType: "fixed_monthly" | "one_person_busy_hourly";
+  storeId: string | null;
+  storeName: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  amount: number;
+  includeInPremiumBase: boolean;
+  validFrom: string;
+  validTo: string | null;
+  isEnabled: boolean;
+  windows: Array<{ weekday: number; startTime: string; endTime: string }>;
+};
+
+type PayrollAllowanceOption = {
+  id: string;
+  name: string;
+};
+
 type RolePermissionDefinition = {
   key: string;
   label: string;
@@ -113,6 +134,8 @@ const roleLabels: Record<string, string> = {
   store_terminal: "店舗Pad"
 };
 
+const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+
 export default function OsSettingsPage() {
   const { notice, showNotice, clearNotice } = useActionNotice();
   const alertPreviewAudioContextRef = useRef<AudioContext | null>(null);
@@ -122,6 +145,9 @@ export default function OsSettingsPage() {
   const [socialInsuranceTables, setSocialInsuranceTables] = useState<SocialInsuranceTable[]>([]);
   const [employmentInsuranceTables, setEmploymentInsuranceTables] = useState<EmploymentInsuranceTable[]>([]);
   const [payrollAlerts, setPayrollAlerts] = useState<PayrollStatutoryAlert[]>([]);
+  const [payrollAllowanceRules, setPayrollAllowanceRules] = useState<PayrollAllowanceRule[]>([]);
+  const [payrollAllowanceStores, setPayrollAllowanceStores] = useState<PayrollAllowanceOption[]>([]);
+  const [payrollAllowanceEmployees, setPayrollAllowanceEmployees] = useState<PayrollAllowanceOption[]>([]);
   const [rolePermissionDefinitions, setRolePermissionDefinitions] = useState<RolePermissionDefinition[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermissionState[]>([]);
   const [canEditRolePermissions, setCanEditRolePermissions] = useState(false);
@@ -134,12 +160,23 @@ export default function OsSettingsPage() {
   const [employmentInsuranceEffectiveFrom, setEmploymentInsuranceEffectiveFrom] = useState(`${new Date().getFullYear()}-04-01`);
   const [employmentInsuranceEffectiveTo, setEmploymentInsuranceEffectiveTo] = useState(`${new Date().getFullYear() + 1}-03-31`);
   const [employmentInsuranceBusinessType, setEmploymentInsuranceBusinessType] = useState("general");
+  const [allowanceName, setAllowanceName] = useState("");
+  const [allowanceRuleType, setAllowanceRuleType] = useState<"fixed_monthly" | "one_person_busy_hourly">("one_person_busy_hourly");
+  const [allowanceStoreId, setAllowanceStoreId] = useState("");
+  const [allowanceEmployeeId, setAllowanceEmployeeId] = useState("");
+  const [allowanceAmount, setAllowanceAmount] = useState("");
+  const [allowanceValidFrom, setAllowanceValidFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [allowanceValidTo, setAllowanceValidTo] = useState("");
+  const [allowanceStartTime, setAllowanceStartTime] = useState("18:00");
+  const [allowanceEndTime, setAllowanceEndTime] = useState("21:00");
+  const [allowanceWeekdays, setAllowanceWeekdays] = useState([0, 1, 2, 3, 4, 5, 6]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingNavigationSettings, setSavingNavigationSettings] = useState(false);
   const [uploadingTaxTable, setUploadingTaxTable] = useState(false);
   const [uploadingSocialInsurance, setUploadingSocialInsurance] = useState(false);
   const [uploadingEmploymentInsurance, setUploadingEmploymentInsurance] = useState(false);
+  const [savingPayrollAllowance, setSavingPayrollAllowance] = useState(false);
   const [savingRolePermissions, setSavingRolePermissions] = useState(false);
   const groupedRolePermissionDefinitions = useMemo(() => {
     const groups = new Map<string, RolePermissionDefinition[]>();
@@ -166,13 +203,14 @@ export default function OsSettingsPage() {
 
   useEffect(() => {
     async function loadSettings() {
-      const [settingsResponse, navigationResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse, rolePermissionsResponse] = await Promise.all([
+      const [settingsResponse, navigationResponse, taxResponse, socialInsuranceResponse, employmentInsuranceResponse, alertResponse, allowanceResponse, rolePermissionsResponse] = await Promise.all([
         fetch("/api/settings?module=store", { cache: "no-store" }),
         fetch("/api/settings?module=navigation", { cache: "no-store" }),
         fetch("/api/settings/withholding-tax", { cache: "no-store" }),
         fetch("/api/settings/social-insurance", { cache: "no-store" }),
         fetch("/api/settings/employment-insurance", { cache: "no-store" }),
         fetch("/api/settings/payroll-statutory-alerts", { cache: "no-store" }),
+        fetch("/api/settings/payroll-allowances", { cache: "no-store" }),
         fetch("/api/settings/role-permissions", { cache: "no-store" })
       ]);
       if (settingsResponse.ok) {
@@ -198,6 +236,12 @@ export default function OsSettingsPage() {
       if (alertResponse.ok) {
         const body = await alertResponse.json() as { alerts?: PayrollStatutoryAlert[]; canView?: boolean };
         if (body.canView) setPayrollAlerts(body.alerts ?? []);
+      }
+      if (allowanceResponse.ok) {
+        const body = await allowanceResponse.json() as { rules?: PayrollAllowanceRule[]; stores?: PayrollAllowanceOption[]; employees?: PayrollAllowanceOption[] };
+        setPayrollAllowanceRules(body.rules ?? []);
+        setPayrollAllowanceStores(body.stores ?? []);
+        setPayrollAllowanceEmployees(body.employees ?? []);
       }
       if (rolePermissionsResponse.ok) {
         const body = await rolePermissionsResponse.json() as {
@@ -261,6 +305,70 @@ export default function OsSettingsPage() {
       setCachedNavigationSettings(body.settings);
     }
     showNotice("メニュー Beta 表示を保存しました。");
+  }
+
+  async function reloadPayrollAllowances() {
+    const response = await fetch("/api/settings/payroll-allowances", { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json() as { rules?: PayrollAllowanceRule[]; stores?: PayrollAllowanceOption[]; employees?: PayrollAllowanceOption[] };
+    setPayrollAllowanceRules(body.rules ?? []);
+    setPayrollAllowanceStores(body.stores ?? []);
+    setPayrollAllowanceEmployees(body.employees ?? []);
+  }
+
+  function toggleAllowanceWeekday(weekday: number, checked: boolean) {
+    setAllowanceWeekdays((current) => {
+      const next = new Set(current);
+      if (checked) next.add(weekday);
+      else next.delete(weekday);
+      return Array.from(next).sort((left, right) => left - right);
+    });
+  }
+
+  async function createPayrollAllowanceRule() {
+    setSavingPayrollAllowance(true);
+    const response = await fetch("/api/settings/payroll-allowances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        name: allowanceName,
+        ruleType: allowanceRuleType,
+        storeId: allowanceStoreId || null,
+        employeeId: allowanceEmployeeId || null,
+        amount: allowanceAmount,
+        includeInPremiumBase: true,
+        validFrom: allowanceValidFrom,
+        validTo: allowanceValidTo || null,
+        weekdays: allowanceWeekdays,
+        startTime: allowanceStartTime,
+        endTime: allowanceEndTime
+      })
+    });
+    setSavingPayrollAllowance(false);
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      showNotice(body.error ?? "手当・加給ルールを保存できませんでした。", "info");
+      return;
+    }
+    setAllowanceName("");
+    setAllowanceAmount("");
+    await reloadPayrollAllowances();
+    showNotice("手当・加給ルールを保存しました。");
+  }
+
+  async function disablePayrollAllowanceRule(id: string) {
+    const response = await fetch("/api/settings/payroll-allowances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "disable", id })
+    });
+    if (!response.ok) {
+      showNotice("手当・加給ルールを停止できませんでした。", "info");
+      return;
+    }
+    await reloadPayrollAllowances();
+    showNotice("手当・加給ルールを停止しました。");
   }
 
   function toggleRolePermission(role: string, permissionKey: string, checked: boolean) {
@@ -616,6 +724,104 @@ export default function OsSettingsPage() {
                 ))}
               </div>
             ) : null}
+            <div className="settings-allowance-panel">
+              <div className="settings-manual-rate-heading">
+                <div>
+                  <strong>手当・加給ルール</strong>
+                  <span>月額手当と、繁忙時間帯のワンオペ加給を給与明細に反映します。既存ルールを変更する場合は停止して新しく作成してください。</span>
+                </div>
+              </div>
+              <div className="settings-allowance-form">
+                <label className="settings-field">
+                  <span>種類</span>
+                  <select value={allowanceRuleType} onChange={(event) => setAllowanceRuleType(event.target.value === "fixed_monthly" ? "fixed_monthly" : "one_person_busy_hourly")}>
+                    <option value="one_person_busy_hourly">ワンオペ繁忙加給（時給加算）</option>
+                    <option value="fixed_monthly">固定手当（月額）</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>名称</span>
+                  <input value={allowanceName} onChange={(event) => setAllowanceName(event.target.value)} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 店長手当" : "例: ワンオペ繁忙加給"} />
+                </label>
+                <label className="settings-field">
+                  <span>{allowanceRuleType === "fixed_monthly" ? "月額" : "加給時給"}</span>
+                  <input value={allowanceAmount} inputMode="numeric" onChange={(event) => setAllowanceAmount(normalizeIntegerInput(event.target.value))} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 10000" : "例: 100"} />
+                </label>
+                <label className="settings-field">
+                  <span>対象店舗</span>
+                  <select value={allowanceStoreId} onChange={(event) => setAllowanceStoreId(event.target.value)}>
+                    <option value="">全店舗</option>
+                    {payrollAllowanceStores.map((store) => (
+                      <option value={store.id} key={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>対象従業員</span>
+                  <select value={allowanceEmployeeId} onChange={(event) => setAllowanceEmployeeId(event.target.value)}>
+                    <option value="">全員</option>
+                    {payrollAllowanceEmployees.map((employee) => (
+                      <option value={employee.id} key={employee.id}>{employee.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>有効開始</span>
+                  <input type="date" value={allowanceValidFrom} onChange={(event) => setAllowanceValidFrom(event.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>有効終了</span>
+                  <input type="date" value={allowanceValidTo} onChange={(event) => setAllowanceValidTo(event.target.value)} />
+                </label>
+                {allowanceRuleType === "one_person_busy_hourly" ? (
+                  <>
+                    <label className="settings-field">
+                      <span>開始</span>
+                      <input type="time" value={allowanceStartTime} onChange={(event) => setAllowanceStartTime(event.target.value)} />
+                    </label>
+                    <label className="settings-field">
+                      <span>終了</span>
+                      <input type="time" value={allowanceEndTime} onChange={(event) => setAllowanceEndTime(event.target.value)} />
+                    </label>
+                    <div className="settings-allowance-weekdays">
+                      {weekdayLabels.map((label, index) => (
+                        <label key={label}>
+                          <input type="checkbox" checked={allowanceWeekdays.includes(index)} onChange={(event) => toggleAllowanceWeekday(index, event.currentTarget.checked)} />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                <button className="secondary-button" type="button" disabled={savingPayrollAllowance} onClick={() => void createPayrollAllowanceRule()}>
+                  <Save size={16} />
+                  {savingPayrollAllowance ? "保存中" : "ルールを追加"}
+                </button>
+              </div>
+              <div className="settings-allowance-list">
+                {payrollAllowanceRules.length ? payrollAllowanceRules.map((rule) => (
+                  <article className={rule.isEnabled ? "" : "is-disabled"} key={rule.id}>
+                    <div>
+                      <strong>{rule.name}</strong>
+                      <span>
+                        {rule.ruleType === "fixed_monthly" ? "固定手当" : "ワンオペ繁忙加給"}
+                        {" / "}{rule.storeName ?? "全店舗"}
+                        {" / "}{rule.employeeName ?? "全員"}
+                        {" / ¥"}{Math.round(rule.amount).toLocaleString("ja-JP")}
+                      </span>
+                      {rule.windows.length ? <small>{rule.windows.map((window) => `${weekdayLabels[window.weekday] ?? ""} ${window.startTime}-${window.endTime}`).join("、")}</small> : null}
+                    </div>
+                    {rule.isEnabled ? (
+                      <button className="text-button" type="button" onClick={() => void disablePayrollAllowanceRule(rule.id)}>停止</button>
+                    ) : (
+                      <span className="status-pill">停止中</span>
+                    )}
+                  </article>
+                )) : (
+                  <p className="empty-state-text">手当・加給ルールはまだありません。</p>
+                )}
+              </div>
+            </div>
             <div className="settings-tax-import">
               <label className="settings-field">
                 <span>対象年</span>

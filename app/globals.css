@@ -5854,6 +5854,82 @@ body :where(
   line-height: 1.4;
 }
 
+.settings-allowance-panel {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.settings-allowance-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.settings-allowance-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-allowance-weekdays label {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-allowance-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-allowance-list article {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.settings-allowance-list article.is-disabled {
+  opacity: 0.62;
+}
+
+.settings-allowance-list article div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-allowance-list strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.settings-allowance-list span,
+.settings-allowance-list small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .settings-manual-period {
   padding: 8px 10px;
   border: 1px solid var(--line);
@@ -18528,7 +18604,7 @@ body :where(
 
 .payroll-ledger-summary {
   display: grid;
-  grid-template-columns: 0.48fr repeat(5, minmax(118px, 1fr));
+  grid-template-columns: 0.48fr repeat(6, minmax(118px, 1fr));
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
@@ -26879,6 +26955,15 @@ body :where(
 
   .settings-tax-import {
     grid-template-columns: 1fr;
+  }
+
+  .settings-allowance-form {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-allowance-list article {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .statutory-schedule-list {

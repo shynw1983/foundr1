@@ -37,6 +37,8 @@ type StaffPayload = {
   employmentType?: string;
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
+  prescribedMonthlyWorkHours?: number | string | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   status?: string;
@@ -58,6 +60,8 @@ type WorkStoreSettingPayload = {
   employmentType?: string;
   hourlyWage?: number | string | null;
   monthlySalary?: number | string | null;
+  prescribedMonthlyWorkHours?: number | string | null;
+  prescribedMonthlyWorkMinutes?: number | string | null;
   commuteAllowancePerWorkday?: number | string | null;
   commuteAllowanceMonthlyCap?: number | string | null;
   applySocialInsurance?: boolean;
@@ -86,6 +90,23 @@ type StorePayrollConfig = {
 
 function normalizeRole(role?: string) {
   return ["owner", "manager", "store_owner", "store_manager", "store_terminal", "staff"].includes(role ?? "") ? role as string : "staff";
+}
+
+function toNullableMinutesFromHours(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const hours = Number(text);
+  return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 60) : null;
+}
+
+function normalizePrescribedMonthlyWorkMinutes(...values: unknown[]) {
+  for (const value of values) {
+    const minutes = Number(String(value ?? "").trim());
+    if (minutes !== null && minutes > 0) return Math.round(minutes);
+    const fromHours = toNullableMinutesFromHours(value);
+    if (fromHours !== null) return fromHours;
+  }
+  return null;
 }
 
 function normalizeStatus(status?: string) {
@@ -260,6 +281,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const employmentType = normalizeEmploymentType(body.employmentType);
   const hourlyWage = employmentType === "hourly" ? toNullableNumber(body.hourlyWage) : null;
   const monthlySalary = employmentType === "monthly" ? toNullableNumber(body.monthlySalary) : null;
+  const prescribedMonthlyWorkMinutes = normalizePrescribedMonthlyWorkMinutes(body.prescribedMonthlyWorkMinutes, toNullableMinutesFromHours(body.prescribedMonthlyWorkHours));
   const commuteAllowancePerWorkday = toNullableNumber(body.commuteAllowancePerWorkday) ?? 0;
   const commuteAllowanceMonthlyCap = toNullableNumber(body.commuteAllowanceMonthlyCap);
   const status = id === session.id ? "active" : normalizeStatus(body.status);
@@ -398,6 +420,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       employment_type as "employmentType",
       hourly_wage as "hourlyWage",
       monthly_salary as "monthlySalary",
+      prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes",
       commute_allowance_per_workday as "commuteAllowancePerWorkday",
       commute_allowance_monthly_cap as "commuteAllowanceMonthlyCap",
       apply_social_insurance as "applySocialInsurance",
@@ -431,7 +454,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     select
       id::text,
       coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
-      coalesce(payroll_closing_day, 31)::int as "payrollClosingDay"
+      coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
+      prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes"
     from stores
     where id::text = any(${workStoreIds.length ? workStoreIds : ["__none__"]})
   `;
@@ -449,6 +473,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const storeEmploymentType = normalizeEmploymentType(storeSetting?.employmentType ?? employmentType);
     const storeHourlyWage = storeEmploymentType === "hourly" ? toNullableNumber(storeSetting?.hourlyWage) ?? hourlyWage : null;
     const storeMonthlySalary = storeEmploymentType === "monthly" ? toNullableNumber(storeSetting?.monthlySalary) ?? monthlySalary : null;
+    const storePrescribedMonthlyWorkMinutes = normalizePrescribedMonthlyWorkMinutes(
+      storeSetting?.prescribedMonthlyWorkMinutes,
+      toNullableMinutesFromHours(storeSetting?.prescribedMonthlyWorkHours),
+      payrollStore?.prescribedMonthlyWorkMinutes,
+      prescribedMonthlyWorkMinutes
+    );
     const storeCommuteAllowancePerWorkday = toNullableNumber(storeSetting?.commuteAllowancePerWorkday) ?? commuteAllowancePerWorkday;
     const storeCommuteAllowanceMonthlyCap = toNullableNumber(storeSetting?.commuteAllowanceMonthlyCap) ?? commuteAllowanceMonthlyCap;
     const storePayrollEnabled = storeSetting?.payrollEnabled !== false;
@@ -478,6 +508,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const currentMonthlySalary = currentEmploymentType === "monthly"
       ? shouldKeepCurrentWageUntilFutureDate ? toNullableNumber(existingStore?.monthlySalary) : storeMonthlySalary
       : null;
+    const currentPrescribedMonthlyWorkMinutes = shouldKeepCurrentWageUntilFutureDate
+      ? normalizePrescribedMonthlyWorkMinutes(existingStore?.prescribedMonthlyWorkMinutes)
+      : storePrescribedMonthlyWorkMinutes;
     const currentCommuteAllowancePerWorkday = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowancePerWorkday) ?? 0 : storeCommuteAllowancePerWorkday;
     const currentCommuteAllowanceMonthlyCap = shouldKeepCurrentCommuteUntilFutureDate ? toNullableNumber(existingStore?.commuteAllowanceMonthlyCap) : storeCommuteAllowanceMonthlyCap;
     const currentApplySocialInsurance = shouldKeepCurrentWageUntilFutureDate ? Boolean(existingStore?.applySocialInsurance) : Boolean(storeSetting?.applySocialInsurance);
@@ -507,6 +540,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         employment_type,
         hourly_wage,
         monthly_salary,
+        prescribed_monthly_work_minutes,
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
@@ -536,6 +570,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${currentEmploymentType},
         ${currentHourlyWage},
         ${currentMonthlySalary},
+        ${currentPrescribedMonthlyWorkMinutes},
         ${currentCommuteAllowancePerWorkday},
         ${currentCommuteAllowanceMonthlyCap},
         ${currentApplySocialInsurance},
@@ -562,6 +597,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         employment_type,
         hourly_wage,
         monthly_salary,
+        prescribed_monthly_work_minutes,
         commute_allowance_per_workday,
         commute_allowance_monthly_cap,
         apply_social_insurance,
@@ -590,6 +626,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ${storeEmploymentType},
         ${storeHourlyWage},
         ${storeMonthlySalary},
+        ${storePrescribedMonthlyWorkMinutes},
         ${storeCommuteAllowancePerWorkday},
         ${storeCommuteAllowanceMonthlyCap},
         ${storeApplySocialInsurance},
@@ -616,6 +653,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         employment_type = excluded.employment_type,
         hourly_wage = excluded.hourly_wage,
         monthly_salary = excluded.monthly_salary,
+        prescribed_monthly_work_minutes = excluded.prescribed_monthly_work_minutes,
         commute_allowance_per_workday = excluded.commute_allowance_per_workday,
         commute_allowance_monthly_cap = excluded.commute_allowance_monthly_cap,
         apply_social_insurance = excluded.apply_social_insurance,
@@ -643,6 +681,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       employment_type,
       hourly_wage,
       monthly_salary,
+      prescribed_monthly_work_minutes,
       commute_allowance_per_workday,
       commute_allowance_monthly_cap,
       payroll_enabled,
@@ -654,6 +693,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       ${employmentType},
       ${hourlyWage},
       ${monthlySalary},
+      ${prescribedMonthlyWorkMinutes},
       ${commuteAllowancePerWorkday},
       ${commuteAllowanceMonthlyCap},
       ${effectivePayrollSubject === "paid"},
