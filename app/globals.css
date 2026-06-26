@@ -24080,6 +24080,38 @@ body :where(
   font-weight: 800;
 }
 
+.exception-basic-panel {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.exception-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.exception-mode-tabs button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: white;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.exception-mode-tabs button.is-active {
+  border-color: rgba(31, 126, 93, 0.36);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
 .edit-fields .exception-toggle {
   display: flex;
   align-items: center;
@@ -28023,6 +28055,15 @@ body :where(
   .receipt-upload-button {
     min-height: 36px;
     padding: 0 7px;
+  }
+
+  .exception-mode-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .exception-mode-tabs button {
+    min-height: 36px;
+    font-size: 11px;
   }
 
   .product-master-head {

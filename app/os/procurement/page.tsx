@@ -2680,6 +2680,9 @@ function ExceptionReportDialog({
   const [deferTemporarySupplier, setDeferTemporarySupplier] = useState("");
   const previousDeferredReason = getDeferredSupplierNote(item.note).split("/").at(-1)?.trim();
   const [deferReason, setDeferReason] = useState(previousDeferredReason || "価格が高いため");
+  const [adjustmentMode, setAdjustmentMode] = useState<"basic" | "product" | "supplier" | "defer" | "split" | "unavailable">(
+    item.unavailable ? "unavailable" : quantityDiff < 0 && !isDeliveryLocked ? "split" : "basic"
+  );
   const splitRemainingQuantity = Math.max(0, item.requestedQuantity - splitPurchasedQuantity);
   const canSplitRemaining = !isDeliveryLocked && !item.unavailable && splitPurchasedQuantity > 0 && splitPurchasedQuantity < item.requestedQuantity;
   const deferTargetSupplier = deferTemporarySupplier.trim() || deferSupplier.trim();
@@ -2805,265 +2808,305 @@ function ExceptionReportDialog({
           </span>
         </div>
         <div className="edit-fields">
-          <label>
-            <span>購入したバリエーション</span>
-            <select
-              value={selectedVariantId}
-              disabled={isDeliveryLocked || variantOptions.length === 0}
-              onChange={(event) => selectPurchasedVariant(event.target.value)}
-            >
-              {variantOptions.length === 0 ? <option value="">登録済み候補なし</option> : null}
-              {variantOptions.map((product) => (
-                <option value={product.id ?? ""} key={product.id ?? product.name}>
-                  {product.name}{product.id === item.productId ? "（依頼）" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="temporary-variant-row">
+          <section className="exception-basic-panel">
             <label>
-              <span>臨時バリエーション</span>
+              <span>実際購入価格</span>
               <input
-                value={temporaryVariantName}
-                disabled={isDeliveryLocked}
-                placeholder={`例: ${familyName} の別サイズ`}
-                onChange={(event) => setTemporaryVariantName(event.target.value)}
+                type="text"
+                inputMode="decimal"
+                value={item.actualPrice}
+                placeholder="例: 271 / ¥271"
+                onChange={(event) => onChange({ actualPrice: normalizeDecimalInput(event.target.value) })}
               />
             </label>
             <label>
-              <span>単位</span>
-              <select
-                value={temporaryVariantUnit}
-                disabled={isDeliveryLocked}
-                onChange={(event) => setTemporaryVariantUnit(event.target.value)}
-              >
-                {temporaryProductUnitOptions.map((unit) => (
-                  <option value={unit} key={`temporary-variant-unit-${unit}`}>{unit}</option>
-                ))}
-              </select>
+              <span>備考</span>
+              <textarea
+                value={item.note}
+                placeholder="価格差、配送メモ、購入時の補足"
+                onChange={(event) => onChange({ note: event.target.value })}
+              />
             </label>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={isDeliveryLocked || !normalizedTemporaryVariantName}
-              onClick={useTemporaryVariant}
-            >
-              臨時で適用
-            </button>
+          </section>
+
+          <div className="exception-mode-tabs" role="tablist" aria-label="購入調整の種類">
+            {[
+              ["basic", "通常"],
+              ["product", "商品変更"],
+              ["supplier", "購入先変更"],
+              ["defer", "見送り"],
+              ["split", "残数"],
+              ["unavailable", "購入不可"]
+            ].map(([mode, label]) => (
+              <button
+                type="button"
+                className={adjustmentMode === mode ? "is-active" : ""}
+                onClick={() => setAdjustmentMode(mode as typeof adjustmentMode)}
+                key={mode}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="supplier-defer-panel">
-            <div>
-              <strong>代替商品</strong>
-              <small>同じバリエーションではない商品で代替購入する場合、商品マスタから選んで明細を切り替えます。</small>
-            </div>
-            <div className="remaining-split-fields">
+
+          {adjustmentMode === "product" ? (
+            <div className="supplier-defer-panel">
+              <div>
+                <strong>商品変更</strong>
+                <small>同系列の別バリエーション、臨時品、または商品マスタ上の代替商品へ切り替えます。</small>
+              </div>
               <label>
-                <span>商品検索</span>
-                <input
-                  value={replacementProductQuery}
-                  disabled={isDeliveryLocked}
-                  placeholder="商品名、カテゴリ、発注先で検索"
-                  onChange={(event) => setReplacementProductQuery(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>代替商品</span>
+                <span>購入したバリエーション</span>
                 <select
-                  value={replacementProductId}
-                  disabled={isDeliveryLocked || replacementProductCandidates.length === 0}
-                  onChange={(event) => setReplacementProductId(event.target.value)}
+                  value={selectedVariantId}
+                  disabled={isDeliveryLocked || variantOptions.length === 0}
+                  onChange={(event) => selectPurchasedVariant(event.target.value)}
                 >
-                  <option value="">選択してください</option>
-                  {replacementProductCandidates.map((product) => (
-                    <option value={product.id ?? ""} key={`replacement-${product.id ?? product.name}`}>
-                      {product.name}{product.unit ? ` / ${product.unit}` : ""}
+                  {variantOptions.length === 0 ? <option value="">登録済み候補なし</option> : null}
+                  {variantOptions.map((product) => (
+                    <option value={product.id ?? ""} key={product.id ?? product.name}>
+                      {product.name}{product.id === item.productId ? "（依頼）" : ""}
                     </option>
                   ))}
                 </select>
               </label>
-            </div>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={isDeliveryLocked || !selectedReplacementProduct}
-              onClick={applyReplacementProduct}
-            >
-              代替商品として適用
-            </button>
-          </div>
-          <label className="exception-toggle">
-            <input
-              type="checkbox"
-              checked={item.unavailable}
-              disabled={isDeliveryLocked}
-              onChange={(event) =>
-                onChange({
-                  unavailable: event.target.checked,
-                  purchased: event.target.checked ? false : item.purchased,
-                  deliveryStatus: event.target.checked ? "pending" : item.deliveryStatus,
-                  deliveryBatchId: event.target.checked ? undefined : item.deliveryBatchId,
-                  actualPrice: event.target.checked ? "" : item.actualPrice
-                })
-              }
-            />
-            <span>購入不可として処理</span>
-          </label>
-          <label>
-            <span>購入先変更</span>
-            <div className="supplier-choice-list">
-              {choices.map((choice) => (
+              <div className="temporary-variant-row">
+                <label>
+                  <span>臨時バリエーション</span>
+                  <input
+                    value={temporaryVariantName}
+                    disabled={isDeliveryLocked}
+                    placeholder={`例: ${familyName} の別サイズ`}
+                    onChange={(event) => setTemporaryVariantName(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>単位</span>
+                  <select
+                    value={temporaryVariantUnit}
+                    disabled={isDeliveryLocked}
+                    onChange={(event) => setTemporaryVariantUnit(event.target.value)}
+                  >
+                    {temporaryProductUnitOptions.map((unit) => (
+                      <option value={unit} key={`temporary-variant-unit-${unit}`}>{unit}</option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="button"
-                  className={choice.supplier === currentSupplier ? "supplier-choice is-selected" : "supplier-choice"}
-                  onClick={() => {
-                    onChange({
-                      supplier: choice.supplier,
-                      note: setTemporarySupplierNote(item.note, "")
-                    });
-                    setTemporarySupplier("");
-                  }}
-                  key={`${choice.role}-${choice.supplier}`}
+                  className="secondary-button"
+                  disabled={isDeliveryLocked || !normalizedTemporaryVariantName}
+                  onClick={useTemporaryVariant}
                 >
-                  <span>{formatSupplierRole(choice.role)}</span>
-                  <strong>{choice.supplier}</strong>
+                  臨時で適用
                 </button>
-              ))}
-              {choices.length === 0 ? <div className="empty-state">選択できる発注先がありません</div> : null}
+              </div>
+              <div className="remaining-split-fields">
+                <label>
+                  <span>商品検索</span>
+                  <input
+                    value={replacementProductQuery}
+                    disabled={isDeliveryLocked}
+                    placeholder="商品名、カテゴリ、発注先で検索"
+                    onChange={(event) => setReplacementProductQuery(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>代替商品</span>
+                  <select
+                    value={replacementProductId}
+                    disabled={isDeliveryLocked || replacementProductCandidates.length === 0}
+                    onChange={(event) => setReplacementProductId(event.target.value)}
+                  >
+                    <option value="">選択してください</option>
+                    {replacementProductCandidates.map((product) => (
+                      <option value={product.id ?? ""} key={`replacement-${product.id ?? product.name}`}>
+                        {product.name}{product.unit ? ` / ${product.unit}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isDeliveryLocked || !selectedReplacementProduct}
+                onClick={applyReplacementProduct}
+              >
+                代替商品として適用
+              </button>
             </div>
-          </label>
-          <label>
-            <span>臨時購入先</span>
-            <input
-              type="text"
-              value={temporarySupplier}
-              placeholder="例: 近隣スーパー、商店街の青果店"
-              onChange={(event) => setTemporarySupplier(event.target.value)}
-            />
-          </label>
-          <div className="supplier-defer-panel">
-            <div>
-              <strong>発注先を見送り</strong>
-              <small>価格が高い、在庫が合わないなどの場合、未購入のまま別の購入先へ回します。</small>
-            </div>
-            <div className="remaining-split-fields">
+          ) : null}
+
+          {adjustmentMode === "supplier" ? (
+            <div className="supplier-defer-panel">
+              <div>
+                <strong>購入先変更</strong>
+                <small>同じ商品を別の発注先、または臨時購入先で買った場合に記録します。</small>
+              </div>
+              <div className="supplier-choice-list">
+                {choices.map((choice) => (
+                  <button
+                    type="button"
+                    className={choice.supplier === currentSupplier ? "supplier-choice is-selected" : "supplier-choice"}
+                    onClick={() => {
+                      onChange({
+                        supplier: choice.supplier,
+                        note: setTemporarySupplierNote(item.note, "")
+                      });
+                      setTemporarySupplier("");
+                    }}
+                    key={`${choice.role}-${choice.supplier}`}
+                  >
+                    <span>{formatSupplierRole(choice.role)}</span>
+                    <strong>{choice.supplier}</strong>
+                  </button>
+                ))}
+                {choices.length === 0 ? <div className="empty-state">選択できる発注先がありません</div> : null}
+              </div>
               <label>
-                <span>別の購入先</span>
-                <select
-                  value={deferSupplier}
-                  disabled={isDeliveryLocked || Boolean(deferTemporarySupplier.trim())}
-                  onChange={(event) => setDeferSupplier(event.target.value)}
-                >
-                  <option value="">選択してください</option>
-                  {choices
-                    .filter((choice) => choice.supplier !== currentSupplier)
-                    .map((choice) => (
-                      <option value={choice.supplier} key={`defer-${choice.role}-${choice.supplier}`}>
+                <span>臨時購入先</span>
+                <input
+                  type="text"
+                  value={temporarySupplier}
+                  placeholder="例: 近隣スーパー、商店街の青果店"
+                  onChange={(event) => setTemporarySupplier(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {adjustmentMode === "defer" ? (
+            <div className="supplier-defer-panel">
+              <div>
+                <strong>発注先を見送り</strong>
+                <small>価格が高い、在庫が合わないなどの場合、未購入のまま別の購入先へ回します。</small>
+              </div>
+              <div className="remaining-split-fields">
+                <label>
+                  <span>別の購入先</span>
+                  <select
+                    value={deferSupplier}
+                    disabled={isDeliveryLocked || Boolean(deferTemporarySupplier.trim())}
+                    onChange={(event) => setDeferSupplier(event.target.value)}
+                  >
+                    <option value="">選択してください</option>
+                    {choices
+                      .filter((choice) => choice.supplier !== currentSupplier)
+                      .map((choice) => (
+                        <option value={choice.supplier} key={`defer-${choice.role}-${choice.supplier}`}>
+                          {choice.supplier}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  <span>臨時の別購入先</span>
+                  <input
+                    value={deferTemporarySupplier}
+                    disabled={isDeliveryLocked}
+                    placeholder="例: 業務スーパー別店舗"
+                    onChange={(event) => setDeferTemporarySupplier(event.target.value)}
+                  />
+                </label>
+              </div>
+              <label>
+                <span>見送り理由</span>
+                <input
+                  value={deferReason}
+                  disabled={isDeliveryLocked}
+                  placeholder="例: 価格が高いため"
+                  onChange={(event) => setDeferReason(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isDeliveryLocked || !deferTargetSupplier}
+                onClick={deferToNextSupplier}
+              >
+                未購入のまま別の購入先へ回す
+              </button>
+            </div>
+          ) : null}
+
+          {adjustmentMode === "split" ? (
+            <div className="remaining-split-panel">
+              <div>
+                <strong>残数フォロー</strong>
+                <small>今回買えた数量だけ購入済みにし、残りをフォロー待ちの未購入明細として残します。</small>
+              </div>
+              <div className="remaining-split-fields">
+                <label>
+                  <span>今回購入数量</span>
+                  <select
+                    value={splitPurchasedQuantity}
+                    disabled={isDeliveryLocked || item.requestedQuantity <= 1}
+                    onChange={(event) => setSplitPurchasedQuantity(Number(event.target.value))}
+                  >
+                    {item.requestedQuantity <= 1 ? <option value={splitPurchasedQuantity}>分割できる残数なし</option> : null}
+                    {actualQuantityOptions
+                      .filter((quantity) => quantity > 0 && quantity < item.requestedQuantity)
+                      .map((quantity) => (
+                        <option value={quantity} key={`split-${item.id}-${quantity}`}>{quantity} {item.unit}</option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  <span>残数購入先</span>
+                  <select
+                    value={splitRemainingSupplier}
+                    disabled={isDeliveryLocked || Boolean(splitRemainingTemporarySupplier.trim())}
+                    onChange={(event) => setSplitRemainingSupplier(event.target.value)}
+                  >
+                    <option value="">現在の発注先を引き継ぐ</option>
+                    {choices.map((choice) => (
+                      <option value={choice.supplier} key={`remaining-${choice.role}-${choice.supplier}`}>
                         {choice.supplier}
                       </option>
                     ))}
-                </select>
-              </label>
-              <label>
-                <span>臨時の別購入先</span>
-                <input
-                  value={deferTemporarySupplier}
-                  disabled={isDeliveryLocked}
-                  placeholder="例: 業務スーパー別店舗"
-                  onChange={(event) => setDeferTemporarySupplier(event.target.value)}
-                />
-              </label>
+                  </select>
+                </label>
+                <label>
+                  <span>臨時の残数購入先</span>
+                  <input
+                    value={splitRemainingTemporarySupplier}
+                    disabled={isDeliveryLocked}
+                    placeholder="例: 近隣スーパー、別店舗"
+                    onChange={(event) => setSplitRemainingTemporarySupplier(event.target.value)}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!canSplitRemaining}
+                onClick={() => onSplit(splitPurchasedQuantity, splitRemainingTargetSupplier)}
+              >
+                {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} をフォローへ回す` : "残数をフォローへ回す"}
+              </button>
             </div>
-            <label>
-              <span>見送り理由</span>
+          ) : null}
+
+          {adjustmentMode === "unavailable" ? (
+            <label className="exception-toggle">
               <input
-                value={deferReason}
+                type="checkbox"
+                checked={item.unavailable}
                 disabled={isDeliveryLocked}
-                placeholder="例: 価格が高いため"
-                onChange={(event) => setDeferReason(event.target.value)}
+                onChange={(event) =>
+                  onChange({
+                    unavailable: event.target.checked,
+                    purchased: event.target.checked ? false : item.purchased,
+                    deliveryStatus: event.target.checked ? "pending" : item.deliveryStatus,
+                    deliveryBatchId: event.target.checked ? undefined : item.deliveryBatchId,
+                    actualPrice: event.target.checked ? "" : item.actualPrice
+                  })
+                }
               />
+              <span>購入不可として処理</span>
             </label>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={isDeliveryLocked || !deferTargetSupplier}
-              onClick={deferToNextSupplier}
-            >
-              未購入のまま別の購入先へ回す
-            </button>
-          </div>
-          <div className="remaining-split-panel">
-            <div>
-              <strong>残数フォロー</strong>
-              <small>今回買えた数量だけ購入済みにし、残りをフォロー待ちの未購入明細として残します。</small>
-            </div>
-            <div className="remaining-split-fields">
-              <label>
-                <span>今回購入数量</span>
-                <select
-                  value={splitPurchasedQuantity}
-                  disabled={isDeliveryLocked || item.requestedQuantity <= 1}
-                  onChange={(event) => setSplitPurchasedQuantity(Number(event.target.value))}
-                >
-                  {item.requestedQuantity <= 1 ? <option value={splitPurchasedQuantity}>分割できる残数なし</option> : null}
-                  {actualQuantityOptions
-                    .filter((quantity) => quantity > 0 && quantity < item.requestedQuantity)
-                    .map((quantity) => (
-                      <option value={quantity} key={`split-${item.id}-${quantity}`}>{quantity} {item.unit}</option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                <span>残数購入先</span>
-                <select
-                  value={splitRemainingSupplier}
-                  disabled={isDeliveryLocked || Boolean(splitRemainingTemporarySupplier.trim())}
-                  onChange={(event) => setSplitRemainingSupplier(event.target.value)}
-                >
-                  <option value="">現在の発注先を引き継ぐ</option>
-                  {choices.map((choice) => (
-                    <option value={choice.supplier} key={`remaining-${choice.role}-${choice.supplier}`}>
-                      {choice.supplier}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>臨時の残数購入先</span>
-                <input
-                  value={splitRemainingTemporarySupplier}
-                  disabled={isDeliveryLocked}
-                  placeholder="例: 近隣スーパー、別店舗"
-                  onChange={(event) => setSplitRemainingTemporarySupplier(event.target.value)}
-                />
-              </label>
-            </div>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!canSplitRemaining}
-              onClick={() => onSplit(splitPurchasedQuantity, splitRemainingTargetSupplier)}
-            >
-              {splitRemainingQuantity > 0 ? `残り ${splitRemainingQuantity} ${item.unit} をフォローへ回す` : "残数をフォローへ回す"}
-            </button>
-          </div>
-          <label>
-            <span>備考</span>
-            <textarea
-              value={item.note}
-              placeholder="代替品、欠品、配送メモなど"
-              onChange={(event) => onChange({ note: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>実際購入価格</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={item.actualPrice}
-              placeholder="例: 271 / ¥271"
-              onChange={(event) => onChange({ actualPrice: normalizeDecimalInput(event.target.value) })}
-            />
-          </label>
+          ) : null}
         </div>
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>
