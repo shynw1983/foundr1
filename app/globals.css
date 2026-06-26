@@ -16907,6 +16907,16 @@ body :where(
   padding: 0 14px;
 }
 
+.payroll-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payroll-view-tabs button {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .timecard-view-tabs button.is-active,
 .timecard-view-tabs a.is-active,
 .timecard-subtabs button.is-active {
@@ -18508,7 +18518,7 @@ body :where(
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
 

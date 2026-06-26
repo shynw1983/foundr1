@@ -2104,19 +2104,17 @@ export function TimecardPage({
                 </button>
               ) : null}
             </section>
-            {payrollView === "employee" ? (
-            <section className="timecard-subtabs" aria-label="給与メニュー">
-              <button type="button" onClick={() => setPayrollView("summary")}>
+            <section className="timecard-subtabs payroll-view-tabs" aria-label="給与メニュー">
+              <button className={payrollView === "summary" ? "is-active" : ""} type="button" onClick={() => setPayrollView("summary")}>
                 月別給与
               </button>
-              <button className="is-active" type="button" onClick={() => {
+              <button className={payrollView === "employee" ? "is-active" : ""} type="button" onClick={() => {
                 setPayrollView("employee");
                 setIsPayrollStatementOpen(true);
               }}>
                 従業員別明細
               </button>
             </section>
-            ) : null}
 
             {payrollView === "summary" || isPayrollStatementOpen ? (
               <section className="panel payroll-ledger-panel">
@@ -2146,17 +2144,6 @@ export function TimecardPage({
                   </button>
                 </div>
                 <div className="payroll-ledger-actions">
-                  <div className="timecard-subtabs" aria-label="給与メニュー">
-                    <button className="is-active" type="button" onClick={() => setPayrollView("summary")}>
-                      月別給与
-                    </button>
-                    <button type="button" onClick={() => {
-                      setPayrollView("employee");
-                      setIsPayrollStatementOpen(true);
-                    }}>
-                      従業員別明細
-                    </button>
-                  </div>
                   {canConfirmPayrollPeriod ? (
                     <button className="secondary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
                       {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "最新設定で再確定" : payrollConfirmation ? "再確定" : "給与を確定"}
