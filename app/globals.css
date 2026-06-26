@@ -6425,6 +6425,72 @@ body :where(
   gap: 12px;
 }
 
+.staff-payroll-store-picker {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.staff-payroll-store-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.staff-payroll-store-chip {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+}
+
+.staff-payroll-store-chip.is-active {
+  border-color: rgba(37, 128, 99, 0.35);
+  background: rgba(37, 128, 99, 0.07);
+}
+
+.staff-payroll-store-chip input[type="checkbox"] {
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.staff-payroll-store-chip strong,
+.staff-payroll-store-chip small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.staff-payroll-store-chip strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.staff-payroll-store-chip small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.staff-payroll-active-store {
+  max-width: 360px;
+}
+
 .staff-payroll-store-row {
   display: grid;
   grid-template-columns: 1fr;
@@ -6434,6 +6500,10 @@ body :where(
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfe;
+}
+
+.staff-payroll-store-row.is-hidden {
+  display: none;
 }
 
 .staff-payroll-store-row.is-inactive {

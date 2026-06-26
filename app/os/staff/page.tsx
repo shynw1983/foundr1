@@ -958,10 +958,16 @@ function StaffFormFields({
   const [selectedWorkStoreIdList, setSelectedWorkStoreIdList] = useState<string[]>(() => (
     member ? getWorkStores(member).map((store) => store.id) : []
   ));
+  const [activePayrollStoreId, setActivePayrollStoreId] = useState(() => (
+    member ? getWorkStores(member)[0]?.id ?? "" : ""
+  ));
   const selectedWorkStoreIds = useMemo(() => new Set(selectedWorkStoreIdList), [selectedWorkStoreIdList]);
+  const selectedPayrollStores = useMemo(() => stores.filter((store) => selectedWorkStoreIds.has(store.id)), [selectedWorkStoreIds, stores]);
 
   useEffect(() => {
-    setSelectedWorkStoreIdList(member ? getWorkStores(member).map((store) => store.id) : []);
+    const nextWorkStoreIds = member ? getWorkStores(member).map((store) => store.id) : [];
+    setSelectedWorkStoreIdList(nextWorkStoreIds);
+    setActivePayrollStoreId(nextWorkStoreIds[0] ?? "");
     setSelectedRole(member?.role ?? "staff");
     setForcePasswordChange(member ? Boolean(member.passwordMustChange) : canForcePasswordChange("staff"));
     setForcePrivacyConsentReset(member ? Boolean(member.privacyConsentResetRequired) : false);
@@ -972,6 +978,12 @@ function StaffFormFields({
     setLifecycleCases([]);
     setLifecycleLoading(false);
   }, [member]);
+
+  useEffect(() => {
+    if (isStoreTerminal) return;
+    if (activePayrollStoreId && selectedWorkStoreIds.has(activePayrollStoreId)) return;
+    setActivePayrollStoreId(selectedWorkStoreIdList[0] ?? "");
+  }, [activePayrollStoreId, isStoreTerminal, selectedWorkStoreIdList, selectedWorkStoreIds]);
 
   useEffect(() => {
     if (isStoreTerminal) return;
@@ -990,10 +1002,15 @@ function StaffFormFields({
   }, [activeTab, member?.id, readOnly]);
 
   function toggleWorkStore(storeId: string, checked: boolean) {
-    setSelectedWorkStoreIdList((current) => {
-      if (checked) return current.includes(storeId) ? current : [...current, storeId];
-      return current.filter((id) => id !== storeId);
-    });
+    const next = checked
+      ? selectedWorkStoreIdList.includes(storeId) ? selectedWorkStoreIdList : [...selectedWorkStoreIdList, storeId]
+      : selectedWorkStoreIdList.filter((id) => id !== storeId);
+    setSelectedWorkStoreIdList(next);
+    if (checked) {
+      setActivePayrollStoreId(storeId);
+    } else if (activePayrollStoreId === storeId) {
+      setActivePayrollStoreId(next[0] ?? "");
+    }
   }
 
   function updateSelectedRole(role: string) {
@@ -1561,21 +1578,61 @@ function StaffFormFields({
         <input name="prescribedMonthlyWorkMinutes" type="hidden" value={String(member?.prescribedMonthlyWorkMinutes ?? "")} readOnly />
         <input name="commuteAllowancePerWorkday" type="hidden" value={String(member?.commuteAllowancePerWorkday ?? 0)} readOnly />
         <input name="commuteAllowanceMonthlyCap" type="hidden" value={String(member?.commuteAllowanceMonthlyCap ?? "")} readOnly />
-        <div className="staff-payroll-store-list">
-          {stores.length ? stores.map((store) => {
-            const setting = workStoreById.get(store.id);
-            const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
-            const history = (setting?.payrollHistory ?? []).slice(0, 4);
-            const isWorkStore = selectedWorkStoreIds.has(store.id);
-            return (
-              <article className={isWorkStore ? "staff-payroll-store-row" : "staff-payroll-store-row is-inactive"} key={store.id}>
-                <label className="staff-payroll-store-toggle">
+        <div className="staff-payroll-store-picker">
+          <div className="staff-payroll-store-checklist" aria-label="勤務店舗">
+            {stores.length ? stores.map((store) => {
+              const setting = workStoreById.get(store.id);
+              const isWorkStore = selectedWorkStoreIds.has(store.id);
+              const wageLabel = setting?.employmentType === "monthly"
+                ? `月給 ${formatPayrollAmount(setting.monthlySalary)}`
+                : setting?.hourlyWage
+                  ? `時給 ${formatPayrollAmount(setting.hourlyWage)}`
+                  : "給与未設定";
+              return (
+                <label className={isWorkStore ? "staff-payroll-store-chip is-active" : "staff-payroll-store-chip"} key={store.id}>
                   <input
                     type="checkbox"
                     name="workStoreIds"
                     value={store.id}
                     checked={isWorkStore}
                     onChange={(event) => toggleWorkStore(store.id, event.currentTarget.checked)}
+                  />
+                  <span>
+                    <strong>{store.name}</strong>
+                    <small>{isWorkStore ? wageLabel : "勤務店舗ではありません"}</small>
+                  </span>
+                </label>
+              );
+            }) : <p className="empty-state-text">店舗データがありません。</p>}
+          </div>
+          {selectedPayrollStores.length ? (
+            <label className="staff-payroll-active-store">
+              <span>設定する店舗</span>
+              <select value={activePayrollStoreId} onChange={(event) => setActivePayrollStoreId(event.target.value)}>
+                {selectedPayrollStores.map((store) => (
+                  <option value={store.id} key={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="empty-state-text">勤務店舗を選ぶと、この下で給与設定を入力できます。</p>
+          )}
+        </div>
+        <div className="staff-payroll-store-list">
+          {selectedPayrollStores.length ? selectedPayrollStores.map((store) => {
+            const setting = workStoreById.get(store.id);
+            const defaultEmploymentType = setting?.employmentType ?? member?.employmentType ?? "hourly";
+            const history = (setting?.payrollHistory ?? []).slice(0, 4);
+            const isWorkStore = selectedWorkStoreIds.has(store.id);
+            const isActivePayrollStore = store.id === activePayrollStoreId;
+            return (
+              <article className={isActivePayrollStore ? "staff-payroll-store-row is-selected" : "staff-payroll-store-row is-hidden"} key={store.id}>
+                <label className="staff-payroll-store-toggle">
+                  <input
+                    type="checkbox"
+                    disabled
+                    checked={isWorkStore}
+                    readOnly
                   />
                   <span>
                     <strong>{store.name}</strong>
@@ -1807,7 +1864,7 @@ function StaffFormFields({
                 )}
               </article>
             );
-          }) : <p className="empty-state-text">店舗データがありません。</p>}
+          }) : <p className="empty-state-text">勤務店舗を選ぶと、ここに給与設定が表示されます。</p>}
         </div>
       </section>
       ) : null}
