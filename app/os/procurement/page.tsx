@@ -123,6 +123,7 @@ type ProductLookup = {
 type ProcurementAmountSummary = {
   amount: number;
   isPending: boolean;
+  estimatedPriceCount?: number;
   missingPriceCount?: number;
 };
 type DashboardSyncState = "loading" | "synced" | "refreshing" | "error";
@@ -3074,14 +3075,18 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
 
     const product = findProcurementProductFromLookup(item, productLookup);
     const actualPrice = parseProcurementAmount(item.actualPrice);
-    if (actualPrice <= 0 && !product && !productLookupReady && hasProductLookupKey(item)) {
+    const referencePrice = Number(product?.referencePrice ?? 0);
+    const hasReferencePrice = Number.isFinite(referencePrice) && referencePrice > 0;
+    if (actualPrice <= 0 && !hasReferencePrice && !product && !productLookupReady && hasProductLookupKey(item)) {
       return { ...summary, isPending: true };
     }
 
-    if (actualPrice <= 0) {
+    const unitPrice = actualPrice > 0 ? actualPrice : hasReferencePrice ? referencePrice : 0;
+    if (unitPrice <= 0) {
       return {
         amount: summary.amount,
         isPending: summary.isPending,
+        estimatedPriceCount: summary.estimatedPriceCount,
         missingPriceCount: (summary.missingPriceCount ?? 0) + 1
       };
     }
@@ -3089,8 +3094,9 @@ function calculateProcurementOrderCurrentAmount(items: ProcurementTaskItem[], pr
     const quantity = Number.isFinite(item.actualQuantity) ? item.actualQuantity : 0;
 
     return {
-      amount: summary.amount + Math.max(0, quantity) * actualPrice,
+      amount: summary.amount + Math.max(0, quantity) * unitPrice,
       isPending: summary.isPending,
+      estimatedPriceCount: actualPrice > 0 ? summary.estimatedPriceCount : (summary.estimatedPriceCount ?? 0) + 1,
       missingPriceCount: summary.missingPriceCount
     };
   }, { amount: 0, isPending: false });
@@ -3126,10 +3132,12 @@ function formatEstimatedAmount(amount: number) {
 
 function formatProcurementAmountSummary(summary: ProcurementAmountSummary) {
   if ((summary.missingPriceCount ?? 0) > 0) {
-    if (summary.amount <= 0) return "価格未入力";
-    return `${formatEstimatedAmount(summary.amount)} + 未入力 ${summary.missingPriceCount} 件`;
+    if (summary.amount <= 0) return "参考価格未設定";
+    const amountLabel = (summary.estimatedPriceCount ?? 0) > 0 ? `約 ${formatEstimatedAmount(summary.amount)}` : formatEstimatedAmount(summary.amount);
+    return `${amountLabel} + 参考価格未設定 ${summary.missingPriceCount} 件`;
   }
-  return summary.isPending ? "計算中" : formatEstimatedAmount(summary.amount);
+  if (summary.isPending) return "計算中";
+  return (summary.estimatedPriceCount ?? 0) > 0 ? `約 ${formatEstimatedAmount(summary.amount)}` : formatEstimatedAmount(summary.amount);
 }
 
 function readAdditionalPurchaseDrafts() {
