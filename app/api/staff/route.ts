@@ -302,27 +302,27 @@ export async function GET() {
           'resignationReason', employee_work_stores.resignation_reason,
           'businessType', employee_work_stores.business_type,
           'employeeType', employee_work_stores.employee_type,
-          'payrollEnabled', employee_work_stores.payroll_enabled,
-          'employmentType', employee_work_stores.employment_type,
-          'hourlyWage', employee_work_stores.hourly_wage,
-          'monthlySalary', employee_work_stores.monthly_salary,
-          'prescribedMonthlyWorkMinutes', employee_work_stores.prescribed_monthly_work_minutes,
+          'payrollEnabled', coalesce(current_wage.payroll_enabled, employee_work_stores.payroll_enabled),
+          'employmentType', coalesce(current_wage.employment_type, employee_work_stores.employment_type),
+          'hourlyWage', coalesce(current_wage.hourly_wage, employee_work_stores.hourly_wage),
+          'monthlySalary', coalesce(current_wage.monthly_salary, employee_work_stores.monthly_salary),
+          'prescribedMonthlyWorkMinutes', coalesce(current_wage.prescribed_monthly_work_minutes, employee_work_stores.prescribed_monthly_work_minutes),
           'storePrescribedMonthlyWorkMinutes', stores.prescribed_monthly_work_minutes,
-          'commuteAllowancePerWorkday', employee_work_stores.commute_allowance_per_workday,
-          'commuteAllowanceMonthlyCap', employee_work_stores.commute_allowance_monthly_cap,
-          'applySocialInsurance', employee_work_stores.apply_social_insurance,
-          'socialInsuranceStandardMonthlyAmount', employee_work_stores.social_insurance_standard_monthly_amount,
-          'socialInsuranceDeductionFrom', employee_work_stores.social_insurance_deduction_from,
-          'applyEmploymentInsurance', employee_work_stores.apply_employment_insurance,
-          'employmentInsuranceDeductionFrom', employee_work_stores.employment_insurance_deduction_from,
-          'applyLaborInsurance', employee_work_stores.apply_labor_insurance,
-          'applyIncomeTax', employee_work_stores.apply_income_tax,
-          'incomeTaxCategory', employee_work_stores.income_tax_category,
-          'dependentCount', employee_work_stores.dependent_count,
-          'applyResidentTax', employee_work_stores.apply_resident_tax,
-          'residentTaxYear', employee_work_stores.resident_tax_year,
-          'residentTaxJuneAmount', employee_work_stores.resident_tax_june_amount,
-          'residentTaxMonthlyAmount', employee_work_stores.resident_tax_monthly_amount,
+          'commuteAllowancePerWorkday', coalesce(current_commute.commute_allowance_per_workday, employee_work_stores.commute_allowance_per_workday),
+          'commuteAllowanceMonthlyCap', coalesce(current_commute.commute_allowance_monthly_cap, employee_work_stores.commute_allowance_monthly_cap),
+          'applySocialInsurance', coalesce(current_wage.apply_social_insurance, employee_work_stores.apply_social_insurance),
+          'socialInsuranceStandardMonthlyAmount', coalesce(current_wage.social_insurance_standard_monthly_amount, employee_work_stores.social_insurance_standard_monthly_amount),
+          'socialInsuranceDeductionFrom', coalesce(current_wage.social_insurance_deduction_from, employee_work_stores.social_insurance_deduction_from),
+          'applyEmploymentInsurance', coalesce(current_wage.apply_employment_insurance, employee_work_stores.apply_employment_insurance),
+          'employmentInsuranceDeductionFrom', coalesce(current_wage.employment_insurance_deduction_from, employee_work_stores.employment_insurance_deduction_from),
+          'applyLaborInsurance', coalesce(current_wage.apply_labor_insurance, employee_work_stores.apply_labor_insurance),
+          'applyIncomeTax', coalesce(current_wage.apply_income_tax, employee_work_stores.apply_income_tax),
+          'incomeTaxCategory', coalesce(current_wage.income_tax_category, employee_work_stores.income_tax_category),
+          'dependentCount', coalesce(current_wage.dependent_count, employee_work_stores.dependent_count),
+          'applyResidentTax', coalesce(current_wage.apply_resident_tax, employee_work_stores.apply_resident_tax),
+          'residentTaxYear', coalesce(current_wage.resident_tax_year, employee_work_stores.resident_tax_year),
+          'residentTaxJuneAmount', coalesce(current_wage.resident_tax_june_amount, employee_work_stores.resident_tax_june_amount),
+          'residentTaxMonthlyAmount', coalesce(current_wage.resident_tax_monthly_amount, employee_work_stores.resident_tax_monthly_amount),
           'payrollHistory', coalesce(payroll_history.records, '[]'::json)
         )
         order by stores.name
@@ -330,6 +330,24 @@ export async function GET() {
       from employee_work_stores
       join stores on stores.id = employee_work_stores.store_id
       left join companies on companies.id = stores.company_id
+      left join lateral (
+        select *
+        from employee_work_store_payroll_history
+        where employee_work_store_payroll_history.employee_id = employee_work_stores.employee_id
+          and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
+          and employee_work_store_payroll_history.wage_valid_from <= (now() at time zone 'Asia/Tokyo')::date
+        order by employee_work_store_payroll_history.wage_valid_from desc, employee_work_store_payroll_history.updated_at desc, employee_work_store_payroll_history.created_at desc
+        limit 1
+      ) current_wage on true
+      left join lateral (
+        select commute_allowance_per_workday, commute_allowance_monthly_cap
+        from employee_work_store_payroll_history
+        where employee_work_store_payroll_history.employee_id = employee_work_stores.employee_id
+          and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
+          and employee_work_store_payroll_history.commute_valid_from <= (now() at time zone 'Asia/Tokyo')::date
+        order by employee_work_store_payroll_history.commute_valid_from desc, employee_work_store_payroll_history.updated_at desc, employee_work_store_payroll_history.created_at desc
+        limit 1
+      ) current_commute on true
       left join lateral (
         select json_agg(
           json_build_object(
