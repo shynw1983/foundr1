@@ -796,6 +796,19 @@ function getShiftWorkMinutes(shift: ShiftEntry | undefined) {
   return Math.max(0, end - start - shift.breakMinutes);
 }
 
+function getShiftNightMinutes(shift: ShiftEntry | undefined) {
+  if (!shift?.scheduledStart || !shift.scheduledEnd) return 0;
+  const start = timeToMinutes(shift.scheduledStart);
+  const endBase = timeToMinutes(shift.scheduledEnd);
+  const end = endBase <= start ? endBase + 1440 : endBase;
+  let grossNightMinutes = 0;
+  for (let minute = start; minute < end; minute += 1) {
+    const hour = Math.floor((minute % 1440) / 60);
+    if (hour >= 22 || hour < 5) grossNightMinutes += 1;
+  }
+  return Math.min(grossNightMinutes, getShiftWorkMinutes(shift));
+}
+
 function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]) {
   let hourlyCost = 0;
   let monthlyCost = 0;
@@ -806,7 +819,16 @@ function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string,
       monthlyCost = Math.max(monthlyCost, Math.ceil(setting.monthlySalary ?? 0));
       continue;
     }
-    hourlyCost += Math.ceil((getShiftWorkMinutes(shift) / 60) * (setting.hourlyWage ?? 0));
+    const workMinutes = getShiftWorkMinutes(shift);
+    const overtimeMinutes = Math.max(0, workMinutes - 480);
+    const regularMinutes = workMinutes - overtimeMinutes;
+    const nightMinutes = getShiftNightMinutes(shift);
+    const hourlyWage = setting.hourlyWage ?? 0;
+    hourlyCost += Math.ceil(
+      (regularMinutes / 60) * hourlyWage
+      + (overtimeMinutes / 60) * hourlyWage * 1.25
+      + (nightMinutes / 60) * hourlyWage * 0.25
+    );
   }
   return hourlyCost + monthlyCost;
 }
