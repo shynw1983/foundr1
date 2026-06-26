@@ -18433,8 +18433,8 @@ body :where(
 }
 
 .payroll-confirmation-banner.is-pending {
-  border-color: var(--line);
-  background: #f8fafc;
+  border-color: var(--amber);
+  background: var(--amber-soft);
 }
 
 .payroll-confirmation-banner.is-stale {

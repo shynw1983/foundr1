@@ -1092,6 +1092,7 @@ export function TimecardPage({
   );
   const canConfirmPayrollPeriod = Boolean(payrollPeriod && getTodayJstDateKey() >= payrollPeriod.endDate);
   const canCreatePayrollPaymentFile = Boolean(payrollConfirmation && !payrollConfirmationNeedsRefresh && displayedPayrollRows.length);
+  const displayedPayrollEmployeeCount = displayedPayrollRows.length;
   const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
   const todayKey = getTodayJstDateKey();
   const selectedStoreBusinessHours = useMemo(
@@ -2086,7 +2087,7 @@ export function TimecardPage({
           <>
             <section className={`payroll-confirmation-banner${payrollConfirmationNeedsRefresh ? " is-stale" : payrollConfirmation ? " is-confirmed" : canConfirmPayrollPeriod ? "" : " is-pending"}`}>
               <div>
-                <strong>{payrollConfirmationNeedsRefresh ? "確定後の給与計算に差分があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
+                <strong>{payrollConfirmationNeedsRefresh ? "確定後の給与計算に差分があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : `${displayedPayrollEmployeeCount}名の給与はまだ確定できません`}</strong>
                 <span>
                   {payrollConfirmationNeedsRefresh
                     ? `現在の画面は最新の勤怠・給与設定で再計算した金額です。${payrollRefreshSummary?.detail ?? ""} 振込ファイルを作成する前に再確定してください。`
@@ -2094,7 +2095,7 @@ export function TimecardPage({
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
                     : canConfirmPayrollPeriod
                       ? "シフトと実勤務時間を確認・修正したあと、給与を確定してください。"
-                      : `給与期間が終了する ${payrollPeriod?.displayEndDate ?? "締め日"} の翌日以降に確定できます。`}
+                      : `この画面の金額は現在の勤怠・給与設定で再計算した概算です。給与期間が終了する ${payrollPeriod?.displayEndDate ?? "締め日"} の翌日以降に給与を確定できます。確定するまで振込ファイルは作成できません。`}
                 </span>
               </div>
               {canConfirmPayrollPeriod ? (
