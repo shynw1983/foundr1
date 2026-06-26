@@ -2,7 +2,6 @@ import { put } from "@vercel/blob";
 import { canAccessStore, requireWritableOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
 import { recordExternalServiceUsage } from "../../../../lib/external-service-usage";
-import { analyzeReceiptImage, saveReceiptOcrResult } from "../../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../../lib/upload-security";
 
 const maxReceiptSizeBytes = 4 * 1024 * 1024;
@@ -71,41 +70,8 @@ export async function POST(request: Request) {
         updated_at = now()
       returning id::text
     `;
-    const fulfillmentId = String(fulfillmentRows[0]?.id ?? "");
-    let ocrResultId = "";
-    let ocrError = "";
-    let supplierLocationName = "";
-    try {
-      const analyzed = await analyzeReceiptImage(file as File);
-      ocrResultId = await saveReceiptOcrResult({
-        sourceType: "procurement",
-        sourceId: fulfillmentId,
-        storeId: String(order.storeId),
-        supplierName,
-        receiptPhotoUrl: receiptUrl,
-        usageType: "shiire",
-        paymentType: "company",
-        createProductCandidates: true
-      }, analyzed.result, analyzed.model, session);
-    } catch (error) {
-      ocrError = error instanceof Error ? error.message : "レシート OCR に失敗しました。";
-      ocrResultId = await saveReceiptOcrResult({
-        sourceType: "procurement",
-        sourceId: fulfillmentId,
-        storeId: String(order.storeId),
-        supplierName,
-        receiptPhotoUrl: receiptUrl,
-        usageType: "shiire",
-        paymentType: "company"
-      }, null, process.env.OPENAI_RECEIPT_OCR_MODEL || "", session, ocrError);
-    }
 
-    if (ocrResultId) {
-      const linkedLocation = await linkReceiptLocationToProcurement(ocrResultId, fulfillmentId, String(order.id), supplierName);
-      supplierLocationName = linkedLocation.supplierLocationName;
-    }
-
-    return Response.json({ ok: true, receiptUrl, ocrResultId, ocrError, supplierLocationName });
+    return Response.json({ ok: true, receiptUrl, fulfillmentId: String(fulfillmentRows[0]?.id ?? "") });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "レシート写真を保存できませんでした。" },
@@ -194,53 +160,4 @@ async function uploadReceiptIfNeeded(file: FormDataEntryValue | null, name: stri
   });
 
   return `/api/products/photo/view?pathname=${encodeURIComponent(blob.pathname)}&v=${Date.now()}`;
-}
-
-async function linkReceiptLocationToProcurement(ocrResultId: string, fulfillmentId: string, purchaseOrderId: string, supplierName: string) {
-  const ocrRows = await sql`
-    select
-      receipt_ocr_results.supplier_id::text as "supplierId",
-      receipt_ocr_results.supplier_location_id::text as "supplierLocationId",
-      coalesce(supplier_locations.name, receipt_ocr_results.location_name, '') as "supplierLocationName"
-    from receipt_ocr_results
-    left join supplier_locations on supplier_locations.id = receipt_ocr_results.supplier_location_id
-    where receipt_ocr_results.id::text = ${ocrResultId}
-    limit 1
-  `;
-  const ocr = ocrRows[0];
-  const supplierId = String(ocr?.supplierId ?? "");
-  const supplierLocationId = String(ocr?.supplierLocationId ?? "");
-  const supplierLocationName = String(ocr?.supplierLocationName ?? "").trim();
-
-  if (!supplierLocationId) {
-    return { supplierLocationName: "" };
-  }
-
-  await sql`
-    update purchase_order_supplier_fulfillments
-    set
-      supplier_id = coalesce(${supplierId || null}::uuid, supplier_id),
-      supplier_location_id = ${supplierLocationId}::uuid,
-      updated_at = now()
-    where id::text = ${fulfillmentId}
-  `;
-
-  await sql`
-    update purchase_actuals
-    set supplier_location_id = ${supplierLocationId}::uuid
-    from purchase_order_items
-    left join suppliers selected_suppliers on selected_suppliers.id = purchase_order_items.selected_supplier_id
-    where purchase_actuals.purchase_order_item_id = purchase_order_items.id
-      and purchase_order_items.purchase_order_id::text = ${purchaseOrderId}
-      and purchase_actuals.supplier_location_id is null
-      and (
-        (${supplierId || null}::uuid is not null and coalesce(purchase_actuals.supplier_id, purchase_order_items.selected_supplier_id) = ${supplierId || null}::uuid)
-        or (
-          ${supplierId || null}::uuid is null
-          and coalesce(selected_suppliers.name, '') = ${supplierName}
-        )
-      )
-  `;
-
-  return { supplierLocationName };
 }

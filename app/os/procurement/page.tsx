@@ -724,13 +724,13 @@ async function uploadProcurementReceipt(orderId: string, supplier: string, file:
     method: "POST",
     body: formData
   });
-  const body = await response.json().catch(() => ({})) as { receiptUrl?: string; supplierLocationName?: string; error?: string };
+  const body = await response.json().catch(() => ({})) as { receiptUrl?: string; error?: string };
 
   if (!response.ok || !body.receiptUrl) {
     throw new Error(body.error ?? "レシート写真を保存できませんでした。");
   }
 
-  return { receiptUrl: body.receiptUrl, supplierLocationName: String(body.supplierLocationName ?? "").trim() };
+  return { receiptUrl: body.receiptUrl };
 }
 
 function isPdfReceiptFile(file: File) {
@@ -1324,27 +1324,20 @@ export default function ProcurementPage() {
 
         return uploadProcurementReceipt(orderId, supplier, uploadFile);
       })
-      .then(({ receiptUrl, supplierLocationName }) => {
+      .then(({ receiptUrl }) => {
         setSupplierFulfillments((fulfillments) => {
           const existingIndex = fulfillments.findIndex(
             (fulfillment) => fulfillment.orderId === orderId && fulfillment.supplier === supplier
           );
           const nextFulfillment: SupplierFulfillment = {
             ...(existingIndex >= 0 ? fulfillments[existingIndex] : { orderId, supplier, status: "not_started", expectedArrivalDate: "" }),
-            receiptPhotoUrl: receiptUrl,
-            supplierLocationName: supplierLocationName || (existingIndex >= 0 ? fulfillments[existingIndex].supplierLocationName : "")
+            receiptPhotoUrl: receiptUrl
           };
 
           if (existingIndex < 0) return [...fulfillments, nextFulfillment];
 
           return fulfillments.map((fulfillment, index) => index === existingIndex ? nextFulfillment : fulfillment);
         });
-        if (supplierLocationName) {
-          setSupplierLocationDrafts((drafts) => ({
-            ...drafts,
-            [`${orderId}:${supplier}`]: drafts[`${orderId}:${supplier}`] || supplierLocationName
-          }));
-        }
         showNotice("レシートを保存しました。");
       })
       .catch((error: Error) => {
