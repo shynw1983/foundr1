@@ -860,6 +860,7 @@ export default function ProcurementPage() {
   const [supplierLocationDrafts, setSupplierLocationDrafts] = useState<Record<string, string>>({});
   const [additionalPurchaseDrafts, setAdditionalPurchaseDrafts] = useState<Record<string, AdditionalPurchaseDraft>>(() => readAdditionalPurchaseDrafts());
   const [submittingAdditionalPurchaseOrderId, setSubmittingAdditionalPurchaseOrderId] = useState("");
+  const [creatingDeliveryBatchOrderIds, setCreatingDeliveryBatchOrderIds] = useState<Set<string>>(() => new Set());
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [procurementStaffAvailability, setProcurementStaffAvailability] = useState<ProcurementStaffUnavailableSlot[]>([]);
   const [calendarStaffId, setCalendarStaffId] = useState("");
@@ -1428,15 +1429,20 @@ export default function ProcurementPage() {
   }
 
   function createDeliveryBatch(orderId: string) {
+    if (creatingDeliveryBatchOrderIds.has(orderId)) return;
+
     const readyItems = procurementTaskItems.filter(
       (item) =>
         item.orderId === orderId &&
         item.purchased &&
+        !item.unavailable &&
         item.deliveryStatus === "pending" &&
+        !item.deliveryBatchId &&
         !isDeliveryOrderItem(item, supplierByName)
     );
 
     if (readyItems.length === 0) return;
+    setCreatingDeliveryBatchOrderIds((current) => new Set(current).add(orderId));
 
     const batchId = createDeliveryBatchId(orderId, deliveryBatches.filter((batch) => batch.orderId === orderId).length);
     const batchNo = deliveryBatches.filter((batch) => batch.orderId === orderId).length + 1;
@@ -1478,9 +1484,15 @@ export default function ProcurementPage() {
         itemIds: readyItems.map((item) => item.id)
       })
     })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((savedBatch: DeliveryBatch | null) => {
-        if (!savedBatch) return;
+      .then(async (response) => {
+        const body = await response.json().catch(() => null) as (DeliveryBatch & { error?: string }) | null;
+        if (!response.ok || !body || !body.id) {
+          throw new Error(body?.error ?? "配送状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
+        }
+
+        return body;
+      })
+      .then((savedBatch) => {
         forgetRecentDeliveryBatch(batchId);
         rememberRecentDeliveryBatch({
           ...savedBatch,
@@ -1508,8 +1520,28 @@ export default function ProcurementPage() {
           return nextItems;
         });
       })
-      .catch(() => {
-        window.alert("配送状態を保存できませんでした。画面を再読み込みして最新状態を確認してください。");
+      .catch((error: Error) => {
+        forgetRecentDeliveryBatch(batchId);
+        setDeliveryBatches((batches) => batches.filter((batch) => batch.id !== batchId));
+        setProcurementTaskItems((items) => {
+          const readyItemIds = new Set(readyItems.map((item) => item.id));
+          const nextItems = items.map((item) =>
+            readyItemIds.has(item.id) && item.deliveryBatchId === batchId
+              ? { ...item, deliveryStatus: "pending" as const, deliveryBatchId: undefined }
+              : item
+          );
+          procurementTaskItemsRef.current = nextItems;
+          return nextItems;
+        });
+        void loadDashboardData({ background: true });
+        window.alert(error.message);
+      })
+      .finally(() => {
+        setCreatingDeliveryBatchOrderIds((current) => {
+          const next = new Set(current);
+          next.delete(orderId);
+          return next;
+        });
       });
     showNotice("購入済み分を配送中にしました。");
   }
@@ -1857,7 +1889,8 @@ export default function ProcurementPage() {
               const inDeliveryCount = items.filter((item) => item.deliveryStatus === "in_delivery").length;
               const onlineOrderItems = items.filter((item) => isDeliveryOrderItem(item, supplierByName));
               const storeDeliveryItems = items.filter((item) => !isDeliveryOrderItem(item, supplierByName));
-              const readyToDeliverCount = storeDeliveryItems.filter((item) => item.purchased && !item.unavailable && item.deliveryStatus === "pending").length;
+              const readyToDeliverCount = storeDeliveryItems.filter((item) => item.purchased && !item.unavailable && item.deliveryStatus === "pending" && !item.deliveryBatchId).length;
+              const isCreatingDeliveryBatch = creatingDeliveryBatchOrderIds.has(order.id);
               const onlinePurchasedCount = onlineOrderItems.filter((item) => item.purchased).length;
               const onlineUnavailableCount = onlineOrderItems.filter((item) => item.unavailable).length;
               const onlineDeliveredCount = onlineOrderItems.filter((item) => item.deliveryStatus === "delivered").length;
@@ -2152,6 +2185,7 @@ export default function ProcurementPage() {
                         receivedCount={receivedCount}
                         inDeliveryCount={inDeliveryCount}
                         readyToDeliverCount={readyToDeliverCount}
+                        isCreatingBatch={isCreatingDeliveryBatch}
                         totalCount={items.length}
                         state={deliveryState}
                         onChange={(supplier, next) => updateDeliveryState(order.id, supplier, next)}
@@ -2420,6 +2454,7 @@ function OrderFulfillmentPanel({
   receivedCount,
   inDeliveryCount,
   readyToDeliverCount,
+  isCreatingBatch,
   totalCount,
   state,
   onChange,
@@ -2444,6 +2479,7 @@ function OrderFulfillmentPanel({
   receivedCount: number;
   inDeliveryCount: number;
   readyToDeliverCount: number;
+  isCreatingBatch: boolean;
   totalCount: number;
   state: DeliveryState;
   onChange: (supplier: string, next: Partial<DeliveryState>) => void;
@@ -2504,10 +2540,10 @@ function OrderFulfillmentPanel({
           <button
             type="button"
             className="secondary-button"
-            disabled={readyToDeliverCount === 0}
+            disabled={readyToDeliverCount === 0 || isCreatingBatch}
             onClick={onCreateBatch}
           >
-            購入済み分を配送
+            {isCreatingBatch ? "配送を作成中" : "購入済み分を配送"}
           </button>
         ) : null}
       </div>

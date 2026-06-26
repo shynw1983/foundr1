@@ -44,6 +44,26 @@ export async function POST(request: Request) {
     return Response.json({ error: "この依頼に含まれない項目があります。" }, { status: 400 });
   }
 
+  const eligibleItemRows = await sql`
+    select purchase_order_items.id::text as id
+    from purchase_order_items
+    where purchase_order_items.purchase_order_id = ${purchaseOrderId}
+      and purchase_order_items.id::text = any(${uniqueItemIds})
+      and purchase_order_items.status = 'purchased'
+      and not exists (
+        select 1
+        from delivery_batch_items
+        where delivery_batch_items.purchase_order_item_id = purchase_order_items.id
+      )
+  `;
+  const eligibleItemIds = eligibleItemRows.map((row) => String(row.id));
+
+  if (eligibleItemIds.length !== uniqueItemIds.length) {
+    return Response.json({
+      error: "配送待ちの商品だけ配送開始できます。最新状態に更新してください。"
+    }, { status: 409 });
+  }
+
   const batchRows = await sql`
     insert into delivery_batches (
       purchase_order_id,
@@ -69,30 +89,49 @@ export async function POST(request: Request) {
   `;
   const batch = batchRows[0];
 
-  for (const itemId of uniqueItemIds) {
-    await sql`
-      insert into delivery_batch_items (
-        delivery_batch_id,
-        purchase_order_item_id
+  const insertedItemRows = await sql`
+    insert into delivery_batch_items (
+      delivery_batch_id,
+      purchase_order_item_id
+    )
+    select ${batch.id}, purchase_order_items.id
+    from purchase_order_items
+    where purchase_order_items.purchase_order_id = ${purchaseOrderId}
+      and purchase_order_items.id::text = any(${eligibleItemIds})
+      and purchase_order_items.status = 'purchased'
+      and not exists (
+        select 1
+        from delivery_batch_items
+        where delivery_batch_items.purchase_order_item_id = purchase_order_items.id
       )
-      values (${batch.id}, ${itemId})
-      on conflict (purchase_order_item_id)
-      do update set delivery_batch_id = excluded.delivery_batch_id
+    on conflict (purchase_order_item_id) do nothing
+    returning purchase_order_item_id::text as id
+  `;
+  const insertedItemIds = insertedItemRows.map((row) => String(row.id));
+
+  if (insertedItemIds.length !== uniqueItemIds.length) {
+    await sql`
+      delete from delivery_batches
+      where id = ${batch.id}
     `;
+
+    return Response.json({
+      error: "配送状態が更新されています。最新状態に更新してください。"
+    }, { status: 409 });
   }
 
-  for (const itemId of uniqueItemIds) {
-    await sql`
-      update purchase_order_items
-      set status = 'in_delivery'
-      where id = ${itemId}
-    `;
-  }
+  await sql`
+    update purchase_order_items
+    set status = 'in_delivery'
+    where purchase_order_id = ${purchaseOrderId}
+      and id::text = any(${insertedItemIds})
+      and status = 'purchased'
+  `;
 
   return Response.json({
     id: batch.id,
     orderId: body.orderId,
-    itemIds: uniqueItemIds,
+    itemIds: insertedItemIds,
     batchNo: batch.batchNo,
     status: batch.status,
     createdLabel: batch.createdLabel,

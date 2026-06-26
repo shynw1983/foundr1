@@ -23509,6 +23509,7 @@ body :where(
 }
 
 .fulfillment-actions button:disabled,
+.fulfillment-summary > button:disabled,
 .fulfillment-actions input:disabled {
   cursor: not-allowed;
   opacity: 0.45;
