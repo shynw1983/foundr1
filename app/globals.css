@@ -18107,8 +18107,8 @@ body :where(
   position: sticky;
   right: 0;
   z-index: 3;
-  min-width: 118px;
-  width: 118px;
+  min-width: 132px;
+  width: 132px;
   border-left: 2px solid var(--line);
   background: #f8fbff;
   color: var(--ink);
@@ -18122,9 +18122,24 @@ body :where(
 }
 
 .shift-grid .shift-cost-cell {
+  align-content: center;
   color: var(--green);
+  display: grid;
   font-size: 12px;
+  gap: 3px;
+  line-height: 1.25;
   white-space: nowrap;
+}
+
+.shift-grid .shift-cost-cell strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shift-grid .shift-cost-cell small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .shift-cell {
@@ -29216,8 +29231,8 @@ body :where(
   .shift-grid .shift-cost-head,
   .shift-grid .shift-cost-cell {
     position: static;
-    min-width: 92px;
-    width: 92px;
+    min-width: 104px;
+    width: 104px;
     border-left: 0;
   }
 

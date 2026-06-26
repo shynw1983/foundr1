@@ -788,6 +788,13 @@ function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, stor
   return settings[0] ?? employee?.storePayrollSettings?.find((setting) => setting.storeId === storeId);
 }
 
+function getEffectiveCommuteSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
+  const settings = (employee?.storePayrollSettings ?? [])
+    .filter((setting) => setting.storeId === storeId && setting.commuteValidFrom <= workDate)
+    .sort((a, b) => b.commuteValidFrom.localeCompare(a.commuteValidFrom));
+  return settings[0] ?? employee?.storePayrollSettings?.find((setting) => setting.storeId === storeId);
+}
+
 function getShiftWorkMinutes(shift: ShiftEntry | undefined) {
   if (!shift?.scheduledStart || !shift.scheduledEnd) return 0;
   const start = timeToMinutes(shift.scheduledStart);
@@ -809,8 +816,13 @@ function getShiftNightMinutes(shift: ShiftEntry | undefined) {
   return Math.min(grossNightMinutes, getShiftWorkMinutes(shift));
 }
 
+type ScheduledCostEstimate = {
+  payrollCost: number;
+  commuteAllowance: number;
+};
+
 function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]) {
-  let hourlyCost = 0;
+  let payrollCost = 0;
   let monthlyCost = 0;
   for (const shift of shifts) {
     const setting = getEffectivePayrollSetting(employee, storeId, shift.workDate);
@@ -824,13 +836,37 @@ function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string,
     const regularMinutes = workMinutes - overtimeMinutes;
     const nightMinutes = getShiftNightMinutes(shift);
     const hourlyWage = setting.hourlyWage ?? 0;
-    hourlyCost += Math.ceil(
+    payrollCost += Math.ceil(
       (regularMinutes / 60) * hourlyWage
       + (overtimeMinutes / 60) * hourlyWage * 1.25
       + (nightMinutes / 60) * hourlyWage * 0.25
     );
   }
-  return hourlyCost + monthlyCost;
+  return payrollCost + monthlyCost;
+}
+
+function estimateScheduledCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]): ScheduledCostEstimate {
+  const payrollCost = estimateScheduledLaborCost(employee, storeId, shifts);
+  let commuteAllowance = 0;
+  const commuteWorkDatesBySetting = new Map<TimecardStorePayrollSetting, Set<string>>();
+
+  for (const shift of shifts) {
+    if (getShiftWorkMinutes(shift) <= 0) continue;
+    const setting = getEffectiveCommuteSetting(employee, storeId, shift.workDate);
+    if (!setting?.payrollEnabled || setting.commuteAllowancePerWorkday <= 0) continue;
+    const workDates = commuteWorkDatesBySetting.get(setting) ?? new Set<string>();
+    workDates.add(shift.workDate);
+    commuteWorkDatesBySetting.set(setting, workDates);
+  }
+
+  for (const [setting, workDates] of commuteWorkDatesBySetting.entries()) {
+    const uncappedAllowance = Math.ceil(workDates.size * setting.commuteAllowancePerWorkday);
+    commuteAllowance += setting.commuteAllowanceMonthlyCap === null
+      ? uncappedAllowance
+      : Math.min(uncappedAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
+  }
+
+  return { payrollCost, commuteAllowance };
 }
 
 function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shifts: ShiftEntry[]) {
@@ -1079,17 +1115,20 @@ export function TimecardPage({
     }
     return map;
   }, [data?.shifts]);
-  const scheduledLaborCostByEmployee = useMemo(() => {
-    const map = new Map<string, number>();
+  const scheduledCostByEmployee = useMemo(() => {
+    const map = new Map<string, ScheduledCostEstimate>();
     const employeesById = new Map((data?.employees ?? []).map((employee) => [employee.id, employee]));
     for (const employee of scheduleEmployees) {
       const employeeShifts = (data?.shifts ?? []).filter((shift) => shift.employeeId === employee.id && shift.storeId === selectedStoreId);
-      map.set(employee.id, estimateScheduledLaborCost(employeesById.get(employee.id) ?? employee, selectedStoreId, employeeShifts));
+      map.set(employee.id, estimateScheduledCost(employeesById.get(employee.id) ?? employee, selectedStoreId, employeeShifts));
     }
     return map;
   }, [data?.employees, data?.shifts, scheduleEmployees, selectedStoreId]);
   const actualLaborCostByEmployee = useMemo(() => {
-    return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, row.basePay]));
+    return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, {
+      payrollCost: row.basePay,
+      commuteAllowance: row.commuteAllowance
+    } satisfies ScheduledCostEstimate]));
   }, [data?.payrollRows]);
   const actualByCell = useMemo(() => {
     const map = new Map<string, DailySummary>();
@@ -1633,7 +1672,7 @@ export function TimecardPage({
               <MetricCard label="勤務時間" value={formatDuration(canViewPayroll ? totals.workMinutes : attendanceTotals.workMinutes)} note={`時間外 ${formatDuration(canViewPayroll ? totals.overtimeMinutes ?? 0 : 0)} / 深夜 ${formatDuration(canViewPayroll ? totals.nightMinutes : attendanceTotals.nightMinutes)}`} />
               {canViewPayroll ? (
                 <>
-              <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost)} note={`交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
+              <MetricCard label="人件費" value={formatMoney(displayedPayrollTotals.laborCost + displayedPayrollTotals.commuteAllowance)} note={`給与 ${formatMoney(displayedPayrollTotals.laborCost)} / 交通費 ${formatMoney(displayedPayrollTotals.commuteAllowance)}`} />
               <MetricCard label="差引支給額" value={formatMoney(displayedPayrollTotals.totalPay)} note={`控除 ${formatMoney((displayedPayrollTotals.socialInsurance ?? 0) + (displayedPayrollTotals.employmentInsurance ?? 0) + (displayedPayrollTotals.incomeTax ?? 0) + (displayedPayrollTotals.residentTax ?? 0))}${payrollConfirmation ? " / 確定済み" : ""}`} />
             </>
           ) : null}
@@ -1873,11 +1912,13 @@ export function TimecardPage({
                             </th>
                           );
                         })}
-                        <th className="shift-cost-head">概算人件費</th>
+                        <th className="shift-cost-head">概算給与</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => (
+                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => {
+                        const scheduledCost = scheduledCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0 };
+                        return (
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
@@ -1908,9 +1949,13 @@ export function TimecardPage({
                               </td>
                             );
                           })}
-                          <td className="shift-cost-cell">{formatMoney(scheduledLaborCostByEmployee.get(employee.id) ?? 0)}</td>
+                          <td className="shift-cost-cell">
+                            <strong>{formatMoney(scheduledCost.payrollCost)}</strong>
+                            {scheduledCost.commuteAllowance > 0 ? <small>交通費 {formatMoney(scheduledCost.commuteAllowance)}</small> : null}
+                          </td>
                         </tr>
-                      )) : (
+                        );
+                      }) : (
                         <tr>
                           <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
@@ -1970,11 +2015,13 @@ export function TimecardPage({
                             ) : null}
                           </th>
                         ))}
-                        <th className="shift-cost-head">概算人件費</th>
+                        <th className="shift-cost-head">給与</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => (
+                      {scheduleEmployees.length ? scheduleEmployees.map((employee) => {
+                        const actualCost = actualLaborCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0 };
+                        return (
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
@@ -2018,9 +2065,13 @@ export function TimecardPage({
                               </td>
                             );
                           })}
-                          <td className="shift-cost-cell">{formatMoney(actualLaborCostByEmployee.get(employee.id) ?? 0)}</td>
+                          <td className="shift-cost-cell">
+                            <strong>{formatMoney(actualCost.payrollCost)}</strong>
+                            {actualCost.commuteAllowance > 0 ? <small>交通費 {formatMoney(actualCost.commuteAllowance)}</small> : null}
+                          </td>
                         </tr>
-                      )) : (
+                        );
+                      }) : (
                         <tr>
                           <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
