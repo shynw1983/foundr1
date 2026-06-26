@@ -204,6 +204,17 @@ type ActualStatus = {
   label: string;
 };
 
+type PayrollRefreshIssue = {
+  employeeName: string;
+  reasons: string[];
+  totalPayDelta: number;
+};
+
+type PayrollRefreshSummary = {
+  issues: PayrollRefreshIssue[];
+  detail: string;
+};
+
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
   { label: "発注依頼", href: "/os/orders", icon: PackageCheck },
@@ -228,6 +239,12 @@ function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
 }
 
+function formatSignedMoney(amount: number) {
+  const rounded = Math.round(amount);
+  if (rounded === 0) return formatMoney(0);
+  return `${rounded > 0 ? "+" : "-"}${formatMoney(Math.abs(rounded))}`;
+}
+
 function formatPayrollDetailMoney(amount: number) {
   const hasFraction = Math.abs(amount - Math.round(amount)) > 0.001;
   return new Intl.NumberFormat("ja-JP", {
@@ -247,6 +264,94 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function addUniqueReason(reasons: string[], reason: string) {
+  if (!reasons.includes(reason)) reasons.push(reason);
+}
+
+function roundedPayrollValue(row: PayrollRow, key: keyof PayrollRow) {
+  const value = row[key];
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+function summarizePayrollRefresh(confirmation: PayrollConfirmation | null, currentRows: PayrollRow[] | undefined): PayrollRefreshSummary | null {
+  if (!confirmation || !currentRows) return null;
+
+  const confirmedRows = confirmation.payrollRows ?? [];
+  const currentByEmployee = new Map(currentRows.map((row) => [row.employeeId, row]));
+  const confirmedByEmployee = new Map(confirmedRows.map((row) => [row.employeeId, row]));
+  const issues: PayrollRefreshIssue[] = [];
+
+  for (const confirmedRow of confirmedRows) {
+    const currentRow = currentByEmployee.get(confirmedRow.employeeId);
+    if (!currentRow) {
+      issues.push({
+        employeeName: confirmedRow.employeeName,
+        reasons: ["対象者または勤怠行がなくなりました"],
+        totalPayDelta: -roundedPayrollValue(confirmedRow, "totalPay")
+      });
+      continue;
+    }
+
+    const reasons: string[] = [];
+    if (
+      roundedPayrollValue(currentRow, "workDays") !== roundedPayrollValue(confirmedRow, "workDays")
+      || roundedPayrollValue(currentRow, "workMinutes") !== roundedPayrollValue(confirmedRow, "workMinutes")
+      || roundedPayrollValue(currentRow, "nightMinutes") !== roundedPayrollValue(confirmedRow, "nightMinutes")
+      || roundedPayrollValue(currentRow, "overtimeMinutes") !== roundedPayrollValue(confirmedRow, "overtimeMinutes")
+    ) {
+      addUniqueReason(reasons, "勤怠時間");
+    }
+    if (roundedPayrollValue(currentRow, "basePay") !== roundedPayrollValue(confirmedRow, "basePay")) {
+      addUniqueReason(reasons, "給与");
+    }
+    if (roundedPayrollValue(currentRow, "commuteAllowance") !== roundedPayrollValue(confirmedRow, "commuteAllowance")) {
+      addUniqueReason(reasons, "交通費");
+    }
+    if (
+      roundedPayrollValue(currentRow, "socialInsurance") !== roundedPayrollValue(confirmedRow, "socialInsurance")
+      || roundedPayrollValue(currentRow, "employmentInsurance") !== roundedPayrollValue(confirmedRow, "employmentInsurance")
+      || roundedPayrollValue(currentRow, "incomeTax") !== roundedPayrollValue(confirmedRow, "incomeTax")
+      || roundedPayrollValue(currentRow, "residentTax") !== roundedPayrollValue(confirmedRow, "residentTax")
+    ) {
+      addUniqueReason(reasons, "控除");
+    }
+    if ((currentRow.alerts ?? []).join("|") !== (confirmedRow.alerts ?? []).join("|")) {
+      addUniqueReason(reasons, "確認アラート");
+    }
+    const totalPayDelta = roundedPayrollValue(currentRow, "totalPay") - roundedPayrollValue(confirmedRow, "totalPay");
+    if (reasons.length || totalPayDelta !== 0) {
+      if (!reasons.length) addUniqueReason(reasons, "差引支給額");
+      issues.push({
+        employeeName: currentRow.employeeName || confirmedRow.employeeName,
+        reasons,
+        totalPayDelta
+      });
+    }
+  }
+
+  for (const currentRow of currentRows) {
+    if (confirmedByEmployee.has(currentRow.employeeId)) continue;
+    issues.push({
+      employeeName: currentRow.employeeName,
+      reasons: ["対象者または勤怠行が追加されました"],
+      totalPayDelta: roundedPayrollValue(currentRow, "totalPay")
+    });
+  }
+
+  if (!issues.length) return null;
+
+  const sortedIssues = [...issues].sort((a, b) => Math.abs(b.totalPayDelta) - Math.abs(a.totalPayDelta));
+  const visibleIssues = sortedIssues.slice(0, 3);
+  const hiddenCount = sortedIssues.length - visibleIssues.length;
+  const detail = [
+    `${issues.length}名に差分があります。`,
+    visibleIssues.map((issue) => `${issue.employeeName}: ${issue.reasons.join("・")}（差引 ${formatSignedMoney(issue.totalPayDelta)}）`).join(" / "),
+    hiddenCount > 0 ? `ほか${hiddenCount}名` : ""
+  ].filter(Boolean).join(" ");
+
+  return { issues: sortedIssues, detail };
 }
 
 function escapeHtml(value: unknown) {
@@ -520,18 +625,22 @@ function getPayrollPeriod(month: string, store: StoreOption | null) {
   if (cycleType === "specified_day") {
     const startValue = new Date(Date.UTC(year, monthIndex - 1, closingDay + 1));
     const endValue = new Date(Date.UTC(year, monthIndex, closingDay + 1));
+    const displayEndValue = new Date(endValue.getTime() - 86_400_000);
     return {
       startDate: formatDateKey(startValue),
       endDate: formatDateKey(endValue),
+      displayEndDate: formatDateKey(displayEndValue),
       label: `前月${closingDay + 1}日〜当月${closingDay}日`
     };
   }
 
   const startDate = `${match[1]}-${match[2]}-01`;
   const endValue = new Date(Date.UTC(year, monthIndex + 1, 1));
+  const displayEndValue = new Date(endValue.getTime() - 86_400_000);
   return {
     startDate,
     endDate: formatDateKey(endValue),
+    displayEndDate: formatDateKey(displayEndValue),
     label: "1日〜月末"
   };
 }
@@ -899,20 +1008,11 @@ export function TimecardPage({
     [canViewPayroll]
   );
   const payrollConfirmation = data?.payrollConfirmation ?? null;
-  const payrollConfirmationNeedsRefresh = useMemo(() => {
-    if (!payrollConfirmation || !data?.payrollRows) return false;
-    const confirmedRows = payrollConfirmation.payrollRows ?? [];
-    const currentRows = data.payrollRows ?? [];
-    if (confirmedRows.length !== currentRows.length) return true;
-    const currentByEmployee = new Map(currentRows.map((row) => [row.employeeId, row]));
-    return confirmedRows.some((confirmedRow) => {
-      const currentRow = currentByEmployee.get(confirmedRow.employeeId);
-      if (!currentRow) return true;
-      return Math.round(currentRow.basePay) !== Math.round(confirmedRow.basePay)
-        || Math.round(currentRow.totalPay) !== Math.round(confirmedRow.totalPay)
-        || (currentRow.alerts ?? []).join("|") !== (confirmedRow.alerts ?? []).join("|");
-    });
-  }, [data?.payrollRows, payrollConfirmation]);
+  const payrollRefreshSummary = useMemo(
+    () => summarizePayrollRefresh(payrollConfirmation, data?.payrollRows),
+    [data?.payrollRows, payrollConfirmation]
+  );
+  const payrollConfirmationNeedsRefresh = Boolean(payrollRefreshSummary);
   const displayedPayrollRows = payrollConfirmation && !payrollConfirmationNeedsRefresh
     ? payrollConfirmation.payrollRows
     : data?.payrollRows ?? [];
@@ -1242,7 +1342,7 @@ export function TimecardPage({
   function openPayrollStatementPdf(row: PayrollRow) {
     const statementDays = data?.dailySummaries.filter((day) => day.employeeId === row.employeeId) ?? [];
     const periodLabel = payrollPeriod
-      ? `${payrollPeriod.startDate} - ${payrollPeriod.endDate}`
+      ? `${payrollPeriod.startDate} - ${payrollPeriod.displayEndDate}`
       : month;
     const printWindow = window.open("", "_blank", "width=920,height=1200");
     if (!printWindow) {
@@ -1913,15 +2013,15 @@ export function TimecardPage({
           <>
             <section className={`payroll-confirmation-banner${payrollConfirmationNeedsRefresh ? " is-stale" : payrollConfirmation ? " is-confirmed" : canConfirmPayrollPeriod ? "" : " is-pending"}`}>
               <div>
-                <strong>{payrollConfirmationNeedsRefresh ? "従業員設定の変更があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
+                <strong>{payrollConfirmationNeedsRefresh ? "確定後の給与計算に差分があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : "この月はまだ締め日前です"}</strong>
                 <span>
                   {payrollConfirmationNeedsRefresh
-                    ? "現在表示している金額は確定時点の保存結果です。最新の従業員設定で反映するには再確定してください。"
+                    ? `現在の画面は最新の勤怠・給与設定で再計算した金額です。${payrollRefreshSummary?.detail ?? ""} 振込ファイルを作成する前に再確定してください。`
                     : payrollConfirmation
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
                     : canConfirmPayrollPeriod
                       ? "シフトと実勤務時間を確認・修正したあと、給与を確定してください。"
-                      : `給与期間が終了する ${payrollPeriod?.endDate ?? "締め日"} 以降に確定できます。`}
+                      : `給与期間が終了する ${payrollPeriod?.displayEndDate ?? "締め日"} の翌日以降に確定できます。`}
                 </span>
               </div>
               {canConfirmPayrollPeriod ? (
