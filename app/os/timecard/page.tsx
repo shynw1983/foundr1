@@ -1239,6 +1239,9 @@ export function TimecardPage({
   const selectedActualEmployee = actualDraft
     ? scheduleEmployees.find((employee) => employee.id === actualDraft.employeeId) ?? null
     : null;
+  const selectedActualShift = actualDraft
+    ? shiftByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
+    : null;
 
   useEffect(() => {
     if (selectedPayrollRow && selectedPayrollRow.employeeId !== selectedPayrollEmployeeId) {
@@ -1481,8 +1484,8 @@ export function TimecardPage({
     }, 400);
   }
 
-  async function saveActualTime() {
-    if (!actualDraft || !selectedStoreId) return;
+  async function saveActualTime(nextDraft = actualDraft) {
+    if (!nextDraft || !selectedStoreId) return;
     setIsSavingShift(true);
     clearShiftMessage();
     const response = await fetch("/api/timecard", {
@@ -1491,11 +1494,11 @@ export function TimecardPage({
       body: JSON.stringify({
         action: "save_actual_time",
         storeId: selectedStoreId,
-        employeeId: actualDraft.employeeId,
-        workDate: actualDraft.workDate,
-        clockIn: actualDraft.clockIn,
-        clockOut: actualDraft.clockOut,
-        note: actualDraft.note
+        employeeId: nextDraft.employeeId,
+        workDate: nextDraft.workDate,
+        clockIn: nextDraft.clockIn,
+        clockOut: nextDraft.clockOut,
+        note: nextDraft.note
       })
     });
     if (response.ok) {
@@ -1506,6 +1509,18 @@ export function TimecardPage({
       showShiftMessage(String(body.error ?? "実勤務時間を保存できませんでした。"), 4200);
     }
     setIsSavingShift(false);
+  }
+
+  function applyScheduledShiftToActual() {
+    if (!actualDraft || !selectedActualShift?.scheduledStart || !selectedActualShift.scheduledEnd) return;
+    const nextDraft = {
+      ...actualDraft,
+      clockIn: selectedActualShift.scheduledStart,
+      clockOut: selectedActualShift.scheduledEnd,
+      note: actualDraft.note || "計画シフトから反映"
+    };
+    setActualDraft(nextDraft);
+    void saveActualTime(nextDraft);
   }
 
   async function deleteActualTime() {
@@ -2077,6 +2092,14 @@ export function TimecardPage({
                       <span>メモ</span>
                       <input value={actualDraft.note} onChange={(event) => setActualDraft({ ...actualDraft, note: event.target.value })} placeholder="修正理由など" />
                     </label>
+                    {selectedActualShift?.scheduledStart && selectedActualShift.scheduledEnd ? (
+                      <div className="shift-patterns actual-shift-shortcuts" aria-label="実勤務時間のクイック操作">
+                        <button type="button" disabled={isSavingShift} onClick={applyScheduledShiftToActual}>
+                          計画シフトを打刻に反映
+                        </button>
+                        <span>予定 {selectedActualShift.scheduledStart}-{selectedActualShift.scheduledEnd}</span>
+                      </div>
+                    ) : null}
                     <div className="shift-editor-actions">
                       <button className="secondary-button" type="button" onClick={() => setActualDraft(null)}>閉じる</button>
                       <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteActualTime()}>削除</button>
