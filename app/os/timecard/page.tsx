@@ -34,6 +34,7 @@ type TimecardStorePayrollSetting = {
   employmentType: "hourly" | "monthly";
   hourlyWage: number | null;
   monthlySalary: number | null;
+  prescribedMonthlyWorkMinutes?: number | null;
   commuteAllowancePerWorkday: number;
   commuteAllowanceMonthlyCap: number | null;
   validFrom: string;
@@ -847,26 +848,43 @@ type ScheduledCostEstimate = {
   overtimeMinutes: number;
 };
 
+const scheduledDailyLegalWorkMinutes = 8 * 60;
+const scheduledOvertimePremiumRate = 1.25;
+const scheduledNightPremiumRate = 0.25;
+
+function getScheduledPayrollHourlyBase(setting: TimecardStorePayrollSetting) {
+  if (setting.employmentType === "monthly") {
+    const prescribedMinutes = Number(setting.prescribedMonthlyWorkMinutes ?? 0);
+    if (!Number.isFinite(prescribedMinutes) || prescribedMinutes <= 0) return 0;
+    return (setting.monthlySalary ?? 0) / (prescribedMinutes / 60);
+  }
+  return setting.hourlyWage ?? 0;
+}
+
 function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]) {
   let payrollCost = 0;
   let monthlyCost = 0;
   for (const shift of shifts) {
     const setting = getEffectivePayrollSetting(employee, storeId, shift.workDate);
     if (!setting?.payrollEnabled) continue;
-    if (setting.employmentType === "monthly") {
-      monthlyCost = Math.max(monthlyCost, Math.ceil(setting.monthlySalary ?? 0));
-      continue;
-    }
     const workMinutes = getShiftWorkMinutes(shift);
-    const overtimeMinutes = Math.max(0, workMinutes - 480);
+    const overtimeMinutes = Math.max(0, workMinutes - scheduledDailyLegalWorkMinutes);
     const regularMinutes = workMinutes - overtimeMinutes;
     const nightMinutes = getShiftNightMinutes(shift);
-    const hourlyWage = setting.hourlyWage ?? 0;
-    payrollCost += Math.ceil(
-      (regularMinutes / 60) * hourlyWage
-      + (overtimeMinutes / 60) * hourlyWage * 1.25
-      + (nightMinutes / 60) * hourlyWage * 0.25
-    );
+    const hourlyBase = getScheduledPayrollHourlyBase(setting);
+    if (setting.employmentType === "monthly") {
+      monthlyCost = Math.max(monthlyCost, Math.ceil(setting.monthlySalary ?? 0));
+      payrollCost += Math.ceil(
+        (overtimeMinutes / 60) * hourlyBase * scheduledOvertimePremiumRate
+        + (nightMinutes / 60) * hourlyBase * scheduledNightPremiumRate
+      );
+    } else {
+      payrollCost += Math.ceil(
+        (regularMinutes / 60) * hourlyBase
+        + (overtimeMinutes / 60) * hourlyBase * scheduledOvertimePremiumRate
+        + (nightMinutes / 60) * hourlyBase * scheduledNightPremiumRate
+      );
+    }
   }
   return payrollCost + monthlyCost;
 }
@@ -884,7 +902,7 @@ function estimateScheduledCost(employee: TimecardEmployee, storeId: string, shif
     if (shiftWorkMinutes <= 0) continue;
     workMinutes += shiftWorkMinutes;
     nightMinutes += getShiftNightMinutes(shift);
-    overtimeMinutes += Math.max(0, shiftWorkMinutes - 480);
+    overtimeMinutes += Math.max(0, shiftWorkMinutes - scheduledDailyLegalWorkMinutes);
     const setting = getEffectiveCommuteSetting(employee, storeId, shift.workDate);
     if (!setting?.payrollEnabled || setting.commuteAllowancePerWorkday <= 0) continue;
     const workDates = commuteWorkDatesBySetting.get(setting) ?? new Set<string>();
