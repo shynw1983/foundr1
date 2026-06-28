@@ -254,6 +254,14 @@ function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
 }
 
+function formatCompactDuration(minutes: number) {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+  if (hours === 0) return remainingMinutes === 0 ? "0h" : `${remainingMinutes}m`;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h${remainingMinutes}`;
+}
+
 function formatSignedMoney(amount: number) {
   const rounded = Math.round(amount);
   if (rounded === 0) return formatMoney(0);
@@ -1949,8 +1957,7 @@ export function TimecardPage({
                             </th>
                           );
                         })}
-                        <th className="shift-hours-head">勤務時間</th>
-                        <th className="shift-cost-head">概算給与</th>
+                        <th className="shift-cost-head">月計</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1987,43 +1994,35 @@ export function TimecardPage({
                               </td>
                             );
                           })}
-                          <td className="shift-hours-cell">
-                            <strong>{formatDuration(scheduledCost.workMinutes)}</strong>
-                            {scheduledCost.nightMinutes > 0 || scheduledCost.overtimeMinutes > 0 ? (
-                              <small>
-                                {scheduledCost.nightMinutes > 0 ? `深夜 ${formatDuration(scheduledCost.nightMinutes)}` : null}
-                                {scheduledCost.nightMinutes > 0 && scheduledCost.overtimeMinutes > 0 ? " / " : null}
-                                {scheduledCost.overtimeMinutes > 0 ? `時間外 ${formatDuration(scheduledCost.overtimeMinutes)}` : null}
-                              </small>
-                            ) : null}
-                          </td>
-                          <td className="shift-cost-cell">
+                          <td className="shift-cost-cell" title={`勤務時間 ${formatDuration(scheduledCost.workMinutes)}${scheduledCost.nightMinutes > 0 ? ` / 深夜 ${formatDuration(scheduledCost.nightMinutes)}` : ""}${scheduledCost.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(scheduledCost.overtimeMinutes)}` : ""}`}>
                             <strong>{formatMoney(scheduledCost.payrollCost)}</strong>
+                            <small>
+                              {formatCompactDuration(scheduledCost.workMinutes)}
+                              {scheduledCost.nightMinutes > 0 ? ` / 深${formatCompactDuration(scheduledCost.nightMinutes)}` : null}
+                              {scheduledCost.overtimeMinutes > 0 ? ` / 外${formatCompactDuration(scheduledCost.overtimeMinutes)}` : null}
+                            </small>
                             {scheduledCost.commuteAllowance > 0 ? <small>交通費 {formatMoney(scheduledCost.commuteAllowance)}</small> : null}
                           </td>
                         </tr>
                         );
                       }) : (
                         <tr>
-                          <td colSpan={monthDays.length + 3}>この店舗で勤務する従業員がまだ設定されていません。</td>
+                          <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
                       {scheduleEmployees.length ? (
                         <tr className="shift-total-row">
                           <th className="shift-employee-cell">合計</th>
-                          <td colSpan={monthDays.length} />
-                          <td className="shift-hours-cell">
-                            <strong>{formatDuration(scheduledCostTotals.workMinutes)}</strong>
-                            {scheduledCostTotals.nightMinutes > 0 || scheduledCostTotals.overtimeMinutes > 0 ? (
-                              <small>
-                                {scheduledCostTotals.nightMinutes > 0 ? `深夜 ${formatDuration(scheduledCostTotals.nightMinutes)}` : null}
-                                {scheduledCostTotals.nightMinutes > 0 && scheduledCostTotals.overtimeMinutes > 0 ? " / " : null}
-                                {scheduledCostTotals.overtimeMinutes > 0 ? `時間外 ${formatDuration(scheduledCostTotals.overtimeMinutes)}` : null}
-                              </small>
-                            ) : null}
-                          </td>
-                          <td className="shift-cost-cell">
+                          {monthDays.map((day) => (
+                            <td className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`.trim()} key={`total-${day.key}`} aria-hidden="true" />
+                          ))}
+                          <td className="shift-cost-cell" title={`勤務時間 ${formatDuration(scheduledCostTotals.workMinutes)}${scheduledCostTotals.nightMinutes > 0 ? ` / 深夜 ${formatDuration(scheduledCostTotals.nightMinutes)}` : ""}${scheduledCostTotals.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(scheduledCostTotals.overtimeMinutes)}` : ""}`}>
                             <strong>{formatMoney(scheduledCostTotals.payrollCost)}</strong>
+                            <small>
+                              {formatCompactDuration(scheduledCostTotals.workMinutes)}
+                              {scheduledCostTotals.nightMinutes > 0 ? ` / 深${formatCompactDuration(scheduledCostTotals.nightMinutes)}` : null}
+                              {scheduledCostTotals.overtimeMinutes > 0 ? ` / 外${formatCompactDuration(scheduledCostTotals.overtimeMinutes)}` : null}
+                            </small>
                             {scheduledCostTotals.commuteAllowance > 0 ? <small>交通費 {formatMoney(scheduledCostTotals.commuteAllowance)}</small> : null}
                           </td>
                         </tr>
