@@ -18258,10 +18258,11 @@ body :where(
   font-weight: 600;
 }
 
+.shift-grid .shift-hours-head,
+.shift-grid .shift-hours-cell,
 .shift-grid .shift-cost-head,
 .shift-grid .shift-cost-cell {
   position: sticky;
-  right: 0;
   z-index: 3;
   min-width: 132px;
   width: 132px;
@@ -18271,12 +18272,24 @@ body :where(
   font-weight: 600;
 }
 
+.shift-grid .shift-hours-head,
+.shift-grid .shift-hours-cell {
+  right: 132px;
+}
+
+.shift-grid .shift-cost-head,
+.shift-grid .shift-cost-cell {
+  right: 0;
+}
+
+.shift-grid .shift-hours-head,
 .shift-grid .shift-cost-head {
   z-index: 4;
   background: #eef4ff;
   font-size: 12px;
 }
 
+.shift-grid .shift-hours-cell,
 .shift-grid .shift-cost-cell {
   align-content: center;
   color: var(--green);
@@ -18287,15 +18300,28 @@ body :where(
   white-space: nowrap;
 }
 
+.shift-grid .shift-hours-cell strong,
 .shift-grid .shift-cost-cell strong {
   font-size: 12px;
   font-weight: 600;
 }
 
+.shift-grid .shift-hours-cell small,
 .shift-grid .shift-cost-cell small {
   color: var(--muted);
   font-size: 10px;
   font-weight: 500;
+}
+
+.shift-grid .shift-total-row th,
+.shift-grid .shift-total-row td {
+  border-top: 2px solid var(--line);
+  background: #f3f8f5;
+}
+
+.shift-grid .shift-total-row .shift-hours-cell,
+.shift-grid .shift-total-row .shift-cost-cell {
+  background: #f3f8f5;
 }
 
 .shift-cell {
@@ -29406,6 +29432,8 @@ body :where(
     font-size: 12px;
   }
 
+  .shift-grid .shift-hours-head,
+  .shift-grid .shift-hours-cell,
   .shift-grid .shift-cost-head,
   .shift-grid .shift-cost-cell {
     position: static;

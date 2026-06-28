@@ -834,6 +834,9 @@ function getShiftNightMinutes(shift: ShiftEntry | undefined) {
 type ScheduledCostEstimate = {
   payrollCost: number;
   commuteAllowance: number;
+  workMinutes: number;
+  nightMinutes: number;
+  overtimeMinutes: number;
 };
 
 function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]) {
@@ -863,10 +866,17 @@ function estimateScheduledLaborCost(employee: TimecardEmployee, storeId: string,
 function estimateScheduledCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]): ScheduledCostEstimate {
   const payrollCost = estimateScheduledLaborCost(employee, storeId, shifts);
   let commuteAllowance = 0;
+  let workMinutes = 0;
+  let nightMinutes = 0;
+  let overtimeMinutes = 0;
   const commuteWorkDatesBySetting = new Map<TimecardStorePayrollSetting, Set<string>>();
 
   for (const shift of shifts) {
-    if (getShiftWorkMinutes(shift) <= 0) continue;
+    const shiftWorkMinutes = getShiftWorkMinutes(shift);
+    if (shiftWorkMinutes <= 0) continue;
+    workMinutes += shiftWorkMinutes;
+    nightMinutes += getShiftNightMinutes(shift);
+    overtimeMinutes += Math.max(0, shiftWorkMinutes - 480);
     const setting = getEffectiveCommuteSetting(employee, storeId, shift.workDate);
     if (!setting?.payrollEnabled || setting.commuteAllowancePerWorkday <= 0) continue;
     const workDates = commuteWorkDatesBySetting.get(setting) ?? new Set<string>();
@@ -881,7 +891,7 @@ function estimateScheduledCost(employee: TimecardEmployee, storeId: string, shif
       : Math.min(uncappedAllowance, Math.ceil(setting.commuteAllowanceMonthlyCap));
   }
 
-  return { payrollCost, commuteAllowance };
+  return { payrollCost, commuteAllowance, workMinutes, nightMinutes, overtimeMinutes };
 }
 
 function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shifts: ShiftEntry[]) {
@@ -1141,10 +1151,24 @@ export function TimecardPage({
     }
     return map;
   }, [data?.employees, data?.shifts, scheduleEmployees, selectedStoreId]);
+  const scheduledCostTotals = useMemo(() => {
+    const totals: ScheduledCostEstimate = { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+    for (const cost of scheduledCostByEmployee.values()) {
+      totals.payrollCost += cost.payrollCost;
+      totals.commuteAllowance += cost.commuteAllowance;
+      totals.workMinutes += cost.workMinutes;
+      totals.nightMinutes += cost.nightMinutes;
+      totals.overtimeMinutes += cost.overtimeMinutes;
+    }
+    return totals;
+  }, [scheduledCostByEmployee]);
   const actualLaborCostByEmployee = useMemo(() => {
     return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, {
       payrollCost: row.basePay,
-      commuteAllowance: row.commuteAllowance
+      commuteAllowance: row.commuteAllowance,
+      workMinutes: row.workMinutes,
+      nightMinutes: row.nightMinutes,
+      overtimeMinutes: row.overtimeMinutes ?? 0
     } satisfies ScheduledCostEstimate]));
   }, [data?.payrollRows]);
   const actualByCell = useMemo(() => {
@@ -1925,12 +1949,13 @@ export function TimecardPage({
                             </th>
                           );
                         })}
+                        <th className="shift-hours-head">勤務時間</th>
                         <th className="shift-cost-head">概算給与</th>
                       </tr>
                     </thead>
                     <tbody>
                       {scheduleEmployees.length ? scheduleEmployees.map((employee) => {
-                        const scheduledCost = scheduledCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0 };
+                        const scheduledCost = scheduledCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
                         return (
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
@@ -1962,6 +1987,16 @@ export function TimecardPage({
                               </td>
                             );
                           })}
+                          <td className="shift-hours-cell">
+                            <strong>{formatDuration(scheduledCost.workMinutes)}</strong>
+                            {scheduledCost.nightMinutes > 0 || scheduledCost.overtimeMinutes > 0 ? (
+                              <small>
+                                {scheduledCost.nightMinutes > 0 ? `深夜 ${formatDuration(scheduledCost.nightMinutes)}` : null}
+                                {scheduledCost.nightMinutes > 0 && scheduledCost.overtimeMinutes > 0 ? " / " : null}
+                                {scheduledCost.overtimeMinutes > 0 ? `時間外 ${formatDuration(scheduledCost.overtimeMinutes)}` : null}
+                              </small>
+                            ) : null}
+                          </td>
                           <td className="shift-cost-cell">
                             <strong>{formatMoney(scheduledCost.payrollCost)}</strong>
                             {scheduledCost.commuteAllowance > 0 ? <small>交通費 {formatMoney(scheduledCost.commuteAllowance)}</small> : null}
@@ -1970,9 +2005,29 @@ export function TimecardPage({
                         );
                       }) : (
                         <tr>
-                          <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
+                          <td colSpan={monthDays.length + 3}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
+                      {scheduleEmployees.length ? (
+                        <tr className="shift-total-row">
+                          <th className="shift-employee-cell">合計</th>
+                          <td colSpan={monthDays.length} />
+                          <td className="shift-hours-cell">
+                            <strong>{formatDuration(scheduledCostTotals.workMinutes)}</strong>
+                            {scheduledCostTotals.nightMinutes > 0 || scheduledCostTotals.overtimeMinutes > 0 ? (
+                              <small>
+                                {scheduledCostTotals.nightMinutes > 0 ? `深夜 ${formatDuration(scheduledCostTotals.nightMinutes)}` : null}
+                                {scheduledCostTotals.nightMinutes > 0 && scheduledCostTotals.overtimeMinutes > 0 ? " / " : null}
+                                {scheduledCostTotals.overtimeMinutes > 0 ? `時間外 ${formatDuration(scheduledCostTotals.overtimeMinutes)}` : null}
+                              </small>
+                            ) : null}
+                          </td>
+                          <td className="shift-cost-cell">
+                            <strong>{formatMoney(scheduledCostTotals.payrollCost)}</strong>
+                            {scheduledCostTotals.commuteAllowance > 0 ? <small>交通費 {formatMoney(scheduledCostTotals.commuteAllowance)}</small> : null}
+                          </td>
+                        </tr>
+                      ) : null}
                     </tbody>
                   </table>
                 </div>
