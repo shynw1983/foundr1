@@ -136,6 +136,8 @@ function parseSupplierLocationNames(formData: FormData) {
 }
 
 async function saveSupplierLocations(supplierId: string, locationNames: string[]) {
+  await removeUnlistedSupplierLocations(supplierId, locationNames);
+
   for (const locationName of locationNames) {
     await sql`
       insert into supplier_locations (
@@ -152,6 +154,48 @@ async function saveSupplierLocations(supplierId: string, locationNames: string[]
       do update set name = excluded.name
     `;
   }
+}
+
+async function removeUnlistedSupplierLocations(supplierId: string, locationNames: string[]) {
+  const obsoleteLocations = await sql`
+    select id::text
+    from supplier_locations
+    where supplier_id = ${supplierId}
+      and not (name = any(${locationNames}))
+  `;
+  const obsoleteLocationIds = obsoleteLocations.map((location) => String(location.id ?? "")).filter(Boolean);
+
+  if (!obsoleteLocationIds.length) return;
+
+  await sql`
+    update purchase_actuals
+    set supplier_location_id = null
+    where supplier_location_id::text = any(${obsoleteLocationIds})
+  `;
+  await sql`
+    update price_records
+    set supplier_location_id = null
+    where supplier_location_id::text = any(${obsoleteLocationIds})
+  `;
+  await sql`
+    update product_supplier_options
+    set preferred_location_id = null
+    where preferred_location_id::text = any(${obsoleteLocationIds})
+  `;
+  await sql`
+    update purchase_order_supplier_fulfillments
+    set supplier_location_id = null
+    where supplier_location_id::text = any(${obsoleteLocationIds})
+  `;
+  await sql`
+    update receipt_ocr_results
+    set supplier_location_id = null
+    where supplier_location_id::text = any(${obsoleteLocationIds})
+  `;
+  await sql`
+    delete from supplier_locations
+    where id::text = any(${obsoleteLocationIds})
+  `;
 }
 
 export async function DELETE(request: Request) {
