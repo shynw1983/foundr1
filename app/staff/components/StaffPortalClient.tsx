@@ -11,6 +11,7 @@ import {
   Home,
   LogIn,
   LogOut,
+  MapPin,
   RefreshCw,
   Send,
   UserRound,
@@ -514,7 +515,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
 
       <section className={`staff-status-card is-${punchState}`}>
         <div>
-          <span>{selectedStore?.name ?? "店舗未設定"}</span>
+          <span className="staff-status-store">{selectedStore?.name ?? "店舗未設定"}</span>
           <h1>{statusLabel}</h1>
           <p>{latestPunch?.punchedAt ? `${formatJstDateTime(latestPunch.punchedAt)} に最終打刻` : loading ? "読み込み中" : "本日の打刻を開始できます"}</p>
         </div>
@@ -525,19 +526,28 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
       </section>
 
       {timecard && timecard.stores.length > 1 ? (
-        <label className="staff-store-select">
-          <span>勤務店舗</span>
-          <select value={selectedStoreId} onChange={(event) => {
-            const nextStoreId = event.target.value;
-            setSelectedStoreId(nextStoreId);
-            window.localStorage.setItem(staffStoreSelectionKey, nextStoreId);
-            void loadTimecard(nextStoreId);
-          }}>
-            {timecard.stores.map((store) => (
-              <option value={store.id} key={store.id}>{store.name}</option>
-            ))}
-          </select>
-        </label>
+        <section className="staff-store-select" aria-label="勤務店舗">
+          <div className="staff-store-select-heading">
+            <MapPin aria-hidden="true" />
+            <div>
+              <span>現在の勤務店舗</span>
+              <strong>{selectedStore?.name ?? "店舗未設定"}</strong>
+            </div>
+          </div>
+          <label className="staff-store-select-control">
+            <span>店舗を切り替え</span>
+            <select value={selectedStoreId} onChange={(event) => {
+              const nextStoreId = event.target.value;
+              setSelectedStoreId(nextStoreId);
+              window.localStorage.setItem(staffStoreSelectionKey, nextStoreId);
+              void loadTimecard(nextStoreId);
+            }}>
+              {timecard.stores.map((store) => (
+                <option value={store.id} key={store.id}>{store.name}</option>
+              ))}
+            </select>
+          </label>
+        </section>
       ) : null}
 
       {view === "home" ? (

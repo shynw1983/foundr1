@@ -32412,6 +32412,18 @@ a:focus-visible {
   color: var(--muted);
 }
 
+.staff-status-card .staff-status-store {
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .staff-status-card h1 {
   margin: 4px 0;
   color: var(--green);
@@ -32439,13 +32451,50 @@ a:focus-visible {
 
 .staff-store-select {
   display: grid;
-  gap: 6px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
+  border-color: rgba(31, 111, 85, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbf8 100%);
 }
 
-.staff-store-select span {
+.staff-store-select-heading {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.staff-store-select-heading > svg {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--green);
+  color: white;
+}
+
+.staff-store-select-heading div,
+.staff-store-select-control {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.staff-store-select span,
+.staff-store-select-control span {
   font-size: 12px;
   font-weight: 700;
+}
+
+.staff-store-select-heading strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .staff-store-select select,
