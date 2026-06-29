@@ -109,7 +109,7 @@ export default function SuppliersPage() {
     const formData = new FormData(form);
     const supplier = readSupplierForm(formData);
     formData.set("businessHoursSettings", serializeBusinessHours(newBusinessHours));
-    formData.set("locations", JSON.stringify(normalizeLocationDrafts(newLocations)));
+    formData.set("locations", JSON.stringify(normalizeLocationDrafts(newLocations, supplier.channelType)));
 
     if (!supplier.name.trim()) return;
 
@@ -138,7 +138,7 @@ export default function SuppliersPage() {
     const formData = new FormData(event.currentTarget);
     formData.set("currentName", editingSupplier.name);
     formData.set("businessHoursSettings", serializeBusinessHours(editingBusinessHours));
-    formData.set("locations", JSON.stringify(normalizeLocationDrafts(editingLocations)));
+    formData.set("locations", JSON.stringify(normalizeLocationDrafts(editingLocations, String(formData.get("channelType") ?? editingSupplier.channelType))));
 
     const response = await fetch("/api/suppliers", {
       method: "PUT",
@@ -283,7 +283,7 @@ export default function SuppliersPage() {
               <input name="reliability" placeholder="例: 即日対応 / 欠品あり / 配送 1-2 日" />
             </label>
             <SupplierBusinessHoursEditor value={newBusinessHours} onChange={setNewBusinessHours} />
-            <SupplierLocationEditor locations={newLocations} onChange={setNewLocations} defaultType="実店舗" />
+            <SupplierLocationEditor locations={newLocations} onChange={setNewLocations} />
             <button className="primary-button" type="submit">
               <Plus size={18} />
               追加
@@ -398,7 +398,7 @@ export default function SuppliersPage() {
                 <input name="reliability" defaultValue={editingSupplier.reliability} />
               </label>
               <SupplierBusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
-              <SupplierLocationEditor locations={editingLocations} onChange={setEditingLocations} defaultType={editingSupplier.channelType || "実店舗"} />
+              <SupplierLocationEditor locations={editingLocations} onChange={setEditingLocations} />
             </div>
             <div className="modal-actions">
               <button className="text-button" type="button" onClick={() => setEditingSupplier(null)}>
@@ -415,11 +415,11 @@ export default function SuppliersPage() {
   );
 }
 
-function normalizeLocationDrafts(locations: SupplierLocationDraft[]) {
+function normalizeLocationDrafts(locations: SupplierLocationDraft[], defaultType: string) {
   return locations
     .map((location) => ({
       locationName: location.locationName.trim(),
-      type: location.type.trim() || "実店舗",
+      type: defaultType.trim() || "実店舗",
       area: location.area.trim(),
       address: location.address.trim(),
       phone: location.phone.trim(),
@@ -431,10 +431,10 @@ function normalizeLocationDrafts(locations: SupplierLocationDraft[]) {
     .filter((location) => location.locationName);
 }
 
-function emptyLocationDraft(defaultType: string): SupplierLocationDraft {
+function emptyLocationDraft(): SupplierLocationDraft {
   return {
     locationName: "",
-    type: defaultType || "実店舗",
+    type: "",
     area: "",
     address: "",
     phone: "",
@@ -498,12 +498,10 @@ function SupplierBusinessHoursEditor({
 
 function SupplierLocationEditor({
   locations,
-  onChange,
-  defaultType
+  onChange
 }: {
   locations: SupplierLocationDraft[];
   onChange: (locations: SupplierLocationDraft[]) => void;
-  defaultType: string;
 }) {
   function updateLocation(index: number, patch: Partial<SupplierLocationDraft>) {
     onChange(locations.map((location, locationIndex) => (
@@ -512,7 +510,7 @@ function SupplierLocationEditor({
   }
 
   function addLocation() {
-    onChange([...locations, emptyLocationDraft(defaultType)]);
+    onChange([...locations, emptyLocationDraft()]);
   }
 
   function deleteLocation(index: number) {
@@ -533,14 +531,6 @@ function SupplierLocationEditor({
               <label>
                 <span>支店名</span>
                 <input value={location.locationName} onChange={(event) => updateLocation(index, { locationName: event.target.value })} placeholder="例: 春吉店" />
-              </label>
-              <label>
-                <span>区分</span>
-                <select value={location.type} onChange={(event) => updateLocation(index, { type: event.target.value })}>
-                  {channelTypes.map((channelType) => (
-                    <option value={channelType} key={channelType}>{channelType}</option>
-                  ))}
-                </select>
               </label>
               <label>
                 <span>住所</span>

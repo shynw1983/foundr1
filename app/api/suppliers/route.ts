@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   const businessHours = String(formData.get("businessHours") ?? "").trim();
   const businessHoursSettings = serializeBusinessHours(String(formData.get("businessHoursSettings") ?? ""));
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
-  const locations = parseSupplierLocations(formData);
+  const locations = parseSupplierLocations(formData, channelType || "実店舗");
 
   if (!name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -99,7 +99,7 @@ export async function PUT(request: Request) {
   const businessHours = String(formData.get("businessHours") ?? "").trim();
   const businessHoursSettings = serializeBusinessHours(String(formData.get("businessHoursSettings") ?? ""));
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
-  const locations = parseSupplierLocations(formData);
+  const locations = parseSupplierLocations(formData, channelType || "実店舗");
 
   if (!currentName || !name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -145,14 +145,14 @@ export async function PUT(request: Request) {
   return Response.json({ ok: true });
 }
 
-function parseSupplierLocations(formData: FormData): SupplierLocationInput[] {
+function parseSupplierLocations(formData: FormData, defaultType: string): SupplierLocationInput[] {
   const rawLocations = String(formData.get("locations") ?? "").trim();
   if (rawLocations) {
     try {
       const parsed = JSON.parse(rawLocations) as Array<Record<string, unknown>>;
       return dedupeSupplierLocations(parsed.map((location) => normalizeSupplierLocationInput({
         locationName: location.locationName,
-        type: location.type,
+        type: defaultType,
         area: location.area,
         address: location.address,
         phone: location.phone,
@@ -169,7 +169,7 @@ function parseSupplierLocations(formData: FormData): SupplierLocationInput[] {
   return dedupeSupplierLocations(
     String(formData.get("locationNames") ?? "")
       .split(/[\n,、]/)
-      .map((value) => normalizeSupplierLocationInput({ locationName: value }))
+      .map((value) => normalizeSupplierLocationInput({ locationName: value, type: defaultType }))
   );
 }
 
