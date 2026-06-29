@@ -628,14 +628,6 @@ function HomeView({ latestPayroll, nextShift, myDays, requests }: { latestPayrol
         </span>
         <ChevronRight size={18} />
       </a>
-      <a className="staff-action-card is-secondary" href="/staff/download">
-        <Download />
-        <span>
-          <strong>APKダウンロード</strong>
-          <small>Android最新版を保存</small>
-        </span>
-        <ChevronRight size={18} />
-      </a>
 
       <article className="staff-panel staff-home-summary">
         <div className="staff-panel-title">
@@ -655,6 +647,15 @@ function HomeView({ latestPayroll, nextShift, myDays, requests }: { latestPayrol
           {!myDays.length ? <p className="empty-state-text">今月の打刻はまだありません。</p> : null}
         </div>
       </article>
+
+      <a className="staff-action-card is-secondary" href="/staff/download">
+        <Download />
+        <span>
+          <strong>APKダウンロード</strong>
+          <small>Android最新版を保存</small>
+        </span>
+        <ChevronRight size={18} />
+      </a>
 
       <a className="staff-action-card is-secondary" href="/staff/privacy-documents">
         <FileText />
