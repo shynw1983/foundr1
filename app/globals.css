@@ -5369,6 +5369,109 @@ body :where(
   min-height: 42px;
 }
 
+.supplier-hours-editor,
+.supplier-location-editor {
+  display: grid;
+  gap: 10px;
+  align-self: stretch;
+}
+
+.supplier-hours-editor > strong,
+.supplier-location-editor-heading strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.supplier-hours-grid {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.supplier-hours-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) minmax(82px, auto);
+  align-items: center;
+  gap: 8px;
+}
+
+.supplier-hours-row > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.supplier-hours-row input[type="time"] {
+  min-width: 0;
+}
+
+.supplier-hours-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.supplier-hours-closed input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
+.supplier-location-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.supplier-location-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.supplier-location-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.supplier-location-grid .full-span,
+.supplier-hours-editor.full-span,
+.supplier-location-editor.full-span {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .supplier-hours-row {
+    grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .supplier-hours-closed {
+    grid-column: 2 / -1;
+  }
+
+  .supplier-location-editor-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .supplier-location-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;

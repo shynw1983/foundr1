@@ -1558,7 +1558,10 @@ alter table suppliers add column if not exists address text;
 alter table suppliers add column if not exists phone text;
 alter table suppliers add column if not exists contact_person text;
 alter table suppliers add column if not exists business_hours text;
+alter table suppliers add column if not exists business_hours_settings jsonb not null default '{}'::jsonb;
 alter table suppliers add column if not exists order_url text;
+alter table supplier_locations add column if not exists phone text;
+alter table supplier_locations add column if not exists opening_hours_settings jsonb not null default '{}'::jsonb;
 
 create table if not exists procurement_staff_unavailable_slots (
   id uuid primary key default gen_random_uuid(),

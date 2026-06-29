@@ -1,5 +1,18 @@
 import { requireMasterOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
+import { serializeBusinessHours } from "../../../lib/store-business-hours";
+
+type SupplierLocationInput = {
+  locationName: string;
+  type: string;
+  area: string;
+  address: string;
+  phone: string;
+  hours: string;
+  businessHoursSettings: string;
+  purchaseMethod: string;
+  note: string;
+};
 
 export async function POST(request: Request) {
   const session = await requireMasterOsSession();
@@ -14,8 +27,9 @@ export async function POST(request: Request) {
   const phone = String(formData.get("phone") ?? "").trim();
   const contactPerson = String(formData.get("contactPerson") ?? "").trim();
   const businessHours = String(formData.get("businessHours") ?? "").trim();
+  const businessHoursSettings = serializeBusinessHours(String(formData.get("businessHoursSettings") ?? ""));
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
-  const locationNames = parseSupplierLocationNames(formData);
+  const locations = parseSupplierLocations(formData);
 
   if (!name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -31,6 +45,7 @@ export async function POST(request: Request) {
       phone,
       contact_person,
       business_hours,
+      business_hours_settings,
       order_url,
       updated_at
     )
@@ -43,6 +58,7 @@ export async function POST(request: Request) {
       ${phone || null},
       ${contactPerson || null},
       ${businessHours || null},
+      ${businessHoursSettings}::jsonb,
       ${orderUrl || null},
       now()
     )
@@ -55,12 +71,13 @@ export async function POST(request: Request) {
       phone = excluded.phone,
       contact_person = excluded.contact_person,
       business_hours = excluded.business_hours,
+      business_hours_settings = excluded.business_hours_settings,
       order_url = excluded.order_url,
       updated_at = now()
     returning id
   `;
   if (rows[0]?.id) {
-    await saveSupplierLocations(rows[0].id, locationNames);
+    await saveSupplierLocations(rows[0].id, locations);
   }
 
   return Response.json({ ok: true });
@@ -80,8 +97,9 @@ export async function PUT(request: Request) {
   const phone = String(formData.get("phone") ?? "").trim();
   const contactPerson = String(formData.get("contactPerson") ?? "").trim();
   const businessHours = String(formData.get("businessHours") ?? "").trim();
+  const businessHoursSettings = serializeBusinessHours(String(formData.get("businessHoursSettings") ?? ""));
   const orderUrl = String(formData.get("orderUrl") ?? "").trim();
-  const locationNames = parseSupplierLocationNames(formData);
+  const locations = parseSupplierLocations(formData);
 
   if (!currentName || !name) {
     return Response.json({ error: "発注先名を入力してください。" }, { status: 400 });
@@ -112,6 +130,7 @@ export async function PUT(request: Request) {
       phone = ${phone || null},
       contact_person = ${contactPerson || null},
       business_hours = ${businessHours || null},
+      business_hours_settings = ${businessHoursSettings}::jsonb,
       order_url = ${orderUrl || null},
       updated_at = now()
     where name = ${currentName}
@@ -121,37 +140,103 @@ export async function PUT(request: Request) {
   if (!rows[0]?.id) {
     return Response.json({ error: "発注先が見つかりません。" }, { status: 404 });
   }
-  await saveSupplierLocations(rows[0].id, locationNames);
+  await saveSupplierLocations(rows[0].id, locations);
 
   return Response.json({ ok: true });
 }
 
-function parseSupplierLocationNames(formData: FormData) {
-  return Array.from(new Set(
+function parseSupplierLocations(formData: FormData): SupplierLocationInput[] {
+  const rawLocations = String(formData.get("locations") ?? "").trim();
+  if (rawLocations) {
+    try {
+      const parsed = JSON.parse(rawLocations) as Array<Record<string, unknown>>;
+      return dedupeSupplierLocations(parsed.map((location) => normalizeSupplierLocationInput({
+        locationName: location.locationName,
+        type: location.type,
+        area: location.area,
+        address: location.address,
+        phone: location.phone,
+        hours: location.hours,
+        businessHoursSettings: location.businessHoursSettings,
+        purchaseMethod: location.purchaseMethod,
+        note: location.note
+      })));
+    } catch {
+      return [];
+    }
+  }
+
+  return dedupeSupplierLocations(
     String(formData.get("locationNames") ?? "")
       .split(/[\n,、]/)
-      .map((value) => value.trim())
-      .filter(Boolean)
-  ));
+      .map((value) => normalizeSupplierLocationInput({ locationName: value }))
+  );
 }
 
-async function saveSupplierLocations(supplierId: string, locationNames: string[]) {
+function normalizeSupplierLocationInput(input: Partial<Record<keyof SupplierLocationInput, unknown>>): SupplierLocationInput {
+  return {
+    locationName: String(input.locationName ?? "").trim(),
+    type: String(input.type ?? "").trim() || "実店舗",
+    area: String(input.area ?? "").trim(),
+    address: String(input.address ?? "").trim(),
+    phone: String(input.phone ?? "").trim(),
+    hours: String(input.hours ?? "").trim(),
+    businessHoursSettings: serializeBusinessHours(String(input.businessHoursSettings ?? "")),
+    purchaseMethod: String(input.purchaseMethod ?? "").trim(),
+    note: String(input.note ?? "").trim()
+  };
+}
+
+function dedupeSupplierLocations(locations: SupplierLocationInput[]) {
+  const seen = new Set<string>();
+  return locations.filter((location) => {
+    if (!location.locationName || seen.has(location.locationName)) return false;
+    seen.add(location.locationName);
+    return true;
+  });
+}
+
+async function saveSupplierLocations(supplierId: string, locations: SupplierLocationInput[]) {
+  const locationNames = locations.map((location) => location.locationName);
   await removeUnlistedSupplierLocations(supplierId, locationNames);
 
-  for (const locationName of locationNames) {
+  for (const location of locations) {
     await sql`
       insert into supplier_locations (
         supplier_id,
         name,
-        location_type
+        location_type,
+        area,
+        address,
+        phone,
+        opening_hours,
+        opening_hours_settings,
+        purchase_method,
+        note
       )
       values (
         ${supplierId},
-        ${locationName},
-        '実店舗'
+        ${location.locationName},
+        ${location.type},
+        ${location.area || null},
+        ${location.address || null},
+        ${location.phone || null},
+        ${location.hours || null},
+        ${location.businessHoursSettings}::jsonb,
+        ${location.purchaseMethod || null},
+        ${location.note || null}
       )
       on conflict (supplier_id, name)
-      do update set name = excluded.name
+      do update set
+        name = excluded.name,
+        location_type = excluded.location_type,
+        area = excluded.area,
+        address = excluded.address,
+        phone = excluded.phone,
+        opening_hours = excluded.opening_hours,
+        opening_hours_settings = excluded.opening_hours_settings,
+        purchase_method = excluded.purchase_method,
+        note = excluded.note
     `;
   }
 }

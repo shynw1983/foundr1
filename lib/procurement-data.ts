@@ -301,6 +301,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(phone, '') as phone,
           coalesce(contact_person, '') as "contactPerson",
           coalesce(business_hours, '') as "businessHours",
+          coalesce(business_hours_settings, '{}'::jsonb) as "businessHoursSettings",
           coalesce(order_url, '') as "orderUrl"
         from suppliers
         order by name
@@ -325,7 +326,10 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           supplier_locations.name as "locationName",
           supplier_locations.location_type as type,
           supplier_locations.area,
+          coalesce(supplier_locations.address, '') as address,
+          coalesce(supplier_locations.phone, '') as phone,
           supplier_locations.opening_hours as hours,
+          coalesce(supplier_locations.opening_hours_settings, '{}'::jsonb) as "businessHoursSettings",
           supplier_locations.purchase_method as "purchaseMethod",
           supplier_locations.note
         from supplier_locations

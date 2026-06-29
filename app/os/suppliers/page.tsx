@@ -10,6 +10,16 @@ import type { LucideIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { suppliers as initialSuppliers } from "../../../lib/mock-data";
+import {
+  defaultBusinessHours,
+  formatBusinessHoursSummary,
+  normalizeBusinessHours,
+  serializeBusinessHours,
+  weekdayKeys,
+  weekdayLabels,
+  type StoreBusinessHours,
+  type WeekdayKey
+} from "../../../lib/store-business-hours";
 
 type Supplier = typeof initialSuppliers[number];
 type SupplierLocation = {
@@ -17,10 +27,15 @@ type SupplierLocation = {
   locationName: string;
   type: string;
   area: string;
+  address: string;
+  phone: string;
   hours: string;
+  businessHoursSettings?: unknown;
   purchaseMethod: string;
   note: string;
 };
+
+type SupplierLocationDraft = Omit<SupplierLocation, "supplier">;
 
 const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "OS ホーム", href: "/os", icon: ClipboardList },
@@ -46,6 +61,10 @@ export default function SuppliersPage() {
   const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState<"loading" | "neon">("loading");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [newBusinessHours, setNewBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [newLocations, setNewLocations] = useState<SupplierLocationDraft[]>([]);
+  const [editingBusinessHours, setEditingBusinessHours] = useState<StoreBusinessHours>(defaultBusinessHours);
+  const [editingLocations, setEditingLocations] = useState<SupplierLocationDraft[]>([]);
 
   async function loadData() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
@@ -89,6 +108,8 @@ export default function SuppliersPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const supplier = readSupplierForm(formData);
+    formData.set("businessHoursSettings", serializeBusinessHours(newBusinessHours));
+    formData.set("locations", JSON.stringify(normalizeLocationDrafts(newLocations)));
 
     if (!supplier.name.trim()) return;
 
@@ -104,6 +125,8 @@ export default function SuppliersPage() {
     }
 
     await loadData();
+    setNewBusinessHours(defaultBusinessHours);
+    setNewLocations([]);
     form.reset();
     showNotice("発注先を追加しました。");
   }
@@ -114,6 +137,8 @@ export default function SuppliersPage() {
 
     const formData = new FormData(event.currentTarget);
     formData.set("currentName", editingSupplier.name);
+    formData.set("businessHoursSettings", serializeBusinessHours(editingBusinessHours));
+    formData.set("locations", JSON.stringify(normalizeLocationDrafts(editingLocations)));
 
     const response = await fetch("/api/suppliers", {
       method: "PUT",
@@ -129,6 +154,22 @@ export default function SuppliersPage() {
     await loadData();
     setEditingSupplier(null);
     showNotice("発注先を更新しました。");
+  }
+
+  function startEditingSupplier(supplier: Supplier) {
+    setEditingSupplier(supplier);
+    setEditingBusinessHours(normalizeBusinessHours((supplier as Supplier & { businessHoursSettings?: unknown }).businessHoursSettings));
+    setEditingLocations((supplierLocationsByName[supplier.name] ?? []).map((location) => ({
+      locationName: location.locationName,
+      type: location.type || supplier.channelType || "実店舗",
+      area: location.area || "",
+      address: location.address || "",
+      phone: location.phone || "",
+      hours: location.hours || "",
+      businessHoursSettings: location.businessHoursSettings,
+      purchaseMethod: location.purchaseMethod || "",
+      note: location.note || ""
+    })));
   }
 
   function deleteSupplier(supplier: Supplier) {
@@ -231,7 +272,7 @@ export default function SuppliersPage() {
             </label>
             <label>
               <span>営業時間</span>
-              <input name="businessHours" placeholder="例: 9:00-18:00 / 日曜休み" />
+              <input name="businessHours" placeholder="補足メモ（例: 祝日は変動）" />
             </label>
             <label>
               <span>注文URL</span>
@@ -241,10 +282,8 @@ export default function SuppliersPage() {
               <span>メモ</span>
               <input name="reliability" placeholder="例: 即日対応 / 欠品あり / 配送 1-2 日" />
             </label>
-            <label className="full-span">
-              <span>店舗・支店</span>
-              <textarea name="locationNames" placeholder="例: 春吉店&#10;博多駅南店&#10;東口店" />
-            </label>
+            <SupplierBusinessHoursEditor value={newBusinessHours} onChange={setNewBusinessHours} />
+            <SupplierLocationEditor locations={newLocations} onChange={setNewLocations} defaultType="実店舗" />
             <button className="primary-button" type="submit">
               <Plus size={18} />
               追加
@@ -267,11 +306,12 @@ export default function SuppliersPage() {
                   <strong>{supplier.name}</strong>
                   <p>{supplier.category || "取扱内容未設定"}</p>
                   <small>{supplier.reliability || "メモ未設定"}</small>
+                  <small>営業時間: {formatBusinessHoursSummary((supplier as Supplier & { businessHoursSettings?: unknown }).businessHoursSettings)}</small>
                   <div className="supplier-detail-list">
                     {supplier.address ? <span>住所: {supplier.address}</span> : null}
                     {supplier.phone ? <span>電話: {supplier.phone}</span> : null}
                     {supplier.contactPerson ? <span>担当: {supplier.contactPerson}</span> : null}
-                    {supplier.businessHours ? <span>営業時間: {supplier.businessHours}</span> : null}
+                    {supplier.businessHours ? <span>営業時間メモ: {supplier.businessHours}</span> : null}
                     {supplier.orderUrl ? (
                       <a href={supplier.orderUrl} target="_blank" rel="noreferrer">注文URL</a>
                     ) : null}
@@ -279,14 +319,18 @@ export default function SuppliersPage() {
                   {supplierLocationsByName[supplier.name]?.length ? (
                     <div className="supplier-location-tags" aria-label={`${supplier.name} の店舗・支店・OCR表示名`}>
                       {supplierLocationsByName[supplier.name].map((location) => (
-                        <span key={`${supplier.name}-${location.locationName}`}>{location.locationName}</span>
+                        <span key={`${supplier.name}-${location.locationName}`}>
+                          {location.locationName}
+                          {location.address ? ` / ${location.address}` : ""}
+                          {location.phone ? ` / ${location.phone}` : ""}
+                        </span>
                       ))}
                     </div>
                   ) : null}
                 </div>
                 <span className="supplier-type">{supplier.channelType}</span>
                 <div className="row-actions">
-                  <button className="text-button" type="button" onClick={() => setEditingSupplier(supplier)}>
+                  <button className="text-button" type="button" onClick={() => startEditingSupplier(supplier)}>
                     編集
                   </button>
                   <button className="text-button danger-button" type="button" onClick={() => deleteSupplier(supplier)}>
@@ -343,7 +387,7 @@ export default function SuppliersPage() {
               </label>
               <label>
                 <span>営業時間</span>
-                <input name="businessHours" defaultValue={editingSupplier.businessHours} />
+                <input name="businessHours" defaultValue={editingSupplier.businessHours} placeholder="補足メモ（例: 祝日は変動）" />
               </label>
               <label>
                 <span>注文URL</span>
@@ -353,14 +397,8 @@ export default function SuppliersPage() {
                 <span>メモ</span>
                 <input name="reliability" defaultValue={editingSupplier.reliability} />
               </label>
-              <label className="full-span">
-                <span>店舗・支店</span>
-                <textarea
-                  name="locationNames"
-                  defaultValue={(supplierLocationsByName[editingSupplier.name] ?? []).map((location) => location.locationName).join("\n")}
-                  placeholder="例: 春吉店&#10;博多駅南店"
-                />
-              </label>
+              <SupplierBusinessHoursEditor value={editingBusinessHours} onChange={setEditingBusinessHours} />
+              <SupplierLocationEditor locations={editingLocations} onChange={setEditingLocations} defaultType={editingSupplier.channelType || "実店舗"} />
             </div>
             <div className="modal-actions">
               <button className="text-button" type="button" onClick={() => setEditingSupplier(null)}>
@@ -374,6 +412,169 @@ export default function SuppliersPage() {
       ) : null}
       <ActionNotice notice={notice} onClose={clearNotice} />
     </main>
+  );
+}
+
+function normalizeLocationDrafts(locations: SupplierLocationDraft[]) {
+  return locations
+    .map((location) => ({
+      locationName: location.locationName.trim(),
+      type: location.type.trim() || "実店舗",
+      area: location.area.trim(),
+      address: location.address.trim(),
+      phone: location.phone.trim(),
+      hours: location.hours.trim(),
+      businessHoursSettings: serializeBusinessHours(location.businessHoursSettings),
+      purchaseMethod: location.purchaseMethod.trim(),
+      note: location.note.trim()
+    }))
+    .filter((location) => location.locationName);
+}
+
+function emptyLocationDraft(defaultType: string): SupplierLocationDraft {
+  return {
+    locationName: "",
+    type: defaultType || "実店舗",
+    area: "",
+    address: "",
+    phone: "",
+    hours: "",
+    businessHoursSettings: defaultBusinessHours,
+    purchaseMethod: "",
+    note: ""
+  };
+}
+
+function SupplierBusinessHoursEditor({
+  value,
+  onChange
+}: {
+  value: StoreBusinessHours;
+  onChange: (value: StoreBusinessHours) => void;
+}) {
+  function updateDay(key: WeekdayKey, patch: Partial<StoreBusinessHours[WeekdayKey]>) {
+    onChange({
+      ...value,
+      [key]: {
+        ...value[key],
+        ...patch
+      }
+    });
+  }
+
+  return (
+    <div className="supplier-hours-editor full-span">
+      <strong>曜日別営業時間</strong>
+      <div className="supplier-hours-grid">
+        {weekdayKeys.map((key) => (
+          <div className="supplier-hours-row" key={key}>
+            <span>{weekdayLabels[key]}</span>
+            <input
+              type="time"
+              value={value[key].open}
+              onChange={(event) => updateDay(key, { open: event.target.value })}
+              disabled={value[key].closed}
+            />
+            <input
+              type="time"
+              value={value[key].close}
+              onChange={(event) => updateDay(key, { close: event.target.value })}
+              disabled={value[key].closed}
+            />
+            <label className="supplier-hours-closed">
+              <input
+                type="checkbox"
+                checked={value[key].closed}
+                onChange={(event) => updateDay(key, { closed: event.target.checked })}
+              />
+              定休日
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SupplierLocationEditor({
+  locations,
+  onChange,
+  defaultType
+}: {
+  locations: SupplierLocationDraft[];
+  onChange: (locations: SupplierLocationDraft[]) => void;
+  defaultType: string;
+}) {
+  function updateLocation(index: number, patch: Partial<SupplierLocationDraft>) {
+    onChange(locations.map((location, locationIndex) => (
+      locationIndex === index ? { ...location, ...patch } : location
+    )));
+  }
+
+  function addLocation() {
+    onChange([...locations, emptyLocationDraft(defaultType)]);
+  }
+
+  function deleteLocation(index: number) {
+    onChange(locations.filter((_, locationIndex) => locationIndex !== index));
+  }
+
+  return (
+    <div className="supplier-location-editor full-span">
+      <div className="supplier-location-editor-heading">
+        <strong>店舗・支店</strong>
+        <button className="secondary-button" type="button" onClick={addLocation}>支店を追加</button>
+      </div>
+      {locations.length ? locations.map((location, index) => {
+        const locationHours = normalizeBusinessHours(location.businessHoursSettings);
+        return (
+          <div className="supplier-location-card" key={index}>
+            <div className="supplier-location-grid">
+              <label>
+                <span>支店名</span>
+                <input value={location.locationName} onChange={(event) => updateLocation(index, { locationName: event.target.value })} placeholder="例: 春吉店" />
+              </label>
+              <label>
+                <span>区分</span>
+                <select value={location.type} onChange={(event) => updateLocation(index, { type: event.target.value })}>
+                  {channelTypes.map((channelType) => (
+                    <option value={channelType} key={channelType}>{channelType}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>住所</span>
+                <input value={location.address} onChange={(event) => updateLocation(index, { address: event.target.value })} />
+              </label>
+              <label>
+                <span>電話番号</span>
+                <input value={location.phone} onChange={(event) => updateLocation(index, { phone: event.target.value })} />
+              </label>
+              <label>
+                <span>エリア</span>
+                <input value={location.area} onChange={(event) => updateLocation(index, { area: event.target.value })} placeholder="例: 清水店から車 10 分" />
+              </label>
+              <label>
+                <span>購入方法</span>
+                <input value={location.purchaseMethod} onChange={(event) => updateLocation(index, { purchaseMethod: event.target.value })} placeholder="例: 店頭購入" />
+              </label>
+              <label className="full-span">
+                <span>営業時間メモ</span>
+                <input value={location.hours} onChange={(event) => updateLocation(index, { hours: event.target.value })} placeholder="補足メモ（例: 年末年始は短縮）" />
+              </label>
+              <label className="full-span">
+                <span>メモ</span>
+                <input value={location.note} onChange={(event) => updateLocation(index, { note: event.target.value })} />
+              </label>
+            </div>
+            <SupplierBusinessHoursEditor value={locationHours} onChange={(nextHours) => updateLocation(index, { businessHoursSettings: nextHours })} />
+            <button className="text-button danger-button" type="button" onClick={() => deleteLocation(index)}>支店を削除</button>
+          </div>
+        );
+      }) : (
+        <p className="empty-state-text">支店・購入地点がある場合は追加してください。チェーン店は支店ごとに住所と電話番号を保存できます。</p>
+      )}
+    </div>
   );
 }
 
