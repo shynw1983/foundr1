@@ -18136,7 +18136,26 @@ body :where(
 }
 
 .actual-editor {
-  grid-template-columns: minmax(180px, 1.1fr) repeat(4, minmax(112px, 0.72fr)) minmax(180px, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.actual-editor .shift-editor-title {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  column-gap: 10px;
+  align-items: center;
+}
+
+.actual-editor label:nth-of-type(7) {
+  grid-column: 1 / span 2;
+}
+
+.actual-editor .actual-shift-shortcuts {
+  grid-column: 3 / span 2;
+}
+
+.actual-editor .shift-editor-actions {
+  grid-column: 5 / -1;
 }
 
 .shift-multi-select-toggle {
