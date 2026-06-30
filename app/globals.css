@@ -33532,3 +33532,71 @@ a:focus-visible {
 .store-context-selector.is-locked {
   background: #f8fafc;
 }
+
+.table-order-shell {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7faf7;
+  color: var(--ink);
+}
+
+.table-order-panel {
+  width: min(480px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(31, 111, 85, 0.18);
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(17, 24, 39, 0.08);
+}
+
+.table-order-kicker {
+  margin: 0;
+  color: #1f6f55;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.table-order-panel h1 {
+  margin: 0;
+  color: #10231d;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.table-order-table {
+  margin: 0;
+  color: #334155;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.table-order-status {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.table-order-status.is-open {
+  border-color: rgba(31, 111, 85, 0.24);
+  background: #edf8f2;
+  color: #166044;
+}
+
+.table-order-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+}

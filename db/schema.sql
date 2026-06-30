@@ -2055,6 +2055,38 @@ create table if not exists pos_customer_display_states (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists store_tables (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id) on delete cascade,
+  brand_id uuid references brands(id) on delete set null,
+  label text not null,
+  display_name text not null default '',
+  area_name text not null default '',
+  seat_count integer not null default 0,
+  qr_token text not null unique default encode(gen_random_bytes(24), 'hex'),
+  status text not null default 'active',
+  table_ordering_enabled boolean not null default true,
+  checkout_exit_policy text not null default 'show_staff_screen_required',
+  sort_order integer not null default 100,
+  metadata jsonb not null default '{}'::jsonb,
+  created_by uuid references employees(id) on delete set null,
+  updated_by uuid references employees(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (store_id, label)
+);
+
+alter table store_tables add column if not exists brand_id uuid references brands(id) on delete set null;
+alter table store_tables add column if not exists display_name text not null default '';
+alter table store_tables add column if not exists area_name text not null default '';
+alter table store_tables add column if not exists seat_count integer not null default 0;
+alter table store_tables add column if not exists table_ordering_enabled boolean not null default true;
+alter table store_tables add column if not exists checkout_exit_policy text not null default 'show_staff_screen_required';
+alter table store_tables add column if not exists sort_order integer not null default 100;
+alter table store_tables add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table store_tables add column if not exists created_by uuid references employees(id) on delete set null;
+alter table store_tables add column if not exists updated_by uuid references employees(id) on delete set null;
+
 create table if not exists menu_store_settings (
   id uuid primary key default gen_random_uuid(),
   brand_id uuid not null references brands(id) on delete cascade,
@@ -3415,6 +3447,8 @@ create index if not exists idx_timecard_workload_settings_store on timecard_work
 create index if not exists idx_procedure_books_status_updated on procedure_books(status, updated_at desc);
 create index if not exists idx_procedure_books_brand on procedure_books(brand_id);
 create index if not exists idx_menu_sources_brand on menu_sources(brand_id, status);
+create index if not exists idx_store_tables_store on store_tables(store_id, status, sort_order);
+create index if not exists idx_store_tables_token on store_tables(qr_token);
 create index if not exists idx_menu_categories_brand_store on menu_categories(brand_id, store_id, sort_order);
 create index if not exists idx_menu_catalog_items_brand_store on menu_catalog_items(brand_id, store_id, is_active);
 create index if not exists idx_menu_option_groups_item on menu_option_groups(menu_catalog_item_id, sort_order);
