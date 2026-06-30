@@ -15,6 +15,7 @@ import {
   PackageCheck,
   Plus,
   Printer,
+  QrCode,
   Search,
   ShoppingCart,
   WalletCards,
@@ -46,6 +47,7 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "現場記録", href: "/os/field-notes", icon: Lightbulb },
   { label: "商品比較", href: "/os/product-comparisons", icon: Search },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
+  { label: "テーブルQR注文", href: "/os/pos/table-order", icon: QrCode },
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
 
@@ -616,6 +618,7 @@ export default function PosPage() {
           <div className="pos-admin-actions">
             <a href="/os/menus"><MenuSquare size={16} />メニュー管理</a>
             <a href="/os/pos/reconciliation"><WalletCards size={16} />日次レジ締め</a>
+            <a href="/os/pos/table-order"><QrCode size={16} />テーブルQR注文</a>
             <a href="/os/analytics/sales"><BarChart3 size={16} />売上分析</a>
             <a href={`/os/stores/devices${selectedStoreId ? `?storeId=${encodeURIComponent(selectedStoreId)}` : ""}`}><MonitorSmartphone size={16} />表示・設備設定</a>
             <a href="/os/stores"><Store size={16} />店舗設定</a>

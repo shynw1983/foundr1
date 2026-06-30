@@ -33600,3 +33600,166 @@ a:focus-visible {
   font-weight: 500;
   line-height: 1.6;
 }
+
+.table-order-admin-page {
+  gap: 18px;
+}
+
+.table-order-create-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.table-order-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.table-order-form-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.table-order-form-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.table-order-form-grid input,
+.table-order-form-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid rgba(31, 111, 85, 0.24);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.table-order-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.table-order-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid rgba(31, 111, 85, 0.16);
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.table-order-card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.table-order-card-heading > div {
+  min-width: 0;
+}
+
+.table-order-card-heading span {
+  color: #1f6f55;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.table-order-card-heading h3 {
+  margin: 3px 0;
+  color: #10231d;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.table-order-card-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.table-order-qr-frame {
+  display: grid;
+  place-items: center;
+  min-height: 184px;
+  border: 1px dashed rgba(31, 111, 85, 0.24);
+  border-radius: 8px;
+  background: #f8fbf9;
+}
+
+.table-order-qr-frame img {
+  width: min(180px, 100%);
+  height: auto;
+  display: block;
+}
+
+.table-order-url {
+  min-width: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.table-order-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-order-card-actions .secondary-button {
+  min-height: 36px;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+
+.table-order-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.table-order-card-meta .status-pill.success {
+  background: #edf8f2;
+  color: #166044;
+}
+
+@media (max-width: 900px) {
+  .table-order-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .table-order-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-order-card-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -20,6 +20,7 @@ import {
   MessageSquareWarning,
   PackageCheck,
   ReceiptText,
+  QrCode,
   Search,
   Settings,
   ShoppingCart,
@@ -51,7 +52,7 @@ const orderModulePaths = new Set([
 ]);
 const analyticsModulePaths = new Set(["/os/analytics", "/os/analytics/sales", "/os/analytics/labor", "/os/analytics/cost", "/os/analytics/expenses", "/os/analytics/profit"]);
 const storeOperationsModulePaths = new Set(["/os/procedures", "/os/field-notes", "/os/reports", "/os/feedback"]);
-const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
+const posModulePaths = new Set(["/os/pos", "/os/pos/reconciliation", "/os/pos/table-order", "/os/menus", "/os/brand-sites", "/os/loyalty"]);
 const timecardModulePaths = new Set(["/os/timecard", "/os/timecard/schedule", "/os/timecard/requests", "/os/timecard/workload", "/os/timecard/payroll", "/os/staff"]);
 const settingsModulePaths = new Set(["/os/products", "/os/stores", "/os/settings", "/os/system-usage"]);
 const settingsNavItem: OsNavItem = { label: "システム設定", href: "/os/settings", icon: Settings };
@@ -85,6 +86,7 @@ export const canonicalNavItems: OsNavItem[] = [
   { label: "手順書管理", href: "/os/procedures", icon: ClipboardCheck },
   { label: "POS", href: "/os/pos", icon: ShoppingCart },
   { label: "日次レジ締め", href: "/os/pos/reconciliation", icon: WalletCards },
+  { label: "テーブルQR注文", href: "/os/pos/table-order", icon: QrCode },
   { label: "会員・ポイント", href: "/os/loyalty", icon: BadgePercent },
   { label: "店舗・ブランド", href: "/os/stores", icon: Store },
   systemUsageNavItem,
@@ -144,6 +146,7 @@ export const navModules: OsNavModule[] = [
     paths: [
       { href: "/os/pos" },
       { href: "/os/pos/reconciliation" },
+      { href: "/os/pos/table-order" },
       { href: "/os/menus" },
       { href: "/os/brand-sites" },
       { href: "/os/loyalty" }

@@ -71,6 +71,19 @@ async function tableRows(storeId: string, request: Request, includeQrCodes: bool
   }));
 }
 
+async function storeBrandRows(storeId: string) {
+  return sql`
+    select
+      brands.id::text as "id",
+      brands.name
+    from store_brands
+    join brands on brands.id = store_brands.brand_id
+    where store_brands.store_id::text = ${storeId}
+      and brands.status = 'active'
+    order by brands.name
+  `;
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session || !(await canManageTableOrders(session.role))) {
@@ -79,12 +92,13 @@ export async function GET(request: Request) {
 
   const { access, selectedStoreId, forbidden } = await resolveStoreId(request, session);
   if (forbidden) return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
-  if (!selectedStoreId) return Response.json({ stores: access.stores, selectedStoreId: "", tables: [] });
+  if (!selectedStoreId) return Response.json({ stores: access.stores, selectedStoreId: "", storeBrands: [], tables: [] });
 
   const includeQrCodes = new URL(request.url).searchParams.get("includeQrCodes") === "1";
   return Response.json({
     stores: access.stores,
     selectedStoreId,
+    storeBrands: await storeBrandRows(selectedStoreId),
     tables: await tableRows(selectedStoreId, request, includeQrCodes)
   });
 }
