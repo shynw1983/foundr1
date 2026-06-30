@@ -18430,6 +18430,64 @@ body :where(
   background: #f3f8f5;
 }
 
+.shift-grid .shift-support-row th,
+.shift-grid .shift-support-row td {
+  border-top: 2px solid var(--line);
+  background: #fff8f6;
+}
+
+.shift-grid .shift-support-row .shift-employee-cell {
+  color: var(--red);
+}
+
+.shift-support-gap,
+.shift-support-empty {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.shift-support-gap {
+  color: var(--red);
+}
+
+.shift-support-empty {
+  color: #c6ced8;
+  font-weight: 500;
+}
+
+.shift-grid .shift-support-summary {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  min-width: 138px;
+  width: 138px;
+  align-content: center;
+  border-left: 2px solid var(--line);
+  background: #fff8f6;
+  color: var(--red);
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+
+.shift-grid .shift-support-summary strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shift-grid .shift-support-summary small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .shift-grid .shift-total-row .shift-cost-cell {
   background: #f3f8f5;
 }

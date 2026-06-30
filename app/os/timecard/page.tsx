@@ -2063,6 +2063,28 @@ export function TimecardPage({
                         </tr>
                       )}
                       {scheduleEmployees.length ? (
+                        <tr className="shift-support-row">
+                          <th className="shift-employee-cell">未シフト</th>
+                          {monthDays.map((day) => {
+                            const coverage = coverageByDate.get(day.key);
+                            const isUncovered = coverage?.status === "uncovered";
+                            return (
+                              <td
+                                className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${day.key === todayKey ? " is-today" : ""}`.trim()}
+                                title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : undefined}
+                                key={`support-${day.key}`}
+                              >
+                                {isUncovered ? <span className="shift-support-gap">{coverage?.missingLabel}</span> : <span className="shift-support-empty">-</span>}
+                              </td>
+                            );
+                          })}
+                          <td className="shift-support-summary">
+                            <strong>{uncoveredDays.length ? `${uncoveredDays.length}日` : "なし"}</strong>
+                            <small>空き時間</small>
+                          </td>
+                        </tr>
+                      ) : null}
+                      {scheduleEmployees.length ? (
                         <tr className="shift-total-row">
                           <th className="shift-employee-cell">合計</th>
                           {monthDays.map((day) => (
