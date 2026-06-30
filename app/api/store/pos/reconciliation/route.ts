@@ -94,7 +94,7 @@ async function getSessionFinancials(sessionId: string) {
       select coalesce(sum(amount), 0)::int as "cashSales"
       from store_customer_orders
       where pos_cash_session_id::text = ${sessionId}
-        and order_source = 'store_pos'
+        and order_source in ('store_pos', 'table_qr')
         and payment_status = 'paid'
         and payment_provider = 'cash'
         and status <> 'cancelled'
@@ -326,7 +326,7 @@ async function getOrders(storeId: string, businessDate: string) {
     from store_customer_orders
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.store_id::text = ${storeId}
-      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.order_source in ('store_pos', 'table_qr')
       and coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date) = ${businessDate}
     order by store_customer_orders.created_at desc
     limit 200
@@ -362,7 +362,7 @@ async function getPaymentTotals(storeId: string, businessDate: string) {
     from store_customer_orders
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.store_id::text = ${storeId}
-      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.order_source in ('store_pos', 'table_qr')
       and store_customer_orders.status <> 'cancelled'
       and coalesce(pos_cash_sessions.business_date, (store_customer_orders.created_at at time zone 'Asia/Tokyo')::date) = ${businessDate}
     group by store_customer_orders.payment_provider
@@ -608,7 +608,7 @@ export async function POST(request: Request) {
       left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
       where store_customer_orders.id::text = ${orderId}
         and store_customer_orders.store_id::text = ${storeFilter}
-        and store_customer_orders.order_source = 'store_pos'
+        and store_customer_orders.order_source in ('store_pos', 'table_qr')
       limit 1
     `;
     const target = targetRows[0] as {

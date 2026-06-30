@@ -98,6 +98,18 @@ type PosSummary = {
   }>;
 };
 
+type PosTableCheckoutRequest = {
+  id: string;
+  tableSessionKey: string;
+  tableLabel: string;
+  checkoutRequestType: string;
+  checkoutRequestedAt: string;
+  totalAmount: number;
+  orderCount: number;
+  pickupCodes: string[];
+  itemSummary: string[];
+};
+
 type PosTransactionItem = {
   id: string;
   name: string;
@@ -432,6 +444,16 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
+function formatTime(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function createCashBreakdownInput() {
   return yenDenominations.reduce((result, denomination) => {
     result[String(denomination)] = "";
@@ -577,6 +599,8 @@ export default function StorePosPage() {
   const [items, setItems] = useState<PosMenuItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<PosOptionGroup[]>([]);
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
+  const [tableCheckoutRequests, setTableCheckoutRequests] = useState<PosTableCheckoutRequest[]>([]);
+  const [selectedTableCheckoutKey, setSelectedTableCheckoutKey] = useState("");
   const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
@@ -677,6 +701,9 @@ export default function StorePosPage() {
     setCategories(nextCategories);
     setItems(nextItems ?? []);
     setOptionGroups((body.optionGroups ?? []) as PosOptionGroup[]);
+    const nextTableCheckoutRequests = (body.tableCheckoutRequests ?? []) as PosTableCheckoutRequest[];
+    setTableCheckoutRequests(nextTableCheckoutRequests);
+    setSelectedTableCheckoutKey((current) => nextTableCheckoutRequests.some((request) => request.tableSessionKey === current) ? current : "");
     setSummary((body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] }) as PosSummary);
     const nextPosSettings = {
       dineInEnabled: body.posSettings?.dineInEnabled !== false,
@@ -835,6 +862,8 @@ export default function StorePosPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + getCartItemAmount(item), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const selectedTableCheckout = tableCheckoutRequests.find((request) => request.tableSessionKey === selectedTableCheckoutKey) ?? null;
+  const tableCheckoutAmount = Number(selectedTableCheckout?.totalAmount ?? 0);
   const enabledDiscountPresets = posSettings.discountPresets.filter((preset) => preset.enabled);
   const selectedDiscountPreset = enabledDiscountPresets.find((preset) => preset.key === discountPresetKey);
   const posDiscountAmount = getPosDiscountAmount(selectedDiscountPreset, cart, subtotal);
@@ -850,6 +879,7 @@ export default function StorePosPage() {
     priceTaxMode: posSettings.priceTaxMode
   });
   const payableAmount = taxSummary.payableAmount;
+  const activeCheckoutAmount = selectedTableCheckout ? tableCheckoutAmount : payableAmount;
   const getMenuDisplayPrice = (item: PosMenuItem) => {
     const price = getItemPrice(item);
     return posSettings.priceTaxMode === "tax_excluded" ? price + Math.floor(price * taxRate / 100) : price;
@@ -882,15 +912,16 @@ export default function StorePosPage() {
   );
   const canUseRegister = Boolean(reconciliation.activeSession);
   const cashTenderedValue = Number(cashTenderedAmount || 0);
-  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - payableAmount : null;
+  const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue - activeCheckoutAmount : null;
   const canCheckout = Boolean(
-    cart.length > 0 &&
+    (cart.length > 0 || selectedTableCheckout) &&
     !saving &&
     canUseRegister &&
-    (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= payableAmount))
+    (paymentMethod !== "cash" || (cashTenderedAmount.trim() !== "" && cashTenderedValue >= activeCheckoutAmount))
   );
   const hasCurrentTransaction = Boolean(
     cart.length > 0 ||
+    selectedTableCheckout ||
     selectedMember ||
     memberLookupInput.trim() ||
     cashTenderedAmount.trim() ||
@@ -1261,6 +1292,7 @@ export default function StorePosPage() {
   function cancelCurrentTransaction() {
     if (!hasCurrentTransaction || saving) return;
     setCart([]);
+    setSelectedTableCheckoutKey("");
     setCashTenderedAmount("");
     setMemberLookupInput("");
     setSelectedMember(null);
@@ -1277,6 +1309,27 @@ export default function StorePosPage() {
     setCustomerDisplayMode("advertising");
     setMessage("現在の会計を中止しました。");
     void publishCustomerDisplayState(getAdvertisingDisplayState());
+  }
+
+  function selectTableCheckout(request: PosTableCheckoutRequest) {
+    if (!canUseRegister) {
+      setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
+      return;
+    }
+    setSelectedTableCheckoutKey((current) => current === request.tableSessionKey ? "" : request.tableSessionKey);
+    setCart([]);
+    setConfiguringItem(null);
+    setOptionDraft({});
+    setWeightDraft("");
+    setSelectedMember(null);
+    setMemberCoupons([]);
+    setSelectedCouponId("");
+    setCustomerSelectedCouponId("");
+    setDiscountPresetKey("");
+    setNote("");
+    setReceiptRequested(false);
+    setCashTenderedAmount("");
+    setCustomerDisplayMode("business");
   }
 
   function getLineBasePrice(item: PosCartItem) {
@@ -1321,6 +1374,7 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
+    setSelectedTableCheckoutKey("");
     const weightPricing = getWeightPricingConfig(item, orderType);
     const measuredQuantity = weightPricing ? Number(weightInput) : 0;
     if (weightPricing) {
@@ -1454,12 +1508,12 @@ export default function StorePosPage() {
   }
 
   async function checkout() {
-    if (!selectedStoreId || cart.length === 0 || saving) return;
+    if (!selectedStoreId || (!cart.length && !selectedTableCheckout) || saving) return;
     if (!canUseRegister) {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
-    if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < payableAmount)) {
+    if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < activeCheckoutAmount)) {
       setMessage("現金会計はお預かり金額を合計以上で入力してください。");
       return;
     }
@@ -1475,6 +1529,7 @@ export default function StorePosPage() {
           orderType,
           paymentMethod,
           cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
+          tableSessionKey: selectedTableCheckout?.tableSessionKey || undefined,
           memberToken: selectedMember?.publicToken || undefined,
           memberId: selectedMember?.id || undefined,
           memberEmail: selectedMember?.email || undefined,
@@ -1485,7 +1540,7 @@ export default function StorePosPage() {
           discountPresetKey: discountPresetKey || undefined,
           receiptRequested,
           note,
-          items: cart.map((item) => ({
+          items: selectedTableCheckout ? [] : cart.map((item) => ({
             menuCatalogItemId: item.id,
             quantity: item.quantity,
             measuredQuantity: item.measuredQuantity,
@@ -1500,9 +1555,11 @@ export default function StorePosPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "checkout failed");
-      const receiptPrintMessage = await printReceiptAfterCheckout(body, cartSnapshot);
-      const kitchenPrintMessage = await printKitchenAfterCheckout(body, cartSnapshot);
+      const receiptPrintMessage = selectedTableCheckout ? "" : await printReceiptAfterCheckout(body, cartSnapshot);
+      const kitchenPrintMessage = selectedTableCheckout ? "" : await printKitchenAfterCheckout(body, cartSnapshot);
       setCart([]);
+      setSelectedTableCheckoutKey("");
+      setTableCheckoutRequests((current) => current.filter((request) => request.tableSessionKey !== selectedTableCheckout?.tableSessionKey));
       setNote("");
       setReceiptRequested(false);
       setCashTenderedAmount("");
@@ -1511,6 +1568,7 @@ export default function StorePosPage() {
       setSummary(body.todaySummary as PosSummary);
       if (transactionDialogOpen) await loadTransactions();
       await loadReconciliation(selectedStoreId);
+      void load(selectedStoreId);
       const discountLabel = body.discountAmount ? ` / 学割 -${formatYen(body.discountAmount)}` : "";
       const couponLabel = body.couponDiscountAmount ? ` / クーポン -${formatYen(body.couponDiscountAmount)}` : "";
       const changeLabel = paymentMethod === "cash" ? ` / お釣り ${formatYen(body.cashChangeAmount ?? cashTenderedValue - body.amount)}` : "";
@@ -1534,7 +1592,17 @@ export default function StorePosPage() {
         ...getDisplayTaxState(body.taxAmount, body.taxRate, body.priceTaxMode),
         cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" ? body.cashChangeAmount ?? cashTenderedValue - body.amount : null,
-        items: getCustomerDisplayItems(customerDisplayLanguage)
+        items: selectedTableCheckout ? [{
+          name: `${selectedTableCheckout.tableLabel} テーブル会計`,
+          optionLabel: selectedTableCheckout.itemSummary.slice(0, 3).join(" / "),
+          quantity: 1,
+          measuredQuantity: null,
+          measuredUnit: "",
+          measuredUnitPrice: null,
+          weightLabel: "",
+          unitPrice: Number(body.amount ?? selectedTableCheckout.totalAmount),
+          amount: Number(body.amount ?? selectedTableCheckout.totalAmount)
+        }] : getCustomerDisplayItems(customerDisplayLanguage)
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会計を保存できませんでした。");
@@ -1561,7 +1629,7 @@ export default function StorePosPage() {
       }
     }
     if (customerDisplayMode === "advertising" && cart.length === 0 && !selectedMember && !memberLookupInput.trim()) return;
-    const status = cart.length === 0
+    const status = cart.length === 0 && !selectedTableCheckout
       ? "idle"
       : paymentMethod === "cash"
         ? cashTenderedAmount.trim() && cashChangeAmount !== null && cashChangeAmount >= 0
@@ -1583,16 +1651,26 @@ export default function StorePosPage() {
         memberMessage: selectedMember ? "いつもご利用いただきありがとうございます。" : "",
         ...getDisplayDiscountState(selectedDiscountPreset, posDiscountAmount, "", customerDisplayLanguage),
         ...getDisplayCouponState(selectedCoupon, couponDiscountAmount, "", customerDisplayLanguage),
-        subtotal: payableAmount,
+        subtotal: activeCheckoutAmount,
         ...getDisplayTaxState(taxSummary.taxAmount, taxRate),
         cashTenderedAmount: paymentMethod === "cash" && cashTenderedAmount.trim() ? cashTenderedValue : null,
         cashChangeAmount: paymentMethod === "cash" && cashChangeAmount !== null ? cashChangeAmount : null,
-        items: getCustomerDisplayItems(customerDisplayLanguage)
+        items: selectedTableCheckout ? [{
+          name: `${selectedTableCheckout.tableLabel} テーブル会計`,
+          optionLabel: selectedTableCheckout.itemSummary.slice(0, 3).join(" / "),
+          quantity: 1,
+          measuredQuantity: null,
+          measuredUnit: "",
+          measuredUnitPrice: null,
+          weightLabel: "",
+          unitPrice: tableCheckoutAmount,
+          amount: tableCheckoutAmount
+        }] : getCustomerDisplayItems(customerDisplayLanguage)
       });
     }, 180);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister]);
+  }, [cart, cashTenderedAmount, completedDisplayState, customerDisplayMode, memberLookupInput, orderType, paymentMethod, posSettings.externalPaymentTerminalBrand, posSettings.priceTaxMode, selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.couponCode, selectedDiscountPreset?.key, selectedDiscountPreset?.name, selectedMember, selectedStoreId, payableAmount, posDiscountAmount, couponDiscountAmount, taxRate, taxSummary.taxAmount, canUseRegister, activeCheckoutAmount, selectedTableCheckout, tableCheckoutAmount]);
 
   useEffect(() => {
     if (!selectedStoreId || !canUseRegister) return;
@@ -1924,6 +2002,37 @@ export default function StorePosPage() {
             </div>
           </div>
 
+          {tableCheckoutRequests.length ? (
+            <section className="store-pos-table-checkout-panel" aria-label="テーブル会計待ち">
+              <div className="store-pos-table-checkout-head">
+                <span>テーブル会計待ち</span>
+                <strong>{tableCheckoutRequests.length}件</strong>
+              </div>
+              <div className="store-pos-table-checkout-list">
+                {tableCheckoutRequests.map((request) => (
+                  <button
+                    key={request.tableSessionKey}
+                    className={selectedTableCheckoutKey === request.tableSessionKey ? "is-active" : ""}
+                    type="button"
+                    onClick={() => selectTableCheckout(request)}
+                    disabled={!canUseRegister || saving}
+                  >
+                    <span>
+                      <strong>{request.tableLabel}</strong>
+                      <small>
+                        {request.checkoutRequestType === "staff_to_table" ? "テーブル会計依頼" : "レジ会計待ち"}
+                        {formatTime(request.checkoutRequestedAt) ? ` / ${formatTime(request.checkoutRequestedAt)}` : ""}
+                        {request.orderCount > 1 ? ` / ${request.orderCount}件` : ""}
+                      </small>
+                      <small>{request.itemSummary.slice(0, 3).join(" / ")}</small>
+                    </span>
+                    <b>{formatYen(request.totalAmount)}</b>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <div className="store-pos-segmented">
             {visibleOrderTypeOptions.map((option) => (
               <button key={option.value} className={orderType === option.value ? "is-active" : ""} type="button" onClick={() => changeOrderType(option.value)}>
@@ -1933,7 +2042,14 @@ export default function StorePosPage() {
           </div>
 
           <div className="store-pos-cart-list">
-            {cart.length === 0 ? (
+            {selectedTableCheckout ? (
+              <div className="store-pos-table-checkout-selected">
+                <span>テーブル会計</span>
+                <strong>{selectedTableCheckout.tableLabel}</strong>
+                <p>{selectedTableCheckout.itemSummary.slice(0, 5).join(" / ") || "追加注文"}</p>
+                <small>{selectedTableCheckout.orderCount}件 / {selectedTableCheckout.pickupCodes.join(", ")}</small>
+              </div>
+            ) : cart.length === 0 ? (
               <div className="store-pos-empty">商品を選択してください。</div>
             ) : cart.map((item) => (
               <div key={item.cartKey} className="store-pos-cart-row">
@@ -2142,32 +2258,43 @@ export default function StorePosPage() {
           ) : null}
 
           <div className="store-pos-total">
-            <span>{posSettings.priceTaxMode === "tax_excluded" ? "小計" : "合計"}</span>
-            <strong>{formatYen(subtotal)}</strong>
-            {posDiscountAmount ? (
+            {selectedTableCheckout ? (
               <>
-                <span>学割</span>
-                <strong className="is-discount">-{formatYen(posDiscountAmount)}</strong>
+                <span>テーブル会計</span>
+                <strong>{formatYen(tableCheckoutAmount)}</strong>
+                <span>対象</span>
+                <strong className="is-tax">{selectedTableCheckout.tableLabel}</strong>
               </>
-            ) : null}
-            {couponDiscountAmount ? (
+            ) : (
               <>
-                <span>クーポン</span>
-                <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
+                <span>{posSettings.priceTaxMode === "tax_excluded" ? "小計" : "合計"}</span>
+                <strong>{formatYen(subtotal)}</strong>
+                {posDiscountAmount ? (
+                  <>
+                    <span>学割</span>
+                    <strong className="is-discount">-{formatYen(posDiscountAmount)}</strong>
+                  </>
+                ) : null}
+                {couponDiscountAmount ? (
+                  <>
+                    <span>クーポン</span>
+                    <strong className="is-discount">-{formatYen(couponDiscountAmount)}</strong>
+                  </>
+                ) : null}
+                {subtotal > 0 ? (
+                  <>
+                    <span>{posSettings.priceTaxMode === "tax_excluded" ? `消費税 ${taxRate}%` : `内消費税 ${taxRate}%`}</span>
+                    <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
+                  </>
+                ) : null}
+                {posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount ? (
+                  <>
+                    <span>お会計</span>
+                    <strong>{formatYen(payableAmount)}</strong>
+                  </>
+                ) : null}
               </>
-            ) : null}
-            {subtotal > 0 ? (
-              <>
-                <span>{posSettings.priceTaxMode === "tax_excluded" ? `消費税 ${taxRate}%` : `内消費税 ${taxRate}%`}</span>
-                <strong className="is-tax">{formatYen(taxSummary.taxAmount)}</strong>
-              </>
-            ) : null}
-            {posSettings.priceTaxMode === "tax_excluded" || posDiscountAmount || couponDiscountAmount ? (
-              <>
-                <span>お会計</span>
-                <strong>{formatYen(payableAmount)}</strong>
-              </>
-            ) : null}
+            )}
           </div>
           <div className="store-pos-checkout-actions">
             <button className="danger-button store-pos-cancel-transaction" type="button" onClick={cancelCurrentTransaction} disabled={!hasCurrentTransaction || saving}>

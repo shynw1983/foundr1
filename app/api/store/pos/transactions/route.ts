@@ -26,7 +26,7 @@ async function getTodaySummary(selectedStoreId: string) {
       coalesce(sum(amount), 0)::int as total
     from store_customer_orders
     where store_id::text = ${selectedStoreId}
-      and order_source = 'store_pos'
+      and order_source in ('store_pos', 'table_qr')
       and created_at >= (date_trunc('day', now() at time zone 'Asia/Tokyo') at time zone 'Asia/Tokyo')
       and created_at < ((date_trunc('day', now() at time zone 'Asia/Tokyo') + interval '1 day') at time zone 'Asia/Tokyo')
       and status <> 'cancelled'
@@ -58,7 +58,7 @@ async function getTransactions(storeId: string) {
     from store_customer_orders
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.store_id::text = ${storeId}
-      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.order_source in ('store_pos', 'table_qr')
       and store_customer_orders.created_at > now() - interval '7 days'
     order by store_customer_orders.created_at desc
     limit 200
@@ -90,7 +90,7 @@ async function getTransactionDetail(storeId: string, orderId: string) {
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.store_id::text = ${storeId}
       and store_customer_orders.id::text = ${orderId}
-      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.order_source in ('store_pos', 'table_qr')
     limit 1
   `;
   const order = orderRows[0];
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
     left join pos_cash_sessions on pos_cash_sessions.id = store_customer_orders.pos_cash_session_id
     where store_customer_orders.id::text = ${orderId}
       and store_customer_orders.store_id::text = ${storeFilter}
-      and store_customer_orders.order_source = 'store_pos'
+      and store_customer_orders.order_source in ('store_pos', 'table_qr')
     limit 1
   `;
   const target = targetRows[0] as { id: string; storeId: string; status: string; paymentStatus: string; paymentMethod: string; amount: number; cashSessionStatus: string } | undefined;

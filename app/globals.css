@@ -11045,6 +11045,105 @@ body :where(
   color: #1f6f55;
 }
 
+.store-pos-table-checkout-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f0f8f4;
+}
+
+.store-pos-table-checkout-head,
+.store-pos-table-checkout-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.store-pos-table-checkout-head span,
+.store-pos-table-checkout-list small,
+.store-pos-table-checkout-selected span,
+.store-pos-table-checkout-selected small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.store-pos-table-checkout-head strong {
+  color: #1f6f55;
+  font-size: 13px;
+}
+
+.store-pos-table-checkout-list {
+  display: grid;
+  gap: 6px;
+}
+
+.store-pos-table-checkout-list button {
+  width: 100%;
+  border: 1px solid rgba(31, 111, 85, 0.18);
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.store-pos-table-checkout-list button.is-active {
+  border-color: rgba(31, 111, 85, 0.48);
+  background: #e7f7ef;
+  box-shadow: inset 0 0 0 1px rgba(31, 111, 85, 0.16);
+}
+
+.store-pos-table-checkout-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.store-pos-table-checkout-list button span,
+.store-pos-table-checkout-selected {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.store-pos-table-checkout-list strong,
+.store-pos-table-checkout-list small,
+.store-pos-table-checkout-selected strong,
+.store-pos-table-checkout-selected p,
+.store-pos-table-checkout-selected small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-pos-table-checkout-list button > b {
+  flex: 0 0 auto;
+  color: #1f6f55;
+  font-size: 16px;
+}
+
+.store-pos-table-checkout-selected {
+  border: 1px solid rgba(31, 111, 85, 0.22);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f0f8f4;
+}
+
+.store-pos-table-checkout-selected strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.store-pos-table-checkout-selected p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .store-pos-segmented,
 .store-pos-payment-grid {
   display: grid;
@@ -11628,6 +11727,10 @@ body :where(
 .store-pos-store-select span,
 .store-pos-summary span,
 .store-pos-summary small,
+.store-pos-table-checkout-head span,
+.store-pos-table-checkout-list small,
+.store-pos-table-checkout-selected span,
+.store-pos-table-checkout-selected small,
 .store-pos-filter-panel span,
 .store-pos-note span,
 .store-pos-cash-strip span,
@@ -11668,6 +11771,10 @@ body :where(
 .store-pos-cash-strip strong,
 .store-pos-business-state strong,
 .store-pos-cash-metrics strong,
+.store-pos-table-checkout-head strong,
+.store-pos-table-checkout-list strong,
+.store-pos-table-checkout-list button > b,
+.store-pos-table-checkout-selected strong,
 .pos-admin-cash-grid strong {
   font-size: 15px;
   font-weight: 700;

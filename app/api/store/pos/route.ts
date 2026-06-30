@@ -26,6 +26,7 @@ type PosCheckoutBody = {
   orderType?: string;
   paymentMethod?: string;
   cashTenderedAmount?: number | string | null;
+  tableSessionKey?: string;
   memberId?: string;
   memberToken?: string;
   memberPhone?: string;
@@ -495,7 +496,7 @@ async function getTodaySummary(selectedStoreId: string) {
       coalesce(sum(amount), 0)::int as total
     from store_customer_orders
     where store_id::text = ${selectedStoreId}
-      and order_source = 'store_pos'
+      and order_source in ('store_pos', 'table_qr')
       and created_at >= (date_trunc('day', now() at time zone 'Asia/Tokyo') at time zone 'Asia/Tokyo')
       and created_at < ((date_trunc('day', now() at time zone 'Asia/Tokyo') + interval '1 day') at time zone 'Asia/Tokyo')
       and status <> 'cancelled'
@@ -509,7 +510,7 @@ async function getTodaySummary(selectedStoreId: string) {
       to_char(created_at at time zone 'Asia/Tokyo', 'HH24:MI') as "createdTime"
     from store_customer_orders
     where store_id::text = ${selectedStoreId}
-      and order_source = 'store_pos'
+      and order_source in ('store_pos', 'table_qr')
     order by created_at desc
     limit 8
   `;
@@ -522,6 +523,85 @@ async function getTodaySummary(selectedStoreId: string) {
     average: orderCount ? Math.round(total / orderCount) : 0,
     latestOrders
   };
+}
+
+async function getTableCheckoutRequests(selectedStoreId: string) {
+  if (!selectedStoreId) return [];
+  const rows = await sql`
+    select
+      store_customer_orders.id::text,
+      store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.amount,
+      store_customer_orders.drink,
+      coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
+      coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "tableLabel",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestType', '') as "checkoutRequestType",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestedAt', '') as "checkoutRequestedAt"
+    from store_customer_orders
+    left join store_tables on store_tables.id = store_customer_orders.store_table_id
+    where store_customer_orders.store_id::text = ${selectedStoreId}
+      and store_customer_orders.order_source = 'table_qr'
+      and store_customer_orders.status <> 'cancelled'
+      and store_customer_orders.payment_status <> 'paid'
+      and coalesce(store_customer_orders.customer_summary ->> 'checkoutStatus', '') = 'requested'
+      and store_customer_orders.created_at > now() - interval '14 days'
+    order by store_customer_orders.created_at asc
+  `;
+  const groups = new Map<string, {
+    id: string;
+    tableSessionKey: string;
+    tableLabel: string;
+    checkoutRequestType: string;
+    checkoutRequestedAt: string;
+    totalAmount: number;
+    orderCount: number;
+    pickupCodes: string[];
+    itemSummary: string[];
+  }>();
+  for (const row of rows as Array<{
+    id: string;
+    pickupCode: string;
+    amount: number;
+    drink: string;
+    tableSessionKey: string;
+    tableLabel: string;
+    checkoutRequestType: string;
+    checkoutRequestedAt: string;
+  }>) {
+    const key = row.tableSessionKey || row.id;
+    const current = groups.get(key);
+    const itemSummary = String(row.drink || "").split(/\n+/).map((item) => item.trim()).filter(Boolean).slice(0, 2);
+    if (!current) {
+      groups.set(key, {
+        id: row.id,
+        tableSessionKey: key,
+        tableLabel: row.tableLabel || "テーブル未設定",
+        checkoutRequestType: row.checkoutRequestType,
+        checkoutRequestedAt: row.checkoutRequestedAt,
+        totalAmount: Number(row.amount ?? 0),
+        orderCount: 1,
+        pickupCodes: [row.pickupCode],
+        itemSummary
+      });
+      continue;
+    }
+    current.totalAmount += Number(row.amount ?? 0);
+    current.orderCount += 1;
+    current.pickupCodes.push(row.pickupCode);
+    current.itemSummary.push(...itemSummary);
+    const currentTime = new Date(current.checkoutRequestedAt).getTime();
+    const rowTime = new Date(row.checkoutRequestedAt).getTime();
+    if (Number.isFinite(rowTime) && (!Number.isFinite(currentTime) || rowTime > currentTime)) {
+      current.id = row.id;
+      current.checkoutRequestType = row.checkoutRequestType;
+      current.checkoutRequestedAt = row.checkoutRequestedAt;
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => {
+    const aTime = new Date(a.checkoutRequestedAt).getTime();
+    const bTime = new Date(b.checkoutRequestedAt).getTime();
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
 }
 
 async function getOpenCashSessionId(selectedStoreId: string) {
@@ -570,10 +650,11 @@ export async function GET(request: Request) {
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [menu, todaySummary, posSettings] = await Promise.all([
+  const [menu, todaySummary, posSettings, tableCheckoutRequests] = await Promise.all([
     getPosMenu(selectedStoreId),
     getTodaySummary(selectedStoreId),
-    getPosSettings(selectedStoreId)
+    getPosSettings(selectedStoreId),
+    getTableCheckoutRequests(selectedStoreId)
   ]);
 
   return Response.json({
@@ -581,7 +662,8 @@ export async function GET(request: Request) {
     selectedStoreId,
     ...menu,
     posSettings,
-    todaySummary
+    todaySummary,
+    tableCheckoutRequests
   });
 }
 
@@ -601,6 +683,7 @@ export async function POST(request: Request) {
   const memberLanguage = normalizeMemberLanguage(body.memberLanguage);
   const couponId = normalizeText(body.couponId);
   const discountPresetKey = normalizeText(body.discountPresetKey);
+  const tableSessionKey = normalizeText(body.tableSessionKey);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -608,7 +691,7 @@ export async function POST(request: Request) {
   const receiptRequested = body.receiptRequested === true;
   const cartItems = Array.isArray(body.items) ? body.items : [];
 
-  if (!storeId || cartItems.length === 0) {
+  if (!storeId || (!tableSessionKey && cartItems.length === 0)) {
     return Response.json({ error: "店舗と商品を選択してください。" }, { status: 400 });
   }
 
@@ -623,6 +706,110 @@ export async function POST(request: Request) {
   }
   if (orderType === "takeout" && !posSettings.takeoutEnabled) {
     return Response.json({ error: "この店舗では持ち帰りの会計は無効です。" }, { status: 400 });
+  }
+
+  if (tableSessionKey) {
+    const cashSessionId = await getOpenCashSessionId(storeId);
+    if (!cashSessionId) {
+      return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
+    }
+    const orders = await sql`
+      select
+        store_customer_orders.id::text,
+        store_customer_orders.pickup_code as "pickupCode",
+        store_customer_orders.amount,
+        store_customer_orders.status,
+        store_customer_orders.drink,
+        coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "tableLabel"
+      from store_customer_orders
+      left join store_tables on store_tables.id = store_customer_orders.store_table_id
+      where store_customer_orders.store_id::text = ${storeId}
+        and store_customer_orders.order_source = 'table_qr'
+        and store_customer_orders.status <> 'cancelled'
+        and store_customer_orders.payment_status <> 'paid'
+        and coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') = ${tableSessionKey}
+      order by store_customer_orders.created_at asc
+    `;
+    if (!orders.length) {
+      return Response.json({ error: "会計待ちのテーブル注文が見つかりません。" }, { status: 404 });
+    }
+    const amount = orders.reduce((sum, order) => sum + Number(order.amount ?? 0), 0);
+    if (
+      paymentMethod === "cash" &&
+      (cashTenderedAmount === null || !Number.isFinite(cashTenderedAmount) || cashTenderedAmount < amount)
+    ) {
+      return Response.json({ error: "現金会計はお預かり金額を合計以上で入力してください。" }, { status: 400 });
+    }
+    const cashChangeAmount = paymentMethod === "cash" && cashTenderedAmount !== null ? cashTenderedAmount - amount : null;
+    const paidAt = new Date().toISOString();
+    const tableLabel = String(orders[0]?.tableLabel || "テーブル");
+    const checkoutPayload = {
+      checkoutStatus: "handled",
+      checkoutHandledAt: paidAt,
+      checkoutHandledBy: session.id,
+      cashierId: session.id,
+      cashierName: session.name,
+      paymentIntent: paymentMethod,
+      paymentMethod,
+      cashTenderedAmount,
+      cashChangeAmount,
+      posCheckoutType: "table_qr",
+      paidAt
+    };
+    const orderIds = (orders as Array<{ id: string }>).map((order) => order.id);
+    const updatedRows = await sql`
+      update store_customer_orders
+      set
+        payment_status = 'paid',
+        payment_provider = ${paymentMethod},
+        paid_at = now(),
+        payment_updated_at = now(),
+        pos_cash_session_id = ${cashSessionId},
+        customer_summary = customer_summary || ${JSON.stringify(checkoutPayload)}::jsonb,
+        updated_at = now()
+      where id::text = any(${orderIds})
+      returning id::text, pickup_code as "pickupCode"
+    `;
+    for (const row of updatedRows as Array<{ id: string }>) {
+      await ensureProductionTasksForOrder(row.id);
+      await syncWebReservationToSalesOrder(row.id);
+      await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(row.id));
+    }
+    const todaySummary = await getTodaySummary(storeId);
+    const taxRate = getOrderTaxRate(posSettings, "eat_in");
+    const taxSummary = calculateTaxSummary({
+      subtotalAmount: amount,
+      discountAmount: 0,
+      couponDiscountAmount: 0,
+      taxRate,
+      priceTaxMode: posSettings.priceTaxMode
+    });
+    return Response.json({
+      ok: true,
+      orderId: orderIds[orderIds.length - 1],
+      pickupCode: tableLabel,
+      amount,
+      receiptRequested,
+      subtotalAmount: amount,
+      taxableAmount: taxSummary.taxableAmount,
+      taxAmount: taxSummary.taxAmount,
+      taxRate,
+      priceTaxMode: posSettings.priceTaxMode,
+      discountAmount: 0,
+      discountName: "",
+      discountPresetKey: "",
+      couponId: "",
+      couponCode: "",
+      couponName: "",
+      couponDiscountAmount: 0,
+      cashTenderedAmount,
+      cashChangeAmount,
+      tableSessionKey,
+      tableLabel,
+      tableOrderCount: orders.length,
+      loyaltyMember: null,
+      todaySummary
+    });
   }
 
   const requestedIds = Array.from(new Set(cartItems.map((item) => normalizeText(item.menuCatalogItemId)).filter(Boolean)));
