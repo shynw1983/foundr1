@@ -39,6 +39,12 @@ export type CustomerOrderRow = {
   customerName: string;
   customerPhone: string;
   customerNote: string;
+  storeTableLabel?: string;
+  tableSessionKey?: string;
+  checkoutStatus?: string;
+  checkoutRequestType?: string;
+  checkoutRequestedAt?: string;
+  checkoutHandledAt?: string;
   createdAt: string;
   updatedAt: string;
   paidAt: string;
@@ -370,6 +376,12 @@ export async function findCustomerOrderById(orderId: string) {
         store_customer_orders.customer_summary ->> 'note',
         ''
       ) as "customerNote",
+      coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "storeTableLabel",
+      coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutStatus', '') as "checkoutStatus",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestType', '') as "checkoutRequestType",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestedAt', '') as "checkoutRequestedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutHandledAt', '') as "checkoutHandledAt",
       store_customer_orders.created_at as "createdAt",
       store_customer_orders.updated_at as "updatedAt",
       coalesce(store_customer_orders.paid_at::text, '') as "paidAt",
@@ -379,6 +391,7 @@ export async function findCustomerOrderById(orderId: string) {
       coalesce(store_customer_orders.cancelled_at::text, '') as "cancelledAt"
     from store_customer_orders
     left join stores on stores.id = store_customer_orders.store_id
+    left join store_tables on store_tables.id = store_customer_orders.store_table_id
     where store_customer_orders.id = ${orderId}
     limit 1
   `;

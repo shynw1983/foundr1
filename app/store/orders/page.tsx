@@ -28,6 +28,12 @@ type StoreOrder = {
   customerName: string;
   customerPhone: string;
   customerNote: string;
+  storeTableLabel: string;
+  tableSessionKey: string;
+  checkoutStatus: string;
+  checkoutRequestType: string;
+  checkoutRequestedAt: string;
+  checkoutHandledAt: string;
   orderType: string;
   productionTasks: Array<{
     id: string;
@@ -110,7 +116,14 @@ const paymentLabels: Record<string, string> = {
 const sourceLabels: Record<string, string> = {
   store_pos: "POS",
   nanacha_web: "Web",
-  maamaa_web: "Web"
+  maamaa_web: "Web",
+  table_qr: "テーブルQR"
+};
+
+const checkoutRequestLabels: Record<string, string> = {
+  pay_at_counter: "レジ会計待ち",
+  staff_to_table: "テーブル会計依頼",
+  online_payment: "オンライン決済"
 };
 
 const orderTypeLabels: Record<string, string> = {
@@ -132,6 +145,12 @@ function shouldNotifyNewOrder(previousOrder: StoreOrder | undefined, nextOrder: 
     nextOrder.status === "new" &&
     nextOrder.orderSource !== "store_pos" &&
     (!previousOrder || previousOrder.paymentStatus !== "paid" || previousOrder.status !== "new");
+}
+
+function shouldNotifyCheckoutRequest(previousOrder: StoreOrder | undefined, nextOrder: StoreOrder) {
+  return nextOrder.orderSource === "table_qr" &&
+    nextOrder.checkoutStatus === "requested" &&
+    previousOrder?.checkoutStatus !== "requested";
 }
 
 function splitLines(value = "") {
@@ -167,6 +186,15 @@ function getProductionTaskLabel(status: string) {
   if (status === "ready") return "完成";
   if (status === "preparing") return "制作中";
   return "制作待ち";
+}
+
+function formatCheckoutRequestTime(value = "") {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 const storeOrderStatusPriority: Record<string, number> = {
@@ -240,6 +268,7 @@ export default function StoreOrdersPage() {
   const [soundReady, setSoundReady] = useState(false);
   const [error, setError] = useState("");
   const [cancelNotice, setCancelNotice] = useState("");
+  const [checkoutHandlingId, setCheckoutHandlingId] = useState("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const ordersRef = useRef<StoreOrder[]>([]);
   const repeatAlertTimersRef = useRef<number[]>([]);
@@ -458,7 +487,7 @@ export default function StoreOrdersPage() {
     setOrders((current) => {
       const currentById = new Map(current.map((order) => [order.id, order]));
       const incomingIds = nextOrders
-        .filter((order: StoreOrder) => shouldNotifyNewOrder(currentById.get(order.id), order))
+        .filter((order: StoreOrder) => shouldNotifyNewOrder(currentById.get(order.id), order) || shouldNotifyCheckoutRequest(currentById.get(order.id), order))
         .map((order: StoreOrder) => order.id);
 
       if (incomingIds.length) {
@@ -540,7 +569,7 @@ export default function StoreOrdersPage() {
           ? current.map((item) => (item.id === order.id ? order : item))
           : [order, ...current];
 
-        if (shouldNotifyNewOrder(previousOrder, order)) {
+        if (shouldNotifyNewOrder(previousOrder, order) || shouldNotifyCheckoutRequest(previousOrder, order)) {
           setNewOrderIds([order.id]);
           setSelectedId(order.id);
           playArrivalAlert([order.id]);
@@ -627,6 +656,59 @@ export default function StoreOrdersPage() {
       return order.status === status;
     })
     .sort(sortStoreOrders), [orders, query, status]);
+  const checkoutRequests = useMemo(() => {
+    const groups = new Map<string, {
+      id: string;
+      key: string;
+      storeName: string;
+      tableLabel: string;
+      checkoutRequestType: string;
+      checkoutRequestedAt: string;
+      totalAmount: number;
+      orderCount: number;
+      pickupCodes: string[];
+      itemSummary: string[];
+    }>();
+
+    for (const order of orders) {
+      if (order.orderSource !== "table_qr" || order.checkoutStatus !== "requested" || order.paymentStatus === "paid" || order.status === "cancelled") continue;
+      const key = order.tableSessionKey || order.id;
+      const current = groups.get(key);
+      const itemSummary = splitLines(order.drink).slice(0, 2);
+      if (!current) {
+        groups.set(key, {
+          id: order.id,
+          key,
+          storeName: order.storeName,
+          tableLabel: order.storeTableLabel || "テーブル未設定",
+          checkoutRequestType: order.checkoutRequestType,
+          checkoutRequestedAt: order.checkoutRequestedAt,
+          totalAmount: Number(order.amount ?? 0),
+          orderCount: 1,
+          pickupCodes: [order.pickupCode],
+          itemSummary
+        });
+        continue;
+      }
+      current.totalAmount += Number(order.amount ?? 0);
+      current.orderCount += 1;
+      current.pickupCodes.push(order.pickupCode);
+      current.itemSummary.push(...itemSummary);
+      const currentTime = new Date(current.checkoutRequestedAt).getTime();
+      const orderTime = new Date(order.checkoutRequestedAt).getTime();
+      if (Number.isFinite(orderTime) && (!Number.isFinite(currentTime) || orderTime > currentTime)) {
+        current.id = order.id;
+        current.checkoutRequestType = order.checkoutRequestType;
+        current.checkoutRequestedAt = order.checkoutRequestedAt;
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      const aTime = new Date(a.checkoutRequestedAt).getTime();
+      const bTime = new Date(b.checkoutRequestedAt).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
+  }, [orders]);
   const selectedOrder = visibleOrders.find((order) => order.id === selectedId) ?? visibleOrders.find(isPaidOrder);
   const counters = {
     new: orders.filter((order) => order.status === "new").length,
@@ -647,6 +729,20 @@ export default function StoreOrdersPage() {
       return true;
     }
     return false;
+  };
+
+  const markCheckoutHandled = async (orderId: string) => {
+    setCheckoutHandlingId(orderId);
+    try {
+      const response = await fetch("/api/store/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, checkoutAction: "mark_checkout_handled" })
+      });
+      if (response.ok) await refresh();
+    } finally {
+      setCheckoutHandlingId("");
+    }
   };
 
   const cancelOrder = async (order: StoreOrder) => {
@@ -742,6 +838,41 @@ export default function StoreOrdersPage() {
               <strong>{counters.ready}</strong>
             </article>
           </section>
+          {checkoutRequests.length ? (
+            <section className="store-checkout-requests" aria-label="テーブル会計リクエスト">
+              <div className="store-checkout-requests-head">
+                <div>
+                  <span>テーブル会計</span>
+                  <strong>{checkoutRequests.length}件</strong>
+                </div>
+                <small>客席からの会計リクエスト</small>
+              </div>
+              {checkoutRequests.map((request) => (
+                <article key={request.key} className={request.checkoutRequestType === "staff_to_table" ? "is-staff" : ""}>
+                  <div>
+                    <span>{checkoutRequestLabels[request.checkoutRequestType] ?? request.checkoutRequestType}</span>
+                    <strong>{request.tableLabel}</strong>
+                    <small>
+                      {formatCheckoutRequestTime(request.checkoutRequestedAt)}
+                      {request.orderCount > 1 ? ` / 追加注文 ${request.orderCount}件` : ""}
+                    </small>
+                    <p>{request.itemSummary.slice(0, 3).join(" / ")}</p>
+                  </div>
+                  <div className="store-checkout-request-side">
+                    <strong>¥{request.totalAmount.toLocaleString("ja-JP")}</strong>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={checkoutHandlingId === request.id}
+                      onClick={() => void markCheckoutHandled(request.id)}
+                    >
+                      {checkoutHandlingId === request.id ? "処理中..." : "対応済み"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          ) : null}
           {access?.stores.length ? (
             <section className="store-pickup-setting" aria-label="最短受け取り準備時間">
               <div>
@@ -878,6 +1009,7 @@ export default function StoreOrdersPage() {
                 className={[
                   "store-order-card",
                   !isPaidOrder(order) ? "is-payment-pending" : "",
+                  order.checkoutStatus === "requested" ? "is-checkout-requested" : "",
                   selectedOrder?.id === order.id ? "is-active" : "",
                   newOrderIds.includes(order.id) ? "is-new" : ""
                 ].filter(Boolean).join(" ")}
@@ -887,8 +1019,8 @@ export default function StoreOrdersPage() {
                 <PickupTimeChip order={order} />
                 {!isPaidOrder(order) ? (
                   <span className="store-order-payment-badge">
-                    決済待ち
-                    <small>30分後に対応中から非表示</small>
+                    {order.checkoutStatus === "requested" ? (checkoutRequestLabels[order.checkoutRequestType] ?? "会計依頼") : "決済待ち"}
+                    <small>{order.checkoutStatus === "requested" ? (order.storeTableLabel || "テーブル") : "30分後に対応中から非表示"}</small>
                   </span>
                 ) : null}
                 <span className="store-order-code">{order.pickupCode}</span>
@@ -968,7 +1100,29 @@ export default function StoreOrdersPage() {
               </div>
 
               {!isPaidOrder(selectedOrder) ? (
-                <p className="store-order-payment-note">決済完了前の注文です。内容確認のみ可能で、制作タスクには反映しません。</p>
+                <p className="store-order-payment-note">
+                  {selectedOrder.orderSource === "table_qr"
+                    ? "テーブル注文は会計前でも店内対応できます。会計後にPOS側で支払い完了を記録してください。"
+                    : "決済完了前の注文です。内容確認のみ可能で、制作タスクには反映しません。"}
+                </p>
+              ) : null}
+
+              {selectedOrder.checkoutStatus === "requested" ? (
+                <div className="store-order-checkout-panel">
+                  <div>
+                    <span>{checkoutRequestLabels[selectedOrder.checkoutRequestType] ?? selectedOrder.checkoutRequestType}</span>
+                    <strong>{selectedOrder.storeTableLabel || "テーブル未設定"}</strong>
+                    <small>{formatCheckoutRequestTime(selectedOrder.checkoutRequestedAt)} に依頼</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={checkoutHandlingId === selectedOrder.id}
+                    onClick={() => void markCheckoutHandled(selectedOrder.id)}
+                  >
+                    {checkoutHandlingId === selectedOrder.id ? "処理中..." : "会計対応済み"}
+                  </button>
+                </div>
               ) : null}
 
               {isPaidOrder(selectedOrder) && selectedOrder.productionTasks?.length ? (

@@ -56,12 +56,19 @@ export async function GET(request: Request) {
         store_customer_orders.customer_summary ->> 'note',
         ''
       ) as "customerNote",
+      coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "storeTableLabel",
+      coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutStatus', '') as "checkoutStatus",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestType', '') as "checkoutRequestType",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestedAt', '') as "checkoutRequestedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutHandledAt', '') as "checkoutHandledAt",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
       coalesce(production_tasks.tasks, '[]'::json) as "productionTasks",
       store_customer_orders.created_at as "createdAt",
       coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
     from store_customer_orders
     left join stores on stores.id = store_customer_orders.store_id
+    left join store_tables on store_tables.id = store_customer_orders.store_table_id
     left join lateral (
       select json_agg(
         json_build_object(
@@ -112,12 +119,19 @@ export async function GET(request: Request) {
       coalesce(store_customer_orders.customer_summary #>> '{customer,name}', store_customer_orders.customer_summary ->> 'name', '') as "customerName",
       coalesce(store_customer_orders.customer_summary #>> '{customer,phone}', store_customer_orders.customer_summary ->> 'phone', '') as "customerPhone",
       coalesce(store_customer_orders.customer_summary #>> '{customer,note}', store_customer_orders.customer_summary ->> 'note', '') as "customerNote",
+      coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "storeTableLabel",
+      coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutStatus', '') as "checkoutStatus",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestType', '') as "checkoutRequestType",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutRequestedAt', '') as "checkoutRequestedAt",
+      coalesce(store_customer_orders.customer_summary ->> 'checkoutHandledAt', '') as "checkoutHandledAt",
       coalesce(store_customer_orders.customer_summary ->> 'orderType', '') as "orderType",
       coalesce(production_tasks.tasks, '[]'::json) as "productionTasks",
       store_customer_orders.created_at as "createdAt",
       coalesce(store_customer_orders.payment_receipt_url, store_customer_orders.square_receipt_url, '') as "squareReceiptUrl"
     from store_customer_orders
     left join stores on stores.id = store_customer_orders.store_id
+    left join store_tables on store_tables.id = store_customer_orders.store_table_id
     left join lateral (
       select json_agg(json_build_object(
         'id', order_production_tasks.id::text,
@@ -147,21 +161,55 @@ export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "ログインしてください。" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { orderId?: string; status?: string };
+  const body = await request.json().catch(() => ({})) as { orderId?: string; status?: string; checkoutAction?: string };
   const orderId = String(body.orderId ?? "").trim();
   const status = String(body.status ?? "").trim();
+  const checkoutAction = String(body.checkoutAction ?? "").trim();
   const access = await getStoreOrderAccess(session);
-  if (!orderId || !canChangeOrderStatus(access, status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
+  if (!orderId || (!checkoutAction && !canChangeOrderStatus(access, status))) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
+  if (checkoutAction && checkoutAction !== "mark_checkout_handled") return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
   const targetRows = await sql`
-    select store_id::text as "storeId"
+    select
+      store_id::text as "storeId",
+      coalesce(store_table_id::text, '') as "storeTableId",
+      coalesce(customer_summary ->> 'tableSessionKey', table_session_key, '') as "tableSessionKey"
     from store_customer_orders
     where id = ${orderId}
     limit 1
   `;
-  const target = targetRows[0] as { storeId: string } | undefined;
+  const target = targetRows[0] as { storeId: string; storeTableId: string; tableSessionKey: string } | undefined;
   if (!target || !(await canAccessStore(session, target.storeId))) {
     return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  if (checkoutAction === "mark_checkout_handled") {
+    const handledAt = new Date().toISOString();
+    const checkoutPayload = {
+      checkoutStatus: "handled",
+      checkoutHandledAt: handledAt,
+      checkoutHandledBy: session.id
+    };
+    const rows = await sql`
+      update store_customer_orders
+      set
+        customer_summary = customer_summary || ${JSON.stringify(checkoutPayload)}::jsonb,
+        updated_at = now()
+      where store_id::text = ${target.storeId}
+        and order_source = 'table_qr'
+        and status <> 'cancelled'
+        and payment_status <> 'paid'
+        and coalesce(customer_summary ->> 'checkoutStatus', '') = 'requested'
+        and (
+          (${target.tableSessionKey} <> '' and coalesce(customer_summary ->> 'tableSessionKey', table_session_key, '') = ${target.tableSessionKey})
+          or (${target.tableSessionKey} = '' and id = ${orderId})
+        )
+      returning id::text
+    `;
+    if (rows[0]?.id) {
+      await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(rows[0].id as string));
+    }
+    return Response.json({ ok: Boolean(rows[0]?.id), handledCount: rows.length });
   }
 
   const rows = await sql`
