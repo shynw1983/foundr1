@@ -117,14 +117,16 @@ export async function ensureProductionTasksForOrder(orderId: string) {
     select
       id::text,
       store_id::text as "storeId",
+      order_source as "orderSource",
       status,
       payment_status as "paymentStatus"
     from store_customer_orders
     where id::text = ${normalizedOrderId}
     limit 1
   `;
-  const order = orderRows[0] as { id: string; storeId: string; status: string; paymentStatus: string } | undefined;
-  if (!order || order.paymentStatus !== "paid" || ["cancelled", "refund_pending", "pending_payment", "checkout_failed", "payment_failed"].includes(order.status)) {
+  const order = orderRows[0] as { id: string; storeId: string; orderSource: string; status: string; paymentStatus: string } | undefined;
+  const canProduceUnpaidTableOrder = order?.orderSource === "table_qr" && ["new", "preparing", "ready"].includes(order.status);
+  if (!order || (!canProduceUnpaidTableOrder && order.paymentStatus !== "paid") || ["cancelled", "refund_pending", "pending_payment", "checkout_failed", "payment_failed"].includes(order.status)) {
     return [];
   }
 

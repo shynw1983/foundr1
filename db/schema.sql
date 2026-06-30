@@ -2210,6 +2210,8 @@ alter table store_customer_orders add column if not exists payment_refund_error 
 alter table store_customer_orders add column if not exists payment_refunded_at timestamptz;
 alter table store_customer_orders add column if not exists receipt_download_count integer not null default 0;
 alter table store_customer_orders add column if not exists receipt_last_downloaded_at timestamptz;
+alter table store_customer_orders add column if not exists store_table_id uuid references store_tables(id) on delete set null;
+alter table store_customer_orders add column if not exists table_session_key text not null default '';
 
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),
