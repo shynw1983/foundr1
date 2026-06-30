@@ -18444,20 +18444,34 @@ body :where(
 .shift-support-empty {
   display: grid;
   min-height: 42px;
-  place-items: center;
   padding: 4px;
   font-size: 10px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.15;
   overflow-wrap: anywhere;
   text-align: center;
 }
 
 .shift-support-gap {
+  align-content: center;
   color: var(--red);
+  gap: 6px;
+}
+
+.shift-support-range {
+  display: grid;
+  gap: 1px;
+  justify-items: center;
+}
+
+.shift-support-dash {
+  color: #d98a82;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .shift-support-empty {
+  place-items: center;
   color: #c6ced8;
   font-weight: 500;
 }

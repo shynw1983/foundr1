@@ -769,6 +769,20 @@ function formatMinuteRange(start: number, end: number) {
   return `${minutesToTime(start)}-${minutesToTime(end)}`;
 }
 
+function renderMissingShiftRanges(missingLabel: string) {
+  return missingLabel.split("、").map((range) => {
+    const [start, end] = range.split("-");
+    if (!start || !end) return <span className="shift-support-range" key={range}>{range}</span>;
+    return (
+      <span className="shift-support-range" key={range}>
+        <span>{start}</span>
+        <span className="shift-support-dash">-</span>
+        <span>{end}</span>
+      </span>
+    );
+  });
+}
+
 function getJstTimeText(value: string | null | undefined) {
   if (!value) return null;
   return new Intl.DateTimeFormat("en-GB", {
@@ -2074,7 +2088,7 @@ export function TimecardPage({
                                 title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : undefined}
                                 key={`support-${day.key}`}
                               >
-                                {isUncovered ? <span className="shift-support-gap">{coverage?.missingLabel}</span> : <span className="shift-support-empty">-</span>}
+                                {isUncovered && coverage?.missingLabel ? <span className="shift-support-gap">{renderMissingShiftRanges(coverage.missingLabel)}</span> : <span className="shift-support-empty">-</span>}
                               </td>
                             );
                           })}
