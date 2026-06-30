@@ -30423,6 +30423,75 @@ body :where(
   font-size: 13px;
 }
 
+.sales-time-band-list {
+  display: grid;
+  gap: 12px;
+  margin-top: var(--sales-inner-gap);
+}
+
+.sales-time-band-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sales-time-band-main {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.sales-time-band-main > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sales-time-band-main strong,
+.sales-time-band-main small,
+.sales-time-band-row > small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sales-time-band-main small,
+.sales-time-band-row > small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-time-band-main b {
+  color: var(--ink);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.sales-time-band-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f6;
+}
+
+.sales-time-band-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #21745b, #0f766e);
+}
+
 .sales-day-bars {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

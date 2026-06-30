@@ -58,6 +58,14 @@ function getDatesBetween(startDate: string, endDate: string) {
 
 const deliveryFeeRate = 0.385;
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const salesTimeBands = [
+  { key: "midnight", label: "深夜", startHour: 0, endHour: 5 },
+  { key: "morning", label: "早朝・午前", startHour: 5, endHour: 11 },
+  { key: "lunch", label: "昼", startHour: 11, endHour: 14 },
+  { key: "afternoon", label: "午後", startHour: 14, endHour: 17 },
+  { key: "evening", label: "夕方", startHour: 17, endHour: 21 },
+  { key: "night", label: "夜", startHour: 21, endHour: 24 }
+];
 const hourMs = 60 * 60 * 1000;
 const salesAnalysisSettingsRoles = new Set(["owner", "manager", "store_owner", "store_manager"]);
 const salesTestDataDeleteRoles = new Set(["owner", "manager"]);
@@ -456,6 +464,14 @@ export async function GET(request: Request) {
     peakLoadLevelScore: number;
   }>();
   const hourMap = new Map<number, { hour: number; orderCount: number; sales: number }>();
+  const timeBandMap = new Map<string, {
+    key: string;
+    label: string;
+    startHour: number;
+    endHour: number;
+    orderCount: number;
+    sales: number;
+  }>();
   const platformMap = new Map<string, { sourcePlatform: string; orderCount: number; sales: number }>();
   const revenueGroupMap = new Map<string, { key: string; label: string; orderCount: number; sales: number; feeRate: number }>();
   const weekdayMap = new Map<number, {
@@ -506,6 +522,9 @@ export async function GET(request: Request) {
   }
   for (let hour = 0; hour < 24; hour += 1) {
     hourMap.set(hour, { hour, orderCount: 0, sales: 0 });
+  }
+  for (const band of salesTimeBands) {
+    timeBandMap.set(band.key, { ...band, orderCount: 0, sales: 0 });
   }
   for (let weekday = 0; weekday < 7; weekday += 1) {
     weekdayMap.set(weekday, {
@@ -561,6 +580,14 @@ export async function GET(request: Request) {
     hourEntry.orderCount += 1;
     hourEntry.sales += sales;
     hourMap.set(hour, hourEntry);
+
+    const timeBand = salesTimeBands.find((band) => hour >= band.startHour && hour < band.endHour);
+    if (timeBand) {
+      const timeBandEntry = timeBandMap.get(timeBand.key) ?? { ...timeBand, orderCount: 0, sales: 0 };
+      timeBandEntry.orderCount += 1;
+      timeBandEntry.sales += sales;
+      timeBandMap.set(timeBand.key, timeBandEntry);
+    }
 
     const sourcePlatform = String(order.sourcePlatform);
     const platformEntry = platformMap.get(sourcePlatform) ?? { sourcePlatform, orderCount: 0, sales: 0 };
@@ -663,6 +690,15 @@ export async function GET(request: Request) {
   const hourly = Array.from(hourMap.values());
   const totalOrders = orders.length;
   const totalSales = orders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
+  const timeBands = Array.from(timeBandMap.values())
+    .map((band) => ({
+      ...band,
+      startLabel: `${String(band.startHour).padStart(2, "0")}:00`,
+      endLabel: band.endHour === 24 ? "24:00" : `${String(band.endHour).padStart(2, "0")}:00`,
+      averageOrderValue: band.orderCount > 0 ? Math.round(band.sales / band.orderCount) : 0,
+      share: totalSales > 0 ? (band.sales / totalSales) * 100 : 0
+    }))
+    .sort((a, b) => b.sales - a.sales || b.orderCount - a.orderCount || a.startHour - b.startHour);
   const revenueGroups = ["in_store", "delivery"].map((key) => {
     const fallback = key === "delivery"
       ? { key, label: "デリバリー", orderCount: 0, sales: 0, feeRate: deliveryFeeRate }
@@ -742,6 +778,7 @@ export async function GET(request: Request) {
     daily,
     weekdays,
     hourly,
+    timeBands,
     busiestDays,
     quietestDays,
     busiestWeekdays,

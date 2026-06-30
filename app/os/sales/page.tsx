@@ -49,6 +49,18 @@ type SalesDay = {
   precipitation: number | null;
 };
 type SalesHour = { hour: number; orderCount: number; sales: number };
+type SalesTimeBand = {
+  key: string;
+  label: string;
+  startHour: number;
+  endHour: number;
+  startLabel: string;
+  endLabel: string;
+  orderCount: number;
+  sales: number;
+  averageOrderValue: number;
+  share: number;
+};
 type SalesWeekday = {
   weekday: number;
   label: string;
@@ -130,6 +142,7 @@ type SalesSummary = {
   daily: SalesDay[];
   weekdays: SalesWeekday[];
   hourly: SalesHour[];
+  timeBands: SalesTimeBand[];
   busiestDays: SalesDay[];
   quietestDays: SalesDay[];
   busiestWeekdays: SalesWeekday[];
@@ -593,6 +606,7 @@ export default function SalesPage() {
       .sort((a, b) => b.ordersPerHour - a.ordersPerHour || b.salesPerHour - a.salesPerHour || b.orderCount - a.orderCount)
   ), [summary?.weekdays]);
   const selectedStoreName = summary?.stores.find((store) => store.id === selectedStoreId)?.name ?? "";
+  const topTimeBandSales = summary?.timeBands[0]?.sales ?? 0;
   const currentSettings = settingsDraft ?? summary?.salesAnalysisSettings ?? defaultSalesAnalysisSettings;
   const settingsDisabled = !summary?.canEditSalesAnalysisSettings || isSavingSettings || !selectedStoreId;
   const importedSourceMap = useMemo(() => {
@@ -1302,6 +1316,28 @@ export default function SalesPage() {
                   <small>{formatMoney(hour.sales)}</small>
                 </div>
               ))}
+            </div>
+          </article>
+          <article className="panel">
+            <h3>時間帯別売上ランキング</h3>
+            <div className="sales-time-band-list">
+              {(summary?.timeBands ?? []).map((band, index) => (
+                <div className="sales-time-band-row" key={band.key}>
+                  <div className="sales-time-band-main">
+                    <span>{index + 1}</span>
+                    <div>
+                      <strong>{band.label}</strong>
+                      <small>{band.startLabel}-{band.endLabel} / {band.orderCount}件 / 客単価 {formatMoney(band.averageOrderValue)}</small>
+                    </div>
+                    <b>{formatMoney(band.sales)}</b>
+                  </div>
+                  <div className="sales-time-band-meter">
+                    <i style={{ width: `${topTimeBandSales > 0 ? Math.max(6, (band.sales / topTimeBandSales) * 100) : 0}%` }} />
+                  </div>
+                  <small>構成比 {formatPercent(band.share)}</small>
+                </div>
+              ))}
+              {summary && summary.timeBands.length === 0 ? <div className="empty-state">時間帯別の売上データはありません</div> : null}
             </div>
           </article>
         </section>
