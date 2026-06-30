@@ -18135,6 +18135,10 @@ body :where(
   background: #f7faff;
 }
 
+.actual-editor {
+  grid-template-columns: minmax(180px, 1.1fr) repeat(4, minmax(112px, 0.72fr)) minmax(180px, 1fr);
+}
+
 .shift-multi-select-toggle {
   margin-left: auto;
 }
@@ -18476,6 +18480,13 @@ body :where(
   display: grid;
   place-items: center;
   gap: 1px;
+  line-height: 1.1;
+}
+
+.actual-break-time {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
   line-height: 1.1;
 }
 
@@ -29410,7 +29421,7 @@ body :where(
 
   .shift-editor-title,
   .shift-editor label:nth-of-type(4),
-  .actual-editor label:nth-of-type(3) {
+  .actual-editor label:nth-of-type(7) {
     grid-column: 1 / -1;
   }
 

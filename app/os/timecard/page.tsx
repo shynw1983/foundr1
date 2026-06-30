@@ -69,6 +69,7 @@ type DailySummary = {
   nightMinutes: number;
   isManualCorrection: boolean;
   alerts: string[];
+  breakIntervals?: Array<{ start: string; end: string }>;
 };
 
 type PayrollRow = {
@@ -200,6 +201,10 @@ type ActualDraft = {
   workDate: string;
   clockIn: string;
   clockOut: string;
+  breakStart1: string;
+  breakEnd1: string;
+  breakStart2: string;
+  breakEnd2: string;
   note: string;
 };
 
@@ -1451,12 +1456,18 @@ export function TimecardPage({
     if (!data?.canEditActualTime) return;
     const actual = actualByCell.get(`${employeeId}:${workDate}`);
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    const breakInterval1 = actual?.breakIntervals?.[0];
+    const breakInterval2 = actual?.breakIntervals?.[1];
     clearShiftMessage();
     setActualDraft({
       employeeId,
       workDate,
       clockIn: getJstTimeText(actual?.clockIn) ?? shift?.scheduledStart ?? "",
       clockOut: getJstTimeText(actual?.clockOut) ?? shift?.scheduledEnd ?? "",
+      breakStart1: getJstTimeText(breakInterval1?.start) ?? "",
+      breakEnd1: getJstTimeText(breakInterval1?.end) ?? "",
+      breakStart2: getJstTimeText(breakInterval2?.start) ?? "",
+      breakEnd2: getJstTimeText(breakInterval2?.end) ?? "",
       note: ""
     });
   }
@@ -1498,6 +1509,10 @@ export function TimecardPage({
         workDate: nextDraft.workDate,
         clockIn: nextDraft.clockIn,
         clockOut: nextDraft.clockOut,
+        breakIntervals: [
+          { start: nextDraft.breakStart1, end: nextDraft.breakEnd1 },
+          { start: nextDraft.breakStart2, end: nextDraft.breakEnd2 }
+        ],
         note: nextDraft.note
       })
     });
@@ -1517,6 +1532,10 @@ export function TimecardPage({
       ...actualDraft,
       clockIn: selectedActualShift.scheduledStart,
       clockOut: selectedActualShift.scheduledEnd,
+      breakStart1: "",
+      breakEnd1: "",
+      breakStart2: "",
+      breakEnd2: "",
       note: actualDraft.note || "計画シフトから反映"
     };
     setActualDraft(nextDraft);
@@ -2089,6 +2108,22 @@ export function TimecardPage({
                       <input type="time" value={actualDraft.clockOut} onChange={(event) => setActualDraft({ ...actualDraft, clockOut: event.target.value })} />
                     </label>
                     <label>
+                      <span>休憩1開始</span>
+                      <input type="time" value={actualDraft.breakStart1} onChange={(event) => setActualDraft({ ...actualDraft, breakStart1: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩1終了</span>
+                      <input type="time" value={actualDraft.breakEnd1} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd1: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩2開始</span>
+                      <input type="time" value={actualDraft.breakStart2} onChange={(event) => setActualDraft({ ...actualDraft, breakStart2: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩2終了</span>
+                      <input type="time" value={actualDraft.breakEnd2} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd2: event.target.value })} />
+                    </label>
+                    <label>
                       <span>メモ</span>
                       <input value={actualDraft.note} onChange={(event) => setActualDraft({ ...actualDraft, note: event.target.value })} placeholder="修正理由など" />
                     </label>
@@ -2159,6 +2194,7 @@ export function TimecardPage({
                                         <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
                                         <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
                                       </span>
+                                      {actual.breakMinutes > 0 ? <span className="actual-break-time">休憩 {formatDuration(actual.breakMinutes)}</span> : null}
                                       {actual.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
                                     </>

@@ -34,6 +34,7 @@ type TimecardPostBody = {
   scheduledEnd?: string;
   clockIn?: string;
   clockOut?: string;
+  breakIntervals?: Array<{ start?: string; end?: string }>;
   breakMinutes?: number | string;
   shifts?: Array<{
     employeeId?: string;
@@ -534,6 +535,18 @@ function normalizeTimeValue(value: unknown) {
   const text = String(value ?? "").trim();
   if (!text) return null;
   return /^\d{2}:\d{2}$/.test(text) ? text : null;
+}
+
+function normalizeBreakIntervals(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 2).map((interval) => {
+    if (!interval || typeof interval !== "object") return { start: null, end: null };
+    const record = interval as { start?: unknown; end?: unknown };
+    return {
+      start: normalizeTimeValue(record.start),
+      end: normalizeTimeValue(record.end)
+    };
+  });
 }
 
 function getJstWorkDateRange(workDate: string) {
@@ -1516,12 +1529,12 @@ export async function POST(request: Request) {
         and store_id = ${storeId}
         and (
           (
-            punch_type in ('clock_in', 'break_start', 'break_end')
+            punch_type = 'clock_in'
             and punched_at >= ${start.toISOString()}
             and punched_at < ${end.toISOString()}
           )
           or (
-            punch_type = 'clock_out'
+            punch_type in ('clock_out', 'break_start', 'break_end')
             and punched_at >= ${start.toISOString()}
             and punched_at < ${overnightEnd.toISOString()}
           )
@@ -1543,14 +1556,30 @@ export async function POST(request: Request) {
 
     const clockIn = normalizeTimeValue(body.clockIn);
     const clockOut = normalizeTimeValue(body.clockOut);
-    if (!clockIn && !clockOut) {
+    const breakIntervals = normalizeBreakIntervals(body.breakIntervals);
+    const completeBreakIntervals = breakIntervals.filter((interval) => interval.start || interval.end);
+    if (completeBreakIntervals.some((interval) => !interval.start || !interval.end)) {
+      return Response.json({ error: "休憩は開始時刻と終了時刻をセットで入力してください。" }, { status: 400 });
+    }
+    if (!clockIn && !clockOut && !completeBreakIntervals.length) {
       return Response.json({ error: "出勤または退勤時刻を入力してください。" }, { status: 400 });
     }
 
     const nextClockInAt = clockIn ? toPunchDateTime(workDate, clockIn) : null;
     const nextClockOutAt = clockOut ? toPunchDateTime(workDate, clockOut, clockIn) : null;
+    const nextBreakIntervals = completeBreakIntervals.map((interval) => {
+      const startTime = interval.start as string;
+      const endTime = interval.end as string;
+      const startAt = toPunchDateTime(workDate, startTime, clockIn);
+      const endAt = toPunchDateTime(workDate, endTime, startTime);
+      return { start: startTime, end: endTime, startAt, endAt };
+    });
     const now = Date.now();
-    const futurePunch = [nextClockInAt, nextClockOutAt].find((value) => value && new Date(value).getTime() > now);
+    const futurePunch = [
+      nextClockInAt,
+      nextClockOutAt,
+      ...nextBreakIntervals.flatMap((interval) => [interval.startAt, interval.endAt])
+    ].find((value) => value && new Date(value).getTime() > now);
     if (futurePunch) {
       return Response.json({ error: "未来の実勤務時刻は保存できません。実際に打刻時刻を過ぎてから修正してください。" }, { status: 400 });
     }
@@ -1579,6 +1608,54 @@ export async function POST(request: Request) {
         returning id::text
       `;
       insertedIds.push(String(rows[0]?.id ?? ""));
+    }
+
+    for (const interval of nextBreakIntervals) {
+      const breakStartRows = await sql`
+        insert into timecard_punches (
+          employee_id,
+          store_id,
+          punch_type,
+          punched_at,
+          source,
+          note,
+          created_by
+        )
+        values (
+          ${employeeId},
+          ${storeId},
+          'break_start',
+          ${interval.startAt},
+          'manager_correction',
+          ${String(body.note ?? "").trim() || null},
+          ${session.id}
+        )
+        returning id::text
+      `;
+      insertedIds.push(String(breakStartRows[0]?.id ?? ""));
+
+      const breakEndRows = await sql`
+        insert into timecard_punches (
+          employee_id,
+          store_id,
+          punch_type,
+          punched_at,
+          source,
+          note,
+          created_by
+        )
+        values (
+          ${employeeId},
+          ${storeId},
+          'break_end',
+          ${interval.endAt},
+          'manager_correction',
+          ${String(body.note ?? "").trim() || null},
+          ${session.id}
+        )
+        returning id::text
+      `;
+      insertedIds.push(String(breakEndRows[0]?.id ?? ""));
     }
 
     if (clockOut && nextClockOutAt) {
@@ -1611,7 +1688,7 @@ export async function POST(request: Request) {
       action: "timecard.actual_time.saved",
       targetType: "timecard_punch",
       targetId: insertedIds.filter(Boolean).join(","),
-      metadata: { storeId, employeeId, workDate, clockIn, clockOut },
+      metadata: { storeId, employeeId, workDate, clockIn, clockOut, breakIntervals: nextBreakIntervals.map((interval) => ({ start: interval.start, end: interval.end })) },
       request
     });
 
