@@ -143,7 +143,9 @@ export async function POST(request: Request) {
       and menu_catalog_items.brand_id::text = ${table.brandId}
       and menu_catalog_items.is_active = true
       and menu_catalog_items.store_id is null
+      and menu_catalog_items.item_kind = 'fixed_product'
       and coalesce(menu_store_settings.pos_enabled, true) = true
+      and coalesce(menu_store_settings.table_order_enabled, true) = true
       and coalesce(menu_store_settings.is_available, true) = true
   `;
   const menuById = new Map((menuRows as Array<{

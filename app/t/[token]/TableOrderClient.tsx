@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { CreditCard, Minus, Plus, ShoppingBag, UserRound, Wallet, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type ResolvedTable = {
@@ -38,12 +38,14 @@ type MenuItem = {
   id: string;
   name: string;
   displayNames?: Record<string, string>;
+  itemKind: string;
   category: string;
   imageUrl: string;
   basePrice: number;
   storeSetting?: {
     websiteEnabled: boolean;
     posEnabled: boolean;
+    tableOrderEnabled?: boolean;
     isAvailable: boolean;
     statusNote: string;
   };
@@ -63,6 +65,8 @@ type CartItem = {
   optionLabels: string[];
   amount: number;
 };
+
+type CheckoutType = "pay_at_counter" | "online_payment" | "staff_to_table";
 
 function formatYen(value: number) {
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
@@ -88,8 +92,11 @@ export function TableOrderClient({ token }: { token: string }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState<CheckoutType | "">("");
   const [message, setMessage] = useState("");
   const [lastOrder, setLastOrder] = useState<{ pickupCode: string; amount: number } | null>(null);
+  const [checkoutResult, setCheckoutResult] = useState<{ type: CheckoutType; message: string; totalAmount: number } | null>(null);
 
   const categories = useMemo(() => Array.from(new Set(items.map((item) => item.category || "未分類"))), [items]);
   const visibleItems = useMemo(() => items.filter((item) => !selectedCategory || (item.category || "未分類") === selectedCategory), [items, selectedCategory]);
@@ -114,7 +121,9 @@ export function TableOrderClient({ token }: { token: string }) {
         const menuBody = await menuResponse.json().catch(() => ({})) as { items?: MenuItem[]; error?: string };
         if (!menuResponse.ok) throw new Error(menuBody.error || "メニューを読み込めませんでした。");
         const availableItems = (menuBody.items ?? []).filter((item) => (
+          item.itemKind === "fixed_product" &&
           item.storeSetting?.posEnabled !== false &&
+          item.storeSetting?.tableOrderEnabled !== false &&
           item.storeSetting?.isAvailable !== false
         ));
         setItems(availableItems);
@@ -205,11 +214,37 @@ export function TableOrderClient({ token }: { token: string }) {
       if (!response.ok) throw new Error(body.error || "注文を送信できませんでした。");
       setLastOrder({ pickupCode: body.pickupCode || "", amount: Number(body.amount ?? cartTotal) });
       setCart([]);
+      setCheckoutResult(null);
       setMessage("追加注文を送信しました。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "注文を送信できませんでした。");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function requestCheckout(checkoutType: CheckoutType) {
+    setCheckoutSubmitting(checkoutType);
+    setMessage("");
+    try {
+      const response = await fetch("/api/public/table-order/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, checkoutType })
+      });
+      const body = await response.json().catch(() => ({})) as { message?: string; totalAmount?: number; error?: string };
+      if (!response.ok) throw new Error(body.error || "会計リクエストを送信できませんでした。");
+      setCheckoutResult({
+        type: checkoutType,
+        message: body.message || "",
+        totalAmount: Number(body.totalAmount ?? 0)
+      });
+      setCheckoutOpen(false);
+      setMessage("会計リクエストを送信しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "会計リクエストを送信できませんでした。");
+    } finally {
+      setCheckoutSubmitting("");
     }
   }
 
@@ -228,6 +263,7 @@ export function TableOrderClient({ token }: { token: string }) {
 
       {message ? <div className="table-order-message">{message}</div> : null}
       {lastOrder ? <div className="table-order-message is-success">受付番号 {lastOrder.pickupCode} / {formatYen(lastOrder.amount)}</div> : null}
+      {checkoutResult ? <div className="table-order-message is-success">{checkoutResult.message} / 合計 {formatYen(checkoutResult.totalAmount)}</div> : null}
 
       {loading ? <section className="table-order-empty">メニューを読み込み中...</section> : null}
       {!loading && !orderingEnabled ? <section className="table-order-empty">このテーブルでは現在注文できません。</section> : null}
@@ -267,6 +303,16 @@ export function TableOrderClient({ token }: { token: string }) {
         </footer>
       ) : null}
 
+      {orderingEnabled && !cart.length ? (
+        <footer className="table-order-checkout-bar">
+          <div>
+            <span>ご注文後はこちら</span>
+            <strong>お会計</strong>
+          </div>
+          <button type="button" onClick={() => setCheckoutOpen(true)}>会計する</button>
+        </footer>
+      ) : null}
+
       {activeItem ? (
         <div className="table-order-modal" role="dialog" aria-modal="true">
           <div className="table-order-modal-panel">
@@ -297,6 +343,39 @@ export function TableOrderClient({ token }: { token: string }) {
               <button type="button" onClick={() => setQuantity(Math.min(99, quantity + 1))}><Plus size={16} /></button>
             </div>
             <button className="table-order-add-button" type="button" onClick={addToCart}>カートに追加</button>
+          </div>
+        </div>
+      ) : null}
+
+      {checkoutOpen ? (
+        <div className="table-order-modal" role="dialog" aria-modal="true">
+          <div className="table-order-modal-panel">
+            <button className="table-order-modal-close" type="button" onClick={() => setCheckoutOpen(false)}><X size={18} /></button>
+            <h2>会計方法を選択</h2>
+            <p>テーブル {table?.tableDisplayName || table?.tableLabel || "-"}</p>
+            <div className="table-order-checkout-options">
+              <button type="button" onClick={() => void requestCheckout("pay_at_counter")} disabled={Boolean(checkoutSubmitting)}>
+                <Wallet size={18} />
+                <span>
+                  <strong>レジで支払う</strong>
+                  <small>レジまでお越しください</small>
+                </span>
+              </button>
+              <button type="button" onClick={() => void requestCheckout("online_payment")} disabled={Boolean(checkoutSubmitting)}>
+                <CreditCard size={18} />
+                <span>
+                  <strong>オンラインで支払う</strong>
+                  <small>現在は準備中です</small>
+                </span>
+              </button>
+              <button type="button" onClick={() => void requestCheckout("staff_to_table")} disabled={Boolean(checkoutSubmitting)}>
+                <UserRound size={18} />
+                <span>
+                  <strong>スタッフを呼んで支払う</strong>
+                  <small>テーブル会計を依頼します</small>
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

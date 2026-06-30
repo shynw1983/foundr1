@@ -33897,7 +33897,8 @@ a:focus-visible {
   font-weight: 650;
 }
 
-.table-order-cart-bar {
+.table-order-cart-bar,
+.table-order-checkout-bar {
   position: fixed;
   left: 12px;
   right: 12px;
@@ -33914,22 +33915,26 @@ a:focus-visible {
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.24);
 }
 
-.table-order-cart-bar div {
+.table-order-cart-bar div,
+.table-order-checkout-bar div {
   display: grid;
   gap: 2px;
 }
 
-.table-order-cart-bar span {
+.table-order-cart-bar span,
+.table-order-checkout-bar span {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.72);
 }
 
-.table-order-cart-bar strong {
+.table-order-cart-bar strong,
+.table-order-checkout-bar strong {
   font-size: 18px;
   font-weight: 700;
 }
 
 .table-order-cart-bar button,
+.table-order-checkout-bar button,
 .table-order-add-button {
   min-height: 44px;
   border: 0;
@@ -33944,6 +33949,15 @@ a:focus-visible {
 
 .table-order-cart-bar button:disabled {
   opacity: 0.65;
+}
+
+.table-order-checkout-bar {
+  background: #1f6f55;
+}
+
+.table-order-checkout-bar button {
+  background: #ffffff;
+  color: #166044;
 }
 
 .table-order-modal {
@@ -34057,6 +34071,50 @@ a:focus-visible {
   font-weight: 700;
 }
 
+.table-order-checkout-options {
+  display: grid;
+  gap: 10px;
+}
+
+.table-order-checkout-options button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(31, 111, 85, 0.18);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  color: #10231d;
+  font: inherit;
+  text-align: left;
+}
+
+.table-order-checkout-options button:disabled {
+  opacity: 0.65;
+}
+
+.table-order-checkout-options button > svg {
+  flex: 0 0 auto;
+  color: #1f6f55;
+}
+
+.table-order-checkout-options button span {
+  display: grid;
+  gap: 3px;
+}
+
+.table-order-checkout-options button strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.table-order-checkout-options button small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 @media (min-width: 720px) {
   .table-order-menu-shell {
     max-width: 760px;
@@ -34067,7 +34125,8 @@ a:focus-visible {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .table-order-cart-bar {
+  .table-order-cart-bar,
+  .table-order-checkout-bar {
     left: 50%;
     right: auto;
     width: min(720px, calc(100vw - 24px));

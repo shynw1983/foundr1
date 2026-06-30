@@ -154,6 +154,7 @@ export async function GET(request: Request) {
           menu_catalog_item_id::text as "menuCatalogItemId",
           website_enabled as "websiteEnabled",
           pos_enabled as "posEnabled",
+          coalesce(table_order_enabled, true) as "tableOrderEnabled",
           delivery_enabled as "deliveryEnabled",
           is_available as "isAvailable",
           price_override::float as "priceOverride",
@@ -303,12 +304,14 @@ export async function GET(request: Request) {
         storeSetting: setting ? {
           websiteEnabled: setting.websiteEnabled,
           posEnabled: setting.posEnabled,
+          tableOrderEnabled: setting.tableOrderEnabled,
           deliveryEnabled: setting.deliveryEnabled,
           isAvailable: setting.isAvailable,
           statusNote: setting.statusNote
         } : {
           websiteEnabled: true,
           posEnabled: true,
+          tableOrderEnabled: true,
           deliveryEnabled: false,
           isAvailable: true,
           statusNote: ""

@@ -2094,6 +2094,7 @@ create table if not exists menu_store_settings (
   menu_catalog_item_id uuid not null references menu_catalog_items(id) on delete cascade,
   website_enabled boolean not null default true,
   pos_enabled boolean not null default true,
+  table_order_enabled boolean not null default true,
   delivery_enabled boolean not null default false,
   is_available boolean not null default true,
   price_override numeric(12, 2),
@@ -2103,6 +2104,8 @@ create table if not exists menu_store_settings (
   updated_at timestamptz not null default now(),
   unique (store_id, menu_catalog_item_id)
 );
+
+alter table menu_store_settings add column if not exists table_order_enabled boolean not null default true;
 
 create table if not exists menu_option_store_settings (
   id uuid primary key default gen_random_uuid(),
