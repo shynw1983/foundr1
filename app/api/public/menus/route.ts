@@ -1,4 +1,5 @@
 import { sql } from "../../../../lib/db";
+import { resolveCustomerStoreDisplayName } from "../../../../lib/customer-display-names";
 import { publicMenuCacheHeaders } from "../../../../lib/public-cache";
 import { applyStaffPresenceGateToPublicOperation, type StoreOperationForPublicMenu } from "../../../../lib/store-staff-presence";
 import { getStoreReservationWindowsForDate } from "../../../../lib/store-reservation-windows";
@@ -84,12 +85,20 @@ export async function GET(request: Request) {
 
   const stores = storeQuery
     ? await sql`
-        select stores.id::text, stores.name
+        select
+          stores.id::text,
+          stores.name,
+          coalesce(stores.external_id, '') as "externalId",
+          coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames"
         from stores
         join store_brands on store_brands.store_id = stores.id
         where stores.status = 'active'
           and store_brands.brand_id = ${brand.id}
-          and (stores.id::text = ${storeQuery} or lower(stores.name) = lower(${storeQuery}))
+          and (
+            stores.id::text = ${storeQuery}
+            or lower(stores.name) = lower(${storeQuery})
+            or lower(coalesce(stores.external_id, '')) = lower(${storeQuery})
+          )
         limit 1
       `
     : [];
@@ -285,10 +294,25 @@ export async function GET(request: Request) {
   const reservationWindows = store?.id
     ? await getStoreReservationWindowsForDate({ storeId: store.id, pickupDate: today })
     : [];
+  const publicStores = store
+    ? [{
+        id: store.externalId || store.name,
+        label: resolveCustomerStoreDisplayName({
+          settings: store.customerDisplayNames,
+          internalStoreName: store.name,
+          brandName: brand.name,
+          platform: "web_reservation"
+        }),
+        name: store.name,
+        osStoreId: store.id
+      }]
+    : [];
 
   return Response.json({
     brand,
     store,
+    stores: publicStores,
+    selectedStoreId: publicStores[0]?.id ?? "",
     storeOperation: {
       ...storeOperation,
       reservationWindows
