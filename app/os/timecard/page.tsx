@@ -70,6 +70,15 @@ type DailySummary = {
   isManualCorrection: boolean;
   alerts: string[];
   breakIntervals?: Array<{ start: string; end: string }>;
+  punches?: TimecardPunchDetail[];
+};
+
+type TimecardPunchDetail = {
+  id: string;
+  punchType: "clock_in" | "clock_out" | "break_start" | "break_end";
+  punchedAt: string;
+  source: string | null;
+  note: string | null;
 };
 
 type PayrollRow = {
@@ -293,6 +302,60 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatPunchTypeLabel(punchType: TimecardPunchDetail["punchType"]) {
+  switch (punchType) {
+    case "clock_in":
+      return "出勤";
+    case "clock_out":
+      return "退勤";
+    case "break_start":
+      return "休憩開始";
+    case "break_end":
+      return "休憩終了";
+    default:
+      return "打刻";
+  }
+}
+
+function getPunchSourceLabel(source: string | null | undefined) {
+  switch (source) {
+    case "mobile":
+      return "staff App";
+    case "store_terminal":
+    case "store_tablet":
+      return "店舗端末";
+    case "manager_correction":
+      return "OS修正";
+    case "csv_import":
+      return "CSV取込";
+    default:
+      return "不明";
+  }
+}
+
+function getPunchSourceClassName(source: string | null | undefined) {
+  switch (source) {
+    case "mobile":
+      return "is-staff-app";
+    case "store_terminal":
+    case "store_tablet":
+      return "is-store-device";
+    case "manager_correction":
+      return "is-os-edit";
+    case "csv_import":
+      return "is-csv-import";
+    default:
+      return "is-unknown";
+  }
+}
+
+function getActualSourceSummary(actual: DailySummary | undefined) {
+  const sources = Array.from(new Set((actual?.punches ?? []).map((punch) => getPunchSourceLabel(punch.source))));
+  if (!sources.length) return null;
+  if (sources.length === 1) return sources[0];
+  return "複数";
 }
 
 function addUniqueReason(reasons: string[], reason: string) {
@@ -1261,6 +1324,9 @@ export function TimecardPage({
   const selectedActualShift = actualDraft
     ? shiftByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
     : null;
+  const selectedActualSummary = actualDraft
+    ? actualByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
+    : null;
 
   useEffect(() => {
     if (selectedPayrollRow && selectedPayrollRow.employeeId !== selectedPayrollEmployeeId) {
@@ -1467,7 +1533,6 @@ export function TimecardPage({
   }
 
   function openActualEditor(employeeId: string, workDate: string) {
-    if (!data?.canEditActualTime) return;
     const actual = actualByCell.get(`${employeeId}:${workDate}`);
     const shift = shiftByCell.get(`${employeeId}:${workDate}`);
     const breakInterval1 = actual?.breakIntervals?.[0];
@@ -2129,41 +2194,61 @@ export function TimecardPage({
                   </div>
                 </div>
                 {actualDraft ? (
-                  <div className="shift-editor actual-editor" aria-label="実勤務時間編集">
+                  <div className="shift-editor actual-editor" aria-label={data?.canEditActualTime ? "実勤務時間編集" : "実勤務時間詳細"}>
                     <div className="shift-editor-title">
                       <strong>{selectedActualEmployee?.name ?? "従業員"}</strong>
                       <span>{actualDraft.workDate}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
+                    <div className="actual-punch-detail" aria-label="打刻詳細">
+                      <div className="actual-punch-detail-head">
+                        <strong>打刻詳細</strong>
+                        <span>{selectedActualSummary?.punches?.length ? `${selectedActualSummary.punches.length}件` : "打刻なし"}</span>
+                      </div>
+                      {selectedActualSummary?.punches?.length ? (
+                        <div className="actual-punch-list">
+                          {selectedActualSummary.punches.map((punch) => (
+                            <div className="actual-punch-row" key={punch.id}>
+                              <span>{formatPunchTypeLabel(punch.punchType)}</span>
+                              <strong>{formatDateTime(punch.punchedAt)}</strong>
+                              <em className={`actual-source-pill ${getPunchSourceClassName(punch.source)}`}>{getPunchSourceLabel(punch.source)}</em>
+                              {punch.note ? <small>{punch.note}</small> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>この日の打刻はまだありません。</p>
+                      )}
+                    </div>
                     <label>
                       <span>出勤</span>
-                      <input type="time" value={actualDraft.clockIn} onChange={(event) => setActualDraft({ ...actualDraft, clockIn: event.target.value })} />
+                      <input type="time" value={actualDraft.clockIn} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, clockIn: event.target.value })} />
                     </label>
                     <label>
                       <span>退勤</span>
-                      <input type="time" value={actualDraft.clockOut} onChange={(event) => setActualDraft({ ...actualDraft, clockOut: event.target.value })} />
+                      <input type="time" value={actualDraft.clockOut} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, clockOut: event.target.value })} />
                     </label>
                     <label>
                       <span>休憩1開始</span>
-                      <input type="time" value={actualDraft.breakStart1} onChange={(event) => setActualDraft({ ...actualDraft, breakStart1: event.target.value })} />
+                      <input type="time" value={actualDraft.breakStart1} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, breakStart1: event.target.value })} />
                     </label>
                     <label>
                       <span>休憩1終了</span>
-                      <input type="time" value={actualDraft.breakEnd1} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd1: event.target.value })} />
+                      <input type="time" value={actualDraft.breakEnd1} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd1: event.target.value })} />
                     </label>
                     <label>
                       <span>休憩2開始</span>
-                      <input type="time" value={actualDraft.breakStart2} onChange={(event) => setActualDraft({ ...actualDraft, breakStart2: event.target.value })} />
+                      <input type="time" value={actualDraft.breakStart2} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, breakStart2: event.target.value })} />
                     </label>
                     <label>
                       <span>休憩2終了</span>
-                      <input type="time" value={actualDraft.breakEnd2} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd2: event.target.value })} />
+                      <input type="time" value={actualDraft.breakEnd2} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, breakEnd2: event.target.value })} />
                     </label>
                     <label>
                       <span>メモ</span>
-                      <input value={actualDraft.note} onChange={(event) => setActualDraft({ ...actualDraft, note: event.target.value })} placeholder="修正理由など" />
+                      <input value={actualDraft.note} disabled={!data?.canEditActualTime} onChange={(event) => setActualDraft({ ...actualDraft, note: event.target.value })} placeholder="修正理由など" />
                     </label>
-                    {selectedActualShift?.scheduledStart && selectedActualShift.scheduledEnd ? (
+                    {data?.canEditActualTime && selectedActualShift?.scheduledStart && selectedActualShift.scheduledEnd ? (
                       <div className="shift-patterns actual-shift-shortcuts" aria-label="実勤務時間のクイック操作">
                         <button type="button" disabled={isSavingShift} onClick={applyScheduledShiftToActual}>
                           計画シフトを打刻に反映
@@ -2173,8 +2258,12 @@ export function TimecardPage({
                     ) : null}
                     <div className="shift-editor-actions">
                       <button className="secondary-button" type="button" onClick={() => setActualDraft(null)}>閉じる</button>
-                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteActualTime()}>削除</button>
-                      <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveActualTime()}>{isSavingShift ? "保存中" : "保存"}</button>
+                      {data?.canEditActualTime ? (
+                        <>
+                          <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteActualTime()}>削除</button>
+                          <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveActualTime()}>{isSavingShift ? "保存中" : "保存"}</button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -2211,17 +2300,19 @@ export function TimecardPage({
                             const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             const isToday = day.key === todayKey;
+                            const sourceSummary = getActualSourceSummary(actual);
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
                                   className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isFutureDate && !actual ? " is-future" : ""}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"
-                                  disabled={!data?.canEditActualTime}
+                                  disabled={!data?.canEditActualTime && !actual && !shouldShowMissing}
                                   title={[
                                     actual?.isManualCorrection ? "手動修正あり" : "",
+                                    sourceSummary ? `打刻元 ${sourceSummary}` : "",
                                     status.label,
                                     shouldShowMissing && shift ? `予定 ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}` : ""
-                                  ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : undefined)}
+                                  ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : "実勤務時間の詳細")}
                                   onClick={() => openActualEditor(employee.id, day.key)}
                                 >
                                   {actual ? (
@@ -2231,6 +2322,7 @@ export function TimecardPage({
                                         <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
                                       </span>
                                       {actual.breakMinutes > 0 ? <span className="actual-break-time">休憩 {formatDuration(actual.breakMinutes)}</span> : null}
+                                      {sourceSummary ? <em className="actual-cell-source">{sourceSummary}</em> : null}
                                       {actual.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
                                     </>

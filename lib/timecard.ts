@@ -89,6 +89,13 @@ export type TimecardDailySummary = {
   isManualCorrection: boolean;
   alerts: string[];
   breakIntervals?: Array<{ start: string; end: string }>;
+  punches?: Array<{
+    id: string;
+    punchType: TimecardPunchType;
+    punchedAt: string;
+    source: string | null;
+    note: string | null;
+  }>;
 };
 
 export type TimecardPayrollAllowanceItem = {
@@ -509,7 +516,14 @@ export function summarizeTimecardDays(
       isOpen: Boolean(firstClockIn && !lastClockOut),
       isManualCorrection,
       alerts,
-      breakIntervals
+      breakIntervals,
+      punches: sortedPunches.map((punch) => ({
+        id: punch.id,
+        punchType: punch.punchType,
+        punchedAt: punch.punchedAt,
+        source: punch.source ?? null,
+        note: punch.note ?? null
+      }))
     });
   }
 
