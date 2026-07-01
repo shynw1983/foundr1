@@ -642,8 +642,14 @@ export default function MenuAdminPage() {
     if (kind === "category") {
       setActiveCategory(null);
       setCategoryDraft(emptyCategory);
+      await loadMenus("");
+      return;
     }
-    await loadMenus("");
+    if (kind === "item") {
+      await loadMenus("");
+      return;
+    }
+    await loadMenus(selectedItemId);
   }
 
   async function saveSortOrder(payload: Record<string, unknown>) {
@@ -1016,6 +1022,17 @@ export default function MenuAdminPage() {
     setActiveCategory(choiceSettingsCategory);
     setCategoryDraft(emptyCategory);
     if (group) editGroup(group);
+  }
+
+  function editGroupFromRule(group: MenuGroup) {
+    openChoiceSettings(group);
+    setMessage("選択グループを編集できます。");
+  }
+
+  function startOptionFromRule(group: MenuGroup) {
+    openChoiceSettings(group);
+    setOptionDraft({ ...emptyOption, optionGroupId: group.id });
+    setMessage("新しい選択肢を入力できます。");
   }
 
   return (
@@ -1777,18 +1794,32 @@ export default function MenuAdminPage() {
                           <strong>{group.name}</strong>
                           <span>{getLabel(selectionTypeOptions, group.selectionType)} / {group.affectsProcedure ? "手順に影響" : "表示のみ"}</span>
                         </div>
+                        <div className="row-actions menu-rule-actions">
+                          <button className="secondary-button compact-button" type="button" onClick={() => editGroupFromRule(group)}>
+                            編集
+                          </button>
+                          <button className="secondary-button compact-button" type="button" onClick={() => startOptionFromRule(group)}>
+                            <Plus size={15} />
+                            選択肢追加
+                          </button>
+                        </div>
                       </div>
                       <div className="menu-choice-grid">
                         {groupOptions.map((option) => (
-                          <label className={allowedKeys.has(getOptionKey(option)) ? "menu-choice-chip is-allowed" : "menu-choice-chip"} key={option.id}>
-                            <input
-                              type="checkbox"
-                              checked={allowedKeys.has(getOptionKey(option))}
-                              onChange={(event) => updateAllowedOption(group, option, event.target.checked)}
-                            />
-                            <span>{option.name}</span>
-                            {option.priceDelta ? <small>{option.priceDelta > 0 ? "+" : ""}{option.priceDelta}円</small> : null}
-                          </label>
+                          <div className={allowedKeys.has(getOptionKey(option)) ? "menu-choice-chip is-allowed" : "menu-choice-chip"} key={option.id}>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={allowedKeys.has(getOptionKey(option))}
+                                onChange={(event) => updateAllowedOption(group, option, event.target.checked)}
+                              />
+                              <span>{option.name}</span>
+                              {option.priceDelta ? <small>{option.priceDelta > 0 ? "+" : ""}{option.priceDelta}円</small> : null}
+                            </label>
+                            <button className="menu-choice-delete-button" type="button" onClick={() => void deleteEntry("option", option.id)} aria-label={`${option.name}を削除`}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         ))}
                         {!groupOptions.length ? <p className="empty-state">選択肢がありません。</p> : null}
                       </div>
