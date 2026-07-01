@@ -170,10 +170,19 @@ function normalizeCustomerDisplayNames(value: FormDataEntryValue | null) {
 
 async function replaceStoreSalesSources(storeId: string, formData: FormData, brandNames: string[]) {
   const sources = normalizeSalesSources(formData, brandNames);
-  await sql`delete from store_sales_sources where store_id = ${storeId}`;
+  const sourceKeys = sources.map((source) => {
+    const definition = getSalesSourceDefinition(source.platform);
+    return {
+      platform: source.platform,
+      label: definition?.label ?? source.label,
+      brandName: source.brandName
+    };
+  });
 
   for (const source of sources) {
     const definition = getSalesSourceDefinition(source.platform);
+    const sourceLabel = definition?.label ?? source.label;
+    const sourceType = definition?.sourceType ?? source.sourceType;
     await sql`
       insert into store_sales_sources (
         store_id,
@@ -189,16 +198,39 @@ async function replaceStoreSalesSources(storeId: string, formData: FormData, bra
       values (
         ${storeId},
         ${source.platform},
-        ${definition?.label ?? source.label},
-        ${definition?.sourceType ?? source.sourceType},
+        ${sourceLabel},
+        ${sourceType},
         ${source.brandName},
         true,
         ${source.sortOrder},
         ${JSON.stringify({ importSupported: Boolean(definition?.importSupported) })}::jsonb,
         now()
       )
+      on conflict (store_id, source_platform, source_label, brand_name)
+      do update set
+        source_type = excluded.source_type,
+        is_enabled = true,
+        sort_order = excluded.sort_order,
+        metadata = excluded.metadata,
+        updated_at = now()
     `;
   }
+
+  await sql`
+    delete from store_sales_sources
+    where store_id = ${storeId}
+      and not exists (
+        select 1
+        from jsonb_to_recordset(${JSON.stringify(sourceKeys)}::jsonb) as desired(
+          platform text,
+          label text,
+          "brandName" text
+        )
+        where desired.platform = store_sales_sources.source_platform
+          and desired.label = store_sales_sources.source_label
+          and desired."brandName" = store_sales_sources.brand_name
+      )
+  `;
 }
 
 function parsePaymentTypes(value: string) {
