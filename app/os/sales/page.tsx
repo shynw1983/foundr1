@@ -626,11 +626,16 @@ export default function SalesPage() {
   const importedDeliveryPeriodMap = useMemo(() => {
     const map = new Map<string, ImportBatch>();
     for (const item of summary?.imports ?? []) {
-      if (!item.salesSourceId || !item.deliveryImportPeriodKey) continue;
-      map.set(`${item.salesSourceId}:${item.deliveryImportPeriodKey}`, item);
+      if (!item.deliveryImportPeriodKey) continue;
+      if (item.salesSourceId) map.set(`${item.salesSourceId}:${item.deliveryImportPeriodKey}`, item);
+      for (const source of importState.salesSources) {
+        if (source.sourcePlatform !== item.sourcePlatform) continue;
+        if (source.brandName && item.brandName !== source.brandName) continue;
+        map.set(`${source.id}:${item.deliveryImportPeriodKey}`, item);
+      }
     }
     return map;
-  }, [summary?.imports]);
+  }, [importState.salesSources, summary?.imports]);
   const dueDeliveryImportKey = importState.currentDueDeliveryImportPeriod?.key ?? "";
   const selectedTestOrders = useMemo(() => {
     const selectedIds = new Set(selectedTestOrderIds);
