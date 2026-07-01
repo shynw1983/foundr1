@@ -1,5 +1,6 @@
 import { sql } from "../../../../../lib/db";
 import { publicMenuCacheHeaders } from "../../../../../lib/public-cache";
+import { resolveCustomerStoreDisplayName } from "../../../../../lib/customer-display-names";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
       store_tables.checkout_exit_policy as "checkoutExitPolicy",
       stores.id::text as "storeId",
       stores.name as "storeName",
+      coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
       coalesce(brands.id::text, fallback_brands.id::text, '') as "brandId",
       coalesce(brands.name, fallback_brands.name, '') as "brandName",
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled"
@@ -47,9 +49,20 @@ export async function GET(request: Request) {
 
   const table = rows[0];
   if (!table) return Response.json({ error: "table not found" }, { status: 404, headers: publicMenuCacheHeaders(true) });
+  const customerStoreName = resolveCustomerStoreDisplayName({
+    settings: table.customerDisplayNames,
+    internalStoreName: String(table.storeName || ""),
+    brandName: String(table.brandName || ""),
+    platform: "table_order"
+  });
 
   return Response.json({
-    table,
+    table: {
+      ...table,
+      customerStoreName,
+      customerDisplayName: customerStoreName,
+      customerDisplayNames: undefined
+    },
     orderingEnabled: table.tableOrderingEnabled === true && table.dineInEnabled === true
   }, {
     headers: publicMenuCacheHeaders(true)

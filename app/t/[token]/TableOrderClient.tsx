@@ -10,6 +10,8 @@ type ResolvedTable = {
   tableDisplayName: string;
   storeId: string;
   storeName: string;
+  customerStoreName?: string;
+  customerDisplayName?: string;
   brandId: string;
   brandName: string;
   tableOrderingEnabled: boolean;
@@ -255,8 +257,8 @@ export function TableOrderClient({ token }: { token: string }) {
     <main className="table-order-menu-shell">
       <header className="table-order-menu-header">
         <div>
-          <span>{table?.brandName || "Foundr1 OS"}</span>
-          <h1>{table?.storeName || "テーブル注文"}</h1>
+          <span>{table?.customerStoreName || table?.customerDisplayName || table?.storeName || "Foundr1 OS"}</span>
+          <h1>テーブル注文</h1>
           <p>テーブル {table?.tableDisplayName || table?.tableLabel || "-"}</p>
         </div>
         <div className="table-order-header-actions">
