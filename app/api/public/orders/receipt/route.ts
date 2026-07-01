@@ -1,5 +1,5 @@
 import { sql } from "../../../../../lib/db";
-import { recordOnlineReceiptDownload } from "../../../../../lib/receipt-data";
+import { getOnlineReceiptTaxRate, recordOnlineReceiptDownload } from "../../../../../lib/receipt-data";
 import { createReceiptPdf } from "../../../../../lib/receipt-pdf";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +69,7 @@ export async function GET(request: Request) {
     select
       store_customer_orders.id::text as id,
       store_customer_orders.pickup_code as "pickupCode",
+      store_customer_orders.order_source as "orderSource",
       store_customer_orders.status,
       store_customer_orders.payment_status as "paymentStatus",
       coalesce(store_customer_orders.payment_refund_status, '') as "paymentRefundStatus",
@@ -88,7 +89,6 @@ export async function GET(request: Request) {
       coalesce(companies.legal_name, companies.name, stores.name, '') as "issuerName",
       coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
       coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
-      coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
       coalesce(companies.address, '') as "issuerAddress",
       coalesce(companies.phone, '') as "issuerPhone"
     from store_customer_orders
@@ -142,7 +142,7 @@ export async function GET(request: Request) {
     issuerPhone: clean(order.issuerPhone),
     invoiceRegistrationNumber: clean(order.invoiceRegistrationNumber),
     purposeText: clean(order.receiptPurposeText) || "テイクアウト飲食代",
-    taxRate: Number(order.receiptTaxRate ?? 8),
+    taxRate: getOnlineReceiptTaxRate({ orderSource: order.orderSource, customerSummary }),
     downloadedAt: formatDate(downloadRecord?.downloadedAt ?? null),
     downloadCount: downloadRecord?.downloadCount ?? 0,
     ...receiptStatus

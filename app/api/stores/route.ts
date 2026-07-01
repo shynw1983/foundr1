@@ -24,7 +24,6 @@ async function resolveCompanyId(input: {
   representativeName?: string;
   invoiceRegistrationNumber?: string;
   receiptPurposeText?: string;
-  receiptTaxRate?: number;
   address?: string;
   phone?: string;
   privacyContactName?: string;
@@ -36,7 +35,6 @@ async function resolveCompanyId(input: {
   const representativeName = String(input.representativeName ?? "").trim();
   const invoiceRegistrationNumber = String(input.invoiceRegistrationNumber ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(input.receiptPurposeText);
-  const receiptTaxRate = normalizeReceiptTaxRate(input.receiptTaxRate);
   const address = String(input.address ?? "").trim();
   const phone = String(input.phone ?? "").trim();
   const privacyContactName = String(input.privacyContactName ?? "").trim();
@@ -51,7 +49,6 @@ async function resolveCompanyId(input: {
       representative_name,
       invoice_registration_number,
       receipt_purpose_text,
-      receipt_tax_rate,
       address,
       phone,
       privacy_contact_name,
@@ -65,7 +62,6 @@ async function resolveCompanyId(input: {
       ${representativeName || null},
       ${invoiceRegistrationNumber},
       ${receiptPurposeText},
-      ${receiptTaxRate},
       ${address},
       ${phone},
       ${privacyContactName},
@@ -79,7 +75,6 @@ async function resolveCompanyId(input: {
       representative_name = coalesce(nullif(${representativeName}, ''), companies.representative_name),
       invoice_registration_number = ${invoiceRegistrationNumber},
       receipt_purpose_text = ${receiptPurposeText},
-      receipt_tax_rate = ${receiptTaxRate},
       address = ${address},
       phone = ${phone},
       privacy_contact_name = ${privacyContactName},
@@ -98,11 +93,6 @@ function normalizePayrollCycleType(value: string) {
 
 function normalizeReceiptPurposeText(value: unknown) {
   return String(value ?? "").trim() || "テイクアウト飲食代";
-}
-
-function normalizeReceiptTaxRate(value: unknown) {
-  const rate = Number(value);
-  return Number.isFinite(rate) && rate > 0 && rate <= 100 ? rate : 8;
 }
 
 function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
@@ -302,7 +292,6 @@ export async function POST(request: Request) {
   const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
-  const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
@@ -334,7 +323,6 @@ export async function POST(request: Request) {
     representativeName: companyRepresentativeName,
     invoiceRegistrationNumber,
     receiptPurposeText,
-    receiptTaxRate,
     address: companyAddress,
     phone: companyPhone,
     privacyContactName,
@@ -458,7 +446,6 @@ export async function PUT(request: Request) {
   const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
   const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
   const receiptPurposeText = normalizeReceiptPurposeText(formData.get("receiptPurposeText"));
-  const receiptTaxRate = normalizeReceiptTaxRate(formData.get("receiptTaxRate"));
   const companyAddress = String(formData.get("companyAddress") ?? "").trim();
   const companyPhone = String(formData.get("companyPhone") ?? "").trim();
   const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
@@ -490,7 +477,6 @@ export async function PUT(request: Request) {
     representativeName: companyRepresentativeName,
     invoiceRegistrationNumber,
     receiptPurposeText,
-    receiptTaxRate,
     address: companyAddress,
     phone: companyPhone,
     privacyContactName,

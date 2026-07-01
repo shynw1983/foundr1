@@ -78,7 +78,6 @@ type OrderRow = {
   issuerName: string;
   invoiceRegistrationNumber: string;
   receiptPurposeText: string;
-  receiptTaxRate: number | string;
   issuerAddress: string;
   issuerPhone: string;
 };
@@ -172,9 +171,17 @@ function getReceiptPurposeText(value: unknown) {
   return clean(value) || "テイクアウト飲食代";
 }
 
-function getReceiptTaxRate(value: unknown) {
-  const rate = Number(value);
-  return Number.isFinite(rate) && rate > 0 ? rate : 8;
+export function getOnlineReceiptTaxRate(input: {
+  orderSource?: unknown;
+  customerSummary?: unknown;
+}) {
+  const source = clean(input.orderSource).toLowerCase();
+  const summary = asRecord(input.customerSummary);
+  const serviceType = clean(summary.serviceType ?? summary.orderType ?? summary.fulfillmentType).toLowerCase();
+
+  if (source === "table_qr" || ["dine_in", "eat_in", "table", "table_qr"].includes(serviceType)) return 10;
+  if (source.includes("_web") || source === "web_reservation" || ["pickup", "takeout", "take_out"].includes(serviceType)) return 8;
+  return 8;
 }
 
 function getIncludedTax(totalAmount: number, taxRate: number) {
@@ -360,7 +367,6 @@ export async function getOnlineReceiptViewModel(input: {
       coalesce(companies.legal_name, companies.name, stores.name, '') as "issuerName",
       coalesce(companies.invoice_registration_number, '') as "invoiceRegistrationNumber",
       coalesce(companies.receipt_purpose_text, 'テイクアウト飲食代') as "receiptPurposeText",
-      coalesce(companies.receipt_tax_rate, 8)::float as "receiptTaxRate",
       coalesce(companies.address, '') as "issuerAddress",
       coalesce(companies.phone, '') as "issuerPhone"
     from store_customer_orders
@@ -409,7 +415,7 @@ export async function getOnlineReceiptViewModel(input: {
   const items = buildItems({ ...order, customerSummary }, itemRows, brand);
   const couponDiscountAmount = getCouponDiscount(customerSummary);
   const subtotalAmount = getSubtotal(customerSummary, totalAmount, couponDiscountAmount, items);
-  const taxRate = getReceiptTaxRate(order.receiptTaxRate);
+  const taxRate = getOnlineReceiptTaxRate({ orderSource: order.orderSource, customerSummary });
 
   return {
     brand,

@@ -35,7 +35,6 @@ type StoreItem = {
   companyRepresentativeName?: string;
   invoiceRegistrationNumber?: string;
   receiptPurposeText?: string;
-  receiptTaxRate?: number;
   companyAddress?: string;
   companyPhone?: string;
   privacyContactName?: string;
@@ -221,7 +220,6 @@ export default function StoresPage() {
   const [editingCompanyRepresentativeName, setEditingCompanyRepresentativeName] = useState("");
   const [editingInvoiceRegistrationNumber, setEditingInvoiceRegistrationNumber] = useState("");
   const [editingReceiptPurposeText, setEditingReceiptPurposeText] = useState("テイクアウト飲食代");
-  const [editingReceiptTaxRate, setEditingReceiptTaxRate] = useState("8");
   const [editingCompanyAddress, setEditingCompanyAddress] = useState("");
   const [editingCompanyPhone, setEditingCompanyPhone] = useState("");
   const [editingPrivacyContactName, setEditingPrivacyContactName] = useState("");
@@ -620,7 +618,6 @@ export default function StoresPage() {
     const companyRepresentativeName = String(formData.get("companyRepresentativeName") ?? "").trim();
     const invoiceRegistrationNumber = String(formData.get("invoiceRegistrationNumber") ?? "").trim();
     const receiptPurposeText = String(formData.get("receiptPurposeText") ?? "テイクアウト飲食代").trim() || "テイクアウト飲食代";
-    const receiptTaxRate = Number(formData.get("receiptTaxRate") ?? 8) || 8;
     const companyAddress = String(formData.get("companyAddress") ?? "").trim();
     const companyPhone = String(formData.get("companyPhone") ?? "").trim();
     const privacyContactName = String(formData.get("privacyContactName") ?? "").trim();
@@ -686,7 +683,6 @@ export default function StoresPage() {
         companyRepresentativeName,
         invoiceRegistrationNumber,
         receiptPurposeText,
-        receiptTaxRate,
         companyAddress,
         companyPhone,
         privacyContactName,
@@ -757,7 +753,6 @@ export default function StoresPage() {
     setEditingCompanyRepresentativeName(store.companyRepresentativeName ?? "");
     setEditingInvoiceRegistrationNumber(store.invoiceRegistrationNumber ?? "");
     setEditingReceiptPurposeText(store.receiptPurposeText ?? "テイクアウト飲食代");
-    setEditingReceiptTaxRate(String(store.receiptTaxRate ?? 8));
     setEditingCompanyAddress(store.companyAddress ?? "");
     setEditingCompanyPhone(store.companyPhone ?? "");
     setEditingPrivacyContactName(store.privacyContactName ?? "");
@@ -1171,7 +1166,6 @@ export default function StoresPage() {
                   <input type="hidden" name="companyRepresentativeName" value={editingCompanyRepresentativeName} />
                   <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
                   <input type="hidden" name="receiptPurposeText" value={editingReceiptPurposeText} />
-                  <input type="hidden" name="receiptTaxRate" value={editingReceiptTaxRate} />
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
                   <input type="hidden" name="privacyContactName" value={editingPrivacyContactName} />
@@ -1349,13 +1343,6 @@ export default function StoresPage() {
                     <input name="receiptPurposeText" value={editingReceiptPurposeText} onChange={(event) => setEditingReceiptPurposeText(event.target.value)} placeholder="例: テイクアウト飲食代" />
                   </label>
                   <label>
-                    <span>消費税率（%）</span>
-                    <select name="receiptTaxRate" value={editingReceiptTaxRate} onChange={(event) => setEditingReceiptTaxRate(event.target.value)}>
-                      <option value="8">8%（テイクアウト）</option>
-                      <option value="10">10%（店内飲食）</option>
-                    </select>
-                  </label>
-                  <label>
                     <span>会社住所</span>
                     <input name="companyAddress" value={editingCompanyAddress} onChange={(event) => setEditingCompanyAddress(event.target.value)} placeholder="例: 福岡県福岡市..." />
                   </label>
@@ -1386,7 +1373,6 @@ export default function StoresPage() {
                   <input type="hidden" name="companyRepresentativeName" value={editingCompanyRepresentativeName} />
                   <input type="hidden" name="invoiceRegistrationNumber" value={editingInvoiceRegistrationNumber} />
                   <input type="hidden" name="receiptPurposeText" value={editingReceiptPurposeText} />
-                  <input type="hidden" name="receiptTaxRate" value={editingReceiptTaxRate} />
                   <input type="hidden" name="companyAddress" value={editingCompanyAddress} />
                   <input type="hidden" name="companyPhone" value={editingCompanyPhone} />
                   <input type="hidden" name="privacyContactName" value={editingPrivacyContactName} />
