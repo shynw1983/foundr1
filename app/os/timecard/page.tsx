@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ChevronDown, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Save, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ChevronDown, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent, MouseEvent } from "react";
@@ -9,7 +9,6 @@ import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
 import { formatDuration, formatJstTime, getJstMonthLabel } from "../../../lib/timecard";
 import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
-import { normalizeIntegerInput } from "../../../lib/number-input";
 
 type StoreOption = {
   id: string;
@@ -158,27 +157,6 @@ type PayrollPaymentBatch = {
   createdByName: string | null;
 };
 
-type PayrollAllowanceRule = {
-  id: string;
-  name: string;
-  ruleType: "fixed_monthly" | "one_person_busy_hourly";
-  storeId: string | null;
-  storeName: string | null;
-  employeeId: string | null;
-  employeeName: string | null;
-  amount: number;
-  includeInPremiumBase: boolean;
-  validFrom: string;
-  validTo: string | null;
-  isEnabled: boolean;
-  windows: Array<{ weekday: number; startTime: string; endTime: string }>;
-};
-
-type PayrollAllowanceOption = {
-  id: string;
-  name: string;
-};
-
 type TimecardPayload = {
   month: string;
   canViewPayroll: boolean;
@@ -277,8 +255,6 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon }> = [
   { label: "システム設定", href: "/os/settings", icon: Settings },
   { label: "ログアウト", href: "/os/logout", icon: LogOut }
 ];
-
-const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(amount);
@@ -1012,7 +988,7 @@ function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shi
 
 type TimecardMainView = "overview" | "schedule" | "payroll";
 type TimecardScheduleView = "planned" | "actual";
-type TimecardPayrollView = "summary" | "employee" | "allowances";
+type TimecardPayrollView = "summary" | "employee";
 
 function getTimecardPageTitle(mainView: TimecardMainView) {
   if (mainView === "schedule") return "シフト";
@@ -1075,21 +1051,6 @@ export function TimecardPage({
   const [isPayrollPaymentOpen, setIsPayrollPaymentOpen] = useState(false);
   const [payrollPaymentMessage, setPayrollPaymentMessage] = useState("");
   const [payrollPaymentBatches, setPayrollPaymentBatches] = useState<PayrollPaymentBatch[]>([]);
-  const [payrollAllowanceRules, setPayrollAllowanceRules] = useState<PayrollAllowanceRule[]>([]);
-  const [payrollAllowanceStores, setPayrollAllowanceStores] = useState<PayrollAllowanceOption[]>([]);
-  const [payrollAllowanceEmployees, setPayrollAllowanceEmployees] = useState<PayrollAllowanceOption[]>([]);
-  const [allowanceName, setAllowanceName] = useState("");
-  const [allowanceRuleType, setAllowanceRuleType] = useState<"fixed_monthly" | "one_person_busy_hourly">("one_person_busy_hourly");
-  const [allowanceStoreId, setAllowanceStoreId] = useState("");
-  const [allowanceEmployeeId, setAllowanceEmployeeId] = useState("");
-  const [allowanceAmount, setAllowanceAmount] = useState("");
-  const [allowanceValidFrom, setAllowanceValidFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [allowanceValidTo, setAllowanceValidTo] = useState("");
-  const [allowanceStartTime, setAllowanceStartTime] = useState("18:00");
-  const [allowanceEndTime, setAllowanceEndTime] = useState("21:00");
-  const [allowanceWeekdays, setAllowanceWeekdays] = useState([0, 1, 2, 3, 4, 5, 6]);
-  const [savingPayrollAllowance, setSavingPayrollAllowance] = useState(false);
-  const [payrollAllowanceMessage, setPayrollAllowanceMessage] = useState("");
   const [attendanceCsvFile, setAttendanceCsvFile] = useState<File | null>(null);
   const [attendanceImportMessage, setAttendanceImportMessage] = useState("");
   const [isImportingAttendance, setIsImportingAttendance] = useState(false);
@@ -1125,77 +1086,6 @@ export function TimecardPage({
     } finally {
       setIsLoading(false);
     }
-  }
-
-  async function reloadPayrollAllowances() {
-    const response = await fetch("/api/settings/payroll-allowances", { cache: "no-store" });
-    if (!response.ok) {
-      setPayrollAllowanceMessage("手当・加給ルールを読み込めませんでした。");
-      return;
-    }
-    const body = await response.json() as { rules?: PayrollAllowanceRule[]; stores?: PayrollAllowanceOption[]; employees?: PayrollAllowanceOption[] };
-    setPayrollAllowanceRules(body.rules ?? []);
-    setPayrollAllowanceStores(body.stores ?? []);
-    setPayrollAllowanceEmployees(body.employees ?? []);
-  }
-
-  function toggleAllowanceWeekday(weekday: number, checked: boolean) {
-    setAllowanceWeekdays((current) => {
-      const next = new Set(current);
-      if (checked) next.add(weekday);
-      else next.delete(weekday);
-      return Array.from(next).sort((left, right) => left - right);
-    });
-  }
-
-  async function createPayrollAllowanceRule() {
-    setSavingPayrollAllowance(true);
-    setPayrollAllowanceMessage("");
-    const response = await fetch("/api/settings/payroll-allowances", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        name: allowanceName,
-        ruleType: allowanceRuleType,
-        storeId: allowanceStoreId || null,
-        employeeId: allowanceEmployeeId || null,
-        amount: allowanceAmount,
-        includeInPremiumBase: true,
-        validFrom: allowanceValidFrom,
-        validTo: allowanceValidTo || null,
-        weekdays: allowanceWeekdays,
-        startTime: allowanceStartTime,
-        endTime: allowanceEndTime
-      })
-    });
-    setSavingPayrollAllowance(false);
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setPayrollAllowanceMessage(body.error ?? "手当・加給ルールを保存できませんでした。");
-      return;
-    }
-    setAllowanceName("");
-    setAllowanceAmount("");
-    await reloadPayrollAllowances();
-    await loadTimecard(month, selectedStoreId);
-    setPayrollAllowanceMessage("手当・加給ルールを保存しました。");
-  }
-
-  async function disablePayrollAllowanceRule(id: string) {
-    setPayrollAllowanceMessage("");
-    const response = await fetch("/api/settings/payroll-allowances", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "disable", id })
-    });
-    if (!response.ok) {
-      setPayrollAllowanceMessage("手当・加給ルールを停止できませんでした。");
-      return;
-    }
-    await reloadPayrollAllowances();
-    await loadTimecard(month, selectedStoreId);
-    setPayrollAllowanceMessage("手当・加給ルールを停止しました。");
   }
 
   useEffect(() => {
@@ -1242,10 +1132,6 @@ export function TimecardPage({
     });
   }, [data?.dailySummaries]);
   const canViewPayroll = Boolean(data?.canViewPayroll);
-  useEffect(() => {
-    if (mainView === "payroll" && canViewPayroll) void reloadPayrollAllowances();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainView, canViewPayroll]);
   const visibleNavItems = useMemo(
     () => canViewPayroll ? navItems : navItems.filter((item) => item.href !== "/os/timecard/payroll"),
     [canViewPayroll]
@@ -2406,9 +2292,6 @@ export function TimecardPage({
               }}>
                 従業員別明細
               </button>
-              <button className={payrollView === "allowances" ? "is-active" : ""} type="button" onClick={() => setPayrollView("allowances")}>
-                手当・加給ルール
-              </button>
             </section>
 
             {payrollView === "summary" ? (
@@ -2731,7 +2614,7 @@ export function TimecardPage({
                   )}
                 </div>
               </section>
-            ) : payrollView === "employee" ? (
+            ) : (
               <section className="panel">
                 <div className="panel-title">
                   <WalletCards />
@@ -2822,109 +2705,6 @@ export function TimecardPage({
                 ) : (
                   <p className="empty-state-text">給与明細を表示できる従業員がいません。</p>
                 )}
-              </section>
-            ) : (
-              <section className="panel payroll-allowance-panel">
-                <div className="panel-title">
-                  <WalletCards />
-                  <div>
-                    <h3>手当・加給ルール</h3>
-                    <p>固定手当と時間帯加給を給与計算へ反映します。既存ルールを変える場合は停止してから新しく作成します。</p>
-                  </div>
-                </div>
-                <div className="settings-allowance-panel">
-                  <div className="settings-allowance-form">
-                    <label className="settings-field">
-                      <span>種類</span>
-                      <select value={allowanceRuleType} onChange={(event) => setAllowanceRuleType(event.target.value === "fixed_monthly" ? "fixed_monthly" : "one_person_busy_hourly")}>
-                        <option value="one_person_busy_hourly">ワンオペ繁忙加給（時給加算）</option>
-                        <option value="fixed_monthly">固定手当（月額）</option>
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>名称</span>
-                      <input value={allowanceName} onChange={(event) => setAllowanceName(event.target.value)} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 店長手当" : "例: ワンオペ繁忙加給"} />
-                    </label>
-                    <label className="settings-field">
-                      <span>{allowanceRuleType === "fixed_monthly" ? "月額" : "加給時給"}</span>
-                      <input value={allowanceAmount} inputMode="numeric" onChange={(event) => setAllowanceAmount(normalizeIntegerInput(event.target.value))} placeholder={allowanceRuleType === "fixed_monthly" ? "例: 10000" : "例: 100"} />
-                    </label>
-                    <label className="settings-field">
-                      <span>対象店舗</span>
-                      <select value={allowanceStoreId} onChange={(event) => setAllowanceStoreId(event.target.value)}>
-                        <option value="">全店舗</option>
-                        {payrollAllowanceStores.map((store) => (
-                          <option value={store.id} key={store.id}>{store.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>対象従業員</span>
-                      <select value={allowanceEmployeeId} onChange={(event) => setAllowanceEmployeeId(event.target.value)}>
-                        <option value="">全員</option>
-                        {payrollAllowanceEmployees.map((employee) => (
-                          <option value={employee.id} key={employee.id}>{employee.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="settings-field">
-                      <span>有効開始</span>
-                      <input type="date" value={allowanceValidFrom} onChange={(event) => setAllowanceValidFrom(event.target.value)} />
-                    </label>
-                    <label className="settings-field">
-                      <span>有効終了</span>
-                      <input type="date" value={allowanceValidTo} onChange={(event) => setAllowanceValidTo(event.target.value)} />
-                    </label>
-                    {allowanceRuleType === "one_person_busy_hourly" ? (
-                      <>
-                        <label className="settings-field">
-                          <span>開始</span>
-                          <input type="time" value={allowanceStartTime} onChange={(event) => setAllowanceStartTime(event.target.value)} />
-                        </label>
-                        <label className="settings-field">
-                          <span>終了</span>
-                          <input type="time" value={allowanceEndTime} onChange={(event) => setAllowanceEndTime(event.target.value)} />
-                        </label>
-                        <div className="settings-allowance-weekdays">
-                          {weekdayLabels.map((label, index) => (
-                            <label key={label}>
-                              <input type="checkbox" checked={allowanceWeekdays.includes(index)} onChange={(event) => toggleAllowanceWeekday(index, event.currentTarget.checked)} />
-                              <span>{label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                    <button className="secondary-button" type="button" disabled={savingPayrollAllowance} onClick={() => void createPayrollAllowanceRule()}>
-                      <Save size={16} />
-                      {savingPayrollAllowance ? "保存中" : "ルールを追加"}
-                    </button>
-                  </div>
-                  {payrollAllowanceMessage ? <p className="payroll-payment-message">{payrollAllowanceMessage}</p> : null}
-                  <div className="settings-allowance-list">
-                    {payrollAllowanceRules.length ? payrollAllowanceRules.map((rule) => (
-                      <article className={rule.isEnabled ? "" : "is-disabled"} key={rule.id}>
-                        <div>
-                          <strong>{rule.name}</strong>
-                          <span>
-                            {rule.ruleType === "fixed_monthly" ? "固定手当" : "ワンオペ繁忙加給"}
-                            {" / "}{rule.storeName ?? "全店舗"}
-                            {" / "}{rule.employeeName ?? "全員"}
-                            {" / ¥"}{Math.round(rule.amount).toLocaleString("ja-JP")}
-                          </span>
-                          {rule.windows.length ? <small>{rule.windows.map((window) => `${weekdayLabels[window.weekday] ?? ""} ${window.startTime}-${window.endTime}`).join("、")}</small> : null}
-                        </div>
-                        {rule.isEnabled ? (
-                          <button className="text-button" type="button" onClick={() => void disablePayrollAllowanceRule(rule.id)}>停止</button>
-                        ) : (
-                          <span className="status-pill">停止中</span>
-                        )}
-                      </article>
-                    )) : (
-                      <p className="empty-state-text">手当・加給ルールはまだありません。</p>
-                    )}
-                  </div>
-                </div>
               </section>
             )}
           </>

@@ -5632,6 +5632,48 @@ body :where(
   gap: 16px;
 }
 
+.settings-section-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-section-tabs button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  text-align: left;
+}
+
+.settings-section-tabs button.is-active {
+  border-color: rgba(26, 95, 63, 0.26);
+  background: rgba(26, 95, 63, 0.08);
+  color: var(--primary);
+}
+
+.settings-section-tabs strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.settings-section-tabs span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-option-list {
   display: grid;
   gap: 10px;
@@ -29100,6 +29142,10 @@ body :where(
   .menu-sync-task-row,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-section-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .menu-item-list {
