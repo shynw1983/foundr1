@@ -559,12 +559,7 @@ export default function SalesPage() {
       endDate: nextRange.endDate
     });
     if (nextStoreId) params.set("storeId", nextStoreId);
-    const importParams = new URLSearchParams({ month: nextMonth });
-    if (nextStoreId) importParams.set("storeId", nextStoreId);
-    const [summaryResponse, importsResponse] = await Promise.all([
-      fetch(`/api/sales/summary?${params.toString()}`, { cache: "no-store" }),
-      fetch(`/api/sales/imports?${importParams.toString()}`, { cache: "no-store" })
-    ]);
+    const summaryResponse = await fetch(`/api/sales/summary?${params.toString()}`, { cache: "no-store" });
 
     let resolvedMonth = nextMonth;
     let resolvedStoreId = nextStoreId;
@@ -576,6 +571,10 @@ export default function SalesPage() {
       resolvedMonth = body.month;
       resolvedStoreId = body.selectedStoreId;
     }
+
+    const importParams = new URLSearchParams({ month: resolvedMonth });
+    if (resolvedStoreId) importParams.set("storeId", resolvedStoreId);
+    const importsResponse = await fetch(`/api/sales/imports?${importParams.toString()}`, { cache: "no-store" });
     if (importsResponse.ok) {
       const body = await importsResponse.json() as ImportState;
       const salesSources = body.salesSources ?? [];
