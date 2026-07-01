@@ -40,6 +40,15 @@ type PosCheckoutBody = {
   items?: PosCheckoutItemInput[];
 };
 
+type PosTableAdjustmentBody = {
+  storeId?: string;
+  tableSessionKey?: string;
+  action?: string;
+  orderId?: string;
+  itemId?: string;
+  quantity?: number | string;
+};
+
 type PosDiscountPreset = {
   key: string;
   name: string;
@@ -532,6 +541,7 @@ async function getTableCheckoutRequests(selectedStoreId: string) {
       store_customer_orders.id::text,
       store_customer_orders.pickup_code as "pickupCode",
       store_customer_orders.amount,
+      store_customer_orders.status,
       store_customer_orders.drink,
       coalesce(store_customer_orders.customer_summary ->> 'tableSessionKey', store_customer_orders.table_session_key, '') as "tableSessionKey",
       coalesce(nullif(store_tables.display_name, ''), store_tables.label, '') as "tableLabel",
@@ -547,6 +557,40 @@ async function getTableCheckoutRequests(selectedStoreId: string) {
       and store_customer_orders.created_at > now() - interval '14 days'
     order by store_customer_orders.created_at asc
   `;
+  const orderIds = (rows as Array<{ id: string }>).map((row) => row.id);
+  const itemRows = orderIds.length ? await sql`
+    select
+      store_customer_order_items.id::text,
+      store_customer_order_items.order_id::text as "orderId",
+      store_customer_order_items.item_name as name,
+      coalesce(store_customer_order_items.quantity, 1)::int as quantity,
+      coalesce(store_customer_order_items.amount, 0)::int as amount,
+      coalesce(store_customer_order_items.option_label, '') as "optionLabel",
+      store_customer_order_items.topping_labels as toppings
+    from store_customer_order_items
+    where store_customer_order_items.order_id::text = any(${orderIds})
+    order by store_customer_order_items.order_id, store_customer_order_items.sort_order, store_customer_order_items.created_at
+  ` : [];
+  const itemsByOrderId = new Map<string, Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    amount: number;
+    optionLabel: string;
+    toppings: string[];
+  }>>();
+  for (const row of itemRows as Array<{ id: string; orderId: string; name: string; quantity: number; amount: number; optionLabel: string; toppings: string[] | null }>) {
+    const items = itemsByOrderId.get(row.orderId) ?? [];
+    items.push({
+      id: row.id,
+      name: row.name,
+      quantity: Number(row.quantity ?? 1),
+      amount: Number(row.amount ?? 0),
+      optionLabel: row.optionLabel,
+      toppings: Array.isArray(row.toppings) ? row.toppings : []
+    });
+    itemsByOrderId.set(row.orderId, items);
+  }
   const groups = new Map<string, {
     id: string;
     tableSessionKey: string;
@@ -557,11 +601,26 @@ async function getTableCheckoutRequests(selectedStoreId: string) {
     orderCount: number;
     pickupCodes: string[];
     itemSummary: string[];
+    orders: Array<{
+      id: string;
+      pickupCode: string;
+      amount: number;
+      status: string;
+      items: Array<{
+        id: string;
+        name: string;
+        quantity: number;
+        amount: number;
+        optionLabel: string;
+        toppings: string[];
+      }>;
+    }>;
   }>();
   for (const row of rows as Array<{
     id: string;
     pickupCode: string;
     amount: number;
+    status: string;
     drink: string;
     tableSessionKey: string;
     tableLabel: string;
@@ -581,7 +640,14 @@ async function getTableCheckoutRequests(selectedStoreId: string) {
         totalAmount: Number(row.amount ?? 0),
         orderCount: 1,
         pickupCodes: [row.pickupCode],
-        itemSummary
+        itemSummary,
+        orders: [{
+          id: row.id,
+          pickupCode: row.pickupCode,
+          amount: Number(row.amount ?? 0),
+          status: row.status,
+          items: itemsByOrderId.get(row.id) ?? []
+        }]
       });
       continue;
     }
@@ -589,6 +655,13 @@ async function getTableCheckoutRequests(selectedStoreId: string) {
     current.orderCount += 1;
     current.pickupCodes.push(row.pickupCode);
     current.itemSummary.push(...itemSummary);
+    current.orders.push({
+      id: row.id,
+      pickupCode: row.pickupCode,
+      amount: Number(row.amount ?? 0),
+      status: row.status,
+      items: itemsByOrderId.get(row.id) ?? []
+    });
     const currentTime = new Date(current.checkoutRequestedAt).getTime();
     const rowTime = new Date(row.checkoutRequestedAt).getTime();
     if (Number.isFinite(rowTime) && (!Number.isFinite(currentTime) || rowTime > currentTime)) {
@@ -614,6 +687,72 @@ async function getOpenCashSessionId(selectedStoreId: string) {
     limit 1
   `;
   return rows[0]?.id as string | undefined;
+}
+
+async function refreshTableQrOrderAfterAdjustment(input: {
+  orderId: string;
+  sessionId: string;
+  reason: string;
+}) {
+  const itemRows = await sql`
+    select
+      id::text,
+      item_name as name,
+      quantity,
+      amount
+    from store_customer_order_items
+    where order_id::text = ${input.orderId}
+    order by sort_order, created_at
+  ` as Array<{ id: string; name: string; quantity: number; amount: number }>;
+  const amount = itemRows.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const itemCount = itemRows.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+  const drink = itemRows.map((item) => item.name).filter(Boolean).join("\n");
+  const adjustmentPayload = {
+    staffAdjusted: true,
+    staffAdjustedAt: new Date().toISOString(),
+    staffAdjustedBy: input.sessionId,
+    staffAdjustmentReason: input.reason,
+    subtotalAmount: amount,
+    itemCount
+  };
+
+  if (!itemRows.length) {
+    await sql`
+      update store_customer_orders
+      set
+        status = 'cancelled',
+        amount = 0,
+        drink = '',
+        cancelled_at = now(),
+        customer_summary = customer_summary || ${JSON.stringify(adjustmentPayload)}::jsonb,
+        updated_at = now()
+      where id::text = ${input.orderId}
+    `;
+    await sql`
+      update order_production_tasks
+      set
+        status = 'cancelled',
+        item_summary = item_summary || E'\nキャンセル済み',
+        updated_at = now()
+      where order_id::text = ${input.orderId}
+        and status <> 'ready'
+    `;
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(input.orderId));
+    return;
+  }
+
+  await sql`
+    update store_customer_orders
+    set
+      amount = ${amount},
+      drink = ${drink},
+      customer_summary = customer_summary || ${JSON.stringify(adjustmentPayload)}::jsonb,
+      updated_at = now()
+    where id::text = ${input.orderId}
+  `;
+  await sql`delete from order_production_tasks where order_id::text = ${input.orderId} and status <> 'ready'`;
+  await ensureProductionTasksForOrder(input.orderId);
+  await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(input.orderId));
 }
 
 async function getPosSettings(selectedStoreId: string) {
@@ -664,6 +803,94 @@ export async function GET(request: Request) {
     posSettings,
     todaySummary,
     tableCheckoutRequests
+  });
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireOsSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => ({})) as PosTableAdjustmentBody;
+  const storeId = normalizeText(body.storeId);
+  const tableSessionKey = normalizeText(body.tableSessionKey);
+  const action = normalizeText(body.action);
+  const orderId = normalizeText(body.orderId);
+  const itemId = normalizeText(body.itemId);
+  const nextQuantity = Math.max(0, Math.min(99, Math.round(Number(body.quantity ?? 0) || 0)));
+
+  if (!storeId || !tableSessionKey || !orderId || !["cancel_order", "cancel_item", "set_item_quantity"].includes(action)) {
+    return Response.json({ error: "修正対象を選択してください。" }, { status: 400 });
+  }
+
+  const access = await getStoreOrderAccess(session);
+  const storeFilter = getScopedStoreFilter(access, storeId);
+  if (storeFilter === "__forbidden__" || !storeFilter) {
+    return Response.json({ error: "権限がありません。" }, { status: 403 });
+  }
+
+  const orderRows = await sql`
+    select
+      id::text,
+      payment_status as "paymentStatus",
+      status
+    from store_customer_orders
+    where id::text = ${orderId}
+      and store_id::text = ${storeId}
+      and order_source = 'table_qr'
+      and coalesce(customer_summary ->> 'tableSessionKey', table_session_key, '') = ${tableSessionKey}
+    limit 1
+  `;
+  const order = orderRows[0] as { id: string; paymentStatus: string; status: string } | undefined;
+  if (!order || order.status === "cancelled") return Response.json({ error: "対象のテーブル注文が見つかりません。" }, { status: 404 });
+  if (order.paymentStatus === "paid") return Response.json({ error: "支払い済みのテーブル注文は修正できません。" }, { status: 409 });
+
+  if (action === "cancel_order") {
+    await sql`delete from store_customer_order_items where order_id::text = ${orderId}`;
+    await refreshTableQrOrderAfterAdjustment({ orderId, sessionId: session.id, reason: "cancel_order" });
+    return Response.json({
+      ok: true,
+      tableCheckoutRequests: await getTableCheckoutRequests(storeId),
+      todaySummary: await getTodaySummary(storeId)
+    });
+  }
+
+  if (!itemId) return Response.json({ error: "修正する商品を選択してください。" }, { status: 400 });
+  const itemRows = await sql`
+    select
+      id::text,
+      quantity,
+      amount
+    from store_customer_order_items
+    where id::text = ${itemId}
+      and order_id::text = ${orderId}
+    limit 1
+  `;
+  const item = itemRows[0] as { id: string; quantity: number; amount: number } | undefined;
+  if (!item) return Response.json({ error: "対象の商品が見つかりません。" }, { status: 404 });
+
+  if (action === "cancel_item" || nextQuantity <= 0) {
+    await sql`delete from store_customer_order_items where id::text = ${itemId} and order_id::text = ${orderId}`;
+    await refreshTableQrOrderAfterAdjustment({ orderId, sessionId: session.id, reason: "cancel_item" });
+  } else {
+    const currentQuantity = Math.max(1, Number(item.quantity ?? 1));
+    const unitAmount = Math.round(Number(item.amount ?? 0) / currentQuantity);
+    const nextAmount = unitAmount * nextQuantity;
+    await sql`
+      update store_customer_order_items
+      set
+        quantity = ${nextQuantity},
+        amount = ${nextAmount},
+        gross_amount = case when gross_amount > 0 then ${nextAmount} else gross_amount end
+      where id::text = ${itemId}
+        and order_id::text = ${orderId}
+    `;
+    await refreshTableQrOrderAfterAdjustment({ orderId, sessionId: session.id, reason: "set_item_quantity" });
+  }
+
+  return Response.json({
+    ok: true,
+    tableCheckoutRequests: await getTableCheckoutRequests(storeId),
+    todaySummary: await getTodaySummary(storeId)
   });
 }
 

@@ -108,6 +108,20 @@ type PosTableCheckoutRequest = {
   orderCount: number;
   pickupCodes: string[];
   itemSummary: string[];
+  orders: Array<{
+    id: string;
+    pickupCode: string;
+    amount: number;
+    status: string;
+    items: Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      amount: number;
+      optionLabel: string;
+      toppings: string[];
+    }>;
+  }>;
 };
 
 type PosTransactionItem = {
@@ -601,6 +615,7 @@ export default function StorePosPage() {
   const [summary, setSummary] = useState<PosSummary>({ orderCount: 0, total: 0, average: 0, latestOrders: [] });
   const [tableCheckoutRequests, setTableCheckoutRequests] = useState<PosTableCheckoutRequest[]>([]);
   const [selectedTableCheckoutKey, setSelectedTableCheckoutKey] = useState("");
+  const [tableCheckoutAdjustingKey, setTableCheckoutAdjustingKey] = useState("");
   const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
@@ -1332,6 +1347,44 @@ export default function StorePosPage() {
     setCustomerDisplayMode("business");
   }
 
+  async function adjustTableCheckout(input: {
+    action: "cancel_order" | "cancel_item" | "set_item_quantity";
+    orderId: string;
+    itemId?: string;
+    quantity?: number;
+  }) {
+    if (!selectedStoreId || !selectedTableCheckout || tableCheckoutAdjustingKey) return;
+    const key = `${input.action}:${input.orderId}:${input.itemId ?? ""}`;
+    setTableCheckoutAdjustingKey(key);
+    setMessage("");
+    try {
+      const response = await fetch("/api/store/pos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: selectedStoreId,
+          tableSessionKey: selectedTableCheckout.tableSessionKey,
+          action: input.action,
+          orderId: input.orderId,
+          itemId: input.itemId,
+          quantity: input.quantity
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { tableCheckoutRequests?: PosTableCheckoutRequest[]; todaySummary?: PosSummary; error?: string };
+      if (!response.ok) throw new Error(body.error || "テーブル注文を修正できませんでした。");
+      const nextRequests = body.tableCheckoutRequests ?? [];
+      setTableCheckoutRequests(nextRequests);
+      setSelectedTableCheckoutKey((current) => nextRequests.some((request) => request.tableSessionKey === current) ? current : "");
+      if (body.todaySummary) setSummary(body.todaySummary);
+      setCashTenderedAmount("");
+      setMessage("テーブル注文を修正しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "テーブル注文を修正できませんでした。");
+    } finally {
+      setTableCheckoutAdjustingKey("");
+    }
+  }
+
   function getLineBasePrice(item: PosCartItem) {
     if (item.measuredQuantity && item.measuredUnitPrice) return Math.round(item.measuredQuantity * item.measuredUnitPrice);
     return getItemPrice(item);
@@ -2048,6 +2101,71 @@ export default function StorePosPage() {
                 <strong>{selectedTableCheckout.tableLabel}</strong>
                 <p>{selectedTableCheckout.itemSummary.slice(0, 5).join(" / ") || "追加注文"}</p>
                 <small>{selectedTableCheckout.orderCount}件 / {selectedTableCheckout.pickupCodes.join(", ")}</small>
+                <div className="store-pos-table-adjust-list">
+                  {selectedTableCheckout.orders.map((order) => (
+                    <section className="store-pos-table-adjust-order" key={order.id}>
+                      <div className="store-pos-table-adjust-order-head">
+                        <span>{order.pickupCode}</span>
+                        <strong>{formatYen(order.amount)}</strong>
+                        <button
+                          className="danger-text-button"
+                          type="button"
+                          disabled={Boolean(tableCheckoutAdjustingKey) || saving}
+                          onClick={() => void adjustTableCheckout({ action: "cancel_order", orderId: order.id })}
+                        >
+                          注文取消
+                        </button>
+                      </div>
+                      {order.items.map((item) => (
+                        <div className="store-pos-table-adjust-item" key={item.id}>
+                          <div>
+                            <strong>{item.name}</strong>
+                            {item.optionLabel ? <small>{item.optionLabel}</small> : null}
+                            {item.toppings.length ? <small>{item.toppings.join(" / ")}</small> : null}
+                            <span>{formatYen(item.amount)}</span>
+                          </div>
+                          <div className="store-pos-quantity">
+                            <button
+                              type="button"
+                              disabled={Boolean(tableCheckoutAdjustingKey) || saving}
+                              onClick={() => void adjustTableCheckout({
+                                action: item.quantity <= 1 ? "cancel_item" : "set_item_quantity",
+                                orderId: order.id,
+                                itemId: item.id,
+                                quantity: item.quantity - 1
+                              })}
+                              aria-label="数量を減らす"
+                            >
+                              <Minus size={16} />
+                            </button>
+                            <span>{item.quantity}</span>
+                            <button
+                              type="button"
+                              disabled={Boolean(tableCheckoutAdjustingKey) || saving}
+                              onClick={() => void adjustTableCheckout({
+                                action: "set_item_quantity",
+                                orderId: order.id,
+                                itemId: item.id,
+                                quantity: item.quantity + 1
+                              })}
+                              aria-label="数量を増やす"
+                            >
+                              <Plus size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={Boolean(tableCheckoutAdjustingKey) || saving}
+                              onClick={() => void adjustTableCheckout({ action: "cancel_item", orderId: order.id, itemId: item.id })}
+                              aria-label="削除"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+                  ))}
+                </div>
               </div>
             ) : cart.length === 0 ? (
               <div className="store-pos-empty">商品を選択してください。</div>
