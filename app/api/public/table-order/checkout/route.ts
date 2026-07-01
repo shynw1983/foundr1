@@ -52,12 +52,15 @@ export async function POST(request: Request) {
     join stores on stores.id = store_tables.store_id
     left join brands on brands.id = store_tables.brand_id
     left join lateral (
-      select brands.id, brands.name
-      from store_brands
-      join brands on brands.id = store_brands.brand_id
-      where store_brands.store_id = stores.id
-        and brands.status = 'active'
-      order by brands.name
+      select brand_candidates.id, brand_candidates.name
+      from (
+        select brands.id, brands.name, count(*) over() as brand_count
+        from store_brands
+        join brands on brands.id = store_brands.brand_id
+        where store_brands.store_id = stores.id
+          and brands.status = 'active'
+      ) brand_candidates
+      where brand_candidates.brand_count = 1
       limit 1
     ) fallback_brands on true
     left join pos_store_settings on pos_store_settings.store_id = stores.id
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
     brandName: string;
     dineInEnabled: boolean;
   } | undefined;
-  if (!table || !table.brandId || !table.tableOrderingEnabled || !table.dineInEnabled) {
+  if (!table || !table.tableOrderingEnabled || !table.dineInEnabled) {
     return Response.json({ error: "このテーブルでは現在会計できません。" }, { status: 400 });
   }
 

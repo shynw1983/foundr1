@@ -84,6 +84,20 @@ async function storeBrandRows(storeId: string) {
   `;
 }
 
+async function activeStoreBrandRows(storeId: string) {
+  const rows = await sql`
+    select
+      brands.id::text as id,
+      brands.name
+    from store_brands
+    join brands on brands.id = store_brands.brand_id
+    where store_brands.store_id::text = ${storeId}
+      and brands.status = 'active'
+    order by brands.name
+  `;
+  return rows.map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
 export async function GET(request: Request) {
   const session = await requireOsSession();
   if (!session || !(await canManageTableOrders(session.role))) {
@@ -123,17 +137,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "店舗へのアクセス権限がありません。" }, { status: 403 });
   }
 
-  if (brandId) {
-    const brandRows = await sql`
-      select 1
-      from store_brands
-      join brands on brands.id = store_brands.brand_id
-      where store_brands.store_id::text = ${storeId}
-        and store_brands.brand_id::text = ${brandId}
-        and brands.status = 'active'
-      limit 1
-    `;
-    if (!brandRows[0]) return Response.json({ error: "この店舗で利用できないブランドです。" }, { status: 400 });
+  const activeBrands = await activeStoreBrandRows(storeId);
+  const effectiveBrandId = brandId || (activeBrands.length === 1 ? activeBrands[0].id : "");
+  if (effectiveBrandId && !activeBrands.some((brand) => brand.id === effectiveBrandId)) {
+    return Response.json({ error: "この店舗で利用できないブランドです。" }, { status: 400 });
   }
 
   const token = createTableQrToken();
@@ -156,7 +163,7 @@ export async function POST(request: Request) {
     )
     values (
       ${storeId},
-      ${brandId || null},
+      ${effectiveBrandId || null},
       ${label},
       ${normalizeText(body.displayName, 120)},
       ${normalizeText(body.areaName, 80)},

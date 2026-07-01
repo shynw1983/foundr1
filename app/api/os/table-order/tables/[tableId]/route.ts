@@ -39,6 +39,20 @@ async function getAccessibleTable(session: NonNullable<Awaited<ReturnType<typeof
   return table;
 }
 
+async function activeStoreBrandRows(storeId: string) {
+  const rows = await sql`
+    select
+      brands.id::text as id,
+      brands.name
+    from store_brands
+    join brands on brands.id = store_brands.brand_id
+    where store_brands.store_id::text = ${storeId}
+      and brands.status = 'active'
+    order by brands.name
+  `;
+  return rows.map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
 async function serializeTable(tableId: string, request: Request) {
   const rows = await sql`
     select
@@ -87,10 +101,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ table
   const action = normalizeText(body.action, 40);
   const shouldRegenerate = action === "regenerate_qr";
   const label = normalizeTableLabel(body.label);
+  const hasBrandPatch = Object.prototype.hasOwnProperty.call(body, "brandId");
+  const brandId = normalizeText(body.brandId, 80);
+  if (hasBrandPatch) {
+    const activeBrands = await activeStoreBrandRows(String(table.storeId));
+    if (brandId && !activeBrands.some((brand) => brand.id === brandId)) {
+      return Response.json({ error: "この店舗で利用できないブランドです。" }, { status: 400 });
+    }
+  }
 
   await sql`
     update store_tables
     set
+      brand_id = case when ${hasBrandPatch} then nullif(${brandId}, '')::uuid else brand_id end,
       label = case when ${label} <> '' then ${label} else label end,
       display_name = case when ${Object.prototype.hasOwnProperty.call(body, "displayName")} then ${normalizeText(body.displayName, 120)} else display_name end,
       area_name = case when ${Object.prototype.hasOwnProperty.call(body, "areaName")} then ${normalizeText(body.areaName, 80)} else area_name end,

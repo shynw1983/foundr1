@@ -14,6 +14,7 @@ type ResolvedTable = {
   customerDisplayName?: string;
   brandId: string;
   brandName: string;
+  brands?: Array<{ id: string; name: string }>;
   tableOrderingEnabled: boolean;
   dineInEnabled: boolean;
 };
@@ -38,6 +39,8 @@ type MenuOptionGroup = {
 
 type MenuItem = {
   id: string;
+  brandId?: string;
+  brandName?: string;
   name: string;
   displayNames?: Record<string, string>;
   itemKind: string;
@@ -115,15 +118,28 @@ export function TableOrderClient({ token }: { token: string }) {
         const tableBody = await tableResponse.json().catch(() => ({})) as { table?: ResolvedTable; orderingEnabled?: boolean; error?: string };
         if (!tableResponse.ok || !tableBody.table) throw new Error(tableBody.error || "テーブルを確認できませんでした。");
         setTable(tableBody.table);
-        if (!tableBody.orderingEnabled || !tableBody.table.brandId) {
+        const menuBrands = tableBody.table.brandId
+          ? [{ id: tableBody.table.brandId, name: tableBody.table.brandName }]
+          : (tableBody.table.brands ?? []);
+        if (!tableBody.orderingEnabled || !menuBrands.length) {
           setItems([]);
           return;
         }
-        const menuParams = new URLSearchParams({ brand: tableBody.table.brandId, store: tableBody.table.storeId });
-        const menuResponse = await fetch(`/api/public/menus?${menuParams.toString()}`, { cache: "no-store" });
-        const menuBody = await menuResponse.json().catch(() => ({})) as { items?: MenuItem[]; error?: string };
-        if (!menuResponse.ok) throw new Error(menuBody.error || "メニューを読み込めませんでした。");
-        const availableItems = (menuBody.items ?? []).filter((item) => (
+        const menuBodies = await Promise.all(menuBrands.map(async (brand) => {
+          const menuParams = new URLSearchParams({ brand: brand.id, store: tableBody.table?.storeId ?? "" });
+          const menuResponse = await fetch(`/api/public/menus?${menuParams.toString()}`, { cache: "no-store" });
+          const menuBody = await menuResponse.json().catch(() => ({})) as { items?: MenuItem[]; error?: string };
+          if (!menuResponse.ok) throw new Error(menuBody.error || "メニューを読み込めませんでした。");
+          return {
+            brand,
+            items: menuBody.items ?? []
+          };
+        }));
+        const availableItems = menuBodies.flatMap(({ brand, items: menuItems }) => menuItems.map((item) => ({
+          ...item,
+          brandId: brand.id,
+          brandName: brand.name
+        }))).filter((item) => (
           item.itemKind === "fixed_product" &&
           item.storeSetting?.posEnabled !== false &&
           item.storeSetting?.tableOrderEnabled !== false &&
@@ -295,6 +311,7 @@ export function TableOrderClient({ token }: { token: string }) {
                 {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="table-order-menu-image-placeholder" />}
                 <span>{item.category || "未分類"}</span>
                 <strong>{displayName(item)}</strong>
+                {item.brandName ? <em>{item.brandName}</em> : null}
                 <small>{formatYen(Number(item.basePrice ?? 0))}</small>
               </button>
             ))}

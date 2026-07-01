@@ -292,9 +292,10 @@ export default function OsTableOrderPage() {
             <label>
               <span>ブランド</span>
               <select value={form.brandId} onChange={(event) => setForm({ ...form, brandId: event.target.value })}>
-                <option value="">未指定</option>
+                <option value="">全ブランド</option>
                 {storeBrands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
               </select>
+              <small>店中店は全ブランド、フードコート型はブランド指定で使い分けます。</small>
             </label>
             <label>
               <span>オンライン決済後</span>
@@ -318,7 +319,7 @@ export default function OsTableOrderPage() {
                 <div>
                   <span>{table.areaName || "テーブル"}</span>
                   <h3>{table.displayName || table.label}</h3>
-                  <p>{table.brandName || "ブランド未指定"} / {table.seatCount > 0 ? `${table.seatCount}席` : "席数未設定"}</p>
+                  <p>{table.brandName || "全ブランド"} / {table.seatCount > 0 ? `${table.seatCount}席` : "席数未設定"}</p>
                 </div>
                 <button
                   className="icon-button"
@@ -338,6 +339,16 @@ export default function OsTableOrderPage() {
                 <a className="secondary-button" href={table.qrUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} />開く</a>
                 <button type="button" className="secondary-button" onClick={() => void patchTable(table, { action: "regenerate_qr" }, "QRを再発行しました。古いQRは無効です。")}><RefreshCcw size={16} />再発行</button>
               </div>
+              <label className="table-order-brand-control">
+                <span>表示メニュー</span>
+                <select
+                  value={table.brandId}
+                  onChange={(event) => void patchTable(table, { brandId: event.target.value }, "テーブルQRのブランドを更新しました。")}
+                >
+                  <option value="">全ブランド</option>
+                  {storeBrands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                </select>
+              </label>
               <div className="table-order-card-meta">
                 <span className={table.tableOrderingEnabled ? "status-pill success" : "status-pill"}>{table.tableOrderingEnabled ? "注文受付中" : "停止中"}</span>
                 <span>{checkoutExitPolicies.find((policy) => policy.value === table.checkoutExitPolicy)?.label ?? table.checkoutExitPolicy}</span>

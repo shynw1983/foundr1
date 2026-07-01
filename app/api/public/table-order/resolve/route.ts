@@ -24,6 +24,7 @@ export async function GET(request: Request) {
       stores.id::text as "storeId",
       stores.name as "storeName",
       coalesce(stores.customer_display_names, '{}'::jsonb) as "customerDisplayNames",
+      coalesce(active_brands.brands, '[]'::jsonb) as brands,
       coalesce(brands.id::text, fallback_brands.id::text, '') as "brandId",
       coalesce(brands.name, fallback_brands.name, '') as "brandName",
       coalesce(pos_store_settings.dine_in_enabled, true) as "dineInEnabled"
@@ -31,12 +32,25 @@ export async function GET(request: Request) {
     join stores on stores.id = store_tables.store_id
     left join brands on brands.id = store_tables.brand_id
     left join lateral (
-      select brands.id, brands.name
+      select jsonb_agg(
+        jsonb_build_object('id', active_brand_rows.id::text, 'name', active_brand_rows.name)
+        order by active_brand_rows.name
+      ) as brands
       from store_brands
-      join brands on brands.id = store_brands.brand_id
+      join brands active_brand_rows on active_brand_rows.id = store_brands.brand_id
       where store_brands.store_id = stores.id
-        and brands.status = 'active'
-      order by brands.name
+        and active_brand_rows.status = 'active'
+    ) active_brands on true
+    left join lateral (
+      select brand_candidates.id, brand_candidates.name
+      from (
+        select brands.id, brands.name, count(*) over() as brand_count
+        from store_brands
+        join brands on brands.id = store_brands.brand_id
+        where store_brands.store_id = stores.id
+          and brands.status = 'active'
+      ) brand_candidates
+      where brand_candidates.brand_count = 1
       limit 1
     ) fallback_brands on true
     left join pos_store_settings on pos_store_settings.store_id = stores.id

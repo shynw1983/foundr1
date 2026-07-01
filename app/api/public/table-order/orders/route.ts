@@ -89,12 +89,15 @@ export async function POST(request: Request) {
     join stores on stores.id = store_tables.store_id
     left join brands on brands.id = store_tables.brand_id
     left join lateral (
-      select brands.id, brands.name
-      from store_brands
-      join brands on brands.id = store_brands.brand_id
-      where store_brands.store_id = stores.id
-        and brands.status = 'active'
-      order by brands.name
+      select brand_candidates.id, brand_candidates.name
+      from (
+        select brands.id, brands.name, count(*) over() as brand_count
+        from store_brands
+        join brands on brands.id = store_brands.brand_id
+        where store_brands.store_id = stores.id
+          and brands.status = 'active'
+      ) brand_candidates
+      where brand_candidates.brand_count = 1
       limit 1
     ) fallback_brands on true
     left join pos_store_settings on pos_store_settings.store_id = stores.id
@@ -115,10 +118,22 @@ export async function POST(request: Request) {
     brandName: string;
     dineInEnabled: boolean;
   } | undefined;
-  if (!table || !table.brandId) return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 404 });
+  if (!table) return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 404 });
   if (!table.tableOrderingEnabled || !table.dineInEnabled) {
     return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 400 });
   }
+  const allowedBrandRows = table.brandId
+    ? [{ brandId: table.brandId }]
+    : await sql`
+        select brands.id::text as "brandId"
+        from store_brands
+        join brands on brands.id = store_brands.brand_id
+        where store_brands.store_id::text = ${table.storeId}
+          and brands.status = 'active'
+        order by brands.name
+      `;
+  const allowedBrandIds = allowedBrandRows.map((row) => String(row.brandId)).filter(Boolean);
+  if (!allowedBrandIds.length) return Response.json({ error: "このテーブルでは現在注文できません。" }, { status: 404 });
 
   const requestedIds = Array.from(new Set(cartItems.map((item) => normalizeText(item.menuCatalogItemId)).filter(Boolean)));
   if (!requestedIds.length) return Response.json({ error: "商品を選択してください。" }, { status: 400 });
@@ -140,7 +155,7 @@ export async function POST(request: Request) {
       on menu_store_settings.menu_catalog_item_id = menu_catalog_items.id
       and menu_store_settings.store_id = ${table.storeId}
     where menu_catalog_items.id::text = any(${requestedIds})
-      and menu_catalog_items.brand_id::text = ${table.brandId}
+      and menu_catalog_items.brand_id::text = any(${allowedBrandIds})
       and menu_catalog_items.is_active = true
       and menu_catalog_items.store_id is null
       and menu_catalog_items.item_kind = 'fixed_product'
@@ -181,7 +196,7 @@ export async function POST(request: Request) {
       and menu_option_store_settings.store_id = ${table.storeId}
     where menu_options.is_active = true
       and menu_option_groups.is_active = true
-      and menu_option_groups.brand_id::text = ${table.brandId}
+      and menu_option_groups.brand_id::text = any(${allowedBrandIds})
       and coalesce(menu_option_store_settings.is_available, true) = true
       and (
         menu_option_groups.menu_catalog_item_id is null
@@ -267,6 +282,7 @@ export async function POST(request: Request) {
   const pickupCode = createPickupCode("T");
   const tableSessionKey = `${table.tableId}:${pickupDate.replaceAll("-", "")}`;
   const firstItemName = normalizedItems[0]?.name ?? "";
+  const primaryBrandId = table.brandId || normalizedItems[0]?.brandId || "";
   const note = normalizeText(body.note).slice(0, 300);
 
   const orderRows = await sql`
@@ -289,7 +305,7 @@ export async function POST(request: Request) {
       updated_at
     )
     values (
-      ${table.brandId},
+      ${primaryBrandId || null},
       ${table.storeId},
       ${table.tableId},
       ${tableSessionKey},

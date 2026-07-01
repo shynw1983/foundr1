@@ -34016,6 +34016,30 @@ a:focus-visible {
   font-size: 13px;
 }
 
+.table-order-brand-control {
+  display: grid;
+  gap: 6px;
+}
+
+.table-order-brand-control span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.table-order-brand-control select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .table-order-card-meta {
   display: flex;
   align-items: center;
@@ -34195,6 +34219,13 @@ a:focus-visible {
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.table-order-menu-item em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .table-order-menu-item small {
