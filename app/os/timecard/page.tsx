@@ -351,13 +351,6 @@ function getPunchSourceClassName(source: string | null | undefined) {
   }
 }
 
-function getActualSourceSummary(actual: DailySummary | undefined) {
-  const sources = Array.from(new Set((actual?.punches ?? []).map((punch) => getPunchSourceLabel(punch.source))));
-  if (!sources.length) return null;
-  if (sources.length === 1) return sources[0];
-  return "複数";
-}
-
 function addUniqueReason(reasons: string[], reason: string) {
   if (!reasons.includes(reason)) reasons.push(reason);
 }
@@ -2300,7 +2293,6 @@ export function TimecardPage({
                             const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             const isToday = day.key === todayKey;
-                            const sourceSummary = getActualSourceSummary(actual);
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
@@ -2309,7 +2301,6 @@ export function TimecardPage({
                                   disabled={!data?.canEditActualTime && !actual && !shouldShowMissing}
                                   title={[
                                     actual?.isManualCorrection ? "手動修正あり" : "",
-                                    sourceSummary ? `打刻元 ${sourceSummary}` : "",
                                     status.label,
                                     shouldShowMissing && shift ? `予定 ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}` : ""
                                   ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : "実勤務時間の詳細")}
@@ -2322,7 +2313,6 @@ export function TimecardPage({
                                         <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
                                       </span>
                                       {actual.breakMinutes > 0 ? <span className="actual-break-time">休憩 {formatDuration(actual.breakMinutes)}</span> : null}
-                                      {sourceSummary ? <em className="actual-cell-source">{sourceSummary}</em> : null}
                                       {actual.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
                                       {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
                                     </>

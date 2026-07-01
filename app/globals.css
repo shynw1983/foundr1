@@ -18960,12 +18960,6 @@ body :where(
   line-height: 1;
 }
 
-.actual-shift-cell .actual-cell-source {
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--muted);
-}
-
 .actual-shift-cell .actual-cell-badge {
   background: #111827;
   color: white;
