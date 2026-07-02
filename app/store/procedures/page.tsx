@@ -5,12 +5,14 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  ChefHat,
   CheckCircle2,
   Clock3,
   Package,
   Search
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { maamaaProductionReferenceSections, maamaaSeasoningRules, maamaaSetRules } from "../../../lib/maamaa-production-rules";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 
 type ProcedureProduct = {
@@ -56,7 +58,7 @@ function formatQuantity(value: number | null, unit: string) {
 
 export default function ProcedureReaderPage() {
   const [procedures, setProcedures] = useState<ProcedureBook[]>([]);
-  const [selectedBookId, setSelectedBookId] = useState("");
+  const [selectedBookId, setSelectedBookId] = useState("maamaa-production-reference");
   const [selectedStepIndex, setSelectedStepIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function ProcedureReaderPage() {
     const data = await response.json() as { procedures?: ProcedureBook[] };
     const nextProcedures = data.procedures ?? [];
     setProcedures(nextProcedures);
-    setSelectedBookId((current) => current || nextProcedures[0]?.id || "");
+    setSelectedBookId((current) => current || "maamaa-production-reference");
     setLoading(false);
   }
 
@@ -94,6 +96,7 @@ export default function ProcedureReaderPage() {
   }, [procedures, query]);
 
   const selectedBook = procedures.find((procedure) => procedure.id === selectedBookId) ?? filteredProcedures[0] ?? procedures[0];
+  const showMaamaaReference = selectedBookId === "maamaa-production-reference";
   const selectedStep = selectedBook?.steps[selectedStepIndex] ?? selectedBook?.steps[0];
   const stepCount = selectedBook?.steps.length ?? 0;
   const progress = stepCount ? ((Math.min(selectedStepIndex + 1, stepCount) / stepCount) * 100) : 0;
@@ -124,9 +127,21 @@ export default function ProcedureReaderPage() {
           </label>
 
           <div className="procedure-reader-books">
+            <button
+              className={`procedure-reader-book ${showMaamaaReference ? "is-active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSelectedBookId("maamaa-production-reference");
+                setSelectedStepIndex(0);
+              }}
+            >
+              <span>マーラータン</span>
+              <strong>まぁ麻 制作早見表</strong>
+              <small>厨房ルール / 全店</small>
+            </button>
             {filteredProcedures.map((procedure) => (
               <button
-                className={`procedure-reader-book ${selectedBook?.id === procedure.id ? "is-active" : ""}`}
+                className={`procedure-reader-book ${!showMaamaaReference && selectedBook?.id === procedure.id ? "is-active" : ""}`}
                 type="button"
                 key={procedure.id}
                 onClick={() => selectBook(procedure.id)}
@@ -142,6 +157,8 @@ export default function ProcedureReaderPage() {
         <section className="procedure-reader-main">
           {loading ? (
             <div className="procedure-reader-empty">読み込み中</div>
+          ) : showMaamaaReference ? (
+            <MaamaaProductionReference />
           ) : error ? (
             <div className="procedure-reader-empty">{error}</div>
           ) : !selectedBook ? (
@@ -226,24 +243,103 @@ export default function ProcedureReaderPage() {
         </section>
 
         <aside className="procedure-reader-products" aria-label="関連商品">
-          <div className="procedure-reader-side-title">
-            <Package size={18} />
-            <strong>関連商品</strong>
-          </div>
-          {selectedStep?.products.length ? selectedStep.products.map((product) => (
-            <article className="procedure-reader-product" key={product.id}>
-              {product.photoUrl ? <img src={product.photoUrl} alt="" /> : <div className="procedure-reader-product-fallback"><Package size={18} /></div>}
-              <div>
-                <strong>{product.productName}</strong>
-                <p>{product.japaneseNote || `${product.category} / ${product.subcategory}`}</p>
-                <small>{formatQuantity(product.quantity, product.unit)} {product.note}</small>
+          {showMaamaaReference ? (
+            <MaamaaProductionSideReference />
+          ) : (
+            <>
+              <div className="procedure-reader-side-title">
+                <Package size={18} />
+                <strong>関連商品</strong>
               </div>
-            </article>
-          )) : (
-            <p className="empty-state">このステップの関連商品はありません。</p>
+              {selectedStep?.products.length ? selectedStep.products.map((product) => (
+                <article className="procedure-reader-product" key={product.id}>
+                  {product.photoUrl ? <img src={product.photoUrl} alt="" /> : <div className="procedure-reader-product-fallback"><Package size={18} /></div>}
+                  <div>
+                    <strong>{product.productName}</strong>
+                    <p>{product.japaneseNote || `${product.category} / ${product.subcategory}`}</p>
+                    <small>{formatQuantity(product.quantity, product.unit)} {product.note}</small>
+                  </div>
+                </article>
+              )) : (
+                <p className="empty-state">このステップの関連商品はありません。</p>
+              )}
+            </>
           )}
         </aside>
       </section>
     </main>
+  );
+}
+
+function MaamaaProductionReference() {
+  const sections = maamaaProductionReferenceSections();
+  return (
+    <div className="maamaa-production-reference">
+      <div className="procedure-reader-heading">
+        <div>
+          <p className="eyebrow">マーラータン / 厨房ルール</p>
+          <h2>まぁ麻 制作早見表</h2>
+          <p>Web予約・店内注文で選ばれた具材を、厨房で取る原料、分量、処理に置き換えるための一覧です。</p>
+        </div>
+        <div className="procedure-reader-progress">
+          <span>初版</span>
+          <div><i style={{ width: "45%" }} /></div>
+        </div>
+      </div>
+
+      <div className="maamaa-reference-alert">
+        <ChefHat size={20} />
+        <span>套餐は追加トッピングだけでなく、壁のセット具材も必ず入れる。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。</span>
+      </div>
+
+      <div className="maamaa-reference-sections">
+        {sections.map((section) => (
+          <section className="maamaa-reference-section" key={section.id}>
+            <h3>{section.title}</h3>
+            <div className="maamaa-reference-rule-grid">
+              {section.rules.map((rule) => (
+                <article className="maamaa-reference-rule" key={`${rule.section}-${rule.customerName}`}>
+                  <strong>{rule.customerName}</strong>
+                  <p>{rule.kitchenName}{rule.quantity ? ` / ${rule.quantity}` : ""}</p>
+                  <small>
+                    {[rule.prep, rule.action, rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "", rule.placement === "container" ? "容器へ" : "", rule.notes]
+                      .filter(Boolean)
+                      .join(" / ") || "通常調理"}
+                  </small>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MaamaaProductionSideReference() {
+  return (
+    <>
+      <div className="procedure-reader-side-title">
+        <ChefHat size={18} />
+        <strong>辛さ・セット</strong>
+      </div>
+      <div className="maamaa-side-reference">
+        {maamaaSeasoningRules.map((rule) => (
+          <article key={rule.name}>
+            <strong>{rule.name}</strong>
+            <p>{rule.lines.join(" / ")}</p>
+          </article>
+        ))}
+      </div>
+      <div className="maamaa-side-reference">
+        {maamaaSetRules.map((rule) => (
+          <article key={rule.name}>
+            <strong>{rule.name}</strong>
+            <p>{rule.defaultItems.join(" / ")}</p>
+            {rule.notes ? <small>{rule.notes}</small> : null}
+          </article>
+        ))}
+      </div>
+    </>
   );
 }

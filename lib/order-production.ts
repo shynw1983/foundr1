@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { findMaamaaProductionRule, formatMaamaaProductionRule, maamaaSeasoningRules } from "./maamaa-production-rules";
 import { syncWebReservationToSalesOrder } from "./sales-orders";
 
 type ProductionTaskStatus = "new" | "preparing" | "ready";
@@ -46,6 +47,59 @@ function labeledDetail(label: string, value: string) {
   return /[:：]/.test(normalized) ? normalized : `${label}：${normalized}`;
 }
 
+function countRawLabels(labels: string[]) {
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const label of labels) {
+    const normalized = normalizeText(label);
+    if (!normalized) continue;
+    const current = counts.get(normalized) ?? { label: normalized, count: 0 };
+    current.count += 1;
+    counts.set(normalized, current);
+  }
+  return Array.from(counts.values());
+}
+
+function getMaamaaSeasoningLine(label: string) {
+  const normalized = normalizeText(label);
+  const heatName = normalized.replace(/^辛さ[:：]\s*/, "");
+  const heatRule = maamaaSeasoningRules.find((rule) => rule.name === heatName);
+  if (heatRule) return `辛さ：${heatName}（${heatRule.lines.join(" / ")}）`;
+  if (/^痺れ[:：]/.test(normalized)) return normalized;
+  if (/^味変[:：]/.test(normalized)) return normalized;
+  if (normalized.includes("薬膳スパイス")) return normalized;
+  return "";
+}
+
+function buildMaamaaProductionItemLines(row: {
+  itemName: string;
+  quantity: number;
+  toppingLabels: string[] | null;
+}) {
+  const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
+  const seasoningLines: string[] = [];
+  const kitchenLines: string[] = [];
+  const fallbackLines: string[] = [];
+
+  for (const { label, count } of countRawLabels(toppingLabels)) {
+    const seasoningLine = getMaamaaSeasoningLine(label);
+    if (seasoningLine) {
+      seasoningLines.push(seasoningLine);
+      continue;
+    }
+    const rule = findMaamaaProductionRule(label);
+    if (rule) {
+      kitchenLines.push(`${rule.section === "noodles" ? "麺" : "具材"}：${formatMaamaaProductionRule(rule, count)}`);
+    } else {
+      fallbackLines.push(`具材：${label}${count > 1 ? ` x${count}` : ""}`);
+    }
+  }
+
+  return [
+    `${row.itemName} x${row.quantity}`,
+    ...uniqueTextParts([...seasoningLines, ...kitchenLines, ...fallbackLines]).map((detail) => `・${detail}`)
+  ];
+}
+
 function buildProductionItemLines(row: {
   itemName: string;
   quantity: number;
@@ -60,12 +114,15 @@ function buildProductionItemLines(row: {
   measuredUnit: string;
 }) {
   const toppingLabels = Array.isArray(row.toppingLabels) ? row.toppingLabels : [];
+  const isMaamaaBuildable = row.sizeKey === "maamaa_buildable";
+  if (isMaamaaBuildable) {
+    return buildMaamaaProductionItemLines(row);
+  }
   const toppingLabelSet = new Set(toppingLabels.map((label) => normalizeText(label)).filter(Boolean));
   const optionParts = row.optionLabel
     .split(",")
     .map((part) => part.trim())
     .filter((part) => part && !toppingLabelSet.has(normalizeText(part)));
-  const isMaamaaBuildable = row.sizeKey === "maamaa_buildable";
   const sizeParts = (isMaamaaBuildable || row.sizeLabel.includes("\n")) && toppingLabels.length ? [] : [row.sizeLabel];
   const details = uniqueTextParts([
     row.measuredQuantity && row.measuredUnit
