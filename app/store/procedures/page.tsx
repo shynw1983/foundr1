@@ -284,6 +284,7 @@ function MaamaaProductionReference({ language }: { language: MaamaaReferenceLang
   const sections = maamaaProductionReferenceSections();
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
+  const operationRules = maamaaSetRules.filter((rule) => rule.name === "複数杯注文");
   return (
     <div className="maamaa-production-reference" data-i18n-ignore>
       <div className="procedure-reader-heading">
@@ -322,6 +323,32 @@ function MaamaaProductionReference({ language }: { language: MaamaaReferenceLang
             </div>
           </section>
         ))}
+        <section className="maamaa-reference-section">
+          <h3>{t("辛さ・味変")}</h3>
+          <div className="maamaa-reference-rule-grid">
+            {maamaaSeasoningRules.map((rule) => (
+              <article className="maamaa-reference-rule" key={rule.name}>
+                <strong>{t(rule.name)}</strong>
+                <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
+                <small>{isChinese ? "调味 / 汤底选项" : "味付け / スープオプション"}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+        {operationRules.length ? (
+          <section className="maamaa-reference-section">
+            <h3>{t("オペレーション")}</h3>
+            <div className="maamaa-reference-rule-grid">
+              {operationRules.map((rule) => (
+                <article className="maamaa-reference-rule" key={rule.name}>
+                  <strong>{t(rule.name)}</strong>
+                  <p>{rule.defaultItems.map((item) => t(item)).join(" / ")}</p>
+                  {rule.notes ? <small>{t(rule.notes)}</small> : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -330,22 +357,15 @@ function MaamaaProductionReference({ language }: { language: MaamaaReferenceLang
 function MaamaaProductionSideReference({ language }: { language: MaamaaReferenceLanguage }) {
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
+  const setMenuRules = maamaaSetRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
   return (
     <div data-i18n-ignore>
       <div className="procedure-reader-side-title">
         <ChefHat size={18} />
-        <strong>{isChinese ? "辣度・套餐" : "辛さ・セット"}</strong>
+        <strong>{isChinese ? "套餐" : "セットメニュー"}</strong>
       </div>
       <div className="maamaa-side-reference">
-        {maamaaSeasoningRules.map((rule) => (
-          <article key={rule.name}>
-            <strong>{t(rule.name)}</strong>
-            <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
-          </article>
-        ))}
-      </div>
-      <div className="maamaa-side-reference">
-        {maamaaSetRules.map((rule) => (
+        {setMenuRules.map((rule) => (
           <article key={rule.name}>
             <strong>{t(rule.name)}</strong>
             <p>{rule.defaultItems.map((item) => t(item)).join(" / ")}</p>
