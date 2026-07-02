@@ -61,12 +61,17 @@ function countRawLabels(labels: string[]) {
 
 function getMaamaaSeasoningLine(label: string) {
   const normalized = normalizeText(label);
-  const heatName = normalized.replace(/^辛さ[:：]\s*/, "");
-  const heatRule = maamaaSeasoningRules.find((rule) => rule.name === heatName);
-  if (heatRule) return `辛さ：${heatName}（${heatRule.lines.join(" / ")}）`;
-  if (/^痺れ[:：]/.test(normalized)) return normalized;
-  if (/^味変[:：]/.test(normalized)) return normalized;
-  if (normalized.includes("薬膳スパイス")) return normalized;
+  const optionName = normalized.replace(/^(辛さ|痺れ|味変)[:：]\s*/, "");
+  const rule = maamaaSeasoningRules.find((seasoningRule) => seasoningRule.name === optionName);
+  if (rule) {
+    if (/^辛さ[:：]/.test(normalized)) return `辛さ：${optionName}（${rule.lines.join(" / ")}）`;
+    if (/^痺れ[:：]/.test(normalized)) return `痺れ：${optionName}（${rule.lines.join(" / ")}）`;
+    if (/^味変[:：]/.test(normalized)) return `味変：${optionName}（${rule.lines.join(" / ")}）`;
+    return `${optionName}（${rule.lines.join(" / ")}）`;
+  }
+  if (/^痺れ[:：]/.test(normalized)) return `${normalized}（要確認）`;
+  if (/^味変[:：]/.test(normalized)) return `${normalized}（要確認）`;
+  if (normalized.includes("薬膳スパイス")) return `${normalized}（要確認）`;
   return "";
 }
 

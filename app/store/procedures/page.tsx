@@ -12,7 +12,14 @@ import {
   Search
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { maamaaProductionReferenceSections, maamaaSeasoningRules, maamaaSetRules } from "../../../lib/maamaa-production-rules";
+import {
+  type MaamaaReferenceLanguage,
+  maamaaProductionReferenceSections,
+  maamaaSeasoningRules,
+  maamaaSetRules,
+  translateMaamaaReferenceText
+} from "../../../lib/maamaa-production-rules";
+import { useOsTranslation } from "../../os/components/OsTranslationProvider";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 
 type ProcedureProduct = {
@@ -63,6 +70,8 @@ export default function ProcedureReaderPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { language: osLanguage } = useOsTranslation();
+  const maamaaReferenceLanguage: MaamaaReferenceLanguage = osLanguage === "ja" ? "ja" : "zh";
 
   async function loadProcedures() {
     setLoading(true);
@@ -158,7 +167,7 @@ export default function ProcedureReaderPage() {
           {loading ? (
             <div className="procedure-reader-empty">読み込み中</div>
           ) : showMaamaaReference ? (
-            <MaamaaProductionReference />
+            <MaamaaProductionReference language={maamaaReferenceLanguage} />
           ) : error ? (
             <div className="procedure-reader-empty">{error}</div>
           ) : !selectedBook ? (
@@ -244,7 +253,7 @@ export default function ProcedureReaderPage() {
 
         <aside className="procedure-reader-products" aria-label="関連商品">
           {showMaamaaReference ? (
-            <MaamaaProductionSideReference />
+            <MaamaaProductionSideReference language={maamaaReferenceLanguage} />
           ) : (
             <>
               <div className="procedure-reader-side-title">
@@ -271,15 +280,17 @@ export default function ProcedureReaderPage() {
   );
 }
 
-function MaamaaProductionReference() {
+function MaamaaProductionReference({ language }: { language: MaamaaReferenceLanguage }) {
   const sections = maamaaProductionReferenceSections();
+  const isChinese = language === "zh";
+  const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
   return (
-    <div className="maamaa-production-reference">
+    <div className="maamaa-production-reference" data-i18n-ignore>
       <div className="procedure-reader-heading">
         <div>
-          <p className="eyebrow">マーラータン / 厨房ルール</p>
-          <h2>まぁ麻 制作早見表</h2>
-          <p>Web予約・店内注文で選ばれた具材を、厨房で取る原料、分量、処理に置き換えるための一覧です。</p>
+          <p className="eyebrow">{isChinese ? "麻辣烫 / 厨房规则" : "マーラータン / 厨房ルール"}</p>
+          <h2>{isChinese ? "まぁ麻 制作速查表" : "まぁ麻 制作早見表"}</h2>
+          <p>{isChinese ? "以菜单上架项目为基准，反映 SOP 和墙上照片里的制作内容。制作依据未确认的项目会保留并标记为需确认。" : "メニュー掲載項目を基準に、SOP・壁写真の制作内容を反映した一覧です。制作根拠が未確認の項目は要確認として残します。"}</p>
         </div>
         <div className="procedure-reader-progress">
           <span>初版</span>
@@ -289,22 +300,22 @@ function MaamaaProductionReference() {
 
       <div className="maamaa-reference-alert">
         <ChefHat size={20} />
-        <span>套餐は追加トッピングだけでなく、壁のセット具材も必ず入れる。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。</span>
+        <span>{isChinese ? "套餐不只放追加加料，也必须放入墙上写的套餐基础食材。更换面类时替换默认宽粉50g；追加宽粉则另加50g。" : "套餐は追加トッピングだけでなく、壁のセット具材も必ず入れる。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。"}</span>
       </div>
 
       <div className="maamaa-reference-sections">
         {sections.map((section) => (
           <section className="maamaa-reference-section" key={section.id}>
-            <h3>{section.title}</h3>
+            <h3>{t(section.title)}</h3>
             <div className="maamaa-reference-rule-grid">
               {section.rules.map((rule) => (
                 <article className="maamaa-reference-rule" key={`${rule.section}-${rule.customerName}`}>
-                  <strong>{rule.customerName}</strong>
-                  <p>{rule.kitchenName}{rule.quantity ? ` / ${rule.quantity}` : ""}</p>
+                  <strong>{t(rule.customerName)}</strong>
+                  <p>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</p>
                   <small>
-                    {[rule.prep, rule.action, rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "", rule.placement === "container" ? "容器へ" : "", rule.notes]
+                    {[t(rule.prep), t(rule.action), rule.minimumHeatMinutes ? (isChinese ? `至少加热${rule.minimumHeatMinutes}分钟` : `最低${rule.minimumHeatMinutes}分加熱`) : "", rule.placement === "container" ? (isChinese ? "放入容器" : "容器へ") : "", t(rule.notes)]
                       .filter(Boolean)
-                      .join(" / ") || "通常調理"}
+                      .join(" / ") || (isChinese ? "常规处理" : "通常調理")}
                   </small>
                 </article>
               ))}
@@ -316,30 +327,32 @@ function MaamaaProductionReference() {
   );
 }
 
-function MaamaaProductionSideReference() {
+function MaamaaProductionSideReference({ language }: { language: MaamaaReferenceLanguage }) {
+  const isChinese = language === "zh";
+  const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
   return (
-    <>
+    <div data-i18n-ignore>
       <div className="procedure-reader-side-title">
         <ChefHat size={18} />
-        <strong>辛さ・セット</strong>
+        <strong>{isChinese ? "辣度・套餐" : "辛さ・セット"}</strong>
       </div>
       <div className="maamaa-side-reference">
         {maamaaSeasoningRules.map((rule) => (
           <article key={rule.name}>
-            <strong>{rule.name}</strong>
-            <p>{rule.lines.join(" / ")}</p>
+            <strong>{t(rule.name)}</strong>
+            <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
           </article>
         ))}
       </div>
       <div className="maamaa-side-reference">
         {maamaaSetRules.map((rule) => (
           <article key={rule.name}>
-            <strong>{rule.name}</strong>
-            <p>{rule.defaultItems.join(" / ")}</p>
-            {rule.notes ? <small>{rule.notes}</small> : null}
+            <strong>{t(rule.name)}</strong>
+            <p>{rule.defaultItems.map((item) => t(item)).join(" / ")}</p>
+            {rule.notes ? <small>{t(rule.notes)}</small> : null}
           </article>
         ))}
       </div>
-    </>
+    </div>
   );
 }
