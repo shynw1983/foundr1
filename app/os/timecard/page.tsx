@@ -880,9 +880,11 @@ function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | u
   return { className: " is-complete", label: "OK" } satisfies ActualStatus;
 }
 
+const scheduleOwnerRoles = new Set(["owner", "store_owner"]);
+
 function compareScheduleEmployees(a: TimecardEmployee, b: TimecardEmployee) {
-  const ownerRankA = a.role === "owner" ? 1 : 0;
-  const ownerRankB = b.role === "owner" ? 1 : 0;
+  const ownerRankA = scheduleOwnerRoles.has(a.role) ? 1 : 0;
+  const ownerRankB = scheduleOwnerRoles.has(b.role) ? 1 : 0;
   return ownerRankA - ownerRankB || a.name.localeCompare(b.name, "ja", { numeric: true, sensitivity: "base" });
 }
 
