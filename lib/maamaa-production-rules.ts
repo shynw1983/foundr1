@@ -40,6 +40,7 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "harusame", section: "noodles", customerName: "春雨", kitchenName: "春雨", quantity: "40g", action: "煮込まず、容器に入れる", placement: "container" },
   { id: "tteokbokki", section: "noodles", customerName: "トッポッキ", kitchenName: "トッポッキ", quantity: "50g", placement: "pot" },
   { id: "sweet-potato-noodle", section: "noodles", customerName: "さつまいも麺", kitchenName: "さつまいも麺", quantity: "50g", placement: "pot" },
+  { id: "raw-mochi-noodle", section: "noodles", customerName: "生もち玉しめん", kitchenName: "生もち玉しめん", quantity: "50g", action: "完全に1分ほどで火が通るため煮込みすぎ注意", placement: "pot", notes: "写真転記。販売名は要確認。" },
 
   { id: "squid-ball", section: "base", customerName: "特選イカ団子1個", kitchenName: "冷凍イカ団子", quantity: "1個", minimumHeatMinutes: 5, placement: "pot" },
   { id: "beef-ball", section: "base", customerName: "特選牛肉団子1個", kitchenName: "冷凍牛肉団子", quantity: "1個", minimumHeatMinutes: 5, placement: "pot" },
@@ -90,7 +91,7 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "oyster", section: "vip", customerName: "広島県産大粒牡蠣", aliases: ["広島県産牡蠣 3個"], kitchenName: "冷凍牡蠣", quantity: "3個", placement: "pot" },
   { id: "seafood-set", section: "vip", customerName: "特選海鮮3種盛り", kitchenName: "大海老2個、ホタテ1個、ヤリイカ50g", quantity: "1セット", placement: "pot" },
   { id: "frankfurt", section: "vip", customerName: "糸島豚の特大フランクフルト1本", kitchenName: "冷凍特大フランクフルト", quantity: "1本", minimumHeatMinutes: 5, placement: "pot" },
-  { id: "stem-lettuce", section: "request", customerName: "山クラゲ", kitchenName: "乾燥山クラゲ", quantity: "6.5-7g", prep: "水で洗う", minimumHeatMinutes: 3, placement: "pot" },
+  { id: "stem-lettuce", section: "request", customerName: "山クラゲ", kitchenName: "乾燥山クラゲ", quantity: "6.5-8g", prep: "水で洗う", minimumHeatMinutes: 3, placement: "pot", notes: "テキストは6.5-7g、壁写真は8g。要確認。" },
 ];
 
 export const maamaaSeasoningRules: MaamaaSeasoningRule[] = [
@@ -104,16 +105,85 @@ export const maamaaSeasoningRules: MaamaaSeasoningRule[] = [
   { name: "味変", lines: ["発酵豆腐タレ 6g", "サーチャージャン 7g", "薬膳スパイス追加: 朝天麻辣鍋底醤 5g、五香粉 4ふり", "にんにくマシマシ 12g", "香酢: タレビンに香酢25g、じゃがりんたん酢5g"] },
 ];
 
+const standardMeatSetBase = [
+  "黒キクラゲ5g",
+  "板春雨50g",
+  "さつまいも1ヶ",
+  "じゃがいも1ヶ",
+  "しいたけ1ヶ",
+  "エリンギ2ヶ",
+  "えのき30g",
+  "しめじ30g",
+  "チンゲン菜30g"
+];
+
+const vegetableSetBase = [
+  "黒キクラゲ5g",
+  "板春雨50g",
+  "さつまいも1ヶ",
+  "じゃがいも2ヶ",
+  "かぼちゃ2ヶ",
+  "ブロッコリー2ヶ",
+  "プチトマト1ヶ",
+  "白ネギ3ヶ",
+  "豆苗20g",
+  "チンゲン菜20g",
+  "しいたけ1ヶ",
+  "エリンギ2ヶ",
+  "えのき30g",
+  "しめじ30g"
+];
+
 export const maamaaSetRules: MaamaaSetRule[] = [
   {
     name: "セットメニュー共通",
     defaultItems: ["黒キクラゲ", "根菜", "キノコ類", "板春雨50g", "チンゲン菜"],
-    notes: "セットメニューで追加トッピングがない場合も、壁のセット具材を必ず入れる。"
+    notes: "セットメニューで追加トッピングがない場合も、壁のセット具材を必ず入れる。下の個別套餐は壁写真から読める範囲で転記。"
+  },
+  {
+    name: "野菜マーラータン",
+    defaultItems: vegetableSetBase,
+    notes: "壁写真転記。野菜量は写真の数字を優先。"
   },
   {
     name: "豚肉マーラータン",
-    defaultItems: ["黒キクラゲ", "チンゲン菜", "キノコ類", "さつまいも2枚", "豚肉80g", "板春雨50g"],
-    notes: "麺変更時は板春雨50gを置き換える。板春雨追加はさらに50g追加。"
+    defaultItems: ["豚肉80g", ...standardMeatSetBase],
+    notes: "壁写真はさつまいも1ヶ。ユーザーメモ例はさつまいも2枚のため要確認。"
+  },
+  {
+    name: "牛肉マーラータン",
+    defaultItems: ["牛肉80g", ...standardMeatSetBase],
+    notes: "壁写真転記。"
+  },
+  {
+    name: "ラムマーラータン",
+    defaultItems: ["ラム肉80g", ...standardMeatSetBase],
+    notes: "壁写真転記。"
+  },
+  {
+    name: "とろとろ国産牛すじのマーラータン",
+    defaultItems: ["牛すじ80g", ...standardMeatSetBase],
+    notes: "壁写真転記。"
+  },
+  {
+    name: "パクチーマーラータン",
+    defaultItems: ["黒キクラゲ5g", "かに団子1ヶ", "イカ団子1ヶ", "牛肉団子1ヶ", "板春雨50g", "さつまいも1ヶ", "じゃがいも1ヶ", "しいたけ1ヶ", "エリンギ2ヶ", "えのき30g", "しめじ30g", "パクチー30g"],
+    notes: "壁写真転記。"
+  },
+  {
+    name: "3種の海鮮マーラータン",
+    defaultItems: ["黒キクラゲ5g", "板春雨50g", "大えび1ヶ", "ヤリイカ40-50g", "ホタテ1ヶ", "さつまいも1ヶ", "じゃがいも1ヶ", "しいたけ1ヶ", "エリンギ2ヶ", "えのき30g", "しめじ30g", "チンゲン菜30g"],
+    notes: "壁写真転記。メニュー上の特選海鮮3種盛りと海老数が異なる可能性があるため要確認。"
+  },
+  {
+    name: "丸ごとカマンベールのマーラータン",
+    defaultItems: ["黒キクラゲ5g", "板春雨50g", "カマンベールチーズ1ヶ", "しいたけ1ヶ", "エリンギ2ヶ", "しめじ30g", "えのき30g", "さつまいも1ヶ", "じゃがいも1ヶ", "チンゲン菜30g"],
+    notes: "壁写真転記。"
+  },
+  {
+    name: "極上の肉マーラータン",
+    defaultItems: ["黒キクラゲ5g", "板春雨50g", "さつまいも1ヶ", "じゃがいも1ヶ", "しいたけ1ヶ", "エリンギ2ヶ", "えのき30g", "しめじ30g", "チンゲン菜30g", "黒毛和牛100g"],
+    notes: "スープ投入後2-3分ほどたったら、自然解凍した黒毛和牛100gをしゃぶしゃぶする。盛り付け時は大きな和牛が一番上に来るようにする。"
   },
   {
     name: "複数杯注文",
