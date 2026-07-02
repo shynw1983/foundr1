@@ -175,8 +175,8 @@ const translations = {
   "footer/footer": {
     body: {
       en: "A malatang shop serving the joy of choosing and the aroma of freshly finished bowls.",
-      zh: "届け选择的乐趣与现做香气的麻辣烫专门店。",
-      "zh-Hant": "届け選擇的樂趣與現做香氣的麻辣燙專門店。",
+      zh: "带来选择乐趣与现做香气的麻辣烫专门店。",
+      "zh-Hant": "帶來選擇樂趣與現做香氣的麻辣燙專門店。",
       ko: "고르는 즐거움과 갓 만든 향을 전하는 마라탕 전문점.",
       vi: "Tiệm malatang mang đến niềm vui lựa chọn và hương thơm của món vừa nấu.",
       ne: "छनोटको रमाइलो र ताजा पकाइको सुगन्ध दिने मालाताङ विशेषज्ञ पसल।"
