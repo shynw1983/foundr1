@@ -18505,7 +18505,8 @@ body :where(
   .shift-editor-popover {
     position: fixed;
     z-index: 140;
-    width: min(760px, calc(100vw - 24px));
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    width: min(900px, calc(100vw - 24px));
     max-height: min(72vh, 520px);
     margin: 0;
     overflow-y: auto;
@@ -18514,6 +18515,26 @@ body :where(
     box-shadow: 0 18px 42px rgba(17, 24, 39, 0.18);
     -webkit-overflow-scrolling: touch;
     backdrop-filter: blur(10px);
+  }
+
+  .shift-editor-popover .shift-editor-title,
+  .shift-editor-popover .shift-segment-switcher {
+    grid-column: 1 / -1;
+  }
+
+  .shift-editor-popover .shift-patterns,
+  .shift-editor-popover .shift-editor-actions {
+    grid-column: 1 / -1;
+  }
+
+  .shift-editor-popover .shift-editor-actions {
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
+
+  .shift-editor-popover .shift-editor-actions button {
+    flex: 0 1 auto;
+    min-width: 84px;
   }
 }
 
