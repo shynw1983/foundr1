@@ -3,7 +3,7 @@
 import { BriefcaseBusiness, CalendarDays, ChevronDown, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import type { FormEvent, MouseEvent } from "react";
+import type { CSSProperties, FormEvent, MouseEvent } from "react";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -185,6 +185,7 @@ type TimecardPayload = {
 };
 
 type ShiftDraft = {
+  id?: string | null;
   employeeId: string;
   workDate: string;
   scheduledStart: string;
@@ -196,6 +197,11 @@ type ShiftDraft = {
 type ShiftSelection = {
   employeeId: string;
   workDate: string;
+};
+
+type ShiftEditorPosition = {
+  top: number;
+  left: number;
 };
 
 type ShiftPatch = ShiftSelection & {
@@ -780,6 +786,12 @@ function getShiftSelectionKey(selection: ShiftSelection) {
   return `${selection.employeeId}:${selection.workDate}`;
 }
 
+function compareShiftEntries(a: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">, b: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">) {
+  return String(a.scheduledStart ?? "").localeCompare(String(b.scheduledStart ?? ""))
+    || String(a.scheduledEnd ?? "").localeCompare(String(b.scheduledEnd ?? ""))
+    || String(a.id ?? "").localeCompare(String(b.id ?? ""));
+}
+
 function getShiftDefaults(businessHours: StoreBusinessHours, workDate: string) {
   const day = getBusinessDayForDate(businessHours, workDate);
   if (day.closed) {
@@ -886,6 +898,24 @@ function compareScheduleEmployees(a: TimecardEmployee, b: TimecardEmployee) {
   const ownerRankA = scheduleOwnerRoles.has(a.role) ? 1 : 0;
   const ownerRankB = scheduleOwnerRoles.has(b.role) ? 1 : 0;
   return ownerRankA - ownerRankB || a.name.localeCompare(b.name, "ja", { numeric: true, sensitivity: "base" });
+}
+
+function getShiftEditorPosition(anchor: HTMLElement): ShiftEditorPosition {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 12;
+  const gap = 8;
+  const panelWidth = Math.min(760, window.innerWidth - margin * 2);
+  const estimatedPanelHeight = 340;
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
+  const belowTop = rect.bottom + gap;
+  const top = belowTop + estimatedPanelHeight <= window.innerHeight - margin
+    ? belowTop
+    : Math.max(margin, rect.top - estimatedPanelHeight - gap);
+
+  return {
+    top: Math.round(top),
+    left: Math.round(left)
+  };
 }
 
 function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
@@ -1099,6 +1129,7 @@ export function TimecardPage({
   const [payrollView, setPayrollView] = useState<TimecardPayrollView>(initialPayrollView);
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
+  const [shiftEditorPosition, setShiftEditorPosition] = useState<ShiftEditorPosition | null>(null);
   const [isShiftMultiSelectMode, setIsShiftMultiSelectMode] = useState(false);
   const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
   const [bulkShiftDraft, setBulkShiftDraft] = useState({
@@ -1143,7 +1174,10 @@ export function TimecardPage({
       } else {
         setPayrollPaymentBatches([]);
       }
-      if (!options.keepShiftDraft) setShiftDraft(null);
+      if (!options.keepShiftDraft) {
+        setShiftDraft(null);
+        setShiftEditorPosition(null);
+      }
       if (!options.keepActualDraft) setActualDraft(null);
     } catch {
       setLoadError("タイムカード情報を読み込めませんでした。データベース接続を確認してください。");
@@ -1240,14 +1274,18 @@ export function TimecardPage({
   const selectedDraftPatterns = shiftDraft
     ? getShiftPatterns(selectedStoreBusinessHours, shiftDraft.workDate)
     : [];
+  const shiftEditorStyle = shiftEditorPosition
+    ? ({ top: shiftEditorPosition.top, left: shiftEditorPosition.left } satisfies CSSProperties)
+    : undefined;
   const scheduleEmployees = useMemo(
     () => (data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? []).sort(compareScheduleEmployees),
     [data, selectedStoreId]
   );
-  const shiftByCell = useMemo(() => {
-    const map = new Map<string, ShiftEntry>();
+  const shiftsByCell = useMemo(() => {
+    const map = new Map<string, ShiftEntry[]>();
     for (const shift of data?.shifts ?? []) {
-      map.set(`${shift.employeeId}:${shift.workDate}`, shift);
+      const key = `${shift.employeeId}:${shift.workDate}`;
+      map.set(key, [...(map.get(key) ?? []), shift].sort(compareShiftEntries));
     }
     return map;
   }, [data?.shifts]);
@@ -1309,21 +1347,24 @@ export function TimecardPage({
     for (const employee of scheduleEmployees) {
       for (const day of monthDays) {
         const actual = actualByCell.get(`${employee.id}:${day.key}`);
-        const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+        const shift = shiftsByCell.get(`${employee.id}:${day.key}`)?.[0];
         const status = getActualStatus(actual, shift, day.key > todayKey);
         if ((status.className && status.className !== " is-complete") || actual?.isManualCorrection) count += 1;
       }
     }
     return count;
-  }, [actualByCell, monthDays, scheduleEmployees, shiftByCell, todayKey]);
+  }, [actualByCell, monthDays, scheduleEmployees, shiftsByCell, todayKey]);
   const selectedShiftEmployee = shiftDraft
     ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
     : null;
+  const selectedShiftSegments = shiftDraft
+    ? shiftsByCell.get(`${shiftDraft.employeeId}:${shiftDraft.workDate}`) ?? []
+    : [];
   const selectedActualEmployee = actualDraft
     ? scheduleEmployees.find((employee) => employee.id === actualDraft.employeeId) ?? null
     : null;
   const selectedActualShift = actualDraft
-    ? shiftByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
+    ? shiftsByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`)?.[0] ?? null
     : null;
   const selectedActualSummary = actualDraft
     ? actualByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
@@ -1335,13 +1376,16 @@ export function TimecardPage({
     }
   }, [selectedPayrollEmployeeId, selectedPayrollRow]);
 
-  function openShiftEditor(employeeId: string, workDate: string) {
-    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+  function openShiftEditor(employeeId: string, workDate: string, anchor?: HTMLElement, shiftId?: string | null) {
+    const shifts = shiftsByCell.get(`${employeeId}:${workDate}`) ?? [];
+    const shift = shiftId ? shifts.find((item) => item.id === shiftId) : shifts[0];
     const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
     setIsShiftMultiSelectMode(false);
     setSelectedShiftCells([]);
+    setShiftEditorPosition((current) => anchor ? getShiftEditorPosition(anchor) : current);
     clearShiftMessage();
     setShiftDraft({
+      id: shift?.id ?? null,
       employeeId,
       workDate,
       scheduledStart: shift?.scheduledStart ?? defaults.scheduledStart,
@@ -1354,7 +1398,8 @@ export function TimecardPage({
   function toggleShiftSelection(employeeId: string, workDate: string) {
     clearShiftMessage();
     setShiftDraft(null);
-    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    setShiftEditorPosition(null);
+    const shift = shiftsByCell.get(`${employeeId}:${workDate}`)?.[0];
     const defaults = getShiftDefaults(selectedStoreBusinessHours, workDate);
     if (!selectedShiftCells.length) {
       setBulkShiftDraft({
@@ -1380,7 +1425,21 @@ export function TimecardPage({
       toggleShiftSelection(employeeId, workDate);
       return;
     }
-    openShiftEditor(employeeId, workDate);
+    openShiftEditor(employeeId, workDate, event.currentTarget);
+  }
+
+  function openNewShiftSegment() {
+    if (!shiftDraft) return;
+    const defaults = getShiftDefaults(selectedStoreBusinessHours, shiftDraft.workDate);
+    setShiftDraft({
+      id: null,
+      employeeId: shiftDraft.employeeId,
+      workDate: shiftDraft.workDate,
+      scheduledStart: defaults.scheduledStart,
+      scheduledEnd: defaults.scheduledEnd,
+      breakMinutes: defaults.breakMinutes,
+      note: ""
+    });
   }
 
   function clearShiftMessage() {
@@ -1411,6 +1470,7 @@ export function TimecardPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "save_shift",
+        shiftId: nextDraft.id ?? null,
         storeId: selectedStoreId,
         employeeId: nextDraft.employeeId,
         workDate: nextDraft.workDate,
@@ -1432,6 +1492,11 @@ export function TimecardPage({
 
   async function deleteShift() {
     if (!shiftDraft || !selectedStoreId) return;
+    if (!shiftDraft.id) {
+      setShiftDraft(null);
+      setShiftEditorPosition(null);
+      return;
+    }
     setIsSavingShift(true);
     clearShiftMessage();
     const response = await fetch("/api/timecard", {
@@ -1439,6 +1504,7 @@ export function TimecardPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "delete_shift",
+        shiftId: shiftDraft.id,
         storeId: selectedStoreId,
         employeeId: shiftDraft.employeeId,
         workDate: shiftDraft.workDate
@@ -1535,7 +1601,7 @@ export function TimecardPage({
 
   function openActualEditor(employeeId: string, workDate: string) {
     const actual = actualByCell.get(`${employeeId}:${workDate}`);
-    const shift = shiftByCell.get(`${employeeId}:${workDate}`);
+    const shift = shiftsByCell.get(`${employeeId}:${workDate}`)?.[0];
     const breakInterval1 = actual?.breakIntervals?.[0];
     const breakInterval2 = actual?.breakIntervals?.[1];
     clearShiftMessage();
@@ -1973,6 +2039,7 @@ export function TimecardPage({
                     onClick={() => {
                       clearShiftMessage();
                       setShiftDraft(null);
+                      setShiftEditorPosition(null);
                       setIsShiftMultiSelectMode((current) => !current);
                     }}
                   >
@@ -2021,12 +2088,30 @@ export function TimecardPage({
                   </div>
                 ) : null}
                 {shiftDraft ? (
-                  <div className="shift-editor" aria-label="シフト編集">
+                  <div className="shift-editor shift-editor-popover" style={shiftEditorStyle} aria-label="シフト編集">
                     <div className="shift-editor-title">
                       <strong>{selectedShiftEmployee?.name ?? "従業員"}</strong>
                       <span>{shiftDraft.workDate}{selectedDraftBusinessDay ? ` / 営業 ${selectedDraftBusinessDay.closed ? "休業日" : `${selectedDraftBusinessDay.open}-${selectedDraftBusinessDay.close}`}` : ""}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
+                    {selectedShiftSegments.length ? (
+                      <div className="shift-segment-switcher" aria-label="時間帯">
+                        {selectedShiftSegments.map((segment, index) => (
+                          <button
+                            className={shiftDraft.id === segment.id ? "is-active" : ""}
+                            type="button"
+                            onClick={() => openShiftEditor(shiftDraft.employeeId, shiftDraft.workDate, undefined, segment.id)}
+                            key={segment.id}
+                          >
+                            {segment.scheduledStart ?? "--:--"}-{segment.scheduledEnd ?? "--:--"}
+                            <small>{index + 1}</small>
+                          </button>
+                        ))}
+                        <button className={!shiftDraft.id ? "is-active" : ""} type="button" onClick={openNewShiftSegment}>
+                          時間帯を追加
+                        </button>
+                      </div>
+                    ) : null}
                     <label>
                       <span>開始</span>
                       <input type="time" value={shiftDraft.scheduledStart} onChange={(event) => setShiftDraft({ ...shiftDraft, scheduledStart: event.target.value })} />
@@ -2057,7 +2142,10 @@ export function TimecardPage({
                       </div>
                     )}
                     <div className="shift-editor-actions">
-                      <button className="secondary-button" type="button" onClick={() => setShiftDraft(null)}>閉じる</button>
+                      <button className="secondary-button" type="button" onClick={() => {
+                        setShiftDraft(null);
+                        setShiftEditorPosition(null);
+                      }}>閉じる</button>
                       <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteShift()}>削除</button>
                       <button className="primary-button" type="button" disabled={isSavingShift} onClick={() => void saveShift()}>{isSavingShift ? "保存中" : "保存"}</button>
                     </div>
@@ -2099,7 +2187,7 @@ export function TimecardPage({
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
-                            const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+                            const shifts = shiftsByCell.get(`${employee.id}:${day.key}`) ?? [];
                             const cellKey = getShiftSelectionKey({ employeeId: employee.id, workDate: day.key });
                             const isSelected = shiftDraft?.employeeId === employee.id && shiftDraft.workDate === day.key;
                             const isBulkSelected = selectedShiftCellKeys.has(cellKey);
@@ -2109,16 +2197,18 @@ export function TimecardPage({
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isUncovered ? " has-uncovered-shift" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
-                                  className={`shift-cell${shift ? " has-shift" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
+                                  className={`shift-cell${shifts.length ? " has-shift" : ""}${shifts.length > 1 ? " has-multiple-shifts" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}`}
                                   type="button"
                                   title={isUncovered ? `未シフト: ${coverage?.missingLabel}` : isShiftMultiSelectMode ? "クリックで複数選択" : "クリックで編集 / Shift・Command・Ctrl クリックで複数選択"}
                                   onClick={(event) => handleShiftCellClick(event, employee.id, day.key)}
                                 >
-                                  {shift ? (
-                                    <>
-                                      <strong>{shift.scheduledStart ?? "--:--"}</strong>
-                                      <span>{shift.scheduledEnd ?? "--:--"}</span>
-                                    </>
+                                  {shifts.length ? (
+                                    shifts.map((shift) => (
+                                      <span className="shift-segment-line" key={shift.id}>
+                                        <strong>{shift.scheduledStart ?? "--:--"}</strong>
+                                        <span>{shift.scheduledEnd ?? "--:--"}</span>
+                                      </span>
+                                    ))
                                   ) : (
                                     <span className="shift-empty">-</span>
                                   )}
@@ -2295,7 +2385,7 @@ export function TimecardPage({
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
                             const actual = actualByCell.get(`${employee.id}:${day.key}`);
-                            const shift = shiftByCell.get(`${employee.id}:${day.key}`);
+                            const shift = shiftsByCell.get(`${employee.id}:${day.key}`)?.[0];
                             const isFutureDate = day.key > todayKey;
                             const shouldShowMissing = Boolean(shift && !actual && !isFutureDate);
                             const status = getActualStatus(actual, shift, isFutureDate);

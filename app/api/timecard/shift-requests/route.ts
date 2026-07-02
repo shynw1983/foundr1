@@ -957,6 +957,17 @@ export async function POST(request: Request) {
       }
 
       await sql`
+        delete from timecard_shifts
+        where store_id::text = ${storeId}
+          and employee_id::text = ${String(shiftRequest.employeeId)}
+          and work_date = ${workDate}::date
+          and (
+            coalesce(note, '') = '希望シフト承認'
+            or coalesce(note, '') like '希望 % から調整'
+          )
+      `;
+
+      await sql`
         insert into timecard_shifts (
           employee_id,
           store_id,
@@ -979,13 +990,6 @@ export async function POST(request: Request) {
           ${session.id},
           now()
         )
-        on conflict (employee_id, store_id, work_date)
-        do update set
-          scheduled_start = excluded.scheduled_start,
-          scheduled_end = excluded.scheduled_end,
-          break_minutes = excluded.break_minutes,
-          note = excluded.note,
-          updated_at = now()
       `;
       notificationTitle = adjusted ? "希望シフトが調整されました" : "希望シフトが承認されました";
       notificationMessage = adjusted

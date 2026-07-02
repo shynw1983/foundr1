@@ -927,8 +927,7 @@ create table if not exists timecard_shifts (
   note text,
   created_by uuid references employees(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (employee_id, store_id, work_date)
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists timecard_shift_requests (
@@ -3444,6 +3443,8 @@ create index if not exists idx_web_push_subscriptions_employee on web_push_subsc
 create index if not exists idx_timecard_punches_employee_punched on timecard_punches(employee_id, punched_at desc);
 create index if not exists idx_timecard_punches_store_punched on timecard_punches(store_id, punched_at desc);
 create index if not exists idx_timecard_shifts_store_date on timecard_shifts(store_id, work_date);
+create index if not exists idx_timecard_shifts_employee_store_date on timecard_shifts(employee_id, store_id, work_date);
+alter table timecard_shifts drop constraint if exists timecard_shifts_employee_id_store_id_work_date_key;
 create index if not exists idx_timecard_shift_requests_store_date on timecard_shift_requests(store_id, work_date, created_at desc);
 create index if not exists idx_timecard_shift_requests_employee on timecard_shift_requests(employee_id, created_at desc);
 create index if not exists idx_timecard_shift_request_candidates_request on timecard_shift_request_candidates(request_id, created_at desc);

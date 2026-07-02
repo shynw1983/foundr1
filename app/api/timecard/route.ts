@@ -25,6 +25,7 @@ type TimecardPostBody = {
   punchType?: string;
   note?: string;
   employeeId?: string;
+  shiftId?: string | null;
   source?: string;
   mobileLatitude?: number | string;
   mobileLongitude?: number | string;
@@ -974,7 +975,7 @@ export async function GET(request: Request) {
       and timecard_shifts.work_date >= ${startDate}::date
       and timecard_shifts.work_date < ${endDate}::date
       and (${!selfOnly} or timecard_shifts.employee_id::text = ${session.id})
-    order by timecard_shifts.work_date asc, employees.name asc
+    order by timecard_shifts.work_date asc, employees.name asc, timecard_shifts.scheduled_start asc nulls last, timecard_shifts.created_at asc
   ` : [];
 
   const latestPunchRows = selectedStoreId ? await sql`
@@ -1378,7 +1379,14 @@ export async function POST(request: Request) {
           return Response.json({ error: "開始時刻と終了時刻を入力してください。" }, { status: 400 });
         }
 
-        const upserted = await sql`
+        await sql`
+          delete from timecard_shifts
+          where employee_id = ${shift.employeeId}
+            and store_id = ${storeId}
+            and work_date = ${shift.workDate}::date
+        `;
+
+        const inserted = await sql`
           insert into timecard_shifts (
             employee_id,
             store_id,
@@ -1401,16 +1409,9 @@ export async function POST(request: Request) {
             ${session.id},
             now()
           )
-          on conflict (employee_id, store_id, work_date)
-          do update set
-            scheduled_start = excluded.scheduled_start,
-            scheduled_end = excluded.scheduled_end,
-            break_minutes = excluded.break_minutes,
-            note = excluded.note,
-            updated_at = now()
           returning id::text
         `;
-        upsertedIds.push(String(upserted[0]?.id ?? ""));
+        upsertedIds.push(String(inserted[0]?.id ?? ""));
       }
 
       await writeAuditLog({
@@ -1425,6 +1426,7 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, count: normalizedShifts.length, ids: upsertedIds.filter(Boolean) });
     }
 
+    const shiftId = String(body.shiftId ?? "");
     const employeeId = String(body.employeeId ?? "");
     const workDate = String(body.workDate ?? "");
     if (!employeeId || !isValidWorkDate(workDate)) {
@@ -1436,12 +1438,22 @@ export async function POST(request: Request) {
     }
 
     if (action === "delete_shift") {
-      await sql`
-        delete from timecard_shifts
-        where employee_id = ${employeeId}
-          and store_id = ${storeId}
-          and work_date = ${workDate}::date
-      `;
+      if (shiftId) {
+        await sql`
+          delete from timecard_shifts
+          where id::text = ${shiftId}
+            and employee_id = ${employeeId}
+            and store_id = ${storeId}
+            and work_date = ${workDate}::date
+        `;
+      } else {
+        await sql`
+          delete from timecard_shifts
+          where employee_id = ${employeeId}
+            and store_id = ${storeId}
+            and work_date = ${workDate}::date
+        `;
+      }
 
       await writeAuditLog({
         actorEmployeeId: session.id,
@@ -1462,7 +1474,19 @@ export async function POST(request: Request) {
       return Response.json({ error: "開始時刻と終了時刻を入力してください。" }, { status: 400 });
     }
 
-    const upserted = await sql`
+    const saved = shiftId ? await sql`
+      update timecard_shifts
+      set scheduled_start = ${scheduledStart}::time,
+          scheduled_end = ${scheduledEnd}::time,
+          break_minutes = ${breakMinutes},
+          note = ${String(body.note ?? "").trim() || null},
+          updated_at = now()
+      where id::text = ${shiftId}
+        and employee_id = ${employeeId}
+        and store_id = ${storeId}
+        and work_date = ${workDate}::date
+      returning id::text
+    ` : await sql`
       insert into timecard_shifts (
         employee_id,
         store_id,
@@ -1485,26 +1509,22 @@ export async function POST(request: Request) {
         ${session.id},
         now()
       )
-      on conflict (employee_id, store_id, work_date)
-      do update set
-        scheduled_start = excluded.scheduled_start,
-        scheduled_end = excluded.scheduled_end,
-        break_minutes = excluded.break_minutes,
-        note = excluded.note,
-        updated_at = now()
       returning id::text
     `;
+    if (shiftId && !saved.length) {
+      return Response.json({ error: "対象シフトが見つかりません。" }, { status: 404 });
+    }
 
     await writeAuditLog({
       actorEmployeeId: session.id,
       action: "timecard.shift.saved",
       targetType: "timecard_shift",
-      targetId: String(upserted[0]?.id ?? ""),
-      metadata: { storeId, employeeId, workDate, scheduledStart, scheduledEnd, breakMinutes },
+      targetId: String(saved[0]?.id ?? ""),
+      metadata: { storeId, employeeId, workDate, shiftId: saved[0]?.id ?? shiftId, scheduledStart, scheduledEnd, breakMinutes },
       request
     });
 
-    return Response.json({ ok: true, id: upserted[0]?.id ?? null });
+    return Response.json({ ok: true, id: saved[0]?.id ?? null });
   }
 
   if (action === "save_actual_time" || action === "delete_actual_time") {
