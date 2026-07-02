@@ -257,7 +257,7 @@ async function getVisibleEmployees(allStores: boolean, storeIds: string[]) {
         and employee_work_store_payroll_history.store_id = employee_work_stores.store_id
     ) payroll_settings on true
     where employees.status = 'active'
-      and (employees.staff_category = 'working' or employees.payroll_subject = 'paid')
+      and employees.staff_category <> 'device'
       and (
         ${allStores}
         or employee_work_stores.store_id::text = any(${scopedStoreIds})
@@ -450,7 +450,7 @@ async function canPunchForEmployee(storeId: string, employeeId: string) {
       on employee_work_stores.employee_id = employees.id
     where employees.id = ${employeeId}
       and employees.status = 'active'
-      and (employees.staff_category = 'working' or employees.payroll_subject = 'paid')
+      and employees.staff_category <> 'device'
       and employee_work_stores.store_id::text = ${storeId}
     limit 1
   `;

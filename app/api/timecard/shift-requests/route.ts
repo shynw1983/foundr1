@@ -244,7 +244,7 @@ async function canWorkAtStore(employeeId: string, storeId: string) {
     where employees.id::text = ${employeeId}
       and employee_work_stores.store_id::text = ${storeId}
       and employees.status = 'active'
-      and (employees.staff_category = 'working' or employees.payroll_subject = 'paid')
+      and employees.staff_category <> 'device'
     limit 1
   `;
   return Boolean(rows[0]);
@@ -306,7 +306,7 @@ export async function GET(request: Request) {
     join employee_work_stores on employee_work_stores.employee_id = employees.id
     where employee_work_stores.store_id::text = ${selectedStoreId}
       and employees.status = 'active'
-      and (employees.staff_category = 'working' or employees.payroll_subject = 'paid')
+      and employees.staff_category <> 'device'
     order by employees.name
   ` : [];
 
