@@ -212,6 +212,7 @@ type ShiftPatch = ShiftSelection & {
 };
 
 type ActualDraft = {
+  shiftId?: string | null;
   employeeId: string;
   workDate: string;
   clockIn: string;
@@ -892,6 +893,21 @@ function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | u
   return { className: " is-complete", label: "OK" } satisfies ActualStatus;
 }
 
+function getActualSummaryForShift(actuals: DailySummary[], shift: ShiftEntry | undefined) {
+  if (!actuals.length) return undefined;
+  if (!shift?.scheduledStart) return actuals[0];
+  const scheduledStart = timeToMinutes(shift.scheduledStart);
+  const circularDistance = (left: number, right: number) => {
+    const distance = Math.abs(left - right);
+    return Math.min(distance, 1440 - distance);
+  };
+  return [...actuals].sort((a, b) => {
+    const aTime = timeToMinutes(getJstTimeText(a.clockIn) ?? "00:00");
+    const bTime = timeToMinutes(getJstTimeText(b.clockIn) ?? "00:00");
+    return circularDistance(aTime, scheduledStart) - circularDistance(bTime, scheduledStart);
+  })[0];
+}
+
 const scheduleOwnerRoles = new Set(["owner", "store_owner"]);
 
 function compareScheduleEmployees(a: TimecardEmployee, b: TimecardEmployee) {
@@ -1319,10 +1335,11 @@ export function TimecardPage({
     } satisfies ScheduledCostEstimate]));
   }, [data?.payrollRows]);
   const actualByCell = useMemo(() => {
-    const map = new Map<string, DailySummary>();
+    const map = new Map<string, DailySummary[]>();
     for (const day of data?.dailySummaries ?? []) {
       if (day.storeId === selectedStoreId) {
-        map.set(`${day.employeeId}:${day.workDate}`, day);
+        const key = `${day.employeeId}:${day.workDate}`;
+        map.set(key, [...(map.get(key) ?? []), day].sort((a, b) => String(a.clockIn ?? "").localeCompare(String(b.clockIn ?? ""))));
       }
     }
     return map;
@@ -1346,8 +1363,9 @@ export function TimecardPage({
     let count = 0;
     for (const employee of scheduleEmployees) {
       for (const day of monthDays) {
-        const actual = actualByCell.get(`${employee.id}:${day.key}`);
+        const actuals = actualByCell.get(`${employee.id}:${day.key}`) ?? [];
         const shift = shiftsByCell.get(`${employee.id}:${day.key}`)?.[0];
+        const actual = getActualSummaryForShift(actuals, shift);
         const status = getActualStatus(actual, shift, day.key > todayKey);
         if ((status.className && status.className !== " is-complete") || actual?.isManualCorrection) count += 1;
       }
@@ -1363,11 +1381,14 @@ export function TimecardPage({
   const selectedActualEmployee = actualDraft
     ? scheduleEmployees.find((employee) => employee.id === actualDraft.employeeId) ?? null
     : null;
+  const selectedActualShiftSegments = actualDraft
+    ? shiftsByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? []
+    : [];
   const selectedActualShift = actualDraft
-    ? shiftsByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`)?.[0] ?? null
+    ? shiftsByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`)?.find((shift) => shift.id === actualDraft.shiftId) ?? shiftsByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`)?.[0] ?? null
     : null;
   const selectedActualSummary = actualDraft
-    ? actualByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? null
+    ? getActualSummaryForShift(actualByCell.get(`${actualDraft.employeeId}:${actualDraft.workDate}`) ?? [], selectedActualShift ?? undefined) ?? null
     : null;
 
   useEffect(() => {
@@ -1599,13 +1620,15 @@ export function TimecardPage({
     setIsSavingShift(false);
   }
 
-  function openActualEditor(employeeId: string, workDate: string) {
-    const actual = actualByCell.get(`${employeeId}:${workDate}`);
-    const shift = shiftsByCell.get(`${employeeId}:${workDate}`)?.[0];
+  function openActualEditor(employeeId: string, workDate: string, shiftId?: string | null) {
+    const shifts = shiftsByCell.get(`${employeeId}:${workDate}`) ?? [];
+    const shift = shiftId ? shifts.find((item) => item.id === shiftId) : shifts[0];
+    const actual = getActualSummaryForShift(actualByCell.get(`${employeeId}:${workDate}`) ?? [], shift);
     const breakInterval1 = actual?.breakIntervals?.[0];
     const breakInterval2 = actual?.breakIntervals?.[1];
     clearShiftMessage();
     setActualDraft({
+      shiftId: shift?.id ?? null,
       employeeId,
       workDate,
       clockIn: getJstTimeText(actual?.clockIn) ?? shift?.scheduledStart ?? "",
@@ -1651,6 +1674,7 @@ export function TimecardPage({
       body: JSON.stringify({
         action: "save_actual_time",
         storeId: selectedStoreId,
+        shiftId: nextDraft.shiftId ?? null,
         employeeId: nextDraft.employeeId,
         workDate: nextDraft.workDate,
         clockIn: nextDraft.clockIn,
@@ -1698,6 +1722,7 @@ export function TimecardPage({
       body: JSON.stringify({
         action: "delete_actual_time",
         storeId: selectedStoreId,
+        shiftId: actualDraft.shiftId ?? null,
         employeeId: actualDraft.employeeId,
         workDate: actualDraft.workDate
       })
@@ -2291,6 +2316,21 @@ export function TimecardPage({
                       <span>{actualDraft.workDate}</span>
                       <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
                     </div>
+                    {selectedActualShiftSegments.length > 1 ? (
+                      <div className="shift-segment-switcher" aria-label="実勤務時間帯">
+                        {selectedActualShiftSegments.map((segment, index) => (
+                          <button
+                            className={actualDraft.shiftId === segment.id ? "is-active" : ""}
+                            type="button"
+                            onClick={() => openActualEditor(actualDraft.employeeId, actualDraft.workDate, segment.id)}
+                            key={segment.id}
+                          >
+                            {segment.scheduledStart ?? "--:--"}-{segment.scheduledEnd ?? "--:--"}
+                            <small>{index + 1}</small>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="actual-punch-detail" aria-label="打刻詳細">
                       <div className="actual-punch-detail-head">
                         <strong>打刻詳細</strong>
@@ -2384,36 +2424,46 @@ export function TimecardPage({
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
                           {monthDays.map((day) => {
-                            const actual = actualByCell.get(`${employee.id}:${day.key}`);
-                            const shift = shiftsByCell.get(`${employee.id}:${day.key}`)?.[0];
+                            const actuals = actualByCell.get(`${employee.id}:${day.key}`) ?? [];
+                            const shifts = shiftsByCell.get(`${employee.id}:${day.key}`) ?? [];
+                            const shift = shifts[0];
+                            const actual = getActualSummaryForShift(actuals, shift);
                             const isFutureDate = day.key > todayKey;
-                            const shouldShowMissing = Boolean(shift && !actual && !isFutureDate);
+                            const shouldShowMissing = Boolean(shifts.length && !actuals.length && !isFutureDate);
                             const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             const isToday = day.key === todayKey;
+                            const displayRows = shifts.length
+                              ? shifts.map((segment) => ({
+                                shift: segment,
+                                actual: getActualSummaryForShift(actuals, segment)
+                              }))
+                              : actuals.map((segment) => ({ shift: null, actual: segment }));
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
-                                  className={`shift-cell actual-shift-cell${actual ? " has-shift" : ""}${status.className}${isFutureDate && !actual ? " is-future" : ""}${actual?.isManualCorrection ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
+                                  className={`shift-cell actual-shift-cell${actuals.length ? " has-shift" : ""}${displayRows.length > 1 ? " has-multiple-shifts" : ""}${status.className}${isFutureDate && !actuals.length ? " is-future" : ""}${actuals.some((item) => item.isManualCorrection) ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"
-                                  disabled={!data?.canEditActualTime && !actual && !shouldShowMissing}
+                                  disabled={!data?.canEditActualTime && !actuals.length && !shouldShowMissing}
                                   title={[
-                                    actual?.isManualCorrection ? "手動修正あり" : "",
+                                    actuals.some((item) => item.isManualCorrection) ? "手動修正あり" : "",
                                     status.label,
                                     shouldShowMissing && shift ? `予定 ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}` : ""
                                   ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : "実勤務時間の詳細")}
-                                  onClick={() => openActualEditor(employee.id, day.key)}
+                                  onClick={() => openActualEditor(employee.id, day.key, shift?.id ?? null)}
                                 >
-                                  {actual ? (
-                                    <>
+                                  {displayRows.length ? (
+                                    displayRows.map(({ shift: rowShift, actual: rowActual }, index) => (
+                                      <span className="shift-segment-line actual-segment-line" key={rowShift?.id ?? rowActual?.key ?? index}>
                                       <span className="actual-time-range">
-                                        <strong>{formatJstTime(actual.clockIn) ?? "--:--"}</strong>
-                                        <span>{formatJstTime(actual.clockOut) ?? "--:--"}</span>
+                                        <strong>{formatJstTime(rowActual?.clockIn) ?? rowShift?.scheduledStart ?? "--:--"}</strong>
+                                        <span>{formatJstTime(rowActual?.clockOut) ?? rowShift?.scheduledEnd ?? "--:--"}</span>
                                       </span>
-                                      {actual.breakMinutes > 0 ? <span className="actual-break-time">休憩 {formatDuration(actual.breakMinutes)}</span> : null}
-                                      {actual.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
-                                      {status.label && status.label !== "OK" ? <small>{status.label}</small> : null}
-                                    </>
+                                      {rowActual?.breakMinutes ? <span className="actual-break-time">休憩 {formatDuration(rowActual.breakMinutes)}</span> : null}
+                                      {rowActual?.isManualCorrection ? <em className="actual-cell-badge">修正</em> : null}
+                                      {!rowActual && rowShift && !isFutureDate ? <small>未打刻</small> : null}
+                                    </span>
+                                    ))
                                   ) : shouldShowMissing ? (
                                     <>
                                       <span className="shift-empty">未打刻</span>

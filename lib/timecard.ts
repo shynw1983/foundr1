@@ -430,7 +430,7 @@ function getResidentTaxDeduction(setting: TimecardStorePayrollSetting, month: st
 
 export function summarizeTimecardDays(
   punches: TimecardPunch[],
-  options: { workDateStart?: string; workDateEndExclusive?: string } = {}
+  options: { workDateStart?: string; workDateEndExclusive?: string; clockInWorkDateByPunchId?: Map<string, string> } = {}
 ) {
   const groups = new Map<string, TimecardPunch[]>();
   const punchesByEmployeeStore = new Map<string, TimecardPunch[]>();
@@ -444,6 +444,7 @@ export function summarizeTimecardDays(
     const sortedPunches = [...employeeStorePunches].sort((a, b) => new Date(a.punchedAt).getTime() - new Date(b.punchedAt).getTime());
     let activeWorkDate: string | null = null;
     let activeClockInAt: string | null = null;
+    let activeSegmentIndex = 0;
 
     for (const punch of sortedPunches) {
       const punchDate = getJstDateLabel(punch.punchedAt);
@@ -452,13 +453,16 @@ export function summarizeTimecardDays(
       const isWithinActiveWorkday = activeTime !== null && punchTime - activeTime <= overnightWindowMs;
 
       if (punch.punchType === "clock_in" || !activeWorkDate || !isWithinActiveWorkday) {
-        activeWorkDate = punchDate;
+        activeWorkDate = punch.punchType === "clock_in"
+          ? options.clockInWorkDateByPunchId?.get(punch.id) ?? punchDate
+          : punchDate;
+        activeSegmentIndex = punch.punchType === "clock_in" ? activeSegmentIndex + 1 : activeSegmentIndex;
       }
       if (punch.punchType === "clock_in") {
         activeClockInAt = punch.punchedAt;
       }
 
-      const key = `${punch.employeeId}:${punch.storeId}:${activeWorkDate}`;
+      const key = `${punch.employeeId}:${punch.storeId}:${activeWorkDate}:${activeSegmentIndex}`;
       groups.set(key, [...(groups.get(key) ?? []), punch]);
     }
   }
@@ -552,16 +556,13 @@ export function summarizePayroll(
   const activeMinutesByDay = new Map<string, number[]>();
   const employeeMinuteWorkOrderByDay = new Map<string, Map<number, number>>();
   const storeMinuteCoverageByDate = new Map<string, Map<number, Set<string>>>();
+  const activeMinutesByEmployeeDate = new Map<string, number[]>();
 
   for (const day of dailySummaries) {
     const activeMinutes = getDailyActiveMinutes(day);
     activeMinutesByDay.set(day.key, activeMinutes);
-    const workOrder = new Map<number, number>();
-    activeMinutes.forEach((minute, index) => workOrder.set(minute, index + 1));
     const employeeWorkOrderKey = `${day.employeeId}:${day.storeId}:${day.workDate}`;
-    const employeeWorkOrder = employeeMinuteWorkOrderByDay.get(employeeWorkOrderKey) ?? new Map<number, number>();
-    for (const [minute, order] of workOrder.entries()) employeeWorkOrder.set(minute, order);
-    employeeMinuteWorkOrderByDay.set(employeeWorkOrderKey, employeeWorkOrder);
+    activeMinutesByEmployeeDate.set(employeeWorkOrderKey, [...(activeMinutesByEmployeeDate.get(employeeWorkOrderKey) ?? []), ...activeMinutes]);
     const storeCoverageKey = `${day.storeId}:${day.workDate}`;
     const storeCoverage = storeMinuteCoverageByDate.get(storeCoverageKey) ?? new Map<number, Set<string>>();
     for (const minute of activeMinutes) {
@@ -570,6 +571,14 @@ export function summarizePayroll(
       storeCoverage.set(minute, employeesAtMinute);
     }
     storeMinuteCoverageByDate.set(storeCoverageKey, storeCoverage);
+  }
+
+  for (const [key, minutes] of activeMinutesByEmployeeDate.entries()) {
+    const workOrder = new Map<number, number>();
+    Array.from(new Set(minutes)).sort((a, b) => a - b).forEach((minute, index) => {
+      workOrder.set(minute, index + 1);
+    });
+    employeeMinuteWorkOrderByDay.set(key, workOrder);
   }
 
   for (const day of dailySummaries) {

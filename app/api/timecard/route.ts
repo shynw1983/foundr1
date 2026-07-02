@@ -705,6 +705,90 @@ function toPunchDateTime(workDate: string, time: string, baseTime?: string | nul
   return date.toISOString();
 }
 
+type ShiftWindowRow = {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  storeId: string;
+  storeName?: string;
+  workDate: string;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  breakMinutes?: number;
+  note?: string | null;
+};
+
+function getShiftWindowDateTime(workDate: string, time: string, baseTime?: string | null) {
+  return new Date(toPunchDateTime(workDate, time, baseTime));
+}
+
+function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRow[]) {
+  const map = new Map<string, string>();
+  const candidateShifts = shifts.filter((shift) => shift.scheduledStart && shift.scheduledEnd);
+  for (const punch of punches) {
+    if (punch.punchType !== "clock_in") continue;
+    const punchTime = new Date(punch.punchedAt).getTime();
+    if (!Number.isFinite(punchTime)) continue;
+    let best: { workDate: string; distance: number } | null = null;
+    for (const shift of candidateShifts) {
+      if (shift.employeeId !== punch.employeeId || shift.storeId !== punch.storeId || !shift.scheduledStart || !shift.scheduledEnd) continue;
+      const scheduledStart = getShiftWindowDateTime(shift.workDate, shift.scheduledStart).getTime();
+      const scheduledEnd = getShiftWindowDateTime(shift.workDate, shift.scheduledEnd, shift.scheduledStart).getTime();
+      const earlyStart = scheduledStart - 6 * 60 * 60 * 1000;
+      const lateEnd = scheduledEnd + 6 * 60 * 60 * 1000;
+      if (punchTime < earlyStart || punchTime > lateEnd) continue;
+      const distance = Math.abs(punchTime - scheduledStart);
+      if (!best || distance < best.distance) best = { workDate: shift.workDate, distance };
+    }
+    if (best) map.set(punch.id, best.workDate);
+  }
+  return map;
+}
+
+async function getShiftById(shiftId: string, storeId: string, employeeId: string, workDate: string) {
+  if (!shiftId) return null;
+  const rows = await sql`
+    select
+      id::text,
+      employee_id::text as "employeeId",
+      store_id::text as "storeId",
+      to_char(work_date, 'YYYY-MM-DD') as "workDate",
+      to_char(scheduled_start, 'HH24:MI') as "scheduledStart",
+      to_char(scheduled_end, 'HH24:MI') as "scheduledEnd"
+    from timecard_shifts
+    where id::text = ${shiftId}
+      and store_id::text = ${storeId}
+      and employee_id::text = ${employeeId}
+      and work_date = ${workDate}::date
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row?.scheduledStart || !row.scheduledEnd) return null;
+  return {
+    id: String(row.id),
+    employeeId: String(row.employeeId),
+    storeId: String(row.storeId),
+    workDate: String(row.workDate),
+    scheduledStart: String(row.scheduledStart),
+    scheduledEnd: String(row.scheduledEnd)
+  };
+}
+
+function resolveActualPunchDateTime(workDate: string, time: string, options: { baseTime?: string | null; shift?: Awaited<ReturnType<typeof getShiftById>> }) {
+  const baseIso = toPunchDateTime(workDate, time, options.baseTime);
+  if (!options.shift?.scheduledStart || !options.shift.scheduledEnd) return baseIso;
+  const scheduledStart = getShiftWindowDateTime(workDate, options.shift.scheduledStart).getTime();
+  const scheduledEnd = getShiftWindowDateTime(workDate, options.shift.scheduledEnd, options.shift.scheduledStart).getTime();
+  const candidates = [-1, 0, 1].map((dayOffset) => {
+    const date = new Date(baseIso);
+    date.setUTCDate(date.getUTCDate() + dayOffset);
+    const value = date.getTime();
+    const insidePenalty = value >= scheduledStart - 6 * 60 * 60 * 1000 && value <= scheduledEnd + 6 * 60 * 60 * 1000 ? 0 : 10_000_000_000;
+    return { iso: date.toISOString(), score: Math.abs(value - scheduledStart) + insidePenalty };
+  });
+  return candidates.sort((a, b) => a.score - b.score)[0]?.iso ?? baseIso;
+}
+
 function getClientIp(request: Request) {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")
@@ -931,31 +1015,6 @@ export async function GET(request: Request) {
     };
   }) satisfies TimecardPunch[];
 
-  const dailySummaries = summarizeTimecardDays(typedPunches, {
-    workDateStart: startDate,
-    workDateEndExclusive: endDate
-  });
-  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, {
-    month,
-    withholdingTaxRows,
-    socialInsuranceRows,
-    employmentInsuranceRateRows,
-    allowanceRules
-  }) : { rows: [], totals: emptyPayrollTotals };
-  const payrollConfirmation = canViewPayroll && selectedStoreId
-    ? await getPayrollConfirmation(selectedStoreId, month)
-    : null;
-  const responseEmployees = canViewPayroll
-    ? employees
-    : employees.map((employee) => ({
-      id: employee.id,
-      name: employee.name,
-      role: employee.role,
-      status: employee.status,
-      storeIds: employee.storeIds,
-      storePayrollSettings: []
-    }));
-
   const shifts = selectedStoreId ? await sql`
     select
       timecard_shifts.id::text,
@@ -977,6 +1036,43 @@ export async function GET(request: Request) {
       and (${!selfOnly} or timecard_shifts.employee_id::text = ${session.id})
     order by timecard_shifts.work_date asc, employees.name asc, timecard_shifts.scheduled_start asc nulls last, timecard_shifts.created_at asc
   ` : [];
+  const responseShifts = shifts.map((row) => ({
+    id: String(row.id),
+    employeeId: String(row.employeeId),
+    employeeName: String(row.employeeName),
+    storeId: String(row.storeId),
+    storeName: String(row.storeName),
+    workDate: String(row.workDate),
+    scheduledStart: row.scheduledStart ? String(row.scheduledStart) : null,
+    scheduledEnd: row.scheduledEnd ? String(row.scheduledEnd) : null,
+    breakMinutes: Number(row.breakMinutes ?? 0),
+    note: row.note ? String(row.note) : null
+  })) satisfies ShiftWindowRow[];
+  const dailySummaries = summarizeTimecardDays(typedPunches, {
+    workDateStart: startDate,
+    workDateEndExclusive: endDate,
+    clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, responseShifts)
+  });
+  const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, {
+    month,
+    withholdingTaxRows,
+    socialInsuranceRows,
+    employmentInsuranceRateRows,
+    allowanceRules
+  }) : { rows: [], totals: emptyPayrollTotals };
+  const payrollConfirmation = canViewPayroll && selectedStoreId
+    ? await getPayrollConfirmation(selectedStoreId, month)
+    : null;
+  const responseEmployees = canViewPayroll
+    ? employees
+    : employees.map((employee) => ({
+      id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      status: employee.status,
+      storeIds: employee.storeIds,
+      storePayrollSettings: []
+    }));
 
   const latestPunchRows = selectedStoreId ? await sql`
     select
@@ -1036,18 +1132,7 @@ export async function GET(request: Request) {
     payrollPeriod: { startDate, endDate },
     employees: responseEmployees,
     punches: isStoreTerminalSession ? [] : typedPunches,
-    shifts: isStoreTerminalSession ? [] : shifts.map((row) => ({
-      id: String(row.id),
-      employeeId: String(row.employeeId),
-      employeeName: String(row.employeeName),
-      storeId: String(row.storeId),
-      storeName: String(row.storeName),
-      workDate: String(row.workDate),
-      scheduledStart: row.scheduledStart ? String(row.scheduledStart) : null,
-      scheduledEnd: row.scheduledEnd ? String(row.scheduledEnd) : null,
-      breakMinutes: Number(row.breakMinutes ?? 0),
-      note: row.note ? String(row.note) : null
-    })),
+    shifts: isStoreTerminalSession ? [] : responseShifts,
     latestPunch: isStoreTerminalSession ? null : latestPunch,
     latestPunches: responseLatestPunches,
     dailySummaries: isStoreTerminalSession ? [] : dailySummaries,
@@ -1266,9 +1351,42 @@ export async function POST(request: Request) {
         note: row.note ? String(row.note) : null
       };
     }) satisfies TimecardPunch[];
+    const payrollShifts = await sql`
+      select
+        timecard_shifts.id::text,
+        timecard_shifts.employee_id::text as "employeeId",
+        employees.name as "employeeName",
+        timecard_shifts.store_id::text as "storeId",
+        stores.name as "storeName",
+        to_char(timecard_shifts.work_date, 'YYYY-MM-DD') as "workDate",
+        to_char(timecard_shifts.scheduled_start, 'HH24:MI') as "scheduledStart",
+        to_char(timecard_shifts.scheduled_end, 'HH24:MI') as "scheduledEnd",
+        timecard_shifts.break_minutes as "breakMinutes",
+        timecard_shifts.note
+      from timecard_shifts
+      join employees on employees.id = timecard_shifts.employee_id
+      join stores on stores.id = timecard_shifts.store_id
+      where timecard_shifts.store_id::text = ${storeId}
+        and timecard_shifts.work_date >= ${startDate}::date
+        and timecard_shifts.work_date < ${endDate}::date
+      order by timecard_shifts.work_date asc, employees.name asc, timecard_shifts.scheduled_start asc nulls last, timecard_shifts.created_at asc
+    `;
+    const payrollShiftWindows = payrollShifts.map((row) => ({
+      id: String(row.id),
+      employeeId: String(row.employeeId),
+      employeeName: String(row.employeeName),
+      storeId: String(row.storeId),
+      storeName: String(row.storeName),
+      workDate: String(row.workDate),
+      scheduledStart: row.scheduledStart ? String(row.scheduledStart) : null,
+      scheduledEnd: row.scheduledEnd ? String(row.scheduledEnd) : null,
+      breakMinutes: Number(row.breakMinutes ?? 0),
+      note: row.note ? String(row.note) : null
+    })) satisfies ShiftWindowRow[];
     const dailySummaries = summarizeTimecardDays(typedPunches, {
       workDateStart: startDate,
-      workDateEndExclusive: endDate
+      workDateEndExclusive: endDate,
+      clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, payrollShiftWindows)
     });
     const payroll = summarizePayroll(employees, dailySummaries, {
       month,
@@ -1542,21 +1660,36 @@ export async function POST(request: Request) {
       return Response.json({ error: "この従業員は選択した店舗の実勤務対象ではありません。" }, { status: 403 });
     }
 
+    const targetShift = await getShiftById(String(body.shiftId ?? ""), storeId, employeeId, workDate);
     const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
+    const deleteStart = targetShift?.scheduledStart
+      ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
+      : start;
+    const deleteEnd = targetShift?.scheduledEnd
+      ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
+      : overnightEnd;
     await sql`
       delete from timecard_punches
       where employee_id = ${employeeId}
         and store_id = ${storeId}
         and (
-          (
-            punch_type = 'clock_in'
-            and punched_at >= ${start.toISOString()}
-            and punched_at < ${end.toISOString()}
-          )
+          ${Boolean(targetShift)}
+          and punched_at >= ${deleteStart.toISOString()}
+          and punched_at < ${deleteEnd.toISOString()}
           or (
-            punch_type in ('clock_out', 'break_start', 'break_end')
-            and punched_at >= ${start.toISOString()}
-            and punched_at < ${overnightEnd.toISOString()}
+            ${!targetShift}
+            and (
+              (
+                punch_type = 'clock_in'
+                and punched_at >= ${start.toISOString()}
+                and punched_at < ${end.toISOString()}
+              )
+              or (
+                punch_type in ('clock_out', 'break_start', 'break_end')
+                and punched_at >= ${start.toISOString()}
+                and punched_at < ${overnightEnd.toISOString()}
+              )
+            )
           )
         )
     `;
@@ -1585,13 +1718,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "出勤または退勤時刻を入力してください。" }, { status: 400 });
     }
 
-    const nextClockInAt = clockIn ? toPunchDateTime(workDate, clockIn) : null;
-    const nextClockOutAt = clockOut ? toPunchDateTime(workDate, clockOut, clockIn) : null;
+    const nextClockInAt = clockIn ? resolveActualPunchDateTime(workDate, clockIn, { shift: targetShift }) : null;
+    const nextClockOutAt = clockOut ? resolveActualPunchDateTime(workDate, clockOut, { baseTime: clockIn, shift: targetShift }) : null;
     const nextBreakIntervals = completeBreakIntervals.map((interval) => {
       const startTime = interval.start as string;
       const endTime = interval.end as string;
-      const startAt = toPunchDateTime(workDate, startTime, clockIn);
-      const endAt = toPunchDateTime(workDate, endTime, startTime);
+      const startAt = resolveActualPunchDateTime(workDate, startTime, { baseTime: clockIn, shift: targetShift });
+      const endAt = resolveActualPunchDateTime(workDate, endTime, { baseTime: startTime, shift: targetShift });
       return { start: startTime, end: endTime, startAt, endAt };
     });
     const now = Date.now();
@@ -1708,7 +1841,7 @@ export async function POST(request: Request) {
       action: "timecard.actual_time.saved",
       targetType: "timecard_punch",
       targetId: insertedIds.filter(Boolean).join(","),
-      metadata: { storeId, employeeId, workDate, clockIn, clockOut, breakIntervals: nextBreakIntervals.map((interval) => ({ start: interval.start, end: interval.end })) },
+      metadata: { storeId, employeeId, workDate, shiftId: targetShift?.id ?? null, clockIn, clockOut, breakIntervals: nextBreakIntervals.map((interval) => ({ start: interval.start, end: interval.end })) },
       request
     });
 
