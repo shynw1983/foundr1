@@ -68,12 +68,12 @@ const sections = [
 const translations = {
   "home/hero": {
     title: {
-      en: "Maama",
+      en: "maamaa",
       zh: "まぁ麻",
       "zh-Hant": "まぁ麻",
       ko: "마마",
-      vi: "Maama",
-      ne: "Maama"
+      vi: "maamaa",
+      ne: "maamaa"
     },
     subtitle: {
       en: "Freshly Made Malatang",
@@ -84,12 +84,12 @@ const translations = {
       ne: "ताजा मालाताङ"
     },
     body: {
-      en: "Choose ingredients, spice, and mala tingle to match your mood. Maama is a malatang shop built around the joy of choosing and the aroma of freshly finished bowls. Enjoy a steaming bowl finished one by one in a separate pot.",
+      en: "Choose ingredients, spice, and mala tingle to match your mood. maamaa is a malatang shop built around the joy of choosing and the aroma of freshly finished bowls. Enjoy a steaming bowl finished one by one in a separate pot.",
       zh: "按当天的心情，自由选择食材、辣度和麻度。まぁ麻是一家重视“选择的乐趣”和“现做香气”的麻辣烫专门店。每一碗都分锅现做，请享用热气腾腾的一碗。",
       "zh-Hant": "依照當天的心情，自由選擇食材、辣度與麻度。まぁ麻是一家重視「選擇的樂趣」與「現做香氣」的麻辣燙專門店。每一碗都分鍋現做，請享用熱騰騰的一碗。",
       ko: "그날의 기분에 맞춰 재료도, 매운맛도, 얼얼함도 자유롭게. 마마는 고르는 즐거움과 갓 만든 향을 소중히 하는 마라탕 전문점입니다. 한 그릇씩 냄비를 나누어 완성한 뜨거운 한 그릇을 즐겨 보세요.",
-      vi: "Tùy theo tâm trạng trong ngày, bạn có thể tự do chọn nguyên liệu, độ cay và độ tê. Maama là tiệm malatang trân trọng niềm vui khi lựa chọn và hương thơm của món vừa nấu. Hãy thưởng thức một tô nóng hổi, được hoàn thiện riêng từng phần.",
-      ne: "आजको मुडअनुसार सामग्री, पिरोपन र झमझमाहट स्वतन्त्र रूपमा छान्नुहोस्। Maama छनोटको रमाइलो र ताजा पकाइको सुगन्धलाई महत्व दिने मालाताङ विशेषज्ञ पसल हो। एक-एक कचौरा छुट्टै पकाएर तयार गरिएको तातो मालाताङको मजा लिनुहोस्।"
+      vi: "Tùy theo tâm trạng trong ngày, bạn có thể tự do chọn nguyên liệu, độ cay và độ tê. maamaa là tiệm malatang trân trọng niềm vui khi lựa chọn và hương thơm của món vừa nấu. Hãy thưởng thức một tô nóng hổi, được hoàn thiện riêng từng phần.",
+      ne: "आजको मुडअनुसार सामग्री, पिरोपन र झमझमाहट स्वतन्त्र रूपमा छान्नुहोस्। maamaa छनोटको रमाइलो र ताजा पकाइको सुगन्धलाई महत्व दिने मालाताङ विशेषज्ञ पसल हो। एक-एक कचौरा छुट्टै पकाएर तयार गरिएको तातो मालाताङको मजा लिनुहोस्।"
     }
   },
   "home/concept": {
@@ -120,22 +120,22 @@ const translations = {
       ne: "मनपर्ने कुरा अलि-अलि एउटै कचौरामा।"
     },
     body: {
-      en: "Choose ingredients, tune the spice and tingle, and build a bowl that fits your mood. At Maama, the flavor starts from the moment you choose.",
+      en: "Choose ingredients, tune the spice and tingle, and build a bowl that fits your mood. At maamaa, the flavor starts from the moment you choose.",
       zh: "选择食材，调整辣度和麻度，做成符合当天心情的一碗。まぁ麻的美味，从选择的那一刻就开始了。",
       "zh-Hant": "選擇食材，調整辣度與麻度，做成符合當天心情的一碗。まぁ麻的美味，從選擇的那一刻就開始了。",
       ko: "재료를 고르고 매운맛과 얼얼함을 맞춰 그날의 기분에 맞는 한 그릇으로. 마마의 맛은 고르는 순간부터 시작됩니다.",
-      vi: "Chọn nguyên liệu, chỉnh độ cay và độ tê, rồi tạo một tô hợp với tâm trạng của bạn. Với Maama, vị ngon bắt đầu từ lúc bạn chọn.",
-      ne: "सामग्री छान्नुहोस्, पिरोपन र झमझमाहट मिलाउनुहोस्, अनि आफ्नो मुडअनुसारको कचौरा बनाउनुहोस्। Maama मा स्वाद छनोट गर्ने क्षणबाट सुरु हुन्छ।"
+      vi: "Chọn nguyên liệu, chỉnh độ cay và độ tê, rồi tạo một tô hợp với tâm trạng của bạn. Với maamaa, vị ngon bắt đầu từ lúc bạn chọn.",
+      ne: "सामग्री छान्नुहोस्, पिरोपन र झमझमाहट मिलाउनुहोस्, अनि आफ्नो मुडअनुसारको कचौरा बनाउनुहोस्। maamaa मा स्वाद छनोट गर्ने क्षणबाट सुरु हुन्छ।"
     }
   },
   "home/shops": {
     title: {
-      en: "Find your nearest Maama.",
+      en: "Find your nearest maamaa.",
       zh: "前往你附近的まぁ麻。",
       "zh-Hant": "前往你附近的まぁ麻。",
       ko: "가까운 마마로.",
-      vi: "Tìm Maama gần bạn.",
-      ne: "नजिकको Maama मा।"
+      vi: "Tìm maamaa gần bạn.",
+      ne: "नजिकको maamaa मा।"
     },
     body: {
       en: "Web reservations, delivery, and dine-in are available according to each shop's reception status.",
