@@ -18945,12 +18945,15 @@ body :where(
 }
 
 .shift-grid .shift-cost-cell {
-  align-content: center;
+  align-content: stretch;
+  align-items: center;
   color: var(--green);
   display: grid;
   font-size: 12px;
-  gap: 3px;
+  gap: 2px;
   line-height: 1.25;
+  min-height: 58px;
+  padding: 4px 6px;
   white-space: nowrap;
 }
 
@@ -18984,11 +18987,11 @@ body :where(
 .shift-support-gap,
 .shift-support-empty {
   display: grid;
-  min-height: 42px;
-  padding: 4px;
-  font-size: 10px;
+  min-height: 34px;
+  padding: 2px 3px;
+  font-size: 8px;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.05;
   overflow-wrap: anywhere;
   text-align: center;
 }
@@ -18996,7 +18999,7 @@ body :where(
 .shift-support-gap {
   align-content: center;
   color: var(--red);
-  gap: 6px;
+  gap: 2px;
 }
 
 .shift-support-range {
@@ -19008,7 +19011,7 @@ body :where(
 .shift-support-dash {
   color: #d98a82;
   font-weight: 500;
-  line-height: 1;
+  line-height: 0.9;
 }
 
 .shift-support-empty {
@@ -19023,12 +19026,15 @@ body :where(
   z-index: 3;
   min-width: 138px;
   width: 138px;
-  align-content: center;
+  align-content: stretch;
+  align-items: center;
   border-left: 2px solid var(--line);
   background: #fff8f6;
   color: var(--red);
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  min-height: 58px;
+  padding: 4px 6px;
   text-align: center;
 }
 
