@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { loadLocalEnv } from "./db-env.mjs";
 
@@ -7,6 +7,7 @@ const nanachaMenuPath = "/Users/wushengyin/Desktop/nanacha New HP/published/menu
 const maamaaMenuPath = "/Users/wushengyin/Desktop/maamaa/src/data/malatang-menu.ts";
 const nanachaLocaleDir = "/Users/wushengyin/Desktop/nanacha New HP/public/locales";
 const maamaaLocaleDir = "/Users/wushengyin/Desktop/maamaa/public/locales";
+const nanachaImageDir = new URL("../public/assets/menu/nanacha/", import.meta.url);
 
 loadLocalEnv();
 
@@ -63,6 +64,22 @@ function displayNamesFor(value, dictionaries) {
       .map(([language, dictionary]) => [language, translateText(text, dictionary)])
       .filter(([, translated]) => translated && translated !== text)
   );
+}
+
+async function loadNanachaImageUrls() {
+  try {
+    const files = await readdir(nanachaImageDir);
+    return new Map(
+      files
+        .filter((file) => /\.(jpe?g|png|webp|avif)$/i.test(file))
+        .map((file) => {
+          const name = file.replace(/\.[^.]+$/, "").replace(/_\d+$/, "");
+          return [name, `/assets/menu/nanacha/${encodeURIComponent(file)}`];
+        })
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 async function ensureBrand(name, brandType) {
@@ -432,6 +449,7 @@ async function upsertOptions(groupId, choices, { affectsProcedure = true, dictio
 async function importNanacha() {
   const menu = JSON.parse(await readFile(nanachaMenuPath, "utf8")).baseMenu;
   const dictionaries = await loadBrandDictionaries(nanachaLocaleDir);
+  const imageUrlsByName = await loadNanachaImageUrls();
   const brand = await ensureBrand("nanacha", "ミルクティー");
   const sourceId = await upsertSource({
     brandId: brand.id,
@@ -479,7 +497,7 @@ async function importNanacha() {
       category: category?.label ?? drink.category,
       description,
       descriptionDisplayNames: displayNamesFor(description, dictionaries),
-      imageUrl: drink.imageUrl ?? "",
+      imageUrl: imageUrlsByName.get(drink.name) ?? drink.imageUrl ?? "",
       basePrice: drink.price ?? null,
       displayNames: displayNamesFor(drink.name, dictionaries),
       variableSchema: {
