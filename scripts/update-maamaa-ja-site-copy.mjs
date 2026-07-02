@@ -44,9 +44,9 @@ const sections = [
   {
     pageKey: "home",
     sectionKey: "shops",
-    title: "今日の一杯を、好きな場所で。",
+    title: "お近くのまぁ麻へ。",
     subtitle: "Shop information",
-    body: "店頭受け取り、デリバリー、テイクアウト、店内飲食。店舗ごとの受付状況に合わせて、出来立ての麻辣湯をお届けします。",
+    body: "Web予約、デリバリー、店内飲食は、店舗ごとの受付状況に合わせてご利用いただけます。",
     tags: ["Web予約", "デリバリー", "テイクアウト", "店内飲食"]
   },
   {
@@ -130,20 +130,20 @@ const translations = {
   },
   "home/shops": {
     title: {
-      en: "Your bowl, wherever today takes you.",
-      zh: "今天这一碗，在喜欢的地方享用。",
-      "zh-Hant": "今天這一碗，在喜歡的地方享用。",
-      ko: "오늘의 한 그릇을 원하는 곳에서.",
-      vi: "Tô hôm nay, ở nơi bạn muốn.",
-      ne: "आजको कचौरा, आफूलाई मन पर्ने ठाउँमा।"
+      en: "Find your nearest Maama.",
+      zh: "前往你附近的まぁ麻。",
+      "zh-Hant": "前往你附近的まぁ麻。",
+      ko: "가까운 마마로.",
+      vi: "Tìm Maama gần bạn.",
+      ne: "नजिकको Maama मा।"
     },
     body: {
-      en: "Pickup, delivery, takeout, and dine-in. According to each shop's reception status, we serve freshly made malatang wherever you want to enjoy it.",
-      zh: "店头自提、外送、外带、店内用餐。我们会根据各店接单情况，把现做麻辣烫送到你想享用的地方。",
-      "zh-Hant": "店頭自提、外送、外帶、店內用餐。我們會依照各店接單情況，把現做麻辣燙送到你想享用的地方。",
-      ko: "매장 픽업, 배달, 테이크아웃, 매장 식사. 매장별 접수 상황에 맞춰 갓 만든 마라탕을 원하는 방식으로 제공합니다.",
-      vi: "Nhận tại cửa hàng, giao hàng, mang đi hoặc dùng tại chỗ. Tùy theo tình trạng phục vụ của từng cửa hàng, chúng tôi mang đến malatang vừa nấu theo cách bạn muốn.",
-      ne: "स्टोर पिकअप, डेलिभरी, टेकआउट र स्टोरभित्र भोजन। प्रत्येक स्टोरको受付 अवस्थाअनुसार ताजा मालाताङ तपाईंले चाहेको तरिकाले उपलब्ध गराइन्छ।"
+      en: "Web reservations, delivery, and dine-in are available according to each shop's reception status.",
+      zh: "Web 预约、外送和堂食会根据各店接单情况开放。",
+      "zh-Hant": "Web 預約、外送與內用會依照各店接單情況開放。",
+      ko: "Web 예약, 배달, 매장 식사는 매장별 접수 상황에 맞춰 이용할 수 있습니다.",
+      vi: "Đặt trước qua Web, giao hàng và dùng tại chỗ được phục vụ tùy theo tình trạng tiếp nhận của từng cửa hàng.",
+      ne: "Web आरक्षण, डेलिभरी र स्टोरभित्र भोजन प्रत्येक स्टोरको अर्डर स्थितिअनुसार उपलब्ध हुन्छ।"
     }
   },
   "menu/menu-hero": {
