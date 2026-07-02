@@ -30215,7 +30215,8 @@ body :where(
   }
 
   .shift-grid .shift-cost-head,
-  .shift-grid .shift-cost-cell {
+  .shift-grid .shift-cost-cell,
+  .shift-grid .shift-support-summary {
     position: static;
     min-width: 112px;
     width: 112px;
