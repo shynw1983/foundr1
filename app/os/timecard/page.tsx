@@ -880,6 +880,12 @@ function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | u
   return { className: " is-complete", label: "OK" } satisfies ActualStatus;
 }
 
+function compareScheduleEmployees(a: TimecardEmployee, b: TimecardEmployee) {
+  const ownerRankA = a.role === "owner" ? 1 : 0;
+  const ownerRankB = b.role === "owner" ? 1 : 0;
+  return ownerRankA - ownerRankB || a.name.localeCompare(b.name, "ja", { numeric: true, sensitivity: "base" });
+}
+
 function getEffectivePayrollSetting(employee: TimecardEmployee | undefined, storeId: string, workDate: string) {
   const settings = (employee?.storePayrollSettings ?? [])
     .filter((setting) => setting.storeId === storeId && setting.wageValidFrom <= workDate)
@@ -1233,7 +1239,7 @@ export function TimecardPage({
     ? getShiftPatterns(selectedStoreBusinessHours, shiftDraft.workDate)
     : [];
   const scheduleEmployees = useMemo(
-    () => data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? [],
+    () => (data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? []).sort(compareScheduleEmployees),
     [data, selectedStoreId]
   );
   const shiftByCell = useMemo(() => {
