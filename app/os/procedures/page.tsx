@@ -290,8 +290,8 @@ const productionRulePlacements: Array<{ value: MaamaaProductionRule["placement"]
 ];
 
 const productionRuleCookTypes: Array<{ value: NonNullable<MaamaaProductionRule["cookType"]>; label: string }> = [
-  { value: "boil", label: "需要煮" },
-  { value: "no_boil", label: "不需要煮" }
+  { value: "boil", label: "要加熱" },
+  { value: "no_boil", label: "加熱不要" }
 ];
 
 const maamaaReferenceEditorCategories: Array<{ value: MaamaaReferenceEditorCategory; label: string }> = [
