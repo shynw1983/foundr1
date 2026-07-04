@@ -25,6 +25,12 @@ export type MaamaaSetRule = {
 
 export type MaamaaReferenceLanguage = "ja" | "zh";
 
+export type MaamaaProductionReferenceSettings = {
+  productionRules: MaamaaProductionRule[];
+  seasoningRules: MaamaaSeasoningRule[];
+  setRules: MaamaaSetRule[];
+};
+
 const normalize = (value: string) =>
   value
     .replace(/\s+/g, "")
@@ -507,9 +513,102 @@ export function translateMaamaaReferenceText(value: string | undefined, language
   return translated;
 }
 
-export function findMaamaaProductionRule(label: string) {
+function cloneMaamaaSettings(settings: MaamaaProductionReferenceSettings): MaamaaProductionReferenceSettings {
+  return {
+    productionRules: settings.productionRules.map((rule) => ({ ...rule, aliases: [...(rule.aliases ?? [])] })),
+    seasoningRules: settings.seasoningRules.map((rule) => ({ ...rule, lines: [...rule.lines] })),
+    setRules: settings.setRules.map((rule) => ({ ...rule, defaultItems: [...rule.defaultItems] }))
+  };
+}
+
+function normalizeProductionSection(value: unknown): MaamaaProductionRule["section"] {
+  const section = String(value ?? "");
+  return ["noodles", "base", "standard", "premium", "vip", "request", "seasoning", "set", "operation"].includes(section)
+    ? section as MaamaaProductionRule["section"]
+    : "standard";
+}
+
+function normalizePlacement(value: unknown): MaamaaProductionRule["placement"] | undefined {
+  const placement = String(value ?? "");
+  return placement === "pot" || placement === "container" || placement === "finish" ? placement : undefined;
+}
+
+function normalizeReferenceLines(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  return String(value ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const customerName = String(source.customerName ?? "").trim();
+  const kitchenName = String(source.kitchenName ?? "").trim();
+  if (!customerName || !kitchenName) return null;
+  const heatMinutes = Number(source.minimumHeatMinutes ?? 0);
+  return {
+    id: String(source.id ?? "").trim() || undefined,
+    customerName,
+    aliases: Array.isArray(source.aliases) ? source.aliases.map((item) => String(item ?? "").trim()).filter(Boolean) : undefined,
+    section: normalizeProductionSection(source.section),
+    kitchenName,
+    quantity: String(source.quantity ?? "").trim() || undefined,
+    prep: String(source.prep ?? "").trim() || undefined,
+    action: String(source.action ?? "").trim() || undefined,
+    minimumHeatMinutes: Number.isFinite(heatMinutes) && heatMinutes > 0 ? Math.round(heatMinutes) : undefined,
+    placement: normalizePlacement(source.placement),
+    notes: String(source.notes ?? "").trim() || undefined
+  };
+}
+
+function normalizeSeasoningRule(value: unknown): MaamaaSeasoningRule | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const name = String(source.name ?? "").trim();
+  const lines = normalizeReferenceLines(source.lines);
+  return name && lines.length ? { name, lines } : null;
+}
+
+function normalizeSetRule(value: unknown): MaamaaSetRule | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const name = String(source.name ?? "").trim();
+  const defaultItems = normalizeReferenceLines(source.defaultItems);
+  return name && defaultItems.length ? {
+    name,
+    defaultItems,
+    notes: String(source.notes ?? "").trim() || undefined
+  } : null;
+}
+
+export const defaultMaamaaProductionReferenceSettings: MaamaaProductionReferenceSettings = {
+  productionRules: maamaaProductionRules,
+  seasoningRules: maamaaSeasoningRules,
+  setRules: maamaaSetRules
+};
+
+export function normalizeMaamaaProductionReferenceSettings(value: unknown): MaamaaProductionReferenceSettings {
+  if (!value || typeof value !== "object") return cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings);
+  const source = value as Partial<MaamaaProductionReferenceSettings>;
+  const productionRules = Array.isArray(source.productionRules)
+    ? source.productionRules.map(normalizeProductionRule).filter((rule): rule is MaamaaProductionRule => Boolean(rule))
+    : [];
+  const seasoningRules = Array.isArray(source.seasoningRules)
+    ? source.seasoningRules.map(normalizeSeasoningRule).filter((rule): rule is MaamaaSeasoningRule => Boolean(rule))
+    : [];
+  const setRules = Array.isArray(source.setRules)
+    ? source.setRules.map(normalizeSetRule).filter((rule): rule is MaamaaSetRule => Boolean(rule))
+    : [];
+
+  return {
+    productionRules: productionRules.length ? productionRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).productionRules,
+    seasoningRules: seasoningRules.length ? seasoningRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).seasoningRules,
+    setRules: setRules.length ? setRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).setRules
+  };
+}
+
+export function findMaamaaProductionRule(label: string, rules = maamaaProductionRules) {
   const normalizedLabel = normalize(label.replace(/^トッピング[:：]/, ""));
-  return maamaaProductionRules.find((rule) => {
+  return rules.find((rule) => {
     const names = [rule.customerName, rule.kitchenName, rule.id ?? "", ...(rule.aliases ?? [])].filter(Boolean).map(normalize);
     return names.some((name) => normalizedLabel === name || normalizedLabel.includes(name) || name.includes(normalizedLabel));
   });
@@ -528,7 +627,7 @@ export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1
   return details.length ? `${parts.join(" ")}（${details.join(" / ")}）` : parts.join(" ");
 }
 
-export function maamaaProductionReferenceSections() {
+export function maamaaProductionReferenceSections(rules = maamaaProductionRules) {
   const sectionLabels: Record<MaamaaProductionRule["section"], string> = {
     noodles: "麺の種類",
     base: "ベーシックトッピング",
@@ -544,7 +643,7 @@ export function maamaaProductionReferenceSections() {
     .map(([section, title]) => ({
       id: section,
       title,
-      rules: maamaaProductionRules.filter((rule) => rule.section === section)
+      rules: rules.filter((rule) => rule.section === section)
     }))
     .filter((section) => section.rules.length);
 }

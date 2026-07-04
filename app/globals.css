@@ -20344,6 +20344,63 @@ body :where(
   padding-top: 9px;
 }
 
+.procedure-reference-editor {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.procedure-reference-editor-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.procedure-reference-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.procedure-reference-editor-heading h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.procedure-reference-editor-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.procedure-reference-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.procedure-reference-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.procedure-reference-editor-wide {
+  grid-column: 1 / -1;
+}
+
+.procedure-reference-editor textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
 .maamaa-side-reference strong {
   font-size: 14px;
 }

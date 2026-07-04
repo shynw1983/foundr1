@@ -13,10 +13,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  defaultMaamaaProductionReferenceSettings,
+  type MaamaaProductionReferenceSettings,
   type MaamaaReferenceLanguage,
   maamaaProductionReferenceSections,
-  maamaaSeasoningRules,
-  maamaaSetRules,
   translateMaamaaReferenceText
 } from "../../../lib/maamaa-production-rules";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
@@ -70,6 +70,7 @@ export default function ProcedureReaderPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [maamaaReferenceSettings, setMaamaaReferenceSettings] = useState<MaamaaProductionReferenceSettings>(defaultMaamaaProductionReferenceSettings);
   const { language: osLanguage } = useOsTranslation();
   const maamaaReferenceLanguage: MaamaaReferenceLanguage = osLanguage === "ja" ? "ja" : "zh";
 
@@ -89,8 +90,20 @@ export default function ProcedureReaderPage() {
     setLoading(false);
   }
 
+  async function loadMaamaaReference() {
+    try {
+      const response = await fetch("/api/procedures/maamaa-reference", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { settings?: MaamaaProductionReferenceSettings };
+      if (data.settings) setMaamaaReferenceSettings(data.settings);
+    } catch {
+      // Keep the bundled default reference if custom settings cannot be loaded.
+    }
+  }
+
   useEffect(() => {
     void loadProcedures();
+    void loadMaamaaReference();
   }, []);
 
   const filteredProcedures = useMemo(() => {
@@ -167,7 +180,7 @@ export default function ProcedureReaderPage() {
           {loading ? (
             <div className="procedure-reader-empty">読み込み中</div>
           ) : showMaamaaReference ? (
-            <MaamaaProductionReference language={maamaaReferenceLanguage} />
+            <MaamaaProductionReference language={maamaaReferenceLanguage} settings={maamaaReferenceSettings} />
           ) : error ? (
             <div className="procedure-reader-empty">{error}</div>
           ) : !selectedBook ? (
@@ -253,7 +266,7 @@ export default function ProcedureReaderPage() {
 
         <aside className="procedure-reader-products" aria-label="関連商品">
           {showMaamaaReference ? (
-            <MaamaaProductionSideReference language={maamaaReferenceLanguage} />
+            <MaamaaProductionSideReference language={maamaaReferenceLanguage} settings={maamaaReferenceSettings} />
           ) : (
             <>
               <div className="procedure-reader-side-title">
@@ -280,11 +293,11 @@ export default function ProcedureReaderPage() {
   );
 }
 
-function MaamaaProductionReference({ language }: { language: MaamaaReferenceLanguage }) {
-  const sections = maamaaProductionReferenceSections();
+function MaamaaProductionReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
+  const sections = maamaaProductionReferenceSections(settings.productionRules);
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
-  const operationRules = maamaaSetRules.filter((rule) => rule.name === "複数杯注文");
+  const operationRules = settings.setRules.filter((rule) => rule.name === "複数杯注文");
   return (
     <div className="maamaa-production-reference" data-i18n-ignore>
       <div className="procedure-reader-heading">
@@ -326,7 +339,7 @@ function MaamaaProductionReference({ language }: { language: MaamaaReferenceLang
         <section className="maamaa-reference-section">
           <h3>{t("辛さ・味変")}</h3>
           <div className="maamaa-reference-rule-grid">
-            {maamaaSeasoningRules.map((rule) => (
+            {settings.seasoningRules.map((rule) => (
               <article className="maamaa-reference-rule" key={rule.name}>
                 <strong>{t(rule.name)}</strong>
                 <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
@@ -354,10 +367,10 @@ function MaamaaProductionReference({ language }: { language: MaamaaReferenceLang
   );
 }
 
-function MaamaaProductionSideReference({ language }: { language: MaamaaReferenceLanguage }) {
+function MaamaaProductionSideReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
-  const setMenuRules = maamaaSetRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
+  const setMenuRules = settings.setRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
   return (
     <div data-i18n-ignore>
       <div className="procedure-reader-side-title">
