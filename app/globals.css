@@ -20328,6 +20328,17 @@ body :where(
   font-weight: 650;
 }
 
+.maamaa-reference-no-boil {
+  width: fit-content;
+  border: 1px solid rgba(180, 83, 9, 0.28);
+  border-radius: 8px;
+  padding: 3px 8px;
+  color: #92400e;
+  background: #fff7ed;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .maamaa-reference-rule small {
   color: var(--muted);
   line-height: 1.45;

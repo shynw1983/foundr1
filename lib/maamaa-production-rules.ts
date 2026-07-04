@@ -62,11 +62,11 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "wide-harusame", section: "noodles", customerName: "もちもち板春雨", kitchenName: "板春雨", quantity: "50g", prep: "2時間水につける", action: "麺変更時はデフォルト板春雨の置き換え。板春雨追加は別途50g追加。", placement: "pot" },
   { id: "wide-harusame-extra", section: "noodles", customerName: "板春雨追加", kitchenName: "板春雨", quantity: "追加50g", prep: "2時間水につける", action: "元々の板春雨50gに追加する", placement: "pot" },
   { id: "beef-noodle", section: "noodles", customerName: "牛筋麺", kitchenName: "牛筋麺", quantity: "50g", prep: "4時間水につける", action: "麺変更時はデフォルト板春雨の置き換え", placement: "pot" },
-  { id: "harusame", section: "noodles", customerName: "春雨", kitchenName: "春雨", quantity: "40g", action: "煮込まず、容器に入れる", placement: "container" },
+  { id: "harusame", section: "noodles", customerName: "春雨", kitchenName: "春雨", quantity: "40g", action: "加熱せず、容器に入れる", placement: "container" },
   { id: "tteokbokki", section: "noodles", customerName: "トッポッキ", kitchenName: "トッポッキ", quantity: "50g", placement: "pot" },
   { id: "sweet-potato-noodle", section: "noodles", customerName: "さつまいも麺", kitchenName: "さつまいも麺", quantity: "50g", placement: "pot" },
   { id: "kishimen", section: "noodles", customerName: "きしめん", aliases: ["【もっちりつるん】きしめん"], kitchenName: "きしめん", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
-  { id: "raw-mochi-noodle", section: "noodles", customerName: "生もち玉しめん", kitchenName: "生もち玉しめん", quantity: "50g", action: "完全に1分ほどで火が通るため煮込みすぎ注意", placement: "pot", notes: "写真転記。販売名は要確認。" },
+  { id: "raw-mochi-noodle", section: "noodles", customerName: "生もち玉しめん", kitchenName: "生もち玉しめん", quantity: "50g", action: "完全に1分ほどで火が通るため加熱しすぎ注意", placement: "pot", notes: "写真転記。販売名は要確認。" },
 
   { id: "squid-ball", section: "base", customerName: "特選イカ団子1個", kitchenName: "冷凍イカ団子", quantity: "1個", minimumHeatMinutes: 5, placement: "pot" },
   { id: "beef-ball", section: "base", customerName: "特選牛肉団子1個", kitchenName: "冷凍牛肉団子", quantity: "1個", minimumHeatMinutes: 5, placement: "pot" },
@@ -492,11 +492,11 @@ const maamaaZhPhraseReplacements: Array<[string, string]> = [
   ["そのまま入れる", "直接放入"],
   ["乾燥したまま鍋に入れる", "干燥状态直接放入锅中"],
   ["乾燥したまま容器に入れる", "干燥状态直接放入容器"],
-  ["煮込まず、容器に入れる", "不煮，放入容器"],
+  ["加熱せず、容器に入れる", "不需要加热，放入容器"],
   ["麺変更時はデフォルト板春雨の置き換え。板春雨追加は別途50g追加。", "更换面类时替换默认宽粉。追加宽粉则另加50g。"],
   ["麺変更時はデフォルト板春雨の置き換え", "更换面类时替换默认宽粉"],
   ["元々の板春雨50gに追加する", "在原本宽粉50g基础上追加"],
-  ["完全に1分ほどで火が通るため煮込みすぎ注意", "约1分钟即可熟，注意不要煮过头"],
+  ["完全に1分ほどで火が通るため加熱しすぎ注意", "约1分钟即可熟，注意不要加热过头"],
   ["鍋に入れたあとよくほぐす", "放入锅后充分拨散"],
   ["鍋に入れたあとこまめにほぐす", "放入锅后勤拨散"],
   ["白いところを3-4cmに切る", "取白色部分切成3-4cm"],
@@ -732,7 +732,7 @@ export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1
   const parts = [rule.kitchenName, quantity].filter(Boolean);
   const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
   const details = [
-    cookType === "no_boil" ? "煮込まない" : "要煮込み",
+    cookType === "no_boil" ? "加熱不要" : "要加熱",
     rule.prep,
     rule.action,
     cookType === "boil" && rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "",
