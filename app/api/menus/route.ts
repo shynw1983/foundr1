@@ -47,6 +47,64 @@ function normalizeDisplayNames(value: unknown) {
   );
 }
 
+function makeInternalKey(value: unknown, fallbackPrefix: string) {
+  const base = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return base || `${fallbackPrefix}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function makeUniqueGroupKey(input: {
+  id: string | null;
+  brandId: string;
+  menuCatalogItemId: string | null;
+  preferredKey: string;
+  name: string;
+}) {
+  const baseKey = makeInternalKey(input.preferredKey || input.name, "group");
+  for (let index = 0; index < 100; index += 1) {
+    const candidate = index === 0 ? baseKey : `${baseKey}-${index + 1}`;
+    const rows = await sql`
+      select id::text
+      from menu_option_groups
+      where brand_id::text = ${input.brandId}
+        and coalesce(menu_catalog_item_id::text, '') = ${input.menuCatalogItemId ?? ""}
+        and group_key = ${candidate}
+        and (${input.id === null} or id::text <> ${input.id ?? ""})
+      limit 1
+    `;
+    if (!rows.length) return candidate;
+  }
+  return `${baseKey}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function makeUniqueOptionKey(input: {
+  id: string | null;
+  optionGroupId: string;
+  preferredKey: string;
+  name: string;
+}) {
+  const baseKey = makeInternalKey(input.preferredKey || input.name, "option");
+  for (let index = 0; index < 100; index += 1) {
+    const candidate = index === 0 ? baseKey : `${baseKey}-${index + 1}`;
+    const rows = await sql`
+      select id::text
+      from menu_options
+      where option_group_id::text = ${input.optionGroupId}
+        and option_key = ${candidate}
+        and (${input.id === null} or id::text <> ${input.id ?? ""})
+      limit 1
+    `;
+    if (!rows.length) return candidate;
+  }
+  return `${baseKey}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 async function readMenuAdminData() {
   const [brands, stores, sources, categories, items, groups, options, storeSettings] = await Promise.all([
     sql`
@@ -893,9 +951,11 @@ async function upsertItem(body: Record<string, unknown>, employeeId: string) {
 async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const brandId = cleanOptionalId(body.brandId);
-  const groupKey = String(body.groupKey ?? "").trim();
+  const rawGroupKey = String(body.groupKey ?? "").trim();
+  const menuCatalogItemId = cleanOptionalId(body.menuCatalogItemId);
   const name = String(body.name ?? "").trim();
-  if (!brandId || !groupKey || !name) throw new Error("ブランド、キー、名称を入力してください。");
+  if (!brandId || !name) throw new Error("ブランド、名称を入力してください。");
+  const groupKey = await makeUniqueGroupKey({ id, brandId, menuCatalogItemId, preferredKey: rawGroupKey, name });
   const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
 
   const rows = id
@@ -903,7 +963,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
         update menu_option_groups
         set
           brand_id = ${brandId},
-          menu_catalog_item_id = ${cleanOptionalId(body.menuCatalogItemId)},
+          menu_catalog_item_id = ${menuCatalogItemId},
           external_id = ${String(body.externalId ?? "").trim()},
           group_key = ${groupKey},
           name = ${name},
@@ -934,7 +994,7 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
         )
         values (
           ${brandId},
-          ${cleanOptionalId(body.menuCatalogItemId)},
+          ${menuCatalogItemId},
           ${String(body.externalId ?? "").trim()},
           ${groupKey},
           ${name},
@@ -965,9 +1025,10 @@ async function upsertGroup(body: Record<string, unknown>, employeeId: string) {
 async function upsertOption(body: Record<string, unknown>, employeeId: string) {
   const id = cleanOptionalId(body.id);
   const optionGroupId = cleanOptionalId(body.optionGroupId);
-  const optionKey = String(body.optionKey ?? "").trim();
+  const rawOptionKey = String(body.optionKey ?? "").trim();
   const name = String(body.name ?? "").trim();
-  if (!optionGroupId || !optionKey || !name) throw new Error("グループ、キー、名称を入力してください。");
+  if (!optionGroupId || !name) throw new Error("グループ、名称を入力してください。");
+  const optionKey = await makeUniqueOptionKey({ id, optionGroupId, preferredKey: rawOptionKey, name });
   const displayNames = JSON.stringify(normalizeDisplayNames(body.displayNames));
   const groupRows = await sql`
     select brand_id::text as "brandId", name

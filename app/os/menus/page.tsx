@@ -1398,6 +1398,7 @@ export default function MenuAdminPage() {
                         <label>
                           <span>内部キー</span>
                           <input value={groupDraft.groupKey} onChange={(event) => setGroupDraft({ ...groupDraft, groupKey: event.target.value })} placeholder="例: size" />
+                          <small>未入力なら表示名から自動生成します。</small>
                         </label>
                         <label>
                           <span>選択方式</span>
@@ -1481,6 +1482,7 @@ export default function MenuAdminPage() {
                         <label>
                           <span>内部キー</span>
                           <input value={optionDraft.optionKey} onChange={(event) => setOptionDraft({ ...optionDraft, optionKey: event.target.value })} placeholder="例: hot" />
+                          <small>未入力なら表示名から自動生成します。</small>
                         </label>
                         <label>
                           <span>価格差額</span>
