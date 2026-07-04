@@ -660,62 +660,27 @@ export const defaultMaamaaProductionReferenceSettings: MaamaaProductionReference
   setRules: maamaaSetRules
 };
 
-function mergeMissingProductionDefaults(rules: MaamaaProductionRule[]) {
-  const seen = new Set(rules.map((rule) => normalize(rule.id || rule.customerName)));
-  const merged = [...rules];
-  for (const rule of defaultMaamaaProductionReferenceSettings.productionRules) {
-    const key = normalize(rule.id || rule.customerName);
-    if (!seen.has(key)) {
-      merged.push({ ...rule, aliases: [...(rule.aliases ?? [])] });
-      seen.add(key);
-    }
-  }
-  return merged;
-}
-
-function mergeMissingSeasoningDefaults(rules: MaamaaSeasoningRule[]) {
-  const seen = new Set(rules.map((rule) => normalize(rule.name)));
-  const merged = [...rules];
-  for (const rule of defaultMaamaaProductionReferenceSettings.seasoningRules) {
-    const key = normalize(rule.name);
-    if (!seen.has(key)) {
-      merged.push({ ...rule, lines: [...rule.lines] });
-      seen.add(key);
-    }
-  }
-  return merged;
-}
-
-function mergeMissingSetDefaults(rules: MaamaaSetRule[]) {
-  const seen = new Set(rules.map((rule) => normalize(rule.name)));
-  const merged = [...rules];
-  for (const rule of defaultMaamaaProductionReferenceSettings.setRules) {
-    const key = normalize(rule.name);
-    if (!seen.has(key)) {
-      merged.push({ ...rule, defaultItems: [...rule.defaultItems], items: rule.items?.map((item) => ({ ...item })) });
-      seen.add(key);
-    }
-  }
-  return merged;
-}
-
 export function normalizeMaamaaProductionReferenceSettings(value: unknown): MaamaaProductionReferenceSettings {
   if (!value || typeof value !== "object") return cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings);
   const source = value as Partial<MaamaaProductionReferenceSettings>;
-  const productionRules = Array.isArray(source.productionRules)
-    ? source.productionRules.map(normalizeProductionRule).filter((rule): rule is MaamaaProductionRule => Boolean(rule))
-    : [];
-  const seasoningRules = Array.isArray(source.seasoningRules)
-    ? source.seasoningRules.map(normalizeSeasoningRule).filter((rule): rule is MaamaaSeasoningRule => Boolean(rule))
-    : [];
-  const setRules = Array.isArray(source.setRules)
-    ? source.setRules.map(normalizeSetRule).filter((rule): rule is MaamaaSetRule => Boolean(rule))
-    : [];
+  const defaultSettings = cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings);
+  const hasProductionRules = Array.isArray(source.productionRules);
+  const hasSeasoningRules = Array.isArray(source.seasoningRules);
+  const hasSetRules = Array.isArray(source.setRules);
+  const productionRules = hasProductionRules
+    ? (source.productionRules ?? []).map(normalizeProductionRule).filter((rule): rule is MaamaaProductionRule => Boolean(rule))
+    : defaultSettings.productionRules;
+  const seasoningRules = hasSeasoningRules
+    ? (source.seasoningRules ?? []).map(normalizeSeasoningRule).filter((rule): rule is MaamaaSeasoningRule => Boolean(rule))
+    : defaultSettings.seasoningRules;
+  const setRules = hasSetRules
+    ? (source.setRules ?? []).map(normalizeSetRule).filter((rule): rule is MaamaaSetRule => Boolean(rule))
+    : defaultSettings.setRules;
 
   return {
-    productionRules: productionRules.length ? mergeMissingProductionDefaults(productionRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).productionRules,
-    seasoningRules: seasoningRules.length ? mergeMissingSeasoningDefaults(seasoningRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).seasoningRules,
-    setRules: setRules.length ? mergeMissingSetDefaults(setRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).setRules
+    productionRules,
+    seasoningRules,
+    setRules
   };
 }
 

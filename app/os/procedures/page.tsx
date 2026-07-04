@@ -992,6 +992,7 @@ export default function ProcedureAdminPage() {
 
   function removeSelectedMaamaaReferenceItem() {
     if (!selectedMaamaaReferenceItem) return;
+    if (!confirm(`「${selectedMaamaaReferenceItem.title}」を削除しますか。`)) return;
     if (selectedMaamaaReferenceItem.kind === "production") {
       removeMaamaaProductionRule(selectedMaamaaReferenceItem.index);
     } else if (selectedMaamaaReferenceItem.kind === "seasoning") {
