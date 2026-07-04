@@ -8472,6 +8472,7 @@ body :where(
 .procedure-reference-disclosure,
 .procedure-settings-disclosure {
   min-width: 0;
+  width: 100%;
 }
 
 .procedure-reference-disclosure summary,
@@ -8506,10 +8507,11 @@ body :where(
 .procedure-reference-panel,
 .procedure-settings-panel {
   margin-top: 10px;
+  width: 100%;
 }
 
 .procedure-reference-panel {
-  width: min(860px, calc(100vw - 300px));
+  width: 100%;
 }
 
 .procedure-reference-grid {
@@ -20346,10 +20348,11 @@ body :where(
 
 .procedure-reference-editor {
   display: grid;
-  grid-template-columns: 170px minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  grid-template-columns: 180px minmax(320px, 1fr) minmax(460px, 1.45fr);
   align-items: start;
   gap: 12px;
   min-width: 0;
+  width: 100%;
 }
 
 .procedure-reference-category-list,
@@ -20428,12 +20431,25 @@ body :where(
   border-radius: 8px;
   padding: 12px;
   background: #f8fafc;
+  width: 100%;
 }
 
 .procedure-reference-editor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.procedure-reference-editor-grid label {
+  min-width: 0;
+}
+
+.procedure-reference-editor-grid input,
+.procedure-reference-editor-grid select,
+.procedure-reference-editor-grid textarea {
+  width: 100%;
   min-width: 0;
 }
 
@@ -20448,7 +20464,7 @@ body :where(
 
 @media (max-width: 1180px) {
   .procedure-reference-editor {
-    grid-template-columns: 150px minmax(200px, 0.8fr) minmax(280px, 1.2fr);
+    grid-template-columns: 160px minmax(280px, 1fr) minmax(360px, 1.25fr);
   }
 }
 

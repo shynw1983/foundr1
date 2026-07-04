@@ -290,8 +290,8 @@ const productionRulePlacements: Array<{ value: MaamaaProductionRule["placement"]
 ];
 
 const productionRuleCookTypes: Array<{ value: NonNullable<MaamaaProductionRule["cookType"]>; label: string }> = [
-  { value: "boil", label: "要煮" },
-  { value: "no_boil", label: "不要煮" }
+  { value: "boil", label: "需要煮" },
+  { value: "no_boil", label: "不需要煮" }
 ];
 
 const maamaaReferenceEditorCategories: Array<{ value: MaamaaReferenceEditorCategory; label: string }> = [
@@ -1194,7 +1194,7 @@ export default function ProcedureAdminPage() {
                             <option value="">手入力の厨房名を使う</option>
                             {maamaaReferenceSkuOptions.map((product) => (
                               <option value={product.id} key={product.id}>
-                                {[product.category, product.subcategory, product.name].filter(Boolean).join(" / ")}
+                                {[product.category, product.name].filter(Boolean).join(" / ")}
                               </option>
                             ))}
                           </select>

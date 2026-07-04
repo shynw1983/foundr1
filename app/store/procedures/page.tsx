@@ -329,8 +329,8 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
                   <small>
                     {[
                       (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) === "no_boil"
-                        ? (isChinese ? "不要煮" : "煮込まない")
-                        : (isChinese ? "要煮" : "要煮込み"),
+                        ? (isChinese ? "不需要煮" : "煮込まない")
+                        : (isChinese ? "需要煮" : "要煮込み"),
                       t(rule.prep),
                       t(rule.action),
                       (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) !== "no_boil" && rule.minimumHeatMinutes ? (isChinese ? `至少加热${rule.minimumHeatMinutes}分钟` : `最低${rule.minimumHeatMinutes}分加熱`) : "",
