@@ -289,6 +289,11 @@ const productionRulePlacements: Array<{ value: MaamaaProductionRule["placement"]
   { value: "finish", label: "仕上げ" }
 ];
 
+const productionRuleCookTypes: Array<{ value: NonNullable<MaamaaProductionRule["cookType"]>; label: string }> = [
+  { value: "boil", label: "要煮" },
+  { value: "no_boil", label: "不要煮" }
+];
+
 const maamaaReferenceEditorCategories: Array<{ value: MaamaaReferenceEditorCategory; label: string }> = [
   ...productionRuleSections,
   { value: "seasoningRules", label: "辛さ・味変" },
@@ -524,6 +529,12 @@ export default function ProcedureAdminPage() {
   const productCategories = useMemo(() => {
     return uniqueSorted(brandFilteredProducts.map((product) => product.category || "未分類"));
   }, [brandFilteredProducts]);
+  const maamaaReferenceSkuOptions = useMemo(() => {
+    return products.filter((product) => product.sourceType === "product");
+  }, [products]);
+  const maamaaReferenceProductsById = useMemo(() => {
+    return new Map(maamaaReferenceSkuOptions.map((product) => [product.id, product]));
+  }, [maamaaReferenceSkuOptions]);
 
   const selectedBrandName = brands.find((brand) => brand.id === editingBook.brandId)?.name ?? "";
   const brandFilteredStores = useMemo(() => {
@@ -566,9 +577,9 @@ export default function ProcedureAdminPage() {
         kind: "production",
         index,
         title: rule.customerName || "メニュー名未設定",
-        summary: [rule.kitchenName, rule.quantity, rule.prep, rule.action].filter(Boolean).join(" / ") || "詳細未設定"
+        summary: [rule.productId ? maamaaReferenceProductsById.get(rule.productId)?.name ?? rule.productName ?? rule.kitchenName : rule.kitchenName, rule.quantity, rule.prep, rule.action].filter(Boolean).join(" / ") || "詳細未設定"
       }));
-  }, [maamaaReferenceCategory, maamaaReferenceSettings]);
+  }, [maamaaReferenceCategory, maamaaReferenceProductsById, maamaaReferenceSettings]);
   const selectedMaamaaReferenceItem = maamaaReferenceItems[Math.min(selectedMaamaaReferenceIndex, Math.max(maamaaReferenceItems.length - 1, 0))];
 
   function updateStep(index: number, nextStep: Partial<ProcedureStep>) {
@@ -803,7 +814,7 @@ export default function ProcedureAdminPage() {
       ...current,
       productionRules: [
         ...current.productionRules,
-        { section, customerName: "", kitchenName: "", placement: "pot" }
+        { section, customerName: "", kitchenName: "", cookType: "boil", placement: "pot" }
       ]
     }));
     setMaamaaReferenceCategory(section);
@@ -1167,8 +1178,38 @@ export default function ProcedureAdminPage() {
                           <input value={rule.customerName} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { customerName: event.target.value })} disabled={!canEdit} />
                         </label>
                         <label>
+                          <span>采购SKU</span>
+                          <select
+                            value={rule.productId ?? ""}
+                            onChange={(event) => {
+                              const product = maamaaReferenceProductsById.get(event.target.value);
+                              updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
+                                productId: product?.id,
+                                productName: product?.name,
+                                kitchenName: product?.name ?? rule.kitchenName
+                              });
+                            }}
+                            disabled={!canEdit}
+                          >
+                            <option value="">手入力の厨房名を使う</option>
+                            {maamaaReferenceSkuOptions.map((product) => (
+                              <option value={product.id} key={product.id}>
+                                {[product.category, product.subcategory, product.name].filter(Boolean).join(" / ")}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
                           <span>厨房名</span>
-                          <input value={rule.kitchenName} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { kitchenName: event.target.value })} disabled={!canEdit} />
+                          <input
+                            value={rule.kitchenName}
+                            onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
+                              kitchenName: event.target.value,
+                              productId: undefined,
+                              productName: undefined
+                            })}
+                            disabled={!canEdit}
+                          />
                         </label>
                         <label>
                           <span>分量</span>
@@ -1183,8 +1224,29 @@ export default function ProcedureAdminPage() {
                           <input value={rule.action ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { action: event.target.value })} disabled={!canEdit} />
                         </label>
                         <label>
+                          <span>調理区分</span>
+                          <select
+                            value={rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")}
+                            onChange={(event) => {
+                              const cookType = event.target.value as NonNullable<MaamaaProductionRule["cookType"]>;
+                              updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
+                                cookType,
+                                minimumHeatMinutes: cookType === "no_boil" ? undefined : rule.minimumHeatMinutes
+                              });
+                            }}
+                            disabled={!canEdit}
+                          >
+                            {productionRuleCookTypes.map((cookType) => <option value={cookType.value} key={cookType.value}>{cookType.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
                           <span>最低加熱分</span>
-                          <input value={rule.minimumHeatMinutes ? String(rule.minimumHeatMinutes) : ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { minimumHeatMinutes: Number(event.target.value) || undefined })} inputMode="numeric" disabled={!canEdit} />
+                          <input
+                            value={rule.minimumHeatMinutes ? String(rule.minimumHeatMinutes) : ""}
+                            onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { minimumHeatMinutes: Number(event.target.value) || undefined, cookType: "boil" })}
+                            inputMode="numeric"
+                            disabled={!canEdit || (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) === "no_boil"}
+                          />
                         </label>
                         <label>
                           <span>投入先</span>

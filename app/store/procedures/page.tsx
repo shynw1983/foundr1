@@ -327,7 +327,16 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
                   <strong>{t(rule.customerName)}</strong>
                   <p>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</p>
                   <small>
-                    {[t(rule.prep), t(rule.action), rule.minimumHeatMinutes ? (isChinese ? `至少加热${rule.minimumHeatMinutes}分钟` : `最低${rule.minimumHeatMinutes}分加熱`) : "", rule.placement === "container" ? (isChinese ? "放入容器" : "容器へ") : "", t(rule.notes)]
+                    {[
+                      (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) === "no_boil"
+                        ? (isChinese ? "不要煮" : "煮込まない")
+                        : (isChinese ? "要煮" : "要煮込み"),
+                      t(rule.prep),
+                      t(rule.action),
+                      (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) !== "no_boil" && rule.minimumHeatMinutes ? (isChinese ? `至少加热${rule.minimumHeatMinutes}分钟` : `最低${rule.minimumHeatMinutes}分加熱`) : "",
+                      rule.placement === "container" ? (isChinese ? "放入容器" : "容器へ") : "",
+                      t(rule.notes)
+                    ]
                       .filter(Boolean)
                       .join(" / ") || (isChinese ? "常规处理" : "通常調理")}
                   </small>

@@ -2,8 +2,11 @@ export type MaamaaProductionRule = {
   id?: string;
   customerName: string;
   aliases?: string[];
+  productId?: string;
+  productName?: string;
   section: "noodles" | "base" | "standard" | "premium" | "vip" | "request" | "seasoning" | "set" | "operation";
   kitchenName: string;
+  cookType?: "boil" | "no_boil";
   quantity?: string;
   prep?: string;
   action?: string;
@@ -556,6 +559,13 @@ function normalizePlacement(value: unknown): MaamaaProductionRule["placement"] |
   return placement === "pot" || placement === "container" || placement === "finish" ? placement : undefined;
 }
 
+function normalizeCookType(value: unknown, placement?: MaamaaProductionRule["placement"]): MaamaaProductionRule["cookType"] {
+  const cookType = String(value ?? "");
+  if (cookType === "no_boil") return "no_boil";
+  if (cookType === "boil") return "boil";
+  return placement === "container" || placement === "finish" ? "no_boil" : "boil";
+}
+
 function normalizeReferenceLines(value: unknown) {
   if (Array.isArray(value)) return value.map((item) => String(item ?? "").trim()).filter(Boolean);
   return String(value ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
@@ -568,17 +578,21 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
   const kitchenName = String(source.kitchenName ?? "").trim();
   if (!customerName || !kitchenName) return null;
   const heatMinutes = Number(source.minimumHeatMinutes ?? 0);
+  const placement = normalizePlacement(source.placement);
   return {
     id: String(source.id ?? "").trim() || undefined,
     customerName,
     aliases: Array.isArray(source.aliases) ? source.aliases.map((item) => String(item ?? "").trim()).filter(Boolean) : undefined,
+    productId: String(source.productId ?? "").trim() || undefined,
+    productName: String(source.productName ?? "").trim() || undefined,
     section: normalizeProductionSection(source.section),
     kitchenName,
+    cookType: normalizeCookType(source.cookType, placement),
     quantity: String(source.quantity ?? "").trim() || undefined,
     prep: String(source.prep ?? "").trim() || undefined,
     action: String(source.action ?? "").trim() || undefined,
     minimumHeatMinutes: Number.isFinite(heatMinutes) && heatMinutes > 0 ? Math.round(heatMinutes) : undefined,
-    placement: normalizePlacement(source.placement),
+    placement,
     notes: String(source.notes ?? "").trim() || undefined
   };
 }
@@ -679,10 +693,12 @@ export function findMaamaaProductionRule(label: string, rules = maamaaProduction
 export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1) {
   const quantity = rule.quantity ? `${rule.quantity}${count > 1 ? ` x${count}` : ""}` : count > 1 ? `x${count}` : "";
   const parts = [rule.kitchenName, quantity].filter(Boolean);
+  const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
   const details = [
+    cookType === "no_boil" ? "煮込まない" : "要煮込み",
     rule.prep,
     rule.action,
-    rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "",
+    cookType === "boil" && rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "",
     rule.placement === "container" ? "容器に入れる" : "",
     rule.notes
   ].filter(Boolean);
