@@ -14,11 +14,15 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   defaultMaamaaProductionReferenceSettings,
+  findMaamaaProductionRule,
   formatMaamaaSetItem,
+  getMaamaaKitchenCategory,
+  maamaaKitchenCategories,
+  type MaamaaKitchenCategoryKey,
+  type MaamaaProductionRule,
   type MaamaaProductionReferenceSettings,
   type MaamaaReferenceLanguage,
   type MaamaaSetRule,
-  maamaaProductionReferenceSections,
   translateMaamaaReferenceText
 } from "../../../lib/maamaa-production-rules";
 import { useOsTranslation } from "../../os/components/OsTranslationProvider";
@@ -295,12 +299,105 @@ export default function ProcedureReaderPage() {
   );
 }
 
+type MaamaaReferenceMode = "basic" | "set";
+
+type MaamaaPlanLine = {
+  id: string;
+  title: string;
+  detail: string;
+  source: "base" | "set" | "add";
+  category: MaamaaKitchenCategoryKey;
+  notes?: string;
+};
+
+const maamaaSelectableSections: MaamaaProductionRule["section"][] = ["noodles", "base", "standard", "premium", "vip", "request"];
+
+function maamaaReferenceItemKey(rule: MaamaaProductionRule, index: number) {
+  return rule.id || `${rule.section}-${rule.customerName}-${index}`;
+}
+
+function sourceLabel(source: MaamaaPlanLine["source"], isChinese: boolean) {
+  if (source === "base") return isChinese ? "基础款" : "基本";
+  if (source === "set") return isChinese ? "套餐内" : "セット内";
+  return isChinese ? "追加" : "追加";
+}
+
+function buildSetPlanLine(item: string, index: number, rules: MaamaaProductionRule[]): MaamaaPlanLine {
+  const rule = findMaamaaProductionRule(item, rules);
+  return {
+    id: `set-${index}-${item}`,
+    title: rule?.kitchenName || item,
+    detail: item,
+    source: "set",
+    category: rule ? getMaamaaKitchenCategory(rule) : getMaamaaKitchenCategory(item),
+    notes: rule?.notes
+  };
+}
+
+function buildAddPlanLine(rule: MaamaaProductionRule, key: string): MaamaaPlanLine {
+  const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
+  return {
+    id: `add-${key}`,
+    title: rule.kitchenName,
+    detail: [
+      rule.quantity || "",
+      rule.prep || "",
+      rule.action || "",
+      cookType === "no_boil" ? "加熱不要" : "",
+      cookType !== "no_boil" && rule.minimumHeatMinutes ? `最低${rule.minimumHeatMinutes}分加熱` : "",
+      rule.placement === "container" ? "容器へ" : "",
+      rule.placement === "finish" ? "仕上げ" : ""
+    ].filter(Boolean).join(" / ") || "分量要確認",
+    source: "add",
+    category: getMaamaaKitchenCategory(rule),
+    notes: rule.notes
+  };
+}
+
+function groupPlanLines(lines: MaamaaPlanLine[]) {
+  return maamaaKitchenCategories
+    .map((category) => ({
+      ...category,
+      lines: lines.filter((line) => line.category === category.key)
+    }))
+    .filter((category) => category.lines.length);
+}
+
 function MaamaaProductionReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
-  const sections = maamaaProductionReferenceSections(settings.productionRules);
   const isChinese = language === "zh";
+  const [mode, setMode] = useState<MaamaaReferenceMode>("basic");
+  const setMenuRules = settings.setRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
+  const [selectedSetName, setSelectedSetName] = useState(setMenuRules[0]?.name ?? "");
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
   const getSetItems = (rule: MaamaaSetRule) => rule.items?.length ? rule.items.map(formatMaamaaSetItem) : rule.defaultItems;
   const operationRules = settings.setRules.filter((rule) => rule.name === "複数杯注文");
+  const selectableRules = settings.productionRules.filter((rule) => maamaaSelectableSections.includes(rule.section));
+  const selectedSet = setMenuRules.find((rule) => rule.name === selectedSetName) ?? setMenuRules[0];
+  useEffect(() => {
+    if (setMenuRules.length && !setMenuRules.some((rule) => rule.name === selectedSetName)) {
+      setSelectedSetName(setMenuRules[0].name);
+    }
+  }, [selectedSetName, setMenuRules]);
+  const selectedAddOnRules = selectableRules
+    .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
+    .filter((entry) => selectedAddOns.includes(entry.key));
+  const setLines = mode === "set" && selectedSet ? getSetItems(selectedSet).map((item, index) => buildSetPlanLine(item, index, settings.productionRules)) : [];
+  const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key));
+  const planLines = groupPlanLines([...setLines, ...addLines]);
+  const groupedSelectableRules = maamaaKitchenCategories
+    .map((category) => ({
+      ...category,
+      rules: selectableRules
+        .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
+        .filter(({ rule }) => getMaamaaKitchenCategory(rule) === category.key)
+    }))
+    .filter((category) => category.rules.length);
+
+  function toggleAddOn(key: string) {
+    setSelectedAddOns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
   return (
     <div className="maamaa-production-reference" data-i18n-ignore>
       <div className="procedure-reader-heading">
@@ -317,50 +414,108 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
 
       <div className="maamaa-reference-alert">
         <ChefHat size={20} />
-        <span>{isChinese ? "套餐不只放追加加料，也必须放入墙上写的套餐基础食材。更换面类时替换默认宽粉50g；追加宽粉则另加50g。" : "套餐は追加トッピングだけでなく、壁のセット具材も必ず入れる。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。"}</span>
+        <span>{isChinese ? "基础款不含任何食材。套餐内食材按套餐用量，额外追加食材按单点追加用量。更换面类时替换默认宽粉50g；追加宽粉则另加50g。" : "基本は具材なし。セット内具材はセット用量、追加具材は単品追加用量で作る。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。"}</span>
       </div>
 
-      <div className="maamaa-reference-sections">
-        {sections.map((section) => (
-          <section className="maamaa-reference-section" key={section.id}>
-            <h3>{t(section.title)}</h3>
+      <div className="maamaa-reference-workbench">
+        <section className="maamaa-reference-builder">
+          <div className="maamaa-reference-mode-tabs" role="tablist" aria-label={isChinese ? "选择制作类型" : "制作タイプ"}>
+            <button className={mode === "basic" ? "is-active" : ""} type="button" onClick={() => setMode("basic")}>
+              <strong>{isChinese ? "基础款" : "基本"}</strong>
+              <span>{isChinese ? "只有汤底，食材全是追加" : "具材なし、追加のみ"}</span>
+            </button>
+            <button className={mode === "set" ? "is-active" : ""} type="button" onClick={() => setMode("set")}>
+              <strong>{isChinese ? "套餐" : "セット"}</strong>
+              <span>{isChinese ? "先带套餐固定食材" : "セット具材あり"}</span>
+            </button>
+          </div>
+
+          {mode === "set" ? (
+            <div className="maamaa-reference-set-picker">
+              <label>
+                <span>{isChinese ? "套餐名" : "セット名"}</span>
+                <select value={selectedSet?.name ?? ""} onChange={(event) => setSelectedSetName(event.target.value)}>
+                  {setMenuRules.map((rule) => <option value={rule.name} key={rule.name}>{t(rule.name)}</option>)}
+                </select>
+              </label>
+              {selectedSet?.notes ? <p>{t(selectedSet.notes)}</p> : null}
+            </div>
+          ) : (
+            <div className="maamaa-reference-basic-note">
+              <strong>{isChinese ? "基础款" : "基本"}</strong>
+              <span>{isChinese ? "不自动包含任何食材。下面选择的产品都会按单点追加用量显示。" : "自動で入る具材はありません。下で選んだ商品は単品追加用量で表示します。"}</span>
+            </div>
+          )}
+
+          <div className="maamaa-reference-product-picker">
+            <div className="maamaa-reference-editor-heading">
+              <h4>{isChinese ? "选择追加产品" : "追加商品を選択"}</h4>
+              {selectedAddOns.length ? (
+                <button className="text-button" type="button" onClick={() => setSelectedAddOns([])}>{isChinese ? "清空" : "クリア"}</button>
+              ) : null}
+            </div>
+            {groupedSelectableRules.map((category) => (
+              <section className="maamaa-reference-picker-group" key={category.key}>
+                <h5>{isChinese ? category.zhLabel : category.label}</h5>
+                <div>
+                  {category.rules.map(({ rule, key }) => (
+                    <button className={selectedAddOns.includes(key) ? "is-selected" : ""} type="button" key={key} onClick={() => toggleAddOn(key)}>
+                      <strong>{t(rule.customerName)}</strong>
+                      <span>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+
+        <section className="maamaa-reference-plan">
+          <div className="maamaa-reference-plan-heading">
+            <div>
+              <p>{mode === "basic" ? (isChinese ? "基础款制作清单" : "基本の制作リスト") : t(selectedSet?.name)}</p>
+              <h3>{isChinese ? "按厨房分类排列" : "厨房分類順"}</h3>
+            </div>
+            <span>{isChinese ? `${setLines.length}个套餐内 / ${addLines.length}个追加` : `セット内 ${setLines.length} / 追加 ${addLines.length}`}</span>
+          </div>
+
+          <section className="maamaa-reference-section">
+            <h3>{t("辛さ・味変")}</h3>
             <div className="maamaa-reference-rule-grid">
-              {section.rules.map((rule) => (
-                <article className="maamaa-reference-rule" key={`${rule.section}-${rule.customerName}`}>
-                  <strong>{t(rule.customerName)}</strong>
-                  <p>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</p>
-                  {(rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) === "no_boil" ? (
-                    <span className="maamaa-reference-no-boil">{isChinese ? "不需要煮" : "加熱不要"}</span>
-                  ) : null}
-                  <small>
-                    {[
-                      t(rule.prep),
-                      t(rule.action),
-                      (rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil")) !== "no_boil" && rule.minimumHeatMinutes ? (isChinese ? `至少加热${rule.minimumHeatMinutes}分钟` : `最低${rule.minimumHeatMinutes}分加熱`) : "",
-                      rule.placement === "container" ? (isChinese ? "放入容器" : "容器へ") : "",
-                      t(rule.notes)
-                    ]
-                      .filter(Boolean)
-                      .join(" / ") || (isChinese ? "常规处理" : "通常調理")}
-                  </small>
+              {settings.seasoningRules.map((rule) => (
+                <article className="maamaa-reference-rule" key={rule.name}>
+                  <strong>{t(rule.name)}</strong>
+                  <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
+                  <small>{isChinese ? "调味 / 汤底选项" : "味付け / スープオプション"}</small>
                 </article>
               ))}
             </div>
           </section>
-        ))}
-        <section className="maamaa-reference-section">
-          <h3>{t("辛さ・味変")}</h3>
-          <div className="maamaa-reference-rule-grid">
-            {settings.seasoningRules.map((rule) => (
-              <article className="maamaa-reference-rule" key={rule.name}>
-                <strong>{t(rule.name)}</strong>
-                <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
-                <small>{isChinese ? "调味 / 汤底选项" : "味付け / スープオプション"}</small>
-              </article>
-            ))}
-          </div>
+
+          {planLines.length ? planLines.map((category) => (
+            <section className="maamaa-reference-section" key={category.key}>
+              <h3>{isChinese ? category.zhLabel : category.label}</h3>
+              <div className="maamaa-reference-plan-list">
+                {category.lines.map((line) => (
+                  <article className="maamaa-reference-plan-row" key={line.id}>
+                    <span>{sourceLabel(line.source, isChinese)}</span>
+                    <div>
+                      <strong>{t(line.title)}</strong>
+                      <p>{t(line.detail)}</p>
+                      {line.notes ? <small>{t(line.notes)}</small> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )) : (
+            <div className="procedure-reader-empty">{isChinese ? "请选择追加产品，或切换到套餐。" : "追加商品を選択するか、セットに切り替えてください。"}</div>
+          )}
         </section>
-        {operationRules.length ? (
+      </div>
+
+      {operationRules.length ? (
+        <div className="maamaa-reference-sections">
           <section className="maamaa-reference-section">
             <h3>{t("オペレーション")}</h3>
             <div className="maamaa-reference-rule-grid">
@@ -373,8 +528,8 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
               ))}
             </div>
           </section>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
