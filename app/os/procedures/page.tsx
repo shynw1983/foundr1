@@ -158,6 +158,11 @@ type ProcedureMasterItem = OptionItem & {
 type SettingKind = "action_types" | "materials" | "locations" | "equipment" | "containers";
 type ActionField = "location" | "product" | "quantity" | "equipment" | "container" | "target" | "standard" | "note";
 type SettingItem = ActionTypeOption | ProcedureMasterItem | ProductOption;
+type MaamaaReferenceEditorCategory = MaamaaProductionRule["section"] | "seasoningRules" | "setRules" | "operationRules";
+type MaamaaReferenceEditorItem =
+  | { kind: "production"; index: number; title: string; summary: string }
+  | { kind: "seasoning"; index: number; title: string; summary: string }
+  | { kind: "set"; index: number; title: string; summary: string };
 
 const emptySettingDraft = {
   name: "",
@@ -282,6 +287,13 @@ const productionRulePlacements: Array<{ value: MaamaaProductionRule["placement"]
   { value: "pot", label: "鍋" },
   { value: "container", label: "容器" },
   { value: "finish", label: "仕上げ" }
+];
+
+const maamaaReferenceEditorCategories: Array<{ value: MaamaaReferenceEditorCategory; label: string }> = [
+  ...productionRuleSections,
+  { value: "seasoningRules", label: "辛さ・味変" },
+  { value: "setRules", label: "套餐" },
+  { value: "operationRules", label: "操作注意" }
 ];
 
 function normalizeBook(book: ProcedureBook): ProcedureBook {
@@ -427,6 +439,8 @@ export default function ProcedureAdminPage() {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [maamaaReferenceSettings, setMaamaaReferenceSettings] = useState<MaamaaProductionReferenceSettings>(defaultMaamaaProductionReferenceSettings);
+  const [maamaaReferenceCategory, setMaamaaReferenceCategory] = useState<MaamaaReferenceEditorCategory>("noodles");
+  const [selectedMaamaaReferenceIndex, setSelectedMaamaaReferenceIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [referenceSaving, setReferenceSaving] = useState(false);
@@ -525,6 +539,37 @@ export default function ProcedureAdminPage() {
     ));
   }, [editingBook.brandId, editingBook.storeIds, menuCatalogItems]);
   const selectedMenuCatalogItem = brandFilteredMenuCatalogItems.find((item) => item.id === editingBook.menuCatalogItemId);
+  const maamaaReferenceItems = useMemo<MaamaaReferenceEditorItem[]>(() => {
+    if (maamaaReferenceCategory === "seasoningRules") {
+      return maamaaReferenceSettings.seasoningRules.map((rule, index) => ({
+        kind: "seasoning",
+        index,
+        title: rule.name || "名称未設定",
+        summary: rule.lines.filter(Boolean).join(" / ") || "内容未設定"
+      }));
+    }
+    if (maamaaReferenceCategory === "setRules" || maamaaReferenceCategory === "operationRules") {
+      return maamaaReferenceSettings.setRules
+        .map((rule, index) => ({ rule, index }))
+        .filter(({ rule }) => maamaaReferenceCategory === "operationRules" ? rule.name === "複数杯注文" : rule.name !== "複数杯注文")
+        .map(({ rule, index }) => ({
+          kind: "set",
+          index,
+          title: rule.name || "名称未設定",
+          summary: rule.defaultItems.filter(Boolean).join(" / ") || "内容未設定"
+        }));
+    }
+    return maamaaReferenceSettings.productionRules
+      .map((rule, index) => ({ rule, index }))
+      .filter(({ rule }) => rule.section === maamaaReferenceCategory)
+      .map(({ rule, index }) => ({
+        kind: "production",
+        index,
+        title: rule.customerName || "メニュー名未設定",
+        summary: [rule.kitchenName, rule.quantity, rule.prep, rule.action].filter(Boolean).join(" / ") || "詳細未設定"
+      }));
+  }, [maamaaReferenceCategory, maamaaReferenceSettings]);
+  const selectedMaamaaReferenceItem = maamaaReferenceItems[Math.min(selectedMaamaaReferenceIndex, Math.max(maamaaReferenceItems.length - 1, 0))];
 
   function updateStep(index: number, nextStep: Partial<ProcedureStep>) {
     setEditingBook((current) => ({
@@ -750,13 +795,19 @@ export default function ProcedureAdminPage() {
   }
 
   function addMaamaaProductionRule() {
+    const section = productionRuleSections.some((entry) => entry.value === maamaaReferenceCategory)
+      ? maamaaReferenceCategory as MaamaaProductionRule["section"]
+      : "standard";
+    const nextIndex = maamaaReferenceSettings.productionRules.length;
     setMaamaaReferenceSettings((current) => ({
       ...current,
       productionRules: [
         ...current.productionRules,
-        { section: "standard", customerName: "", kitchenName: "", placement: "pot" }
+        { section, customerName: "", kitchenName: "", placement: "pot" }
       ]
     }));
+    setMaamaaReferenceCategory(section);
+    setSelectedMaamaaReferenceIndex(maamaaReferenceSettings.productionRules.filter((rule) => rule.section === section).length);
   }
 
   function removeMaamaaProductionRule(index: number) {
@@ -764,6 +815,7 @@ export default function ProcedureAdminPage() {
       ...current,
       productionRules: current.productionRules.filter((_, ruleIndex) => ruleIndex !== index)
     }));
+    setSelectedMaamaaReferenceIndex((current) => Math.max(0, current - 1));
   }
 
   function updateMaamaaSeasoningRule(index: number, patch: Partial<MaamaaSeasoningRule>) {
@@ -774,10 +826,13 @@ export default function ProcedureAdminPage() {
   }
 
   function addMaamaaSeasoningRule() {
+    const nextIndex = maamaaReferenceSettings.seasoningRules.length;
     setMaamaaReferenceSettings((current) => ({
       ...current,
       seasoningRules: [...current.seasoningRules, { name: "", lines: [""] }]
     }));
+    setMaamaaReferenceCategory("seasoningRules");
+    setSelectedMaamaaReferenceIndex(nextIndex);
   }
 
   function removeMaamaaSeasoningRule(index: number) {
@@ -785,6 +840,7 @@ export default function ProcedureAdminPage() {
       ...current,
       seasoningRules: current.seasoningRules.filter((_, ruleIndex) => ruleIndex !== index)
     }));
+    setSelectedMaamaaReferenceIndex((current) => Math.max(0, current - 1));
   }
 
   function updateMaamaaSetRule(index: number, patch: Partial<MaamaaSetRule>) {
@@ -795,10 +851,14 @@ export default function ProcedureAdminPage() {
   }
 
   function addMaamaaSetRule() {
+    const isOperation = maamaaReferenceCategory === "operationRules";
+    const nextIndex = maamaaReferenceSettings.setRules.length;
     setMaamaaReferenceSettings((current) => ({
       ...current,
-      setRules: [...current.setRules, { name: "", defaultItems: [""] }]
+      setRules: [...current.setRules, { name: isOperation ? "複数杯注文" : "", defaultItems: [""] }]
     }));
+    setMaamaaReferenceCategory(isOperation ? "operationRules" : "setRules");
+    setSelectedMaamaaReferenceIndex(nextIndex);
   }
 
   function removeMaamaaSetRule(index: number) {
@@ -806,6 +866,30 @@ export default function ProcedureAdminPage() {
       ...current,
       setRules: current.setRules.filter((_, ruleIndex) => ruleIndex !== index)
     }));
+    setSelectedMaamaaReferenceIndex((current) => Math.max(0, current - 1));
+  }
+
+  function addMaamaaReferenceItem() {
+    if (maamaaReferenceCategory === "seasoningRules") {
+      addMaamaaSeasoningRule();
+      return;
+    }
+    if (maamaaReferenceCategory === "setRules" || maamaaReferenceCategory === "operationRules") {
+      addMaamaaSetRule();
+      return;
+    }
+    addMaamaaProductionRule();
+  }
+
+  function removeSelectedMaamaaReferenceItem() {
+    if (!selectedMaamaaReferenceItem) return;
+    if (selectedMaamaaReferenceItem.kind === "production") {
+      removeMaamaaProductionRule(selectedMaamaaReferenceItem.index);
+    } else if (selectedMaamaaReferenceItem.kind === "seasoning") {
+      removeMaamaaSeasoningRule(selectedMaamaaReferenceItem.index);
+    } else {
+      removeMaamaaSetRule(selectedMaamaaReferenceItem.index);
+    }
   }
 
   return (
@@ -1018,130 +1102,135 @@ export default function ProcedureAdminPage() {
               </div>
 
               <div className="procedure-reference-editor">
-                <section className="procedure-reference-editor-section">
+                <aside className="procedure-reference-category-list" aria-label="早見表分類">
+                  {maamaaReferenceEditorCategories.map((category) => (
+                    <button
+                      className={maamaaReferenceCategory === category.value ? "is-active" : ""}
+                      type="button"
+                      key={category.value}
+                      onClick={() => {
+                        setMaamaaReferenceCategory(category.value);
+                        setSelectedMaamaaReferenceIndex(0);
+                      }}
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </aside>
+
+                <section className="procedure-reference-item-list">
                   <div className="procedure-reference-editor-heading">
-                    <h4>具材・麺</h4>
-                    <button className="secondary-button" type="button" onClick={addMaamaaProductionRule} disabled={!canEdit}>
+                    <h4>{maamaaReferenceEditorCategories.find((category) => category.value === maamaaReferenceCategory)?.label ?? "項目"}</h4>
+                    <button className="secondary-button" type="button" onClick={addMaamaaReferenceItem} disabled={!canEdit}>
                       <Plus size={16} />
-                      行を追加
+                      追加
                     </button>
                   </div>
-                  <div className="procedure-reference-editor-list">
-                    {maamaaReferenceSettings.productionRules.map((rule, index) => (
-                      <article className="procedure-reference-editor-row" key={`${rule.id ?? rule.customerName}-${index}`}>
-                        <div className="procedure-reference-editor-grid">
-                          <label>
-                            <span>分類</span>
-                            <select value={rule.section} onChange={(event) => updateMaamaaProductionRule(index, { section: event.target.value as MaamaaProductionRule["section"] })} disabled={!canEdit}>
-                              {productionRuleSections.map((section) => <option value={section.value} key={section.value}>{section.label}</option>)}
-                            </select>
-                          </label>
-                          <label>
-                            <span>メニュー表示名</span>
-                            <input value={rule.customerName} onChange={(event) => updateMaamaaProductionRule(index, { customerName: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>厨房名</span>
-                            <input value={rule.kitchenName} onChange={(event) => updateMaamaaProductionRule(index, { kitchenName: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>分量</span>
-                            <input value={rule.quantity ?? ""} onChange={(event) => updateMaamaaProductionRule(index, { quantity: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>下処理</span>
-                            <input value={rule.prep ?? ""} onChange={(event) => updateMaamaaProductionRule(index, { prep: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>作業</span>
-                            <input value={rule.action ?? ""} onChange={(event) => updateMaamaaProductionRule(index, { action: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>最低加熱分</span>
-                            <input value={rule.minimumHeatMinutes ? String(rule.minimumHeatMinutes) : ""} onChange={(event) => updateMaamaaProductionRule(index, { minimumHeatMinutes: Number(event.target.value) || undefined })} inputMode="numeric" disabled={!canEdit} />
-                          </label>
-                          <label>
-                            <span>投入先</span>
-                            <select value={rule.placement ?? ""} onChange={(event) => updateMaamaaProductionRule(index, { placement: event.target.value ? event.target.value as MaamaaProductionRule["placement"] : undefined })} disabled={!canEdit}>
-                              {productionRulePlacements.map((placement) => <option value={placement.value ?? ""} key={placement.value || "none"}>{placement.label}</option>)}
-                            </select>
-                          </label>
-                          <label className="procedure-reference-editor-wide">
-                            <span>メモ</span>
-                            <input value={rule.notes ?? ""} onChange={(event) => updateMaamaaProductionRule(index, { notes: event.target.value })} disabled={!canEdit} />
-                          </label>
-                        </div>
-                        <button className="danger-button" type="button" onClick={() => removeMaamaaProductionRule(index)} disabled={!canEdit}>
-                          <Trash2 size={14} />
-                          削除
-                        </button>
-                      </article>
+                  <div className="procedure-reference-items">
+                    {maamaaReferenceItems.map((item, index) => (
+                      <button
+                        className={index === Math.min(selectedMaamaaReferenceIndex, Math.max(maamaaReferenceItems.length - 1, 0)) ? "is-active" : ""}
+                        type="button"
+                        key={`${item.kind}-${item.index}`}
+                        onClick={() => setSelectedMaamaaReferenceIndex(index)}
+                      >
+                        <strong>{item.title}</strong>
+                        <span>{item.summary}</span>
+                      </button>
                     ))}
+                    {!maamaaReferenceItems.length ? <p className="empty-state">この分類の項目はありません。</p> : null}
                   </div>
                 </section>
 
-                <section className="procedure-reference-editor-section">
+                <section className="procedure-reference-detail-editor">
                   <div className="procedure-reference-editor-heading">
-                    <h4>辛さ・味変</h4>
-                    <button className="secondary-button" type="button" onClick={addMaamaaSeasoningRule} disabled={!canEdit}>
-                      <Plus size={16} />
-                      行を追加
+                    <h4>詳細編集</h4>
+                    <button className="danger-button" type="button" onClick={removeSelectedMaamaaReferenceItem} disabled={!canEdit || !selectedMaamaaReferenceItem}>
+                      <Trash2 size={14} />
+                      削除
                     </button>
                   </div>
-                  <div className="procedure-reference-editor-list">
-                    {maamaaReferenceSettings.seasoningRules.map((rule, index) => (
-                      <article className="procedure-reference-editor-row" key={`${rule.name}-${index}`}>
-                        <div className="procedure-reference-editor-grid">
-                          <label>
-                            <span>名称</span>
-                            <input value={rule.name} onChange={(event) => updateMaamaaSeasoningRule(index, { name: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label className="procedure-reference-editor-wide">
-                            <span>内容（1行ずつ）</span>
-                            <textarea value={rule.lines.join("\n")} onChange={(event) => updateMaamaaSeasoningRule(index, { lines: event.target.value.split("\n") })} disabled={!canEdit} />
-                          </label>
-                        </div>
-                        <button className="danger-button" type="button" onClick={() => removeMaamaaSeasoningRule(index)} disabled={!canEdit}>
-                          <Trash2 size={14} />
-                          削除
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="procedure-reference-editor-section">
-                  <div className="procedure-reference-editor-heading">
-                    <h4>套餐・操作</h4>
-                    <button className="secondary-button" type="button" onClick={addMaamaaSetRule} disabled={!canEdit}>
-                      <Plus size={16} />
-                      行を追加
-                    </button>
-                  </div>
-                  <div className="procedure-reference-editor-list">
-                    {maamaaReferenceSettings.setRules.map((rule, index) => (
-                      <article className="procedure-reference-editor-row" key={`${rule.name}-${index}`}>
-                        <div className="procedure-reference-editor-grid">
-                          <label>
-                            <span>名称</span>
-                            <input value={rule.name} onChange={(event) => updateMaamaaSetRule(index, { name: event.target.value })} disabled={!canEdit} />
-                          </label>
-                          <label className="procedure-reference-editor-wide">
-                            <span>内容（1行ずつ）</span>
-                            <textarea value={rule.defaultItems.join("\n")} onChange={(event) => updateMaamaaSetRule(index, { defaultItems: event.target.value.split("\n") })} disabled={!canEdit} />
-                          </label>
-                          <label className="procedure-reference-editor-wide">
-                            <span>メモ</span>
-                            <input value={rule.notes ?? ""} onChange={(event) => updateMaamaaSetRule(index, { notes: event.target.value })} disabled={!canEdit} />
-                          </label>
-                        </div>
-                        <button className="danger-button" type="button" onClick={() => removeMaamaaSetRule(index)} disabled={!canEdit}>
-                          <Trash2 size={14} />
-                          削除
-                        </button>
-                      </article>
-                    ))}
-                  </div>
+                  {!selectedMaamaaReferenceItem ? (
+                    <p className="empty-state">左の分類から項目を選択してください。</p>
+                  ) : selectedMaamaaReferenceItem.kind === "production" ? (() => {
+                    const rule = maamaaReferenceSettings.productionRules[selectedMaamaaReferenceItem.index];
+                    return (
+                      <div className="procedure-reference-editor-grid">
+                        <label>
+                          <span>分類</span>
+                          <select value={rule.section} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { section: event.target.value as MaamaaProductionRule["section"] })} disabled={!canEdit}>
+                            {productionRuleSections.map((section) => <option value={section.value} key={section.value}>{section.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>メニュー表示名</span>
+                          <input value={rule.customerName} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { customerName: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>厨房名</span>
+                          <input value={rule.kitchenName} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { kitchenName: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>分量</span>
+                          <input value={rule.quantity ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { quantity: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>下処理</span>
+                          <input value={rule.prep ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { prep: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>作業</span>
+                          <input value={rule.action ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { action: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>最低加熱分</span>
+                          <input value={rule.minimumHeatMinutes ? String(rule.minimumHeatMinutes) : ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { minimumHeatMinutes: Number(event.target.value) || undefined })} inputMode="numeric" disabled={!canEdit} />
+                        </label>
+                        <label>
+                          <span>投入先</span>
+                          <select value={rule.placement ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { placement: event.target.value ? event.target.value as MaamaaProductionRule["placement"] : undefined })} disabled={!canEdit}>
+                            {productionRulePlacements.map((placement) => <option value={placement.value ?? ""} key={placement.value || "none"}>{placement.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="procedure-reference-editor-wide">
+                          <span>メモ</span>
+                          <input value={rule.notes ?? ""} onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, { notes: event.target.value })} disabled={!canEdit} />
+                        </label>
+                      </div>
+                    );
+                  })() : selectedMaamaaReferenceItem.kind === "seasoning" ? (() => {
+                    const rule = maamaaReferenceSettings.seasoningRules[selectedMaamaaReferenceItem.index];
+                    return (
+                      <div className="procedure-reference-editor-grid">
+                        <label>
+                          <span>名称</span>
+                          <input value={rule.name} onChange={(event) => updateMaamaaSeasoningRule(selectedMaamaaReferenceItem.index, { name: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label className="procedure-reference-editor-wide">
+                          <span>内容（1行ずつ）</span>
+                          <textarea value={rule.lines.join("\n")} onChange={(event) => updateMaamaaSeasoningRule(selectedMaamaaReferenceItem.index, { lines: event.target.value.split("\n") })} disabled={!canEdit} />
+                        </label>
+                      </div>
+                    );
+                  })() : (() => {
+                    const rule = maamaaReferenceSettings.setRules[selectedMaamaaReferenceItem.index];
+                    return (
+                      <div className="procedure-reference-editor-grid">
+                        <label>
+                          <span>名称</span>
+                          <input value={rule.name} onChange={(event) => updateMaamaaSetRule(selectedMaamaaReferenceItem.index, { name: event.target.value })} disabled={!canEdit} />
+                        </label>
+                        <label className="procedure-reference-editor-wide">
+                          <span>内容（1行ずつ）</span>
+                          <textarea value={rule.defaultItems.join("\n")} onChange={(event) => updateMaamaaSetRule(selectedMaamaaReferenceItem.index, { defaultItems: event.target.value.split("\n") })} disabled={!canEdit} />
+                        </label>
+                        <label className="procedure-reference-editor-wide">
+                          <span>メモ</span>
+                          <input value={rule.notes ?? ""} onChange={(event) => updateMaamaaSetRule(selectedMaamaaReferenceItem.index, { notes: event.target.value })} disabled={!canEdit} />
+                        </label>
+                      </div>
+                    );
+                  })()}
                 </section>
               </div>
             </section>

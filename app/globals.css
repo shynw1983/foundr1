@@ -20346,14 +20346,44 @@ body :where(
 
 .procedure-reference-editor {
   display: grid;
-  gap: 18px;
+  grid-template-columns: 170px minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  align-items: start;
+  gap: 12px;
   min-width: 0;
 }
 
-.procedure-reference-editor-section {
+.procedure-reference-category-list,
+.procedure-reference-item-list,
+.procedure-reference-detail-editor {
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.procedure-reference-category-list {
+  align-content: start;
+}
+
+.procedure-reference-category-list button,
+.procedure-reference-items button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.procedure-reference-category-list button.is-active,
+.procedure-reference-items button.is-active {
+  border-color: rgba(20, 92, 72, 0.32);
+  background: var(--green-soft);
 }
 
 .procedure-reference-editor-heading {
@@ -20368,20 +20398,35 @@ body :where(
   font-size: 15px;
 }
 
-.procedure-reference-editor-list {
+.procedure-reference-items {
   display: grid;
   gap: 10px;
   min-width: 0;
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 2px;
 }
 
-.procedure-reference-editor-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
+.procedure-reference-items strong,
+.procedure-reference-items span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.procedure-reference-items strong {
+  font-size: 14px;
+}
+
+.procedure-reference-items span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.procedure-reference-detail-editor {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px;
   background: #f8fafc;
 }
 
@@ -20399,6 +20444,26 @@ body :where(
 .procedure-reference-editor textarea {
   min-height: 86px;
   resize: vertical;
+}
+
+@media (max-width: 1180px) {
+  .procedure-reference-editor {
+    grid-template-columns: 150px minmax(200px, 0.8fr) minmax(280px, 1.2fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .procedure-reference-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .procedure-reference-category-list {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+
+  .procedure-reference-items {
+    max-height: none;
+  }
 }
 
 .maamaa-side-reference strong {
