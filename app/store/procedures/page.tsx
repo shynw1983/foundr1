@@ -14,8 +14,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   defaultMaamaaProductionReferenceSettings,
+  formatMaamaaSetItem,
   type MaamaaProductionReferenceSettings,
   type MaamaaReferenceLanguage,
+  type MaamaaSetRule,
   maamaaProductionReferenceSections,
   translateMaamaaReferenceText
 } from "../../../lib/maamaa-production-rules";
@@ -297,6 +299,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
   const sections = maamaaProductionReferenceSections(settings.productionRules);
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
+  const getSetItems = (rule: MaamaaSetRule) => rule.items?.length ? rule.items.map(formatMaamaaSetItem) : rule.defaultItems;
   const operationRules = settings.setRules.filter((rule) => rule.name === "複数杯注文");
   return (
     <div className="maamaa-production-reference" data-i18n-ignore>
@@ -364,7 +367,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
               {operationRules.map((rule) => (
                 <article className="maamaa-reference-rule" key={rule.name}>
                   <strong>{t(rule.name)}</strong>
-                  <p>{rule.defaultItems.map((item) => t(item)).join(" / ")}</p>
+                  <p>{getSetItems(rule).map((item) => t(item)).join(" / ")}</p>
                   {rule.notes ? <small>{t(rule.notes)}</small> : null}
                 </article>
               ))}
@@ -379,6 +382,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
 function MaamaaProductionSideReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
   const isChinese = language === "zh";
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
+  const getSetItems = (rule: MaamaaSetRule) => rule.items?.length ? rule.items.map(formatMaamaaSetItem) : rule.defaultItems;
   const setMenuRules = settings.setRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
   return (
     <div data-i18n-ignore>
@@ -390,7 +394,7 @@ function MaamaaProductionSideReference({ language, settings }: { language: Maama
         {setMenuRules.map((rule) => (
           <article key={rule.name}>
             <strong>{t(rule.name)}</strong>
-            <p>{rule.defaultItems.map((item) => t(item)).join(" / ")}</p>
+            <p>{getSetItems(rule).map((item) => t(item)).join(" / ")}</p>
             {rule.notes ? <small>{t(rule.notes)}</small> : null}
           </article>
         ))}

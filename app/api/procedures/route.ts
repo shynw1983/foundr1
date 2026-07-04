@@ -391,6 +391,8 @@ async function readAdminOptions() {
       select
         id::text,
         name,
+        coalesce(product_family_name, name) as "productFamilyName",
+        coalesce(variant_name, '') as "variantName",
         category,
         coalesce(subcategory, '未分類') as subcategory,
         unit,

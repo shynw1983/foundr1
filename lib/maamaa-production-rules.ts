@@ -2,6 +2,8 @@ export type MaamaaProductionRule = {
   id?: string;
   customerName: string;
   aliases?: string[];
+  menuEntryKey?: string;
+  menuEntryName?: string;
   productId?: string;
   productName?: string;
   section: "noodles" | "base" | "standard" | "premium" | "vip" | "request" | "seasoning" | "set" | "operation";
@@ -20,9 +22,18 @@ export type MaamaaSeasoningRule = {
   lines: string[];
 };
 
+export type MaamaaSetItem = {
+  productId?: string;
+  productName: string;
+  quantity?: string;
+  unit?: string;
+  note?: string;
+};
+
 export type MaamaaSetRule = {
   name: string;
   defaultItems: string[];
+  items?: MaamaaSetItem[];
   notes?: string;
 };
 
@@ -543,7 +554,7 @@ function cloneMaamaaSettings(settings: MaamaaProductionReferenceSettings): Maama
   return {
     productionRules: settings.productionRules.map((rule) => ({ ...rule, aliases: [...(rule.aliases ?? [])] })),
     seasoningRules: settings.seasoningRules.map((rule) => ({ ...rule, lines: [...rule.lines] })),
-    setRules: settings.setRules.map((rule) => ({ ...rule, defaultItems: [...rule.defaultItems] }))
+    setRules: settings.setRules.map((rule) => ({ ...rule, defaultItems: [...rule.defaultItems], items: rule.items?.map((item) => ({ ...item })) }))
   };
 }
 
@@ -583,6 +594,8 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
     id: String(source.id ?? "").trim() || undefined,
     customerName,
     aliases: Array.isArray(source.aliases) ? source.aliases.map((item) => String(item ?? "").trim()).filter(Boolean) : undefined,
+    menuEntryKey: String(source.menuEntryKey ?? "").trim() || undefined,
+    menuEntryName: String(source.menuEntryName ?? "").trim() || undefined,
     productId: String(source.productId ?? "").trim() || undefined,
     productName: String(source.productName ?? "").trim() || undefined,
     section: normalizeProductionSection(source.section),
@@ -605,14 +618,38 @@ function normalizeSeasoningRule(value: unknown): MaamaaSeasoningRule | null {
   return name && lines.length ? { name, lines } : null;
 }
 
+export function formatMaamaaSetItem(item: MaamaaSetItem) {
+  const quantity = [item.quantity, item.unit].filter(Boolean).join("");
+  return [item.productName, quantity].filter(Boolean).join("");
+}
+
+function normalizeSetItem(value: unknown): MaamaaSetItem | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const productName = String(source.productName ?? "").trim();
+  if (!productName) return null;
+  return {
+    productId: String(source.productId ?? "").trim() || undefined,
+    productName,
+    quantity: String(source.quantity ?? "").trim() || undefined,
+    unit: String(source.unit ?? "").trim() || undefined,
+    note: String(source.note ?? "").trim() || undefined
+  };
+}
+
 function normalizeSetRule(value: unknown): MaamaaSetRule | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Record<string, unknown>;
   const name = String(source.name ?? "").trim();
+  const items = Array.isArray(source.items)
+    ? source.items.map(normalizeSetItem).filter((item): item is MaamaaSetItem => Boolean(item))
+    : [];
   const defaultItems = normalizeReferenceLines(source.defaultItems);
-  return name && defaultItems.length ? {
+  const normalizedDefaultItems = defaultItems.length ? defaultItems : items.map(formatMaamaaSetItem).filter(Boolean);
+  return name && normalizedDefaultItems.length ? {
     name,
-    defaultItems,
+    defaultItems: normalizedDefaultItems,
+    items: items.length ? items : undefined,
     notes: String(source.notes ?? "").trim() || undefined
   } : null;
 }
@@ -655,7 +692,7 @@ function mergeMissingSetDefaults(rules: MaamaaSetRule[]) {
   for (const rule of defaultMaamaaProductionReferenceSettings.setRules) {
     const key = normalize(rule.name);
     if (!seen.has(key)) {
-      merged.push({ ...rule, defaultItems: [...rule.defaultItems] });
+      merged.push({ ...rule, defaultItems: [...rule.defaultItems], items: rule.items?.map((item) => ({ ...item })) });
       seen.add(key);
     }
   }

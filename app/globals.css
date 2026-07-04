@@ -20462,6 +20462,33 @@ body :where(
   resize: vertical;
 }
 
+.procedure-reference-set-items {
+  display: grid;
+  gap: 10px;
+}
+
+.procedure-reference-set-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.procedure-reference-set-item-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(90px, 0.24fr) minmax(70px, 0.18fr) auto;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.procedure-reference-set-item-row label {
+  min-width: 0;
+}
+
+.procedure-reference-set-item-row .danger-button {
+  min-height: 42px;
+  padding-inline: 10px;
+}
+
 @media (max-width: 1180px) {
   .procedure-reference-editor {
     grid-template-columns: 160px minmax(280px, 1fr) minmax(360px, 1.25fr);
@@ -20479,6 +20506,15 @@ body :where(
 
   .procedure-reference-items {
     max-height: none;
+  }
+
+  .procedure-reference-set-item-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .procedure-reference-set-item-row label:first-child,
+  .procedure-reference-set-item-row .danger-button {
+    grid-column: 1 / -1;
   }
 }
 
