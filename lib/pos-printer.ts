@@ -314,13 +314,15 @@ export function createTestPrintPayload(printer: PosPrinterConnection, storeName:
       taxRate: 8,
       totalAmount: 0,
       items: [{
-        name: "Foundr1 OS Test Print",
+        name: "Foundr1 OS テスト印刷 / 厨房打印测试",
         quantity: 1,
         amount: 0,
         options: [
           printer.deviceType === "star_printer" ? `Star printer / ${printer.connectionType}` : getEscPosDeviceLabel(printer),
           printer.identifier ? `ID: ${printer.identifier}` : printer.paperWidth,
-          printer.paperWidth
+          printer.paperWidth,
+          "日本語: レシート / 厨房伝票 / 合計",
+          "中文: 厨房打印 / 收据 / 合计"
         ]
       }]
     }

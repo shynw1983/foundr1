@@ -34,7 +34,7 @@ The first supported transport is Wi-Fi ESC/POS over TCP.
 - Paper width: `80mm` or `58mm`
 - Encoding: default `shift_jis`
 
-Android should connect to `host:port`, convert the payload into ESC/POS commands, write bytes, optionally cut paper, and close the socket with a short timeout.
+Android should connect to `host:port`, render the payload as a bitmap, convert the bitmap into ESC/POS raster commands, write bytes, optionally cut paper, and close the socket with a short timeout. Do not print CJK text through printer code pages; Chinese-market ESC/POS devices often produce mojibake unless the whole ticket is rasterized.
 
 Printer settings are stored per store and support multiple destinations:
 
@@ -54,7 +54,7 @@ The web app currently sends:
 - `printedAt`
 - `order`: pickup code, order type, payment, totals, tax, cash tender/change, items, and option labels
 
-The payload version is `1`. Keep Android parsing tolerant of unknown fields so POS templates can evolve.
+The payload version is `1`. Keep Android parsing tolerant of unknown fields so POS templates can evolve. Android should rasterize `test`, `receipt`, and `kitchen` jobs through the same bitmap path so CJK output is consistent across OS test prints, POS receipts, and kitchen tickets.
 
 ## Current Web Entry Points
 

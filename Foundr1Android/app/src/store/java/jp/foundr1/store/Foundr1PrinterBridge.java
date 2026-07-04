@@ -286,25 +286,15 @@ public class Foundr1PrinterBridge {
 
     private byte[] buildEscPos(JSONObject payload) throws Exception {
         JSONObject printer = payload.optJSONObject("printer");
-        String encoding = printer != null ? printer.optString("characterEncoding", "shift_jis") : "shift_jis";
         String paperWidth = printer != null ? printer.optString("paperWidth", "80mm") : "80mm";
         boolean cutPaper = printer == null || printer.optBoolean("cutPaper", true);
         boolean openCashDrawer = printer != null && printer.optBoolean("openCashDrawer", false);
-        Charset charset = "utf8".equals(encoding) ? StandardCharsets.UTF_8 : Charset.forName("MS932");
-        int columns = "58mm".equals(paperWidth) ? LINE_CHARS_58MM : LINE_CHARS_80MM;
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[] { 0x1B, 0x40 });
         out.write(new byte[] { 0x1B, 0x61, 0x00 });
         out.write(new byte[] { 0x1B, 0x21, 0x00 });
-        applyCharacterEncoding(out, encoding);
-
-        String jobType = payload.optString("jobType", "receipt");
-        if ("test".equals(jobType)) {
-            writeRawAsciiTest(out, printer, columns);
-        } else {
-            writeRasterReceipt(out, payload, paperWidth);
-        }
+        writeRasterReceipt(out, payload, paperWidth);
 
         feedLines(out, 6);
         if (openCashDrawer) {
