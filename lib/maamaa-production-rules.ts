@@ -51,6 +51,7 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "harusame", section: "noodles", customerName: "春雨", kitchenName: "春雨", quantity: "40g", action: "煮込まず、容器に入れる", placement: "container" },
   { id: "tteokbokki", section: "noodles", customerName: "トッポッキ", kitchenName: "トッポッキ", quantity: "50g", placement: "pot" },
   { id: "sweet-potato-noodle", section: "noodles", customerName: "さつまいも麺", kitchenName: "さつまいも麺", quantity: "50g", placement: "pot" },
+  { id: "kishimen", section: "noodles", customerName: "きしめん", aliases: ["【もっちりつるん】きしめん"], kitchenName: "きしめん", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "raw-mochi-noodle", section: "noodles", customerName: "生もち玉しめん", kitchenName: "生もち玉しめん", quantity: "50g", action: "完全に1分ほどで火が通るため煮込みすぎ注意", placement: "pot", notes: "写真転記。販売名は要確認。" },
 
   { id: "squid-ball", section: "base", customerName: "特選イカ団子1個", kitchenName: "冷凍イカ団子", quantity: "1個", minimumHeatMinutes: 5, placement: "pot" },
@@ -60,6 +61,7 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "quail-egg", section: "base", customerName: "うずらの卵1個", kitchenName: "うずらの卵", quantity: "1個", placement: "pot" },
   { id: "tofu-skin", section: "base", customerName: "火鍋豆皮", kitchenName: "乾燥火鍋豆皮", quantity: "1枚", prep: "水で洗う", minimumHeatMinutes: 5, placement: "pot" },
   { id: "fresh-yuba", section: "base", customerName: "生腐竹", kitchenName: "生腐竹", quantity: "50g", placement: "pot", notes: "店内表記と実物を要確認" },
+  { id: "old-tofu-skin", section: "base", customerName: "老豆皮1枚", aliases: ["【大サイズ】老豆皮1枚"], kitchenName: "老豆皮", quantity: "1枚", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "knotted-yuba", section: "base", customerName: "結びゆば1個", kitchenName: "冷凍結びゆば", quantity: "1個", minimumHeatMinutes: 2, placement: "pot" },
   { id: "crab-ball", section: "base", customerName: "魚卵入り蟹団子1個", kitchenName: "冷凍蟹団子", quantity: "1個", minimumHeatMinutes: 3, placement: "pot" },
   { id: "hanamidori-tsukune", section: "base", customerName: "華味鳥つくね1個", kitchenName: "華味鳥つくね", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
@@ -73,9 +75,9 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "kanikama", section: "standard", customerName: "カニカマ", kitchenName: "冷凍カニカマ", quantity: "50g", placement: "pot" },
   { id: "dried-tofu", section: "standard", customerName: "干し豆腐", kitchenName: "干し豆腐", quantity: "1個", action: "乾燥したまま鍋に入れる", placement: "pot" },
   { id: "garlic", section: "standard", customerName: "にんにく1粒", kitchenName: "冷凍にんにく", quantity: "1個", placement: "pot" },
-  { id: "tomato", section: "standard", customerName: "プチトマト1個", kitchenName: "プチトマト", quantity: "1個", prep: "ヘタを取る", placement: "pot" },
+  { id: "tomato", section: "standard", customerName: "プチトマト1個", aliases: ["国産プチトマト1個"], kitchenName: "プチトマト", quantity: "1個", prep: "ヘタを取る", placement: "pot" },
   { id: "wakame", section: "standard", customerName: "わかめ", kitchenName: "乾燥わかめ", quantity: "5g", action: "乾燥したまま容器に入れる", placement: "container" },
-  { id: "pork-tongue", section: "standard", customerName: "豚タン", aliases: ["国産 豚タン 約50g"], kitchenName: "冷凍豚タン", quantity: "50g", action: "鍋に入れたあとよくほぐす", placement: "pot" },
+  { id: "pork-tongue", section: "premium", customerName: "豚タン", aliases: ["国産 豚タン 約50g", "【国産】豚タン約50g"], kitchenName: "冷凍豚タン", quantity: "50g", action: "鍋に入れたあとよくほぐす", placement: "pot" },
   { id: "nira", section: "standard", customerName: "ニラ", kitchenName: "ニラ", quantity: "30g", prep: "3-4cmに切る", placement: "pot" },
   { id: "okra", section: "standard", customerName: "オクラ1本", kitchenName: "冷凍オクラ", quantity: "1本", placement: "pot" },
   { id: "asparagus", section: "standard", customerName: "グリーンアスパラガス1本", kitchenName: "冷凍グリーンアスパラガス", quantity: "1本", placement: "pot" },
@@ -98,20 +100,22 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "lotus-root", section: "standard", customerName: "れんこん1個", kitchenName: "れんこん", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "pea-sprout", section: "standard", customerName: "豆苗", kitchenName: "豆苗", placement: "pot", notes: "メニュー掲載。野菜セット写真では20g。単品分量/処理は要確認。" },
   { id: "satoimo", section: "standard", customerName: "里芋1個", kitchenName: "里芋", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "hime-takenoko", section: "standard", customerName: "姫たけのこ1本", kitchenName: "姫たけのこ", quantity: "1本", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "beef-slice-standard", section: "standard", customerName: "牛肉スライス 50g", kitchenName: "牛肉スライス", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "mochi", section: "standard", customerName: "国産もち1個", kitchenName: "国産もち", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "spinach", section: "standard", customerName: "ほうれん草", kitchenName: "ほうれん草", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "eggplant", section: "standard", customerName: "茄子", kitchenName: "茄子", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "celery", section: "standard", customerName: "セロリ", kitchenName: "セロリ", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "mini-hamburg", section: "standard", customerName: "ミニハンバーグ1個", kitchenName: "ミニハンバーグ", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "shishamo", section: "standard", customerName: "子持ちししゃも一匹", aliases: ["【ぷちぷち】子持ちししゃも一匹"], kitchenName: "子持ちししゃも", quantity: "1匹", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "carrot", section: "standard", customerName: "人参", kitchenName: "人参", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "lettuce", section: "standard", customerName: "レタス", kitchenName: "レタス", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "kaiware", section: "standard", customerName: "カイワレ", kitchenName: "カイワレ", placement: "finish", notes: menuListedNeedsConfirmation },
 
   { id: "beef-suji", section: "premium", customerName: "とろとろ牛すじ", aliases: ["国産牛すじ 50g"], kitchenName: "冷凍小分け牛すじ", quantity: "50g 1袋", placement: "pot" },
   { id: "pork-cartilage", section: "premium", customerName: "とろとろ豚軟骨", aliases: ["国産豚軟骨 50g"], kitchenName: "冷凍小分け豚軟骨", quantity: "50g 1袋", placement: "pot" },
-  { id: "pork-head", section: "premium", customerName: "厳選国産豚肉スライス", aliases: ["国産豚肉スライス", "豚肉スライス"], kitchenName: "冷凍豚あたまスライス", quantity: "50g", placement: "pot" },
-  { id: "lamb", section: "premium", customerName: "厳選ラム肉", aliases: ["高級NZ羊ラム 50g"], kitchenName: "冷凍ラム肉", quantity: "50g", action: "鍋に入れたあとこまめにほぐす", placement: "pot" },
+  { id: "pork-head", section: "premium", customerName: "厳選国産豚肉スライス", aliases: ["国産豚肉スライス", "豚肉スライス", "【厳選】豚肉スライス(1人前約50g)"], kitchenName: "冷凍豚あたまスライス", quantity: "50g", placement: "pot" },
+  { id: "lamb", section: "premium", customerName: "厳選ラム肉", aliases: ["高級NZ羊ラム 50g", "【高級NZ羊】厳選ラム肉(1人前約50g)"], kitchenName: "冷凍ラム肉", quantity: "50g", action: "鍋に入れたあとこまめにほぐす", placement: "pot" },
   { id: "pork-offal", section: "premium", customerName: "ぷりぷり国産牛モツ", aliases: ["国産牛モツ 50g"], kitchenName: "冷凍小分け牛モツ", quantity: "50g 1袋", placement: "pot" },
   { id: "large-shrimp", section: "premium", customerName: "大えび一匹", kitchenName: "冷凍ブラックタイガー", quantity: "1匹", minimumHeatMinutes: 4, placement: "pot" },
   { id: "scallop", section: "premium", customerName: "丸ごとホタテ1個", kitchenName: "冷凍ホタテ", quantity: "1個", placement: "pot" },
@@ -120,14 +124,18 @@ export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "clam", section: "premium", customerName: "たっぷりあさり", kitchenName: "冷凍あさり", quantity: "70g", placement: "pot" },
   { id: "white-fish", section: "premium", customerName: "白身魚", kitchenName: "白身魚", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "chicken-breast", section: "premium", customerName: "国産とりむねスライス 50g", kitchenName: "国産とりむねスライス", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
-  { id: "pork-liver", section: "premium", customerName: "国産豚レバー 50g", kitchenName: "国産豚レバー", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "pork-liver", section: "premium", customerName: "国産豚レバー 50g", aliases: ["【スタミナ】国産豚レバー(1人前約50g)"], kitchenName: "国産豚レバー", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "octopus", section: "premium", customerName: "ぶつ切りたこ 50g", kitchenName: "ぶつ切りたこ", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "iidako", section: "premium", customerName: "丸ごとイイダコ1匹", aliases: ["【李司令】丸ごとイイダコ1匹"], kitchenName: "丸ごとイイダコ", quantity: "1匹", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "beef-omasum", section: "premium", customerName: "牛赤センマイ", aliases: ["【数量限定品】牛赤センマイ(約50g)"], kitchenName: "牛赤センマイ", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
+  { id: "beef-mochicho", section: "premium", customerName: "牛もちちょう", aliases: ["【数量限定品】牛もちちょう(約50g)"], kitchenName: "牛もちちょう", quantity: "50g", placement: "pot", notes: menuListedNeedsConfirmation },
 
   { id: "oyster", section: "vip", customerName: "広島県産大粒牡蠣", aliases: ["広島県産牡蠣 3個"], kitchenName: "冷凍牡蠣", quantity: "3個", placement: "pot" },
   { id: "seafood-set", section: "vip", customerName: "特選海鮮3種盛り", kitchenName: "大海老2個、ホタテ1個、ヤリイカ50g", quantity: "1セット", placement: "pot" },
   { id: "frankfurt", section: "vip", customerName: "糸島豚の特大フランクフルト1本", kitchenName: "冷凍特大フランクフルト", quantity: "1本", minimumHeatMinutes: 5, placement: "pot" },
   { id: "mozzarella", section: "vip", customerName: "丸ごとモッツァレラ1個", kitchenName: "丸ごとモッツァレラ", quantity: "1個", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "stem-lettuce", section: "request", customerName: "山クラゲ", kitchenName: "乾燥山クラゲ", quantity: "6.5-8g", prep: "水で洗う", minimumHeatMinutes: 3, placement: "pot", notes: "テキストは6.5-7g、壁写真は8g。要確認。" },
+  { id: "bunmoja", section: "request", customerName: "ブンモジャ1本", kitchenName: "ブンモジャ", quantity: "1本", placement: "pot", notes: menuListedNeedsConfirmation },
   { id: "cola-shot", section: "request", customerName: "コーラ1ショット", kitchenName: "コーラ", quantity: "1ショット", placement: "finish", notes: menuListedDrinkNeedsConfirmation },
 ];
 
@@ -151,6 +159,7 @@ export const maamaaSeasoningRules: MaamaaSeasoningRule[] = [
   { name: "サーチャージャン / 沙茶醤", lines: ["サーチャージャン 7g"] },
   { name: "発酵豆腐タレ", lines: ["発酵豆腐タレ 6g"] },
   { name: "薬膳スパイス追加", lines: ["朝天麻辣鍋底醤 5g", "五香粉 4ふり"] },
+  { name: "にんにくマシマシ", lines: ["にんにく 12g"] },
   { name: "味変", lines: ["発酵豆腐タレ 6g", "サーチャージャン 7g", "薬膳スパイス追加: 朝天麻辣鍋底醤 5g、五香粉 4ふり", "にんにくマシマシ 12g", "香酢: タレビンに香酢25g、じゃがりんたん酢5g"] },
 ];
 
@@ -258,6 +267,7 @@ const maamaaZhExactText: Record<string, string> = {
   "春雨": "粉丝",
   "トッポッキ": "年糕条",
   "さつまいも麺": "红薯粉",
+  "きしめん": "宽扁面",
   "生もち玉しめん": "生年糕玉面",
   "特選イカ団子1個": "特选鱿鱼丸1个",
   "冷凍イカ団子": "冷冻鱿鱼丸",
@@ -272,6 +282,8 @@ const maamaaZhExactText: Record<string, string> = {
   "火鍋豆皮": "火锅豆皮",
   "乾燥火鍋豆皮": "干火锅豆皮",
   "生腐竹": "鲜腐竹",
+  "老豆皮1枚": "老豆皮1张",
+  "老豆皮": "老豆皮",
   "結びゆば1個": "豆皮结1个",
   "冷凍結びゆば": "冷冻豆皮结",
   "魚卵入り蟹団子1個": "鱼籽蟹柳丸1个",
@@ -331,6 +343,8 @@ const maamaaZhExactText: Record<string, string> = {
   "豆苗": "豆苗",
   "里芋1個": "芋头1个",
   "里芋": "芋头",
+  "姫たけのこ1本": "姬竹笋1根",
+  "姫たけのこ": "姬竹笋",
   "牛肉スライス 50g": "牛肉片50g",
   "牛肉スライス": "牛肉片",
   "国産もち1個": "国产年糕1个",
@@ -340,6 +354,8 @@ const maamaaZhExactText: Record<string, string> = {
   "セロリ": "芹菜",
   "ミニハンバーグ1個": "迷你汉堡肉1个",
   "ミニハンバーグ": "迷你汉堡肉",
+  "子持ちししゃも一匹": "带籽柳叶鱼1条",
+  "子持ちししゃも": "带籽柳叶鱼",
   "人参": "胡萝卜",
   "レタス": "生菜",
   "カイワレ": "萝卜苗",
@@ -370,6 +386,10 @@ const maamaaZhExactText: Record<string, string> = {
   "国産豚レバー": "国产猪肝",
   "ぶつ切りたこ 50g": "切块章鱼50g",
   "ぶつ切りたこ": "切块章鱼",
+  "丸ごとイイダコ1匹": "整只饭蛸1只",
+  "丸ごとイイダコ": "整只饭蛸",
+  "牛赤センマイ": "牛红百叶",
+  "牛もちちょう": "牛小肠",
   "広島県産大粒牡蠣": "广岛县产大粒牡蛎",
   "冷凍牡蠣": "冷冻牡蛎",
   "特選海鮮3種盛り": "特选海鲜三拼",
@@ -380,6 +400,8 @@ const maamaaZhExactText: Record<string, string> = {
   "丸ごとモッツァレラ": "整颗马苏里拉",
   "山クラゲ": "山莴笋",
   "乾燥山クラゲ": "干山莴笋",
+  "ブンモジャ1本": "粉耗子1根",
+  "ブンモジャ": "粉耗子",
   "コーラ1ショット": "可乐1 shot",
   "コーラ": "可乐",
   "旨味マーラータンスープ": "鲜味麻辣烫汤底",
@@ -401,6 +423,7 @@ const maamaaZhExactText: Record<string, string> = {
   "サーチャージャン / 沙茶醤": "沙茶酱",
   "発酵豆腐タレ": "腐乳酱",
   "薬膳スパイス追加": "追加药膳香料",
+  "にんにくマシマシ": "加倍蒜",
   "味変": "调味",
   "セットメニュー共通": "套餐通用",
   "野菜マーラータン": "蔬菜麻辣烫",
@@ -586,6 +609,45 @@ export const defaultMaamaaProductionReferenceSettings: MaamaaProductionReference
   setRules: maamaaSetRules
 };
 
+function mergeMissingProductionDefaults(rules: MaamaaProductionRule[]) {
+  const seen = new Set(rules.map((rule) => normalize(rule.id || rule.customerName)));
+  const merged = [...rules];
+  for (const rule of defaultMaamaaProductionReferenceSettings.productionRules) {
+    const key = normalize(rule.id || rule.customerName);
+    if (!seen.has(key)) {
+      merged.push({ ...rule, aliases: [...(rule.aliases ?? [])] });
+      seen.add(key);
+    }
+  }
+  return merged;
+}
+
+function mergeMissingSeasoningDefaults(rules: MaamaaSeasoningRule[]) {
+  const seen = new Set(rules.map((rule) => normalize(rule.name)));
+  const merged = [...rules];
+  for (const rule of defaultMaamaaProductionReferenceSettings.seasoningRules) {
+    const key = normalize(rule.name);
+    if (!seen.has(key)) {
+      merged.push({ ...rule, lines: [...rule.lines] });
+      seen.add(key);
+    }
+  }
+  return merged;
+}
+
+function mergeMissingSetDefaults(rules: MaamaaSetRule[]) {
+  const seen = new Set(rules.map((rule) => normalize(rule.name)));
+  const merged = [...rules];
+  for (const rule of defaultMaamaaProductionReferenceSettings.setRules) {
+    const key = normalize(rule.name);
+    if (!seen.has(key)) {
+      merged.push({ ...rule, defaultItems: [...rule.defaultItems] });
+      seen.add(key);
+    }
+  }
+  return merged;
+}
+
 export function normalizeMaamaaProductionReferenceSettings(value: unknown): MaamaaProductionReferenceSettings {
   if (!value || typeof value !== "object") return cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings);
   const source = value as Partial<MaamaaProductionReferenceSettings>;
@@ -600,9 +662,9 @@ export function normalizeMaamaaProductionReferenceSettings(value: unknown): Maam
     : [];
 
   return {
-    productionRules: productionRules.length ? productionRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).productionRules,
-    seasoningRules: seasoningRules.length ? seasoningRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).seasoningRules,
-    setRules: setRules.length ? setRules : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).setRules
+    productionRules: productionRules.length ? mergeMissingProductionDefaults(productionRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).productionRules,
+    seasoningRules: seasoningRules.length ? mergeMissingSeasoningDefaults(seasoningRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).seasoningRules,
+    setRules: setRules.length ? mergeMissingSetDefaults(setRules) : cloneMaamaaSettings(defaultMaamaaProductionReferenceSettings).setRules
   };
 }
 
