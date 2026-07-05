@@ -1894,6 +1894,24 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
   const purchaseDate = purchaseDateCheck.date;
   const purchaseTime = String(row.purchaseTime ?? "00:00") || "00:00";
   const recordedAt = new Date(`${purchaseDate}T${purchaseTime}:00+09:00`);
+
+  const mergeResult = await mergeReceiptItemIntoExistingSameProductActual({
+    ocrResultId,
+    itemId,
+    productId,
+    quantity,
+    unit,
+    unitPrice,
+    employeeId
+  });
+  if (mergeResult.error) return { error: mergeResult.error };
+  if (mergeResult.purchaseActualId) {
+    if (unitPrice && unitPrice > 0) {
+      await recordReceiptItemPrice(itemId, productId, employeeId, { price: unitPrice, unit });
+    }
+    return { purchaseActualId: mergeResult.purchaseActualId, orderNo: mergeResult.orderNo };
+  }
+
   const compactDate = purchaseDate.replaceAll("-", "");
   const shortItemId = itemId.replaceAll("-", "").slice(0, 8).toUpperCase();
   const orderNo = `RCPT-${compactDate}-${shortItemId}`;
@@ -2008,6 +2026,116 @@ async function createPurchaseActualFromReceiptItem(ocrResultId: string, itemId: 
   }
 
   return { purchaseActualId, orderNo };
+}
+
+async function mergeReceiptItemIntoExistingSameProductActual({
+  ocrResultId,
+  itemId,
+  productId,
+  quantity,
+  unit,
+  unitPrice,
+  employeeId
+}: {
+  ocrResultId: string;
+  itemId: string;
+  productId: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number | null;
+  employeeId: string;
+}) {
+  const candidateRows = await sql`
+    select
+      receipt_ocr_items.id::text as "itemId",
+      receipt_ocr_items.purchase_actual_id::text as "purchaseActualId",
+      receipt_ocr_items.unit_price::float as "receiptUnitPrice",
+      coalesce(receipt_ocr_items.unit, '') as "receiptUnit",
+      purchase_actuals.actual_quantity::float as "actualQuantity",
+      coalesce(purchase_actuals.actual_unit, '') as "actualUnit",
+      purchase_actuals.actual_price::float as "actualPrice",
+      purchase_orders.order_no as "orderNo"
+    from receipt_ocr_items
+    join purchase_actuals on purchase_actuals.id = receipt_ocr_items.purchase_actual_id
+    join purchase_order_items on purchase_order_items.id = purchase_actuals.purchase_order_item_id
+    join purchase_orders on purchase_orders.id = purchase_order_items.purchase_order_id
+    where receipt_ocr_items.receipt_ocr_result_id::text = ${ocrResultId}
+      and receipt_ocr_items.id::text <> ${itemId}
+      and receipt_ocr_items.matched_product_id::text = ${productId}
+      and receipt_ocr_items.reconciliation_status in ('auto_matched', 'manual_matched')
+    order by receipt_ocr_items.line_index asc
+    limit 1
+  `;
+  const candidate = candidateRows[0];
+  if (!candidate?.purchaseActualId) return { purchaseActualId: "", orderNo: "" };
+
+  const candidateUnit = String(candidate.actualUnit || candidate.receiptUnit || "").trim();
+  if (candidateUnit && unit && candidateUnit !== unit) {
+    return {
+      error: Response.json({
+        error: `同じ商品に既存の購入実績がありますが、単位が異なります（${candidateUnit} / ${unit}）。内容を確認してください。`
+      }, { status: 400 })
+    };
+  }
+
+  const candidatePrice = normalizeNullableUnitPrice(candidate.actualPrice) ?? normalizeNullableUnitPrice(candidate.receiptUnitPrice);
+  if (!areReceiptUnitPricesMergeable(candidatePrice, unitPrice)) {
+    return {
+      error: Response.json({
+        error: `同じ商品に既存の購入実績がありますが、単価が異なります（${formatPlainMoney(candidatePrice)} / ${formatPlainMoney(unitPrice)}）。別SKUの可能性があるため自動合算しません。`
+      }, { status: 400 })
+    };
+  }
+
+  const nextQuantity = Math.round(((Number(candidate.actualQuantity ?? 0) || 0) + quantity) * 1000) / 1000;
+  await sql`
+    update purchase_actuals
+    set
+      actual_quantity = ${nextQuantity},
+      actual_unit = ${unit || candidateUnit || null},
+      actual_price = coalesce(actual_price, ${unitPrice}),
+      note = concat(coalesce(note, ''), case when coalesce(note, '') = '' then '' else ' / ' end, '同一レシート同SKUを合算'),
+      recorded_by = ${employeeId}
+    where id::text = ${String(candidate.purchaseActualId)}
+  `;
+
+  await sql`
+    update purchase_order_items
+    set
+      actual_quantity = ${nextQuantity},
+      actual_price = coalesce(actual_price, ${unitPrice})
+    where id = (
+      select purchase_order_item_id
+      from purchase_actuals
+      where id::text = ${String(candidate.purchaseActualId)}
+      limit 1
+    )
+  `;
+
+  await sql`
+    update receipt_ocr_items
+    set
+      purchase_actual_id = ${String(candidate.purchaseActualId)},
+      reconciliation_status = 'manual_matched',
+      reconciliation_note = '同一レシート内の同じ商品として購入実績に合算しました。',
+      updated_at = now()
+    where id::text = ${itemId}
+  `;
+
+  return {
+    purchaseActualId: String(candidate.purchaseActualId),
+    orderNo: String(candidate.orderNo ?? "")
+  };
+}
+
+function areReceiptUnitPricesMergeable(first: number | null, second: number | null) {
+  if (first === null || second === null) return false;
+  if (first <= 0 || second <= 0) return false;
+  return Math.abs(first - second) <= 1;
+}
+
+function formatPlainMoney(value: number | null) {
+  return value === null ? "未設定" : `¥${Math.round(value).toLocaleString("ja-JP")}`;
 }
 
 function normalizeStoredAccountingLines(value: unknown) {

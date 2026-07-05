@@ -359,6 +359,7 @@ export default function VouchersPage() {
   const [voucherDateSort, setVoucherDateSort] = useState<VoucherDateSort>("desc");
   const [savingConfirmedLineKeys, setSavingConfirmedLineKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedSummaryKeys, setSavingConfirmedSummaryKeys] = useState<Record<string, boolean>>({});
+  const [creatingConfirmedPurchaseActualKeys, setCreatingConfirmedPurchaseActualKeys] = useState<Record<string, boolean>>({});
   const [savingConfirmedBasicIds, setSavingConfirmedBasicIds] = useState<Record<string, boolean>>({});
   const [lineProductSelections, setLineProductSelections] = useState<Record<string, string>>({});
   const [lineProductCategorySelections, setLineProductCategorySelections] = useState<Record<string, string>>({});
@@ -658,6 +659,44 @@ export default function VouchersPage() {
       setMessage("摘要を保存できませんでした。通信状態を確認してください。");
     } finally {
       setSavingConfirmedSummaryKeys((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  async function createPurchaseActualFromConfirmedLine(line: ConfirmedAccountingLine) {
+    const key = getConfirmedLineKey(line);
+    const detail = getConfirmedLinePurchaseActualCandidate(line);
+    if (!detail || creatingConfirmedPurchaseActualKeys[key]) return;
+
+    setCreatingConfirmedPurchaseActualKeys((current) => ({ ...current, [key]: true }));
+    try {
+      const response = await fetch("/api/vouchers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: line.voucherId,
+          usageType: line.usageType,
+          action: "create_purchase_actual_from_receipt_item",
+          ocrItemId: detail.ocrItemId
+        })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error ?? "購入実績を作成できませんでした。");
+        return;
+      }
+      setMessage("購入実績を作成しました。");
+      await Promise.all([
+        loadVouchers(),
+        loadConfirmedAccountingLines(exportStartDate, exportEndDate)
+      ]);
+    } catch {
+      setMessage("購入実績を作成できませんでした。通信状態を確認してください。");
+    } finally {
+      setCreatingConfirmedPurchaseActualKeys((current) => {
         const next = { ...current };
         delete next[key];
         return next;
@@ -1414,6 +1453,9 @@ export default function VouchersPage() {
                   const isSavingSummary = Boolean(savingConfirmedSummaryKeys[key]);
                   const isEditingSummary = Boolean(editingConfirmedSummaryKeys[key]);
                   const reconciliationStatus = getConfirmedLineReconciliationStatus(line);
+                  const purchaseActualCandidate = getConfirmedLinePurchaseActualCandidate(line);
+                  const canCreatePurchaseActual = line.usageType === "shiire" && Boolean(purchaseActualCandidate);
+                  const isCreatingPurchaseActual = Boolean(creatingConfirmedPurchaseActualKeys[key]);
                   return (
                   <div className="voucher-confirmed-line-row" key={key}>
                     <div className="voucher-confirmed-line-meta">
@@ -1485,6 +1527,16 @@ export default function VouchersPage() {
                     >
                       証憑
                     </button>
+                    {canCreatePurchaseActual ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => createPurchaseActualFromConfirmedLine(line)}
+                        disabled={isCreatingPurchaseActual}
+                      >
+                        {isCreatingPurchaseActual ? "作成中" : "購入実績を作成"}
+                      </button>
+                    ) : null}
                   </div>
                   );
                 })}
@@ -3269,6 +3321,17 @@ function getConfirmedLineReconciliationStatus(line: ConfirmedAccountingLine) {
   if (details.every(isMatched)) return "auto_matched";
   if (details.every((detail) => detail.reconciliationStatus === "ignored")) return "ignored";
   return "unmatched";
+}
+
+function getConfirmedLinePurchaseActualCandidate(line: ConfirmedAccountingLine) {
+  return (line.details ?? []).find((detail) =>
+    detail.ocrItemId &&
+    detail.matchedProductId &&
+    !detail.purchaseActualId &&
+    detail.reconciliationStatus !== "auto_matched" &&
+    detail.reconciliationStatus !== "manual_matched" &&
+    detail.reconciliationStatus !== "ignored"
+  );
 }
 
 function getProductCategoryOptions(productOptions: ProductOption[]) {
