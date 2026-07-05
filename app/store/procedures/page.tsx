@@ -16,12 +16,10 @@ import {
   defaultMaamaaProductionReferenceSettings,
   findMaamaaProductionRule,
   formatMaamaaSetItem,
-  getMaamaaKitchenCategory,
-  maamaaKitchenCategories,
-  type MaamaaKitchenCategoryKey,
   type MaamaaProductionRule,
   type MaamaaProductionReferenceSettings,
   type MaamaaReferenceLanguage,
+  type MaamaaSetItem,
   type MaamaaSetRule,
   translateMaamaaReferenceText
 } from "../../../lib/maamaa-production-rules";
@@ -306,7 +304,8 @@ type MaamaaPlanLine = {
   title: string;
   detail: string;
   source: "base" | "set" | "add";
-  category: MaamaaKitchenCategoryKey;
+  categoryKey: string;
+  categoryLabel: string;
   notes?: string;
 };
 
@@ -322,20 +321,47 @@ function sourceLabel(source: MaamaaPlanLine["source"], isChinese: boolean) {
   return isChinese ? "追加" : "追加";
 }
 
+function skuCategoryLabel(category: string | undefined, subcategory: string | undefined, isChinese: boolean) {
+  const main = category?.trim();
+  const sub = subcategory?.trim();
+  if (!main && !sub) return isChinese ? "未关联SKU" : "SKU未連携";
+  if (main && sub && sub !== "未分類") return `${main} / ${sub}`;
+  return main || sub || (isChinese ? "未关联SKU" : "SKU未連携");
+}
+
+function skuCategoryKey(category: string | undefined, subcategory: string | undefined) {
+  return `${category?.trim() || "__unlinked__"}::${subcategory?.trim() || ""}`;
+}
+
 function buildSetPlanLine(item: string, index: number, rules: MaamaaProductionRule[]): MaamaaPlanLine {
   const rule = findMaamaaProductionRule(item, rules);
+  const category = rule ? skuCategoryLabel(rule.productCategory, rule.productSubcategory, false) : skuCategoryLabel(undefined, undefined, false);
   return {
     id: `set-${index}-${item}`,
     title: rule?.kitchenName || item,
     detail: item,
     source: "set",
-    category: rule ? getMaamaaKitchenCategory(rule) : getMaamaaKitchenCategory(item),
+    categoryKey: rule ? skuCategoryKey(rule.productCategory, rule.productSubcategory) : skuCategoryKey(undefined, undefined),
+    categoryLabel: category,
     notes: rule?.notes
+  };
+}
+
+function buildStructuredSetPlanLine(item: MaamaaSetItem, index: number): MaamaaPlanLine {
+  return {
+    id: `set-${index}-${item.productId ?? item.productName}`,
+    title: item.productName,
+    detail: formatMaamaaSetItem(item),
+    source: "set",
+    categoryKey: skuCategoryKey(item.productCategory, item.productSubcategory),
+    categoryLabel: skuCategoryLabel(item.productCategory, item.productSubcategory, false),
+    notes: item.note
   };
 }
 
 function buildAddPlanLine(rule: MaamaaProductionRule, key: string): MaamaaPlanLine {
   const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
+  const category = skuCategoryLabel(rule.productCategory, rule.productSubcategory, false);
   return {
     id: `add-${key}`,
     title: rule.kitchenName,
@@ -349,18 +375,20 @@ function buildAddPlanLine(rule: MaamaaProductionRule, key: string): MaamaaPlanLi
       rule.placement === "finish" ? "仕上げ" : ""
     ].filter(Boolean).join(" / ") || "分量要確認",
     source: "add",
-    category: getMaamaaKitchenCategory(rule),
+    categoryKey: skuCategoryKey(rule.productCategory, rule.productSubcategory),
+    categoryLabel: category,
     notes: rule.notes
   };
 }
 
 function groupPlanLines(lines: MaamaaPlanLine[]) {
-  return maamaaKitchenCategories
-    .map((category) => ({
-      ...category,
-      lines: lines.filter((line) => line.category === category.key)
-    }))
-    .filter((category) => category.lines.length);
+  const groups = new Map<string, { key: string; label: string; lines: MaamaaPlanLine[] }>();
+  for (const line of lines) {
+    const current = groups.get(line.categoryKey) ?? { key: line.categoryKey, label: line.categoryLabel, lines: [] };
+    current.lines.push(line);
+    groups.set(line.categoryKey, current);
+  }
+  return Array.from(groups.values());
 }
 
 function MaamaaProductionReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
@@ -382,17 +410,23 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
   const selectedAddOnRules = selectableRules
     .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
     .filter((entry) => selectedAddOns.includes(entry.key));
-  const setLines = mode === "set" && selectedSet ? getSetItems(selectedSet).map((item, index) => buildSetPlanLine(item, index, settings.productionRules)) : [];
+  const setLines = mode === "set" && selectedSet
+    ? selectedSet.items?.length
+      ? selectedSet.items.map((item, index) => buildStructuredSetPlanLine(item, index))
+      : getSetItems(selectedSet).map((item, index) => buildSetPlanLine(item, index, settings.productionRules))
+    : [];
   const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key));
   const planLines = groupPlanLines([...setLines, ...addLines]);
-  const groupedSelectableRules = maamaaKitchenCategories
-    .map((category) => ({
-      ...category,
-      rules: selectableRules
-        .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
-        .filter(({ rule }) => getMaamaaKitchenCategory(rule) === category.key)
-    }))
-    .filter((category) => category.rules.length);
+  const groupedSelectableRules = Array.from(selectableRules
+    .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
+    .reduce((groups, entry) => {
+      const key = skuCategoryKey(entry.rule.productCategory, entry.rule.productSubcategory);
+      const label = skuCategoryLabel(entry.rule.productCategory, entry.rule.productSubcategory, isChinese);
+      const current = groups.get(key) ?? { key, label, rules: [] as Array<{ rule: MaamaaProductionRule; key: string }> };
+      current.rules.push(entry);
+      groups.set(key, current);
+      return groups;
+    }, new Map<string, { key: string; label: string; rules: Array<{ rule: MaamaaProductionRule; key: string }> }>()).values());
 
   function toggleAddOn(key: string) {
     setSelectedAddOns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
@@ -456,7 +490,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
             </div>
             {groupedSelectableRules.map((category) => (
               <section className="maamaa-reference-picker-group" key={category.key}>
-                <h5>{isChinese ? category.zhLabel : category.label}</h5>
+                <h5>{category.label}</h5>
                 <div>
                   {category.rules.map(({ rule, key }) => (
                     <button className={selectedAddOns.includes(key) ? "is-selected" : ""} type="button" key={key} onClick={() => toggleAddOn(key)}>
@@ -494,7 +528,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
 
           {planLines.length ? planLines.map((category) => (
             <section className="maamaa-reference-section" key={category.key}>
-              <h3>{isChinese ? category.zhLabel : category.label}</h3>
+              <h3>{category.key.startsWith("__unlinked__") ? (isChinese ? "未关联SKU" : "SKU未連携") : category.label}</h3>
               <div className="maamaa-reference-plan-list">
                 {category.lines.map((line) => (
                   <article className="maamaa-reference-plan-row" key={line.id}>

@@ -6,6 +6,8 @@ export type MaamaaProductionRule = {
   menuEntryName?: string;
   productId?: string;
   productName?: string;
+  productCategory?: string;
+  productSubcategory?: string;
   section: "noodles" | "base" | "standard" | "premium" | "vip" | "request" | "seasoning" | "set" | "operation";
   kitchenName: string;
   cookType?: "boil" | "no_boil";
@@ -17,20 +19,6 @@ export type MaamaaProductionRule = {
   notes?: string;
 };
 
-export type MaamaaKitchenCategoryKey =
-  | "soup"
-  | "noodles"
-  | "frozen_meat"
-  | "meatballs"
-  | "seafood"
-  | "vegetables"
-  | "mushrooms"
-  | "tofu"
-  | "dry_goods"
-  | "container"
-  | "finish"
-  | "other";
-
 export type MaamaaSeasoningRule = {
   name: string;
   lines: string[];
@@ -39,6 +27,8 @@ export type MaamaaSeasoningRule = {
 export type MaamaaSetItem = {
   productId?: string;
   productName: string;
+  productCategory?: string;
+  productSubcategory?: string;
   quantity?: string;
   unit?: string;
   note?: string;
@@ -71,21 +61,6 @@ const normalize = (value: string) =>
 
 const menuListedNeedsConfirmation = "メニュー掲載。厨房分量/処理は要確認。";
 const menuListedDrinkNeedsConfirmation = "メニュー掲載。厨房提供ルールは要確認。";
-
-export const maamaaKitchenCategories: Array<{ key: MaamaaKitchenCategoryKey; label: string; zhLabel: string }> = [
-  { key: "soup", label: "スープ / 味付け", zhLabel: "汤底 / 调味" },
-  { key: "noodles", label: "麺類", zhLabel: "面类" },
-  { key: "frozen_meat", label: "冷凍肉類", zhLabel: "冷冻肉类" },
-  { key: "meatballs", label: "冷凍団子類", zhLabel: "冷冻丸子类" },
-  { key: "seafood", label: "海鮮類", zhLabel: "海鲜类" },
-  { key: "vegetables", label: "野菜類", zhLabel: "蔬菜类" },
-  { key: "mushrooms", label: "キノコ類", zhLabel: "菌菇类" },
-  { key: "tofu", label: "豆腐 / 豆皮類", zhLabel: "豆腐 / 豆皮类" },
-  { key: "dry_goods", label: "乾物 / 常温", zhLabel: "干货 / 常温" },
-  { key: "container", label: "容器に入れる", zhLabel: "放入容器" },
-  { key: "finish", label: "仕上げ", zhLabel: "出餐前放" },
-  { key: "other", label: "その他", zhLabel: "其他" }
-];
 
 export const maamaaProductionRules: MaamaaProductionRule[] = [
   { id: "wide-harusame", section: "noodles", customerName: "もちもち板春雨", kitchenName: "板春雨", quantity: "50g", prep: "2時間水につける", action: "麺変更時はデフォルト板春雨の置き換え。板春雨追加は別途50g追加。", placement: "pot" },
@@ -627,6 +602,8 @@ function normalizeProductionRule(value: unknown): MaamaaProductionRule | null {
     menuEntryName: String(source.menuEntryName ?? "").trim() || undefined,
     productId: String(source.productId ?? "").trim() || undefined,
     productName: String(source.productName ?? "").trim() || undefined,
+    productCategory: String(source.productCategory ?? "").trim() || undefined,
+    productSubcategory: String(source.productSubcategory ?? "").trim() || undefined,
     section: normalizeProductionSection(source.section),
     kitchenName,
     cookType: normalizeCookType(source.cookType, placement),
@@ -660,6 +637,8 @@ function normalizeSetItem(value: unknown): MaamaaSetItem | null {
   return {
     productId: String(source.productId ?? "").trim() || undefined,
     productName,
+    productCategory: String(source.productCategory ?? "").trim() || undefined,
+    productSubcategory: String(source.productSubcategory ?? "").trim() || undefined,
     quantity: String(source.quantity ?? "").trim() || undefined,
     unit: String(source.unit ?? "").trim() || undefined,
     note: String(source.note ?? "").trim() || undefined
@@ -734,28 +713,6 @@ export function formatMaamaaProductionRule(rule: MaamaaProductionRule, count = 1
     rule.notes
   ].filter(Boolean);
   return details.length ? `${parts.join(" ")}（${details.join(" / ")}）` : parts.join(" ");
-}
-
-export function getMaamaaKitchenCategory(value: string | MaamaaProductionRule | undefined): MaamaaKitchenCategoryKey {
-  if (!value) return "other";
-  const rule = typeof value === "string" ? undefined : value;
-  const label = typeof value === "string"
-    ? value
-    : [value.customerName, value.kitchenName, value.productName, value.notes].filter(Boolean).join(" ");
-  const normalized = normalize(label);
-  if (rule?.placement === "container") return "container";
-  if (rule?.placement === "finish") return "finish";
-  if (rule?.section === "noodles") return "noodles";
-  if (/スープ|辛さ|痺れ|味変|薬膳|香酢|沙茶|サーチャー|発酵豆腐|にんにく/.test(normalized)) return "soup";
-  if (/板春雨|牛筋麺|春雨|トッポッキ|さつまいも麺|きしめん|玉しめん|ブンモジャ/.test(normalized)) return "noodles";
-  if (/団子|つくね|ワンタン|餃子|ミニハンバーグ/.test(normalized)) return "meatballs";
-  if (/牛すじ|豚軟骨|豚肉|牛肉|ラム|モツ|レバー|豚タン|黒毛和牛|フランクフルト|ウインナー|スパム|ししゃも/.test(normalized)) return "frozen_meat";
-  if (/えび|海老|エビ|ホタテ|ヤリイカ|イカ|あさり|牡蠣|白身魚|たこ|イイダコ|海鮮|蟹|カニ/.test(normalized)) return "seafood";
-  if (/えのき|しめじ|エリンギ|しいたけ|キクラゲ|きくらげ|キノコ|きのこ/.test(normalized)) return "mushrooms";
-  if (/豆腐|豆皮|腐竹|ゆば|湯葉/.test(normalized)) return "tofu";
-  if (/わかめ|山クラゲ|乾燥|干し豆腐/.test(normalized)) return "dry_goods";
-  if (/チンゲン菜|ブロッコリー|トマト|ニラ|オクラ|アスパラ|キャベツ|じゃがいも|さつまいも|白ネギ|白菜|かぼちゃ|パクチー|ベビーコーン|れんこん|豆苗|里芋|たけのこ|もち|ほうれん草|茄子|セロリ|人参|レタス|カイワレ/.test(normalized)) return "vegetables";
-  return "other";
 }
 
 export function maamaaProductionReferenceSections(rules = maamaaProductionRules) {

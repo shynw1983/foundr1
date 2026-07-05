@@ -1313,6 +1313,8 @@ export default function ProcedureAdminPage() {
                               updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
                                 productId: product?.id,
                                 productName: product ? getProductFamilyLabel(product) : undefined,
+                                productCategory: product?.category,
+                                productSubcategory: product?.subcategory,
                                 kitchenName: product ? getProductFamilyLabel(product) : rule.kitchenName
                               });
                             }}
@@ -1333,7 +1335,9 @@ export default function ProcedureAdminPage() {
                             onChange={(event) => updateMaamaaProductionRule(selectedMaamaaReferenceItem.index, {
                               kitchenName: event.target.value,
                               productId: undefined,
-                              productName: undefined
+                              productName: undefined,
+                              productCategory: undefined,
+                              productSubcategory: undefined
                             })}
                             disabled={!canEdit}
                           />
@@ -1429,7 +1433,9 @@ export default function ProcedureAdminPage() {
                                       const product = maamaaReferenceProductsById.get(event.target.value);
                                       updateMaamaaSetItem(selectedMaamaaReferenceItem.index, itemIndex, {
                                         productId: product?.id,
-                                        productName: product ? getProductFamilyLabel(product) : item.productName
+                                        productName: product ? getProductFamilyLabel(product) : item.productName,
+                                        productCategory: product?.category,
+                                        productSubcategory: product?.subcategory
                                       });
                                     }}
                                     disabled={!canEdit}

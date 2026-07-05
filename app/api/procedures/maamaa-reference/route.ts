@@ -1,6 +1,6 @@
 import { requireOsSession } from "../../../../lib/api-auth";
 import { sql } from "../../../../lib/db";
-import { normalizeMaamaaProductionReferenceSettings } from "../../../../lib/maamaa-production-rules";
+import { normalizeMaamaaProductionReferenceSettings, type MaamaaProductionReferenceSettings } from "../../../../lib/maamaa-production-rules";
 import { roleHasPermission } from "../../../../lib/role-permissions";
 
 const moduleKey = "maamaa_production_reference";
@@ -26,11 +26,44 @@ async function readSettings() {
   return normalizeMaamaaProductionReferenceSettings(rows[0]?.settings);
 }
 
+async function enrichSettingsWithSkuCategories(settings: MaamaaProductionReferenceSettings) {
+  const productIds = Array.from(new Set([
+    ...settings.productionRules.map((rule) => rule.productId).filter(Boolean),
+    ...settings.setRules.flatMap((rule) => (rule.items ?? []).map((item) => item.productId).filter(Boolean))
+  ] as string[]));
+  if (!productIds.length) return settings;
+
+  const products = await sql`
+    select id::text, category, coalesce(subcategory, '未分類') as subcategory
+    from products
+    where id::text = any(${productIds})
+  `;
+  const productsById = new Map(products.map((product) => [String(product.id), {
+    category: String(product.category ?? ""),
+    subcategory: String(product.subcategory ?? "")
+  }]));
+
+  return {
+    ...settings,
+    productionRules: settings.productionRules.map((rule) => {
+      const product = rule.productId ? productsById.get(rule.productId) : null;
+      return product ? { ...rule, productCategory: product.category, productSubcategory: product.subcategory } : rule;
+    }),
+    setRules: settings.setRules.map((rule) => ({
+      ...rule,
+      items: rule.items?.map((item) => {
+        const product = item.productId ? productsById.get(item.productId) : null;
+        return product ? { ...item, productCategory: product.category, productSubcategory: product.subcategory } : item;
+      })
+    }))
+  };
+}
+
 export async function GET() {
   const session = await requireProcedureReader();
   if (!session) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const settings = await readSettings();
+  const settings = await enrichSettingsWithSkuCategories(await readSettings());
   const canEdit = await roleHasPermission(session.role, "procedures.edit");
   return Response.json({ settings, canEdit });
 }
@@ -51,5 +84,5 @@ export async function PUT(request: Request) {
       updated_at = now()
   `;
 
-  return Response.json({ ok: true, settings });
+  return Response.json({ ok: true, settings: await enrichSettingsWithSkuCategories(settings) });
 }
