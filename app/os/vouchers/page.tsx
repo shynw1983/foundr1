@@ -419,7 +419,7 @@ export default function VouchersPage() {
         if (voucherReviewStatusFilter === "unconfirmed" && voucher.status === "confirmed") return false;
         return !term || voucherMatchesProductSearch(voucher, term);
       })
-      .sort((left, right) => compareVoucherPurchaseDate(left, right, voucherDateSort));
+      .sort((left, right) => compareVoucherReviewPriority(left, right, voucherDateSort));
   }, [sortedVouchers, voucherSearchTerm, voucherFilterStartDate, voucherFilterEndDate, voucherReviewStatusFilter, voucherDateSort]);
 
   useEffect(() => {
@@ -3608,6 +3608,17 @@ function compareVoucherPurchaseDate(left: VoucherRecord, right: VoucherRecord, s
   const rightKey = `${right.purchaseDate || "0000-00-00"} ${right.purchaseTime || "00:00"}`;
   const result = leftKey.localeCompare(rightKey);
   return sort === "asc" ? result : -result;
+}
+
+function compareVoucherReviewPriority(left: VoucherRecord, right: VoucherRecord, sort: VoucherDateSort) {
+  const leftNeedsReview = isVoucherPendingReview(left);
+  const rightNeedsReview = isVoucherPendingReview(right);
+  if (leftNeedsReview !== rightNeedsReview) return leftNeedsReview ? -1 : 1;
+  return compareVoucherPurchaseDate(left, right, sort);
+}
+
+function isVoucherPendingReview(voucher: VoucherRecord) {
+  return voucher.status !== "confirmed" && voucher.status !== "failed";
 }
 
 function voucherMatchesProductSearch(voucher: VoucherRecord, term: string) {
