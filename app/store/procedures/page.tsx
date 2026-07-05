@@ -297,7 +297,7 @@ export default function ProcedureReaderPage() {
   );
 }
 
-type MaamaaReferenceMode = "basic" | "set";
+type MaamaaReferenceMode = "soup" | "set";
 
 type MaamaaPlanLine = {
   id: string;
@@ -316,7 +316,7 @@ function maamaaReferenceItemKey(rule: MaamaaProductionRule, index: number) {
 }
 
 function sourceLabel(source: MaamaaPlanLine["source"], isChinese: boolean) {
-  if (source === "base") return isChinese ? "基础款" : "基本";
+  if (source === "base") return isChinese ? "汤底" : "スープ";
   if (source === "set") return isChinese ? "套餐内" : "セット内";
   return isChinese ? "追加" : "追加";
 }
@@ -391,22 +391,59 @@ function groupPlanLines(lines: MaamaaPlanLine[]) {
   return Array.from(groups.values());
 }
 
+function seasoningDetail(rule: { lines: string[] } | undefined, translate: (value: string | undefined) => string) {
+  if (!rule) return "";
+  return rule.lines.map((line) => translate(line)).join(" / ");
+}
+
+function isFlavorRuleName(name: string) {
+  return ["香酢", "サーチャージャン / 沙茶醤", "発酵豆腐タレ", "薬膳スパイス追加", "にんにくマシマシ"].includes(name);
+}
+
 function MaamaaProductionReference({ language, settings }: { language: MaamaaReferenceLanguage; settings: MaamaaProductionReferenceSettings }) {
   const isChinese = language === "zh";
-  const [mode, setMode] = useState<MaamaaReferenceMode>("basic");
-  const setMenuRules = settings.setRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文");
+  const [mode, setMode] = useState<MaamaaReferenceMode>("soup");
+  const setMenuRules = useMemo(() => settings.setRules.filter((rule) => rule.name !== "セットメニュー共通" && rule.name !== "複数杯注文"), [settings.setRules]);
   const [selectedSetName, setSelectedSetName] = useState(setMenuRules[0]?.name ?? "");
+  const soupRules = useMemo(() => settings.seasoningRules.filter((rule) => rule.name.includes("スープ")), [settings.seasoningRules]);
+  const [selectedSoupName, setSelectedSoupName] = useState(soupRules[0]?.name ?? "旨味マーラータンスープ");
+  const medicinalRules = useMemo(() => settings.seasoningRules.filter((rule) => rule.name.includes("薬膳スパイス") && !rule.name.includes("追加")), [settings.seasoningRules]);
+  const heatRules = useMemo(() => settings.seasoningRules.filter((rule) => ["普通辛", "中辛", "大辛", "激辛", "鬼の一歩手前", "修羅の道", "地獄の業火"].includes(rule.name)), [settings.seasoningRules]);
+  const numbRules = useMemo(() => settings.seasoningRules.filter((rule) => ["微シビ", "ちょいシビ", "シビレ", "ビリリ", "ビリビリ"].includes(rule.name)), [settings.seasoningRules]);
+  const flavorRules = useMemo(() => settings.seasoningRules.filter((rule) => isFlavorRuleName(rule.name)), [settings.seasoningRules]);
+  const [selectedMedicinalName, setSelectedMedicinalName] = useState(medicinalRules.find((rule) => rule.name.includes("なし"))?.name ?? medicinalRules[0]?.name ?? "");
+  const [selectedHeatName, setSelectedHeatName] = useState("普通辛");
+  const [selectedNumbName, setSelectedNumbName] = useState("");
+  const [selectedFlavorNames, setSelectedFlavorNames] = useState<string[]>([]);
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
   const getSetItems = (rule: MaamaaSetRule) => rule.items?.length ? rule.items.map(formatMaamaaSetItem) : rule.defaultItems;
-  const operationRules = settings.setRules.filter((rule) => rule.name === "複数杯注文");
-  const selectableRules = settings.productionRules.filter((rule) => maamaaSelectableSections.includes(rule.section));
+  const operationRules = useMemo(() => settings.setRules.filter((rule) => rule.name === "複数杯注文"), [settings.setRules]);
+  const selectableRules = useMemo(() => settings.productionRules.filter((rule) => maamaaSelectableSections.includes(rule.section)), [settings.productionRules]);
   const selectedSet = setMenuRules.find((rule) => rule.name === selectedSetName) ?? setMenuRules[0];
   useEffect(() => {
     if (setMenuRules.length && !setMenuRules.some((rule) => rule.name === selectedSetName)) {
       setSelectedSetName(setMenuRules[0].name);
     }
   }, [selectedSetName, setMenuRules]);
+  useEffect(() => {
+    if (soupRules.length && !soupRules.some((rule) => rule.name === selectedSoupName)) {
+      setSelectedSoupName(soupRules[0].name);
+    }
+    if (medicinalRules.length && selectedMedicinalName && !medicinalRules.some((rule) => rule.name === selectedMedicinalName)) {
+      setSelectedMedicinalName(medicinalRules.find((rule) => rule.name.includes("なし"))?.name ?? medicinalRules[0].name);
+    }
+    if (heatRules.length && selectedHeatName && !heatRules.some((rule) => rule.name === selectedHeatName)) {
+      setSelectedHeatName(heatRules[0].name);
+    }
+    if (numbRules.length && selectedNumbName && !numbRules.some((rule) => rule.name === selectedNumbName)) {
+      setSelectedNumbName("");
+    }
+    setSelectedFlavorNames((current) => {
+      const next = current.filter((name) => flavorRules.some((rule) => rule.name === name));
+      return next.length === current.length ? current : next;
+    });
+  }, [flavorRules, heatRules, medicinalRules, numbRules, selectedHeatName, selectedMedicinalName, selectedNumbName, selectedSoupName, soupRules]);
   const selectedAddOnRules = selectableRules
     .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
     .filter((entry) => selectedAddOns.includes(entry.key));
@@ -417,6 +454,19 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
     : [];
   const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key));
   const planLines = groupPlanLines([...setLines, ...addLines]);
+  const selectedSoupRule = settings.seasoningRules.find((rule) => rule.name === selectedSoupName) ?? soupRules[0];
+  const selectedMedicinalRule = settings.seasoningRules.find((rule) => rule.name === selectedMedicinalName);
+  const selectedHeatRule = settings.seasoningRules.find((rule) => rule.name === selectedHeatName);
+  const selectedNumbRule = settings.seasoningRules.find((rule) => rule.name === selectedNumbName);
+  const selectedFlavorRules = selectedFlavorNames
+    .map((name) => settings.seasoningRules.find((rule) => rule.name === name))
+    .filter((rule): rule is typeof settings.seasoningRules[number] => Boolean(rule));
+  const seasoningSelections = [
+    selectedMedicinalRule,
+    selectedHeatRule,
+    selectedNumbRule,
+    ...selectedFlavorRules
+  ].filter((rule): rule is typeof settings.seasoningRules[number] => Boolean(rule));
   const groupedSelectableRules = Array.from(selectableRules
     .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
     .reduce((groups, entry) => {
@@ -430,6 +480,10 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
 
   function toggleAddOn(key: string) {
     setSelectedAddOns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
+  function toggleFlavor(name: string) {
+    setSelectedFlavorNames((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
   }
 
   return (
@@ -448,20 +502,64 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
 
       <div className="maamaa-reference-alert">
         <ChefHat size={20} />
-        <span>{isChinese ? "基础款不含任何食材。套餐内食材按套餐用量，额外追加食材按单点追加用量。更换面类时替换默认宽粉50g；追加宽粉则另加50g。" : "基本は具材なし。セット内具材はセット用量、追加具材は単品追加用量で作る。麺変更は基本の板春雨50gの置き換え、板春雨追加は別途50g追加。"}</span>
+        <span>{isChinese ? "汤底产品只有汤，不含任何食材。小锅煮食材时加入自制高汤，煮好后连高汤和食材一起倒入容器，与基础底料和辅助料轻轻搅拌后打包。" : "スープ商品は具材なし。小鍋では自家製高湯で具材を煮て、煮上がったら高湯ごと容器に注ぎ、ベース調味料・補助調味料と軽く混ぜて包装します。"}</span>
       </div>
 
       <div className="maamaa-reference-workbench">
         <section className="maamaa-reference-builder">
           <div className="maamaa-reference-mode-tabs" role="tablist" aria-label={isChinese ? "选择制作类型" : "制作タイプ"}>
-            <button className={mode === "basic" ? "is-active" : ""} type="button" onClick={() => setMode("basic")}>
-              <strong>{isChinese ? "基础款" : "基本"}</strong>
-              <span>{isChinese ? "只有汤底，食材全是追加" : "具材なし、追加のみ"}</span>
+            <button className={mode === "soup" ? "is-active" : ""} type="button" onClick={() => setMode("soup")}>
+              <strong>{isChinese ? "汤底" : "スープ"}</strong>
+              <span>{isChinese ? "不含食材，食材全是追加" : "具材なし、追加のみ"}</span>
             </button>
             <button className={mode === "set" ? "is-active" : ""} type="button" onClick={() => setMode("set")}>
               <strong>{isChinese ? "套餐" : "セット"}</strong>
               <span>{isChinese ? "先带套餐固定食材" : "セット具材あり"}</span>
             </button>
+          </div>
+
+          <div className="maamaa-reference-seasoning-picker">
+            <label>
+              <span>{isChinese ? "汤底" : "スープ"}</span>
+              <select value={selectedSoupRule?.name ?? selectedSoupName} onChange={(event) => setSelectedSoupName(event.target.value)}>
+                {(soupRules.length ? soupRules : [{ name: "旨味マーラータンスープ", lines: [] }]).map((rule) => (
+                  <option value={rule.name} key={rule.name}>{t(rule.name)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{isChinese ? "药膳" : "薬膳"}</span>
+              <select value={selectedMedicinalName} onChange={(event) => setSelectedMedicinalName(event.target.value)}>
+                <option value="">{isChinese ? "未选择" : "未選択"}</option>
+                {medicinalRules.map((rule) => <option value={rule.name} key={rule.name}>{t(rule.name)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>{isChinese ? "辣度" : "辛さ"}</span>
+              <select value={selectedHeatName} onChange={(event) => setSelectedHeatName(event.target.value)}>
+                <option value="">{isChinese ? "未选择" : "未選択"}</option>
+                {heatRules.map((rule) => <option value={rule.name} key={rule.name}>{t(rule.name)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>{isChinese ? "麻度" : "痺れ"}</span>
+              <select value={selectedNumbName} onChange={(event) => setSelectedNumbName(event.target.value)}>
+                <option value="">{isChinese ? "未选择" : "未選択"}</option>
+                {numbRules.map((rule) => <option value={rule.name} key={rule.name}>{t(rule.name)}</option>)}
+              </select>
+            </label>
+            {flavorRules.length ? (
+              <div className="maamaa-reference-flavor-options">
+                <span>{isChinese ? "加其他料 / 味变" : "追加調味 / 味変"}</span>
+                <div>
+                  {flavorRules.map((rule) => (
+                    <button className={selectedFlavorNames.includes(rule.name) ? "is-selected" : ""} type="button" key={rule.name} onClick={() => toggleFlavor(rule.name)}>
+                      {t(rule.name)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {mode === "set" ? (
@@ -476,7 +574,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
             </div>
           ) : (
             <div className="maamaa-reference-basic-note">
-              <strong>{isChinese ? "基础款" : "基本"}</strong>
+              <strong>{isChinese ? "汤底产品" : "スープ商品"}</strong>
               <span>{isChinese ? "不自动包含任何食材。下面选择的产品都会按单点追加用量显示。" : "自動で入る具材はありません。下で選んだ商品は単品追加用量で表示します。"}</span>
             </div>
           )}
@@ -507,22 +605,64 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
         <section className="maamaa-reference-plan">
           <div className="maamaa-reference-plan-heading">
             <div>
-              <p>{mode === "basic" ? (isChinese ? "基础款制作清单" : "基本の制作リスト") : t(selectedSet?.name)}</p>
-              <h3>{isChinese ? "按厨房分类排列" : "厨房分類順"}</h3>
+              <p>{mode === "soup" ? t(selectedSoupRule?.name ?? selectedSoupName) : t(selectedSet?.name)}</p>
+              <h3>{isChinese ? "制作流程" : "制作フロー"}</h3>
             </div>
             <span>{isChinese ? `${setLines.length}个套餐内 / ${addLines.length}个追加` : `セット内 ${setLines.length} / 追加 ${addLines.length}`}</span>
           </div>
 
+          <section className="maamaa-reference-flow">
+            <article>
+              <span>1</span>
+              <div>
+                <strong>{isChinese ? "容器：放基础底料" : "容器：ベース調味料を入れる"}</strong>
+                <p>{isChinese ? "先把基础底料放入出餐容器。" : "先にベース調味料を提供容器に入れます。"}</p>
+              </div>
+            </article>
+            <article>
+              <span>2</span>
+              <div>
+                <strong>{isChinese ? "容器：加入客人选择的辅助料" : "容器：選択された補助調味料を入れる"}</strong>
+                {seasoningSelections.length ? (
+                  <div className="maamaa-reference-seasoning-lines">
+                    {seasoningSelections.map((rule) => (
+                      <p key={rule.name}><b>{t(rule.name)}</b>{seasoningDetail(rule, t) ? ` / ${seasoningDetail(rule, t)}` : ""}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{isChinese ? "未选择辅助料。" : "補助調味料は未選択です。"}</p>
+                )}
+              </div>
+            </article>
+            <article>
+              <span>3</span>
+              <div>
+                <strong>{isChinese ? "小锅：加入自制高汤" : "小鍋：自家製高湯を入れる"}</strong>
+                <p>{isChinese ? "煮食材时使用我们的自制高汤。" : "具材を煮る時は自家製高湯を使います。"}</p>
+              </div>
+            </article>
+            <article>
+              <span>4</span>
+              <div>
+                <strong>{isChinese ? "小锅：煮食材" : "小鍋：具材を煮る"}</strong>
+                <p>{mode === "soup" ? (isChinese ? "汤底产品只煮客人追加食材。" : "スープ商品は追加具材だけを煮ます。") : (isChinese ? "套餐基础食材和客人追加食材一起煮。" : "セット具材と追加具材を一緒に煮ます。")}</p>
+              </div>
+            </article>
+            <article>
+              <span>5</span>
+              <div>
+                <strong>{isChinese ? "倒入容器，轻轻搅拌后打包" : "容器へ注ぎ、軽く混ぜて包装"}</strong>
+                <p>{isChinese ? "煮好后把食材和高汤一起倒入容器，微微搅拌，让底料和高汤融合后打包。" : "煮上がった具材と高湯を容器に注ぎ、軽く混ぜてから包装します。"}</p>
+              </div>
+            </article>
+          </section>
+
           <section className="maamaa-reference-section">
-            <h3>{t("辛さ・味変")}</h3>
-            <div className="maamaa-reference-rule-grid">
-              {settings.seasoningRules.map((rule) => (
-                <article className="maamaa-reference-rule" key={rule.name}>
-                  <strong>{t(rule.name)}</strong>
-                  <p>{rule.lines.map((line) => t(line)).join(" / ")}</p>
-                  <small>{isChinese ? "调味 / 汤底选项" : "味付け / スープオプション"}</small>
-                </article>
-              ))}
+            <h3>{isChinese ? "食材清单（按SKU分类）" : "具材リスト（SKU分類順）"}</h3>
+            <div className="maamaa-reference-stock-note">
+              {mode === "soup"
+                ? (isChinese ? "汤底产品没有套餐内食材，只显示追加食材。" : "スープ商品にはセット内具材はなく、追加具材だけを表示します。")
+                : (isChinese ? "套餐内食材按套餐用量，追加食材按单点追加用量。" : "セット内具材はセット用量、追加具材は単品追加用量です。")}
             </div>
           </section>
 

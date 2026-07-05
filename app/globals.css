@@ -20369,6 +20369,69 @@ body :where(
   margin: 0;
 }
 
+.maamaa-reference-seasoning-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+}
+
+.maamaa-reference-seasoning-picker label,
+.maamaa-reference-flavor-options {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.maamaa-reference-seasoning-picker label > span,
+.maamaa-reference-flavor-options > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.maamaa-reference-seasoning-picker select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.maamaa-reference-flavor-options {
+  grid-column: 1 / -1;
+}
+
+.maamaa-reference-flavor-options > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.maamaa-reference-flavor-options button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #f8fafc;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.maamaa-reference-flavor-options button.is-selected {
+  border-color: rgba(33, 116, 91, 0.45);
+  color: #145c48;
+  background: var(--green-soft);
+}
+
 .maamaa-reference-product-picker {
   display: grid;
   gap: 10px;
@@ -20442,6 +20505,71 @@ body :where(
   background: var(--green-soft);
   font-size: 12px;
   font-weight: 650;
+}
+
+.maamaa-reference-flow {
+  display: grid;
+  gap: 8px;
+}
+
+.maamaa-reference-flow article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+}
+
+.maamaa-reference-flow article > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: white;
+  background: #145c48;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.maamaa-reference-flow strong,
+.maamaa-reference-flow p,
+.maamaa-reference-seasoning-lines b {
+  overflow-wrap: anywhere;
+}
+
+.maamaa-reference-flow strong {
+  display: block;
+  font-weight: 650;
+}
+
+.maamaa-reference-flow p,
+.maamaa-reference-stock-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.maamaa-reference-seasoning-lines {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.maamaa-reference-seasoning-lines p {
+  color: #145c48;
+  font-weight: 600;
+}
+
+.maamaa-reference-stock-note {
+  border: 1px solid rgba(33, 116, 91, 0.18);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--green-soft);
 }
 
 .maamaa-reference-plan-list {
@@ -20762,6 +20890,7 @@ body :where(
 
 @media (max-width: 640px) {
   .maamaa-reference-mode-tabs,
+  .maamaa-reference-seasoning-picker,
   .maamaa-reference-picker-group > div {
     grid-template-columns: 1fr;
   }
