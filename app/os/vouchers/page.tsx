@@ -770,10 +770,12 @@ export default function VouchersPage() {
         if (!result.ok || result.ocrError) {
           failedCount += 1;
         } else if (result.duplicate) {
-          duplicateCount += 1;
-          if (result.existingOcrResultId) duplicateVoucherIds[result.existingOcrResultId] = true;
+          duplicateCount += Math.max(1, result.duplicateCount);
+          for (const existingId of result.existingOcrResultIds) duplicateVoucherIds[existingId] = true;
         } else {
-          savedCount += 1;
+          savedCount += Math.max(1, result.createdCount);
+          duplicateCount += result.duplicateCount;
+          for (const existingId of result.existingOcrResultIds) duplicateVoucherIds[existingId] = true;
         }
         setUploadProgress({ total: files.length, completed: index + 1, currentProgress: 0, failed: failedCount, currentFile: fileName, phase: "完了" });
         if (index < files.length - 1) await sleep(800);
@@ -3650,7 +3652,17 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
       const response = await fetch("/api/vouchers", { method: "POST", body: formData });
       const body = await response.json().catch(() => ({})) as {
         error?: string;
-        results?: Array<{ ok?: boolean; duplicate?: boolean; existingOcrResultId?: string; ocrError?: string; error?: string }>;
+        results?: Array<{
+          ok?: boolean;
+          duplicate?: boolean;
+          existingOcrResultId?: string;
+          existingOcrResultIds?: string[];
+          ocrError?: string;
+          error?: string;
+          createdCount?: number;
+          duplicateCount?: number;
+          detectedCount?: number;
+        }>;
       };
       const result = body.results?.[0];
       if (response.ok && result?.ok) {
@@ -3658,7 +3670,13 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
           ok: true,
           duplicate: Boolean(result.duplicate),
           existingOcrResultId: String(result.existingOcrResultId ?? ""),
-          ocrError: result.ocrError || ""
+          existingOcrResultIds: Array.isArray(result.existingOcrResultIds)
+            ? result.existingOcrResultIds.map((id) => String(id)).filter(Boolean)
+            : String(result.existingOcrResultId ?? "") ? [String(result.existingOcrResultId)] : [],
+          ocrError: result.ocrError || "",
+          createdCount: Number(result.createdCount ?? 0),
+          duplicateCount: Number(result.duplicateCount ?? 0),
+          detectedCount: Number(result.detectedCount ?? 0)
         };
       }
       lastError = body.error || result?.error || "証憑をアップロードできませんでした。";
@@ -3667,7 +3685,16 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
     }
     await sleep(1200 * (attempt + 1));
   }
-  return { ok: false, duplicate: false, existingOcrResultId: "", ocrError: lastError || "証憑をアップロードできませんでした。" };
+  return {
+    ok: false,
+    duplicate: false,
+    existingOcrResultId: "",
+    existingOcrResultIds: [],
+    ocrError: lastError || "証憑をアップロードできませんでした。",
+    createdCount: 0,
+    duplicateCount: 0,
+    detectedCount: 0
+  };
 }
 
 async function splitPdfIntoPageFiles(file: File) {

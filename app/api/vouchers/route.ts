@@ -2,7 +2,7 @@ import { del, put } from "@vercel/blob";
 import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
-import { analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, reconcileReceiptOcrItemWithPurchaseActual, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import { analyzeReceiptDocuments, createProductCandidatesForOcrResult, normalizeReceiptProductName, reconcileReceiptOcrItemWithPurchaseActual, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { resolveReceiptSupplierLink } from "../../../lib/supplier-ocr-linking";
 import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
@@ -102,31 +102,50 @@ export async function POST(request: Request) {
     const file = files[index];
     try {
       const receiptUrl = await uploadVoucherDocument(file, storeId, index);
-      let ocrResultId = "";
+      const ocrResultIds: string[] = [];
+      const duplicateVoucherIds: string[] = [];
       let ocrError = "";
       try {
         const analyzed = await analyzeReceiptWithRetry(file);
-        const supplierName = buildVendorName(analyzed.result.companyName, analyzed.result.brandName, analyzed.result.locationName, analyzed.result.storeName);
-        const duplicate = await findDuplicateVoucherResult(storeId, analyzed.result);
-        if (duplicate) {
+        for (let receiptIndex = 0; receiptIndex < analyzed.results.length; receiptIndex += 1) {
+          const receiptResult = analyzed.results[receiptIndex];
+          const supplierName = buildVendorName(receiptResult.companyName, receiptResult.brandName, receiptResult.locationName, receiptResult.storeName);
+          const duplicate = await findDuplicateVoucherResult(storeId, receiptResult);
+          if (duplicate) {
+            duplicateVoucherIds.push(duplicate.id);
+            continue;
+          }
+          const ocrResultId = await saveReceiptOcrResult({
+            sourceType: "voucher",
+            storeId,
+            supplierName,
+            receiptPhotoUrl: receiptUrl,
+            uploadedFileName: buildUploadedVoucherFileName(file.name || "", receiptIndex, analyzed.results.length),
+            usageType: inferVoucherUsageTypeFromOcr(usageType, receiptResult),
+            paymentType,
+            createProductCandidates: false
+          }, receiptResult, analyzed.model, session);
+          ocrResultIds.push(ocrResultId);
+        }
+
+        if (!ocrResultIds.length && duplicateVoucherIds.length) {
           const pathname = extractBlobPathname(receiptUrl);
           if (pathname) await del(pathname).catch(() => undefined);
-          results.push({ ok: true, duplicate: true, existingOcrResultId: duplicate.id, receiptUrl: duplicate.receiptPhotoUrl });
+          results.push({
+            ok: true,
+            duplicate: true,
+            existingOcrResultId: duplicateVoucherIds[0] || "",
+            existingOcrResultIds: duplicateVoucherIds,
+            receiptUrl,
+            createdCount: 0,
+            duplicateCount: duplicateVoucherIds.length,
+            detectedCount: analyzed.results.length
+          });
           continue;
         }
-        ocrResultId = await saveReceiptOcrResult({
-          sourceType: "voucher",
-          storeId,
-          supplierName,
-          receiptPhotoUrl: receiptUrl,
-          uploadedFileName: file.name || "",
-          usageType: inferVoucherUsageTypeFromOcr(usageType, analyzed.result),
-          paymentType,
-          createProductCandidates: false
-        }, analyzed.result, analyzed.model, session);
       } catch (error) {
         ocrError = error instanceof Error ? error.message : "OCRに失敗しました。";
-        ocrResultId = await saveReceiptOcrResult({
+        const failedOcrResultId = await saveReceiptOcrResult({
           sourceType: "voucher",
           storeId,
           receiptPhotoUrl: receiptUrl,
@@ -134,9 +153,22 @@ export async function POST(request: Request) {
           usageType,
           paymentType
         }, null, process.env.OPENAI_RECEIPT_OCR_MODEL || "", session, ocrError);
+        if (failedOcrResultId) ocrResultIds.push(failedOcrResultId);
       }
 
-      results.push({ ok: true, ocrResultId, receiptUrl, ocrError });
+      results.push({
+        ok: true,
+        ocrResultId: ocrResultIds[0] || "",
+        ocrResultIds,
+        receiptUrl,
+        ocrError,
+        duplicate: !ocrResultIds.length && duplicateVoucherIds.length > 0,
+        existingOcrResultId: duplicateVoucherIds[0] || "",
+        existingOcrResultIds: duplicateVoucherIds,
+        createdCount: ocrResultIds.length,
+        duplicateCount: duplicateVoucherIds.length,
+        detectedCount: ocrResultIds.length + duplicateVoucherIds.length
+      });
     } catch (error) {
       results.push({
         ok: false,
@@ -2233,13 +2265,19 @@ async function analyzeReceiptWithRetry(file: File) {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await analyzeReceiptImage(file);
+      return await analyzeReceiptDocuments(file);
     } catch (error) {
       lastError = error;
       if (attempt < 2) await sleep(1200 * (attempt + 1));
     }
   }
   throw lastError instanceof Error ? lastError : new Error("OCRに失敗しました。");
+}
+
+function buildUploadedVoucherFileName(fileName: string, receiptIndex: number, receiptCount: number) {
+  const name = fileName || "receipt";
+  if (receiptCount <= 1) return name;
+  return `${name} #${receiptIndex + 1}`;
 }
 
 async function uploadVoucherDocument(file: File, storeId: string, index: number) {

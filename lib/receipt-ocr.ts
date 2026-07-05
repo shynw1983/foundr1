@@ -80,6 +80,19 @@ const receiptOcrSchema = {
   required: ["documentType", "financialPurpose", "storeName", "companyName", "brandName", "locationName", "purchaseDate", "purchaseTime", "subtotal", "tax", "total", "items"]
 };
 
+const receiptOcrBatchSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    receipts: {
+      type: "array",
+      description: "Every independent accounting voucher or receipt visible in the uploaded scan. Return one item when only one document is visible.",
+      items: receiptOcrSchema
+    }
+  },
+  required: ["receipts"]
+};
+
 function nullableNumberSchema() {
   return {
     anyOf: [
@@ -217,6 +230,112 @@ export async function analyzeReceiptImage(file: File): Promise<{ result: Receipt
   });
 
   return { result: normalizeReceiptOcrResult(parsed), model };
+}
+
+export async function analyzeReceiptDocuments(file: File): Promise<{ results: ReceiptOcrResult[]; model: string }> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY が設定されていません。");
+
+  const model = process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
+  const fileInput = await buildReceiptFileInput(file);
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                "You extract Japanese accounting voucher data for a restaurant-focused backoffice system.",
+                "Return JSON only and follow the schema exactly.",
+                "Use visible receipt text only. Do not invent missing values.",
+                "The uploaded file may be an A4 scanner page that contains multiple independent receipts, invoices, tax slips, or vouchers.",
+                "Detect every independent document visible in the scan and return one receipts[] object for each document.",
+                "If there is only one document, return receipts with exactly one object.",
+                "Do not merge separate receipts into one result. Keep each receipt's store, date, totals, tax, and items independent.",
+                "Do not split one long receipt into multiple receipts just because it wraps, folds, or continues across the same paper.",
+                "For documentType, choose one of: レシート, 領収書, 請求書, 納品書, 納付書, 振込明細, カード明細, 銀行明細, 給与社保資料, その他.",
+                "For financialPurpose, choose one of: 仕入, 経費, 租税公課, 給与関連, 固定資産, 売上関連, 立替返金, 未分類.",
+                "Use financialPurpose 仕入 only for goods bought for resale/menu production or restaurant operation inventory such as ingredients, packaging, and consumables.",
+                "Use documentType 納付書 and financialPurpose 租税公課 for tax payment slips, tax office/local government payment receipts, 納税, 消費税, 法人税, 源泉所得税, 住民税, 固定資産税, 自動車税, or public dues.",
+                "Use financialPurpose 給与関連 for payroll, salary, social insurance, labor insurance, pension, health insurance, unemployment insurance, and staff-related statutory payments.",
+                "Separate companyName, brandName, and locationName when receipts show legal/operating company, public chain brand, and branch/store/site name.",
+                "Set storeName to the best human-readable combined display name, usually brandName + locationName when brandName is visible, otherwise companyName + locationName.",
+                "Ignore payment method lines, subtotal labels, discounts, and points as items.",
+                "Treat each purchased product, service, fee, or expense row as a separate item. Do not merge different visible rows even when they share the same category, accountTitle, taxRate, or taxMode.",
+                "If one item wraps across multiple printed lines, combine only those wrapped lines into one item. Preserve quantity, unit price, and amount from the same printed item.",
+                "For item category, choose one of: 食材, 包材, 消耗品, 清掃用品, 設備, 税金, 給与社保, 家賃, 水道光熱, 通信, 広告, 交通, 車両, 保険, 手数料, 研修, 雑費, 未分類.",
+                "For accountTitle, choose one Japanese accounting account from: 仕入高, 租税公課, 荷造運賃, 水道光熱費, 旅費交通費, 通信費, 広告宣伝費, 接待交際費, 損害保険料, 保険料, 修繕費, 消耗品費, 事務用品費, 減価償却費, 福利厚生費, 法定福利費, 給料賃金, 外注工賃, 支払報酬料, 利子割引料, 地代家賃, 貸倒金, 支払手数料, 車両費, リース料, 新聞図書費, 図書研修費, 研修採用費, 会議費, 諸会費, 衛生管理費, 雑費.",
+                "Use YYYY-MM-DD for purchaseDate and HH:mm for purchaseTime when visible.",
+                "For each item taxRate, preserve visible 8% or 10% markers when present. Use 対象外 for tax payments, public dues, payroll, and other transactions outside Japanese consumption tax.",
+                "For each item taxMode, use 内税 if tax is included in the displayed amount, 外税 if tax is added separately, 対象外 for tax payments/public dues/payroll/out-of-scope transactions, otherwise 不明."
+              ].join("\n")
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: fileInput.kind === "pdf" ? "Read this scanned PDF page and extract every independent receipt or voucher visible on the page as separate receipts[] entries." : "Read this scanned image and extract every independent receipt or voucher visible on the page as separate receipts[] entries." },
+            fileInput.content
+          ]
+        }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "receipt_ocr_batch_result",
+          strict: true,
+          schema: receiptOcrBatchSchema
+        }
+      },
+      max_output_tokens: 9000
+    })
+  });
+
+  const body = await response.json().catch(() => ({})) as {
+    error?: { message?: string };
+    output_text?: string;
+    output?: Array<{ content?: Array<{ text?: string }> }>;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
+    };
+  };
+  if (!response.ok) throw new Error(body.error?.message || "レシート OCR に失敗しました。");
+
+  const content = body.output_text
+    ?? body.output?.flatMap((item) => item.content ?? []).map((contentItem) => contentItem.text ?? "").join("\n").trim()
+    ?? "";
+  const parsed = JSON.parse(content) as { receipts?: ReceiptOcrResult[] };
+  const results = Array.isArray(parsed.receipts) ? parsed.receipts.map(normalizeReceiptOcrResult) : [];
+
+  await recordExternalServiceUsage({
+    serviceKey: "openai",
+    metricKey: "tokens",
+    quantity: Number(body.usage?.total_tokens ?? 0),
+    unit: "tokens",
+    source: "receipt_ocr",
+    metadata: {
+      model,
+      inputTokens: body.usage?.input_tokens ?? null,
+      outputTokens: body.usage?.output_tokens ?? null,
+      batch: true,
+      receiptCount: results.length
+    }
+  });
+
+  if (!results.length) throw new Error("レシートを読み取れませんでした。1枚ずつ見えるようにスキャンしてください。");
+  return { results, model };
 }
 
 async function buildReceiptFileInput(file: File): Promise<{
