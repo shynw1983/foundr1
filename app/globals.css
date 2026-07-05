@@ -18976,6 +18976,41 @@ body :where(
   background: #f3f8f5;
 }
 
+.shift-grid .shift-daily-total-cell {
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  color: var(--green);
+  line-height: 1.15;
+}
+
+.shift-grid .shift-daily-total-cell strong,
+.shift-grid .shift-daily-total-cell small,
+.shift-total-empty {
+  display: block;
+}
+
+.shift-grid .shift-daily-total-cell strong {
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.shift-grid .shift-daily-total-cell small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.shift-total-empty {
+  color: #c6ced8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .shift-grid .shift-support-row th,
 .shift-grid .shift-support-row td {
   border-top: 2px solid var(--line);

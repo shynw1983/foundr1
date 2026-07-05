@@ -1049,6 +1049,36 @@ function estimateScheduledCost(employee: TimecardEmployee, storeId: string, shif
   return { payrollCost, commuteAllowance, workMinutes, nightMinutes, overtimeMinutes };
 }
 
+function estimateScheduledDailyCost(employee: TimecardEmployee, storeId: string, shifts: ShiftEntry[]): ScheduledCostEstimate {
+  let payrollCost = 0;
+  let workMinutes = 0;
+  let nightMinutes = 0;
+  let overtimeMinutes = 0;
+
+  for (const shift of shifts) {
+    const setting = getEffectivePayrollSetting(employee, storeId, shift.workDate);
+    const shiftWorkMinutes = getShiftWorkMinutes(shift);
+    if (shiftWorkMinutes <= 0) continue;
+
+    workMinutes += shiftWorkMinutes;
+    const shiftNightMinutes = getShiftNightMinutes(shift);
+    const shiftOvertimeMinutes = Math.max(0, shiftWorkMinutes - scheduledDailyLegalWorkMinutes);
+    const regularMinutes = shiftWorkMinutes - shiftOvertimeMinutes;
+    nightMinutes += shiftNightMinutes;
+    overtimeMinutes += shiftOvertimeMinutes;
+
+    if (!setting?.payrollEnabled) continue;
+    const hourlyBase = getScheduledPayrollHourlyBase(setting);
+    payrollCost += Math.ceil(
+      (regularMinutes / 60) * hourlyBase
+      + (shiftOvertimeMinutes / 60) * hourlyBase * scheduledOvertimePremiumRate
+      + (shiftNightMinutes / 60) * hourlyBase * scheduledNightPremiumRate
+    );
+  }
+
+  return { payrollCost, commuteAllowance: 0, workMinutes, nightMinutes, overtimeMinutes };
+}
+
 function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shifts: ShiftEntry[]) {
   const day = getBusinessDayForDate(businessHours, workDate);
   if (day.closed) {
@@ -1325,6 +1355,24 @@ export function TimecardPage({
     }
     return totals;
   }, [scheduledCostByEmployee]);
+  const scheduledCostByDate = useMemo(() => {
+    const map = new Map<string, ScheduledCostEstimate>();
+    const employeesById = new Map((data?.employees ?? []).map((employee) => [employee.id, employee]));
+    for (const day of monthDays) {
+      const totals: ScheduledCostEstimate = { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+      for (const scheduleEmployee of scheduleEmployees) {
+        const employee = employeesById.get(scheduleEmployee.id) ?? scheduleEmployee;
+        const shifts = (data?.shifts ?? []).filter((shift) => shift.employeeId === employee.id && shift.storeId === selectedStoreId && shift.workDate === day.key);
+        const cost = estimateScheduledDailyCost(employee, selectedStoreId, shifts);
+        totals.payrollCost += cost.payrollCost;
+        totals.workMinutes += cost.workMinutes;
+        totals.nightMinutes += cost.nightMinutes;
+        totals.overtimeMinutes += cost.overtimeMinutes;
+      }
+      map.set(day.key, totals);
+    }
+    return map;
+  }, [data?.employees, data?.shifts, monthDays, scheduleEmployees, selectedStoreId]);
   const actualLaborCostByEmployee = useMemo(() => {
     return new Map((data?.payrollRows ?? []).map((row) => [row.employeeId, {
       payrollCost: row.basePay,
@@ -2282,9 +2330,26 @@ export function TimecardPage({
                       {scheduleEmployees.length ? (
                         <tr className="shift-total-row">
                           <th className="shift-employee-cell">合計</th>
-                          {monthDays.map((day) => (
-                            <td className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""}`.trim()} key={`total-${day.key}`} aria-hidden="true" />
-                          ))}
+                          {monthDays.map((day) => {
+                            const dailyCost = scheduledCostByDate.get(day.key) ?? { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+                            const hasDailyCost = dailyCost.workMinutes > 0 || dailyCost.payrollCost > 0;
+                            return (
+                              <td
+                                className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""} shift-daily-total-cell`.trim()}
+                                key={`total-${day.key}`}
+                                title={`予定勤務時間 ${formatDuration(dailyCost.workMinutes)} / 予定給与 ${formatMoney(dailyCost.payrollCost)}${dailyCost.nightMinutes > 0 ? ` / 深夜 ${formatDuration(dailyCost.nightMinutes)}` : ""}${dailyCost.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(dailyCost.overtimeMinutes)}` : ""}`}
+                              >
+                                {hasDailyCost ? (
+                                  <>
+                                    <strong>{formatMoney(dailyCost.payrollCost)}</strong>
+                                    <small>{formatCompactDuration(dailyCost.workMinutes)}</small>
+                                  </>
+                                ) : (
+                                  <span className="shift-total-empty">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
                           <td className="shift-cost-cell" title={`勤務時間 ${formatDuration(scheduledCostTotals.workMinutes)}${scheduledCostTotals.nightMinutes > 0 ? ` / 深夜 ${formatDuration(scheduledCostTotals.nightMinutes)}` : ""}${scheduledCostTotals.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(scheduledCostTotals.overtimeMinutes)}` : ""}`}>
                             <strong>{formatMoney(scheduledCostTotals.payrollCost)}</strong>
                             <small>
