@@ -981,7 +981,116 @@ async function findProductMatch(supplierName: string, normalizedName: string) {
     order by rank asc
     limit 1
   `;
-  return { productId: productRows[0]?.productId ? String(productRows[0].productId) : "" };
+  if (productRows[0]?.productId) return { productId: String(productRows[0].productId) };
+
+  const fuzzyMatch = await findFuzzyProductMatch(supplierName, normalizedName);
+  return { productId: fuzzyMatch.productId };
+}
+
+async function findFuzzyProductMatch(supplierName: string, normalizedName: string) {
+  const target = normalizeProductMatchKey(normalizedName);
+  if (target.length < 4) return { productId: "" };
+
+  const rows = await sql`
+    select
+      products.id::text as "productId",
+      products.name,
+      coalesce(products.product_family_name, '') as "familyName",
+      coalesce(products.variant_name, '') as "variantName",
+      coalesce(dictionary.normalized_name, '') as "aliasName",
+      case when dictionary.supplier_name = ${supplierName} then 0 else 1 end as "supplierRank"
+    from products
+    left join product_match_dictionary dictionary
+      on dictionary.product_id = products.id
+      and (dictionary.supplier_name = ${supplierName} or dictionary.supplier_name = '')
+    where products.name <> ''
+    order by "supplierRank" asc, products.updated_at desc nulls last
+    limit 900
+  `;
+
+  const scored = rows
+    .map((row) => {
+      const names = [
+        row.name,
+        row.familyName,
+        row.variantName,
+        row.aliasName
+      ].map((value) => String(value ?? "")).filter(Boolean);
+      const score = Math.max(...names.map((name) => scoreProductNameSimilarity(target, normalizeProductMatchKey(name))));
+      return {
+        productId: String(row.productId ?? ""),
+        supplierRank: Number(row.supplierRank ?? 1),
+        score
+      };
+    })
+    .filter((row) => row.productId && row.score >= getFuzzyMatchMinimumScore(target.length))
+    .sort((first, second) => first.supplierRank - second.supplierRank || second.score - first.score);
+
+  const best = scored[0];
+  const second = scored.find((row) => row.productId !== best?.productId);
+  if (!best) return { productId: "" };
+  if (best.score >= 0.92) return { productId: best.productId };
+  if (best.score >= 0.86 && (!second || best.score - second.score >= 0.08 || best.supplierRank < second.supplierRank)) {
+    return { productId: best.productId };
+  }
+  return { productId: "" };
+}
+
+function normalizeProductMatchKey(value: string) {
+  return normalizeReceiptProductName(value)
+    .replace(/[・･\-.‐ー_/\s]/g, "")
+    .replace(/[0-9]+(?:g|kg|ml|l|個|本|袋|枚|束|パック|pack|pc)$/gi, "")
+    .trim();
+}
+
+function scoreProductNameSimilarity(left: string, right: string) {
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  const containment = longer.includes(shorter) && shorter.length >= 4
+    ? shorter.length / longer.length
+    : 0;
+  const subsequence = longestCommonSubsequenceLength(left, right) / Math.max(left.length, right.length);
+  const edit = 1 - levenshteinDistance(left, right) / Math.max(left.length, right.length);
+  return Math.max(containment, subsequence * 0.96, edit);
+}
+
+function getFuzzyMatchMinimumScore(length: number) {
+  if (length <= 5) return 0.9;
+  if (length <= 8) return 0.84;
+  return 0.78;
+}
+
+function levenshteinDistance(left: string, right: string) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      current[j] = Math.min(
+        (current[j - 1] ?? 0) + 1,
+        (previous[j] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (left[i - 1] === right[j - 1] ? 0 : 1)
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[right.length] ?? Math.max(left.length, right.length);
+}
+
+function longestCommonSubsequenceLength(left: string, right: string) {
+  const previous = new Array(right.length + 1).fill(0) as number[];
+  for (let i = 1; i <= left.length; i += 1) {
+    let diagonal = 0;
+    for (let j = 1; j <= right.length; j += 1) {
+      const saved = previous[j] ?? 0;
+      previous[j] = left[i - 1] === right[j - 1]
+        ? diagonal + 1
+        : Math.max(previous[j] ?? 0, previous[j - 1] ?? 0);
+      diagonal = saved;
+    }
+  }
+  return previous[right.length] ?? 0;
 }
 
 async function createProductCandidate(itemId: string, item: ReceiptOcrItem, normalizedName: string, supplierName: string, session: EmployeeSession) {
