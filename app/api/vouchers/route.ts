@@ -101,26 +101,29 @@ export async function POST(request: Request) {
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     try {
-      const receiptUrl = await uploadVoucherDocument(file, storeId, index);
       const ocrResultIds: string[] = [];
       const duplicateVoucherIds: string[] = [];
+      const receiptUrls: string[] = [];
       let ocrError = "";
       try {
         const analyzed = await analyzeReceiptWithRetry(file);
-        for (let receiptIndex = 0; receiptIndex < analyzed.results.length; receiptIndex += 1) {
-          const receiptResult = analyzed.results[receiptIndex];
+        for (let receiptIndex = 0; receiptIndex < analyzed.documents.length; receiptIndex += 1) {
+          const receiptDocument = analyzed.documents[receiptIndex];
+          const receiptResult = receiptDocument.result;
           const supplierName = buildVendorName(receiptResult.companyName, receiptResult.brandName, receiptResult.locationName, receiptResult.storeName);
           const duplicate = await findDuplicateVoucherResult(storeId, receiptResult);
           if (duplicate) {
             duplicateVoucherIds.push(duplicate.id);
             continue;
           }
+          const receiptUrl = await uploadVoucherDocument(receiptDocument.file, storeId, receiptIndex);
+          receiptUrls.push(receiptUrl);
           const ocrResultId = await saveReceiptOcrResult({
             sourceType: "voucher",
             storeId,
             supplierName,
             receiptPhotoUrl: receiptUrl,
-            uploadedFileName: buildUploadedVoucherFileName(file.name || "", receiptIndex, analyzed.results.length),
+            uploadedFileName: buildUploadedVoucherFileName(file.name || "", receiptIndex, analyzed.documents.length),
             usageType: inferVoucherUsageTypeFromOcr(usageType, receiptResult),
             paymentType,
             createProductCandidates: false
@@ -129,22 +132,22 @@ export async function POST(request: Request) {
         }
 
         if (!ocrResultIds.length && duplicateVoucherIds.length) {
-          const pathname = extractBlobPathname(receiptUrl);
-          if (pathname) await del(pathname).catch(() => undefined);
           results.push({
             ok: true,
             duplicate: true,
             existingOcrResultId: duplicateVoucherIds[0] || "",
             existingOcrResultIds: duplicateVoucherIds,
-            receiptUrl,
+            receiptUrl: "",
             createdCount: 0,
             duplicateCount: duplicateVoucherIds.length,
-            detectedCount: analyzed.results.length
+            detectedCount: analyzed.documents.length
           });
           continue;
         }
       } catch (error) {
         ocrError = error instanceof Error ? error.message : "OCRに失敗しました。";
+        const receiptUrl = await uploadVoucherDocument(file, storeId, index);
+        receiptUrls.push(receiptUrl);
         const failedOcrResultId = await saveReceiptOcrResult({
           sourceType: "voucher",
           storeId,
@@ -160,7 +163,8 @@ export async function POST(request: Request) {
         ok: true,
         ocrResultId: ocrResultIds[0] || "",
         ocrResultIds,
-        receiptUrl,
+        receiptUrl: receiptUrls[0] || "",
+        receiptUrls,
         ocrError,
         duplicate: !ocrResultIds.length && duplicateVoucherIds.length > 0,
         existingOcrResultId: duplicateVoucherIds[0] || "",
@@ -2395,16 +2399,21 @@ async function analyzeReceiptWithRetry(file: File) {
     try {
       const ocrFiles = await splitReceiptScanFile(file);
       if (ocrFiles.length > 1) {
-        const results: ReceiptOcrResult[] = [];
+        const documents: Array<{ result: ReceiptOcrResult; file: File }> = [];
         let model = process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
         for (const ocrFile of ocrFiles) {
           const analyzed = await analyzeReceiptImage(ocrFile);
           model = analyzed.model;
-          results.push(analyzed.result);
+          documents.push({ result: analyzed.result, file: ocrFile });
         }
-        return { results, model };
+        return { documents, model };
       }
-      return await analyzeReceiptDocuments(ocrFiles[0] ?? file);
+      const targetFile = ocrFiles[0] ?? file;
+      const analyzed = await analyzeReceiptDocuments(targetFile);
+      return {
+        documents: analyzed.results.map((result) => ({ result, file: targetFile })),
+        model: analyzed.model
+      };
     } catch (error) {
       lastError = error;
       if (attempt < 2) await sleep(1200 * (attempt + 1));
