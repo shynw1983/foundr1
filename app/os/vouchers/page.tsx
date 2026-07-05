@@ -965,10 +965,14 @@ export default function VouchersPage() {
   }
 
   async function bindAccountingLineProduct(voucher: VoucherRecord, line: VoucherAccountingLine) {
-    const selectedProductId = lineProductSelections[line.id];
-    const productId = selectedProductId !== undefined
-      ? selectedProductId
-      : line.matchedProductId || getSuggestedProduct(line, productOptions)?.id || "";
+    const { selectedProductId: productId } = getEffectiveProductBindingState({
+      lineId: line.id,
+      line,
+      productOptions,
+      lineProductSelections,
+      lineProductCategorySelections,
+      lineProductSubcategorySelections
+    });
     if (!productId) {
       window.alert("紐付ける商品を選択してください。");
       return;
@@ -2529,11 +2533,19 @@ function VoucherAccountingEditor({
           </button>
         </div>
         {draft.lines.map((line) => {
-          const suggestedProduct = getSuggestedProduct(line, productOptions);
-          const selectedProductId = lineProductSelections[line.id] ?? line.matchedProductId ?? suggestedProduct?.id ?? "";
-          const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
-          const selectedCategory = selectedProduct ? getProductCategory(selectedProduct) : (lineProductCategorySelections[line.id] ?? (suggestedProduct ? getProductCategory(suggestedProduct) : ""));
-          const selectedSubcategory = selectedProduct ? getProductSubcategory(selectedProduct) : (lineProductSubcategorySelections[line.id] ?? (suggestedProduct ? getProductSubcategory(suggestedProduct) : ""));
+          const {
+            suggestedProduct,
+            selectedProductId,
+            selectedCategory,
+            selectedSubcategory
+          } = getEffectiveProductBindingState({
+            lineId: line.id,
+            line,
+            productOptions,
+            lineProductSelections,
+            lineProductCategorySelections,
+            lineProductSubcategorySelections
+          });
           const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
           const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
           const isProductPending = Boolean(pendingProductLineIds[line.id]);
@@ -3112,11 +3124,19 @@ function ConfirmedVoucherDetailEditor({
         const isProductPending = Boolean(pendingProductLineIds[detailKey]);
         const showProductBinding = voucher.usageType === "shiire" && Boolean(accountingLine.ocrItemId);
         const isReceiptReconciled = accountingLine.reconciliationStatus === "auto_matched" || accountingLine.reconciliationStatus === "manual_matched";
-        const suggestedProduct = getSuggestedProduct(accountingLine, productOptions);
-        const selectedProductId = lineProductSelections[detailKey] ?? accountingLine.matchedProductId ?? suggestedProduct?.id ?? "";
-        const selectedProduct = productOptions.find((product) => product.id === selectedProductId) ?? null;
-        const selectedCategory = selectedProduct ? getProductCategory(selectedProduct) : (lineProductCategorySelections[detailKey] ?? (suggestedProduct ? getProductCategory(suggestedProduct) : ""));
-        const selectedSubcategory = selectedProduct ? getProductSubcategory(selectedProduct) : (lineProductSubcategorySelections[detailKey] ?? (suggestedProduct ? getProductSubcategory(suggestedProduct) : ""));
+        const {
+          suggestedProduct,
+          selectedProductId,
+          selectedCategory,
+          selectedSubcategory
+        } = getEffectiveProductBindingState({
+          lineId: detailKey,
+          line: accountingLine,
+          productOptions,
+          lineProductSelections,
+          lineProductCategorySelections,
+          lineProductSubcategorySelections
+        });
         const productSubcategoryOptions = getProductSubcategoryOptions(productOptions, selectedCategory);
         const filteredProductOptions = getFilteredProductOptions(productOptions, selectedCategory, selectedSubcategory);
         const isBindingExpanded = Boolean(productBindingDetailKeys[detailKey]);
@@ -3353,6 +3373,51 @@ function getFilteredProductOptions(productOptions: ProductOption[], category: st
     return (!category || getProductCategory(product) === category)
       && (!subcategory || getProductSubcategory(product) === subcategory);
   });
+}
+
+function getEffectiveProductBindingState({
+  lineId,
+  line,
+  productOptions,
+  lineProductSelections,
+  lineProductCategorySelections,
+  lineProductSubcategorySelections
+}: {
+  lineId: string;
+  line: VoucherAccountingLine;
+  productOptions: ProductOption[];
+  lineProductSelections: Record<string, string>;
+  lineProductCategorySelections: Record<string, string>;
+  lineProductSubcategorySelections: Record<string, string>;
+}) {
+  const suggestedProduct = getSuggestedProduct(line, productOptions);
+  const fallbackProductId = line.matchedProductId || suggestedProduct?.id || "";
+  const fallbackProduct = fallbackProductId
+    ? productOptions.find((product) => product.id === fallbackProductId) ?? null
+    : null;
+  const manualProductId = String(lineProductSelections[lineId] ?? "").trim();
+  const manualCategory = String(lineProductCategorySelections[lineId] ?? "").trim();
+  const manualSubcategory = String(lineProductSubcategorySelections[lineId] ?? "").trim();
+  const fallbackMatchesManualFilter = fallbackProduct
+    && (!manualCategory || getProductCategory(fallbackProduct) === manualCategory)
+    && (!manualSubcategory || getProductSubcategory(fallbackProduct) === manualSubcategory);
+  const selectedProductId = manualProductId || (fallbackMatchesManualFilter ? fallbackProductId : "");
+  const selectedProduct = selectedProductId
+    ? productOptions.find((product) => product.id === selectedProductId) ?? null
+    : null;
+  const selectedCategory = selectedProduct
+    ? getProductCategory(selectedProduct)
+    : manualCategory || (suggestedProduct ? getProductCategory(suggestedProduct) : "");
+  const selectedSubcategory = selectedProduct
+    ? getProductSubcategory(selectedProduct)
+    : manualSubcategory || (suggestedProduct ? getProductSubcategory(suggestedProduct) : "");
+  return {
+    suggestedProduct,
+    selectedProductId,
+    selectedProduct,
+    selectedCategory,
+    selectedSubcategory
+  };
 }
 
 function getSuggestedProduct(line: VoucherAccountingLine, productOptions: ProductOption[]) {
