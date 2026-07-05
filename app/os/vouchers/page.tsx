@@ -3772,21 +3772,40 @@ async function uploadVoucherFileWithRetry(formData: FormData) {
 }
 
 async function splitPdfIntoPageFiles(file: File) {
-  const { PDFDocument } = await import("pdf-lib");
-  const sourcePdf = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
-  const pageCount = sourcePdf.getPageCount();
+  const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const pdf = await loadingTask.promise;
+  const pageCount = pdf.numPages;
   if (pageCount <= 0) throw new Error("PDFページを読み取れませんでした。");
 
   const baseName = (file.name || "receipt.pdf").replace(/\.pdf$/i, "");
   const pageFiles: File[] = [];
   for (let index = 0; index < pageCount; index += 1) {
-    const pagePdf = await PDFDocument.create();
-    const [page] = await pagePdf.copyPages(sourcePdf, [index]);
-    pagePdf.addPage(page);
-    const bytes = await pagePdf.save();
-    pageFiles.push(new File([bytes], `${baseName}-page-${String(index + 1).padStart(3, "0")}.pdf`, { type: "application/pdf" }));
+    const page = await pdf.getPage(index + 1);
+    const viewport = page.getViewport({ scale: 3 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("PDFページを画像化できませんでした。");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    pageFiles.push(await canvasToPngFile(canvas, `${baseName}-page-${String(index + 1).padStart(3, "0")}.png`));
   }
+  pdf.destroy();
   return pageFiles;
+}
+
+function canvasToPngFile(canvas: HTMLCanvasElement, fileName: string) {
+  return new Promise<File>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("PDFページを画像化できませんでした。"));
+        return;
+      }
+      resolve(new File([blob], fileName, { type: "image/png" }));
+    }, "image/png");
+  });
 }
 
 function sleep(ms: number) {

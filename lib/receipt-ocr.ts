@@ -2,6 +2,7 @@ import type { EmployeeSession } from "./auth";
 import { sql } from "./db";
 import { recordExternalServiceUsage } from "./external-service-usage";
 import { buildSupplierDisplayName, resolveReceiptSupplierLink } from "./supplier-ocr-linking";
+import sharp from "sharp";
 
 export type ReceiptOcrItem = {
   name: string;
@@ -338,6 +339,44 @@ export async function analyzeReceiptDocuments(file: File): Promise<{ results: Re
   return { results, model };
 }
 
+export async function splitReceiptScanFile(file: File): Promise<File[]> {
+  const mimeType = getReceiptMimeType(file);
+  if (mimeType === "application/pdf" || !mimeType.startsWith("image/")) return [file];
+
+  const input = Buffer.from(await file.arrayBuffer());
+  const image = sharp(input, { failOn: "none" }).rotate();
+  const metadata = await image.metadata();
+  const sourceWidth = metadata.width ?? 0;
+  const sourceHeight = metadata.height ?? 0;
+  if (!sourceWidth || !sourceHeight) return [file];
+
+  const maxAnalysisEdge = 1600;
+  const scale = Math.min(1, maxAnalysisEdge / Math.max(sourceWidth, sourceHeight));
+  const analysis = image.clone().resize({
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale)),
+    fit: "fill"
+  });
+  const { data, info } = await analysis.removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const boxes = detectReceiptInkRegions(Buffer.from(data), info.width, info.height)
+    .map((box) => scaleRegion(box, 1 / scale, sourceWidth, sourceHeight))
+    .sort((first, second) => first.top - second.top || first.left - second.left);
+
+  if (!boxes.length) return [file];
+  const imageArea = sourceWidth * sourceHeight;
+  const shouldCropSingle = boxes.length === 1 && boxes[0].width * boxes[0].height < imageArea * 0.88;
+  if (boxes.length === 1 && !shouldCropSingle) return [file];
+
+  const baseName = sanitizeReceiptFilename((file.name || "receipt").replace(/\.[^.]+$/, ""), "receipt");
+  const crops: File[] = [];
+  for (let index = 0; index < Math.min(boxes.length, 12); index += 1) {
+    const box = boxes[index];
+    const buffer = await image.clone().extract(box).png({ compressionLevel: 6 }).toBuffer();
+    crops.push(new File([buffer], `${baseName}-crop-${String(index + 1).padStart(2, "0")}.png`, { type: "image/png" }));
+  }
+  return crops.length ? crops : [file];
+}
+
 async function buildReceiptFileInput(file: File): Promise<{
   kind: "image" | "pdf";
   content:
@@ -366,6 +405,150 @@ async function buildReceiptFileInput(file: File): Promise<{
     }
   };
 }
+
+function detectReceiptInkRegions(raw: Buffer, width: number, height: number): sharp.Region[] {
+  const darkMask = new Uint8Array(width * height);
+  for (let index = 0; index < width * height; index += 1) {
+    const offset = index * 3;
+    const red = raw[offset] ?? 255;
+    const green = raw[offset + 1] ?? 255;
+    const blue = raw[offset + 2] ?? 255;
+    const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+    if (luminance < 214) darkMask[index] = 1;
+  }
+
+  const block = Math.max(10, Math.round(Math.min(width, height) / 90));
+  const gridWidth = Math.ceil(width / block);
+  const gridHeight = Math.ceil(height / block);
+  const grid = new Uint8Array(gridWidth * gridHeight);
+  for (let gy = 0; gy < gridHeight; gy += 1) {
+    for (let gx = 0; gx < gridWidth; gx += 1) {
+      const left = gx * block;
+      const top = gy * block;
+      const right = Math.min(width, left + block);
+      const bottom = Math.min(height, top + block);
+      let dark = 0;
+      for (let y = top; y < bottom; y += 1) {
+        const rowOffset = y * width;
+        for (let x = left; x < right; x += 1) dark += darkMask[rowOffset + x] ?? 0;
+      }
+      if (dark >= Math.max(2, Math.round((right - left) * (bottom - top) * 0.012))) {
+        grid[gy * gridWidth + gx] = 1;
+      }
+    }
+  }
+
+  const dilated = dilateGrid(grid, gridWidth, gridHeight, Math.max(2, Math.round(Math.min(gridWidth, gridHeight) / 34)));
+  const boxes = connectedGridBoxes(dilated, gridWidth, gridHeight, block, width, height);
+  return mergeNearbyReceiptBoxes(boxes, width, height)
+    .filter((box) => box.width >= width * 0.12 && box.height >= height * 0.12)
+    .filter((box) => box.width * box.height >= width * height * 0.025)
+    .slice(0, 12);
+}
+
+function dilateGrid(grid: Uint8Array, width: number, height: number, radius: number) {
+  const output = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!grid[y * width + x]) continue;
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          output[ny * width + nx] = 1;
+        }
+      }
+    }
+  }
+  return output;
+}
+
+function connectedGridBoxes(grid: Uint8Array, gridWidth: number, gridHeight: number, block: number, imageWidth: number, imageHeight: number) {
+  const visited = new Uint8Array(grid.length);
+  const boxes: sharp.Region[] = [];
+  for (let start = 0; start < grid.length; start += 1) {
+    if (!grid[start] || visited[start]) continue;
+    const queue = [start];
+    visited[start] = 1;
+    let minX = start % gridWidth;
+    let maxX = minX;
+    let minY = Math.floor(start / gridWidth);
+    let maxY = minY;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const current = queue[cursor];
+      const x = current % gridWidth;
+      const y = Math.floor(current / gridWidth);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (const [dx, dy] of receiptGridNeighbors) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+        const next = ny * gridWidth + nx;
+        if (!grid[next] || visited[next]) continue;
+        visited[next] = 1;
+        queue.push(next);
+      }
+    }
+    const padding = Math.max(block * 2, Math.round(Math.min(imageWidth, imageHeight) * 0.018));
+    const left = Math.max(0, minX * block - padding);
+    const top = Math.max(0, minY * block - padding);
+    const right = Math.min(imageWidth, (maxX + 1) * block + padding);
+    const bottom = Math.min(imageHeight, (maxY + 1) * block + padding);
+    boxes.push({ left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) });
+  }
+  return boxes;
+}
+
+function mergeNearbyReceiptBoxes(boxes: sharp.Region[], imageWidth: number, imageHeight: number) {
+  const merged: sharp.Region[] = [];
+  for (const box of boxes.sort((first, second) => first.top - second.top || first.left - second.left)) {
+    const existing = merged.find((candidate) => shouldMergeReceiptBoxes(candidate, box, imageWidth, imageHeight));
+    if (!existing) {
+      merged.push({ ...box });
+      continue;
+    }
+    const left = Math.min(existing.left, box.left);
+    const top = Math.min(existing.top, box.top);
+    const right = Math.max(existing.left + existing.width, box.left + box.width);
+    const bottom = Math.max(existing.top + existing.height, box.top + box.height);
+    existing.left = left;
+    existing.top = top;
+    existing.width = right - left;
+    existing.height = bottom - top;
+  }
+  return merged;
+}
+
+function shouldMergeReceiptBoxes(first: sharp.Region, second: sharp.Region, imageWidth: number, imageHeight: number) {
+  const horizontalGap = Math.max(0, Math.max(first.left, second.left) - Math.min(first.left + first.width, second.left + second.width));
+  const verticalGap = Math.max(0, Math.max(first.top, second.top) - Math.min(first.top + first.height, second.top + second.height));
+  const horizontalOverlap = Math.min(first.left + first.width, second.left + second.width) - Math.max(first.left, second.left);
+  const verticalOverlap = Math.min(first.top + first.height, second.top + second.height) - Math.max(first.top, second.top);
+  const maxGap = Math.max(18, Math.round(Math.min(imageWidth, imageHeight) * 0.025));
+  if (horizontalGap <= maxGap && verticalOverlap > Math.min(first.height, second.height) * 0.25) return true;
+  if (verticalGap <= maxGap && horizontalOverlap > Math.min(first.width, second.width) * 0.25) return true;
+  return false;
+}
+
+function scaleRegion(region: sharp.Region, scale: number, imageWidth: number, imageHeight: number): sharp.Region {
+  const left = Math.max(0, Math.floor(region.left * scale));
+  const top = Math.max(0, Math.floor(region.top * scale));
+  const right = Math.min(imageWidth, Math.ceil((region.left + region.width) * scale));
+  const bottom = Math.min(imageHeight, Math.ceil((region.top + region.height) * scale));
+  return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+}
+
+const receiptGridNeighbors = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1]
+] as const;
 
 function getReceiptMimeType(file: File) {
   const type = file.type.toLowerCase();

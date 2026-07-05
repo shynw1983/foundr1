@@ -2,7 +2,7 @@ import { del, put } from "@vercel/blob";
 import { canAccessStore, getSessionStoreScope, requireOsSession, requireWritableOsSession } from "../../../lib/api-auth";
 import { sql } from "../../../lib/db";
 import { recordExternalServiceUsage } from "../../../lib/external-service-usage";
-import { analyzeReceiptDocuments, createProductCandidatesForOcrResult, normalizeReceiptProductName, reconcileReceiptOcrItemWithPurchaseActual, recordReceiptItemPrice, saveReceiptOcrResult } from "../../../lib/receipt-ocr";
+import { analyzeReceiptDocuments, analyzeReceiptImage, createProductCandidatesForOcrResult, normalizeReceiptProductName, reconcileReceiptOcrItemWithPurchaseActual, recordReceiptItemPrice, saveReceiptOcrResult, splitReceiptScanFile } from "../../../lib/receipt-ocr";
 import { resolveReceiptSupplierLink } from "../../../lib/supplier-ocr-linking";
 import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
@@ -2393,7 +2393,18 @@ async function analyzeReceiptWithRetry(file: File) {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await analyzeReceiptDocuments(file);
+      const ocrFiles = await splitReceiptScanFile(file);
+      if (ocrFiles.length > 1) {
+        const results: ReceiptOcrResult[] = [];
+        let model = process.env.OPENAI_RECEIPT_OCR_MODEL || "gpt-4.1-mini";
+        for (const ocrFile of ocrFiles) {
+          const analyzed = await analyzeReceiptImage(ocrFile);
+          model = analyzed.model;
+          results.push(analyzed.result);
+        }
+        return { results, model };
+      }
+      return await analyzeReceiptDocuments(ocrFiles[0] ?? file);
     } catch (error) {
       lastError = error;
       if (attempt < 2) await sleep(1200 * (attempt + 1));
