@@ -6,6 +6,7 @@ import { analyzeReceiptDocuments, analyzeReceiptImage, createProductCandidatesFo
 import { resolveReceiptSupplierLink } from "../../../lib/supplier-ocr-linking";
 import type { ReceiptOcrResult } from "../../../lib/receipt-ocr";
 import { validateReceiptUpload } from "../../../lib/upload-security";
+import { buildVoucherPublicPreviewUrl } from "../../../lib/voucher-public-preview";
 
 type VoucherUsageType = "unclassified" | "shiire" | "keihi";
 type VoucherPaymentType = "company" | "reimbursement";
@@ -1061,7 +1062,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       summaryNote,
       String(row.voucherId ?? ""),
       String(row.lineNo ?? ""),
-      `${origin}/api/vouchers/${encodeURIComponent(String(row.voucherId ?? ""))}/preview`
+      buildVoucherPublicPreviewUrl(origin, String(row.voucherId ?? ""))
     ];
   });
 
