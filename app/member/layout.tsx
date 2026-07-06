@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "Foundr1 MEMBER",
   description: "Foundr1 ブランド共通の会員証アプリ",
   manifest: "/manifest-member.webmanifest",
+  other: {
+    google: "notranslate"
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -32,5 +35,11 @@ export default function MemberLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <MemberLanguageProvider>{children}</MemberLanguageProvider>;
+  return (
+    <MemberLanguageProvider>
+      <div className="notranslate" translate="no">
+        {children}
+      </div>
+    </MemberLanguageProvider>
+  );
 }
