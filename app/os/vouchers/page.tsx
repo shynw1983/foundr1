@@ -2772,6 +2772,7 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
   });
   const receiptTaxTotal = Math.round(Number(voucher?.tax ?? 0)) || calculateVoucherLinesTaxTotal(normalizedLines);
   const receiptTaxLines = normalizeReceiptTaxLines(voucher?.receiptTaxLines, normalizedLines, receiptTaxTotal);
+  const adjustedLines = applyVoucherAccountingLinesTaxBreakdown(normalizedLines, receiptTaxLines);
   return {
     note: "",
     vendorName: voucher?.vendorName || "",
@@ -2784,7 +2785,7 @@ function buildVoucherAccountingDraft(voucher?: VoucherRecord): VoucherAccounting
     receiptTaxTotal: String(receiptTaxTotal || 0),
     receiptTaxLines,
     taxMode,
-    lines: normalizedLines
+    lines: adjustedLines
   };
 }
 
@@ -2801,12 +2802,13 @@ function normalizeVoucherAccountingDraft(draft: VoucherAccountingDraft): Voucher
     ? normalizeMoneyInputText(draft.receiptTaxTotal)
     : String(calculateVoucherLinesTaxTotal(normalizedLines));
   const receiptTaxLines = normalizeReceiptTaxLines(draft.receiptTaxLines, normalizedLines, receiptTaxTotal);
+  const adjustedLines = applyVoucherAccountingLinesTaxBreakdown(normalizedLines, receiptTaxLines);
   return {
     ...draft,
     receiptTaxTotal: String(calculateReceiptTaxLinesTotal(receiptTaxLines)),
     receiptTaxLines,
     taxMode,
-    lines: normalizedLines
+    lines: adjustedLines
   };
 }
 
@@ -2949,6 +2951,59 @@ function normalizeReceiptTaxLines(lines: ReceiptTaxLine[] | undefined, accountin
     taxRate: normalizeDraftTaxRate(line.taxRate) || "8%",
     taxAmount: normalizeMoneyInputText(line.taxAmount)
   }));
+}
+
+function applyVoucherAccountingLinesTaxBreakdown(lines: VoucherAccountingLine[], taxLines: ReceiptTaxLine[]) {
+  const nextLines = lines.map((line) => ({ ...line }));
+  const taxableTaxLines = taxLines
+    .map((line) => ({
+      taxRate: normalizeDraftTaxRate(line.taxRate),
+      taxAmount: Math.max(0, Math.round(Number(line.taxAmount || 0)))
+    }))
+    .filter((line) => (line.taxRate === "8%" || line.taxRate === "10%") && line.taxAmount > 0);
+  const singleTaxableRate = taxableTaxLines.length === 1 ? taxableTaxLines[0]?.taxRate ?? "" : "";
+
+  for (const taxLine of taxLines) {
+    const taxRate = normalizeDraftTaxRate(taxLine.taxRate);
+    if (!taxRate) continue;
+    const targetTaxTotal = Math.max(0, Math.round(Number(taxLine.taxAmount || 0)));
+    let shouldApplyFallbackRate = false;
+    let targetIndexes = nextLines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => normalizeDraftTaxRate(line.taxRate) === taxRate)
+      .map(({ index }) => index)
+      .reverse();
+    if (!targetIndexes.length && singleTaxableRate === taxRate) {
+      targetIndexes = nextLines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => normalizeDraftTaxMode(line.taxMode) !== "対象外")
+        .map(({ index }) => index)
+        .reverse();
+      shouldApplyFallbackRate = Boolean(targetIndexes.length);
+    }
+    if (!targetIndexes.length) continue;
+
+    const currentTaxTotal = targetIndexes.reduce((sum, index) => sum + Math.round(Number(nextLines[index]?.taxAmount || 0)), 0);
+    let remainingDelta = targetTaxTotal - currentTaxTotal;
+    if (!remainingDelta && !shouldApplyFallbackRate) continue;
+    for (const index of targetIndexes) {
+      const line = nextLines[index];
+      if (!line) continue;
+      if (shouldApplyFallbackRate) line.taxRate = taxRate;
+      if (!remainingDelta) continue;
+      const currentTaxAmount = Math.max(0, Math.round(Number(line.taxAmount || 0)));
+      if (remainingDelta > 0) {
+        line.taxAmount = String(currentTaxAmount + remainingDelta);
+        remainingDelta = 0;
+        continue;
+      }
+      const reduction = Math.min(currentTaxAmount, Math.abs(remainingDelta));
+      line.taxAmount = String(currentTaxAmount - reduction);
+      remainingDelta += reduction;
+    }
+  }
+
+  return nextLines;
 }
 
 function adjustVoucherAccountingLinesTaxTotal(lines: VoucherAccountingLine[], taxTotalValue: string) {

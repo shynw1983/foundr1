@@ -1488,15 +1488,31 @@ function calculateReceiptTaxLinesTotal(lines: Array<{ taxAmount?: unknown }>) {
 
 function applyAccountingLinesTaxBreakdown<T>(lines: T[], taxLines: Array<{ taxRate: string; taxAmount: number }>): T[] {
   const mutableLines = lines.map((line) => isPlainObject(line) ? { ...line } : line) as T[];
+  const taxableTaxLines = taxLines
+    .map((line) => ({
+      taxRate: normalizeTaxRate(line.taxRate),
+      taxAmount: Math.max(0, Math.round(Number(line.taxAmount ?? 0)))
+    }))
+    .filter((line) => (line.taxRate === "8%" || line.taxRate === "10%") && line.taxAmount > 0);
+  const singleTaxableRate = taxableTaxLines.length === 1 ? taxableTaxLines[0]?.taxRate ?? "" : "";
   for (const taxLine of taxLines) {
     const taxRate = normalizeTaxRate(taxLine.taxRate);
     if (!taxRate) continue;
     const targetTaxTotal = Math.max(0, Math.round(Number(taxLine.taxAmount ?? 0)));
-    const targetIndexes = mutableLines
+    let shouldApplyFallbackRate = false;
+    let targetIndexes = mutableLines
       .map((line, index) => ({ line, index }))
       .filter(({ line }) => isPlainObject(line) && normalizeTaxRate(line.taxRate) === taxRate)
       .map(({ index }) => index)
       .reverse();
+    if (!targetIndexes.length && singleTaxableRate === taxRate) {
+      targetIndexes = mutableLines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => isPlainObject(line) && normalizeTaxMode(line.taxMode) !== "対象外")
+        .map(({ index }) => index)
+        .reverse();
+      shouldApplyFallbackRate = Boolean(targetIndexes.length);
+    }
     if (!targetIndexes.length) continue;
     const currentTaxTotal = targetIndexes.reduce((sum, index) => {
       const line = mutableLines[index];
@@ -1510,6 +1526,7 @@ function applyAccountingLinesTaxBreakdown<T>(lines: T[], taxLines: Array<{ taxRa
       const line = mutableLines[index];
       if (!isPlainObject(line)) continue;
       const lineRecord = line as Record<string, unknown>;
+      if (shouldApplyFallbackRate) lineRecord.taxRate = taxRate;
       const currentTaxAmount = Math.max(0, Math.round(Number(lineRecord.taxAmount ?? 0)));
       if (remainingDelta > 0) {
         lineRecord.taxAmount = currentTaxAmount + remainingDelta;
