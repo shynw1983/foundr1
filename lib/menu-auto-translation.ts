@@ -60,9 +60,18 @@ function normalizeDisplayRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function needsTranslation(currentText: unknown, overwriteExisting: boolean) {
+function hasNonTargetJapaneseText(currentText: string, language: MenuTranslationLanguage) {
+  if (!currentText.trim()) return false;
+  const hasKana = /[\u3040-\u30ff]/u.test(currentText);
+  const hasCjk = /[\u3400-\u9fff]/u.test(currentText);
+  if (language === "zh" || language === "zh-Hant") return hasKana;
+  return hasKana || hasCjk;
+}
+
+function needsTranslation(currentText: unknown, overwriteExisting: boolean, language: MenuTranslationLanguage) {
   if (overwriteExisting) return true;
-  return !String(currentText ?? "").trim();
+  const text = String(currentText ?? "").trim();
+  return !text || hasNonTargetJapaneseText(text, language);
 }
 
 function buildEntry(input: {
@@ -135,7 +144,7 @@ export async function collectMenuTranslationTargets(input: {
     if (itemName) {
       for (const language of languages) {
         const currentText = String(displayNames[language] ?? "").trim();
-        if (needsTranslation(currentText, overwriteExisting)) {
+        if (needsTranslation(currentText, overwriteExisting, language)) {
           entries.push(buildEntry({
             targetType: "item",
             targetId: String(item.id),
@@ -151,7 +160,7 @@ export async function collectMenuTranslationTargets(input: {
     if (description) {
       for (const language of languages) {
         const currentText = String(descriptionDisplayNames[language] ?? "").trim();
-        if (needsTranslation(currentText, overwriteExisting)) {
+        if (needsTranslation(currentText, overwriteExisting, language)) {
           entries.push(buildEntry({
             targetType: "item_description",
             targetId: String(item.id),
@@ -172,7 +181,7 @@ export async function collectMenuTranslationTargets(input: {
     if (!groupName) continue;
     for (const language of languages) {
       const currentText = String(displayNames[language] ?? "").trim();
-      if (needsTranslation(currentText, overwriteExisting)) {
+      if (needsTranslation(currentText, overwriteExisting, language)) {
         entries.push(buildEntry({
           targetType: "group",
           targetId: String(group.id),
@@ -192,7 +201,7 @@ export async function collectMenuTranslationTargets(input: {
     if (!optionName) continue;
     for (const language of languages) {
       const currentText = String(displayNames[language] ?? "").trim();
-      if (needsTranslation(currentText, overwriteExisting)) {
+      if (needsTranslation(currentText, overwriteExisting, language)) {
         entries.push(buildEntry({
           targetType: "option",
           targetId: String(option.id),

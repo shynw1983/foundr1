@@ -751,7 +751,7 @@ export default function MenuAdminPage() {
         return;
       }
       setTranslationPreview(result);
-      setTranslationStatus(result.entries.length ? `${result.entries.length}件の翻訳候補を作成しました。` : "翻訳が必要な空欄はありません。");
+      setTranslationStatus(result.entries.length ? `${result.entries.length}件の翻訳候補を作成しました。` : "翻訳が必要な空欄・日本語混入はありません。");
     } catch {
       setTranslationStatus("通信エラーで翻訳プレビューを作成できませんでした。");
     } finally {
@@ -1091,7 +1091,7 @@ export default function MenuAdminPage() {
           <div className="menu-auto-translation-body">
             <div>
               <strong>対象</strong>
-              <span>商品名、商品説明、選択グループ、選択肢の未翻訳欄を AI で候補作成します。確認するまで書き込みません。</span>
+              <span>商品名、商品説明、選択グループ、選択肢の未翻訳欄と日本語混入を AI で候補作成します。確認するまで書き込みません。</span>
             </div>
             <div className="menu-auto-translation-controls">
               {customerMenuLanguageOptions.map((language) => (
