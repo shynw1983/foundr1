@@ -101,6 +101,10 @@ function normalizePayrollClosingDay(value: string, payrollCycleType: string) {
   return Number.isFinite(day) ? Math.max(1, Math.min(30, day)) : 25;
 }
 
+function normalizeSocialInsuranceDeductionTiming(value: string) {
+  return value === "current_month" ? "current_month" : "next_month";
+}
+
 function normalizePrescribedMonthlyWorkMinutes(value: FormDataEntryValue | null) {
   const hours = Number(String(value ?? "").trim());
   return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 60) : null;
@@ -335,6 +339,7 @@ export async function POST(request: Request) {
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
   const prescribedMonthlyWorkMinutes = normalizePrescribedMonthlyWorkMinutes(formData.get("prescribedMonthlyWorkHours"));
   const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
+  const socialInsuranceDeductionTiming = normalizeSocialInsuranceDeductionTiming(String(formData.get("socialInsuranceDeductionTiming") ?? ""));
   const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
   const attendanceLatitude = normalizeCoordinate(String(formData.get("attendanceLatitude") ?? ""), -90, 90);
   const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
@@ -378,6 +383,7 @@ export async function POST(request: Request) {
       payroll_closing_day,
       prescribed_monthly_work_minutes,
       social_insurance_prefecture,
+      social_insurance_deduction_timing,
       weather_location_name,
       weather_latitude,
       weather_longitude,
@@ -403,6 +409,7 @@ export async function POST(request: Request) {
       ${payrollClosingDay},
       ${prescribedMonthlyWorkMinutes},
       ${socialInsurancePrefecture},
+      ${socialInsuranceDeductionTiming},
       ${weatherLocationName || null},
       ${weatherLatitude},
       ${weatherLongitude},
@@ -428,6 +435,7 @@ export async function POST(request: Request) {
       payroll_closing_day = excluded.payroll_closing_day,
       prescribed_monthly_work_minutes = excluded.prescribed_monthly_work_minutes,
       social_insurance_prefecture = excluded.social_insurance_prefecture,
+      social_insurance_deduction_timing = excluded.social_insurance_deduction_timing,
       weather_location_name = excluded.weather_location_name,
       weather_latitude = excluded.weather_latitude,
       weather_longitude = excluded.weather_longitude,
@@ -489,6 +497,7 @@ export async function PUT(request: Request) {
   const payrollClosingDay = normalizePayrollClosingDay(String(formData.get("payrollClosingDay") ?? ""), payrollCycleType);
   const prescribedMonthlyWorkMinutes = normalizePrescribedMonthlyWorkMinutes(formData.get("prescribedMonthlyWorkHours"));
   const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? "福岡県").trim() || "福岡県";
+  const socialInsuranceDeductionTiming = normalizeSocialInsuranceDeductionTiming(String(formData.get("socialInsuranceDeductionTiming") ?? ""));
   const attendanceLocationEnabled = formData.get("attendanceLocationEnabled") === "on";
   const attendanceLatitude = normalizeCoordinate(String(formData.get("attendanceLatitude") ?? ""), -90, 90);
   const attendanceLongitude = normalizeCoordinate(String(formData.get("attendanceLongitude") ?? ""), -180, 180);
@@ -547,6 +556,7 @@ export async function PUT(request: Request) {
       payroll_closing_day = ${payrollClosingDay},
       prescribed_monthly_work_minutes = ${prescribedMonthlyWorkMinutes},
       social_insurance_prefecture = ${socialInsurancePrefecture},
+      social_insurance_deduction_timing = ${socialInsuranceDeductionTiming},
       weather_location_name = ${weatherLocationName || null},
       weather_latitude = ${weatherLatitude},
       weather_longitude = ${weatherLongitude},

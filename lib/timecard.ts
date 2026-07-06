@@ -37,6 +37,7 @@ export type TimecardStorePayrollSetting = {
   applySocialInsurance?: boolean;
   socialInsuranceStandardMonthlyAmount?: number | null;
   socialInsuranceDeductionFrom?: string | null;
+  socialInsuranceDeductionTiming?: "current_month" | "next_month";
   applyEmploymentInsurance?: boolean;
   employmentInsuranceDeductionFrom?: string | null;
   applyIncomeTax?: boolean;
@@ -296,6 +297,19 @@ function isSameOrAfterMonth(month: string, date: string | null | undefined) {
   return month >= date.slice(0, 7);
 }
 
+function addMonths(month: string, offset: number) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return month;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function getSocialInsuranceFirstDeductionMonth(setting: TimecardStorePayrollSetting) {
+  const baseMonth = setting.socialInsuranceDeductionFrom?.slice(0, 7);
+  if (!baseMonth) return null;
+  return setting.socialInsuranceDeductionTiming === "current_month" ? baseMonth : addMonths(baseMonth, 1);
+}
+
 function addYearsMinusOneDay(date: string, years: number) {
   const [year, month, day] = date.split("-").map(Number);
   const target = new Date(Date.UTC(year + years, month - 1, day));
@@ -390,7 +404,7 @@ function getSocialInsuranceDeduction(
   month: string,
   socialInsuranceRows: SocialInsuranceRow[]
 ) {
-  if (!setting.applySocialInsurance || !isSameOrAfterMonth(month, setting.socialInsuranceDeductionFrom)) return { amount: 0, alerts: [] as string[] };
+  if (!setting.applySocialInsurance || !isSameOrAfterMonth(month, getSocialInsuranceFirstDeductionMonth(setting))) return { amount: 0, alerts: [] as string[] };
   const alerts: string[] = [];
   const standardMonthlyAmount = Math.round(Number(setting.socialInsuranceStandardMonthlyAmount ?? 0) || 0);
   const prefecture = String(setting.socialInsurancePrefecture ?? "").trim();

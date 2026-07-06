@@ -50,6 +50,7 @@ type StoreItem = {
   payrollClosingDay?: number;
   prescribedMonthlyWorkMinutes?: number | null;
   socialInsurancePrefecture?: string;
+  socialInsuranceDeductionTiming?: "current_month" | "next_month";
   weatherLocationName?: string;
   weatherLatitude?: number | null;
   weatherLongitude?: number | null;
@@ -247,6 +248,7 @@ export default function StoresPage() {
   const [editingPayrollClosingDay, setEditingPayrollClosingDay] = useState(25);
   const [editingPrescribedMonthlyWorkHours, setEditingPrescribedMonthlyWorkHours] = useState("");
   const [editingSocialInsurancePrefecture, setEditingSocialInsurancePrefecture] = useState("福岡県");
+  const [editingSocialInsuranceDeductionTiming, setEditingSocialInsuranceDeductionTiming] = useState<"current_month" | "next_month">("next_month");
   const [editingShiftFirstHalfDeadlineDay, setEditingShiftFirstHalfDeadlineDay] = useState(25);
   const [editingShiftSecondHalfDeadlineDay, setEditingShiftSecondHalfDeadlineDay] = useState(10);
   const [editingShiftDeadlineTime, setEditingShiftDeadlineTime] = useState("23:59");
@@ -435,6 +437,7 @@ export default function StoresPage() {
     formData.set("payrollClosingDay", "31");
     formData.set("prescribedMonthlyWorkHours", "");
     formData.set("socialInsurancePrefecture", "福岡県");
+    formData.set("socialInsuranceDeductionTiming", "next_month");
     selectedSalesSourceKeys.forEach((key) => {
       const [platform, brandName = ""] = key.split("::");
       formData.set(salesSourceFormField(platform, brandName), "on");
@@ -467,6 +470,7 @@ export default function StoresPage() {
         payrollClosingDay: 31,
         prescribedMonthlyWorkMinutes: null,
         socialInsurancePrefecture: "福岡県",
+        socialInsuranceDeductionTiming: "next_month",
         weatherLocationName,
         weatherLatitude,
         weatherLongitude,
@@ -639,6 +643,7 @@ export default function StoresPage() {
     const prescribedMonthlyWorkHours = String(formData.get("prescribedMonthlyWorkHours") ?? editingPrescribedMonthlyWorkHours).trim();
     const prescribedMonthlyWorkMinutes = prescribedMonthlyWorkHours ? Math.round(Number(prescribedMonthlyWorkHours) * 60) : null;
     const socialInsurancePrefecture = String(formData.get("socialInsurancePrefecture") ?? editingSocialInsurancePrefecture);
+    const socialInsuranceDeductionTiming = String(formData.get("socialInsuranceDeductionTiming") ?? editingSocialInsuranceDeductionTiming) === "current_month" ? "current_month" : "next_month";
     const shiftFirstHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftFirstHalfSubmissionDeadlineDay") ?? editingShiftFirstHalfDeadlineDay) || editingShiftFirstHalfDeadlineDay)));
     const shiftSecondHalfSubmissionDeadlineDay = Math.max(1, Math.min(28, Math.round(Number(formData.get("shiftSecondHalfSubmissionDeadlineDay") ?? editingShiftSecondHalfDeadlineDay) || editingShiftSecondHalfDeadlineDay)));
     const shiftSubmissionDeadlineTime = String(formData.get("shiftSubmissionDeadlineTime") ?? editingShiftDeadlineTime);
@@ -698,6 +703,7 @@ export default function StoresPage() {
         payrollClosingDay,
         prescribedMonthlyWorkMinutes: Number.isFinite(Number(prescribedMonthlyWorkMinutes)) ? prescribedMonthlyWorkMinutes : null,
         socialInsurancePrefecture,
+        socialInsuranceDeductionTiming,
         weatherLocationName,
         weatherLatitude,
         weatherLongitude,
@@ -734,6 +740,7 @@ export default function StoresPage() {
     setEditingAttendanceRadiusMeters("100");
     setEditingAttendanceAccuracyThresholdMeters("100");
     setEditingPrescribedMonthlyWorkHours("");
+    setEditingSocialInsuranceDeductionTiming("next_month");
     setEditingShiftFirstHalfDeadlineDay(25);
     setEditingShiftSecondHalfDeadlineDay(10);
     setEditingShiftDeadlineTime("23:59");
@@ -774,6 +781,7 @@ export default function StoresPage() {
     setEditingPayrollClosingDay(store.payrollCycleType === "specified_day" ? store.payrollClosingDay ?? 25 : 25);
     setEditingPrescribedMonthlyWorkHours(formatMonthlyWorkHours(store.prescribedMonthlyWorkMinutes));
     setEditingSocialInsurancePrefecture(store.socialInsurancePrefecture ?? "福岡県");
+    setEditingSocialInsuranceDeductionTiming(store.socialInsuranceDeductionTiming === "current_month" ? "current_month" : "next_month");
     setEditingShiftFirstHalfDeadlineDay(store.shiftFirstHalfSubmissionDeadlineDay ?? 25);
     setEditingShiftSecondHalfDeadlineDay(store.shiftSecondHalfSubmissionDeadlineDay ?? 10);
     setEditingShiftDeadlineTime(store.shiftSubmissionDeadlineTime ?? "23:59");
@@ -897,7 +905,7 @@ export default function StoresPage() {
                     <small>領収書: {store.invoiceRegistrationNumber || store.companyLegalName || store.companyAddress ? (store.invoiceRegistrationNumber || "登録番号未設定") : "未設定"}</small>
                     <small>通常の購入担当: {getStaffName(store.defaultProcurementStaffId) || "未設定"}</small>
                     <small>営業時間: {formatBusinessHoursSummary(store.businessHours)}</small>
-                    <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 月所定 {formatMonthlyWorkHours(store.prescribedMonthlyWorkMinutes) || "未設定"}h / 社保 {store.socialInsurancePrefecture ?? "福岡県"}</small>
+                    <small>給与: {store.payrollCycleType === "specified_day" ? `${store.payrollClosingDay ?? 25}日締め` : "月末締め"} / 月所定 {formatMonthlyWorkHours(store.prescribedMonthlyWorkMinutes) || "未設定"}h / 社保 {store.socialInsurancePrefecture ?? "福岡県"} / {store.socialInsuranceDeductionTiming === "current_month" ? "当月徴収" : "翌月徴収"}</small>
                     <small>天気: {store.attendanceLatitude !== null && store.attendanceLatitude !== undefined && store.attendanceLongitude !== null && store.attendanceLongitude !== undefined ? "打刻地点から自動取得" : "福岡市（既定）"}</small>
                     <small>打刻地点: {store.attendanceLocationEnabled ? `${store.attendanceLatitude ?? "--"}, ${store.attendanceLongitude ?? "--"} / ${store.attendanceRadiusMeters ?? 100}m` : "位置制限なし"}</small>
                     {store.reservationNote ? <small>予約メモ: {store.reservationNote}</small> : null}
@@ -1429,9 +1437,20 @@ export default function StoresPage() {
                       ))}
                     </select>
                   </label>
+                  <label>
+                    <span>社会保険料の控除タイミング</span>
+                    <select
+                      name="socialInsuranceDeductionTiming"
+                      value={editingSocialInsuranceDeductionTiming}
+                      onChange={(event) => setEditingSocialInsuranceDeductionTiming(event.target.value === "current_month" ? "current_month" : "next_month")}
+                    >
+                      <option value="next_month">翌月徴収</option>
+                      <option value="current_month">当月徴収</option>
+                    </select>
+                  </label>
                   <div className="store-payroll-summary">
                     <strong>社会保険料率</strong>
-                    <p>健康保険・厚生年金などの料率を地区別に参照するための基準地域です。料率表との連携は給与計算の次フェーズで反映します。</p>
+                    <p>健康保険・厚生年金などの料率を地区別に参照します。翌月徴収では、従業員の適用開始月の翌月給与から控除します。</p>
                   </div>
                   <div className="store-payroll-summary">
                     <strong>希望シフト提出期限</strong>
@@ -1475,6 +1494,7 @@ export default function StoresPage() {
                   <input type="hidden" name="payrollClosingDay" value={editingPayrollClosingDay} />
                   <input type="hidden" name="prescribedMonthlyWorkHours" value={editingPrescribedMonthlyWorkHours} />
                   <input type="hidden" name="socialInsurancePrefecture" value={editingSocialInsurancePrefecture} />
+                  <input type="hidden" name="socialInsuranceDeductionTiming" value={editingSocialInsuranceDeductionTiming} />
                   <input type="hidden" name="shiftFirstHalfSubmissionDeadlineDay" value={editingShiftFirstHalfDeadlineDay} />
                   <input type="hidden" name="shiftSecondHalfSubmissionDeadlineDay" value={editingShiftSecondHalfDeadlineDay} />
                   <input type="hidden" name="shiftSubmissionDeadlineTime" value={editingShiftDeadlineTime} />

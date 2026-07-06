@@ -14,6 +14,7 @@ create table if not exists stores (
   payroll_closing_day integer not null default 31,
   prescribed_monthly_work_minutes integer,
   social_insurance_prefecture text not null default '福岡県',
+  social_insurance_deduction_timing text not null default 'next_month',
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -28,6 +29,7 @@ alter table stores add column if not exists payroll_cycle_type text not null def
 alter table stores add column if not exists payroll_closing_day integer not null default 31;
 alter table stores add column if not exists prescribed_monthly_work_minutes integer;
 alter table stores add column if not exists social_insurance_prefecture text not null default '福岡県';
+alter table stores add column if not exists social_insurance_deduction_timing text not null default 'next_month';
 alter table stores add column if not exists weather_location_name text;
 alter table stores add column if not exists weather_latitude numeric(10, 6);
 alter table stores add column if not exists weather_longitude numeric(10, 6);

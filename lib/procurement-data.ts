@@ -133,6 +133,7 @@ export async function getProcurementDashboardData(session?: EmployeeSession) {
           coalesce(stores.payroll_closing_day, 31)::int as "payrollClosingDay",
           stores.prescribed_monthly_work_minutes as "prescribedMonthlyWorkMinutes",
           coalesce(stores.social_insurance_prefecture, '福岡県') as "socialInsurancePrefecture",
+          coalesce(stores.social_insurance_deduction_timing, 'next_month') as "socialInsuranceDeductionTiming",
           coalesce(stores.weather_location_name, '') as "weatherLocationName",
           stores.weather_latitude::float as "weatherLatitude",
           stores.weather_longitude::float as "weatherLongitude",
