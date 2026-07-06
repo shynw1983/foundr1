@@ -1318,6 +1318,7 @@ export default function VouchersPage() {
     const params = new URLSearchParams({ export: "tax_accountant_csv" });
     if (exportStartDate) params.set("from", exportStartDate);
     if (exportEndDate) params.set("to", exportEndDate);
+    if (selectedStoreId) params.set("storeId", selectedStoreId);
     window.location.href = `/api/vouchers?${params.toString()}`;
   }
 

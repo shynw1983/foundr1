@@ -904,7 +904,19 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
   const url = new URL(request.url);
   const fromDate = normalizeDate(url.searchParams.get("from") ?? "");
   const toDate = normalizeDate(url.searchParams.get("to") ?? "");
+  const storeId = String(url.searchParams.get("storeId") ?? "").trim();
   const origin = url.origin;
+  if (storeId && !await canAccessStore(session, storeId)) {
+    return Response.json({ error: "この店舗のCSVを出力する権限がありません。" }, { status: 403 });
+  }
+  const storeRows = storeId ? await sql`
+    select name
+    from stores
+    where id::text = ${storeId}
+      and status = 'active'
+    limit 1
+  ` : [];
+  const storeName = storeId ? String(storeRows[0]?.name ?? "") : "";
 
   const rows = await sql`
     with expanded_lines as (
@@ -938,6 +950,7 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
       cross join lateral jsonb_array_elements(coalesce(receipt_ocr_results.raw_result->'accountingLines', '[]'::jsonb)) with ordinality as line(value, ordinality)
       where receipt_ocr_results.status = 'confirmed'
         and (${scope.allStores} or receipt_ocr_results.created_by = ${session.id} or receipt_ocr_results.store_id::text = any(${scopedStoreIds}))
+        and (${storeId || null}::text is null or receipt_ocr_results.store_id::text = ${storeId || null})
         and (${fromDate || null}::date is null or receipt_ocr_results.purchase_date >= ${fromDate || null}::date)
         and (${toDate || null}::date is null or receipt_ocr_results.purchase_date <= ${toDate || null}::date)
     )
@@ -1053,13 +1066,40 @@ async function exportTaxAccountantCsv(session: NonNullable<Awaited<ReturnType<ty
   });
 
   const csv = "\ufeff" + [headers, ...csvRows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
-  const filename = `foundr1-tax-accountant-vouchers-${fromDate || "all"}-${toDate || "all"}.csv`;
+  const filename = buildVoucherCsvFilename(storeName, fromDate, toDate);
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`
+      "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
     }
   });
+}
+
+function buildVoucherCsvFilename(storeName: string, fromDate: string, toDate: string) {
+  const storeSlug = buildVoucherStoreFilenameSlug(storeName);
+  return `foundr1-vouchers-${storeSlug}-${fromDate || "all"}-${toDate || "all"}.csv`;
+}
+
+function buildVoucherStoreFilenameSlug(storeName: string) {
+  const normalizedName = String(storeName ?? "").normalize("NFKC").trim();
+  if (!normalizedName) return "all-stores";
+  const knownStoreSlugs: Array<[RegExp, string]> = [
+    [/清水/, "shimizu"],
+    [/春吉/, "haruyoshi"],
+    [/天神/, "tenjin"],
+    [/博多/, "hakata"],
+    [/福岡|福冈/, "fukuoka"]
+  ];
+  for (const [pattern, slug] of knownStoreSlugs) {
+    if (pattern.test(normalizedName)) return slug;
+  }
+  const asciiSlug = normalizedName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return asciiSlug || "store";
 }
 
 async function listConfirmedAccountingLines(session: NonNullable<Awaited<ReturnType<typeof requireOsSession>>>, request: Request) {
