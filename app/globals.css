@@ -20329,12 +20329,16 @@ body :where(
 }
 
 .maamaa-reference-mode-tabs button,
-.maamaa-reference-picker-group button {
+.maamaa-reference-picker-item {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
   background: #f8fafc;
+}
+
+.maamaa-reference-mode-tabs button,
+.maamaa-reference-picker-item > button {
   text-align: left;
 }
 
@@ -20345,7 +20349,7 @@ body :where(
 }
 
 .maamaa-reference-mode-tabs button.is-active,
-.maamaa-reference-picker-group button.is-selected {
+.maamaa-reference-picker-item.is-selected {
   border-color: rgba(33, 116, 91, 0.45);
   background: var(--green-soft);
 }
@@ -20489,17 +20493,65 @@ body :where(
 
 .maamaa-reference-picker-group > div {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 7px;
 }
 
-.maamaa-reference-picker-group button {
+.maamaa-reference-picker-item {
   display: grid;
-  gap: 3px;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
   padding: 8px;
 }
 
+.maamaa-reference-picker-item > button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
 .maamaa-reference-picker-group strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.maamaa-reference-quantity-stepper {
+  display: grid;
+  grid-template-columns: 30px minmax(26px, 1fr) 30px;
+  align-items: center;
+  gap: 5px;
+}
+
+.maamaa-reference-quantity-stepper button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: white;
+}
+
+.maamaa-reference-quantity-stepper button:disabled {
+  color: var(--muted);
+  background: #f1f5f9;
+}
+
+.maamaa-reference-quantity-stepper strong {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
   font-size: 13px;
   font-weight: 650;
 }

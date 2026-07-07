@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   Clock3,
   Package,
+  Minus,
+  Plus,
   Search
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -303,6 +305,7 @@ type MaamaaPlanLine = {
   id: string;
   title: string;
   detail: string;
+  quantity: number;
   source: "base" | "set" | "add";
   categoryKey: string;
   categoryLabel: string;
@@ -340,6 +343,7 @@ function buildSetPlanLine(item: string, index: number, rules: MaamaaProductionRu
     id: `set-${index}-${item}`,
     title: rule?.kitchenName || item,
     detail: item,
+    quantity: 1,
     source: "set",
     categoryKey: rule ? skuCategoryKey(rule.productCategory, rule.productSubcategory) : skuCategoryKey(undefined, undefined),
     categoryLabel: category,
@@ -352,6 +356,7 @@ function buildStructuredSetPlanLine(item: MaamaaSetItem, index: number): MaamaaP
     id: `set-${index}-${item.productId ?? item.productName}`,
     title: item.productName,
     detail: formatMaamaaSetItem(item),
+    quantity: 1,
     source: "set",
     categoryKey: skuCategoryKey(item.productCategory, item.productSubcategory),
     categoryLabel: skuCategoryLabel(item.productCategory, item.productSubcategory, false),
@@ -359,7 +364,7 @@ function buildStructuredSetPlanLine(item: MaamaaSetItem, index: number): MaamaaP
   };
 }
 
-function buildAddPlanLine(rule: MaamaaProductionRule, key: string): MaamaaPlanLine {
+function buildAddPlanLine(rule: MaamaaProductionRule, key: string, quantity: number): MaamaaPlanLine {
   const cookType = rule.cookType ?? (rule.placement === "container" || rule.placement === "finish" ? "no_boil" : "boil");
   const category = skuCategoryLabel(rule.productCategory, rule.productSubcategory, false);
   return {
@@ -374,6 +379,7 @@ function buildAddPlanLine(rule: MaamaaProductionRule, key: string): MaamaaPlanLi
       rule.placement === "container" ? "容器へ" : "",
       rule.placement === "finish" ? "仕上げ" : ""
     ].filter(Boolean).join(" / ") || "分量要確認",
+    quantity,
     source: "add",
     categoryKey: skuCategoryKey(rule.productCategory, rule.productSubcategory),
     categoryLabel: category,
@@ -415,7 +421,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
   const [selectedHeatName, setSelectedHeatName] = useState("普通辛");
   const [selectedNumbName, setSelectedNumbName] = useState("");
   const [selectedFlavorNames, setSelectedFlavorNames] = useState<string[]>([]);
-  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [selectedAddOns, setSelectedAddOns] = useState<Record<string, number>>({});
   const t = (value: string | undefined) => translateMaamaaReferenceText(value, language);
   const getSetItems = (rule: MaamaaSetRule) => rule.items?.length ? rule.items.map(formatMaamaaSetItem) : rule.defaultItems;
   const operationRules = useMemo(() => settings.setRules.filter((rule) => rule.name === "複数杯注文"), [settings.setRules]);
@@ -446,13 +452,13 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
   }, [flavorRules, heatRules, medicinalRules, numbRules, selectedHeatName, selectedMedicinalName, selectedNumbName, selectedSoupName, soupRules]);
   const selectedAddOnRules = selectableRules
     .map((rule, index) => ({ rule, key: maamaaReferenceItemKey(rule, index) }))
-    .filter((entry) => selectedAddOns.includes(entry.key));
+    .filter((entry) => (selectedAddOns[entry.key] ?? 0) > 0);
   const setLines = mode === "set" && selectedSet
     ? selectedSet.items?.length
       ? selectedSet.items.map((item, index) => buildStructuredSetPlanLine(item, index))
       : getSetItems(selectedSet).map((item, index) => buildSetPlanLine(item, index, settings.productionRules))
     : [];
-  const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key));
+  const addLines = selectedAddOnRules.map(({ rule, key }) => buildAddPlanLine(rule, key, selectedAddOns[key] ?? 1));
   const planLines = groupPlanLines([...setLines, ...addLines]);
   const selectedSoupRule = settings.seasoningRules.find((rule) => rule.name === selectedSoupName) ?? soupRules[0];
   const selectedMedicinalRule = settings.seasoningRules.find((rule) => rule.name === selectedMedicinalName);
@@ -478,8 +484,17 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
       return groups;
     }, new Map<string, { key: string; label: string; rules: Array<{ rule: MaamaaProductionRule; key: string }> }>()).values());
 
-  function toggleAddOn(key: string) {
-    setSelectedAddOns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  function setAddOnQuantity(key: string, quantity: number) {
+    const nextQuantity = Math.max(0, Math.min(99, Math.round(quantity)));
+    setSelectedAddOns((current) => {
+      const next = { ...current };
+      if (nextQuantity <= 0) {
+        delete next[key];
+      } else {
+        next[key] = nextQuantity;
+      }
+      return next;
+    });
   }
 
   function toggleFlavor(name: string) {
@@ -582,8 +597,8 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
           <div className="maamaa-reference-product-picker">
             <div className="maamaa-reference-editor-heading">
               <h4>{isChinese ? "选择追加产品" : "追加商品を選択"}</h4>
-              {selectedAddOns.length ? (
-                <button className="text-button" type="button" onClick={() => setSelectedAddOns([])}>{isChinese ? "清空" : "クリア"}</button>
+              {Object.keys(selectedAddOns).length ? (
+                <button className="text-button" type="button" onClick={() => setSelectedAddOns({})}>{isChinese ? "清空" : "クリア"}</button>
               ) : null}
             </div>
             {groupedSelectableRules.map((category) => (
@@ -591,10 +606,21 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
                 <h5>{category.label}</h5>
                 <div>
                   {category.rules.map(({ rule, key }) => (
-                    <button className={selectedAddOns.includes(key) ? "is-selected" : ""} type="button" key={key} onClick={() => toggleAddOn(key)}>
-                      <strong>{t(rule.customerName)}</strong>
-                      <span>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</span>
-                    </button>
+                    <article className={`maamaa-reference-picker-item ${(selectedAddOns[key] ?? 0) > 0 ? "is-selected" : ""}`} key={key}>
+                      <button type="button" onClick={() => setAddOnQuantity(key, (selectedAddOns[key] ?? 0) > 0 ? 0 : 1)}>
+                        <strong>{t(rule.customerName)}</strong>
+                        <span>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</span>
+                      </button>
+                      <div className="maamaa-reference-quantity-stepper" aria-label={t(rule.customerName)}>
+                        <button type="button" onClick={() => setAddOnQuantity(key, (selectedAddOns[key] ?? 0) - 1)} disabled={(selectedAddOns[key] ?? 0) <= 0} aria-label={isChinese ? "减少" : "減らす"}>
+                          <Minus size={14} />
+                        </button>
+                        <strong>{selectedAddOns[key] ?? 0}</strong>
+                        <button type="button" onClick={() => setAddOnQuantity(key, (selectedAddOns[key] ?? 0) + 1)} aria-label={isChinese ? "增加" : "増やす"}>
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </article>
                   ))}
                 </div>
               </section>
@@ -608,7 +634,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
               <p>{mode === "soup" ? t(selectedSoupRule?.name ?? selectedSoupName) : t(selectedSet?.name)}</p>
               <h3>{isChinese ? "制作流程" : "制作フロー"}</h3>
             </div>
-            <span>{isChinese ? `${setLines.length}个套餐内 / ${addLines.length}个追加` : `セット内 ${setLines.length} / 追加 ${addLines.length}`}</span>
+            <span>{isChinese ? `${setLines.length}个套餐内 / ${addLines.reduce((sum, line) => sum + line.quantity, 0)}个追加` : `セット内 ${setLines.length} / 追加 ${addLines.reduce((sum, line) => sum + line.quantity, 0)}`}</span>
           </div>
 
           <section className="maamaa-reference-flow">
@@ -675,7 +701,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
                     <span>{sourceLabel(line.source, isChinese)}</span>
                     <div>
                       <strong>{t(line.title)}</strong>
-                      <p>{t(line.detail)}</p>
+                      <p>{line.quantity > 1 ? `${t(line.detail)} / x${line.quantity}` : t(line.detail)}</p>
                       {line.notes ? <small>{t(line.notes)}</small> : null}
                     </div>
                   </article>

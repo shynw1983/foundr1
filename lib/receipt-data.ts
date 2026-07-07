@@ -273,7 +273,12 @@ function getMaamaaSections(summary: CustomerSummary) {
       const section = asRecord(rawSection);
       return {
         title: clean(section.sectionTitle),
-        items: asArray(section.items).map((rawChoice) => clean(asRecord(rawChoice).name)).filter(Boolean)
+        items: asArray(section.items).map((rawChoice) => {
+          const choice = asRecord(rawChoice);
+          const name = clean(choice.name);
+          const quantity = Math.max(1, Math.round(Number(choice.quantity) || 1));
+          return name && quantity > 1 ? `${name} x${quantity}` : name;
+        }).filter(Boolean)
       };
     }).filter((section) => section.title && section.items.length);
   });

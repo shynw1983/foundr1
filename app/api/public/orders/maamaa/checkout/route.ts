@@ -65,6 +65,19 @@ function selectedIdsForSection(body: Record<string, unknown>, section: MaamaaMen
   return Array.isArray(raw) ? raw.map(String).filter(Boolean) : [];
 }
 
+function countChoices(items: MaamaaPricedOption[]) {
+  const counts = new Map<string, { item: MaamaaPricedOption; quantity: number }>();
+  for (const item of items) {
+    const current = counts.get(item.id);
+    counts.set(item.id, { item, quantity: (current?.quantity ?? 0) + 1 });
+  }
+  return Array.from(counts.values());
+}
+
+function quantityLabel(name: string, quantity: number) {
+  return quantity > 1 ? `${name} x${quantity}` : name;
+}
+
 function komojuAuthHeader(secretKey: string) {
   return `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
 }
@@ -118,7 +131,7 @@ function validateBuildableItem(rawItem: Record<string, unknown>, menu: Awaited<R
   ].filter(Boolean);
   const sectionLabels = selectedSections
     .filter((section) => section.items.length)
-    .map(({ section, items }) => `${section.title}: ${items.map((item) => item.name).join(", ")}`);
+    .map(({ section, items }) => `${section.title}: ${countChoices(items).map(({ item, quantity }) => quantityLabel(item.name, quantity)).join(", ")}`);
   const detailLabel = [...customizationLabels, ...sectionLabels].join("\n");
 
   return {
@@ -157,7 +170,13 @@ function buildMaamaaItemPayload(
     sections: item.selectedSections.map(({ section, items }) => ({
       sectionId: section.id,
       sectionTitle: section.title,
-      items: items.map((selectedItem) => ({ id: selectedItem.id, name: selectedItem.name, price: selectedItem.price }))
+      items: countChoices(items).map(({ item: selectedItem, quantity }) => ({
+        id: selectedItem.id,
+        name: selectedItem.name,
+        price: selectedItem.price,
+        quantity,
+        linePrice: selectedItem.price * quantity
+      }))
     })),
     amount: item.amount,
     detailLabel: item.detailLabel
@@ -170,7 +189,7 @@ function buildMaamaaProductionLabels(item: Exclude<ReturnType<typeof validateBui
     item.heat ? `辛さ: ${item.heat.name}` : "",
     item.numb ? `痺れ: ${item.numb.name}` : "",
     ...item.specialFlavorItems.map((flavor) => `味変: ${flavor.name}`),
-    ...item.toppingItems.map((topping) => topping.name)
+    ...countChoices(item.toppingItems).map(({ item: topping, quantity }) => quantityLabel(topping.name, quantity))
   ].filter(Boolean);
 }
 
