@@ -607,7 +607,7 @@ function MaamaaProductionReference({ language, settings }: { language: MaamaaRef
                 <div>
                   {category.rules.map(({ rule, key }) => (
                     <article className={`maamaa-reference-picker-item ${(selectedAddOns[key] ?? 0) > 0 ? "is-selected" : ""}`} key={key}>
-                      <button type="button" onClick={() => setAddOnQuantity(key, (selectedAddOns[key] ?? 0) > 0 ? 0 : 1)}>
+                      <button type="button" onClick={() => setAddOnQuantity(key, (selectedAddOns[key] ?? 0) + 1)}>
                         <strong>{t(rule.customerName)}</strong>
                         <span>{t(rule.kitchenName)}{rule.quantity ? ` / ${rule.quantity}` : ""}</span>
                       </button>
