@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, MonitorSmartphone, ScanLine } from "lucide-react";
+import { MonitorSmartphone, ScanLine } from "lucide-react";
 import jsQR from "jsqr";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
@@ -402,6 +402,7 @@ export default function CustomerDisplayPage() {
   const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const memberScannerStreamRef = useRef<MediaStream | null>(null);
   const memberScannerActiveRef = useRef(false);
+  const memberScanCommandIdRef = useRef("");
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [state, setState] = useState<DisplayState>(idleState);
@@ -568,6 +569,33 @@ export default function CustomerDisplayPage() {
     };
   }, [memberScannerOpen]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function checkMemberScanCommand() {
+      const storeId = selectedStoreIdRef.current;
+      if (!storeId || memberScannerOpen) return;
+      const params = new URLSearchParams({ storeId });
+      if (memberScanCommandIdRef.current) params.set("commandSince", memberScanCommandIdRef.current);
+      const response = await fetch(`/api/store/pos/customer-display/member-scan?${params.toString()}`, { cache: "no-store" }).catch(() => null);
+      if (!active || !response?.ok) return;
+      const body = await response.json().catch(() => ({})) as { scanCommand?: { id?: string; action?: string } | null };
+      const command = body.scanCommand;
+      const commandId = String(command?.id ?? "").trim();
+      if (!commandId || commandId === memberScanCommandIdRef.current || command?.action !== "open_scanner") return;
+      memberScanCommandIdRef.current = commandId;
+      setMenuOpen(false);
+      setMemberScannerOpen(true);
+    }
+
+    void checkMemberScanCommand();
+    const interval = window.setInterval(checkMemberScanCommand, 1200);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [memberScannerOpen]);
+
   async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
     if (storeId) params.set("storeId", storeId);
@@ -717,10 +745,6 @@ export default function CustomerDisplayPage() {
           </button>
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             全画面・常時点灯 ON
-          </button>
-          <button className="secondary-button" type="button" onClick={() => setMemberScannerOpen(true)}>
-            <Camera size={16} />
-            会員 QR 読取
           </button>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"} / 同期 {realtimeStatus === "connected" ? "リアルタイム" : "自動更新"}</small>
           <a className="secondary-button" href="/store/pos">POS</a>

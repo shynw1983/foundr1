@@ -659,6 +659,7 @@ export default function StorePosPage() {
   const [memberLookupLoading, setMemberLookupLoading] = useState(false);
   const [memberScannerOpen, setMemberScannerOpen] = useState(false);
   const [memberScannerMessage, setMemberScannerMessage] = useState("");
+  const [customerDisplayScannerLoading, setCustomerDisplayScannerLoading] = useState(false);
   const [note, setNote] = useState("");
   const [receiptRequested, setReceiptRequested] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1056,6 +1057,26 @@ export default function StorePosPage() {
       setMessage(error instanceof Error ? error.message : "会員を確認できませんでした。");
     } finally {
       setMemberLookupLoading(false);
+    }
+  }
+
+  async function openCustomerDisplayMemberScanner() {
+    if (!selectedStoreId || customerDisplayScannerLoading) return;
+    setCustomerDisplayScannerLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/store/pos/customer-display/member-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: selectedStoreId, action: "open_scanner" })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "客席表示に会員 QR 読取を開始できませんでした。");
+      setMessage("客席表示で会員 QR 読取を開始しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "客席表示に会員 QR 読取を開始できませんでした。");
+    } finally {
+      setCustomerDisplayScannerLoading(false);
     }
   }
 
@@ -2343,10 +2364,14 @@ export default function StorePosPage() {
                   </button>
                   <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => setMemberScannerOpen(true)}>
                     <Camera size={15} />
-                    読取
+                    POS背面
+                  </button>
+                  <button className="secondary-button store-pos-member-scan-button" type="button" onClick={() => void openCustomerDisplayMemberScanner()} disabled={!selectedStoreId || customerDisplayScannerLoading}>
+                    <ScanLine size={15} />
+                    客席表示前面
                   </button>
                 </div>
-                <small>会員証 QR を読むか、電話番号を入力して確認できます。</small>
+                <small>POS 本体または客席表示の前面カメラで会員 QR を読み取れます。</small>
               </div>
             )}
           </div>

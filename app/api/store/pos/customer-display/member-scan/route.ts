@@ -32,12 +32,27 @@ function readScanRequest(value: unknown) {
   return { id, code, createdAt };
 }
 
+function readScanCommand(value: unknown) {
+  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const command = state.memberScanCommand && typeof state.memberScanCommand === "object" && !Array.isArray(state.memberScanCommand)
+    ? state.memberScanCommand as Record<string, unknown>
+    : {};
+  const id = normalizeText(command.id);
+  const action = normalizeText(command.action);
+  const createdAt = normalizeText(command.createdAt);
+  if (!id || action !== "open_scanner" || !createdAt) return null;
+  const ageMs = Date.now() - new Date(createdAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 2 * 60 * 1000) return null;
+  return { id, action, createdAt };
+}
+
 export async function GET(request: Request) {
   const { session, selectedStoreId, forbidden } = await resolveStoreId(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const since = normalizeText(new URL(request.url).searchParams.get("since"));
+  const commandSince = normalizeText(new URL(request.url).searchParams.get("commandSince"));
   const rows = await sql`
     select display_state as "displayState"
     from pos_customer_display_states
@@ -46,17 +61,16 @@ export async function GET(request: Request) {
   `;
   const requestState = readScanRequest(rows[0]?.displayState);
   const scanRequest = requestState && requestState.id !== since ? requestState : null;
-  return Response.json({ scanRequest }, { headers: { "Cache-Control": "no-store" } });
+  const commandState = readScanCommand(rows[0]?.displayState);
+  const scanCommand = commandState && commandState.id !== commandSince ? commandState : null;
+  return Response.json({ scanRequest, scanCommand }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { storeId?: string; code?: string };
+  const body = await request.json().catch(() => ({})) as { storeId?: string; code?: string; action?: string };
   const { session, selectedStoreId, forbidden } = await resolveStoreId(request, normalizeText(body.storeId));
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
-
-  const code = normalizeText(body.code);
-  if (!code) return Response.json({ error: "会員 QR を読み取れませんでした。" }, { status: 400 });
 
   const currentRows = await sql`
     select display_state as "displayState"
@@ -67,12 +81,29 @@ export async function POST(request: Request) {
   const currentState = currentRows[0]?.displayState && typeof currentRows[0].displayState === "object"
     ? currentRows[0].displayState as Record<string, unknown>
     : {};
-  const memberScanRequest = {
-    id: crypto.randomUUID(),
-    code,
-    createdAt: new Date().toISOString()
+  const createdAt = new Date().toISOString();
+  const action = normalizeText(body.action);
+  const code = normalizeText(body.code);
+  const memberScanCommand = action === "open_scanner"
+    ? {
+        id: crypto.randomUUID(),
+        action: "open_scanner",
+        createdAt
+      }
+    : null;
+  const memberScanRequest = !memberScanCommand
+    ? {
+        id: crypto.randomUUID(),
+        code,
+        createdAt
+      }
+    : null;
+  if (!memberScanCommand && !code) return Response.json({ error: "会員 QR を読み取れませんでした。" }, { status: 400 });
+  const displayState = {
+    ...currentState,
+    ...(memberScanCommand ? { memberScanCommand } : {}),
+    ...(memberScanRequest ? { memberScanRequest } : {})
   };
-  const displayState = { ...currentState, memberScanRequest };
 
   await sql`
     insert into pos_customer_display_states (
@@ -94,5 +125,5 @@ export async function POST(request: Request) {
       updated_at = now()
   `;
 
-  return Response.json({ ok: true, scanRequest: memberScanRequest });
+  return Response.json({ ok: true, scanRequest: memberScanRequest, scanCommand: memberScanCommand });
 }
