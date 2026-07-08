@@ -12387,33 +12387,40 @@ body :where(
 
 .customer-display-page.is-dense .customer-display-items {
   gap: 8px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .customer-display-page.is-dense .customer-display-item-list {
-  gap: 6px;
+  gap: 5px;
 }
 
 .customer-display-page.is-dense .customer-display-item {
-  min-height: 44px;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(88px, auto);
-  padding: 6px 8px;
+  min-height: 36px;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(76px, auto);
+  padding: 4px 6px;
 }
 
 .customer-display-page.is-dense .customer-display-item strong {
-  font-size: clamp(13px, 1.7vh, 18px);
-  line-height: 1.08;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: clamp(11px, 1.45vh, 15px);
+  line-height: 1.05;
 }
 
 .customer-display-page.is-dense .customer-display-item span {
-  font-size: 10px;
-  line-height: 1.15;
+  overflow: hidden;
+  font-size: 9px;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customer-display-page.is-dense .customer-display-item em,
 .customer-display-page.is-dense .customer-display-item b {
-  font-size: clamp(13px, 1.8vh, 18px);
+  font-size: clamp(11px, 1.5vh, 15px);
 }
 
 .customer-display-page.is-ultra-dense .customer-display-layout {
@@ -12439,11 +12446,11 @@ body :where(
 }
 
 .customer-display-page.is-ultra-dense .customer-display-item {
-  min-height: 32px;
-  gap: 6px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(70px, auto);
+  min-height: 26px;
+  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(58px, auto);
   border-radius: 6px;
-  padding: 3px 6px;
+  padding: 2px 5px;
 }
 
 .customer-display-page.is-ultra-dense .customer-display-item div {
@@ -12451,18 +12458,25 @@ body :where(
 }
 
 .customer-display-page.is-ultra-dense .customer-display-item strong {
-  font-size: clamp(10px, 1.35vh, 14px);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: clamp(9px, 1.12vh, 12px);
   line-height: 1.05;
 }
 
 .customer-display-page.is-ultra-dense .customer-display-item span {
-  font-size: 9px;
+  overflow: hidden;
+  font-size: 8px;
   line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customer-display-page.is-ultra-dense .customer-display-item em,
 .customer-display-page.is-ultra-dense .customer-display-item b {
-  font-size: clamp(10px, 1.45vh, 14px);
+  font-size: clamp(9px, 1.18vh, 12px);
 }
 
 .customer-display-page.is-ultra-dense .customer-display-payment {
@@ -12797,6 +12811,40 @@ body :where(
 
   .customer-display-settlement.is-cash {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 900px) {
+  .customer-display-page.is-dense,
+  .customer-display-page.is-ultra-dense {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .customer-display-page.is-dense .customer-display-topbar,
+  .customer-display-page.is-ultra-dense .customer-display-topbar {
+    min-height: 0;
+  }
+
+  .customer-display-page.is-dense .customer-display-clock,
+  .customer-display-page.is-ultra-dense .customer-display-clock {
+    padding: 6px 10px;
+  }
+
+  .customer-display-page.is-dense .customer-display-clock span,
+  .customer-display-page.is-ultra-dense .customer-display-clock span {
+    font-size: 20px;
+  }
+
+  .customer-display-page.is-dense .customer-display-status-title,
+  .customer-display-page.is-ultra-dense .customer-display-status-title {
+    min-height: 0;
+    padding: 6px 10px;
+  }
+
+  .customer-display-page.is-dense .customer-display-status-title h1,
+  .customer-display-page.is-ultra-dense .customer-display-status-title h1 {
+    font-size: 16px;
   }
 }
 

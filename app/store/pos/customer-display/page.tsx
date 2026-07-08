@@ -419,9 +419,9 @@ export default function CustomerDisplayPage() {
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   const visibleItems = state.items;
-  const orderDensityClass = state.items.length >= 13
+  const orderDensityClass = state.items.length >= 7
     ? "is-ultra-dense"
-    : state.items.length >= 8
+    : state.items.length >= 4
       ? "is-dense"
       : "";
   const changeAmount = state.cashChangeAmount ?? 0;
