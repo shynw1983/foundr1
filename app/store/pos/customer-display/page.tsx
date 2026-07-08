@@ -430,7 +430,7 @@ export default function CustomerDisplayPage() {
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   const visibleItems = state.items;
-  const orderScale = useMemo(() => {
+  const orderLayout = useMemo(() => {
     const itemCount = Math.max(1, state.items.length);
     const chromeHeight = viewportSize.width <= 820 ? 280 : 180;
     const availableListHeight = Math.max(180, viewportSize.height - chromeHeight);
@@ -438,8 +438,15 @@ export default function CustomerDisplayPage() {
     const rowPressure = (targetRowHeight - 22) / 46;
     const itemPressure = 1 - Math.max(0, itemCount - 2) * 0.11;
     const viewportPressure = viewportSize.height < 760 ? 0.92 : 1;
-    return Math.round(clampNumber(Math.min(rowPressure, itemPressure, viewportPressure), 0.42, 0.92) * 1000) / 1000;
+    const scale = Math.round(clampNumber(Math.min(rowPressure, itemPressure, viewportPressure), 0.42, 0.92) * 1000) / 1000;
+    return {
+      scale,
+      nameLines: targetRowHeight >= 72 && scale >= 0.7 ? 2 : 1,
+      metaLines: targetRowHeight >= 64 && scale >= 0.62 ? 2 : 1
+    };
   }, [state.items.length, viewportSize.height, viewportSize.width]);
+  const orderScale = orderLayout.scale;
+  const orderMetaLineHeight = Math.round((1.14 + 0.08 * orderScale) * 1000) / 1000;
   const orderLayoutStyle = {
     "--order-scale": orderScale,
     "--order-row-min": `${Math.round(24 + 28 * orderScale)}px`,
@@ -452,8 +459,10 @@ export default function CustomerDisplayPage() {
     "--order-meta-size": `${Math.round((7.5 + 3.5 * orderScale) * 10) / 10}px`,
     "--order-amount-size": `${Math.round((8.5 + 12.5 * orderScale) * 10) / 10}px`,
     "--order-line-height": Math.round((1.03 + 0.13 * orderScale) * 1000) / 1000,
-    "--order-name-lines": orderScale < 0.7 ? 1 : 2,
-    "--order-meta-lines": orderScale < 0.6 ? 1 : 2,
+    "--order-meta-line-height": orderMetaLineHeight,
+    "--order-name-lines": orderLayout.nameLines,
+    "--order-meta-lines": orderLayout.metaLines,
+    "--order-meta-max-height": `${Math.ceil((7.5 + 3.5 * orderScale) * orderMetaLineHeight * orderLayout.metaLines + 2)}px`,
     "--order-amount-column": `${Math.round(54 + 48 * orderScale)}px`
   } as CSSProperties;
   const changeAmount = state.cashChangeAmount ?? 0;

@@ -12049,8 +12049,10 @@ body :where(
   --order-meta-size: 11px;
   --order-amount-size: 20px;
   --order-line-height: 1.15;
+  --order-meta-line-height: 1.2;
   --order-name-lines: 2;
   --order-meta-lines: 2;
+  --order-meta-max-height: 28px;
   --order-amount-column: 98px;
   min-height: 100dvh;
   max-height: 100dvh;
@@ -12560,10 +12562,11 @@ body :where(
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--order-meta-lines);
+  max-height: var(--order-meta-max-height);
   color: #73736d;
   font-size: var(--order-meta-size);
   font-weight: 400;
-  line-height: var(--order-line-height);
+  line-height: var(--order-meta-line-height);
   text-overflow: ellipsis;
 }
 
