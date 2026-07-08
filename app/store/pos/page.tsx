@@ -626,6 +626,8 @@ export default function StorePosPage() {
   const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const memberScannerStreamRef = useRef<MediaStream | null>(null);
   const memberScannerActiveRef = useRef(false);
+  const memberLookupLoadingRef = useRef(false);
+  const customerDisplayMemberScanIdRef = useRef("");
   const selectedStoreIdRef = useRef("");
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -780,6 +782,10 @@ export default function StorePosPage() {
     const timer = window.setTimeout(() => setMessage(""), 3500);
     return () => window.clearTimeout(timer);
   }, [message]);
+
+  useEffect(() => {
+    memberLookupLoadingRef.current = memberLookupLoading;
+  }, [memberLookupLoading]);
 
   useEffect(() => {
     if (!discountPresetKey) return;
@@ -1052,6 +1058,34 @@ export default function StorePosPage() {
       setMemberLookupLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!selectedStoreId) return;
+    let active = true;
+
+    async function checkCustomerDisplayMemberScan() {
+      if (!selectedStoreIdRef.current || memberLookupLoadingRef.current) return;
+      const params = new URLSearchParams({ storeId: selectedStoreIdRef.current });
+      if (customerDisplayMemberScanIdRef.current) params.set("since", customerDisplayMemberScanIdRef.current);
+      const response = await fetch(`/api/store/pos/customer-display/member-scan?${params.toString()}`, { cache: "no-store" }).catch(() => null);
+      if (!active || !response?.ok) return;
+      const body = await response.json().catch(() => ({})) as { scanRequest?: { id?: string; code?: string } | null };
+      const scanRequest = body.scanRequest;
+      const requestId = String(scanRequest?.id ?? "").trim();
+      const code = String(scanRequest?.code ?? "").trim();
+      if (!requestId || !code || requestId === customerDisplayMemberScanIdRef.current) return;
+      customerDisplayMemberScanIdRef.current = requestId;
+      void lookupMember(code);
+    }
+
+    void checkCustomerDisplayMemberScan();
+    const interval = window.setInterval(checkCustomerDisplayMemberScan, 1500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId]);
 
   function clearSelectedMember() {
     setSelectedMember(null);

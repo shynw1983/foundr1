@@ -1,6 +1,7 @@
 "use client";
 
-import { MonitorSmartphone } from "lucide-react";
+import { Camera, MonitorSmartphone, ScanLine } from "lucide-react";
+import jsQR from "jsqr";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
@@ -397,12 +398,18 @@ function formatMemberDisplayName(name: string, language: DisplayLanguage) {
 }
 
 export default function CustomerDisplayPage() {
+  const memberScannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const memberScannerStreamRef = useRef<MediaStream | null>(null);
+  const memberScannerActiveRef = useRef(false);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [state, setState] = useState<DisplayState>(idleState);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [memberScannerOpen, setMemberScannerOpen] = useState(false);
+  const [memberScannerMessage, setMemberScannerMessage] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "polling">("connecting");
   const [clockDate, setClockDate] = useState(() => new Date());
   const [mediaSettings, setMediaSettings] = useState<CustomerDisplayMediaSettings>(defaultMediaSettings);
@@ -461,6 +468,105 @@ export default function CustomerDisplayPage() {
     }, duration);
     return () => window.clearTimeout(timer);
   }, [activeMediaIndex, advertisingActive, mediaSettings.mode, mediaSettings.slideDurationSeconds, slideshowAssets]);
+
+  useEffect(() => {
+    if (!memberScannerOpen) return;
+    let cancelled = false;
+    let frameId = 0;
+
+    async function postScannedMemberCode(code: string) {
+      const storeId = selectedStoreIdRef.current;
+      if (!storeId) {
+        throw new Error("店舗を選択してください。");
+      }
+      const response = await fetch("/api/store/pos/customer-display/member-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId, code })
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "POS に会員 QR を送信できませんでした。");
+      setMessage("会員 QR を POS に送信しました。");
+    }
+
+    async function startScanner() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMemberScannerMessage("カメラを利用できません。");
+        return;
+      }
+
+      try {
+        setMemberScannerMessage("お客さまの会員 QR を前面カメラにかざしてください。");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "user" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        memberScannerStreamRef.current = stream;
+        const video = memberScannerVideoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
+
+        memberScannerActiveRef.current = true;
+        const scan = () => {
+          if (cancelled || !memberScannerActiveRef.current) return;
+          try {
+            const canvas = memberScannerCanvasRef.current;
+            const context = canvas?.getContext("2d", { willReadFrequently: true });
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            if (!canvas || !context || !width || !height) {
+              frameId = window.requestAnimationFrame(scan);
+              return;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(video, 0, 0, width, height);
+            const imageData = context.getImageData(0, 0, width, height);
+            const result = jsQR(imageData.data, width, height);
+            const code = result?.data?.trim();
+            if (code) {
+              memberScannerActiveRef.current = false;
+              setMemberScannerMessage("会員 QR を読み取りました。");
+              void postScannedMemberCode(code)
+                .then(() => setMemberScannerOpen(false))
+                .catch((error) => {
+                  setMemberScannerMessage(error instanceof Error ? error.message : "POS に送信できませんでした。");
+                  memberScannerActiveRef.current = true;
+                  frameId = window.requestAnimationFrame(scan);
+                });
+              return;
+            }
+          } catch {
+            setMemberScannerMessage("QR を読み取れません。角度を変えてもう一度かざしてください。");
+          }
+          frameId = window.requestAnimationFrame(scan);
+        };
+        frameId = window.requestAnimationFrame(scan);
+      } catch {
+        setMemberScannerMessage("カメラを起動できません。ブラウザまたは端末のカメラ権限を確認してください。");
+      }
+    }
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      memberScannerActiveRef.current = false;
+      if (frameId) window.cancelAnimationFrame(frameId);
+      memberScannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+      memberScannerStreamRef.current = null;
+      if (memberScannerVideoRef.current) memberScannerVideoRef.current.srcObject = null;
+    };
+  }, [memberScannerOpen]);
 
   async function load(storeId = selectedStoreIdRef.current || getStoredStoreSelection()) {
     const params = new URLSearchParams();
@@ -612,10 +718,39 @@ export default function CustomerDisplayPage() {
           <button className="secondary-button" type="button" onClick={() => void activateDisplayMode()}>
             全画面・常時点灯 ON
           </button>
+          <button className="secondary-button" type="button" onClick={() => setMemberScannerOpen(true)}>
+            <Camera size={16} />
+            会員 QR 読取
+          </button>
           <small>全画面 {fullscreenActive ? "ON" : "OFF"} / 常時点灯 {wakeLockActive ? "ON" : wakeLockSupported ? "OFF" : "使用不可"} / 同期 {realtimeStatus === "connected" ? "リアルタイム" : "自動更新"}</small>
           <a className="secondary-button" href="/store/pos">POS</a>
           <a className="secondary-button" href="/store">店舗ホーム</a>
           <a className="danger-button" href="/store/logout">ログアウト</a>
+        </div>
+      ) : null}
+
+      {memberScannerOpen ? (
+        <div className="store-pos-scanner-overlay customer-display-scanner-overlay" role="dialog" aria-modal="true" aria-label="会員 QR 読取">
+          <div className="store-pos-scanner-dialog customer-display-scanner-dialog">
+            <div className="store-pos-scanner-head">
+              <div>
+                <p className="eyebrow">Member QR</p>
+                <h3>会員 QR 読取</h3>
+                <span>客席表示タブレットの前面カメラで、お客さまの会員 QR を読み取ります。</span>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setMemberScannerOpen(false)}>閉じる</button>
+            </div>
+            <div className="store-pos-scanner-video">
+              <video ref={memberScannerVideoRef} playsInline muted />
+              <canvas ref={memberScannerCanvasRef} aria-hidden="true" />
+              <div className="store-pos-scanner-frame" aria-hidden="true" />
+            </div>
+            <p className="store-pos-scanner-message">{memberScannerMessage || "カメラを準備しています。"}</p>
+            <div className="store-pos-scanner-fallback">
+              <ScanLine size={16} />
+              <span>読み取り後、POS 側の会計に会員情報が自動で反映されます。</span>
+            </div>
+          </div>
         </div>
       ) : null}
 
