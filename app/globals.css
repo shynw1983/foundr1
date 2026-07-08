@@ -12753,17 +12753,55 @@ body :where(
 }
 
 .customer-display-cash-card {
-  align-content: center;
+  container-type: inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-items: center;
+  align-content: stretch;
+  gap: 6px;
+  min-height: 0;
   border: 1px solid #ededeb;
-  padding: 12px;
+  padding: 10px 12px;
   background: #fff;
 }
 
+.customer-display-cash-card span {
+  align-self: start;
+  min-width: 0;
+  color: #73736d;
+  line-height: 1.15;
+}
+
 .customer-display-cash-card strong {
+  align-self: center;
+  justify-self: end;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   color: #171717;
-  font-size: clamp(30px, 5.8vh, 62px);
+  font-size: clamp(24px, min(5vh, 17cqw), 54px);
   font-weight: 500;
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 0.98;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-display-settlement.has-promotions .customer-display-cash-card strong {
+  font-size: clamp(22px, min(4.2vh, 15cqw), 44px);
+}
+
+.customer-display-cash-card small {
+  align-self: end;
+  min-width: 0;
+  overflow: hidden;
+  color: #73736d;
+  font-size: 12px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customer-display-cash-card.is-short strong,
