@@ -520,7 +520,7 @@ async function importNanacha() {
 
   const groups = [
     { key: "temperature", name: "温度", type: "single", choices: [{ id: "ICE", label: "ICE", price: 0 }, { id: "HOT", label: "HOT", price: 0 }], affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "temperatures", defaultBehavior: "ice_when_missing", optionValueType: "id" } },
-    { key: "size", name: "サイズ", type: "single", choices: menu.sizes, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedSizes", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id" } },
+    { key: "size", name: "サイズ", type: "single", choices: menu.sizes, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedSizes", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id", defaultOptionKey: "regular" } },
     { key: "sweetness", name: "甘さ", type: "single", choices: menu.sweetness, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedSweetness", defaultBehavior: "all_when_missing_or_empty", optionValueType: "label" } },
     { key: "ice", name: "氷", type: "single", choices: menu.ice, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedIce", defaultBehavior: "all_when_missing_or_empty", optionValueType: "label", hotValue: menu.hotIce } },
     { key: "option", name: "オプション", type: "multiple", choices: menu.options, affectsProcedure: true, ruleJson: { source: "nanacha", sourceField: "allowedOptions", defaultBehavior: "all_when_missing_or_empty", optionValueType: "id", alwaysAllowed: ["none"] } },

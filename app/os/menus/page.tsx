@@ -314,6 +314,20 @@ function groupUsesFallbackAll(group: MenuGroup) {
   return group.ruleJson?.defaultBehavior === "all_when_missing_or_empty";
 }
 
+function getDefaultOptionKey(group: Pick<MenuGroup, "ruleJson">) {
+  return String(group.ruleJson?.defaultOptionKey ?? "").trim();
+}
+
+function updateGroupDefaultOption(group: MenuGroup, defaultOptionKey: string): MenuGroup {
+  const nextRuleJson = { ...(group.ruleJson ?? {}) };
+  if (defaultOptionKey) {
+    nextRuleJson.defaultOptionKey = defaultOptionKey;
+  } else {
+    delete nextRuleJson.defaultOptionKey;
+  }
+  return { ...group, ruleJson: nextRuleJson };
+}
+
 function buildPublicMenuUrl(brandId: string) {
   const params = new URLSearchParams();
   if (brandId) params.set("brand", brandId);
@@ -1405,6 +1419,20 @@ export default function MenuAdminPage() {
                           <select value={groupDraft.selectionType} onChange={(event) => setGroupDraft({ ...groupDraft, selectionType: event.target.value })}>
                             {selectionTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                           </select>
+                        </label>
+                        <label>
+                          <span>デフォルト選択肢</span>
+                          <select
+                            value={getDefaultOptionKey(groupDraft)}
+                            onChange={(event) => setGroupDraft(updateGroupDefaultOption(groupDraft, event.target.value))}
+                            disabled={!groupDraft.id || !activeGroupOptions.length}
+                          >
+                            <option value="">指定なし</option>
+                            {activeGroupOptions.map((option) => (
+                              <option value={getOptionKey(option)} key={option.id}>{option.name}</option>
+                            ))}
+                          </select>
+                          <small>POS で商品を選んだ時に最初から選択されます。</small>
                         </label>
 	                        <label>
 	                          <span>並び順</span>
