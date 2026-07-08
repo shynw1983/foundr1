@@ -33753,6 +33753,12 @@ body:has(.store-workbench-shell) {
   color: var(--green);
 }
 
+.store-pos-filter-list button.is-active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
 .source-indicator,
 .status-pill.is-active,
 .menu-category-button.is-active,
