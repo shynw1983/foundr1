@@ -107,10 +107,21 @@ type BridgePrintResult = {
   error?: string;
 };
 
+export type NativePrinterDevice = {
+  name: string;
+  address: string;
+  identifier: string;
+  deviceType: PosPrinterConnection["deviceType"];
+  connectionType: PosPrinterConnection["connectionType"];
+  paperWidth: PosPrinterConnection["paperWidth"];
+  isLikelyStarPrinter: boolean;
+};
+
 declare global {
   interface Window {
     Foundr1Printer?: {
       print?: (payloadJson: string) => BridgePrintResult | Promise<BridgePrintResult> | string | void;
+      listPairedPrinters?: () => string | Promise<string>;
       isAvailable?: () => boolean;
     };
   }
@@ -352,5 +363,26 @@ export async function printWithAndroidBridge(payload: PosPrintPayload) {
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "印刷に失敗しました。" };
+  }
+}
+
+export async function listPairedNativePrinters() {
+  if (typeof window === "undefined" || !window.Foundr1Printer?.listPairedPrinters) {
+    return { ok: false, error: "Android 印刷ブリッジが見つかりません。", devices: [] as NativePrinterDevice[] };
+  }
+  try {
+    const result = await window.Foundr1Printer.listPairedPrinters();
+    const parsed = JSON.parse(result || "{}") as { ok?: boolean; error?: string; devices?: NativePrinterDevice[] };
+    return {
+      ok: parsed.ok !== false,
+      error: parsed.error || "",
+      devices: Array.isArray(parsed.devices) ? parsed.devices : []
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "プリンター検索に失敗しました。",
+      devices: [] as NativePrinterDevice[]
+    };
   }
 }

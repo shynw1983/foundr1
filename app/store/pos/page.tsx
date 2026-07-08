@@ -379,6 +379,13 @@ function getOrderTaxRate(settings: PosSettings, orderType: string) {
   return orderType === "eat_in" ? Number(settings.dineInTaxRate ?? 10) : Number(settings.takeoutTaxRate ?? 8);
 }
 
+function isPrintablePrinter(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_network") return Boolean(printer.host);
+  if (printer.deviceType === "escpos_usb") return true;
+  if (printer.deviceType === "star_printer") return true;
+  return Boolean(printer.identifier);
+}
+
 function getTaxSummary(params: {
   subtotal: number;
   discountAmount: number;
@@ -572,6 +579,19 @@ function getOptionGroupLimit(group: Pick<PosOptionGroup, "groupKey" | "selection
   const limit = Number(group.ruleJson?.limit);
   if (Number.isFinite(limit)) return Math.max(0, Math.floor(limit));
   return getEffectiveSelectionType(group) === "single" ? 1 : 99;
+}
+
+function getDefaultOptionId(group: PosOptionGroup) {
+  const defaultOptionKey = String(group.ruleJson?.defaultOptionKey ?? "").trim();
+  const configuredOption = defaultOptionKey
+    ? group.options.find((option) => option.optionKey === defaultOptionKey || option.name === defaultOptionKey || option.id === defaultOptionKey)
+    : null;
+  if (configuredOption) return configuredOption.id;
+  if (group.groupKey === "size") {
+    const regularOption = group.options.find((option) => option.optionKey.toLowerCase() === "regular");
+    if (regularOption) return regularOption.id;
+  }
+  return group.options[0]?.id ?? "";
 }
 
 function getCustomerDisplayLanguage(member: PosMember | null) {
@@ -1240,7 +1260,7 @@ export default function StorePosPage() {
   async function printReceiptAfterCheckout(body: Record<string, unknown>, cartSnapshot: PosCartItem[]) {
     const printerSettings = posSettings.printerSettings;
     const printer = getReceiptPrinter(printerSettings);
-    if (!printerSettings.enabled || !printerSettings.receiptEnabled || !printer.host) return "";
+    if (!printerSettings.enabled || !printerSettings.receiptEnabled || !isPrintablePrinter(printer)) return "";
     const result = await printWithAndroidBridge(createReceiptPrintPayload(body, cartSnapshot));
     return result.ok ? " / レシート印刷送信済み" : ` / レシート印刷未送信: ${result.error}`;
   }
@@ -1258,7 +1278,7 @@ export default function StorePosPage() {
     const errors: string[] = [];
     for (const [brandId, group] of Object.entries(brandGroups)) {
       const printer = getKitchenPrinterForBrand(printerSettings, brandId === "default" ? null : brandId);
-      if (!printer.host) continue;
+      if (!isPrintablePrinter(printer)) continue;
       const result = await printWithAndroidBridge(createKitchenPrintPayload(body, group.items, printer, group.brandName));
       if (result.ok) {
         sentCount += 1;
@@ -1476,7 +1496,7 @@ export default function StorePosPage() {
     const nextDraft: Record<string, string[]> = {};
     for (const group of groups) {
       if (getEffectiveSelectionType(group) === "single" && group.options.length) {
-        nextDraft[group.id] = [group.options[0].id];
+        nextDraft[group.id] = [getDefaultOptionId(group)];
       } else {
         nextDraft[group.id] = [];
       }

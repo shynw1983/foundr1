@@ -48,7 +48,7 @@ android {
 }
 
 dependencies {
-    storeImplementation "com.starmicronics:stario10:1.12.1"
-    storeImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
-    storeImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.1"
+    implementation "com.starmicronics:stario10:1.12.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.1"
 }

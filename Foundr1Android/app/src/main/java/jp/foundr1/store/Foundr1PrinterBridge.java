@@ -88,6 +88,42 @@ public class Foundr1PrinterBridge {
     }
 
     @JavascriptInterface
+    public String listPairedPrinters() {
+        try {
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (adapter == null) throw new IllegalArgumentException("Bluetooth is not available on this device.");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                requestBluetoothPermissionIfNeeded();
+                throw new IllegalArgumentException("Bluetooth permission is not granted.");
+            }
+            JSONArray devicesJson = new JSONArray();
+            Set<BluetoothDevice> devices = adapter.getBondedDevices();
+            for (BluetoothDevice device : devices) {
+                String name = device.getName() == null ? "" : device.getName();
+                String address = device.getAddress() == null ? "" : device.getAddress();
+                boolean likelyStarPrinter = isLikelyStarPrinterName(name);
+                JSONObject record = new JSONObject();
+                record.put("name", name);
+                record.put("address", address);
+                record.put("identifier", address.isEmpty() ? name : address);
+                record.put("deviceType", likelyStarPrinter ? "star_printer" : "escpos_bluetooth");
+                record.put("connectionType", "bluetooth");
+                record.put("paperWidth", likelyStarPrinter ? "58mm" : "80mm");
+                record.put("isLikelyStarPrinter", likelyStarPrinter);
+                devicesJson.put(record);
+            }
+            JSONObject result = new JSONObject();
+            result.put("ok", true);
+            result.put("devices", devicesJson);
+            return result.toString();
+        } catch (Exception error) {
+            String message = error.getMessage() == null ? "プリンター検索に失敗しました。" : error.getMessage();
+            return "{\"ok\":false,\"error\":\"" + jsonEscape(message) + "\"}";
+        }
+    }
+
+    @JavascriptInterface
     public String print(String payloadJson) {
         try {
             PrintResult result = sendPrintJob(payloadJson);
@@ -170,6 +206,30 @@ public class Foundr1PrinterBridge {
             if (name.toLowerCase(Locale.ROOT).contains(normalized)) return device;
         }
         return null;
+    }
+
+    private BluetoothDevice findAutoStarBluetoothDevice(BluetoothAdapter adapter) throws Exception {
+        BluetoothDevice fallback = null;
+        int matches = 0;
+        Set<BluetoothDevice> devices = adapter.getBondedDevices();
+        for (BluetoothDevice device : devices) {
+            String name = device.getName() == null ? "" : device.getName();
+            if (!isLikelyStarPrinterName(name)) continue;
+            fallback = device;
+            matches += 1;
+        }
+        if (matches == 1) return fallback;
+        if (matches > 1) throw new IllegalArgumentException("Multiple paired Star printers were found. Please select one in POS settings.");
+        throw new IllegalArgumentException("Paired Star printer was not found. Please pair mPOP in Android Bluetooth settings.");
+    }
+
+    private boolean isLikelyStarPrinterName(String name) {
+        String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return normalized.contains("mpop")
+            || normalized.contains("star")
+            || normalized.contains("tsp")
+            || normalized.contains("mcp")
+            || normalized.contains("sp700");
     }
 
     private PrintResult sendEscPosUsbPrintJob(JSONObject payload, JSONObject printer) throws Exception {
@@ -271,7 +331,15 @@ public class Foundr1PrinterBridge {
         String connectionType = printer.optString("connectionType", "bluetooth");
         String identifier = printer.optString("identifier", "").trim();
         if (!"usb".equals(connectionType) && identifier.isEmpty()) {
-            throw new IllegalArgumentException("Star printer identifier is empty.");
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (adapter == null) throw new IllegalArgumentException("Bluetooth is not available on this device.");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                requestBluetoothPermissionIfNeeded();
+                throw new IllegalArgumentException("Bluetooth permission is not granted.");
+            }
+            BluetoothDevice device = findAutoStarBluetoothDevice(adapter);
+            identifier = device.getAddress() == null || device.getAddress().isEmpty() ? device.getName() : device.getAddress();
         }
         boolean cutPaper = printer.optBoolean("cutPaper", true);
         boolean openCashDrawer = printer.optBoolean("openCashDrawer", false);

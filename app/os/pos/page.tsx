@@ -28,7 +28,7 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUnsavedChangesGuard } from "../../../components/UnsavedChangesGuard";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
-import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
+import { createTestPrintPayload, defaultPosPrinterSettings, getReceiptPrinter, listPairedNativePrinters, printWithAndroidBridge, type NativePrinterDevice, type PosPrinterConnection, type PosPrinterSettings, type PosReceiptTemplateSettings } from "../../../lib/pos-printer";
 import { MobileNavMenu } from "../components/MobileNavMenu";
 import { OsNavList } from "../components/OsNavList";
 import { UserBadge } from "../components/UserBadge";
@@ -196,7 +196,7 @@ function usesPrinterIdentifier(printer: PosPrinterConnection) {
 
 function requiresPrinterIdentifier(printer: PosPrinterConnection) {
   if (printer.deviceType === "escpos_bluetooth") return true;
-  if (printer.deviceType === "star_printer") return printer.connectionType !== "usb";
+  if (printer.deviceType === "star_printer") return false;
   return false;
 }
 
@@ -270,6 +270,8 @@ export default function PosPage() {
   const [receiptImageUploadStatus, setReceiptImageUploadStatus] = useState("");
   const [testPrintStatus, setTestPrintStatus] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
+  const [nativePrinterDevices, setNativePrinterDevices] = useState<NativePrinterDevice[]>([]);
+  const [nativePrinterScanning, setNativePrinterScanning] = useState(false);
   const [receiptPreviewMode, setReceiptPreviewMode] = useState<"receipt" | "invoice">("receipt");
   const [hasNativePrintBridge, setHasNativePrintBridge] = useState(false);
   const [uploadingMediaType, setUploadingMediaType] = useState<"" | "image" | "video">("");
@@ -348,6 +350,48 @@ export default function PosPage() {
         }
       };
     });
+  }
+
+  function applyNativePrinterDevice(device: NativePrinterDevice, quiet = false) {
+    updateReceiptPrinter({
+      deviceType: device.isLikelyStarPrinter ? "star_printer" : device.deviceType,
+      connectionType: device.connectionType || "bluetooth",
+      identifier: device.identifier || device.address || device.name,
+      host: "",
+      paperWidth: device.paperWidth || "58mm"
+    });
+    if (!quiet) {
+      setTestPrintStatus(`${device.name || device.identifier} をレシートプリンターに設定しました。保存またはテスト印刷で反映されます。`);
+    }
+  }
+
+  async function refreshNativePrinterDevices(options: { autoApply?: boolean; quiet?: boolean } = {}) {
+    if (!hasNativePrintBridge || nativePrinterScanning) return;
+    setNativePrinterScanning(true);
+    if (!options.quiet) setTestPrintStatus("");
+    const result = await listPairedNativePrinters();
+    setNativePrinterScanning(false);
+    if (!result.ok) {
+      if (!options.quiet) setTestPrintStatus(result.error || "接続済みプリンターを読み込めませんでした。");
+      return;
+    }
+    setNativePrinterDevices(result.devices);
+    const likelyStarPrinters = result.devices.filter((device) => device.isLikelyStarPrinter);
+    const selectedDevice = likelyStarPrinters.length === 1
+      ? likelyStarPrinters[0]
+      : result.devices.length === 1
+        ? result.devices[0]
+        : null;
+    if (options.autoApply && selectedDevice) {
+      applyNativePrinterDevice(selectedDevice, true);
+      return;
+    }
+    if (!options.quiet) {
+      setTestPrintStatus(result.devices.length
+        ? "接続済みプリンターを読み込みました。使用するプリンターを選択してください。"
+        : "Android にペアリング済みプリンターが見つかりません。先に Bluetooth 設定で mPOP をペアリングしてください。"
+      );
+    }
   }
 
   function updateReceiptTemplate(patch: Partial<PosReceiptTemplateSettings>) {
@@ -562,6 +606,15 @@ export default function PosPage() {
       window.removeEventListener("pageshow", detectNativePrintBridge);
     };
   }, []);
+
+  useEffect(() => {
+    const printer = getReceiptPrinter(taxForm.printerSettings);
+    if (!hasNativePrintBridge || !canManagePosSettings || nativePrinterDevices.length || nativePrinterScanning) return;
+    if (printer.deviceType === "star_printer" && !printer.identifier) {
+      void refreshNativePrinterDevices({ autoApply: true, quiet: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNativePrintBridge, canManagePosSettings, taxForm.printerSettings]);
 
   return (
     <main className="shell">
@@ -948,6 +1001,9 @@ export default function PosPage() {
                   <Printer size={15} />
                   {testPrinting ? "送信中..." : hasNativePrintBridge ? "テスト印刷" : "アプリでテスト"}
                 </button>
+                <button className="secondary-button" type="button" onClick={() => void refreshNativePrinterDevices()} disabled={!canManagePosSettings || !hasNativePrintBridge || nativePrinterScanning}>
+                  {nativePrinterScanning ? "読込中..." : "接続済みを読込"}
+                </button>
               </div>
             </div>
             {!hasNativePrintBridge ? (
@@ -1048,6 +1104,15 @@ export default function PosPage() {
                   <span>現金会計でドロアを開く</span>
                 </label>
               </div>
+              {nativePrinterDevices.length ? (
+                <div className="pos-admin-printer-actions">
+                  {nativePrinterDevices.map((device) => (
+                    <button className="secondary-button" type="button" key={`${device.address}-${device.name}`} onClick={() => applyNativePrinterDevice(device)} disabled={!canManagePosSettings}>
+                      {device.name || device.address || "Bluetooth printer"}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="pos-admin-printer-card">
               <div>
