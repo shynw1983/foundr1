@@ -432,26 +432,29 @@ export default function CustomerDisplayPage() {
   const visibleItems = state.items;
   const orderScale = useMemo(() => {
     const itemCount = Math.max(1, state.items.length);
-    if (itemCount <= 3) return 1;
-    const chromeHeight = viewportSize.width <= 820 ? 250 : 150;
-    const availableListHeight = Math.max(240, viewportSize.height - chromeHeight);
+    const chromeHeight = viewportSize.width <= 820 ? 280 : 180;
+    const availableListHeight = Math.max(180, viewportSize.height - chromeHeight);
     const targetRowHeight = availableListHeight / itemCount;
-    return Math.round(clampNumber((targetRowHeight - 24) / 46, 0.45, 1) * 1000) / 1000;
+    const rowPressure = (targetRowHeight - 22) / 46;
+    const itemPressure = 1 - Math.max(0, itemCount - 2) * 0.11;
+    const viewportPressure = viewportSize.height < 760 ? 0.92 : 1;
+    return Math.round(clampNumber(Math.min(rowPressure, itemPressure, viewportPressure), 0.42, 0.92) * 1000) / 1000;
   }, [state.items.length, viewportSize.height, viewportSize.width]);
   const orderLayoutStyle = {
     "--order-scale": orderScale,
-    "--order-row-min": `${Math.round(28 + 32 * orderScale)}px`,
-    "--order-row-gap": `${Math.round(3 + 7 * orderScale)}px`,
-    "--order-row-inner-gap": `${Math.round(4 + 10 * orderScale)}px`,
+    "--order-row-min": `${Math.round(24 + 28 * orderScale)}px`,
+    "--order-row-gap": `${Math.round(3 + 6 * orderScale)}px`,
+    "--order-row-inner-gap": `${Math.round(4 + 8 * orderScale)}px`,
     "--order-content-gap": `${Math.round(1 + 2 * orderScale)}px`,
-    "--order-row-padding-y": `${Math.round(2 + 8 * orderScale)}px`,
-    "--order-row-padding-x": `${Math.round(5 + 7 * orderScale)}px`,
-    "--order-name-size": `${Math.round((9 + 13 * orderScale) * 10) / 10}px`,
-    "--order-meta-size": `${Math.round((8 + 4 * orderScale) * 10) / 10}px`,
-    "--order-amount-size": `${Math.round((9 + 15 * orderScale) * 10) / 10}px`,
-    "--order-line-height": Math.round((1.04 + 0.16 * orderScale) * 1000) / 1000,
-    "--order-name-lines": orderScale < 0.62 ? 1 : 2,
-    "--order-amount-column": `${Math.round(58 + 54 * orderScale)}px`
+    "--order-row-padding-y": `${Math.round(2 + 6 * orderScale)}px`,
+    "--order-row-padding-x": `${Math.round(5 + 6 * orderScale)}px`,
+    "--order-name-size": `${Math.round((8.5 + 11.5 * orderScale) * 10) / 10}px`,
+    "--order-meta-size": `${Math.round((7.5 + 3.5 * orderScale) * 10) / 10}px`,
+    "--order-amount-size": `${Math.round((8.5 + 12.5 * orderScale) * 10) / 10}px`,
+    "--order-line-height": Math.round((1.03 + 0.13 * orderScale) * 1000) / 1000,
+    "--order-name-lines": orderScale < 0.7 ? 1 : 2,
+    "--order-meta-lines": orderScale < 0.6 ? 1 : 2,
+    "--order-amount-column": `${Math.round(54 + 48 * orderScale)}px`
   } as CSSProperties;
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";

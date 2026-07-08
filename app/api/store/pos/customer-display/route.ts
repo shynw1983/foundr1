@@ -15,6 +15,35 @@ function normalizeDisplayLanguage(value: unknown) {
   return ["ja", "zh", "zh-Hant", "en", "ko", "vi", "ne"].includes(language) ? language : "";
 }
 
+function isFreshIsoTime(value: string, ttlMs = 2 * 60 * 1000) {
+  const ageMs = Date.now() - new Date(value).getTime();
+  return Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= ttlMs;
+}
+
+function readMemberScanCommand(value: unknown) {
+  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const command = state.memberScanCommand && typeof state.memberScanCommand === "object" && !Array.isArray(state.memberScanCommand)
+    ? state.memberScanCommand as Record<string, unknown>
+    : {};
+  const id = normalizeText(command.id);
+  const action = normalizeText(command.action);
+  const createdAt = normalizeText(command.createdAt);
+  if (!id || action !== "open_scanner" || !createdAt || !isFreshIsoTime(createdAt)) return null;
+  return { id, action, createdAt };
+}
+
+function readMemberScanRequest(value: unknown) {
+  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const request = state.memberScanRequest && typeof state.memberScanRequest === "object" && !Array.isArray(state.memberScanRequest)
+    ? state.memberScanRequest as Record<string, unknown>
+    : {};
+  const id = normalizeText(request.id);
+  const code = normalizeText(request.code);
+  const createdAt = normalizeText(request.createdAt);
+  if (!id || !code || !createdAt || !isFreshIsoTime(createdAt)) return null;
+  return { id, code, createdAt };
+}
+
 function normalizeCustomerDisplayMediaSettings(value: unknown) {
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const modeValue = normalizeText(record.mode);
@@ -55,9 +84,7 @@ async function resolveStoreId(request: Request, session: NonNullable<Awaited<Ret
 
 function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
   const state = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
-  const memberScanCommand = state.memberScanCommand && typeof state.memberScanCommand === "object" && !Array.isArray(state.memberScanCommand)
-    ? state.memberScanCommand as Record<string, unknown>
-    : null;
+  const memberScanCommand = readMemberScanCommand(state);
   const toAmount = (amount: unknown) => {
     const nextAmount = Number(amount ?? 0);
     return Number.isFinite(nextAmount) ? Math.round(nextAmount) : 0;
@@ -89,13 +116,7 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
     cashChangeAmount: toNullableAmount(state.cashChangeAmount),
     updatedLabel: normalizeText(state.updatedLabel),
-    memberScanCommand: memberScanCommand
-      ? {
-          id: normalizeText(memberScanCommand.id),
-          action: normalizeText(memberScanCommand.action),
-          createdAt: normalizeText(memberScanCommand.createdAt)
-        }
-      : null,
+    memberScanCommand,
     items: Array.isArray(state.items)
       ? state.items.slice(0, 50).map((item) => {
           const row = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
@@ -206,8 +227,19 @@ export async function POST(request: Request) {
   const { selectedStoreId, forbidden } = await resolveStoreId(request, session, normalizeText(body.storeId));
   if (forbidden || !selectedStoreId) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const storeName = await getStoreName(selectedStoreId);
+  const [storeName, currentRows] = await Promise.all([
+    getStoreName(selectedStoreId),
+    sql`
+      select display_state as "displayState"
+      from pos_customer_display_states
+      where store_id::text = ${selectedStoreId}
+      limit 1
+    `
+  ]);
+  const currentDisplayState = currentRows[0]?.displayState;
   const state = normalizeDisplayState(body.state, storeName);
+  const memberScanCommand = readMemberScanCommand(body.state) ?? readMemberScanCommand(currentDisplayState);
+  const memberScanRequest = readMemberScanRequest(body.state) ?? readMemberScanRequest(currentDisplayState);
   const updatedLabel = new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
     hour: "2-digit",
@@ -215,7 +247,13 @@ export async function POST(request: Request) {
     second: "2-digit",
     hour12: false
   }).format(new Date());
-  const displayState = { ...state, storeName, updatedLabel };
+  const displayState = {
+    ...state,
+    storeName,
+    updatedLabel,
+    ...(memberScanCommand ? { memberScanCommand } : {}),
+    ...(memberScanRequest ? { memberScanRequest } : {})
+  };
 
   await sql`
     insert into pos_customer_display_states (

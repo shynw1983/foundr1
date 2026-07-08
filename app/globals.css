@@ -12038,19 +12038,20 @@ body :where(
 }
 
 .customer-display-page {
-  --order-scale: 1;
-  --order-row-min: 60px;
-  --order-row-gap: 10px;
-  --order-row-inner-gap: 14px;
+  --order-scale: 0.92;
+  --order-row-min: 50px;
+  --order-row-gap: 9px;
+  --order-row-inner-gap: 11px;
   --order-content-gap: 3px;
-  --order-row-padding-y: 10px;
-  --order-row-padding-x: 12px;
-  --order-name-size: 22px;
-  --order-meta-size: 12px;
-  --order-amount-size: 24px;
-  --order-line-height: 1.2;
+  --order-row-padding-y: 8px;
+  --order-row-padding-x: 11px;
+  --order-name-size: 19px;
+  --order-meta-size: 11px;
+  --order-amount-size: 20px;
+  --order-line-height: 1.15;
   --order-name-lines: 2;
-  --order-amount-column: 112px;
+  --order-meta-lines: 2;
+  --order-amount-column: 98px;
   min-height: 100dvh;
   max-height: 100dvh;
   display: grid;
@@ -12555,13 +12556,15 @@ body :where(
 }
 
 .customer-display-item span {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--order-meta-lines);
   color: #73736d;
   font-size: var(--order-meta-size);
   font-weight: 400;
   line-height: var(--order-line-height);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .customer-display-item em,
