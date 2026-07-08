@@ -2,7 +2,7 @@
 
 import { MonitorSmartphone, ScanLine } from "lucide-react";
 import jsQR from "jsqr";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../../components/store-selection";
 import { useDisplayMode } from "../../components/useDisplayMode";
 
@@ -42,6 +42,11 @@ type DisplayState = {
   cashChangeAmount: number | null;
   updatedLabel: string;
   updatedAt: string;
+  memberScanCommand: {
+    id: string;
+    action: string;
+    createdAt: string;
+  } | null;
   items: DisplayItem[];
 };
 
@@ -86,6 +91,7 @@ const idleState: DisplayState = {
   cashChangeAmount: null,
   updatedLabel: "",
   updatedAt: "",
+  memberScanCommand: null,
   items: []
 };
 
@@ -397,6 +403,10 @@ function formatMemberDisplayName(name: string, language: DisplayLanguage) {
   return normalizedName.replace(/様$/u, "").trim();
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 export default function CustomerDisplayPage() {
   const memberScannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const memberScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -415,15 +425,34 @@ export default function CustomerDisplayPage() {
   const [clockDate, setClockDate] = useState(() => new Date());
   const [mediaSettings, setMediaSettings] = useState<CustomerDisplayMediaSettings>(defaultMediaSettings);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [viewportSize, setViewportSize] = useState({ width: 1280, height: 800 });
   const selectedStoreIdRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
   const visibleItems = state.items;
-  const orderDensityClass = state.items.length >= 7
-    ? "is-ultra-dense"
-    : state.items.length >= 4
-      ? "is-dense"
-      : "";
+  const orderScale = useMemo(() => {
+    const itemCount = Math.max(1, state.items.length);
+    if (itemCount <= 3) return 1;
+    const chromeHeight = viewportSize.width <= 820 ? 250 : 150;
+    const availableListHeight = Math.max(240, viewportSize.height - chromeHeight);
+    const targetRowHeight = availableListHeight / itemCount;
+    return Math.round(clampNumber((targetRowHeight - 24) / 46, 0.45, 1) * 1000) / 1000;
+  }, [state.items.length, viewportSize.height, viewportSize.width]);
+  const orderLayoutStyle = {
+    "--order-scale": orderScale,
+    "--order-row-min": `${Math.round(28 + 32 * orderScale)}px`,
+    "--order-row-gap": `${Math.round(3 + 7 * orderScale)}px`,
+    "--order-row-inner-gap": `${Math.round(4 + 10 * orderScale)}px`,
+    "--order-content-gap": `${Math.round(1 + 2 * orderScale)}px`,
+    "--order-row-padding-y": `${Math.round(2 + 8 * orderScale)}px`,
+    "--order-row-padding-x": `${Math.round(5 + 7 * orderScale)}px`,
+    "--order-name-size": `${Math.round((9 + 13 * orderScale) * 10) / 10}px`,
+    "--order-meta-size": `${Math.round((8 + 4 * orderScale) * 10) / 10}px`,
+    "--order-amount-size": `${Math.round((9 + 15 * orderScale) * 10) / 10}px`,
+    "--order-line-height": Math.round((1.04 + 0.16 * orderScale) * 1000) / 1000,
+    "--order-name-lines": orderScale < 0.62 ? 1 : 2,
+    "--order-amount-column": `${Math.round(58 + 54 * orderScale)}px`
+  } as CSSProperties;
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";
   const completeActive = state.status === "complete";
@@ -459,6 +488,23 @@ export default function CustomerDisplayPage() {
   useEffect(() => {
     const interval = window.setInterval(() => setClockDate(new Date()), 1000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    function updateViewportSize() {
+      setViewportSize({
+        width: window.innerWidth || 1280,
+        height: window.innerHeight || 800
+      });
+    }
+
+    updateViewportSize();
+    window.addEventListener("resize", updateViewportSize);
+    window.visualViewport?.addEventListener("resize", updateViewportSize);
+    return () => {
+      window.removeEventListener("resize", updateViewportSize);
+      window.visualViewport?.removeEventListener("resize", updateViewportSize);
+    };
   }, []);
 
   useEffect(() => {
@@ -572,6 +618,17 @@ export default function CustomerDisplayPage() {
       if (memberScannerVideoRef.current) memberScannerVideoRef.current.srcObject = null;
     };
   }, [memberScannerOpen]);
+
+  useEffect(() => {
+    const command = state.memberScanCommand;
+    const commandId = String(command?.id ?? "").trim();
+    if (!commandId || commandId === memberScanCommandIdRef.current || command?.action !== "open_scanner") return;
+    const ageMs = Date.now() - new Date(command.createdAt).getTime();
+    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 2 * 60 * 1000) return;
+    memberScanCommandIdRef.current = commandId;
+    setMenuOpen(false);
+    setMemberScannerOpen(true);
+  }, [state.memberScanCommand]);
 
   useEffect(() => {
     let active = true;
@@ -728,9 +785,8 @@ export default function CustomerDisplayPage() {
   return (
     <main className={[
       "customer-display-page",
-      advertisingActive || completeActive ? "is-advertising" : "",
-      orderDensityClass
-    ].filter(Boolean).join(" ")}>
+      advertisingActive || completeActive ? "is-advertising" : ""
+    ].filter(Boolean).join(" ")} style={orderLayoutStyle}>
       <button
         className={`store-display-menu-button customer-display-menu-button ${realtimeStatus === "connected" ? "is-realtime" : "is-polling"}`}
         type="button"

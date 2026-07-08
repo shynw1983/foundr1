@@ -12038,6 +12038,19 @@ body :where(
 }
 
 .customer-display-page {
+  --order-scale: 1;
+  --order-row-min: 60px;
+  --order-row-gap: 10px;
+  --order-row-inner-gap: 14px;
+  --order-content-gap: 3px;
+  --order-row-padding-y: 10px;
+  --order-row-padding-x: 12px;
+  --order-name-size: 22px;
+  --order-meta-size: 12px;
+  --order-amount-size: 24px;
+  --order-line-height: 1.2;
+  --order-name-lines: 2;
+  --order-amount-column: 112px;
   min-height: 100dvh;
   max-height: 100dvh;
   display: grid;
@@ -12381,7 +12394,7 @@ body :where(
   min-height: 0;
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: var(--order-row-gap);
   overflow: hidden;
 }
 
@@ -12506,19 +12519,19 @@ body :where(
 
 .customer-display-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(112px, auto);
+  grid-template-columns: minmax(0, 1fr) auto minmax(var(--order-amount-column), auto);
   align-items: center;
-  gap: 14px;
-  min-height: 60px;
+  gap: var(--order-row-inner-gap);
+  min-height: var(--order-row-min);
   border: 1px solid #ededeb;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: var(--order-row-padding-y) var(--order-row-padding-x);
   background: #fff;
 }
 
 .customer-display-item div {
   display: grid;
-  gap: 3px;
+  gap: var(--order-content-gap);
   min-width: 0;
 }
 
@@ -12531,23 +12544,31 @@ body :where(
 }
 
 .customer-display-item strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--order-name-lines);
   color: #171717;
-  font-size: clamp(16px, 2.2vh, 22px);
+  font-size: var(--order-name-size);
   font-weight: 500;
-  line-height: 1.2;
+  line-height: var(--order-line-height);
 }
 
 .customer-display-item span {
+  overflow: hidden;
   color: #73736d;
-  font-size: 12px;
+  font-size: var(--order-meta-size);
   font-weight: 400;
+  line-height: var(--order-line-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customer-display-item em,
 .customer-display-item b {
   color: #171717;
   font-style: normal;
-  font-size: clamp(17px, 2.4vh, 24px);
+  font-size: var(--order-amount-size);
   font-weight: 500;
   white-space: nowrap;
 }

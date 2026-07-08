@@ -55,6 +55,9 @@ async function resolveStoreId(request: Request, session: NonNullable<Awaited<Ret
 
 function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
   const state = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  const memberScanCommand = state.memberScanCommand && typeof state.memberScanCommand === "object" && !Array.isArray(state.memberScanCommand)
+    ? state.memberScanCommand as Record<string, unknown>
+    : null;
   const toAmount = (amount: unknown) => {
     const nextAmount = Number(amount ?? 0);
     return Number.isFinite(nextAmount) ? Math.round(nextAmount) : 0;
@@ -86,6 +89,13 @@ function normalizeDisplayState(value: unknown, fallbackStoreName = "") {
     cashTenderedAmount: cashTenderedAmount === null ? null : Math.max(0, cashTenderedAmount),
     cashChangeAmount: toNullableAmount(state.cashChangeAmount),
     updatedLabel: normalizeText(state.updatedLabel),
+    memberScanCommand: memberScanCommand
+      ? {
+          id: normalizeText(memberScanCommand.id),
+          action: normalizeText(memberScanCommand.action),
+          createdAt: normalizeText(memberScanCommand.createdAt)
+        }
+      : null,
     items: Array.isArray(state.items)
       ? state.items.slice(0, 50).map((item) => {
           const row = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
