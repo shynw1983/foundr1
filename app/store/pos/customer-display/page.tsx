@@ -418,8 +418,12 @@ export default function CustomerDisplayPage() {
   const selectedStoreIdRef = useRef("");
   const { activateDisplayMode, fullscreenActive, wakeLockActive, wakeLockSupported } = useDisplayMode();
 
-  const visibleItems = useMemo(() => state.items.slice(0, 12), [state.items]);
-  const hiddenItemCount = Math.max(0, state.items.length - visibleItems.length);
+  const visibleItems = state.items;
+  const orderDensityClass = state.items.length >= 13
+    ? "is-ultra-dense"
+    : state.items.length >= 8
+      ? "is-dense"
+      : "";
   const changeAmount = state.cashChangeAmount ?? 0;
   const advertisingActive = state.status === "advertising";
   const completeActive = state.status === "complete";
@@ -722,7 +726,11 @@ export default function CustomerDisplayPage() {
   const hasPromotions = hasDiscount || hasCoupon;
 
   return (
-    <main className={advertisingActive || completeActive ? "customer-display-page is-advertising" : "customer-display-page"}>
+    <main className={[
+      "customer-display-page",
+      advertisingActive || completeActive ? "is-advertising" : "",
+      orderDensityClass
+    ].filter(Boolean).join(" ")}>
       <button
         className={`store-display-menu-button customer-display-menu-button ${realtimeStatus === "connected" ? "is-realtime" : "is-polling"}`}
         type="button"
@@ -865,7 +873,6 @@ export default function CustomerDisplayPage() {
                   <b>{formatYen(item.amount)}</b>
                 </div>
               ))}
-              {hiddenItemCount > 0 ? <div className="customer-display-more">{text.moreItems} {hiddenItemCount} {text.itemCount}</div> : null}
             </div>
           )}
         </div>
