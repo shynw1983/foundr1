@@ -5,7 +5,7 @@ import jsQR from "jsqr";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDecimalInput, normalizeIntegerInput } from "../../../lib/number-input";
 import { getCashBreakdownTotal, yenDenominations, type CashBreakdown } from "../../../lib/pos-cash-denominations";
-import { defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
+import { createAutoStarBluetoothPrinter, defaultPosPrinterSettings, getKitchenPrinterForBrand, getReceiptPrinter, hasPosPrinterDestination, printWithAndroidBridge, type PosPrinterConnection, type PosPrinterSettings, type PosPrintPayload } from "../../../lib/pos-printer";
 import { ModalHistoryScope } from "../../os/components/useModalHistory";
 import { StoreNavTabs } from "../components/StoreNavTabs";
 import { getStoredStoreSelection, setStoredStoreSelection } from "../components/store-selection";
@@ -380,10 +380,7 @@ function getOrderTaxRate(settings: PosSettings, orderType: string) {
 }
 
 function isPrintablePrinter(printer: PosPrinterConnection) {
-  if (printer.deviceType === "escpos_network") return Boolean(printer.host);
-  if (printer.deviceType === "escpos_usb") return true;
-  if (printer.deviceType === "star_printer") return true;
-  return Boolean(printer.identifier);
+  return hasPosPrinterDestination(printer);
 }
 
 function getTaxSummary(params: {
@@ -1239,8 +1236,12 @@ export default function StorePosPage() {
     };
   }
 
-  function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[]): PosPrintPayload {
+  function getStoreReceiptPrinter() {
     const printer = getReceiptPrinter(posSettings.printerSettings);
+    return isPrintablePrinter(printer) ? printer : createAutoStarBluetoothPrinter(printer);
+  }
+
+  function createReceiptPrintPayload(body: Record<string, unknown>, cartSnapshot: PosCartItem[], printer = getStoreReceiptPrinter()): PosPrintPayload {
     const receiptTemplate = posSettings.printerSettings.receiptTemplate;
     const isInvoice = Boolean(body.receiptRequested ?? receiptRequested);
     return {
@@ -1314,9 +1315,9 @@ export default function StorePosPage() {
 
   async function printReceiptAfterCheckout(body: Record<string, unknown>, cartSnapshot: PosCartItem[]) {
     const printerSettings = posSettings.printerSettings;
-    const printer = getReceiptPrinter(printerSettings);
+    const printer = getStoreReceiptPrinter();
     if (!printerSettings.enabled || !printerSettings.receiptEnabled || !isPrintablePrinter(printer)) return "";
-    const result = await printWithAndroidBridge(createReceiptPrintPayload(body, cartSnapshot));
+    const result = await printWithAndroidBridge(createReceiptPrintPayload(body, cartSnapshot, printer));
     return result.ok ? " / レシート印刷送信済み" : ` / レシート印刷未送信: ${result.error}`;
   }
 

@@ -190,10 +190,10 @@ export const defaultPosPrinterSettings: PosPrinterSettings = {
 export function normalizePosPrinterConnection(value: unknown, fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PosPrinterConnection> : {};
   const port = Math.round(Number(source.port || fallback.port));
-  const deviceType = ["escpos_bluetooth", "escpos_usb", "star_printer"].includes(String(source.deviceType))
+  const deviceType = ["escpos_network", "escpos_bluetooth", "escpos_usb", "star_printer"].includes(String(source.deviceType))
     ? source.deviceType as PosPrinterConnection["deviceType"]
     : fallback.deviceType;
-  const connectionType = ["bluetooth", "bluetooth_le", "usb"].includes(String(source.connectionType))
+  const connectionType = ["lan", "bluetooth", "bluetooth_le", "usb"].includes(String(source.connectionType))
     ? source.connectionType as PosPrinterConnection["connectionType"]
     : deviceType === "star_printer"
       ? fallback.connectionType
@@ -299,9 +299,27 @@ export function getReceiptPrinter(settings: PosPrinterSettings) {
 export function getKitchenPrinterForBrand(settings: PosPrinterSettings, brandId?: string | null) {
   if (brandId) {
     const brandPrinter = settings.brandKitchenPrinters.find((item) => item.brandId === brandId)?.printer;
-    if (brandPrinter?.host) return brandPrinter;
+    if (brandPrinter && hasPosPrinterDestination(brandPrinter)) return brandPrinter;
   }
   return settings.kitchenPrinter || getReceiptPrinter(settings);
+}
+
+export function hasPosPrinterDestination(printer: PosPrinterConnection) {
+  if (printer.deviceType === "escpos_network") return Boolean(printer.host);
+  if (printer.deviceType === "escpos_usb") return true;
+  if (printer.deviceType === "star_printer") return true;
+  return Boolean(printer.identifier);
+}
+
+export function createAutoStarBluetoothPrinter(fallback: PosPrinterConnection = defaultPosPrinterConnection): PosPrinterConnection {
+  return {
+    ...fallback,
+    deviceType: "star_printer",
+    connectionType: "bluetooth",
+    identifier: "",
+    host: "",
+    paperWidth: "58mm"
+  };
 }
 
 export function createTestPrintPayload(printer: PosPrinterConnection, storeName: string): PosPrintPayload {
