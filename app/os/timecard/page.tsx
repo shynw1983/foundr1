@@ -987,13 +987,21 @@ function getShiftEditorPosition(anchor: HTMLElement): ShiftEditorPosition {
   const rect = anchor.getBoundingClientRect();
   const margin = 12;
   const gap = 8;
-  const panelWidth = Math.min(760, window.innerWidth - margin * 2);
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const panelWidth = Math.min(900, Math.max(320, viewportWidth - margin * 2));
   const estimatedPanelHeight = 340;
-  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
+  const minLeft = viewportLeft + margin;
+  const maxLeft = viewportLeft + viewportWidth - panelWidth - margin;
+  const left = Math.max(minLeft, Math.min(rect.left, maxLeft));
   const belowTop = rect.bottom + gap;
-  const top = belowTop + estimatedPanelHeight <= window.innerHeight - margin
+  const viewportBottom = viewportTop + viewportHeight;
+  const top = belowTop + estimatedPanelHeight <= viewportBottom - margin
     ? belowTop
-    : Math.max(margin, rect.top - estimatedPanelHeight - gap);
+    : Math.max(viewportTop + margin, rect.top - estimatedPanelHeight - gap);
 
   return {
     top: Math.round(top),
