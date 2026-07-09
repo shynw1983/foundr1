@@ -19677,6 +19677,34 @@ body :where(
   line-height: 1.45;
 }
 
+.payroll-refresh-issue-list {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payroll-refresh-issue-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.payroll-refresh-issue-list strong {
+  font-size: 13px;
+}
+
+.payroll-refresh-issue-list span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .payroll-ledger-panel {
   display: grid;
   gap: 14px;

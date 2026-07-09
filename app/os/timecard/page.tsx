@@ -1319,10 +1319,10 @@ export function TimecardPage({
     [data?.payrollRows, payrollConfirmation]
   );
   const payrollConfirmationNeedsRefresh = Boolean(payrollRefreshSummary);
-  const displayedPayrollRows = payrollConfirmation && !payrollConfirmationNeedsRefresh
+  const displayedPayrollRows = payrollConfirmation
     ? payrollConfirmation.payrollRows
     : data?.payrollRows ?? [];
-  const displayedPayrollTotals = payrollConfirmation && !payrollConfirmationNeedsRefresh
+  const displayedPayrollTotals = payrollConfirmation
     ? payrollConfirmation.payrollTotals
     : totals;
   const selectedPayrollRow = useMemo(
@@ -1339,7 +1339,7 @@ export function TimecardPage({
     [month, selectedStore]
   );
   const canConfirmPayrollPeriod = Boolean(payrollPeriod && getTodayJstDateKey() >= payrollPeriod.endDate);
-  const canCreatePayrollPaymentFile = Boolean(payrollConfirmation && !payrollConfirmationNeedsRefresh && displayedPayrollRows.length);
+  const canCreatePayrollPaymentFile = Boolean(payrollConfirmation && displayedPayrollRows.length);
   const displayedPayrollEmployeeCount = displayedPayrollRows.length;
   const monthDays = useMemo(() => getPeriodDays(month, selectedStore), [month, selectedStore]);
   const todayKey = getTodayJstDateKey();
@@ -2011,7 +2011,17 @@ export function TimecardPage({
       window.alert("この月度はまだ締め日前のため、給与を確定できません。");
       return;
     }
-    if (!selectedStoreId || !window.confirm("この月の給与を確定しますか？確定時点の給与計算結果を保存します。")) return;
+    const confirmationMessage = payrollConfirmationNeedsRefresh
+      ? [
+          "保存済みの給与を最新の勤怠・給与設定で再計算して上書きします。",
+          "実行前に、現在の給与明細PDF・振込ファイル・必要な控えをバックアップしてください。",
+          payrollRefreshSummary?.detail ? `差分: ${payrollRefreshSummary.detail}` : "",
+          "再計算して保存しますか？"
+        ].filter(Boolean).join("\n\n")
+      : payrollConfirmation
+        ? "この月の給与を再確定しますか？保存済みの給与計算結果を上書きします。必要な控えをバックアップしてから実行してください。"
+        : "この月の給与を確定しますか？確定時点の給与計算結果を保存します。";
+    if (!selectedStoreId || !window.confirm(confirmationMessage)) return;
 
     setIsConfirmingPayroll(true);
     const response = await fetch("/api/timecard", {
@@ -2892,17 +2902,33 @@ export function TimecardPage({
                 <strong>{payrollConfirmationNeedsRefresh ? "確定後の給与計算に差分があります" : payrollConfirmation ? "この月の給与は確定済みです" : canConfirmPayrollPeriod ? "この月の給与はまだ確定していません" : `${displayedPayrollEmployeeCount}名の給与はまだ確定できません`}</strong>
                 <span>
                   {payrollConfirmationNeedsRefresh
-                    ? `現在の画面は最新の勤怠・給与設定で再計算した金額です。${payrollRefreshSummary?.detail ?? ""} 振込ファイルを作成する前に再確定してください。`
+                    ? `画面の金額は保存済みの確定給与のまま保持しています。最新の勤怠・給与設定で再計算すると差分が出ます。${payrollRefreshSummary?.detail ?? ""} 再計算する前に必ず控えをバックアップしてください。`
                     : payrollConfirmation
                     ? `${formatDateTime(payrollConfirmation.confirmedAt)} に ${payrollConfirmation.confirmedByName ?? "管理者"} が確定しました。`
                     : canConfirmPayrollPeriod
                       ? "シフトと実勤務時間を確認・修正したあと、給与を確定してください。"
                       : `この画面の金額は現在の勤怠・給与設定で再計算した概算です。給与期間が終了する ${payrollPeriod?.displayEndDate ?? "締め日"} の翌日以降に給与を確定できます。確定するまで振込ファイルは作成できません。`}
                 </span>
+                {payrollConfirmationNeedsRefresh ? (
+                  <ul className="payroll-refresh-issue-list" aria-label="給与再計算差分">
+                    {payrollRefreshSummary?.issues.slice(0, 5).map((issue) => (
+                      <li key={`${issue.employeeName}-${issue.reasons.join("-")}-${issue.totalPayDelta}`}>
+                        <strong>{issue.employeeName}</strong>
+                        <span>{issue.reasons.join("・")} / 差引 {formatSignedMoney(issue.totalPayDelta)}</span>
+                      </li>
+                    ))}
+                    {(payrollRefreshSummary?.issues.length ?? 0) > 5 ? (
+                      <li>
+                        <strong>ほか{(payrollRefreshSummary?.issues.length ?? 0) - 5}名</strong>
+                        <span>再計算確認前に差分対象を確認してください。</span>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
               </div>
               {canConfirmPayrollPeriod ? (
                 <button className="primary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
-                  {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "最新設定で再確定" : payrollConfirmation ? "再確定" : "給与を確定"}
+                  {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "バックアップ確認後に再計算" : payrollConfirmation ? "再確定" : "給与を確定"}
                 </button>
               ) : null}
             </section>
@@ -2954,7 +2980,7 @@ export function TimecardPage({
                 <div className="payroll-ledger-actions">
                   {canConfirmPayrollPeriod ? (
                     <button className="secondary-button" type="button" disabled={isConfirmingPayroll} onClick={() => void confirmPayroll()}>
-                      {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "最新設定で再確定" : payrollConfirmation ? "再確定" : "給与を確定"}
+                      {isConfirmingPayroll ? "確定中" : payrollConfirmationNeedsRefresh ? "バックアップ確認後に再計算" : payrollConfirmation ? "再確定" : "給与を確定"}
                     </button>
                   ) : null}
                 </div>
