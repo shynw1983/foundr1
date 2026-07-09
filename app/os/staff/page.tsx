@@ -1729,7 +1729,7 @@ function StaffFormFields({
                     <input name={`commuteAllowanceMonthlyCap:${store.id}`} type="number" min="0" step="1" defaultValue={setting?.commuteAllowanceMonthlyCap ?? member?.commuteAllowanceMonthlyCap ?? ""} placeholder="任意" />
                   </label>
                   <label>
-                    <span>賃金適用月度</span>
+                    <span>賃金・月所定適用月度</span>
                     <input name={`wageValidFromMonth:${store.id}`} type="month" defaultValue={formatPayrollMonth(history[0]?.wageValidFrom ?? history[0]?.validFrom, store) || toDateInputValue(new Date().toISOString()).slice(0, 7)} />
                   </label>
                   <label>

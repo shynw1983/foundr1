@@ -572,6 +572,7 @@ export function summarizePayroll(
   const storeMinuteCoverageByDate = new Map<string, Map<number, Set<string>>>();
   const activeMinutesByEmployeeDate = new Map<string, number[]>();
 
+  const workDatesByEmployee = new Map<string, Set<string>>();
   for (const day of dailySummaries) {
     const activeMinutes = getDailyActiveMinutes(day);
     activeMinutesByDay.set(day.key, activeMinutes);
@@ -635,7 +636,12 @@ export function summarizePayroll(
       current.hourlyWage = current.employmentType === "hourly" ? storeSetting.hourlyWage : null;
       current.monthlySalary = current.employmentType === "monthly" ? storeSetting.monthlySalary : null;
     }
-    current.workDays += day.workMinutes > 0 ? 1 : 0;
+    if (day.workMinutes > 0) {
+      const workDates = workDatesByEmployee.get(day.employeeId) ?? new Set<string>();
+      if (!workDates.has(day.workDate)) current.workDays += 1;
+      workDates.add(day.workDate);
+      workDatesByEmployee.set(day.employeeId, workDates);
+    }
     current.punchCount += 1;
     current.workMinutes += day.workMinutes;
     current.breakMinutes += day.breakMinutes;
