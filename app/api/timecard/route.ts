@@ -2,6 +2,7 @@ import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../..
 import { writeAuditLog } from "../../../lib/audit-log";
 import { sql } from "../../../lib/db";
 import type { EmployeeSession } from "../../../lib/auth";
+import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from "../../../lib/store-business-hours";
 import {
   getJstDateLabel,
   getJstMonthLabel,
@@ -732,20 +733,42 @@ function timeValueToMinutes(value: string | null | undefined) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function isEarlyMorningBusinessDayShift(shift: { scheduledStart?: string | null; scheduledEnd?: string | null }) {
+function getWeekdayKeyForDate(dateString: string): WeekdayKey | null {
+  const date = new Date(`${dateString}T12:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[date.getDay()];
+}
+
+function getBusinessDayCloseMinutes(businessHours: StoreBusinessHours | null | undefined, workDate: string) {
+  if (!businessHours) return null;
+  const weekdayKey = getWeekdayKeyForDate(workDate);
+  const day = weekdayKey ? businessHours[weekdayKey] : null;
+  if (!day || day.closed) return null;
+  const open = timeValueToMinutes(day.open);
+  const close = timeValueToMinutes(day.close);
+  if (open === null || close === null || close > open) return null;
+  return close === 0 ? 24 * 60 : close;
+}
+
+function isEarlyMorningBusinessDayShift(
+  shift: { workDate: string; scheduledStart?: string | null; scheduledEnd?: string | null },
+  businessHours?: StoreBusinessHours | null
+) {
   const start = timeValueToMinutes(shift.scheduledStart);
   const end = timeValueToMinutes(shift.scheduledEnd);
   if (start === null || end === null) return false;
-  return start < 6 * 60 && end > start && end <= 6 * 60;
+  const close = getBusinessDayCloseMinutes(businessHours, shift.workDate) ?? 6 * 60;
+  return start < close && end > start && end <= close;
 }
 
 function getScheduledShiftDateTime(
   shift: { workDate: string; scheduledStart?: string | null; scheduledEnd?: string | null },
   time: string,
-  baseTime?: string | null
+  baseTime?: string | null,
+  businessHours?: StoreBusinessHours | null
 ) {
   const date = getShiftWindowDateTime(shift.workDate, time, baseTime);
-  if (isEarlyMorningBusinessDayShift(shift)) {
+  if (isEarlyMorningBusinessDayShift(shift, businessHours)) {
     date.setUTCDate(date.getUTCDate() + 1);
   }
   return date;
@@ -785,7 +808,7 @@ function getActualInputDeleteWindow(
   return { start, end };
 }
 
-function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRow[]) {
+function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRow[], storeBusinessHours?: StoreBusinessHours | null) {
   const map = new Map<string, string>();
   const candidateShifts = shifts.filter((shift) => shift.scheduledStart && shift.scheduledEnd);
   for (const punch of punches) {
@@ -795,8 +818,8 @@ function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRo
     let best: { workDate: string; distance: number } | null = null;
     for (const shift of candidateShifts) {
       if (shift.employeeId !== punch.employeeId || shift.storeId !== punch.storeId || !shift.scheduledStart || !shift.scheduledEnd) continue;
-      const scheduledStart = getScheduledShiftDateTime(shift, shift.scheduledStart).getTime();
-      const scheduledEnd = getScheduledShiftDateTime(shift, shift.scheduledEnd, shift.scheduledStart).getTime();
+      const scheduledStart = getScheduledShiftDateTime(shift, shift.scheduledStart, null, storeBusinessHours).getTime();
+      const scheduledEnd = getScheduledShiftDateTime(shift, shift.scheduledEnd, shift.scheduledStart, storeBusinessHours).getTime();
       const earlyStart = scheduledStart - 6 * 60 * 60 * 1000;
       const lateEnd = scheduledEnd + 6 * 60 * 60 * 1000;
       if (punchTime < earlyStart || punchTime > lateEnd) continue;
@@ -837,7 +860,7 @@ async function getShiftById(shiftId: string, storeId: string, employeeId: string
   };
 }
 
-async function getShiftForActualEdit(storeId: string, employeeId: string, workDate: string, clockIn?: string | null) {
+async function getShiftForActualEdit(storeId: string, employeeId: string, workDate: string, clockIn?: string | null, storeBusinessHours?: StoreBusinessHours | null) {
   const rows = await sql`
     select
       id::text,
@@ -868,18 +891,18 @@ async function getShiftForActualEdit(storeId: string, employeeId: string, workDa
     .map((shift) => ({
       shift,
       distance: Math.abs(
-        getScheduledShiftDateTime(shift, shift.scheduledStart).getTime()
-        - new Date(resolveActualPunchDateTime(workDate, clockIn, { shift })).getTime()
+        getScheduledShiftDateTime(shift, shift.scheduledStart, null, storeBusinessHours).getTime()
+        - new Date(resolveActualPunchDateTime(workDate, clockIn, { shift, storeBusinessHours })).getTime()
       )
     }))
     .sort((left, right) => left.distance - right.distance)[0]?.shift ?? shifts[0];
 }
 
-function resolveActualPunchDateTime(workDate: string, time: string, options: { baseTime?: string | null; shift?: Awaited<ReturnType<typeof getShiftById>> }) {
+function resolveActualPunchDateTime(workDate: string, time: string, options: { baseTime?: string | null; shift?: Awaited<ReturnType<typeof getShiftById>>; storeBusinessHours?: StoreBusinessHours | null }) {
   const baseIso = toPunchDateTime(workDate, time, options.baseTime);
   if (!options.shift?.scheduledStart || !options.shift.scheduledEnd) return baseIso;
-  const scheduledStart = getScheduledShiftDateTime(options.shift, options.shift.scheduledStart).getTime();
-  const scheduledEnd = getScheduledShiftDateTime(options.shift, options.shift.scheduledEnd, options.shift.scheduledStart).getTime();
+  const scheduledStart = getScheduledShiftDateTime(options.shift, options.shift.scheduledStart, null, options.storeBusinessHours).getTime();
+  const scheduledEnd = getScheduledShiftDateTime(options.shift, options.shift.scheduledEnd, options.shift.scheduledStart, options.storeBusinessHours).getTime();
   const candidates = [-1, 0, 1].map((dayOffset) => {
     const date = new Date(baseIso);
     date.setUTCDate(date.getUTCDate() + dayOffset);
@@ -1067,6 +1090,7 @@ export async function GET(request: Request) {
     ? requestedStoreId
     : visibleStoreIds[0] ?? "";
   const selectedStore = stores.find((store) => String(store.id) === selectedStoreId) ?? null;
+  const selectedStoreBusinessHours = normalizeBusinessHours(selectedStore?.businessHours);
   const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, selectedStore);
   const punchWindowStartUtc = new Date(startUtc.getTime() - 36 * 60 * 60 * 1000);
   const punchWindowEndUtc = new Date(endUtc.getTime() + 36 * 60 * 60 * 1000);
@@ -1152,7 +1176,7 @@ export async function GET(request: Request) {
   const dailySummaries = summarizeTimecardDays(typedPunches, {
     workDateStart: startDate,
     workDateEndExclusive: endDate,
-    clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, responseShifts)
+    clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, responseShifts, selectedStoreBusinessHours)
   });
   const payroll = canViewPayroll ? summarizePayroll(employees, dailySummaries, {
     month,
@@ -1395,6 +1419,7 @@ export async function POST(request: Request) {
     const storeRows = await sql`
       select
         id::text,
+        business_hours as "businessHours",
         coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
         coalesce(payroll_closing_day, 31)::int as "payrollClosingDay"
       from stores
@@ -1405,6 +1430,7 @@ export async function POST(request: Request) {
     if (!store) {
       return Response.json({ error: "店舗が見つかりません。" }, { status: 404 });
     }
+    const storeBusinessHours = normalizeBusinessHours(store.businessHours);
 
     const { startDate, endDate, startUtc, endUtc } = getPayrollDateRange(month, store);
     if (getJstDateLabel(new Date()) < endDate) {
@@ -1487,7 +1513,7 @@ export async function POST(request: Request) {
     const dailySummaries = summarizeTimecardDays(typedPunches, {
       workDateStart: startDate,
       workDateEndExclusive: endDate,
-      clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, payrollShiftWindows)
+      clockInWorkDateByPunchId: buildClockInWorkDateMap(typedPunches, payrollShiftWindows, storeBusinessHours)
     });
     const payroll = summarizePayroll(employees, dailySummaries, {
       month,
@@ -1761,18 +1787,25 @@ export async function POST(request: Request) {
       return Response.json({ error: "この従業員は選択した店舗の実勤務対象ではありません。" }, { status: 403 });
     }
 
+    const storeRows = await sql`
+      select business_hours as "businessHours"
+      from stores
+      where id::text = ${storeId}
+      limit 1
+    `;
+    const storeBusinessHours = normalizeBusinessHours(storeRows[0]?.businessHours);
     const clockIn = normalizeTimeValue(body.clockIn);
     const clockOut = normalizeTimeValue(body.clockOut);
     const breakIntervals = normalizeBreakIntervals(body.breakIntervals);
     const targetShift = await getShiftById(String(body.shiftId ?? ""), storeId, employeeId, workDate)
-      ?? await getShiftForActualEdit(storeId, employeeId, workDate, clockIn);
+      ?? await getShiftForActualEdit(storeId, employeeId, workDate, clockIn, storeBusinessHours);
     const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
     const inputDeleteWindow = getActualInputDeleteWindow(workDate, { clockIn, clockOut, breakIntervals });
     const deleteStart = targetShift?.scheduledStart
-      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
+      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledStart, null, storeBusinessHours).getTime() - 3 * 60 * 60 * 1000)
       : inputDeleteWindow?.start ?? start;
     const deleteEnd = targetShift?.scheduledEnd
-      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
+      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledEnd, targetShift.scheduledStart, storeBusinessHours).getTime() + 3 * 60 * 60 * 1000)
       : inputDeleteWindow?.end ?? overnightEnd;
     const hasNarrowDeleteWindow = Boolean(targetShift || inputDeleteWindow);
     const deleteTargetPunches = async () => {
@@ -1826,13 +1859,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "出勤または退勤時刻を入力してください。" }, { status: 400 });
     }
 
-    const nextClockInAt = clockIn ? resolveActualPunchDateTime(workDate, clockIn, { shift: targetShift }) : null;
-    const nextClockOutAt = clockOut ? resolveActualPunchDateTime(workDate, clockOut, { baseTime: clockIn, shift: targetShift }) : null;
+    const nextClockInAt = clockIn ? resolveActualPunchDateTime(workDate, clockIn, { shift: targetShift, storeBusinessHours }) : null;
+    const nextClockOutAt = clockOut ? resolveActualPunchDateTime(workDate, clockOut, { baseTime: clockIn, shift: targetShift, storeBusinessHours }) : null;
     const nextBreakIntervals = completeBreakIntervals.map((interval) => {
       const startTime = interval.start as string;
       const endTime = interval.end as string;
-      const startAt = resolveActualPunchDateTime(workDate, startTime, { baseTime: clockIn, shift: targetShift });
-      const endAt = resolveActualPunchDateTime(workDate, endTime, { baseTime: startTime, shift: targetShift });
+      const startAt = resolveActualPunchDateTime(workDate, startTime, { baseTime: clockIn, shift: targetShift, storeBusinessHours });
+      const endAt = resolveActualPunchDateTime(workDate, endTime, { baseTime: startTime, shift: targetShift, storeBusinessHours });
       return { start: startTime, end: endTime, startAt, endAt };
     });
     const now = Date.now();
