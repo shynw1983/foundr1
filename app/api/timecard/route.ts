@@ -778,6 +778,42 @@ async function getShiftById(shiftId: string, storeId: string, employeeId: string
   };
 }
 
+async function getShiftForActualEdit(storeId: string, employeeId: string, workDate: string, clockIn?: string | null) {
+  const rows = await sql`
+    select
+      id::text,
+      employee_id::text as "employeeId",
+      store_id::text as "storeId",
+      to_char(work_date, 'YYYY-MM-DD') as "workDate",
+      to_char(scheduled_start, 'HH24:MI') as "scheduledStart",
+      to_char(scheduled_end, 'HH24:MI') as "scheduledEnd"
+    from timecard_shifts
+    where store_id::text = ${storeId}
+      and employee_id::text = ${employeeId}
+      and work_date = ${workDate}::date
+      and scheduled_start is not null
+      and scheduled_end is not null
+    order by scheduled_start asc, scheduled_end asc, id asc
+  `;
+  const shifts = rows.map((row) => ({
+    id: String(row.id),
+    employeeId: String(row.employeeId),
+    storeId: String(row.storeId),
+    workDate: String(row.workDate),
+    scheduledStart: String(row.scheduledStart),
+    scheduledEnd: String(row.scheduledEnd)
+  }));
+  if (!shifts.length) return null;
+  if (!clockIn || shifts.length === 1) return shifts[0];
+  const clockInAt = getShiftWindowDateTime(workDate, clockIn).getTime();
+  return shifts
+    .map((shift) => ({
+      shift,
+      distance: Math.abs(getShiftWindowDateTime(workDate, shift.scheduledStart).getTime() - clockInAt)
+    }))
+    .sort((left, right) => left.distance - right.distance)[0]?.shift ?? shifts[0];
+}
+
 function resolveActualPunchDateTime(workDate: string, time: string, options: { baseTime?: string | null; shift?: Awaited<ReturnType<typeof getShiftById>> }) {
   const baseIso = toPunchDateTime(workDate, time, options.baseTime);
   if (!options.shift?.scheduledStart || !options.shift.scheduledEnd) return baseIso;
@@ -1664,7 +1700,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "この従業員は選択した店舗の実勤務対象ではありません。" }, { status: 403 });
     }
 
-    const targetShift = await getShiftById(String(body.shiftId ?? ""), storeId, employeeId, workDate);
+    const clockIn = normalizeTimeValue(body.clockIn);
+    const clockOut = normalizeTimeValue(body.clockOut);
+    const breakIntervals = normalizeBreakIntervals(body.breakIntervals);
+    const targetShift = await getShiftById(String(body.shiftId ?? ""), storeId, employeeId, workDate)
+      ?? await getShiftForActualEdit(storeId, employeeId, workDate, clockIn);
     const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
     const deleteStart = targetShift?.scheduledStart
       ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
@@ -1715,9 +1755,6 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
 
-    const clockIn = normalizeTimeValue(body.clockIn);
-    const clockOut = normalizeTimeValue(body.clockOut);
-    const breakIntervals = normalizeBreakIntervals(body.breakIntervals);
     const completeBreakIntervals = breakIntervals.filter((interval) => interval.start || interval.end);
     if (completeBreakIntervals.some((interval) => !interval.start || !interval.end)) {
       return Response.json({ error: "休憩は開始時刻と終了時刻をセットで入力してください。" }, { status: 400 });
