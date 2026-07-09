@@ -726,6 +726,40 @@ function getShiftWindowDateTime(workDate: string, time: string, baseTime?: strin
   return new Date(toPunchDateTime(workDate, time, baseTime));
 }
 
+function getActualInputDeleteWindow(
+  workDate: string,
+  input: {
+    clockIn?: string | null;
+    clockOut?: string | null;
+    breakIntervals?: Array<{ start: string | null; end: string | null }>;
+  }
+) {
+  const timestamps: number[] = [];
+  if (input.clockIn) {
+    timestamps.push(getShiftWindowDateTime(workDate, input.clockIn).getTime());
+  }
+  if (input.clockOut) {
+    timestamps.push(getShiftWindowDateTime(workDate, input.clockOut, input.clockIn).getTime());
+  }
+  for (const interval of input.breakIntervals ?? []) {
+    if (interval.start) {
+      timestamps.push(getShiftWindowDateTime(workDate, interval.start, input.clockIn).getTime());
+    }
+    if (interval.end) {
+      timestamps.push(getShiftWindowDateTime(workDate, interval.end, interval.start ?? input.clockIn).getTime());
+    }
+  }
+  const validTimestamps = timestamps.filter(Number.isFinite);
+  if (!validTimestamps.length) return null;
+  const marginMs = 3 * 60 * 60 * 1000;
+  const singlePunchRangeMs = 18 * 60 * 60 * 1000;
+  const minTime = Math.min(...validTimestamps);
+  const maxTime = Math.max(...validTimestamps);
+  const start = new Date(minTime - (validTimestamps.length === 1 && !input.clockIn ? singlePunchRangeMs : marginMs));
+  const end = new Date(maxTime + (validTimestamps.length === 1 && input.clockIn ? singlePunchRangeMs : marginMs));
+  return { start, end };
+}
+
 function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRow[]) {
   const map = new Map<string, string>();
   const candidateShifts = shifts.filter((shift) => shift.scheduledStart && shift.scheduledEnd);
@@ -1706,23 +1740,25 @@ export async function POST(request: Request) {
     const targetShift = await getShiftById(String(body.shiftId ?? ""), storeId, employeeId, workDate)
       ?? await getShiftForActualEdit(storeId, employeeId, workDate, clockIn);
     const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
+    const inputDeleteWindow = getActualInputDeleteWindow(workDate, { clockIn, clockOut, breakIntervals });
     const deleteStart = targetShift?.scheduledStart
       ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
-      : start;
+      : inputDeleteWindow?.start ?? start;
     const deleteEnd = targetShift?.scheduledEnd
       ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
-      : overnightEnd;
+      : inputDeleteWindow?.end ?? overnightEnd;
+    const hasNarrowDeleteWindow = Boolean(targetShift || inputDeleteWindow);
     const deleteTargetPunches = async () => {
       await sql`
         delete from timecard_punches
         where employee_id = ${employeeId}
           and store_id = ${storeId}
           and (
-            ${Boolean(targetShift)}
+            ${hasNarrowDeleteWindow}
             and punched_at >= ${deleteStart.toISOString()}
             and punched_at < ${deleteEnd.toISOString()}
             or (
-              ${!targetShift}
+              ${!hasNarrowDeleteWindow}
               and (
                 (
                   punch_type = 'clock_in'
@@ -1731,7 +1767,7 @@ export async function POST(request: Request) {
                 )
                 or (
                   punch_type in ('clock_out', 'break_start', 'break_end')
-                  and punched_at >= ${start.toISOString()}
+                  and punched_at >= ${new Date(start.getTime() + 12 * 60 * 60 * 1000).toISOString()}
                   and punched_at < ${overnightEnd.toISOString()}
                 )
               )
