@@ -720,6 +720,16 @@ function getTodayJstDateKey() {
   }).format(new Date());
 }
 
+function getJstDateKey(value: string | null | undefined) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date(value));
+}
+
 function getPayrollPeriod(month: string, store: StoreOption | null) {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
   if (!match) return null;
@@ -795,6 +805,46 @@ function minutesToTime(totalMinutes: number) {
 
 function getBusinessDayForDate(businessHours: StoreBusinessHours, workDate: string) {
   return businessHours[getWeekdayKeyForDate(workDate)];
+}
+
+function getBusinessDayCloseMinutes(businessHours: StoreBusinessHours | undefined, workDate: string) {
+  if (!businessHours) return null;
+  const day = getBusinessDayForDate(businessHours, workDate);
+  if (!day || day.closed) return null;
+  const open = timeToMinutes(day.open);
+  const close = timeToMinutes(day.close);
+  return close <= open ? close : null;
+}
+
+function isEarlyMorningBusinessDayShift(shift: ShiftEntry, businessHours: StoreBusinessHours | undefined) {
+  if (!shift.scheduledStart) return false;
+  const close = getBusinessDayCloseMinutes(businessHours, shift.workDate) ?? 6 * 60;
+  return timeToMinutes(shift.scheduledStart) < close;
+}
+
+function getScheduledMinutesForWorkDate(shift: ShiftEntry, time: string, baseTime: string | null, businessHours: StoreBusinessHours | undefined) {
+  let minutes = timeToMinutes(time);
+  if (baseTime && minutes <= timeToMinutes(baseTime)) minutes += 1440;
+  if (isEarlyMorningBusinessDayShift(shift, businessHours)) minutes += 1440;
+  return minutes;
+}
+
+function getActualMinutesForWorkDate(value: string | null | undefined, workDate: string, shift: ShiftEntry | undefined, businessHours: StoreBusinessHours | undefined) {
+  const timeText = getJstTimeText(value);
+  if (!value || !timeText) return null;
+  let minutes = timeToMinutes(timeText);
+  const actualDate = getJstDateKey(value);
+  if (actualDate) {
+    const [workYear, workMonth, workDay] = workDate.split("-").map(Number);
+    const [actualYear, actualMonth, actualDay] = actualDate.split("-").map(Number);
+    const workUtc = Date.UTC(workYear, workMonth - 1, workDay);
+    const actualUtc = Date.UTC(actualYear, actualMonth - 1, actualDay);
+    minutes += Math.round((actualUtc - workUtc) / 86_400_000) * 1440;
+  }
+  if (shift && isEarlyMorningBusinessDayShift(shift, businessHours) && minutes < (getBusinessDayCloseMinutes(businessHours, shift.workDate) ?? 6 * 60)) {
+    minutes += 1440;
+  }
+  return minutes;
 }
 
 function getShiftSelectionKey(selection: ShiftSelection) {
@@ -880,22 +930,21 @@ function getJstTimeText(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | undefined, isFutureDate = false) {
+function getActualStatus(actual: DailySummary | undefined, shift: ShiftEntry | undefined, isFutureDate = false, businessHours?: StoreBusinessHours) {
   if (!actual) {
     return shift && !isFutureDate ? { className: " is-missing", label: "未打刻" } satisfies ActualStatus : { className: "", label: "" } satisfies ActualStatus;
   }
 
   const labels = [...actual.alerts];
   if (shift?.scheduledStart && shift.scheduledEnd && actual.clockIn && actual.clockOut) {
-    const scheduledStart = timeToMinutes(shift.scheduledStart);
-    const scheduledEndBase = timeToMinutes(shift.scheduledEnd);
-    const scheduledEnd = scheduledEndBase <= scheduledStart ? scheduledEndBase + 1440 : scheduledEndBase;
-    const actualStart = timeToMinutes(getJstTimeText(actual.clockIn) ?? "00:00");
-    const actualEndBase = timeToMinutes(getJstTimeText(actual.clockOut) ?? "00:00");
-    const actualEnd = actualEndBase <= actualStart ? actualEndBase + 1440 : actualEndBase;
+    const scheduledStart = getScheduledMinutesForWorkDate(shift, shift.scheduledStart, null, businessHours);
+    const scheduledEnd = getScheduledMinutesForWorkDate(shift, shift.scheduledEnd, shift.scheduledStart, businessHours);
+    const actualStart = getActualMinutesForWorkDate(actual.clockIn, shift.workDate, shift, businessHours);
+    const actualEndBase = getActualMinutesForWorkDate(actual.clockOut, shift.workDate, shift, businessHours);
+    const actualEnd = actualStart !== null && actualEndBase !== null && actualEndBase <= actualStart ? actualEndBase + 1440 : actualEndBase;
 
-    if (actualStart > scheduledStart) labels.push("遅刻");
-    if (actualEnd < scheduledEnd) labels.push("早退");
+    if (actualStart !== null && actualStart > scheduledStart) labels.push("遅刻");
+    if (actualEnd !== null && actualEnd < scheduledEnd) labels.push("早退");
   }
 
   const uniqueLabels = Array.from(new Set(labels));
@@ -1479,12 +1528,12 @@ export function TimecardPage({
         const actuals = actualByCell.get(`${employee.id}:${day.key}`) ?? [];
         const shift = shiftsByCell.get(`${employee.id}:${day.key}`)?.[0];
         const actual = getActualSummaryForShift(actuals, shift);
-        const status = getActualStatus(actual, shift, day.key > todayKey);
+        const status = getActualStatus(actual, shift, day.key > todayKey, selectedStoreBusinessHours);
         if ((status.className && status.className !== " is-complete") || actual?.isManualCorrection) count += 1;
       }
     }
     return count;
-  }, [actualByCell, monthDays, scheduleEmployees, shiftsByCell, todayKey]);
+  }, [actualByCell, monthDays, scheduleEmployees, selectedStoreBusinessHours, shiftsByCell, todayKey]);
   const selectedShiftEmployee = shiftDraft
     ? scheduleEmployees.find((employee) => employee.id === shiftDraft.employeeId) ?? null
     : null;
@@ -2791,7 +2840,7 @@ export function TimecardPage({
                             const actual = getActualSummaryForShift(actuals, shift);
                             const isFutureDate = day.key > todayKey;
                             const shouldShowMissing = Boolean(shifts.length && !actuals.length && !isFutureDate);
-                            const status = getActualStatus(actual, shift, isFutureDate);
+                            const status = getActualStatus(actual, shift, isFutureDate, selectedStoreBusinessHours);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
                             const actualSelectionKey = getActualSelectionKey({ employeeId: employee.id, workDate: day.key, shiftId: shift?.id ?? null });
                             const isBulkSelected = selectedActualCellKeys.has(actualSelectionKey);
