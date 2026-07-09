@@ -161,6 +161,15 @@ type LocationState = {
   accuracyMeters: number | null;
 };
 
+declare global {
+  interface Window {
+    Foundr1Calendar?: {
+      isAvailable?: () => boolean;
+      addEvent?: (payloadJson: string) => string;
+    };
+  }
+}
+
 const staffStoreSelectionKey = "foundr1-staff:selected-store";
 
 const punchActions = [
@@ -813,8 +822,10 @@ function ShiftsView({ myShifts, schedulingPeriod }: { myShifts: ShiftEntry[]; sc
                   <span>{display.timeLabel}</span>
                   {display.businessDateLabel ? <small>{display.businessDateLabel}</small> : null}
                 </div>
-                <a className="text-button" href={createCalendarHref(shift)} download={`foundr1-shift-${shift.workDate}.ics`}>
-                  カレンダー
+                <a className="text-button" href={createCalendarHref(shift)} download={`foundr1-shift-${display.actualStartDate}.ics`} onClick={(event) => {
+                  if (addShiftToNativeCalendar(shift, display)) event.preventDefault();
+                }}>
+                  カレンダーに追加
                 </a>
               </article>
             );
@@ -1005,21 +1016,26 @@ function DocumentsView({ documents }: { documents: PrivacyConsentRecord[] }) {
 }
 
 function createCalendarHref(shift: ShiftEntry) {
-  if (!shift.scheduledStart || !shift.scheduledEnd) return "#";
-  const display = getShiftDisplayParts(shift);
-  const start = `${display.actualStartDate.replaceAll("-", "")}T${shift.scheduledStart.replace(":", "")}00`;
-  const end = `${display.actualEndDate.replaceAll("-", "")}T${shift.scheduledEnd.replace(":", "")}00`;
-  const body = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Foundr1//Staff Shift//JA",
-    "BEGIN:VEVENT",
-    `UID:foundr1-staff-shift-${shift.id}@foundr1.jp`,
-    `DTSTART;TZID=Asia/Tokyo:${start}`,
-    `DTEND;TZID=Asia/Tokyo:${end}`,
-    "SUMMARY:Foundr1 シフト",
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ].join("\r\n");
-  return `data:text/calendar;charset=utf-8,${encodeURIComponent(body)}`;
+  return `/api/staff/shifts/${encodeURIComponent(shift.id)}/calendar`;
+}
+
+function addShiftToNativeCalendar(shift: ShiftEntry, display: ReturnType<typeof getShiftDisplayParts>) {
+  if (typeof window === "undefined" || !window.Foundr1Calendar?.addEvent) return false;
+  if (window.Foundr1Calendar.isAvailable && !window.Foundr1Calendar.isAvailable()) return false;
+  if (!shift.scheduledStart || !shift.scheduledEnd) return false;
+  const result = window.Foundr1Calendar.addEvent(JSON.stringify({
+    title: "Foundr1 シフト",
+    startDate: display.actualStartDate,
+    startTime: shift.scheduledStart,
+    endDate: display.actualEndDate,
+    endTime: shift.scheduledEnd,
+    description: display.businessDateLabel || `${formatDate(shift.workDate)} ${display.timeLabel}`
+  }));
+  try {
+    const body = JSON.parse(result || "{}") as { ok?: boolean; error?: string };
+    if (!body.ok && body.error) window.alert(body.error);
+  } catch {
+    // Older native shells may return an empty value after opening the calendar.
+  }
+  return true;
 }

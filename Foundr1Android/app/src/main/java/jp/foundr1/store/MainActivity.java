@@ -17,6 +17,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.CalendarContract;
 import android.provider.Settings;
 import android.view.DisplayCutout;
 import android.view.View;
@@ -43,8 +44,12 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
 public class MainActivity extends Activity {
     private static final int CAMERA_PERMISSION_REQUEST = 1001;
@@ -66,13 +71,20 @@ public class MainActivity extends Activity {
     private int lastPromptedVersionCode = 0;
     private boolean appUpdateDialogShowing = false;
     private long pendingApkDownloadId = -1L;
+    private long pendingCalendarDownloadId = -1L;
     private final BroadcastReceiver appUpdateDownloadReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
             long downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
-            if (downloadId < 0 || downloadId != pendingApkDownloadId) return;
-            installDownloadedApk(downloadId);
+            if (downloadId < 0) return;
+            if (downloadId == pendingApkDownloadId) {
+                installDownloadedApk(downloadId);
+                return;
+            }
+            if (downloadId == pendingCalendarDownloadId) {
+                openDownloadedCalendar(downloadId);
+            }
         }
     };
 
@@ -109,10 +121,16 @@ public class MainActivity extends Activity {
         requestStartupPermissionsIfNeeded();
         addStorePrinterBridgeIfAvailable();
         webView.addJavascriptInterface(new Foundr1NotificationBridge(), "Foundr1NativeNotifications");
+        webView.addJavascriptInterface(new Foundr1CalendarBridge(), "Foundr1Calendar");
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String host = request.getUrl().getHost();
+                Uri uri = request.getUrl();
+                if (isStaffCalendarUrl(uri)) {
+                    downloadStaffCalendar(uri.toString());
+                    return true;
+                }
+                String host = uri.getHost();
                 if (host == null || host.endsWith("foundr1.jp") || host.equals("localhost") || host.equals("127.0.0.1")) {
                     return false;
                 }
@@ -532,6 +550,64 @@ public class MainActivity extends Activity {
         startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)));
     }
 
+    private boolean isStaffCalendarUrl(Uri uri) {
+        if (uri == null) return false;
+        String path = uri.getPath();
+        return path != null
+            && path.startsWith("/api/staff/shifts/")
+            && path.endsWith("/calendar");
+    }
+
+    private void downloadStaffCalendar(String calendarUrl) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (manager == null) {
+                openExternalDownload(calendarUrl);
+                return;
+            }
+
+            String fileName = "foundr1-shift-" + System.currentTimeMillis() + ".ics";
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(calendarUrl));
+            request.setTitle("Foundr1 シフト");
+            request.setDescription("カレンダー予定を準備しています。");
+            request.setMimeType("text/calendar");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
+
+            String cookies = CookieManager.getInstance().getCookie(calendarUrl);
+            if (cookies != null && !cookies.trim().isEmpty()) {
+                request.addRequestHeader("Cookie", cookies);
+            }
+
+            pendingCalendarDownloadId = manager.enqueue(request);
+            Toast.makeText(this, "カレンダー予定を準備しています。", Toast.LENGTH_SHORT).show();
+        } catch (Exception error) {
+            openExternalDownload(calendarUrl);
+        }
+    }
+
+    private void openDownloadedCalendar(long downloadId) {
+        DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) return;
+        Uri calendarUri = manager.getUriForDownloadedFile(downloadId);
+        pendingCalendarDownloadId = -1L;
+        if (calendarUri == null) {
+            Toast.makeText(this, "カレンダー予定を開けませんでした。", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            Intent calendarIntent = new Intent(Intent.ACTION_VIEW);
+            calendarIntent.setDataAndType(calendarUri, "text/calendar");
+            calendarIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            calendarIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(calendarIntent);
+        } catch (Exception error) {
+            Toast.makeText(this, "カレンダーアプリを開けませんでした。ダウンロード通知から開いてください。", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private String sanitizeFileName(String value) {
         String safe = value == null ? "latest" : value.trim().replaceAll("[^0-9A-Za-z._-]+", "-");
         return safe.isEmpty() ? "latest" : safe;
@@ -630,6 +706,56 @@ public class MainActivity extends Activity {
         }
     }
 
+    public class Foundr1CalendarBridge {
+        @JavascriptInterface
+        public boolean isAvailable() {
+            return true;
+        }
+
+        @JavascriptInterface
+        public String addEvent(String payloadJson) {
+            try {
+                JSONObject payload = new JSONObject(payloadJson);
+                String title = payload.optString("title", "Foundr1 シフト");
+                String startDate = payload.optString("startDate", "");
+                String startTime = payload.optString("startTime", "");
+                String endDate = payload.optString("endDate", startDate);
+                String endTime = payload.optString("endTime", "");
+                Date start = parseJstDateTime(startDate, startTime);
+                Date end = parseJstDateTime(endDate, endTime);
+                if (start == null || end == null || end.getTime() <= start.getTime()) {
+                    return "{\"ok\":false,\"error\":\"カレンダー日時が不正です。\"}";
+                }
+
+                Intent intent = new Intent(Intent.ACTION_INSERT)
+                    .setData(CalendarContract.Events.CONTENT_URI)
+                    .putExtra(CalendarContract.Events.TITLE, title)
+                    .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start.getTime())
+                    .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end.getTime())
+                    .putExtra(CalendarContract.Events.EVENT_TIMEZONE, "Asia/Tokyo")
+                    .putExtra(CalendarContract.Events.DESCRIPTION, payload.optString("description", ""))
+                    .putExtra(CalendarContract.Events.EVENT_LOCATION, payload.optString("location", ""));
+                startActivity(intent);
+                return "{\"ok\":true}";
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "カレンダーを開けませんでした。" : error.getMessage();
+                return "{\"ok\":false,\"error\":\"" + jsonEscape(message) + "\"}";
+            }
+        }
+    }
+
+    private Date parseJstDateTime(String date, String time) {
+        try {
+            if (date == null || !date.matches("\\d{4}-\\d{2}-\\d{2}")) return null;
+            if (time == null || !time.matches("\\d{2}:\\d{2}")) return null;
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("Asia/Tokyo"));
+            format.setLenient(false);
+            return format.parse(date + " " + time);
+        } catch (Exception error) {
+            return null;
+        }
+    }
 
     private String jsonEscape(String value) {
         return value
