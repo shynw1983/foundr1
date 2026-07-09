@@ -206,6 +206,39 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+function addDateDays(value: string, amount: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + amount));
+  return date.toISOString().slice(0, 10);
+}
+
+function isEarlyMorningShiftStart(value: string | null | undefined) {
+  return Boolean(value && value < "06:00");
+}
+
+function getShiftDisplayParts(shift: ShiftEntry) {
+  const start = shift.scheduledStart ?? "--:--";
+  const end = shift.scheduledEnd ?? "--:--";
+  const actualStartDate = shift.scheduledStart && isEarlyMorningShiftStart(shift.scheduledStart)
+    ? addDateDays(shift.workDate, 1)
+    : shift.workDate;
+  const actualEndDate = shift.scheduledStart && shift.scheduledEnd && shift.scheduledEnd <= shift.scheduledStart
+    ? addDateDays(actualStartDate, 1)
+    : actualStartDate;
+  const timeLabel = actualEndDate === actualStartDate
+    ? `${start}-${end}`
+    : `${start}-${formatDate(actualEndDate)} ${end}`;
+  const businessDateLabel = actualStartDate !== shift.workDate ? `営業日 ${formatDate(shift.workDate)}` : "";
+  return {
+    actualStartDate,
+    actualEndDate,
+    dateLabel: formatDate(actualStartDate),
+    timeLabel,
+    businessDateLabel,
+    compactLabel: businessDateLabel ? `${formatDate(actualStartDate)} ${timeLabel}（${businessDateLabel}）` : `${formatDate(actualStartDate)} ${timeLabel}`
+  };
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "未記録";
   const date = new Date(value);
@@ -605,6 +638,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
 function HomeView({ latestPayroll, nextShift, myDays, requests }: { latestPayroll: PayrollItem | null; nextShift: ShiftEntry | null; myDays: DailySummary[]; requests: ShiftRequestItem[] }) {
   const monthWorkMinutes = myDays.reduce((sum, day) => sum + day.workMinutes, 0);
   const openRequests = requests.filter((request) => request.status === "open").length;
+  const nextShiftDisplay = nextShift ? getShiftDisplayParts(nextShift) : null;
   return (
     <section className="staff-home-grid">
       <a className="staff-action-card" href="/staff/timecard">
@@ -619,7 +653,7 @@ function HomeView({ latestPayroll, nextShift, myDays, requests }: { latestPayrol
         <CalendarDays />
         <span>
           <strong>次回シフト</strong>
-          <small>{nextShift ? `${formatDate(nextShift.workDate)} ${nextShift.scheduledStart ?? "--:--"}-${nextShift.scheduledEnd ?? "--:--"}` : "確定シフトなし"}</small>
+          <small>{nextShiftDisplay ? nextShiftDisplay.compactLabel : "確定シフトなし"}</small>
         </span>
         <ChevronRight size={18} />
       </a>
@@ -770,17 +804,21 @@ function ShiftsView({ myShifts, schedulingPeriod }: { myShifts: ShiftEntry[]; sc
           </div>
         </div>
         <div className="staff-shift-list">
-          {myShifts.length ? myShifts.map((shift) => (
-            <article className="staff-shift-row" key={shift.id}>
-              <div>
-                <strong>{formatDate(shift.workDate)}</strong>
-                <span>{shift.scheduledStart ?? "--:--"} - {shift.scheduledEnd ?? "--:--"}</span>
-              </div>
-              <a className="text-button" href={createCalendarHref(shift)} download={`foundr1-shift-${shift.workDate}.ics`}>
-                カレンダー
-              </a>
-            </article>
-          )) : <p className="empty-state-text">この期間の確定シフトはまだありません。</p>}
+          {myShifts.length ? myShifts.map((shift) => {
+            const display = getShiftDisplayParts(shift);
+            return (
+              <article className="staff-shift-row" key={shift.id}>
+                <div>
+                  <strong>{display.dateLabel}</strong>
+                  <span>{display.timeLabel}</span>
+                  {display.businessDateLabel ? <small>{display.businessDateLabel}</small> : null}
+                </div>
+                <a className="text-button" href={createCalendarHref(shift)} download={`foundr1-shift-${shift.workDate}.ics`}>
+                  カレンダー
+                </a>
+              </article>
+            );
+          }) : <p className="empty-state-text">この期間の確定シフトはまだありません。</p>}
         </div>
       </article>
     </section>
@@ -862,7 +900,7 @@ function RequestsView({
         <div className="staff-form-row">
           <select value={swapTargetShiftId} onChange={(event) => onChangeSwapTarget(event.target.value)}>
             {myShifts.map((shift) => (
-              <option value={shift.id} key={shift.id}>{shift.workDate} {shift.scheduledStart ?? "--:--"}-{shift.scheduledEnd ?? "--:--"}</option>
+              <option value={shift.id} key={shift.id}>{getShiftDisplayParts(shift).compactLabel}</option>
             ))}
           </select>
           <input value={swapNote} placeholder="メモ" onChange={(event) => onChangeSwapNote(event.target.value)} />
@@ -968,8 +1006,9 @@ function DocumentsView({ documents }: { documents: PrivacyConsentRecord[] }) {
 
 function createCalendarHref(shift: ShiftEntry) {
   if (!shift.scheduledStart || !shift.scheduledEnd) return "#";
-  const start = `${shift.workDate.replaceAll("-", "")}T${shift.scheduledStart.replace(":", "")}00`;
-  const end = `${shift.workDate.replaceAll("-", "")}T${shift.scheduledEnd.replace(":", "")}00`;
+  const display = getShiftDisplayParts(shift);
+  const start = `${display.actualStartDate.replaceAll("-", "")}T${shift.scheduledStart.replace(":", "")}00`;
+  const end = `${display.actualEndDate.replaceAll("-", "")}T${shift.scheduledEnd.replace(":", "")}00`;
   const body = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",

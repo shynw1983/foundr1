@@ -439,12 +439,18 @@ export async function GET(request: Request) {
     join employees on employees.id = timecard_shifts.employee_id
     where timecard_shifts.store_id::text = ${selectedStoreId}
       and timecard_shifts.employee_id::text = ${session.id}
-      and timecard_shifts.work_date >= ${getJstDateLabel(new Date())}::date
+      and timecard_shifts.work_date >= (${getJstDateLabel(new Date())}::date - interval '1 day')
+      and timecard_shifts.scheduled_start is not null
       and (
-        timecard_shifts.scheduled_start is not null
-        or timecard_shifts.scheduled_end is not null
-      )
-    order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc nulls last
+        timecard_shifts.work_date
+        + timecard_shifts.scheduled_start
+        + case when timecard_shifts.scheduled_start < '06:00'::time then interval '1 day' else interval '0 day' end
+      ) >= (now() at time zone 'Asia/Tokyo')
+    order by (
+      timecard_shifts.work_date
+      + timecard_shifts.scheduled_start
+      + case when timecard_shifts.scheduled_start < '06:00'::time then interval '1 day' else interval '0 day' end
+    ) asc
     limit 1
   ` : [];
 
