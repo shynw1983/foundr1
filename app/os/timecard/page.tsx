@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, CalendarDays, ChevronDown, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, Download, FileText, FileUp, Lightbulb, LogOut, MessageSquare, MessageSquareWarning, PackageCheck, Search, Settings, Store, Truck, UserCog, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, FormEvent, MouseEvent } from "react";
@@ -1222,6 +1222,54 @@ function storeTimecardSelection(nextMonth: string, nextStoreId: string) {
   if (nextStoreId) window.localStorage.setItem(timecardStoreStorageKey, nextStoreId);
 }
 
+function addTimecardMonths(month: string, offset: number) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return getJstMonthLabel();
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatTimecardMonthHeading(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return month;
+  return `${match[1]}年 ${match[2]}月度`;
+}
+
+function MonthNavigator({
+  month,
+  isLoading,
+  onChange
+}: {
+  month: string;
+  isLoading: boolean;
+  onChange: (nextMonth: string) => void;
+}) {
+  const currentMonth = getJstMonthLabel();
+  return (
+    <div className="timecard-month-navigator" aria-label="月度選択">
+      <strong className="timecard-month-heading">{formatTimecardMonthHeading(month)}</strong>
+      <div className="timecard-month-controls">
+        <button className="timecard-month-step" type="button" disabled={isLoading} aria-label="前月" onClick={() => onChange(addTimecardMonths(month, -1))}>
+          <ChevronLeft size={16} />
+        </button>
+        <label className="timecard-month-picker" aria-label="月度を選択">
+          <CalendarDays size={15} />
+          <input type="month" value={month} disabled={isLoading} onChange={(event) => onChange(event.target.value)} />
+        </label>
+        <button className="timecard-month-today" type="button" disabled={isLoading || month === currentMonth} onClick={() => onChange(currentMonth)}>
+          今月
+        </button>
+        <button className="timecard-month-step" type="button" disabled={isLoading} aria-label="翌月" onClick={() => onChange(addTimecardMonths(month, 1))}>
+          <ChevronRight size={16} />
+        </button>
+        <select className="timecard-month-range" value="month" aria-label="表示範囲" disabled>
+          <option value="month">1ヶ月間表示</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export function TimecardPage({
   initialMainView = "overview",
   initialScheduleView = "planned",
@@ -1317,6 +1365,16 @@ export function TimecardPage({
     void loadTimecard(getStoredTimecardMonth(), getStoredTimecardStoreId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function changeTimecardMonth(nextMonth: string) {
+    setMonth(nextMonth);
+    storeTimecardSelection(nextMonth, selectedStoreId);
+    setIsShiftMultiSelectMode(false);
+    setSelectedShiftCells([]);
+    setIsActualMultiSelectMode(false);
+    setSelectedActualCells([]);
+    void loadTimecard(nextMonth, selectedStoreId);
+  }
 
   useEffect(() => () => {
     if (shiftMessageTimerRef.current) {
@@ -2236,13 +2294,7 @@ export function TimecardPage({
           </div>
           {mainView !== "payroll" ? (
           <div className="timecard-toolbar">
-            <input type="month" value={month} onChange={(event) => {
-              setMonth(event.target.value);
-              storeTimecardSelection(event.target.value, selectedStoreId);
-              setIsShiftMultiSelectMode(false);
-              setSelectedShiftCells([]);
-              void loadTimecard(event.target.value, selectedStoreId);
-            }} />
+            <MonthNavigator month={month} isLoading={isLoading} onChange={changeTimecardMonth} />
             <label className="store-context-selector is-os is-compact">
               <span>対象店舗</span>
               <select value={selectedStoreId} onChange={(event) => {
@@ -3001,14 +3053,7 @@ export function TimecardPage({
                   </div>
                 </div>
                 <div className="payroll-ledger-search">
-                  <label>
-                    <span>月度（勤怠）</span>
-                    <input type="month" value={month} onChange={(event) => {
-                      setMonth(event.target.value);
-                      storeTimecardSelection(event.target.value, selectedStoreId);
-                      void loadTimecard(event.target.value, selectedStoreId);
-                    }} />
-                  </label>
+                  <MonthNavigator month={month} isLoading={isLoading} onChange={changeTimecardMonth} />
                   <label className="store-context-selector is-os is-compact">
                     <span>事業所</span>
                     <select value={selectedStoreId} onChange={(event) => {

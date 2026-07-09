@@ -17714,6 +17714,94 @@ body :where(
   margin-bottom: 14px;
 }
 
+.timecard-month-navigator {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timecard-month-heading {
+  min-width: 156px;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.timecard-month-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.timecard-month-step,
+.timecard-month-picker,
+.timecard-month-today,
+.timecard-month-range {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.timecard-month-step,
+.timecard-month-picker,
+.timecard-month-today {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timecard-month-step {
+  width: 34px;
+  padding: 0;
+}
+
+.timecard-month-picker {
+  position: relative;
+  width: 34px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.timecard-month-picker input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.timecard-month-today {
+  padding: 0 10px;
+}
+
+.timecard-month-range {
+  min-width: 118px;
+  padding: 0 28px 0 10px;
+}
+
+.timecard-month-step:disabled,
+.timecard-month-picker:has(input:disabled),
+.timecard-month-today:disabled,
+.timecard-month-range:disabled {
+  color: var(--muted);
+  background: #f8faf9;
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .timecard-view-tabs,
 .timecard-subtabs {
   display: flex;
@@ -19743,6 +19831,21 @@ body :where(
   background: white;
   color: var(--ink);
   font-weight: 500;
+}
+
+.payroll-ledger-search .timecard-month-navigator {
+  justify-content: flex-start;
+}
+
+.payroll-ledger-search .timecard-month-picker input {
+  min-height: 0;
+  padding: 0;
+}
+
+.payroll-ledger-search .timecard-month-range {
+  min-height: 34px;
+  width: auto;
+  padding: 0 28px 0 10px;
 }
 
 .payroll-ledger-search .primary-button {
@@ -30864,6 +30967,32 @@ body :where(
   .timecard-toolbar {
     justify-content: stretch;
     width: 100%;
+  }
+
+  .timecard-month-navigator {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .timecard-month-heading {
+    width: 100%;
+    min-width: 0;
+    font-size: 20px;
+    text-align: left;
+  }
+
+  .timecard-month-controls {
+    display: grid;
+    grid-template-columns: 34px 34px minmax(54px, 0.7fr) 34px minmax(112px, 1.3fr);
+    width: 100%;
+  }
+
+  .timecard-month-range,
+  .timecard-month-today {
+    width: 100%;
+    min-width: 0;
   }
 
   .timecard-store-select {
