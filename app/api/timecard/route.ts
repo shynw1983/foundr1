@@ -747,7 +747,7 @@ function getBusinessDayCloseMinutes(businessHours: StoreBusinessHours | null | u
   const open = timeValueToMinutes(day.open);
   const close = timeValueToMinutes(day.close);
   if (open === null || close === null || close > open) return null;
-  return close === 0 ? 24 * 60 : close;
+  return close;
 }
 
 function isEarlyMorningBusinessDayShift(
@@ -755,10 +755,9 @@ function isEarlyMorningBusinessDayShift(
   businessHours?: StoreBusinessHours | null
 ) {
   const start = timeValueToMinutes(shift.scheduledStart);
-  const end = timeValueToMinutes(shift.scheduledEnd);
-  if (start === null || end === null) return false;
+  if (start === null) return false;
   const close = getBusinessDayCloseMinutes(businessHours, shift.workDate) ?? 6 * 60;
-  return start < close && end > start && end <= close;
+  return start < close;
 }
 
 function getScheduledShiftDateTime(
