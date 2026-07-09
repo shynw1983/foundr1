@@ -94,6 +94,7 @@ type ShiftRequestItem = {
 type ShiftRequestPayload = {
   requests?: ShiftRequestItem[];
   myShifts?: ShiftEntry[];
+  nextShift?: ShiftEntry | null;
   schedulingPeriod?: {
     label: string;
     startDate: string;
@@ -290,7 +291,7 @@ export function StaffPortalClient({ view }: { view: StaffView }) {
   ), [timecard]);
   const myShifts = shiftPayload?.myShifts ?? [];
   const requests = shiftPayload?.requests ?? [];
-  const nextShift = myShifts.find((shift) => shift.scheduledStart || shift.scheduledEnd) ?? null;
+  const nextShift = shiftPayload?.nextShift ?? myShifts.find((shift) => shift.scheduledStart || shift.scheduledEnd) ?? null;
   const latestPayroll = payrolls[0] ?? null;
 
   async function loadTimecard(nextStoreId = selectedStoreId || readStoredStoreId()) {

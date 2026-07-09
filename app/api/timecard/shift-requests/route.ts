@@ -1,7 +1,7 @@
 import { canAccessStore, getSessionStoreScope, requireOsSession } from "../../../../lib/api-auth";
 import { writeAuditLog } from "../../../../lib/audit-log";
 import { sql } from "../../../../lib/db";
-import { getJstMonthLabel } from "../../../../lib/timecard";
+import { getJstDateLabel, getJstMonthLabel } from "../../../../lib/timecard";
 import { createOsNotification } from "../../../../lib/web-push";
 import type { EmployeeSession } from "../../../../lib/auth";
 
@@ -428,6 +428,26 @@ export async function GET(request: Request) {
     order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc
   ` : [];
 
+  const nextShift = selectedStoreId && selfOnly ? await sql`
+    select
+      timecard_shifts.id::text,
+      to_char(timecard_shifts.work_date, 'YYYY-MM-DD') as "workDate",
+      to_char(timecard_shifts.scheduled_start, 'HH24:MI') as "scheduledStart",
+      to_char(timecard_shifts.scheduled_end, 'HH24:MI') as "scheduledEnd",
+      employees.name as "employeeName"
+    from timecard_shifts
+    join employees on employees.id = timecard_shifts.employee_id
+    where timecard_shifts.store_id::text = ${selectedStoreId}
+      and timecard_shifts.employee_id::text = ${session.id}
+      and timecard_shifts.work_date >= ${getJstDateLabel(new Date())}::date
+      and (
+        timecard_shifts.scheduled_start is not null
+        or timecard_shifts.scheduled_end is not null
+      )
+    order by timecard_shifts.work_date asc, timecard_shifts.scheduled_start asc nulls last
+    limit 1
+  ` : [];
+
   const publications = selectedStoreId ? await sql`
     select
       timecard_shift_publications.id::text,
@@ -456,6 +476,7 @@ export async function GET(request: Request) {
     schedulingDates,
     requests,
     myShifts,
+    nextShift: nextShift[0] ?? null,
     publications
   });
 }
