@@ -646,6 +646,8 @@ create index if not exists idx_employee_work_store_payroll_history_commute_looku
   on employee_work_store_payroll_history(employee_id, store_id, commute_valid_from desc);
 alter table employee_work_store_payroll_history
   drop constraint if exists employee_work_store_payroll_history_employee_id_store_id_valid_from_key;
+alter table employee_work_store_payroll_history
+  drop constraint if exists employee_work_store_payroll_h_employee_id_store_id_valid_fr_key;
 create unique index if not exists employee_work_store_payroll_history_effective_idx
   on employee_work_store_payroll_history(employee_id, store_id, wage_valid_from, commute_valid_from);
 
