@@ -1194,6 +1194,7 @@ export function TimecardPage({
   const [selectedPayrollEmployeeId, setSelectedPayrollEmployeeId] = useState("");
   const [shiftDraft, setShiftDraft] = useState<ShiftDraft | null>(null);
   const [shiftEditorPosition, setShiftEditorPosition] = useState<ShiftEditorPosition | null>(null);
+  const [actualEditorPosition, setActualEditorPosition] = useState<ShiftEditorPosition | null>(null);
   const [isShiftMultiSelectMode, setIsShiftMultiSelectMode] = useState(false);
   const [selectedShiftCells, setSelectedShiftCells] = useState<ShiftSelection[]>([]);
   const [bulkShiftDraft, setBulkShiftDraft] = useState({
@@ -1253,7 +1254,10 @@ export function TimecardPage({
         setShiftDraft(null);
         setShiftEditorPosition(null);
       }
-      if (!options.keepActualDraft) setActualDraft(null);
+      if (!options.keepActualDraft) {
+        setActualDraft(null);
+        setActualEditorPosition(null);
+      }
     } catch {
       setLoadError("タイムカード情報を読み込めませんでした。データベース接続を確認してください。");
     } finally {
@@ -1351,6 +1355,9 @@ export function TimecardPage({
     : [];
   const shiftEditorStyle = shiftEditorPosition
     ? ({ top: shiftEditorPosition.top, left: shiftEditorPosition.left } satisfies CSSProperties)
+    : undefined;
+  const actualEditorStyle = actualEditorPosition
+    ? ({ top: actualEditorPosition.top, left: actualEditorPosition.left } satisfies CSSProperties)
     : undefined;
   const scheduleEmployees = useMemo(
     () => (data?.employees.filter((employee) => employee.storeIds.includes(selectedStoreId)) ?? []).sort(compareScheduleEmployees),
@@ -1520,6 +1527,11 @@ export function TimecardPage({
       breakMinutes: String(shift?.breakMinutes ?? defaults.breakMinutes),
       note: shift?.note ?? ""
     });
+  }
+
+  function closeActualEditor() {
+    setActualDraft(null);
+    setActualEditorPosition(null);
   }
 
   function toggleShiftSelection(employeeId: string, workDate: string) {
@@ -1726,7 +1738,7 @@ export function TimecardPage({
     setIsSavingShift(false);
   }
 
-  function openActualEditor(employeeId: string, workDate: string, shiftId?: string | null) {
+  function openActualEditor(employeeId: string, workDate: string, anchor?: HTMLElement, shiftId?: string | null) {
     const shifts = shiftsByCell.get(`${employeeId}:${workDate}`) ?? [];
     const shift = shiftId ? shifts.find((item) => item.id === shiftId) : shifts[0];
     const actual = getActualSummaryForShift(actualByCell.get(`${employeeId}:${workDate}`) ?? [], shift);
@@ -1735,6 +1747,7 @@ export function TimecardPage({
     clearShiftMessage();
     setIsActualMultiSelectMode(false);
     setSelectedActualCells([]);
+    setActualEditorPosition((current) => anchor ? getShiftEditorPosition(anchor) : current);
     setActualDraft({
       shiftId: shift?.id ?? null,
       employeeId,
@@ -1770,6 +1783,7 @@ export function TimecardPage({
     if (!data?.canEditActualTime) return;
     clearShiftMessage();
     setActualDraft(null);
+    setActualEditorPosition(null);
     const selection = { employeeId, workDate, shiftId: shiftId ?? null } satisfies ActualSelection;
     if (!selectedActualCells.length) {
       setBulkActualDraft(getActualBulkDefaults(employeeId, workDate, shiftId));
@@ -1789,7 +1803,7 @@ export function TimecardPage({
       toggleActualSelection(employeeId, workDate, shiftId);
       return;
     }
-    openActualEditor(employeeId, workDate, shiftId);
+    openActualEditor(employeeId, workDate, event.currentTarget, shiftId);
   }
 
   function openPayrollStatement(employeeId: string) {
@@ -2587,6 +2601,7 @@ export function TimecardPage({
                       onClick={() => {
                         clearShiftMessage();
                         setActualDraft(null);
+                        setActualEditorPosition(null);
                         setIsActualMultiSelectMode((current) => !current);
                       }}
                     >
@@ -2646,7 +2661,7 @@ export function TimecardPage({
                   </div>
                 ) : null}
                 {actualDraft ? (
-                  <div className="shift-editor actual-editor" aria-label={data?.canEditActualTime ? "実勤務時間編集" : "実勤務時間詳細"}>
+                  <div className="shift-editor actual-editor shift-editor-popover" style={actualEditorStyle} aria-label={data?.canEditActualTime ? "実勤務時間編集" : "実勤務時間詳細"}>
                     <div className="shift-editor-title">
                       <strong>{selectedActualEmployee?.name ?? "従業員"}</strong>
                       <span>{actualDraft.workDate}</span>
@@ -2658,7 +2673,7 @@ export function TimecardPage({
                           <button
                             className={actualDraft.shiftId === segment.id ? "is-active" : ""}
                             type="button"
-                            onClick={() => openActualEditor(actualDraft.employeeId, actualDraft.workDate, segment.id)}
+                            onClick={() => openActualEditor(actualDraft.employeeId, actualDraft.workDate, undefined, segment.id)}
                             key={segment.id}
                           >
                             {segment.scheduledStart ?? "--:--"}-{segment.scheduledEnd ?? "--:--"}
@@ -2724,7 +2739,7 @@ export function TimecardPage({
                       </div>
                     ) : null}
                     <div className="shift-editor-actions">
-                      <button className="secondary-button" type="button" onClick={() => setActualDraft(null)}>閉じる</button>
+                      <button className="secondary-button" type="button" onClick={closeActualEditor}>閉じる</button>
                       {data?.canEditActualTime ? (
                         <>
                           <button className="secondary-button is-danger" type="button" disabled={isSavingShift} onClick={() => void deleteActualTime()}>削除</button>
