@@ -1158,9 +1158,8 @@ function getDayCoverage(businessHours: StoreBusinessHours, workDate: string, shi
   const intervals = shifts
     .filter((shift) => shift.workDate === workDate && shift.scheduledStart && shift.scheduledEnd)
     .map((shift) => {
-      const start = timeToMinutes(shift.scheduledStart as string);
-      const endBase = timeToMinutes(shift.scheduledEnd as string);
-      const end = endBase <= start ? endBase + 1440 : endBase;
+      const start = getScheduledMinutesForWorkDate(shift, shift.scheduledStart as string, null, businessHours);
+      const end = getScheduledMinutesForWorkDate(shift, shift.scheduledEnd as string, shift.scheduledStart as string, businessHours);
       return {
         start: Math.max(start, businessStart),
         end: Math.min(end, businessEnd)
