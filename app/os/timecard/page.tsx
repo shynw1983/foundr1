@@ -1270,9 +1270,6 @@ function MonthNavigator({
         <button className="timecard-month-step" type="button" disabled={isLoading} aria-label="翌月" onClick={() => onChange(addTimecardMonths(month, 1))}>
           <ChevronRight size={16} />
         </button>
-        <select className="timecard-month-range" value="month" aria-label="表示範囲" disabled>
-          <option value="month">1ヶ月間表示</option>
-        </select>
       </div>
     </div>
   );
@@ -2294,30 +2291,32 @@ export function TimecardPage({
 
       <section className="workspace timecard-workspace">
         <header className="topbar">
-          <div>
+          <div className="timecard-topbar-title">
             <p className="eyebrow">出退勤、実績、給与計算</p>
             <h2>{getTimecardPageTitle(mainView)}</h2>
             <span className="source-indicator">{isLoading ? "読み込み中" : `給与期間 ${payrollPeriod?.label ?? "月度"} 集計済み`}</span>
             {loadError ? <p className="timecard-import-message">{loadError}</p> : null}
           </div>
           {mainView !== "payroll" ? (
-          <div className="timecard-toolbar">
+          <>
             <MonthNavigator month={month} isLoading={isLoading} onChange={changeTimecardMonth} />
-            <label className="store-context-selector is-os is-compact">
-              <span>対象店舗</span>
-              <select value={selectedStoreId} onChange={(event) => {
-                setSelectedStoreId(event.target.value);
-                storeTimecardSelection(month, event.target.value);
-                setIsShiftMultiSelectMode(false);
-                setSelectedShiftCells([]);
-                void loadTimecard(month, event.target.value);
-              }}>
-                {data?.stores.map((store) => (
-                  <option value={store.id} key={store.id}>{store.name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
+            <div className="timecard-toolbar timecard-store-toolbar">
+              <label className="store-context-selector is-os is-compact">
+                <span>対象店舗</span>
+                <select value={selectedStoreId} onChange={(event) => {
+                  setSelectedStoreId(event.target.value);
+                  storeTimecardSelection(month, event.target.value);
+                  setIsShiftMultiSelectMode(false);
+                  setSelectedShiftCells([]);
+                  void loadTimecard(month, event.target.value);
+                }}>
+                  {data?.stores.map((store) => (
+                    <option value={store.id} key={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </>
           ) : null}
         </header>
 

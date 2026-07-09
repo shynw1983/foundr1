@@ -17714,6 +17714,15 @@ body :where(
   margin-bottom: 14px;
 }
 
+.timecard-topbar-title,
+.timecard-store-toolbar {
+  flex: 1 1 0;
+}
+
+.timecard-store-toolbar {
+  justify-content: flex-end;
+}
+
 .timecard-month-navigator {
   display: inline-flex;
   flex-wrap: wrap;
@@ -17742,8 +17751,7 @@ body :where(
 
 .timecard-month-step,
 .timecard-month-picker,
-.timecard-month-today,
-.timecard-month-range {
+.timecard-month-today {
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -17787,15 +17795,9 @@ body :where(
   padding: 0 10px;
 }
 
-.timecard-month-range {
-  min-width: 118px;
-  padding: 0 28px 0 10px;
-}
-
 .timecard-month-step:disabled,
 .timecard-month-picker:has(input:disabled),
-.timecard-month-today:disabled,
-.timecard-month-range:disabled {
+.timecard-month-today:disabled {
   color: var(--muted);
   background: #f8faf9;
   cursor: not-allowed;
@@ -19840,12 +19842,6 @@ body :where(
 .payroll-ledger-search .timecard-month-picker input {
   min-height: 0;
   padding: 0;
-}
-
-.payroll-ledger-search .timecard-month-range {
-  min-height: 34px;
-  width: auto;
-  padding: 0 28px 0 10px;
 }
 
 .payroll-ledger-search .primary-button {
@@ -30969,6 +30965,12 @@ body :where(
     width: 100%;
   }
 
+  .timecard-topbar-title,
+  .timecard-store-toolbar {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
   .timecard-month-navigator {
     display: grid;
     grid-template-columns: 1fr;
@@ -30985,11 +30987,10 @@ body :where(
 
   .timecard-month-controls {
     display: grid;
-    grid-template-columns: 34px 34px minmax(54px, 0.7fr) 34px minmax(112px, 1.3fr);
+    grid-template-columns: 34px 34px minmax(54px, 1fr) 34px;
     width: 100%;
   }
 
-  .timecard-month-range,
   .timecard-month-today {
     width: 100%;
     min-width: 0;
