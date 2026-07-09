@@ -1672,33 +1672,37 @@ export async function POST(request: Request) {
     const deleteEnd = targetShift?.scheduledEnd
       ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
       : overnightEnd;
-    await sql`
-      delete from timecard_punches
-      where employee_id = ${employeeId}
-        and store_id = ${storeId}
-        and (
-          ${Boolean(targetShift)}
-          and punched_at >= ${deleteStart.toISOString()}
-          and punched_at < ${deleteEnd.toISOString()}
-          or (
-            ${!targetShift}
-            and (
-              (
-                punch_type = 'clock_in'
-                and punched_at >= ${start.toISOString()}
-                and punched_at < ${end.toISOString()}
-              )
-              or (
-                punch_type in ('clock_out', 'break_start', 'break_end')
-                and punched_at >= ${start.toISOString()}
-                and punched_at < ${overnightEnd.toISOString()}
+    const deleteTargetPunches = async () => {
+      await sql`
+        delete from timecard_punches
+        where employee_id = ${employeeId}
+          and store_id = ${storeId}
+          and (
+            ${Boolean(targetShift)}
+            and punched_at >= ${deleteStart.toISOString()}
+            and punched_at < ${deleteEnd.toISOString()}
+            or (
+              ${!targetShift}
+              and (
+                (
+                  punch_type = 'clock_in'
+                  and punched_at >= ${start.toISOString()}
+                  and punched_at < ${end.toISOString()}
+                )
+                or (
+                  punch_type in ('clock_out', 'break_start', 'break_end')
+                  and punched_at >= ${start.toISOString()}
+                  and punched_at < ${overnightEnd.toISOString()}
+                )
               )
             )
           )
-        )
-    `;
+      `;
+    };
 
     if (action === "delete_actual_time") {
+      await deleteTargetPunches();
+
       await writeAuditLog({
         actorEmployeeId: session.id,
         action: "timecard.actual_time.deleted",
@@ -1740,6 +1744,8 @@ export async function POST(request: Request) {
     if (futurePunch) {
       return Response.json({ error: "未来の実勤務時刻は保存できません。実際に打刻時刻を過ぎてから修正してください。" }, { status: 400 });
     }
+
+    await deleteTargetPunches();
 
     const insertedIds: string[] = [];
     if (clockIn && nextClockInAt) {
