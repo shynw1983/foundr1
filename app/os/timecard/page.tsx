@@ -199,6 +199,10 @@ type ShiftSelection = {
   workDate: string;
 };
 
+type ActualSelection = ShiftSelection & {
+  shiftId?: string | null;
+};
+
 type ShiftEditorPosition = {
   top: number;
   left: number;
@@ -215,6 +219,16 @@ type ActualDraft = {
   shiftId?: string | null;
   employeeId: string;
   workDate: string;
+  clockIn: string;
+  clockOut: string;
+  breakStart1: string;
+  breakEnd1: string;
+  breakStart2: string;
+  breakEnd2: string;
+  note: string;
+};
+
+type ActualBulkDraft = {
   clockIn: string;
   clockOut: string;
   breakStart1: string;
@@ -787,6 +801,10 @@ function getShiftSelectionKey(selection: ShiftSelection) {
   return `${selection.employeeId}:${selection.workDate}`;
 }
 
+function getActualSelectionKey(selection: ActualSelection) {
+  return `${selection.employeeId}:${selection.workDate}:${selection.shiftId ?? ""}`;
+}
+
 function compareShiftEntries(a: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">, b: Pick<ShiftEntry, "scheduledStart" | "scheduledEnd" | "id">) {
   return String(a.scheduledStart ?? "").localeCompare(String(b.scheduledStart ?? ""))
     || String(a.scheduledEnd ?? "").localeCompare(String(b.scheduledEnd ?? ""))
@@ -1185,6 +1203,17 @@ export function TimecardPage({
     note: ""
   });
   const [actualDraft, setActualDraft] = useState<ActualDraft | null>(null);
+  const [isActualMultiSelectMode, setIsActualMultiSelectMode] = useState(false);
+  const [selectedActualCells, setSelectedActualCells] = useState<ActualSelection[]>([]);
+  const [bulkActualDraft, setBulkActualDraft] = useState<ActualBulkDraft>({
+    clockIn: "",
+    clockOut: "",
+    breakStart1: "",
+    breakEnd1: "",
+    breakStart2: "",
+    breakEnd2: "",
+    note: ""
+  });
   const [shiftMessage, setShiftMessage] = useState("");
   const [isSavingShift, setIsSavingShift] = useState(false);
   const [isConfirmingPayroll, setIsConfirmingPayroll] = useState(false);
@@ -1382,6 +1411,17 @@ export function TimecardPage({
       overtimeMinutes: row.overtimeMinutes ?? 0
     } satisfies ScheduledCostEstimate]));
   }, [data?.payrollRows]);
+  const actualLaborCostTotals = useMemo(() => {
+    const totals: ScheduledCostEstimate = { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+    for (const cost of actualLaborCostByEmployee.values()) {
+      totals.payrollCost += cost.payrollCost;
+      totals.commuteAllowance += cost.commuteAllowance;
+      totals.workMinutes += cost.workMinutes;
+      totals.nightMinutes += cost.nightMinutes;
+      totals.overtimeMinutes += cost.overtimeMinutes;
+    }
+    return totals;
+  }, [actualLaborCostByEmployee]);
   const actualByCell = useMemo(() => {
     const map = new Map<string, DailySummary[]>();
     for (const day of data?.dailySummaries ?? []) {
@@ -1392,9 +1432,27 @@ export function TimecardPage({
     }
     return map;
   }, [data?.dailySummaries, selectedStoreId]);
+  const actualWorkByDate = useMemo(() => {
+    const map = new Map<string, ScheduledCostEstimate>();
+    for (const day of monthDays) {
+      map.set(day.key, { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 });
+    }
+    for (const summary of data?.dailySummaries ?? []) {
+      if (summary.storeId !== selectedStoreId) continue;
+      const current = map.get(summary.workDate) ?? { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+      current.workMinutes += summary.workMinutes;
+      current.nightMinutes += summary.nightMinutes;
+      map.set(summary.workDate, current);
+    }
+    return map;
+  }, [data?.dailySummaries, monthDays, selectedStoreId]);
   const selectedShiftCellKeys = useMemo(
     () => new Set(selectedShiftCells.map(getShiftSelectionKey)),
     [selectedShiftCells]
+  );
+  const selectedActualCellKeys = useMemo(
+    () => new Set(selectedActualCells.map(getActualSelectionKey)),
+    [selectedActualCells]
   );
   const coverageByDate = useMemo(() => {
     const map = new Map<string, DayCoverage>();
@@ -1675,6 +1733,8 @@ export function TimecardPage({
     const breakInterval1 = actual?.breakIntervals?.[0];
     const breakInterval2 = actual?.breakIntervals?.[1];
     clearShiftMessage();
+    setIsActualMultiSelectMode(false);
+    setSelectedActualCells([]);
     setActualDraft({
       shiftId: shift?.id ?? null,
       employeeId,
@@ -1687,6 +1747,49 @@ export function TimecardPage({
       breakEnd2: getJstTimeText(breakInterval2?.end) ?? "",
       note: ""
     });
+  }
+
+  function getActualBulkDefaults(employeeId: string, workDate: string, shiftId?: string | null): ActualBulkDraft {
+    const shifts = shiftsByCell.get(`${employeeId}:${workDate}`) ?? [];
+    const shift = shiftId ? shifts.find((item) => item.id === shiftId) : shifts[0];
+    const actual = getActualSummaryForShift(actualByCell.get(`${employeeId}:${workDate}`) ?? [], shift);
+    const breakInterval1 = actual?.breakIntervals?.[0];
+    const breakInterval2 = actual?.breakIntervals?.[1];
+    return {
+      clockIn: getJstTimeText(actual?.clockIn) ?? shift?.scheduledStart ?? "",
+      clockOut: getJstTimeText(actual?.clockOut) ?? shift?.scheduledEnd ?? "",
+      breakStart1: getJstTimeText(breakInterval1?.start) ?? "",
+      breakEnd1: getJstTimeText(breakInterval1?.end) ?? "",
+      breakStart2: getJstTimeText(breakInterval2?.start) ?? "",
+      breakEnd2: getJstTimeText(breakInterval2?.end) ?? "",
+      note: ""
+    };
+  }
+
+  function toggleActualSelection(employeeId: string, workDate: string, shiftId?: string | null) {
+    if (!data?.canEditActualTime) return;
+    clearShiftMessage();
+    setActualDraft(null);
+    const selection = { employeeId, workDate, shiftId: shiftId ?? null } satisfies ActualSelection;
+    if (!selectedActualCells.length) {
+      setBulkActualDraft(getActualBulkDefaults(employeeId, workDate, shiftId));
+    }
+    setSelectedActualCells((current) => {
+      const key = getActualSelectionKey(selection);
+      const exists = current.some((item) => getActualSelectionKey(item) === key);
+      return exists
+        ? current.filter((item) => getActualSelectionKey(item) !== key)
+        : [...current, selection];
+    });
+  }
+
+  function handleActualCellClick(event: MouseEvent<HTMLButtonElement>, employeeId: string, workDate: string, shiftId?: string | null) {
+    if (data?.canEditActualTime && (isActualMultiSelectMode || event.shiftKey || event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      toggleActualSelection(employeeId, workDate, shiftId);
+      return;
+    }
+    openActualEditor(employeeId, workDate, shiftId);
   }
 
   function openPayrollStatement(employeeId: string) {
@@ -1783,6 +1886,110 @@ export function TimecardPage({
       showShiftMessage(String(body.error ?? "実勤務時間を削除できませんでした。"), 4200);
     }
     setIsSavingShift(false);
+  }
+
+  async function saveSelectedActualCells() {
+    if (!selectedStoreId || !selectedActualCells.length) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    try {
+      for (const selection of selectedActualCells) {
+        const response = await fetch("/api/timecard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save_actual_time",
+            storeId: selectedStoreId,
+            shiftId: selection.shiftId ?? null,
+            employeeId: selection.employeeId,
+            workDate: selection.workDate,
+            clockIn: bulkActualDraft.clockIn,
+            clockOut: bulkActualDraft.clockOut,
+            breakIntervals: [
+              { start: bulkActualDraft.breakStart1, end: bulkActualDraft.breakEnd1 },
+              { start: bulkActualDraft.breakStart2, end: bulkActualDraft.breakEnd2 }
+            ],
+            note: bulkActualDraft.note
+          })
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          showShiftMessage(String(body.error ?? "選択した実勤務時間を保存できませんでした。"), 4200);
+          return;
+        }
+      }
+      await loadTimecard(month, selectedStoreId);
+      showShiftMessage("選択した実勤務時間を保存しました。");
+    } finally {
+      setIsSavingShift(false);
+    }
+  }
+
+  async function applyScheduledShiftToSelectedActualCells() {
+    if (!selectedStoreId || !selectedActualCells.length) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    try {
+      for (const selection of selectedActualCells) {
+        const shifts = shiftsByCell.get(`${selection.employeeId}:${selection.workDate}`) ?? [];
+        const shift = selection.shiftId ? shifts.find((item) => item.id === selection.shiftId) : shifts[0];
+        if (!shift?.scheduledStart || !shift.scheduledEnd) continue;
+        const response = await fetch("/api/timecard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save_actual_time",
+            storeId: selectedStoreId,
+            shiftId: shift.id,
+            employeeId: selection.employeeId,
+            workDate: selection.workDate,
+            clockIn: shift.scheduledStart,
+            clockOut: shift.scheduledEnd,
+            breakIntervals: [],
+            note: bulkActualDraft.note || "計画シフトから反映"
+          })
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          showShiftMessage(String(body.error ?? "計画シフトを実勤務時間に反映できませんでした。"), 4200);
+          return;
+        }
+      }
+      await loadTimecard(month, selectedStoreId);
+      showShiftMessage("計画シフトを選択した実勤務時間に反映しました。");
+    } finally {
+      setIsSavingShift(false);
+    }
+  }
+
+  async function deleteSelectedActualCells() {
+    if (!selectedStoreId || !selectedActualCells.length) return;
+    setIsSavingShift(true);
+    clearShiftMessage();
+    try {
+      for (const selection of selectedActualCells) {
+        const response = await fetch("/api/timecard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "delete_actual_time",
+            storeId: selectedStoreId,
+            shiftId: selection.shiftId ?? null,
+            employeeId: selection.employeeId,
+            workDate: selection.workDate
+          })
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          showShiftMessage(String(body.error ?? "選択した実勤務時間を削除できませんでした。"), 4200);
+          return;
+        }
+      }
+      await loadTimecard(month, selectedStoreId);
+      showShiftMessage("選択した実勤務時間を削除しました。");
+    } finally {
+      setIsSavingShift(false);
+    }
   }
 
   async function confirmPayroll() {
@@ -2371,9 +2578,73 @@ export function TimecardPage({
                   <CalendarDays />
                   <div>
                     <h3>実勤務時間</h3>
-                    <p>計画シフトと同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。{data?.canEditActualTime ? "権限があるユーザーはセルをクリックして修正できます。" : ""}</p>
+                    <p>計画シフトと同じ月間表で、出勤・退勤の打刻と遅刻・早退を確認します。{data?.canEditActualTime ? "複数選択モード、または Shift / Command / Ctrl クリックでまとめて修正できます。" : ""}</p>
                   </div>
+                  {data?.canEditActualTime ? (
+                    <button
+                      className={`secondary-button shift-multi-select-toggle${isActualMultiSelectMode ? " is-active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        clearShiftMessage();
+                        setActualDraft(null);
+                        setIsActualMultiSelectMode((current) => !current);
+                      }}
+                    >
+                      {isActualMultiSelectMode ? "複数選択中" : "複数選択"}
+                    </button>
+                  ) : null}
                 </div>
+                {data?.canEditActualTime && (isActualMultiSelectMode || selectedActualCells.length) ? (
+                  <div className="shift-editor shift-bulk-editor actual-bulk-editor" aria-label="実勤務時間一括編集">
+                    <div className="shift-editor-title">
+                      <strong>{selectedActualCells.length}件を選択中</strong>
+                      <span>{selectedActualCells.length ? "複数の実績セルをまとめて修正" : "修正したいセルをクリックして選択"}</span>
+                      <small className={`shift-editor-status${shiftMessage ? " is-visible" : ""}`} aria-live="polite">{shiftMessage || "\u00a0"}</small>
+                    </div>
+                    <label>
+                      <span>出勤</span>
+                      <input type="time" value={bulkActualDraft.clockIn} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, clockIn: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>退勤</span>
+                      <input type="time" value={bulkActualDraft.clockOut} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, clockOut: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩1開始</span>
+                      <input type="time" value={bulkActualDraft.breakStart1} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, breakStart1: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩1終了</span>
+                      <input type="time" value={bulkActualDraft.breakEnd1} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, breakEnd1: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩2開始</span>
+                      <input type="time" value={bulkActualDraft.breakStart2} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, breakStart2: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>休憩2終了</span>
+                      <input type="time" value={bulkActualDraft.breakEnd2} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, breakEnd2: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>メモ</span>
+                      <input value={bulkActualDraft.note} onChange={(event) => setBulkActualDraft({ ...bulkActualDraft, note: event.target.value })} placeholder="修正理由など" />
+                    </label>
+                    <div className="shift-patterns actual-shift-shortcuts" aria-label="実勤務時間の一括操作">
+                      <button type="button" disabled={isSavingShift || !selectedActualCells.length} onClick={() => void applyScheduledShiftToSelectedActualCells()}>
+                        計画シフトを反映
+                      </button>
+                    </div>
+                    <div className="shift-editor-actions">
+                      <button className="secondary-button" type="button" onClick={() => setSelectedActualCells([])}>選択解除</button>
+                      <button className="secondary-button" type="button" onClick={() => {
+                        setIsActualMultiSelectMode(false);
+                        setSelectedActualCells([]);
+                      }}>終了</button>
+                      <button className="secondary-button is-danger" type="button" disabled={isSavingShift || !selectedActualCells.length} onClick={() => void deleteSelectedActualCells()}>一括削除</button>
+                      <button className="primary-button" type="button" disabled={isSavingShift || !selectedActualCells.length} onClick={() => void saveSelectedActualCells()}>{isSavingShift ? "保存中" : "一括保存"}</button>
+                    </div>
+                  </div>
+                ) : null}
                 {actualDraft ? (
                   <div className="shift-editor actual-editor" aria-label={data?.canEditActualTime ? "実勤務時間編集" : "実勤務時間詳細"}>
                     <div className="shift-editor-title">
@@ -2484,7 +2755,7 @@ export function TimecardPage({
                     </thead>
                     <tbody>
                       {scheduleEmployees.length ? scheduleEmployees.map((employee) => {
-                        const actualCost = actualLaborCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0 };
+                        const actualCost = actualLaborCostByEmployee.get(employee.id) ?? { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
                         return (
                         <tr key={employee.id}>
                           <th className="shift-employee-cell">{employee.name}</th>
@@ -2497,6 +2768,8 @@ export function TimecardPage({
                             const shouldShowMissing = Boolean(shifts.length && !actuals.length && !isFutureDate);
                             const status = getActualStatus(actual, shift, isFutureDate);
                             const isSelected = actualDraft?.employeeId === employee.id && actualDraft.workDate === day.key;
+                            const actualSelectionKey = getActualSelectionKey({ employeeId: employee.id, workDate: day.key, shiftId: shift?.id ?? null });
+                            const isBulkSelected = selectedActualCellKeys.has(actualSelectionKey);
                             const isToday = day.key === todayKey;
                             const displayRows = shifts.length
                               ? shifts.map((segment) => ({
@@ -2507,15 +2780,16 @@ export function TimecardPage({
                             return (
                               <td className={`${day.isWeekend ? "is-weekend" : ""}${isToday ? " is-today" : ""}`.trim()} key={day.key}>
                                 <button
-                                  className={`shift-cell actual-shift-cell${actuals.length ? " has-shift" : ""}${displayRows.length > 1 ? " has-multiple-shifts" : ""}${status.className}${isFutureDate && !actuals.length ? " is-future" : ""}${actuals.some((item) => item.isManualCorrection) ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
+                                  className={`shift-cell actual-shift-cell${actuals.length ? " has-shift" : ""}${displayRows.length > 1 ? " has-multiple-shifts" : ""}${status.className}${isFutureDate && !actuals.length ? " is-future" : ""}${actuals.some((item) => item.isManualCorrection) ? " is-manual-correction" : ""}${isSelected ? " is-selected" : ""}${isBulkSelected ? " is-bulk-selected" : ""}${data?.canEditActualTime ? " is-editable" : ""}`}
                                   type="button"
                                   disabled={!data?.canEditActualTime && !actuals.length && !shouldShowMissing}
                                   title={[
+                                    isActualMultiSelectMode ? "クリックで複数選択" : "",
                                     actuals.some((item) => item.isManualCorrection) ? "手動修正あり" : "",
                                     status.label,
                                     shouldShowMissing && shift ? `予定 ${shift.scheduledStart ?? "--:--"}-${shift.scheduledEnd ?? "--:--"}` : ""
                                   ].filter(Boolean).join("、") || (data?.canEditActualTime ? "実勤務時間を修正" : "実勤務時間の詳細")}
-                                  onClick={() => openActualEditor(employee.id, day.key, shift?.id ?? null)}
+                                  onClick={(event) => handleActualCellClick(event, employee.id, day.key, shift?.id ?? null)}
                                 >
                                   {displayRows.length ? (
                                     displayRows.map(({ shift: rowShift, actual: rowActual }, index) => (
@@ -2540,8 +2814,13 @@ export function TimecardPage({
                               </td>
                             );
                           })}
-                          <td className="shift-cost-cell">
+                          <td className="shift-cost-cell" title={`勤務時間 ${formatDuration(actualCost.workMinutes)}${actualCost.nightMinutes > 0 ? ` / 深夜 ${formatDuration(actualCost.nightMinutes)}` : ""}${actualCost.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(actualCost.overtimeMinutes)}` : ""}`}>
                             <strong>{formatMoney(actualCost.payrollCost)}</strong>
+                            <small>
+                              {formatCompactDuration(actualCost.workMinutes)}
+                              {actualCost.nightMinutes > 0 ? ` / 深${formatCompactDuration(actualCost.nightMinutes)}` : null}
+                              {actualCost.overtimeMinutes > 0 ? ` / 外${formatCompactDuration(actualCost.overtimeMinutes)}` : null}
+                            </small>
                             {actualCost.commuteAllowance > 0 ? <small>交通費 {formatMoney(actualCost.commuteAllowance)}</small> : null}
                           </td>
                         </tr>
@@ -2551,6 +2830,40 @@ export function TimecardPage({
                           <td colSpan={monthDays.length + 2}>この店舗で勤務する従業員がまだ設定されていません。</td>
                         </tr>
                       )}
+                      {scheduleEmployees.length ? (
+                        <tr className="shift-total-row">
+                          <th className="shift-employee-cell">合計</th>
+                          {monthDays.map((day) => {
+                            const dailyActual = actualWorkByDate.get(day.key) ?? { payrollCost: 0, commuteAllowance: 0, workMinutes: 0, nightMinutes: 0, overtimeMinutes: 0 };
+                            const hasDailyActual = dailyActual.workMinutes > 0;
+                            return (
+                              <td
+                                className={`${day.isWeekend ? "is-weekend" : ""}${day.key === todayKey ? " is-today" : ""} shift-daily-total-cell`.trim()}
+                                key={`actual-total-${day.key}`}
+                                title={`実勤務時間 ${formatDuration(dailyActual.workMinutes)}${dailyActual.nightMinutes > 0 ? ` / 深夜 ${formatDuration(dailyActual.nightMinutes)}` : ""}`}
+                              >
+                                {hasDailyActual ? (
+                                  <>
+                                    <strong>{formatCompactDuration(dailyActual.workMinutes)}</strong>
+                                    {dailyActual.nightMinutes > 0 ? <small>深{formatCompactDuration(dailyActual.nightMinutes)}</small> : <small>実績</small>}
+                                  </>
+                                ) : (
+                                  <span className="shift-total-empty">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="shift-cost-cell" title={`勤務時間 ${formatDuration(actualLaborCostTotals.workMinutes)}${actualLaborCostTotals.nightMinutes > 0 ? ` / 深夜 ${formatDuration(actualLaborCostTotals.nightMinutes)}` : ""}${actualLaborCostTotals.overtimeMinutes > 0 ? ` / 時間外 ${formatDuration(actualLaborCostTotals.overtimeMinutes)}` : ""}`}>
+                            <strong>{formatMoney(actualLaborCostTotals.payrollCost)}</strong>
+                            <small>
+                              {formatCompactDuration(actualLaborCostTotals.workMinutes)}
+                              {actualLaborCostTotals.nightMinutes > 0 ? ` / 深${formatCompactDuration(actualLaborCostTotals.nightMinutes)}` : null}
+                              {actualLaborCostTotals.overtimeMinutes > 0 ? ` / 外${formatCompactDuration(actualLaborCostTotals.overtimeMinutes)}` : null}
+                            </small>
+                            {actualLaborCostTotals.commuteAllowance > 0 ? <small>交通費 {formatMoney(actualLaborCostTotals.commuteAllowance)}</small> : null}
+                          </td>
+                        </tr>
+                      ) : null}
                     </tbody>
                   </table>
                 </div>
