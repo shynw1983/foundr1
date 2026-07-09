@@ -726,6 +726,31 @@ function getShiftWindowDateTime(workDate: string, time: string, baseTime?: strin
   return new Date(toPunchDateTime(workDate, time, baseTime));
 }
 
+function timeValueToMinutes(value: string | null | undefined) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(value ?? ""));
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isEarlyMorningBusinessDayShift(shift: { scheduledStart?: string | null; scheduledEnd?: string | null }) {
+  const start = timeValueToMinutes(shift.scheduledStart);
+  const end = timeValueToMinutes(shift.scheduledEnd);
+  if (start === null || end === null) return false;
+  return start < 6 * 60 && end > start && end <= 6 * 60;
+}
+
+function getScheduledShiftDateTime(
+  shift: { workDate: string; scheduledStart?: string | null; scheduledEnd?: string | null },
+  time: string,
+  baseTime?: string | null
+) {
+  const date = getShiftWindowDateTime(shift.workDate, time, baseTime);
+  if (isEarlyMorningBusinessDayShift(shift)) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date;
+}
+
 function getActualInputDeleteWindow(
   workDate: string,
   input: {
@@ -770,8 +795,8 @@ function buildClockInWorkDateMap(punches: TimecardPunch[], shifts: ShiftWindowRo
     let best: { workDate: string; distance: number } | null = null;
     for (const shift of candidateShifts) {
       if (shift.employeeId !== punch.employeeId || shift.storeId !== punch.storeId || !shift.scheduledStart || !shift.scheduledEnd) continue;
-      const scheduledStart = getShiftWindowDateTime(shift.workDate, shift.scheduledStart).getTime();
-      const scheduledEnd = getShiftWindowDateTime(shift.workDate, shift.scheduledEnd, shift.scheduledStart).getTime();
+      const scheduledStart = getScheduledShiftDateTime(shift, shift.scheduledStart).getTime();
+      const scheduledEnd = getScheduledShiftDateTime(shift, shift.scheduledEnd, shift.scheduledStart).getTime();
       const earlyStart = scheduledStart - 6 * 60 * 60 * 1000;
       const lateEnd = scheduledEnd + 6 * 60 * 60 * 1000;
       if (punchTime < earlyStart || punchTime > lateEnd) continue;
@@ -839,11 +864,13 @@ async function getShiftForActualEdit(storeId: string, employeeId: string, workDa
   }));
   if (!shifts.length) return null;
   if (!clockIn || shifts.length === 1) return shifts[0];
-  const clockInAt = getShiftWindowDateTime(workDate, clockIn).getTime();
   return shifts
     .map((shift) => ({
       shift,
-      distance: Math.abs(getShiftWindowDateTime(workDate, shift.scheduledStart).getTime() - clockInAt)
+      distance: Math.abs(
+        getScheduledShiftDateTime(shift, shift.scheduledStart).getTime()
+        - new Date(resolveActualPunchDateTime(workDate, clockIn, { shift })).getTime()
+      )
     }))
     .sort((left, right) => left.distance - right.distance)[0]?.shift ?? shifts[0];
 }
@@ -851,8 +878,8 @@ async function getShiftForActualEdit(storeId: string, employeeId: string, workDa
 function resolveActualPunchDateTime(workDate: string, time: string, options: { baseTime?: string | null; shift?: Awaited<ReturnType<typeof getShiftById>> }) {
   const baseIso = toPunchDateTime(workDate, time, options.baseTime);
   if (!options.shift?.scheduledStart || !options.shift.scheduledEnd) return baseIso;
-  const scheduledStart = getShiftWindowDateTime(workDate, options.shift.scheduledStart).getTime();
-  const scheduledEnd = getShiftWindowDateTime(workDate, options.shift.scheduledEnd, options.shift.scheduledStart).getTime();
+  const scheduledStart = getScheduledShiftDateTime(options.shift, options.shift.scheduledStart).getTime();
+  const scheduledEnd = getScheduledShiftDateTime(options.shift, options.shift.scheduledEnd, options.shift.scheduledStart).getTime();
   const candidates = [-1, 0, 1].map((dayOffset) => {
     const date = new Date(baseIso);
     date.setUTCDate(date.getUTCDate() + dayOffset);
@@ -1742,10 +1769,10 @@ export async function POST(request: Request) {
     const { start, end, overnightEnd } = getJstWorkDateRange(workDate);
     const inputDeleteWindow = getActualInputDeleteWindow(workDate, { clockIn, clockOut, breakIntervals });
     const deleteStart = targetShift?.scheduledStart
-      ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
+      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledStart).getTime() - 3 * 60 * 60 * 1000)
       : inputDeleteWindow?.start ?? start;
     const deleteEnd = targetShift?.scheduledEnd
-      ? new Date(getShiftWindowDateTime(workDate, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
+      ? new Date(getScheduledShiftDateTime(targetShift, targetShift.scheduledEnd, targetShift.scheduledStart).getTime() + 3 * 60 * 60 * 1000)
       : inputDeleteWindow?.end ?? overnightEnd;
     const hasNarrowDeleteWindow = Boolean(targetShift || inputDeleteWindow);
     const deleteTargetPunches = async () => {
