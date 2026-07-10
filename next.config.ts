@@ -50,6 +50,9 @@ const nextConfig: NextConfig = {
       "./fonts/**/*",
       "./app/globals.css",
       "./public/brands/*.png"
+    ],
+    "/api/timecard/payroll-statement/pdf": [
+      "./node_modules/@sparticuz/chromium/bin/**/*"
     ]
   },
   outputFileTracingExcludes: {
@@ -60,6 +63,12 @@ const nextConfig: NextConfig = {
       "./outputs/**/*"
     ],
     "/api/public/orders/receipt/pdf/[filename]": [
+      "./public/downloads/**/*",
+      "./Foundr1Android/**/*",
+      "./output/**/*",
+      "./outputs/**/*"
+    ],
+    "/api/timecard/payroll-statement/pdf": [
       "./public/downloads/**/*",
       "./Foundr1Android/**/*",
       "./output/**/*",
