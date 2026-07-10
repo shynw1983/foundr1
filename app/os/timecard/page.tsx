@@ -606,12 +606,19 @@ function buildPayrollStatementPrintHtml(row: PayrollRow, days: DailySummary[], m
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 18px;
+      page-break-inside: auto;
     }
     th, td {
       border: 1px solid #d8e2df;
       padding: 8px 9px;
       text-align: left;
       vertical-align: top;
+    }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     th {
       background: #eff5f3;
@@ -629,12 +636,21 @@ function buildPayrollStatementPrintHtml(row: PayrollRow, days: DailySummary[], m
       font-size: 15px;
       font-weight: 650;
     }
-    @page { size: A4; margin: 0; }
+    .head,
+    .employee,
+    .summary {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    @page { size: A4; margin: 14mm 12mm; }
     @media print {
       body { background: white; }
       .print-actions { display: none; }
       .sheet {
+        width: auto;
+        min-height: 0;
         margin: 0;
+        padding: 0;
         box-shadow: none;
       }
     }
