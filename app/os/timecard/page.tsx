@@ -1961,6 +1961,27 @@ export function TimecardPage({
         throw new Error(body.error || "給与明細PDFを作成できませんでした。");
       }
       const blob = await response.blob();
+      const nativeDownloads = (window as Window & {
+        Foundr1Downloads?: {
+          isAvailable?: () => boolean;
+          saveBase64?: (fileName: string, mimeType: string, base64Data: string) => string;
+        };
+      }).Foundr1Downloads;
+      if (nativeDownloads?.saveBase64 && (!nativeDownloads.isAvailable || nativeDownloads.isAvailable())) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(new Error("給与明細PDFを読み込めませんでした。"));
+          reader.readAsDataURL(blob);
+        });
+        const result = JSON.parse(nativeDownloads.saveBase64(
+          getPayrollStatementFilename(row, month),
+          "application/pdf",
+          dataUrl.slice(dataUrl.indexOf(",") + 1)
+        )) as { ok?: boolean; error?: string };
+        if (!result.ok) throw new Error(result.error || "給与明細PDFを保存できませんでした。");
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
