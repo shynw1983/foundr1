@@ -727,6 +727,14 @@ function getShiftWindowDateTime(workDate: string, time: string, baseTime?: strin
   return new Date(toPunchDateTime(workDate, time, baseTime));
 }
 
+function moveDateTimeAtOrAfter(date: Date, earliest: Date) {
+  const next = new Date(date);
+  while (next.getTime() < earliest.getTime()) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next;
+}
+
 function timeValueToMinutes(value: string | null | undefined) {
   const match = /^(\d{2}):(\d{2})$/.exec(String(value ?? ""));
   if (!match) return null;
@@ -790,10 +798,20 @@ function getActualInputDeleteWindow(
   }
   for (const interval of input.breakIntervals ?? []) {
     if (interval.start) {
-      timestamps.push(getShiftWindowDateTime(workDate, interval.start, input.clockIn).getTime());
+      const breakStart = getShiftWindowDateTime(workDate, interval.start, input.clockIn);
+      timestamps.push(breakStart.getTime());
+      if (interval.end) {
+        timestamps.push(
+          moveDateTimeAtOrAfter(
+            getShiftWindowDateTime(workDate, interval.end, input.clockIn),
+            breakStart
+          ).getTime()
+        );
+      }
+      continue;
     }
     if (interval.end) {
-      timestamps.push(getShiftWindowDateTime(workDate, interval.end, interval.start ?? input.clockIn).getTime());
+      timestamps.push(getShiftWindowDateTime(workDate, interval.end, input.clockIn).getTime());
     }
   }
   const validTimestamps = timestamps.filter(Number.isFinite);
@@ -1864,7 +1882,10 @@ export async function POST(request: Request) {
       const startTime = interval.start as string;
       const endTime = interval.end as string;
       const startAt = resolveActualPunchDateTime(workDate, startTime, { baseTime: clockIn, shift: targetShift, storeBusinessHours });
-      const endAt = resolveActualPunchDateTime(workDate, endTime, { baseTime: startTime, shift: targetShift, storeBusinessHours });
+      const endAt = moveDateTimeAtOrAfter(
+        new Date(resolveActualPunchDateTime(workDate, endTime, { baseTime: clockIn, shift: targetShift, storeBusinessHours })),
+        new Date(startAt)
+      ).toISOString();
       return { start: startTime, end: endTime, startAt, endAt };
     });
     const now = Date.now();
