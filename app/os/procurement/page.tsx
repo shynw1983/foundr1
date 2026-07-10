@@ -2705,8 +2705,7 @@ function ExceptionReportDialog({
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedQuery));
-      })
-      .slice(0, 80);
+      });
   }, [products, item.productId, replacementProductQuery]);
   const selectedReplacementProduct = products.find((product) => product.id === replacementProductId);
 
