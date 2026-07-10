@@ -94,8 +94,9 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
   if (allStores) {
     return sql`
       select
-        id::text,
-        name,
+        stores.id::text,
+        stores.name,
+        coalesce(companies.legal_name, companies.name, '') as "companyLegalName",
         business_hours as "businessHours",
         coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
         coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
@@ -107,8 +108,9 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
         coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
         coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
       from stores
-      where status = 'active'
-      order by name
+      left join companies on companies.id = stores.company_id
+      where stores.status = 'active'
+      order by stores.name
     `;
   }
 
@@ -116,8 +118,9 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
 
   return sql`
     select
-      id::text,
-      name,
+      stores.id::text,
+      stores.name,
+      coalesce(companies.legal_name, companies.name, '') as "companyLegalName",
       business_hours as "businessHours",
       coalesce(payroll_cycle_type, 'month_end') as "payrollCycleType",
       coalesce(payroll_closing_day, 31)::int as "payrollClosingDay",
@@ -129,9 +132,10 @@ async function getVisibleStores(allStores: boolean, storeIds: string[]) {
       coalesce(attendance_radius_meters, 100)::int as "attendanceRadiusMeters",
       coalesce(attendance_accuracy_threshold_meters, 100)::int as "attendanceAccuracyThresholdMeters"
     from stores
-    where status = 'active'
-      and id::text = any(${storeIds})
-    order by name
+    left join companies on companies.id = stores.company_id
+    where stores.status = 'active'
+      and stores.id::text = any(${storeIds})
+    order by stores.name
   `;
 }
 

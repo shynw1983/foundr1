@@ -13,6 +13,7 @@ import { normalizeBusinessHours, type StoreBusinessHours, type WeekdayKey } from
 type StoreOption = {
   id: string;
   name: string;
+  companyLegalName?: string;
   businessHours?: unknown;
   payrollCycleType?: "month_end" | "specified_day";
   payrollClosingDay?: number;
@@ -1938,22 +1939,39 @@ export function TimecardPage({
     setPayrollView("employee");
   }
 
-  function openPayrollStatementPdf(row: PayrollRow) {
+  async function openPayrollStatementPdf(row: PayrollRow) {
     const statementDays = data?.dailySummaries.filter((day) => day.employeeId === row.employeeId) ?? [];
     const periodLabel = payrollPeriod
       ? `${payrollPeriod.startDate} - ${payrollPeriod.displayEndDate}`
       : month;
-    const printWindow = window.open("", "_blank", "width=920,height=1200");
-    if (!printWindow) {
-      window.alert("給与明細PDFを開けませんでした。ポップアップ許可を確認してください。");
-      return;
+    try {
+      const response = await fetch("/api/timecard/payroll-statement/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          row,
+          days: statementDays,
+          month,
+          periodLabel,
+          companyName: selectedStore?.companyLegalName || "会社名未設定"
+        })
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "給与明細PDFを作成できませんでした。");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = getPayrollStatementFilename(row, month);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "給与明細PDFを作成できませんでした。");
     }
-    printWindow.document.write(buildPayrollStatementPrintHtml(row, statementDays, month, periodLabel));
-    printWindow.document.close();
-    printWindow.focus();
-    window.setTimeout(() => {
-      printWindow.print();
-    }, 400);
   }
 
   async function saveActualTime(nextDraft = actualDraft) {
@@ -3281,7 +3299,7 @@ export function TimecardPage({
                                 明細
                               </button>
                               <button className="text-button" type="button" onClick={() => openPayrollStatementPdf(row)}>
-                                PDF
+                                PDFダウンロード
                               </button>
                             </div>
                           </td>
@@ -3370,7 +3388,7 @@ export function TimecardPage({
                           明細
                         </button>
                         <button className="text-button" type="button" onClick={() => openPayrollStatementPdf(row)}>
-                          PDF
+                          PDFダウンロード
                         </button>
                       </div>
                     </article>
