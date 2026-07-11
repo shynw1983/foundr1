@@ -1,9 +1,16 @@
 "use client";
 
-import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags } from "lucide-react";
+import { BookOpen, Clock3, ClipboardList, MessageSquareWarning, PackageCheck, ShoppingCart, Tags, Users } from "lucide-react";
 import { StoreNavTabs } from "./components/StoreNavTabs";
 
 const storeModules = [
+  {
+    title: "客席管理",
+    description: "入口で客席を割り当て、選菜中、制作中、食事中、清掃待ちまで店舗設定に合わせて管理します。",
+    href: "/store/seats",
+    icon: Users,
+    status: "利用可能"
+  },
   {
     title: "注文",
     description: "Web予約注文を受け取り、制作開始、受け取り可、受け渡し完了まで処理します。",
