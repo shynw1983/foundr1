@@ -71,13 +71,28 @@ export async function PATCH(request: Request) {
   const session = await requireOsSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { storeId?: string; taskId?: string; status?: string; area?: string };
+  const body = await request.json().catch(() => ({})) as { storeId?: string; taskId?: string; orderId?: string; status?: string; area?: string };
   const access = await getStoreOrderAccess(session);
   const storeFilter = getScopedStoreFilter(access, body.storeId) ?? access.stores[0]?.id ?? "";
   if (storeFilter === "__forbidden__" || !storeFilter) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
   const taskId = normalizeText(body.taskId);
+  const requestedOrderId = normalizeText(body.orderId);
   const status = normalizeText(body.status);
+  if (status === "completed" && requestedOrderId) {
+    const completedRows = await sql`
+      update store_customer_orders
+      set status = 'completed', completed_at = coalesce(completed_at, now()), updated_at = now()
+      where id::text = ${requestedOrderId}
+        and store_id::text = ${storeFilter}
+        and status = 'ready'
+      returning id::text
+    `;
+    if (!completedRows[0]) return Response.json({ error: "受け渡し可能な注文が見つかりません。" }, { status: 409 });
+    await publishCustomerOrderEvent("order.updated", await findCustomerOrderById(requestedOrderId));
+    const { tasks, areas } = await getKitchenTasks(storeFilter, normalizeText(body.area));
+    return Response.json({ ok: true, tasks, areas });
+  }
   if (!taskId || !["new", "preparing", "ready"].includes(status)) return Response.json({ error: "更新内容が不正です。" }, { status: 400 });
 
   const taskRows = await sql`

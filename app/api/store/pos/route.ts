@@ -6,7 +6,7 @@ import { ensureProductionTasksForOrder } from "../../../../lib/order-production"
 import { publishCustomerOrderEvent } from "../../../../lib/order-realtime";
 import { normalizePosPrinterSettings } from "../../../../lib/pos-printer";
 import { syncWebReservationToSalesOrder } from "../../../../lib/sales-orders";
-import { getActiveDiningSessionsForPos, linkPaidOrderToDiningSession, markDiningOrdersPaid, storeRequiresDiningSeat } from "../../../../lib/store-dining-sessions";
+import { markDiningOrdersPaid } from "../../../../lib/store-dining-sessions";
 import { getScopedStoreFilter, getStoreOrderAccess } from "../../../../lib/store-order-access";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,7 @@ type PosCheckoutBody = {
   cashTenderedAmount?: number | string | null;
   tableSessionKey?: string;
   diningSessionId?: string;
+  bowlNumber?: string;
   memberId?: string;
   memberToken?: string;
   memberPhone?: string;
@@ -355,10 +356,6 @@ function getEffectiveSelectionType(group: { groupKey: string; selectionType: str
   if (["size", "temperature", "sweetness", "ice", "option"].includes(group.groupKey)) return "single";
   if (group.groupKey === "topping") return "multiple";
   return group.selectionType || "single";
-}
-
-function getPosPickupCodePrefix(orderType: string) {
-  return orderType === "eat_in" ? "S" : "P";
 }
 
 function getAllowedRuleKey(groupKey: string) {
@@ -804,13 +801,11 @@ export async function GET(request: Request) {
   const { access, selectedStoreId, forbidden } = await getSelectedStoreId(request, session);
   if (forbidden) return Response.json({ error: "権限がありません。" }, { status: 403 });
 
-  const [menu, todaySummary, posSettings, tableCheckoutRequests, diningSessions, diningSeatRequired] = await Promise.all([
+  const [menu, todaySummary, posSettings, tableCheckoutRequests] = await Promise.all([
     getPosMenu(selectedStoreId),
     getTodaySummary(selectedStoreId),
     getPosSettings(selectedStoreId),
-    getTableCheckoutRequests(selectedStoreId),
-    getActiveDiningSessionsForPos(selectedStoreId),
-    storeRequiresDiningSeat(selectedStoreId)
+    getTableCheckoutRequests(selectedStoreId)
   ]);
 
   return Response.json({
@@ -819,9 +814,7 @@ export async function GET(request: Request) {
     ...menu,
     posSettings,
     todaySummary,
-    tableCheckoutRequests,
-    diningSessions,
-    diningSeatRequired
+    tableCheckoutRequests
   });
 }
 
@@ -931,6 +924,7 @@ export async function POST(request: Request) {
   const discountPresetKey = normalizeText(body.discountPresetKey);
   const tableSessionKey = normalizeText(body.tableSessionKey);
   const diningSessionId = normalizeText(body.diningSessionId);
+  const bowlNumber = normalizeText(body.bowlNumber);
   const cashTenderedAmount = body.cashTenderedAmount === null || body.cashTenderedAmount === undefined || body.cashTenderedAmount === ""
     ? null
     : Math.round(Number(body.cashTenderedAmount));
@@ -953,18 +947,6 @@ export async function POST(request: Request) {
   }
   if (orderType === "takeout" && !posSettings.takeoutEnabled) {
     return Response.json({ error: "この店舗では持ち帰りの会計は無効です。" }, { status: 400 });
-  }
-
-  const diningSessions = orderType === "eat_in" && !tableSessionKey
-    ? await getActiveDiningSessionsForPos(storeId) as Array<{ id: string; label: string; dineInEntitled: boolean }>
-    : [];
-  const diningSeatRequired = orderType === "eat_in" && !tableSessionKey && await storeRequiresDiningSeat(storeId);
-  const selectedDiningSession = diningSessions.find((diningSession) => diningSession.id === diningSessionId);
-  if (diningSeatRequired && !diningSessionId) {
-    return Response.json({ error: "店内注文の座席を選択してください。" }, { status: 400 });
-  }
-  if (diningSessionId && !selectedDiningSession) {
-    return Response.json({ error: "選択した座席は現在利用できません。座席状況を更新してください。" }, { status: 409 });
   }
 
   if (tableSessionKey) {
@@ -1251,11 +1233,18 @@ export async function POST(request: Request) {
   if (normalizedItems.length === 0) {
     return Response.json({ error: "POS で販売できる商品がありません。" }, { status: 400 });
   }
-  const grantsDineInEntitlement = orderType === "eat_in" && await containsMalatangBrand(Array.from(new Set(normalizedItems.map((item) => item.brandId))));
-  if (orderType === "eat_in" && selectedDiningSession && !selectedDiningSession.dineInEntitled && !grantsDineInEntitlement) {
+  const containsMalatang = await containsMalatangBrand(Array.from(new Set(normalizedItems.map((item) => item.brandId))));
+  if (orderType === "eat_in" && !containsMalatang) {
     return Response.json({
       error: "ドリンクのみのご注文はお持ち帰りです。店内利用にはマーラータンのご注文が必要です。"
     }, { status: 400 });
+  }
+  if (containsMalatang && !/^\d{1,2}$/.test(bowlNumber)) {
+    return Response.json({ error: "マーラータンはボウル番号（1〜30）を入力してください。" }, { status: 400 });
+  }
+  const normalizedBowlNumber = containsMalatang ? Number(bowlNumber) : 0;
+  if (containsMalatang && (normalizedBowlNumber < 1 || normalizedBowlNumber > 30)) {
+    return Response.json({ error: "ボウル番号は1〜30で入力してください。" }, { status: 400 });
   }
 
   const subtotalAmount = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
@@ -1277,7 +1266,23 @@ export async function POST(request: Request) {
     return Response.json({ error: "POS 会計の前に開店前のレジ金額を確認してください。" }, { status: 400 });
   }
   const { pickupDate, pickupTime } = getJstParts();
-  const pickupCode = createPickupCode(getPosPickupCodePrefix(orderType));
+  const pickupCode = containsMalatang
+    ? String(normalizedBowlNumber).padStart(2, "0")
+    : createPickupCode("D");
+  if (containsMalatang) {
+    const activeBowl = await sql`
+      select 1
+      from store_customer_orders
+      where store_id::text = ${storeId}
+        and pickup_code = ${pickupCode}
+        and status in ('new', 'preparing', 'ready')
+        and created_at > now() - interval '1 day'
+      limit 1
+    `;
+    if (activeBowl.length) {
+      return Response.json({ error: `${pickupCode}番は使用中です。別のボウルを使用してください。` }, { status: 409 });
+    }
+  }
   const brandId = normalizedItems[0]?.brandId ?? null;
   const firstItemName = normalizedItems[0]?.name ?? "";
   const member = await resolveMemberForOrder({
@@ -1389,6 +1394,7 @@ export async function POST(request: Request) {
       'JPY',
       ${JSON.stringify({
         orderType,
+        bowlNumber: containsMalatang ? pickupCode : "",
         note,
         cashierId: session.id,
         cashierName: session.name,
@@ -1434,13 +1440,6 @@ export async function POST(request: Request) {
   `;
   const orderId = orderRows[0]?.id as string | undefined;
   if (!orderId) return Response.json({ error: "会計を保存できませんでした。" }, { status: 500 });
-  if (diningSessionId) {
-    const linked = await linkPaidOrderToDiningSession({ storeId, sessionId: diningSessionId, orderId, grantsDineInEntitlement });
-    if (!linked) {
-      await sql`delete from store_customer_orders where id::text = ${orderId}`;
-      return Response.json({ error: "座席が更新されました。もう一度座席を選択してください。" }, { status: 409 });
-    }
-  }
   if (coupon && member?.id) {
     const redeemedCoupon = await redeemMemberCouponForOrder({ memberId: member.id, couponId: coupon.id, orderId, storeId });
     if (!redeemedCoupon) return Response.json({ error: "クーポンを使用処理できませんでした。もう一度会員情報を確認してください。" }, { status: 409 });
@@ -1549,7 +1548,7 @@ export async function POST(request: Request) {
     cashChangeAmount,
     loyaltyMember,
     diningSessionId,
-    diningSeatLabel: selectedDiningSession?.label ?? "",
+    diningSeatLabel: "",
     todaySummary
   });
 }

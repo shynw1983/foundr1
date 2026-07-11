@@ -132,6 +132,23 @@ export default function StoreKitchenPage() {
     setSavingId("");
   }
 
+  async function completeHandoff(task: KitchenTask) {
+    setSavingId(task.id);
+    const response = await fetch("/api/store/display/kitchen", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: selectedStoreId, orderId: task.orderId, status: "completed", area: selectedArea })
+    });
+    if (response.ok) {
+      const body = await response.json();
+      setTasks(body.tasks ?? []);
+      setAreas(body.areas ?? areas);
+    } else {
+      await load();
+    }
+    setSavingId("");
+  }
+
   useEffect(() => {
     void load();
     const timer = window.setInterval(
@@ -310,10 +327,13 @@ export default function StoreKitchenPage() {
         <aside>
           <h2>完成</h2>
           <div className="store-kitchen-ready-list">
-            {readyTasks.map((task) => (
+            {readyTasks.map((task, taskIndex) => (
               <div key={task.id}>
                 <strong>{task.pickupCode}</strong>
                 <span>{task.productionAreaLabel}</span>
+                {readyTasks.findIndex((candidate) => candidate.orderId === task.orderId) === taskIndex && tasks.every((candidate) => candidate.orderId !== task.orderId || candidate.status === "ready") ? (
+                  <button className="primary-button" type="button" disabled={savingId === task.id} onClick={() => void completeHandoff(task)}>受渡完了</button>
+                ) : null}
               </div>
             ))}
             {!readyTasks.length ? <p>完成待ちです。</p> : null}

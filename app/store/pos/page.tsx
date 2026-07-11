@@ -177,15 +177,6 @@ type PosAccess = {
   canUseAllStoreView: boolean;
 };
 
-type PosDiningSession = {
-  id: string;
-  label: string;
-  status: "selecting" | "cooking" | "dining";
-  partySize: number;
-  orderCount: number;
-  assignedAt: string;
-};
-
 type PosDiscountPreset = {
   key: string;
   name: string;
@@ -644,9 +635,7 @@ export default function StorePosPage() {
   const [tableCheckoutRequests, setTableCheckoutRequests] = useState<PosTableCheckoutRequest[]>([]);
   const [selectedTableCheckoutKey, setSelectedTableCheckoutKey] = useState("");
   const [tableCheckoutAdjustingKey, setTableCheckoutAdjustingKey] = useState("");
-  const [diningSessions, setDiningSessions] = useState<PosDiningSession[]>([]);
-  const [diningSeatRequired, setDiningSeatRequired] = useState(false);
-  const [selectedDiningSessionId, setSelectedDiningSessionId] = useState("");
+  const [bowlNumber, setBowlNumber] = useState("");
   const [posSettings, setPosSettings] = useState<PosSettings>({ dineInEnabled: true, takeoutEnabled: true, dineInTaxRate: 10, takeoutTaxRate: 8, externalPaymentTerminalBrand: "PayCAS", priceTaxMode: "tax_included", discountPresets: [], printerSettings: defaultPosPrinterSettings });
   const [selectedStoreId, setSelectedStoreId] = useState(() => getStoredStoreSelection());
   const [selectedBrandId, setSelectedBrandId] = useState("");
@@ -723,37 +712,6 @@ export default function StorePosPage() {
     });
   }
 
-  async function refreshDiningSessions(storeId = selectedStoreIdRef.current) {
-    if (!storeId || !diningSeatRequired) return;
-    const response = await fetch(`/api/store/seats?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json() as { targets?: Array<{
-      sessionId: string;
-      label: string;
-      groupLabel: string;
-      status: PosDiningSession["status"] | "available" | "cleaning";
-      partySize: number;
-      orderCount: number;
-      startedAt: string;
-    }> };
-    const unique = new Map<string, PosDiningSession>();
-    for (const target of body.targets ?? []) {
-      if (!target.sessionId || !["selecting", "cooking", "dining"].includes(target.status)) continue;
-      if (unique.has(target.sessionId)) continue;
-      unique.set(target.sessionId, {
-        id: target.sessionId,
-        label: target.groupLabel || target.label,
-        status: target.status as PosDiningSession["status"],
-        partySize: Number(target.partySize ?? 1),
-        orderCount: Number(target.orderCount ?? 0),
-        assignedAt: target.startedAt
-      });
-    }
-    const next = Array.from(unique.values());
-    setDiningSessions(next);
-    setSelectedDiningSessionId((current) => next.some((diningSession) => diningSession.id === current) ? current : "");
-  }
-
   async function load(nextStoreId = selectedStoreId) {
     setLoading(true);
     const params = new URLSearchParams();
@@ -782,10 +740,6 @@ export default function StorePosPage() {
     const nextTableCheckoutRequests = (body.tableCheckoutRequests ?? []) as PosTableCheckoutRequest[];
     setTableCheckoutRequests(nextTableCheckoutRequests);
     setSelectedTableCheckoutKey((current) => nextTableCheckoutRequests.some((request) => request.tableSessionKey === current) ? current : "");
-    const nextDiningSessions = (body.diningSessions ?? []) as PosDiningSession[];
-    setDiningSessions(nextDiningSessions);
-    setDiningSeatRequired(body.diningSeatRequired === true);
-    setSelectedDiningSessionId((current) => nextDiningSessions.some((diningSession) => diningSession.id === current) ? current : "");
     setSummary((body.todaySummary ?? { orderCount: 0, total: 0, average: 0, latestOrders: [] }) as PosSummary);
     const nextPosSettings = {
       dineInEnabled: body.posSettings?.dineInEnabled !== false,
@@ -821,14 +775,6 @@ export default function StorePosPage() {
     void load(getStoredStoreSelection());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!selectedStoreId || !diningSeatRequired || orderType !== "eat_in") return;
-    void refreshDiningSessions(selectedStoreId);
-    const timer = window.setInterval(() => void refreshDiningSessions(selectedStoreId), 3000);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diningSeatRequired, orderType, selectedStoreId]);
 
   useEffect(() => {
     if (!message) return;
@@ -1681,7 +1627,6 @@ export default function StorePosPage() {
       Boolean(getWeightPricingConfig(item, nextOrderType))
     ));
     setOrderType(nextOrderType);
-    if (nextOrderType !== "eat_in") setSelectedDiningSessionId("");
     setCustomerDisplayMode("business");
     setConfiguringItem(null);
     setOptionDraft({});
@@ -1698,8 +1643,8 @@ export default function StorePosPage() {
       setMessage("POS 会計の前に開店前のレジ金額を確認してください。");
       return;
     }
-    if (orderType === "eat_in" && diningSeatRequired && !selectedTableCheckout && !selectedDiningSessionId) {
-      setMessage("店内注文の座席を選択してください。");
+    if (cart.some((item) => /maamaa|まぁ麻|麻辣/i.test(item.brandName)) && !/^(?:0?[1-9]|[12]\d|30)$/.test(bowlNumber)) {
+      setMessage("マーラータンのボウル番号（1〜30）を入力してください。");
       return;
     }
     if (paymentMethod === "cash" && (cashTenderedAmount.trim() === "" || cashTenderedValue < activeCheckoutAmount)) {
@@ -1719,7 +1664,7 @@ export default function StorePosPage() {
           paymentMethod,
           cashTenderedAmount: paymentMethod === "cash" ? cashTenderedValue : null,
           tableSessionKey: selectedTableCheckout?.tableSessionKey || undefined,
-          diningSessionId: !selectedTableCheckout && orderType === "eat_in" ? selectedDiningSessionId || undefined : undefined,
+          bowlNumber: selectedTableCheckout ? undefined : bowlNumber,
           memberToken: selectedMember?.publicToken || undefined,
           memberId: selectedMember?.id || undefined,
           memberEmail: selectedMember?.email || undefined,
@@ -1749,7 +1694,7 @@ export default function StorePosPage() {
       const kitchenPrintMessage = selectedTableCheckout ? "" : await printKitchenAfterCheckout(body, cartSnapshot);
       setCart([]);
       setSelectedTableCheckoutKey("");
-      setSelectedDiningSessionId("");
+      setBowlNumber("");
       setTableCheckoutRequests((current) => current.filter((request) => request.tableSessionKey !== selectedTableCheckout?.tableSessionKey));
       setNote("");
       setReceiptRequested(false);
@@ -2232,31 +2177,20 @@ export default function StorePosPage() {
             ))}
           </div>
 
-          {orderType === "eat_in" && diningSeatRequired && !selectedTableCheckout ? (
-            <section className="store-pos-seat-selector" aria-label="座席選択">
-              <div className="store-pos-seat-selector-head">
-                <strong>座席</strong>
-                <span>必須</span>
-              </div>
-              {diningSessions.length ? (
-                <div className="store-pos-seat-selector-grid">
-                  {diningSessions.map((diningSession) => (
-                    <button
-                      className={`is-${diningSession.status}${selectedDiningSessionId === diningSession.id ? " is-active" : ""}`}
-                      type="button"
-                      key={diningSession.id}
-                      onClick={() => setSelectedDiningSessionId(diningSession.id)}
-                      disabled={saving}
-                    >
-                      <strong>{diningSession.label}</strong>
-                      <small>{diningSession.partySize}名 / {diningSession.orderCount}会計</small>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p>案内済みの座席がありません。先に客席管理でご案内ください。</p>
-              )}
-            </section>
+          {!selectedTableCheckout && cart.some((item) => /maamaa|まぁ麻|麻辣/i.test(item.brandName)) ? (
+            <label className="store-pos-bowl-number">
+              <span><ScanLine size={18} /> ボウル番号 <b>必須</b></span>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
+                placeholder="01〜30"
+                value={bowlNumber}
+                onChange={(event) => setBowlNumber(normalizeIntegerInput(event.target.value).slice(0, 2))}
+                disabled={saving}
+              />
+              <small>盆のコードをスキャン、または番号を入力</small>
+            </label>
           ) : null}
 
           <div className="store-pos-cart-list">
