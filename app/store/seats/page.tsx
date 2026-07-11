@@ -155,7 +155,7 @@ export default function StoreSeatsPage() {
           </div>
 
           <div className="seat-plan-service-zone">
-            <span>選菜ショーケース</span>
+            <span>選菜冷蔵ケース</span>
             <small>食材を選ぶ</small>
           </div>
 

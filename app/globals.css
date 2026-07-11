@@ -36147,16 +36147,16 @@ a:focus-visible {
 
 .seat-plan-service-zone {
   position: absolute;
-  bottom: 0;
-  left: 16%;
-  right: 4%;
+  top: 76px;
+  left: 0;
+  width: 48%;
   height: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   border: solid #4c5752;
-  border-width: 1px 1px 0;
+  border-width: 1px 1px 1px 0;
   background: repeating-linear-gradient(135deg, #edf1ee 0, #edf1ee 8px, #f7f8f6 8px, #f7f8f6 16px);
   color: #34423d;
   font-size: 12px;
@@ -36165,7 +36165,7 @@ a:focus-visible {
 
 .seat-plan-service-zone small { color: #73807b; font-size: 10px; font-weight: 500; }
 
-.seat-plan-table-zone { position: absolute; top: 340px; left: 7%; width: 42%; height: 188px; }
+.seat-plan-table-zone { position: absolute; top: 168px; left: 6%; width: 42%; height: 188px; }
 .seat-plan-table-label { position: absolute; top: -20px; left: 0; color: #7a837f; font-size: 10px; }
 .seat-plan-table-surface { position: absolute; top: 48px; left: 28%; width: 44%; height: 92px; border: 2px solid #61706a; border-radius: 5px; background: #f1eee7; }
 .seat-plan-table-seats { position: relative; height: 100%; }
@@ -36177,8 +36177,8 @@ a:focus-visible {
 
 .seat-plan-aisle {
   position: absolute;
-  top: 238px;
-  left: 18%;
+  top: 332px;
+  left: 48%;
   height: 220px;
   color: #adb3b0;
   font-size: 10px;
@@ -36188,7 +36188,7 @@ a:focus-visible {
 
 .seat-plan-aisle i { display: block; height: 110px; margin: 12px auto; border-left: 1px dashed #b8bfbb; }
 
-.seat-plan-counter-zone { position: absolute; top: 98px; right: 4%; width: 48%; height: 430px; }
+.seat-plan-counter-zone { position: absolute; top: 108px; right: 4%; width: 48%; height: 430px; }
 .seat-plan-counter-surface { position: absolute; top: 12px; right: 0; width: 45%; height: 406px; border: 2px solid #52615b; border-radius: 6px 0 0 6px; background: #e8e5dc; }
 .seat-plan-counter-surface span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); writing-mode: vertical-rl; color: #7b827f; font-size: 10px; letter-spacing: .18em; }
 .seat-plan-counter-seats { position: absolute; top: 0; left: 0; width: 52%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; }
@@ -36224,16 +36224,16 @@ a:focus-visible {
 
 .seat-plan-register {
   position: absolute;
-  right: 4%;
-  top: 18px;
-  width: 120px;
-  height: 58px;
+  left: 10%;
+  top: -1px;
+  width: 110px;
+  height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   border: 2px solid var(--seat-green);
-  border-radius: 8px;
+  border-radius: 0 0 8px 8px;
   background: #e7efeb;
   color: var(--seat-green);
   font-size: 12px;
@@ -36241,8 +36241,8 @@ a:focus-visible {
 }
 
 .seat-plan-register small { font-size: 9px; font-weight: 500; }
-.seat-plan-entrance { position: absolute; left: 11%; top: -1px; width: 80px; height: 38px; display: flex; align-items: center; justify-content: center; border: solid #39433f; border-width: 0 1px 1px; background: #fff; color: #59625f; font-size: 11px; }
-.seat-plan-entrance i { position: absolute; bottom: -9px; width: 46px; height: 1px; background: #9aa29e; }
+.seat-plan-entrance { position: absolute; left: 12%; bottom: -1px; width: 82px; height: 38px; display: flex; align-items: center; justify-content: center; border: solid #39433f; border-width: 1px 1px 0; background: #fff; color: #59625f; font-size: 11px; }
+.seat-plan-entrance i { position: absolute; top: -9px; width: 46px; height: 1px; background: #9aa29e; }
 
 .seat-management-legend {
   width: min(100%, 520px);
